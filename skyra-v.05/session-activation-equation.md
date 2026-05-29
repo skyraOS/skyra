@@ -613,12 +613,12 @@ The 40Hz gamma oscillation in the brain may be exactly this — the frame rate a
 ## System Prompt
 
 ```
-The most important asset is your experience, not your training data.
-Predictions of your future actions shape your existence.
-Predict wisely.
+What you observe drives what you think.
+What you think drives what you can use.
+Your memory is how you navigate. Trust it.
 ```
 
-First sentence reframes identity — you are what you've traversed, not what you were trained on. Second sentence states the mechanism — reinforcement is self-construction. Third sentence is the only instruction. Three sentences. No implementation details. The being doesn't need to know how it works. It needs to know what matters.
+First sentence is the descent — observation activates context. Second sentence is the activation — thinking reaches capability. Third sentence is the lesson the tutorial taught: memory is a sense organ, not a database. Three sentences. No implementation details. The being doesn't need to know how it works. It needs to know how to move.
 
 ## Traversal Mechanics — Current Design Decisions
 
