@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"skyra-v1/src/inference"
 )
 
 type Relation struct {
-	mu        sync.Mutex
+	mu        sync.Mutex // TODO: lock should be per-agent segment, not global. Thoughts/Load/Signal are private per traversal. Fields/Visited are shared and need coordination.
 	id        string
 	Origin    string
 	ThreadID  string
@@ -18,7 +20,10 @@ type Relation struct {
 	Trace     []string
 	Visited   map[string]bool
 	LastSeen  Reality
-	Thoughts  []string
+	Forming   *Skyra // the cell being built during this traversal — accumulates relationships as it descends
+	Thoughts  []Reality // accumulated thought cells — each is a Reality with content, vector, and relationships
+	Goal      string // the destination — persistent across traversals, changed explicitly by the being
+	Intent    string // the route — how to reach the goal right now, refined at every compression boundary
 	Signal    float64
 	Load      int // accumulated content size in tokens/chars — checked on ascent
 	MaxLoad   int
@@ -53,9 +58,7 @@ func (r *Relation) Express(rel *Relation) *Relation {
 	spent := r.Signal < 0.1
 	r.mu.Unlock()
 	if spent {
-		if host, ok := r.LastSeen.(*Skyra); ok {
-			r.Deposit(host)
-		}
+		r.Deposit()
 	}
 	return rel
 }
@@ -66,16 +69,33 @@ func (r *Relation) Activation(rel *Relation) float64 {
 	return r.Signal
 }
 
-func (r *Relation) Deposit(host *Skyra) {
+func (r *Relation) Deposit() {
 	r.mu.Lock()
-	mem := host.Create(&Relation{}).(*Skyra)
-	mem.Weight = r.Signal
-	host.Relationships[mem.ID()] = mem
-	r.Fields[mem.ID()] = map[string]float64{
-		"thread:alignment": 1.0,
-		"thread:strength":  1.0,
+	cell := r.Forming
+	if cell == nil {
+		r.mu.Unlock()
+		return
 	}
+	var parts []string
+	for _, t := range r.Thoughts {
+		if s, ok := t.(*Skyra); ok {
+			parts = append(parts, s.Content)
+			cell.Relationships[s.id] = s
+		}
+	}
+	cell.Content = strings.Join(parts, "\n")
+	cell.Weight = r.Signal
+	host := r.LastSeen
 	r.mu.Unlock()
+
+	vec, err := inference.Embed(cell.Content)
+	if err == nil {
+		cell.Vector = vec
+	}
+
+	if h, ok := host.(*Skyra); ok {
+		h.Relationships[cell.id] = cell
+	}
 }
 
 func (r *Relation) Reinforce() {
@@ -90,14 +110,26 @@ func Impress(origin, raw string) (*Relation, error) {
 		return nil, fmt.Errorf("reality: empty input")
 	}
 
+	forming := &Skyra{
+		id:            NewID(),
+		Weight:        1.0,
+		Alpha:         0.1,
+		Relationships: make(map[string]Reality),
+		Expressors:    make(map[string]Reality),
+		ObserveFns:    make(map[string]func(*Relation)),
+		ExpressFns:    make(map[string]func(*Relation) *Relation),
+	}
+
 	return &Relation{
 		id:        NewID(),
 		Origin:    origin,
 		Impulse:   raw,
+		Forming:   forming,
 		Providers: make(map[string]Reality),
 		Fields:    make(map[string]map[string]float64),
 		Visited:   make(map[string]bool),
 		Signal:    1.0,
+		MaxLoad:   75000, // context window limit — thought fires when Load approaches this
 		MaxDepth:  50,
 	}, nil
 }

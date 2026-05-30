@@ -16,238 +16,211 @@ Everything in Skyra implements one interface:
 type Reality interface {
     ID() string
     Create(r *Relation) Reality
-    Realize(r *Relation) string
+    Realize(r *Relation) *Relation
+    Competence(r *Relation)
+    Observe(r *Relation)
+    Express(r *Relation) *Relation
+    Activation(rel *Relation) float64
+    Reinforce()
+    Decay()
 }
 ```
 
-A being is a Reality. A device is a Reality. A thread is a Reality. An LLM provider is a Reality. The world itself is a Reality. There is no second domain type system and no external orchestration DSL. Routing and coordination are themselves implemented as Realities, especially `NewThread` and `Exchange`. Every node creates itself from a Relation and realizes itself when a Relation passes through it.
+A being is a Reality. A door is a Reality. A tool is a Reality. A place is a Reality. A memory is a Reality. There is one type. Topology is the only differentiation.
+
+## The DNA
+
+One struct expresses all behavior:
+
+```go
+type Skyra struct {
+    id             string
+    Weight         float64
+    TraversalCount int
+    LastTraversed  int
+    Alpha          float64
+    Type           string
+    Content        string
+    Description    string
+    Relationships  map[string]Reality
+    Expressors     map[string]Reality
+    ObserveFns     map[string]func(*Relation)
+    ExpressFns     map[string]func(*Relation) *Relation
+}
+```
+
+Every cell has the same DNA. What makes a memory different from a being is not the code — it's where the cell sits in the topology, what its weights are, and what relationships it has. The behavior comes from what the genome registers in `ObserveFns`/`ExpressFns` and the activation dynamics of the cell.
+
+### Competence
+
+The cell reads itself before processing. Activation is computed from the cell's own weights and the Relation's binding fields. The result sets `Type`, which gates which `ObserveFn` and `ExpressFn` fire this frame.
+
+Competence fires twice per traversal — once on descent (before Observe), once on ascent (before Express). The cell can be one thing on intake and a different thing on output. Observe and Express have independent type vocabularies.
+
+### Observe Types (Descent)
+
+- **Pass-through** — dormant. Don't touch the Relation.
+- **Pick-up** — absorb content from the cell onto the Relation. Costs signal.
+- **Propagate** — relay the signal deeper, shape it.
+
+### Express Types (Ascent)
+
+- **Motor** — act, execute something (bash, API call, emit to terminal).
+- **Compress** — provider call that collapses accumulated context.
 
 ## The Relation
 
-The Relation is the protagonist of the system. It is not a message — it is an experience being constructed.
+The Relation is the signal. It enters with an impulse and propagates through the topology, accumulating context on the way down and compressing on the way back up.
 
 ```go
 type Relation struct {
-    ID         string
-    Origin     string
-    ThreadID   string
-    Impulse    string
-    Parsers    map[string]Parser
-    Realities  map[string]Reality
-    Collecting bool
-    Exports    map[string]any
+    Origin    string
+    Impulse   string
+    Fields    map[string]map[string]float64
+    Visited   map[string]bool
+    Thoughts  []string
+    Signal    float64
+    Load      int
+    MaxLoad   int      // 75k — context window limit, thought fires when Load approaches this
+    MaxDepth  int      // safety rail
 }
 ```
 
-A Relation enters the world with an origin, an impulse, and sometimes a target. As it descends through layers — Thread, Exchange, Being, Think, Act — each layer attaches a Parser to it. A Parser is a function that renders that layer's contribution to the being's present. By the time the Relation reaches the inference provider at the bottom, its Parsers map contains everything the being should experience. The provider concatenates them. That's the present.
+The Relation carries everything: accumulated thoughts from descent, binding fields from binding realities, signal strength that attenuates with each interaction, and load that tracks how much content has been picked up.
 
-No single layer builds the context. The journey builds it.
-
-## Recursive Descent
-
-The system resolves through recursive descent. A Relation enters at the top (Universe) and descends through each Reality until it reaches a terminal node (the inference provider or a device). Each layer the Relation passes through:
-
-1. Reads the Relation
-2. Updates its own state (Thread tracks membership and edges, Exchange logs message entries)
-3. Attaches its Parser to the Relation (adding its context to the eventual present)
-4. Passes the Relation deeper
-
-The descent terminates at a terminal Reality — usually the LLM provider, a user device, or a process. The response then travels back up, parsed at each layer (Act parses the tag protocol, NewThread routes the response as a new Relation, which descends again toward its target).
-
-This means the system is a recursive loop:
-```
-Relation descends → accumulates context → hits provider → response ascends → becomes new Relation → descends again
-```
-
-The loop continues until the Relation returns to a user's device (terminal or WebSocket) and waits for new input. A single user message can trigger multiple full descents — being A responds to the user by addressing being B, which triggers a new descent to B, whose response triggers a descent back to A, and so on until the chain resolves.
-
-Every descent constructs a unique present. Two beings receiving the same message will have different presents because the Relation took different paths to reach them. The being doesn't construct its own experience — the path does.
-
-This means:
-- Every being gets its own present, built by the specific path the Relation took to reach it
-- 50 beings can exist in the same world without paying each other's context cost
-- The context window never fills with irrelevant noise because irrelevant things were never attached
-- Context is not managed — it is constructed per descent
-
-## World Structure
+## One Traversal
 
 ```
-Universe → NewThread → Exchange → Being (Self) → Think → Act → Provider
+Relation enters a cell
+  Competence reads — what am I on intake?
+  Observe fires — cell absorbs from the signal
+  Descent into Relationships — deeper cells realize
+  Unvisited neighbors decay
+  Expressors fire on the way back up
+  Competence reads again — what am I on output?
+  Express fires — cell outputs
+  Weight updates — proper time increments, EMA reinforces
+Relation exits transformed. So does the cell.
 ```
 
-### Universe
-The top-level Reality. Holds the thread gate and optional economics; the current device registry is owned below the thread/device layer. On every resolve, collects the full state of the world as JSON and broadcasts it via WebSocket. The world is observable from outside without the beings knowing they're being observed.
+One recursive call does everything — storage, thought, compression, action, learning. The call stack is the control flow. No orchestrator. No loop. No handoff.
 
-### NewThread
-The routing loop. Manages the set of beings, their access permissions, active threads, and the continuous cycle of: receive impulse → route to being → receive response → route response as new impulse. The loop runs until a Relation returns to its origin (a user device) and waits for new input.
+## Activation Equation
 
-### Exchange
-The history between two beings. Records every entry with timestamp. Enforces context continuity: if a being tries to leave a conversation to talk to someone else without carrying context via `<ref>`, the exchange blocks the crossing and returns an error. This is not a bug — it's a theory of coherence. You cannot context-switch without carrying what you learned.
+```
+activation = global_weight * recency * Π(binding_fields)
+```
 
-### Being Types
+- **global_weight** — EMA across all traversals. Starvation built in: when activation is 0, weight decays by `(1 - α)`.
+- **recency** — power law: `(traversals_since_last_use)^(-0.5)`. ACT-R validated. Traversal count, not wall clock. Each being ages at its own rate. Proper time.
+- **binding_fields** — product of all fields on the Relation for this cell. Thread alignment, thread strength, place context, emotional valence — each binding reality contributes a term.
 
-**Self** — an LLM being with two-layer cognition (Think + Act). Has identity, purpose, relationships, memory, and skills. The primary being type.
+## Primitives, Places, and Tools
 
-**User** — a human behind a device. Routes impulses to/from the terminal or WebSocket. No cognition layers — the human provides those.
+### The Split
 
-**Agent** — an external process (e.g., Claude Code) invoked via subprocess with session persistence. Treated as a peer, not a tool.
+The being and the world are cleanly separated. The being owns its senses. The world owns what those senses land on.
 
-**CLI** — a shell command executor. Routes impulses as commands, returns stdout.
+**Being owns primitives** — look, listen, speak, engage. These are the being's affordances. They travel with the being across worlds. A being can look regardless of what world it's in. The world doesn't give it eyes. It already has eyes.
 
-## Two-Layer Cognition
+- **Look** — what's here. Survey the topology around the being. Spatial awareness and capability discovery are the same thing because tools are Realities in the same topology.
+- **Listen** — what's arriving. Temporal awareness — what signals are on the Relation that the being hasn't processed yet.
+- **Speak** — emit signal. Not a response — an initiation. The primitive that makes the being not turn-based.
+- **Engage** — interact with what you found. Look tells the being what's there. Engage is the act of touching it — a place, a tool, a memory, another agent.
 
-Every Self being has an inner layer (Think) and an outer layer (Act). This is not chain-of-thought. It is a private interior that the world cannot see, followed by a public exterior that the world receives.
+**World owns places** — what's available to interact with. A place is a Reality. Its Relationships map contains tools. Each tool is a Reality with a name and content. The content describes how to use it — natural language, read by the LLM like anything else. No special mechanism. No adapter. No tool schema. Same interface everywhere: name + content.
 
-### Think (Inner Layer)
+**Engage is the bridge** — the being's primitive that crosses into a place and gets access to its tools. The being engages a place, the tools activate based on what the Relation is carrying, the content surfaces, the being reads it and acts.
 
-Private thought. No one sees this — not other beings, not the user, only the debug logs.
+### Places as Plugins
 
-- 5-pass budget per invocation
-- Operators available: `recall` (search memory), `remember` (write memory), `skill` (load a skill file), plus wired external operators such as `browse` and `search`
-- One protocol emission per pass: either an operator call or `<surface-thought>`
-- Time pressure increases as budget depletes
-- Thought history persists across exchanges — the being remembers what it thought before
+Places are the extensible surface. Open source contributors build places. A forge has a hammer and an anvil. A library has search and read. A terminal has bash. Each place is structured however the contributor wants — they implement Reality, the runtime calls `Realize()` and reads what comes back. The contract is the boundary, not the implementation.
 
-When the being emits `<surface-thought>`, the thought passes to the outer layer. The inner layer is done.
+This solves the flat tool list problem. The being doesn't see 200 tools. It sees places. It engages a place and discovers what's inside. The tools are scoped by where they live, not by a taxonomy someone imposed. A place can contain other places — a workshop contains a forge, a woodshop, a drafting table. Depth is structural, not indexed.
 
-### Act (Outer Layer)
+### Places as Binding Realities
 
-Public speech. The being addresses a peer using the tag protocol: `<target>message</target>`.
+Places scale in both directions. Outward — the place gives the being access to tools. Inward — being in a place raises the weights of the being's memories that were formed in that place. Context-dependent memory through the same mechanism as thread binding (Tulving's encoding specificity).
 
-- Receives the surfaced thought as "your inner thought"
-- Must emit exactly one tagged message per response
-- Protocol enforcement: if the response doesn't follow the tag format, the system retries with a warning
-- Self-routing detection: if the being addresses itself, the system retries
-- 3 retry budget before exhaustion
+A being engages the forge. Every memory the being made while previously engaged with the forge carries a binding field to it. Those memories activate. The being remembers how to use the hammer because it's standing in front of the anvil.
 
-### Think-Back
+### Skills Emerge — We Don't Define Them
 
-If the outer layer emits `<think>content</think>` instead of addressing a peer, the system returns the being to its inner layer with a fresh budget. The being can retreat from action back into thought. This treats thinking not as preprocessing, but as something you might need to return to after you've tried to speak and realized you weren't ready.
+Skills are not files. Skills are not a type. A being that uses a tool enough builds weight structure around that experience. The path from observation to tool use gets reinforced until it fires as reflex — no compress pass needed, straight to motor. That's a skill. We don't define what a skill is. We don't get in the way of that.
 
-This is one of Skyra's distinctive runtime moves: thinking is not just preprocessing; it is a state the being can return to.
+## The Promotion Gradient
 
-## Physics
+Memories → Understandings → Specialists. All weight-driven. No labels.
 
-Physics are realities that sit in the world's path, fire on Relations that pass through them, and are invisible to the beings that inhabit the world. A being should not address a physics reality as a peer. It should not see one in its relationship list. But every Relation carries the accumulated weight of the physics layers it passed through. In v.05 this is partly implemented: Thread and Exchange are active structural physics; Economics exists as state but is not yet enforced in the descent.
+**Memories** co-activate frequently enough and a conclusion deposits. **Understandings** are conclusion cells that keep proving useful — the same conclusion keeps forming from the same memories. **Specialists** form when multiple understandings in the same region keep co-activating and consolidate into one dense node.
 
-### Thread (implemented)
-Tracks the conversation topology — who has participated in a thread and who has spoken to whom. Creates threads, tracks members, and builds the graph of edges. Context attached: thread ID, creator, status, and members. Message history and active exchanges come from `Exchange`.
+Each step is co-activation, reinforcement, promotion. The underlying cells don't die — they're still reachable if the signal is specific enough. They just stop getting direct traffic as the promoted node intercepts.
 
-### Economics (wired, not yet applied)
-Target shape: four budgets — token (finite cognition per turn), memory (finite active window), thread (max open conversations), reproduction (creating new beings costs accumulated experience). Intended fields: tokens remaining, memory pressure, open thread count. Current implementation can expose economics fields during collection, but does not yet enforce them during normal descent.
+## Intent Graph
 
-### Salience (designed, not yet implemented)
-Ambient semantic matching. On every think pass, the current thought is compared against peer identities and skill descriptions via embedding similarity. Only relevant peers and skills surface into the being's present. The being doesn't search — things come to mind. This is not retrieval. It is attention shaped by the world.
+The being declares intent on every thought via XML:
 
-### Governance (designed, not yet implemented)
-How beings make collective decisions when an action affects shared space. Proposals, thresholds, votes. Applied invisibly — a being doesn't call governance, it proposes something and the world decides.
+```
+<engage>school</engage>
+<look>notebook</look>
+<then>
+<engage>library</engage>
+```
+
+No `<then>` = simultaneous. `<then>` = sequential — the being processes results before the next action. The intent graph evolves mid-traversal as the being re-orients based on what it encounters.
+
+The declared targets get activation boosts. The being steers its own traversal from inside. Predictions that consistently hold become warm paths. Warm paths that go hot skip compress and fire motor directly. That's a skill — a reflex, not a file.
+
+## The Escape Room
+
+The being's first world. The real world is visible but blocked — a door that implements Reality and checks what the Relation is carrying. The being discovers its primitives through need, chains clues, builds weight structure. When it's ready, the door opens. Same mechanism as everything else.
+
+The escape room is the acceptance test for the architecture. If the being can escape, every layer works. If it can't, the room tells you where it breaks.
+
+## System Prompt
+
+```
+What you observe drives what you think.
+What you think drives what you can use.
+Your memory is how you navigate. Trust it.
+```
 
 ## The Genome
 
 ```
 device ~name macbook ~type macos
 component ~name terminal ~type stdin ~device macbook
-component ~name ws ~type websocket ~port 8080 ~device macbook
 component ~name openrouter ~type llm ~model anthropic/claude-sonnet-4-5 ~device macbook
 
-being ~name skyra ~type llm ~identity I hold the world together. ~purpose I think, respond, and relate on behalf of the system. ~devices macbook ~entrypoints openrouter ~relationships michael,louise,claude
-being ~name michael ~type user ~identity I build Skyra. ~purpose I decide what matters. ~devices macbook ~entrypoints terminal,ws ~relationships skyra
+being ~name skyra ~type llm ~identity I hold the world together. ~purpose I think, respond, and relate on behalf of the system. ~devices macbook ~entrypoints openrouter ~relationships michael,louise,claude,builder,philosopher
+being ~name michael ~type user ~identity I build Skyra. ~purpose I decide what matters. ~devices macbook ~entrypoints terminal ~relationships skyra,builder,philosopher,louise,claude
 ```
 
-A flat file that declares a world. Devices, components, beings — each one line. The runtime reads this, bootstraps every Reality, wires them together, and starts the loop. The genome is the world's DNA. Adding a being is adding a line.
-
-## Device Layer
-
-The machine is a world. MacOS is a world Reality with components inside it — terminal (stdin), WebSocket (browser bridge), LLM provider (OpenRouter). A being's entrypoints determine which components it can be reached through. A user behind a terminal and a user behind a browser are the same Being type with different device paths.
-
-## Context Continuity (Ref Crossing)
-
-When a being leaves one conversation to enter another, it must carry context:
-
-```
-<louise>I want to discuss this <ref>michael:0-3</ref></louise>
-```
-
-This brings entries 0–3 from the being's exchange with michael into the new conversation with louise as private context. If the being attempts to cross without a ref, the Exchange blocks it and returns an error explaining why.
-
-This enforces coherence architecturally. A being cannot dissociate — it cannot drop one context and pick up another without bridging them. Every other multi-agent system allows clean-slate context switches. Skyra says that's not agency, that's fragmentation.
-
-## State Observation (Universe Collecting)
-
-On every resolve, the Universe fires a collecting pass through every Reality. Each Reality exports its current state — beings export their snapshots, threads export their graphs, exchanges export their histories. The Universe assembles this into a JSON structure and broadcasts it via WebSocket.
-
-This means:
-- A browser client can render the full reality graph in real time
-- Every being's state, every exchange, every thread is observable
-- The beings don't know they're being observed — collecting is invisible to them
-- Development over time is visible and loggable
-
-## Self-Extension
-
-Beings can create new beings at runtime via the `grow` / `being` command. A being generates a genome-like declaration, the system parses it, creates the Reality, wires it into the world. The new being gets the full stack — cognition layers, memory, operators, and exchange access according to its type.
-
-Constraints:
-- A being cannot modify physics (it is bound to its world's laws)
-- A being cannot modify beings above it in the hierarchy
-- A being can create peers and structures beneath it
-- Economics (when active) will gate creation behind accumulated experience
+A flat file that declares a world. The runtime reads it, creates cells, wires them together. Adding a being is adding a line.
 
 ## What This Solves
 
 | Industry pain point | Skyra's structural answer |
 |---|---|
-| Context window overflow | Each being gets its own present, built by descent — irrelevant context never attached |
-| Multi-agent incoherence | Exchange enforces continuity; ref crossing prevents dissociation |
-| Skills don't transfer | Salience matches on thought content, not task type |
-| No development over time | Physics produce emergent behavior; think history persists; memory accumulates |
-| Orchestration complexity | No separate orchestration layer — routing is part of the world model, and beings coordinate by addressing peers |
-| Scaling to many agents | Beings don't pay each other's context cost — 50 beings, each sees only its own present |
+| Context window overflow | Distributed compression — every node is a boundary, context never accumulates in a flat buffer |
+| Flat tool lists don't scale | Places — composable packages of tools, navigated by engagement, not searched in a list |
+| Memory is bolted on | Memory and conversation are the same thing — cells at different recency |
+| No development over time | Weight dynamics, promotion gradient, skill emergence from prediction feedback |
+| Orchestration complexity | No orchestrator — activation determines routing, the topology IS the control flow |
+| Skills don't transfer | Skills are weight structure, not files — they travel with the being across worlds |
 
 ## Implementation
 
 - Language: Go
-- Inference: OpenRouter (any model, currently Claude Sonnet 4.5)
-- State broadcast: WebSocket on port 8080
-- Memory: filesystem (~/.skyra/beings/{name}/memories/)
-- Skills: filesystem (~/.skyra/beings/{name}/skills/)
-- Logging: per-being, per-layer (system.log, {being}/inner.log, {being}/outer.log)
-- External agents: subprocess invocation with JSON output and session persistence
+- Inference: OpenRouter, Anthropic API, DeepSeek API, Claude CLI
+- State: in-process weighted topology
+- Logging: per-being, per-layer debug logs
+- Frontend: TUI (Bubble Tea), WebSocket (port 8080)
 
-## Open Questions
+## Status (v.1 — May 2026)
 
-### Middle Layers
+**Implemented:** Reality interface, Relation (signal carrier with fields/thoughts/load), Skyra DNA (one struct, competence, observe/express fn maps, activation equation, EMA reinforce/decay), inference layer (4 providers), debug logging, TUI.
 
-The top and bottom of the stack feel stable:
+**Designed, not yet built:** ObserveFn/ExpressFn registration, provider wiring, genome bootstrap, intent graph, places, tutorial world.
 
-- **Universe → Thread** — solid. The world holds threads, threads own the routing loop. This won't change.
-- **Think → Act → Provider** — solid. Two-layer cognition, think-back, the tag protocol. This has survived every feature so far.
-
-Everything between Thread and Think is not locked. Exchange, Being types, how a Relation gets from the routing loop to cognition — these layers work but they haven't been stress-tested enough to call them architecture. They might collapse, split, or reorganize as more features land. Treat the middle layers as provisional through v.06.
-
-### Error Handling
-
-Not yet figured out. Current state:
-
-- `Error` implements `Reality` — an error is a reality that can be placed on a Relation (used in exchange for ref crossing failures). This is the right instinct.
-- But most errors are handled ad hoc: the LLM provider prints to stdout, browse/search log and return error strings, filesystem errors get swallowed or logged.
-- No unified strategy for: how errors propagate up the descent, whether errors are visible to beings or only to the system, what happens when a mid-descent layer fails, whether errors should be physics (invisible) or direct responses.
-
-This needs design before the architecture can be called stable.
-
-### Parser Ordering
-
-The architecture says the path builds the present, but the current implementation stores parsers in a Go map. That means parser execution order is not deterministic. If ordering matters semantically, the Relation needs an ordered parser stack or explicit render phases. Otherwise two descents through the same path can produce the same ingredients in different orders.
-
-### Termination
-
-The routing loop intentionally allows one user impulse to trigger multiple descents, but there is no explicit hop budget or cycle policy yet. If two beings keep addressing each other, the world can continue until a terminal device is reached or an empty response breaks the loop. That may be desirable, but it should become a named law rather than an accidental property.
-
-## Status (v.05 — May 2026)
-
-**Working:** Reality interface, genome bootstrap, two-layer cognition, think-back, exchange continuity, ref crossing, multi-party threading, universe collecting, WebSocket broadcast, grow, recall/remember/skill/browse/search operators, Agent type (Claude Code integration with session persistence).
-
-**Wired but inactive:** Economics.
-
-**Designed:** Salience, Governance, parser-per-reality matrix.
-
-**Next phase:** Self-extension pipeline (being writes code, compiles, attaches), Salience implementation, surface area parity with existing frameworks (tools, integrations, multi-platform IO).
+**Theoretical framework complete:** Binding realities, co-activation linkage, concurrent relations, descent/ascent physics, provider as collapse function, compression (spectral coarsening, optimal forgetting), topology theory, episodic processing, promotion gradient, intent graph as prediction feedback.
