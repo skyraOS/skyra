@@ -23,3 +23,28 @@ Tests multi-agent coordination. Multiple beings in the same world, needing to co
 ## Decay Room
 
 Tests memory under time pressure. Clues decay faster than the being can engage them all. The being has to prioritize — what to look at first, what to remember, what to let go. Measures: how the being triages under scarcity, whether the weight dynamics produce good prioritization or collapse under pressure.
+
+## Benchmark Frame
+
+The rooms should test the architectural claims, not implementation details.
+
+Keep it to this:
+
+- **Escape Room:** does the whole loop work end to end?
+- **Maze Room:** can the being maintain orientation across depth?
+- **Social Room:** can multiple beings coordinate without orchestration?
+- **Decay Room:** can the being prioritize under scarcity?
+- **Repeat Room:** does the system get cheaper or better with experience?
+- **Distractor Room:** can goal/intent prevent context bloat?
+
+What matters across all rooms:
+
+- Did it solve the task?
+- How much did it cost?
+- Did it stay oriented?
+- Did it learn or compress anything useful?
+- Did the architecture reduce orchestration compared to a normal agent loop?
+
+That is the benchmark frame. The large claim is simple:
+
+**If memory, thought, planning, and action are one mechanism, the rooms should show competent behavior with less scaffolding.**

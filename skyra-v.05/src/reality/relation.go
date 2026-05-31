@@ -8,24 +8,33 @@ import (
 	"skyra-v1/src/inference"
 )
 
+// Slice — a being's private cognitive state on the Relation.
+// Each being gets its own slice. Own lock. Own goroutine.
+// No being can access another being's slice.
+type Slice struct {
+	mu       sync.Mutex
+	Thoughts []Reality // accumulated thought cells
+	Signal   float64
+	Load     int    // accumulated content size
+	Forming  *Skyra // the cell being built during this traversal
+	Goal     string // the destination — persistent, changed explicitly
+	Intent   string // the predicted future — refined at every compression boundary
+	LastSeen Reality
+	Depth    int
+	Trace    []string
+	Visited  map[string]bool
+}
+
 type Relation struct {
-	mu        sync.Mutex // TODO: lock should be per-agent segment, not global. Thoughts/Load/Signal are private per traversal. Fields/Visited are shared and need coordination.
+	mu        sync.RWMutex // protects shared state: World, Fields
 	id        string
 	Origin    string
 	ThreadID  string
 	Impulse   string
-	Providers map[string]Reality
-	Fields    map[string]map[string]float64 // memoryID → {bindingReality: activation}
-	Depth     int
-	Trace     []string
-	Visited   map[string]bool
-	LastSeen  Reality
-	Forming   *Skyra // the cell being built during this traversal — accumulates relationships as it descends
-	Thoughts  []Reality // accumulated thought cells — each is a Reality with content, vector, and relationships
-	Goal      string // the destination — persistent across traversals, changed explicitly by the being
-	Intent    string // the route — how to reach the goal right now, refined at every compression boundary
-	Signal    float64
-	Load      int // accumulated content size in tokens/chars — checked on ascent
+	World     map[string]Reality             // shared — beings, places, tools. The world is the Relation.
+	Providers map[string]Reality             // shared — inference endpoints
+	Fields    map[string]map[string]float64  // shared — binding fields
+	Slices    map[string]*Slice              // private — keyed by being ID, tenant-isolated
 	MaxLoad   int
 	MaxDepth  int
 	Cancelled bool
@@ -47,46 +56,50 @@ func (r *Relation) Competence(rel *Relation) {
 }
 
 func (r *Relation) Observe(rel *Relation) {
-	r.mu.Lock()
-	r.Depth++
-	r.Trace = append(r.Trace, rel.ID())
-	r.mu.Unlock()
+	s := r.GetSlice(r.Origin)
+	s.mu.Lock()
+	s.Depth++
+	s.Trace = append(s.Trace, rel.ID())
+	s.mu.Unlock()
 }
 
 func (r *Relation) Express(rel *Relation) *Relation {
-	r.mu.Lock()
-	spent := r.Signal < 0.1
-	r.mu.Unlock()
+	s := r.GetSlice(r.Origin)
+	s.mu.Lock()
+	spent := s.Signal < 0.1
+	s.mu.Unlock()
 	if spent {
-		r.Deposit()
+		r.Deposit(r.Origin)
 	}
 	return rel
 }
 
 func (r *Relation) Activation(rel *Relation) float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.Signal
+	s := r.GetSlice(r.Origin)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Signal
 }
 
-func (r *Relation) Deposit() {
-	r.mu.Lock()
-	cell := r.Forming
+func (r *Relation) Deposit(beingID string) {
+	s := r.GetSlice(beingID)
+	s.mu.Lock()
+	cell := s.Forming
 	if cell == nil {
-		r.mu.Unlock()
+		s.mu.Unlock()
 		return
 	}
 	var parts []string
-	for _, t := range r.Thoughts {
-		if s, ok := t.(*Skyra); ok {
-			parts = append(parts, s.Content)
-			cell.Relationships[s.id] = s
+	for _, t := range s.Thoughts {
+		if sk, ok := t.(*Skyra); ok {
+			parts = append(parts, sk.Content)
+			cell.Relationships[sk.id] = sk
 		}
 	}
 	cell.Content = strings.Join(parts, "\n")
-	cell.Weight = r.Signal
-	host := r.LastSeen
-	r.mu.Unlock()
+	cell.Weight = s.Signal
+	host := s.LastSeen
+	s.mu.Unlock()
 
 	vec, err := inference.Embed(cell.Content)
 	if err == nil {
@@ -120,16 +133,54 @@ func Impress(origin, raw string) (*Relation, error) {
 		ExpressFns:    make(map[string]func(*Relation) *Relation),
 	}
 
+	slice := &Slice{
+		Thoughts: []Reality{},
+		Signal:   1.0,
+		Forming:  forming,
+		Visited:  make(map[string]bool),
+	}
+
 	return &Relation{
 		id:        NewID(),
 		Origin:    origin,
 		Impulse:   raw,
-		Forming:   forming,
+		World:     make(map[string]Reality),
 		Providers: make(map[string]Reality),
 		Fields:    make(map[string]map[string]float64),
-		Visited:   make(map[string]bool),
-		Signal:    1.0,
-		MaxLoad:   75000, // context window limit — thought fires when Load approaches this
+		Slices:    map[string]*Slice{origin: slice},
+		MaxLoad:   75000,
 		MaxDepth:  50,
 	}, nil
+}
+
+// GetSlice returns the being's private slice, creating one if it doesn't exist.
+func (r *Relation) GetSlice(beingID string) *Slice {
+	r.mu.RLock()
+	s, ok := r.Slices[beingID]
+	r.mu.RUnlock()
+	if ok {
+		return s
+	}
+
+	forming := &Skyra{
+		id:            NewID(),
+		Weight:        1.0,
+		Alpha:         0.1,
+		Relationships: make(map[string]Reality),
+		Expressors:    make(map[string]Reality),
+		ObserveFns:    make(map[string]func(*Relation)),
+		ExpressFns:    make(map[string]func(*Relation) *Relation),
+	}
+
+	s = &Slice{
+		Thoughts: []Reality{},
+		Signal:   1.0,
+		Forming:  forming,
+		Visited:  make(map[string]bool),
+	}
+
+	r.mu.Lock()
+	r.Slices[beingID] = s
+	r.mu.Unlock()
+	return s
 }

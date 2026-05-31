@@ -115,6 +115,32 @@ activation = global_weight * recency * Π(binding_fields)
 - **recency** — power law: `(traversals_since_last_use)^(-0.5)`. ACT-R validated. Traversal count, not wall clock. Each being ages at its own rate. Proper time.
 - **binding_fields** — product of all fields on the Relation for this cell. Thread alignment, thread strength, place context, emotional valence — each binding reality contributes a term.
 
+## The World Is the Relation
+
+The world and the Relation collapsed into one thing. The world is what's registered on the Relation. Each being gets its own slice — private thoughts, private signal, private forming cell. The shared frame is the world. Bootstrap is registration: add beings, add places, the world exists.
+
+### Two-Way Reception
+
+Signal doesn't deliver like a message. It lands where both sides agree. Two activations have to meet:
+
+**Sender activation** — how strongly does this impulse point toward that target? Weight, recency, cosine similarity between the impulse embedding and the target's vector. The signal reaching toward the target.
+
+**Receiver attention** — is the target listening? How much attention does it have available? A being deep in its own traversal has low attention — the signal arrives but doesn't penetrate. A being at rest with open attention receives it fully.
+
+```
+reception = sender_activation * receiver_attention
+```
+
+Both high = full reception. High sender + low receiver = shout at someone who isn't listening. Low sender + high receiver = the being is listening but the signal isn't aimed at it.
+
+The `listen` primitive is the being's attention state — its contribution to whether the Relation reaches it. Not a passive read. An active gate.
+
+Tags (`<skyra>message</skyra>`) boost sender activation for the named target. No tag means pure activation routing — the signal finds whoever is most receptive through the product of both sides.
+
+### Routing Without a Router
+
+The impulse enters the Relation, gets embedded. The activation equation scores every registered entity — beings, places, everything. Top-k most activated targets receive the traversal. The signal finds its own destination. No dispatcher. No control plane. The same activation equation that governs internal traversal also governs inter-being communication.
+
 ## Primitives, Places, and Tools
 
 ### The Split

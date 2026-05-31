@@ -12,6 +12,7 @@ import (
 // and where this Reality sits in the topology.
 type Skyra struct {
 	id             string  // unique per instance, assigned at creation
+	BeingID        string  // which being this cell belongs to — used to get the right Slice on the Relation
 	Weight         float64 // global weight — EMA across all traversals
 	TraversalCount int     // proper time — how many relations have passed through
 	LastTraversed  int     // traversal count when last activated
@@ -65,31 +66,33 @@ func (s *Skyra) Competence(r *Relation) {
 	}
 }
 
-// CompetenceExpress — ascent competence read. Decides between
-// motor and compress based on thought density on the Relation.
+// CompetenceExpress — ascent competence read. Decides whether
+// to compress based on thought density on the Relation.
 func (s *Skyra) CompetenceExpress(r *Relation) {
-	density := ThoughtDensity(r)
+	density := ThoughtDensity(r, s.BeingID)
 
 	switch {
 	case density > 0.5:
 		s.Type = "compress"
 	default:
-		s.Type = "motor"
+		s.Type = "pass-through"
 	}
+	// motor fires at the exit of Realize(), not through competence
 }
 
 // ThoughtDensity — average pairwise cosine similarity across
 // thought vectors on the Relation. High = through line exists.
 // Low = scattered context.
-func ThoughtDensity(r *Relation) float64 {
-	r.mu.Lock()
-	thoughts := make([]*Skyra, 0, len(r.Thoughts))
-	for _, t := range r.Thoughts {
+func ThoughtDensity(r *Relation, beingID string) float64 {
+	sl := r.GetSlice(beingID)
+	sl.mu.Lock()
+	thoughts := make([]*Skyra, 0, len(sl.Thoughts))
+	for _, t := range sl.Thoughts {
 		if cell, ok := t.(*Skyra); ok && len(cell.Vector) > 0 {
 			thoughts = append(thoughts, cell)
 		}
 	}
-	r.mu.Unlock()
+	sl.mu.Unlock()
 
 	if len(thoughts) < 2 {
 		return 0
@@ -114,12 +117,14 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 		s.Decay()
 		return r
 	}
-	if r.Visited[s.id] {
+	sl := r.GetSlice(s.BeingID)
+	sl.mu.Lock()
+	if sl.Visited[s.id] {
+		sl.mu.Unlock()
 		return r
 	}
-	r.mu.Lock()
-	r.Visited[s.id] = true
-	r.mu.Unlock()
+	sl.Visited[s.id] = true
+	sl.mu.Unlock()
 
 	// first competence read — what am I on intake?
 	s.Competence(r)
@@ -134,7 +139,10 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 
 	// decay unvisited neighbors — cancelled traversal, one level deep
 	for id, rel := range s.Relationships {
-		if !r.Visited[id] {
+		sl.mu.Lock()
+		visited := sl.Visited[id]
+		sl.mu.Unlock()
+		if !visited {
 			rel.Realize(&Relation{Cancelled: true})
 		}
 	}
@@ -156,17 +164,17 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	s.Reinforce()
 
 	// act — parse intent graph, add acts to the Relation
-	r.mu.Lock()
-	intent := r.Intent
-	r.mu.Unlock()
+	sl.mu.Lock()
+	intent := sl.Intent
+	sl.mu.Unlock()
 	if intent != "" {
 		acts := parseIntentGraph(intent)
 		for _, act := range acts {
 			a := s.Create(&Relation{}).(*Skyra)
 			a.Content = act
-			r.mu.Lock()
-			r.Thoughts = append(r.Thoughts, a)
-			r.mu.Unlock()
+			sl.mu.Lock()
+			sl.Thoughts = append(sl.Thoughts, a)
+			sl.mu.Unlock()
 		}
 	}
 
@@ -196,12 +204,13 @@ func parseIntentGraph(intent string) []string {
 // Observe — mutual observation. The Relation observes itself through
 // the encounter first, then the cell's type-specific intake fires.
 func (s *Skyra) Observe(r *Relation) {
-	r.mu.Lock()
-	r.LastSeen = s
-	if r.Forming != nil {
-		r.Forming.Relationships[s.id] = s
+	sl := r.GetSlice(s.BeingID)
+	sl.mu.Lock()
+	sl.LastSeen = s
+	if sl.Forming != nil {
+		sl.Forming.Relationships[s.id] = s
 	}
-	r.mu.Unlock()
+	sl.mu.Unlock()
 	r.Observe(r)
 	if fn, ok := s.ObserveFns[s.Type]; ok {
 		fn(r)
@@ -219,29 +228,30 @@ func ObservePickUp(s *Skyra) func(*Relation) {
 		if s.Content == "" {
 			return
 		}
-		r.mu.Lock()
-		r.Thoughts = append(r.Thoughts, s)
-		r.Load += len(s.Content)
-		r.Signal -= 0.01
-		r.mu.Unlock()
+		sl := r.GetSlice(s.BeingID)
+		sl.mu.Lock()
+		sl.Thoughts = append(sl.Thoughts, s)
+		sl.Load += len(s.Content)
+		sl.Signal -= 0.01
+		sl.mu.Unlock()
 	}
 }
 
 // ObservePropagate — absorb content onto the Relation without costing signal.
-// Also reads Goal and Intent from the Relation to shape descent.
-// If the cell's content updates the being's understanding of goal or route,
-// propagate can refine them.
+// Also reads Goal and Intent to shape descent. If the cell's content updates
+// the being's understanding of goal or route, propagate can refine them.
 func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(*Relation) {
 	return func(r *Relation) {
 		if s.Content == "" {
 			return
 		}
-		r.mu.Lock()
-		r.Thoughts = append(r.Thoughts, s)
-		r.Load += len(s.Content)
-		goal := r.Goal
-		intent := r.Intent
-		r.mu.Unlock()
+		sl := r.GetSlice(s.BeingID)
+		sl.mu.Lock()
+		sl.Thoughts = append(sl.Thoughts, s)
+		sl.Load += len(s.Content)
+		goal := sl.Goal
+		intent := sl.Intent
+		sl.mu.Unlock()
 
 		if goal == "" {
 			return
@@ -270,43 +280,44 @@ Optionally, if your prediction of the future has changed:
 		newGoal := extractTag(result, "goal")
 		newIntent := extractTag(result, "intent")
 
-		r.mu.Lock()
+		sl.mu.Lock()
 		if thought != "" {
 			t := s.Create(&Relation{}).(*Skyra)
 			t.Content = thought
-			r.Thoughts = append(r.Thoughts, t)
-			r.Load += len(thought)
+			sl.Thoughts = append(sl.Thoughts, t)
+			sl.Load += len(thought)
 		}
 		if newGoal != "" {
-			r.Goal = newGoal
+			sl.Goal = newGoal
 		}
 		if newIntent != "" {
-			r.Intent = newIntent
+			sl.Intent = newIntent
 		}
-		r.mu.Unlock()
+		sl.mu.Unlock()
 	}
 }
 
 // ExpressMotor — execute. The leaf where cognition crosses into consequence.
 func ExpressMotor(s *Skyra, execute func(string) string) func(*Relation) *Relation {
 	return func(r *Relation) *Relation {
-		r.mu.Lock()
+		sl := r.GetSlice(s.BeingID)
+		sl.mu.Lock()
 		var parts []string
-		for _, t := range r.Thoughts {
+		for _, t := range sl.Thoughts {
 			if cell, ok := t.(*Skyra); ok {
 				parts = append(parts, cell.Content)
 			}
 		}
-		r.mu.Unlock()
+		sl.mu.Unlock()
 		if len(parts) > 0 {
 			result := execute(strings.Join(parts, "\n"))
 			if result != "" {
 				out := s.Create(&Relation{}).(*Skyra)
 				out.Content = result
-				r.mu.Lock()
-				r.Thoughts = []Reality{out}
-				r.Load = len(result)
-				r.mu.Unlock()
+				sl.mu.Lock()
+				sl.Thoughts = []Reality{out}
+				sl.Load = len(result)
+				sl.mu.Unlock()
 			}
 		}
 		return r
@@ -319,19 +330,20 @@ func ExpressMotor(s *Skyra, execute func(string) string) func(*Relation) *Relati
 // with compressed cells on the Relation.
 func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
 	return func(r *Relation) *Relation {
-		r.mu.Lock()
-		if r.Load < r.MaxLoad/2 || len(r.Thoughts) < 2 {
-			r.mu.Unlock()
+		sl := r.GetSlice(s.BeingID)
+		sl.mu.Lock()
+		if sl.Load < r.MaxLoad/2 || len(sl.Thoughts) < 2 {
+			sl.mu.Unlock()
 			return r
 		}
 
-		thoughts := make([]*Skyra, 0, len(r.Thoughts))
-		for _, t := range r.Thoughts {
+		thoughts := make([]*Skyra, 0, len(sl.Thoughts))
+		for _, t := range sl.Thoughts {
 			if cell, ok := t.(*Skyra); ok {
 				thoughts = append(thoughts, cell)
 			}
 		}
-		r.mu.Unlock()
+		sl.mu.Unlock()
 
 		if len(thoughts) < 2 {
 			return r
@@ -355,10 +367,10 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 			}
 			raw := strings.Join(parts, "\n---\n")
 
-			r.mu.Lock()
-			goal := r.Goal
-			intent := r.Intent
-			r.mu.Unlock()
+			sl.mu.Lock()
+			goal := sl.Goal
+			intent := sl.Intent
+			sl.mu.Unlock()
 
 			prompt := `You are a being navigating a world. You have a goal and an intent graph.
 
@@ -394,39 +406,39 @@ Optionally, if your prediction of the future has changed:
 			newGoal := extractTag(result, "goal")
 			newIntent := extractTag(result, "intent")
 
-			r.mu.Lock()
+			sl.mu.Lock()
 			if thought != "" {
 				t := s.Create(&Relation{}).(*Skyra)
 				t.Content = thought
-				r.Thoughts = append(r.Thoughts, t)
+				sl.Thoughts = append(sl.Thoughts, t)
 			}
 			if newGoal != "" {
-				r.Goal = newGoal
+				sl.Goal = newGoal
 			}
 			if newIntent != "" {
-				r.Intent = newIntent
+				sl.Intent = newIntent
 			}
-			r.mu.Unlock()
+			sl.mu.Unlock()
 
 			out := s.Create(&Relation{}).(*Skyra)
 			out.Content = compressedContent
 			for _, cell := range cluster {
 				out.Relationships[cell.id] = cell
 			}
-			vec, err := inference.Embed(result)
+			vec, err := inference.Embed(compressedContent)
 			if err == nil {
 				out.Vector = vec
 			}
 
 			s.Relationships[out.id] = out
 			compressed = append(compressed, out)
-			totalLoad += len(result)
+			totalLoad += len(compressedContent)
 		}
 
-		r.mu.Lock()
-		r.Thoughts = compressed
-		r.Load = totalLoad
-		r.mu.Unlock()
+		sl.mu.Lock()
+		sl.Thoughts = compressed
+		sl.Load = totalLoad
+		sl.mu.Unlock()
 
 		return r
 	}
