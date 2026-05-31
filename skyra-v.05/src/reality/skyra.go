@@ -36,10 +36,23 @@ func (s *Skyra) ID() string {
 	return s.id
 }
 
+// Init — set up a cell with an id and being ownership. Called during bootstrap.
+func (s *Skyra) Init(id, beingID string) {
+	s.id = id
+	s.BeingID = beingID
+	s.Weight = 1.0
+	s.Alpha = 0.1
+	s.Relationships = make(map[string]Reality)
+	s.Expressors = make(map[string]Reality)
+	s.ObserveFns = make(map[string]func(*Relation))
+	s.ExpressFns = make(map[string]func(*Relation) *Relation)
+}
+
 // Create — instantiate a new cell with this DNA. The genome calls this.
 func (s *Skyra) Create(r *Relation) Reality {
 	return &Skyra{
 		id:            NewID(),
+		BeingID:       s.BeingID,
 		Weight:        1.0,
 		Alpha:         0.1,
 		Relationships: make(map[string]Reality),

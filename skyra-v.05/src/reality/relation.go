@@ -25,8 +25,11 @@ type Slice struct {
 	Visited  map[string]bool
 }
 
+func (s *Slice) Lock()   { s.mu.Lock() }
+func (s *Slice) Unlock() { s.mu.Unlock() }
+
 type Relation struct {
-	mu        sync.RWMutex // protects shared state: World, Fields
+	mu sync.RWMutex // protects shared state: World, Fields
 	id        string
 	Origin    string
 	ThreadID  string
@@ -40,6 +43,16 @@ type Relation struct {
 	Cancelled bool
 }
 
+func (r *Relation) RLock()   { r.mu.RLock() }
+func (r *Relation) RUnlock() { r.mu.RUnlock() }
+
+func (r *Relation) SetImpulse(origin, impulse string) {
+	r.mu.Lock()
+	r.Origin = origin
+	r.Impulse = impulse
+	r.mu.Unlock()
+}
+
 func (r *Relation) ID() string {
 	return r.id
 }
@@ -48,19 +61,37 @@ func (r *Relation) Create(rel *Relation) Reality {
 	return nil
 }
 
+// Realize — the world loop. Observe routes the impulse to the
+// highest scoring entity. The entity traverses. Express delivers.
 func (r *Relation) Realize(rel *Relation) *Relation {
+	r.Observe(rel)
 	return rel
 }
 
 func (r *Relation) Competence(rel *Relation) {
 }
 
+// Observe — the world observes the impulse. Scores every entity in the
+// World map by activation. The highest scoring targets receive the traversal.
 func (r *Relation) Observe(rel *Relation) {
-	s := r.GetSlice(r.Origin)
-	s.mu.Lock()
-	s.Depth++
-	s.Trace = append(s.Trace, rel.ID())
-	s.mu.Unlock()
+	r.mu.RLock()
+	world := r.World
+	r.mu.RUnlock()
+
+	var best Reality
+	var bestScore float64
+
+	for _, entity := range world {
+		score := entity.Activation(rel)
+		if score > bestScore {
+			bestScore = score
+			best = entity
+		}
+	}
+
+	if best != nil {
+		best.Realize(rel)
+	}
 }
 
 func (r *Relation) Express(rel *Relation) *Relation {
