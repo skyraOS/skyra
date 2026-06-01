@@ -7,7 +7,6 @@ This is a high-level but fairly detailed timeline of how the architecture change
 It is based on the git history from:
 
 - first commit: `2026-02-08`
-- latest reviewed state in this pass: `2026-04-07`
 
 Recent pace reference:
 

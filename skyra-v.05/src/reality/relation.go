@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"skyra-v1/src/inference"
 )
@@ -12,17 +13,18 @@ import (
 // Each being gets its own slice. Own lock. Own goroutine.
 // No being can access another being's slice.
 type Slice struct {
-	mu       sync.Mutex
-	Thoughts []Reality // accumulated thought cells
-	Signal   float64
-	Load     int    // accumulated content size
-	Forming  *Skyra // the cell being built during this traversal
-	Goal     string // the destination — persistent, changed explicitly
-	Intent   string // the predicted future — refined at every compression boundary
-	LastSeen Reality
-	Depth    int
-	Trace    []string
-	Visited  map[string]bool
+	mu           sync.Mutex
+	Thoughts     []Reality // accumulated thought cells
+	Signal       float64
+	Load         int    // accumulated content size
+	Forming      *Skyra // the cell being built during this traversal
+	Goal         string // the destination — persistent, changed explicitly
+	Intent       string // the predicted future — refined at every compression boundary
+	Surroundings map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
+	LastSeen     Reality
+	Depth        int
+	Trace        []string
+	Visited      map[string]bool
 }
 
 func (s *Slice) Lock()   { s.mu.Lock() }
@@ -37,6 +39,7 @@ type Relation struct {
 	World     map[string]Reality             // shared — beings, places, tools. The world is the Relation.
 	Providers map[string]Reality             // shared — inference endpoints
 	Fields    map[string]map[string]float64  // shared — binding fields
+	Threads   map[string]*Thread             // active threads — keyed by thread ID. A being can listen to many.
 	Slices    map[string]*Slice              // private — keyed by being ID, tenant-isolated
 	MaxLoad   int
 	MaxDepth  int
@@ -128,7 +131,8 @@ func (r *Relation) Deposit(beingID string) {
 		}
 	}
 	cell.Content = strings.Join(parts, "\n")
-	cell.Weight = s.Signal
+	cell.FamiliarityWeight = s.Signal
+	cell.IdentityWeight = s.Signal
 	host := s.LastSeen
 	s.mu.Unlock()
 
@@ -140,6 +144,70 @@ func (r *Relation) Deposit(beingID string) {
 	if h, ok := host.(*Skyra); ok {
 		h.Relationships[cell.id] = cell
 	}
+
+	r.mu.RLock()
+	for _, thread := range r.Threads {
+		if thread.BeingID == beingID {
+			thread.Bind(cell.id)
+		}
+	}
+	r.mu.RUnlock()
+}
+
+type SliceSnapshot struct {
+	BeingID      string
+	Signal       float64
+	Load         int
+	ThoughtCount int
+	Goal         string
+	Intent       string
+	Surroundings map[string]float64
+}
+
+type ThreadSnapshot struct {
+	ID      string
+	BeingID string
+	Members map[string]float64
+}
+
+func (r *Relation) SliceList() []SliceSnapshot {
+	var out []SliceSnapshot
+	for name, sl := range r.Slices {
+		sl.mu.Lock()
+		surroundings := make(map[string]float64, len(sl.Surroundings))
+		for k, v := range sl.Surroundings {
+			surroundings[k] = v
+		}
+		out = append(out, SliceSnapshot{
+			BeingID:      name,
+			Signal:       sl.Signal,
+			Load:         sl.Load,
+			ThoughtCount: len(sl.Thoughts),
+			Goal:         sl.Goal,
+			Intent:       sl.Intent,
+			Surroundings: surroundings,
+		})
+		sl.mu.Unlock()
+	}
+	return out
+}
+
+func (r *Relation) ThreadList() []ThreadSnapshot {
+	var out []ThreadSnapshot
+	for _, t := range r.Threads {
+		t.mu.Lock()
+		members := make(map[string]float64, len(t.Members))
+		for k, v := range t.Members {
+			members[k] = v
+		}
+		out = append(out, ThreadSnapshot{
+			ID:      t.id,
+			BeingID: t.BeingID,
+			Members: members,
+		})
+		t.mu.Unlock()
+	}
+	return out
 }
 
 func (r *Relation) Reinforce() {
@@ -155,20 +223,22 @@ func Impress(origin, raw string) (*Relation, error) {
 	}
 
 	forming := &Skyra{
-		id:            NewID(),
-		Weight:        1.0,
-		Alpha:         0.1,
-		Relationships: make(map[string]Reality),
-		Expressors:    make(map[string]Reality),
-		ObserveFns:    make(map[string]func(*Relation)),
-		ExpressFns:    make(map[string]func(*Relation) *Relation),
+		id:                NewID(),
+		IdentityWeight:    1.0,
+		FamiliarityWeight: 1.0,
+		CreatedAt:         time.Now().Unix(),
+		Relationships:     make(map[string]Reality),
+		Expressors:        make(map[string]Reality),
+		ObserveFns:        make(map[string]func(*Relation)),
+		ExpressFns:        make(map[string]func(*Relation) *Relation),
 	}
 
 	slice := &Slice{
-		Thoughts: []Reality{},
-		Signal:   1.0,
-		Forming:  forming,
-		Visited:  make(map[string]bool),
+		Thoughts:     []Reality{},
+		Signal:       1.0,
+		Forming:      forming,
+		Surroundings: make(map[string]float64),
+		Visited:      make(map[string]bool),
 	}
 
 	return &Relation{
@@ -178,6 +248,7 @@ func Impress(origin, raw string) (*Relation, error) {
 		World:     make(map[string]Reality),
 		Providers: make(map[string]Reality),
 		Fields:    make(map[string]map[string]float64),
+		Threads:   make(map[string]*Thread),
 		Slices:    map[string]*Slice{origin: slice},
 		MaxLoad:   75000,
 		MaxDepth:  50,
@@ -194,20 +265,22 @@ func (r *Relation) GetSlice(beingID string) *Slice {
 	}
 
 	forming := &Skyra{
-		id:            NewID(),
-		Weight:        1.0,
-		Alpha:         0.1,
-		Relationships: make(map[string]Reality),
-		Expressors:    make(map[string]Reality),
-		ObserveFns:    make(map[string]func(*Relation)),
-		ExpressFns:    make(map[string]func(*Relation) *Relation),
+		id:                NewID(),
+		IdentityWeight:    1.0,
+		FamiliarityWeight: 1.0,
+		CreatedAt:         time.Now().Unix(),
+		Relationships:     make(map[string]Reality),
+		Expressors:        make(map[string]Reality),
+		ObserveFns:        make(map[string]func(*Relation)),
+		ExpressFns:        make(map[string]func(*Relation) *Relation),
 	}
 
 	s = &Slice{
-		Thoughts: []Reality{},
-		Signal:   1.0,
-		Forming:  forming,
-		Visited:  make(map[string]bool),
+		Thoughts:     []Reality{},
+		Signal:       1.0,
+		Forming:      forming,
+		Surroundings: make(map[string]float64),
+		Visited:      make(map[string]bool),
 	}
 
 	r.mu.Lock()

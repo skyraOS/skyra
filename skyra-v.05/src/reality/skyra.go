@@ -1,10 +1,32 @@
 package reality
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/inference"
 )
+
+const systemPrompt = `What you observe drives what you think.
+What you think drives what you can use.
+Your memory is how you navigate. Trust it.
+
+Respond with:
+<thought>what you think</thought>
+Optionally:
+<goal>updated goal</goal>
+<intent>updated intent graph using <look>, <engage>, <listen>, <speak>, and <then></intent>`
+
+const compressPrompt = `Compress the context below. Find the through line, drop redundancy.
+
+Respond with:
+<compressed>dense summary preserving the through line</compressed>
+<thought>what you think about what survived</thought>
+Optionally:
+<goal>updated goal</goal>
+<intent>updated intent graph</intent>`
 
 // Skyra DNA — the first expression of the Reality interface.
 // Every field here is the same as every other DNA. The behavior
@@ -13,23 +35,28 @@ import (
 type Skyra struct {
 	id             string  // unique per instance, assigned at creation
 	BeingID        string  // which being this cell belongs to — used to get the right Slice on the Relation
-	Weight         float64 // global weight — EMA across all traversals
-	TraversalCount int     // proper time — how many relations have passed through
-	LastTraversed  int     // traversal count when last activated
-	Alpha          float64 // EMA smoothing factor — slow = stable, fast = reactive
-	Type           string  // set by Competence once on descent (before Observe), once on ascent (before Express). One field, two reads. Observe and Express have independent type vocabularies but never fire at the same time.
+	Type           string  // set by Competence once on descent (before Observe), once on ascent (before Express). One field, two reads.
 	Content        string    // what this cell holds — identity for PFC, memory for memory, skill for skill
 	Vector         []float64 // embedding of Content — set once at creation, used for relevance in activation
 	Description    string    // what this cell type is responsible for — shapes traversal, not shown during inference
+
+	// three time horizons — each a different decay curve
+	IdentityWeight    float64 // long term memory — EMA α=0.02. What the being IS. The groove.
+	FamiliarityWeight float64 // medium term memory — EMA α=0.1. What the being has been doing.
+	TraversalCount    int     // proper time — how many relations have passed through. Also: reinforcement count.
+	LastTraversed     int     // traversal count when last activated — recency derives from this.
+	CreatedAt         int64   // unix timestamp — temporal binding derives from this
 
 	// the topology — where this Reality sits in the graph
 	Relationships map[string]Reality // descent targets — what this node knows
 	Expressors    map[string]Reality // ascent targets — what this node can do
 
+	// the being's senses — travel with it across worlds
+	Primitives map[string]func(*Relation, string) // look, engage, listen, speak — keyed by name, target is the argument
+
 	// the DNA — keyed by Type, selected by Competence
-	ObserveFns map[string]func(*Relation)            // intake behaviors per type — needed: pass-through, pick-up, propagate
+	ObserveFns map[string]func(*Relation)            // intake behaviors per type
 	ExpressFns map[string]func(*Relation) *Relation  // output behaviors per type
-	// expressors needed: motor (act), compress (provider call — collapse accumulated context)
 }
 
 func (s *Skyra) ID() string {
@@ -40,10 +67,12 @@ func (s *Skyra) ID() string {
 func (s *Skyra) Init(id, beingID string) {
 	s.id = id
 	s.BeingID = beingID
-	s.Weight = 1.0
-	s.Alpha = 0.1
+	s.IdentityWeight = 1.0
+	s.FamiliarityWeight = 1.0
+	s.CreatedAt = time.Now().Unix()
 	s.Relationships = make(map[string]Reality)
 	s.Expressors = make(map[string]Reality)
+	s.Primitives = make(map[string]func(*Relation, string))
 	s.ObserveFns = make(map[string]func(*Relation))
 	s.ExpressFns = make(map[string]func(*Relation) *Relation)
 }
@@ -51,14 +80,16 @@ func (s *Skyra) Init(id, beingID string) {
 // Create — instantiate a new cell with this DNA. The genome calls this.
 func (s *Skyra) Create(r *Relation) Reality {
 	return &Skyra{
-		id:            NewID(),
-		BeingID:       s.BeingID,
-		Weight:        1.0,
-		Alpha:         0.1,
-		Relationships: make(map[string]Reality),
-		Expressors:    make(map[string]Reality),
-		ObserveFns:    make(map[string]func(*Relation)),
-		ExpressFns:    make(map[string]func(*Relation) *Relation),
+		id:                NewID(),
+		BeingID:           s.BeingID,
+		IdentityWeight:    1.0,
+		FamiliarityWeight: 1.0,
+		CreatedAt:         time.Now().Unix(),
+		Relationships:     make(map[string]Reality),
+		Expressors:        make(map[string]Reality),
+		Primitives:        make(map[string]func(*Relation, string)),
+		ObserveFns:        make(map[string]func(*Relation)),
+		ExpressFns:        make(map[string]func(*Relation) *Relation),
 	}
 }
 
@@ -134,19 +165,34 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	sl.mu.Lock()
 	if sl.Visited[s.id] {
 		sl.mu.Unlock()
+		debug.Being(s.BeingID, "traverse", "SKIP (already visited):", s.id, s.Description)
 		return r
 	}
 	sl.Visited[s.id] = true
 	sl.mu.Unlock()
 
+	activation := s.Activation(r)
+	debug.Being(s.BeingID, "traverse", fmt.Sprintf("ENTER %s [%s] activation=%.4f identity=%.4f familiarity=%.4f recency=%.4f traversals=%d",
+		s.id, s.Description, activation, s.IdentityWeight, s.FamiliarityWeight,
+		Recency(s.TraversalCount, s.LastTraversed), s.TraversalCount))
+
 	// first competence read — what am I on intake?
 	s.Competence(r)
+	debug.Being(s.BeingID, "traverse", "  competence:", s.Type)
 
 	// descent phase — the cell absorbs from the signal
 	s.Observe(r)
 
+	sl.mu.Lock()
+	thoughtCount := len(sl.Thoughts)
+	signal := sl.Signal
+	load := sl.Load
+	sl.mu.Unlock()
+	debug.Being(s.BeingID, "traverse", fmt.Sprintf("  post-observe: thoughts=%d signal=%.4f load=%d", thoughtCount, signal, load))
+
 	// deeper into the topology — promoted nodes first, then memories
-	for _, rel := range s.Relationships {
+	for name, rel := range s.Relationships {
+		debug.Being(s.BeingID, "traverse", "  descend ->", name, rel.ID())
 		r = rel.Realize(r)
 	}
 
@@ -161,12 +207,14 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	}
 
 	// ascent phase — expressors fire on the way back up
-	for _, e := range s.Expressors {
+	for name, e := range s.Expressors {
+		debug.Being(s.BeingID, "traverse", "  expressor ->", name)
 		r = e.Realize(r)
 	}
 
 	// second competence read — ascent vocabulary: motor or compress based on thought density
 	s.CompetenceExpress(r)
+	debug.Being(s.BeingID, "traverse", "  express-competence:", s.Type)
 
 	// the cell outputs
 	r = s.Express(r)
@@ -176,18 +224,29 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	s.LastTraversed = s.TraversalCount
 	s.Reinforce()
 
-	// act — parse intent graph, add acts to the Relation
+	// act — parse intent graph, execute primitives or add acts to the Relation
 	sl.mu.Lock()
 	intent := sl.Intent
+	goal := sl.Goal
 	sl.mu.Unlock()
+	if goal != "" {
+		debug.Being(s.BeingID, "traverse", "  goal:", goal)
+	}
 	if intent != "" {
+		debug.Being(s.BeingID, "traverse", "  intent:", intent)
 		acts := parseIntentGraph(intent)
 		for _, act := range acts {
-			a := s.Create(&Relation{}).(*Skyra)
-			a.Content = act
-			sl.mu.Lock()
-			sl.Thoughts = append(sl.Thoughts, a)
-			sl.mu.Unlock()
+			name, target := parsePrimitive(act)
+			if fn, ok := s.Primitives[name]; ok {
+				debug.Being(s.BeingID, "traverse", "  primitive:", name, "->", target)
+				fn(r, target)
+			} else {
+				a := s.Create(&Relation{}).(*Skyra)
+				a.Content = act
+				sl.mu.Lock()
+				sl.Thoughts = append(sl.Thoughts, a)
+				sl.mu.Unlock()
+			}
 		}
 	}
 
@@ -196,6 +255,7 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 		r = fn(r)
 	}
 
+	debug.Being(s.BeingID, "traverse", fmt.Sprintf("EXIT %s [%s]", s.id, s.Description))
 	return r
 }
 
@@ -212,6 +272,22 @@ func parseIntentGraph(intent string) []string {
 		}
 	}
 	return acts
+}
+
+// parsePrimitive extracts primitive name and target from tags like <engage>forge</engage>.
+// Returns the tag name and inner content. If not a recognized primitive tag, returns empty name.
+func parsePrimitive(act string) (string, string) {
+	primitives := []string{"look", "engage", "listen", "speak"}
+	for _, p := range primitives {
+		open := "<" + p + ">"
+		close := "</" + p + ">"
+		if strings.HasPrefix(act, open) && strings.HasSuffix(act, close) {
+			target := strings.TrimPrefix(act, open)
+			target = strings.TrimSuffix(target, close)
+			return p, strings.TrimSpace(target)
+		}
+	}
+	return "", act
 }
 
 // Observe — mutual observation. The Relation observes itself through
@@ -250,9 +326,9 @@ func ObservePickUp(s *Skyra) func(*Relation) {
 	}
 }
 
-// ObservePropagate — absorb content onto the Relation without costing signal.
-// Also reads Goal and Intent to shape descent. If the cell's content updates
-// the being's understanding of goal or route, propagate can refine them.
+// ObservePropagate — absorb content onto the Relation, then call the provider
+// with the being's full present. The being sees its own state — surroundings,
+// threads, thoughts, goal, intent — and responds from that.
 func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(*Relation) {
 	return func(r *Relation) {
 		if s.Content == "" {
@@ -262,32 +338,19 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 		sl.mu.Lock()
 		sl.Thoughts = append(sl.Thoughts, s)
 		sl.Load += len(s.Content)
-		goal := sl.Goal
-		intent := sl.Intent
 		sl.mu.Unlock()
 
-		if goal == "" {
-			return
-		}
+		present := Present(r, s.BeingID)
 
-		prompt := `You are a being navigating a world. You have a goal and an intent graph.
-
-Your goal is what you are trying to reach.
-Your intent graph is your prediction of the future — the sequence of actions you believe will get you to the goal. When you update it, it overwrites the current one and shapes what happens next.
-
-You just observed something. Think about what it means for your goal and your predicted future.
-
-Respond with:
-<thought>what you think about this observation</thought>
-Optionally, if your prediction of the future has changed:
-<goal>updated goal</goal>
-<intent>updated intent graph</intent>`
-		context := "Goal: " + goal + "\nCurrent intent: " + intent + "\nObserved: " + s.Content
-
-		result, err := call(prompt, context)
+		debug.Being(s.BeingID, "provider", "PROPAGATE call")
+		debug.Being(s.BeingID, "provider", "system:", systemPrompt)
+		debug.Being(s.BeingID, "provider", "present:", present+"\n\n## Observed\n"+s.Content)
+		result, err := call(systemPrompt, present+"\n\n## Observed\n"+s.Content)
 		if err != nil {
+			debug.Being(s.BeingID, "provider", "ERROR:", err)
 			return
 		}
+		debug.Being(s.BeingID, "provider", "RESULT:", result)
 
 		thought := extractTag(result, "thought")
 		newGoal := extractTag(result, "goal")
@@ -339,8 +402,8 @@ func ExpressMotor(s *Skyra, execute func(string) string) func(*Relation) *Relati
 
 // ExpressCompress — provider call that collapses accumulated thoughts.
 // Fires when Load approaches MaxLoad. Groups similar thoughts by cosine
-// similarity, compresses each cluster via provider, replaces raw thoughts
-// with compressed cells on the Relation.
+// similarity, compresses each cluster via provider with the being's full
+// present as context.
 func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
 	return func(r *Relation) *Relation {
 		sl := r.GetSlice(s.BeingID)
@@ -363,6 +426,8 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 		}
 
 		clusters := clusterBySimilarity(thoughts, 0.6)
+		present := Present(r, s.BeingID)
+		debug.Being(s.BeingID, "provider", fmt.Sprintf("COMPRESS call — %d clusters", len(clusters)))
 
 		var compressed []Reality
 		totalLoad := 0
@@ -380,29 +445,7 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 			}
 			raw := strings.Join(parts, "\n---\n")
 
-			sl.mu.Lock()
-			goal := sl.Goal
-			intent := sl.Intent
-			sl.mu.Unlock()
-
-			prompt := `You are a being navigating a world. You have a goal and an intent graph.
-
-Your goal is what you are trying to reach.
-Your intent graph is your prediction of the future — the sequence of actions you believe will get you to the goal. When you update it, it overwrites the current one and shapes what happens next.
-
-You just gathered context during a traversal. Compress it — find the through line, drop redundancy. Then think about what survived and what it means for your predicted future.
-
-Respond with:
-<compressed>dense summary preserving the through line</compressed>
-<thought>what you think about what survived</thought>
-Optionally, if your prediction of the future has changed:
-<goal>updated goal</goal>
-<intent>updated intent graph</intent>`
-			if goal != "" {
-				raw = "Goal: " + goal + "\nCurrent intent: " + intent + "\n---\n" + raw
-			}
-
-			result, err := call(prompt, raw)
+			result, err := call(compressPrompt, present+"\n\n## Compress\n"+raw)
 			if err != nil {
 				for _, cell := range cluster {
 					compressed = append(compressed, cell)
@@ -500,11 +543,12 @@ func (s *Skyra) Express(r *Relation) *Relation {
 	return r
 }
 
-// Activation — base weight * recency * product of all binding fields.
-// This is the score that Competence reads to determine what the cell is.
-// TODO: add relevance term — cosine similarity between cell's content embedding and Relation's impulse embedding. Local model (nomic-embed-text or ONNX in-process). Embed once at cell creation, store vector on cell.
+// Activation — identity * familiarity * recency * binding fields.
+// Three time horizons multiplied together. The product of the
+// groove, the relationship, and the echo.
 func (s *Skyra) Activation(rel *Relation) float64 {
-	base := s.Weight * Recency(s.TraversalCount, s.LastTraversed)
+	recency := Recency(s.TraversalCount, s.LastTraversed)
+	base := s.IdentityWeight * s.FamiliarityWeight * recency
 	if field, ok := rel.Fields[s.id]; ok {
 		for _, w := range field {
 			base *= w
@@ -513,14 +557,16 @@ func (s *Skyra) Activation(rel *Relation) float64 {
 	return base
 }
 
-// Reinforce — EMA update on the return path. The cell was traversed,
-// so its weight moves toward 1.0. Alpha controls how fast.
+// Reinforce — both EMAs update on the return path. The cell was traversed.
+// Identity moves slow (α=0.02). Familiarity moves fast (α=0.1).
 func (s *Skyra) Reinforce() {
-	s.Weight = s.Alpha*1.0 + (1-s.Alpha)*s.Weight
+	s.IdentityWeight = Identity(s.IdentityWeight, true)
+	s.FamiliarityWeight = Familiarity(s.FamiliarityWeight, true)
 }
 
-// Decay — EMA update when NOT traversed. Weight drifts toward 0.
-// Starvation is built into the formula.
+// Decay — both EMAs drift toward 0 when NOT traversed.
+// Identity barely moves. Familiarity fades faster.
 func (s *Skyra) Decay() {
-	s.Weight = (1 - s.Alpha) * s.Weight
+	s.IdentityWeight = Identity(s.IdentityWeight, false)
+	s.FamiliarityWeight = Familiarity(s.FamiliarityWeight, false)
 }

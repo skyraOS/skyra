@@ -2,3 +2,6 @@ skyra
 skyra-bin
 logs/
 .gocache/
+skyra-tui
+skyra-v05
+tui
