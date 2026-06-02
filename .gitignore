@@ -6,6 +6,7 @@ skyra/voice/audit.log.jsonl
 NeuroNote/
 
 # Frontend
+frontend/
 node_modules/
 dist/
 .next/
