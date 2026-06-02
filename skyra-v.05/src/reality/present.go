@@ -16,7 +16,7 @@ func Present(r *Relation, beingID string) string {
 	var sections []string
 
 	// primitives — always present
-	sections = append(sections, "## Primitives\nlook, engage, listen, speak")
+	sections = append(sections, "## Primitives\nspeak")
 
 	// surroundings — what the being can see right now
 	if len(sl.Surroundings) > 0 {
@@ -70,15 +70,15 @@ func Present(r *Relation, beingID string) string {
 	sections = append(sections, threadSections...)
 
 	// thoughts — accumulated during traversal
-	if len(sl.Thoughts) > 0 {
+	if len(sl.TrainOfThought) > 0 {
 		var lines []string
-		for _, t := range sl.Thoughts {
+		for _, t := range sl.TrainOfThought {
 			if sk, ok := t.(*Skyra); ok && sk.Content != "" {
 				lines = append(lines, sk.Content)
 			}
 		}
 		if len(lines) > 0 {
-			sections = append(sections, "## Thoughts\n"+strings.Join(lines, "\n"))
+			sections = append(sections, "## Train of Thought\n"+strings.Join(lines, "\n"))
 		}
 	}
 

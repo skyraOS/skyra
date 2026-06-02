@@ -13,18 +13,21 @@ import (
 // Each being gets its own slice. Own lock. Own goroutine.
 // No being can access another being's slice.
 type Slice struct {
-	mu           sync.Mutex
-	Thoughts     []Reality // accumulated thought cells
-	Signal       float64
-	Load         int    // accumulated content size
-	Forming      *Skyra // the cell being built during this traversal
-	Goal         string // the destination — persistent, changed explicitly
-	Intent       string // the predicted future — refined at every compression boundary
-	Surroundings map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
-	LastSeen     Reality
-	Depth        int
-	Trace        []string
-	Visited      map[string]bool
+	mu              sync.Mutex
+	Thread          []Reality // exchange state — who said what. Managed by the thread binding reality.
+	TrainOfThought  []Reality // the traversal's working surface. Cells picked up during descent land here.
+	Understandings  []Reality // the being's cognitive output — inference from propagate AND compressed products.
+	PreviousActions []Reality // what the being already did. Written by speak/motor.
+	Signal          float64
+	Load            int    // accumulated content size
+	Forming         *Skyra // the cell being built during this traversal
+	Goal            string // the destination — persistent, changed explicitly
+	Intent          string // the predicted future — refined at every compression boundary
+	Surroundings    map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
+	LastSeen        Reality
+	Depth           int
+	Trace           []string
+	Visited         map[string]bool
 }
 
 func (s *Slice) Lock()   { s.mu.Lock() }
@@ -124,7 +127,7 @@ func (r *Relation) Deposit(beingID string) {
 		return
 	}
 	var parts []string
-	for _, t := range s.Thoughts {
+	for _, t := range s.TrainOfThought {
 		if sk, ok := t.(*Skyra); ok {
 			parts = append(parts, sk.Content)
 			cell.Relationships[sk.id] = sk
@@ -155,13 +158,16 @@ func (r *Relation) Deposit(beingID string) {
 }
 
 type SliceSnapshot struct {
-	BeingID      string
-	Signal       float64
-	Load         int
-	ThoughtCount int
-	Goal         string
-	Intent       string
-	Surroundings map[string]float64
+	BeingID              string
+	Signal               float64
+	Load                 int
+	ThreadCount          int
+	TrainOfThoughtCount  int
+	UnderstandingCount   int
+	PreviousActionCount  int
+	Goal                 string
+	Intent               string
+	Surroundings         map[string]float64
 }
 
 type ThreadSnapshot struct {
@@ -179,13 +185,16 @@ func (r *Relation) SliceList() []SliceSnapshot {
 			surroundings[k] = v
 		}
 		out = append(out, SliceSnapshot{
-			BeingID:      name,
-			Signal:       sl.Signal,
-			Load:         sl.Load,
-			ThoughtCount: len(sl.Thoughts),
-			Goal:         sl.Goal,
-			Intent:       sl.Intent,
-			Surroundings: surroundings,
+			BeingID:             name,
+			Signal:              sl.Signal,
+			Load:                sl.Load,
+			ThreadCount:          len(sl.Thread),
+			TrainOfThoughtCount:  len(sl.TrainOfThought),
+			UnderstandingCount:   len(sl.Understandings),
+			PreviousActionCount:  len(sl.PreviousActions),
+			Goal:                sl.Goal,
+			Intent:              sl.Intent,
+			Surroundings:        surroundings,
 		})
 		sl.mu.Unlock()
 	}
@@ -234,11 +243,14 @@ func Impress(origin, raw string) (*Relation, error) {
 	}
 
 	slice := &Slice{
-		Thoughts:     []Reality{},
-		Signal:       1.0,
-		Forming:      forming,
-		Surroundings: make(map[string]float64),
-		Visited:      make(map[string]bool),
+		Thread:          []Reality{},
+		TrainOfThought:  []Reality{},
+		Understandings:  []Reality{},
+		PreviousActions: []Reality{},
+		Signal:          1.0,
+		Forming:         forming,
+		Surroundings:    make(map[string]float64),
+		Visited:         make(map[string]bool),
 	}
 
 	return &Relation{
@@ -276,11 +288,14 @@ func (r *Relation) GetSlice(beingID string) *Slice {
 	}
 
 	s = &Slice{
-		Thoughts:     []Reality{},
-		Signal:       1.0,
-		Forming:      forming,
-		Surroundings: make(map[string]float64),
-		Visited:      make(map[string]bool),
+		Thread:          []Reality{},
+		TrainOfThought:  []Reality{},
+		Understandings:  []Reality{},
+		PreviousActions: []Reality{},
+		Signal:          1.0,
+		Forming:         forming,
+		Surroundings:    make(map[string]float64),
+		Visited:         make(map[string]bool),
 	}
 
 	r.mu.Lock()

@@ -28,7 +28,9 @@ type SliceView struct {
 	BeingID      string             `json:"beingId"`
 	Signal       float64            `json:"signal"`
 	Load         int                `json:"load"`
-	ThoughtCount int                `json:"thoughtCount"`
+	TrainOfThoughtCount int          `json:"trainOfThoughtCount"`
+	UnderstandingCount  int          `json:"understandingCount"`
+	PreviousActionCount int          `json:"previousActionCount"`
 	Goal         string             `json:"goal"`
 	Intent       string             `json:"intent"`
 	Surroundings map[string]float64 `json:"surroundings"`
@@ -54,7 +56,9 @@ func sliceViewFrom(s reality.SliceSnapshot) SliceView {
 		BeingID:      s.BeingID,
 		Signal:       s.Signal,
 		Load:         s.Load,
-		ThoughtCount: s.ThoughtCount,
+		TrainOfThoughtCount: s.TrainOfThoughtCount,
+		UnderstandingCount:  s.UnderstandingCount,
+		PreviousActionCount: s.PreviousActionCount,
 		Goal:         s.Goal,
 		Intent:       s.Intent,
 		Surroundings: s.Surroundings,

@@ -14,19 +14,34 @@ What you think drives what you can use.
 Your memory is how you navigate. Trust it.
 
 Respond with:
-<thought>what you think</thought>
+<thought>This drives searching your memory. Be selective. Be precise.</thought>
 Optionally:
-<goal>updated goal</goal>
-<intent>updated intent graph using <look>, <engage>, <listen>, <speak>, and <then></intent>`
+<goal>This orients your focus. Make it your global focus for higher level activities or local for precision.</goal>
+<intent>updated intent graph using <speak></intent>`
 
-const compressPrompt = `Compress the context below. Find the through line, drop redundancy.
+const speakInternalPrompt = `You are giving context that your outer layer can't see.
+The outer layer sees the conversation but not your memories.
+Give it what it needs to say the right thing.
 
 Respond with:
-<compressed>dense summary preserving the through line</compressed>
+<speak>context from your memory and understanding that the outer layer needs</speak>`
+
+const speakActPrompt = `You are speaking for %s.
+Read the thread state and your internal thoughts and express.
+
+Respond with:
+<speak>what you say</speak>`
+
+const compressPrompt = `What you carry back is your understanding.
+Your understanding is how you learn.
+Generate an understanding through your previous experience.
+
+Respond with:
+<compressed>your understanding</compressed>
 <thought>what you think about what survived</thought>
 Optionally:
 <goal>updated goal</goal>
-<intent>updated intent graph</intent>`
+<intent>updated intent graph using <speak></intent>`
 
 // Skyra DNA — the first expression of the Reality interface.
 // Every field here is the same as every other DNA. The behavior
@@ -130,8 +145,8 @@ func (s *Skyra) CompetenceExpress(r *Relation) {
 func ThoughtDensity(r *Relation, beingID string) float64 {
 	sl := r.GetSlice(beingID)
 	sl.mu.Lock()
-	thoughts := make([]*Skyra, 0, len(sl.Thoughts))
-	for _, t := range sl.Thoughts {
+	thoughts := make([]*Skyra, 0, len(sl.TrainOfThought))
+	for _, t := range sl.TrainOfThought {
 		if cell, ok := t.(*Skyra); ok && len(cell.Vector) > 0 {
 			thoughts = append(thoughts, cell)
 		}
@@ -184,7 +199,7 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	s.Observe(r)
 
 	sl.mu.Lock()
-	thoughtCount := len(sl.Thoughts)
+	thoughtCount := len(sl.TrainOfThought)
 	signal := sl.Signal
 	load := sl.Load
 	sl.mu.Unlock()
@@ -241,11 +256,7 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 				debug.Being(s.BeingID, "traverse", "  primitive:", name, "->", target)
 				fn(r, target)
 			} else {
-				a := s.Create(&Relation{}).(*Skyra)
-				a.Content = act
-				sl.mu.Lock()
-				sl.Thoughts = append(sl.Thoughts, a)
-				sl.mu.Unlock()
+				debug.Being(s.BeingID, "traverse", "  unmatched intent, dropping:", act)
 			}
 		}
 	}
@@ -300,7 +311,6 @@ func (s *Skyra) Observe(r *Relation) {
 		sl.Forming.Relationships[s.id] = s
 	}
 	sl.mu.Unlock()
-	r.Observe(r)
 	if fn, ok := s.ObserveFns[s.Type]; ok {
 		fn(r)
 	}
@@ -311,7 +321,7 @@ func ObservePassThrough(s *Skyra) func(*Relation) {
 	return func(r *Relation) {}
 }
 
-// ObservePickUp — absorb content from the cell onto the Relation as a thought cell. Costs signal.
+// ObservePickUp — absorb content from the cell onto the train of thought. Costs signal.
 func ObservePickUp(s *Skyra) func(*Relation) {
 	return func(r *Relation) {
 		if s.Content == "" {
@@ -319,7 +329,7 @@ func ObservePickUp(s *Skyra) func(*Relation) {
 		}
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		sl.Thoughts = append(sl.Thoughts, s)
+		sl.TrainOfThought = append(sl.TrainOfThought, s)
 		sl.Load += len(s.Content)
 		sl.Signal -= 0.01
 		sl.mu.Unlock()
@@ -336,7 +346,7 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 		}
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		sl.Thoughts = append(sl.Thoughts, s)
+		sl.TrainOfThought = append(sl.TrainOfThought, s)
 		sl.Load += len(s.Content)
 		sl.mu.Unlock()
 
@@ -360,7 +370,7 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 		if thought != "" {
 			t := s.Create(&Relation{}).(*Skyra)
 			t.Content = thought
-			sl.Thoughts = append(sl.Thoughts, t)
+			sl.Understandings = append(sl.Understandings, t)
 			sl.Load += len(thought)
 		}
 		if newGoal != "" {
@@ -373,29 +383,105 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 	}
 }
 
-// ExpressMotor — execute. The leaf where cognition crosses into consequence.
-func ExpressMotor(s *Skyra, execute func(string) string) func(*Relation) *Relation {
+// ExpressSpeak — the act layer. Takes the being's accumulated understanding
+// and produces context for motor. The being briefs its own outer layer —
+// thread has the conversation, speak carries what the thread can't see.
+// Appends what was spoken to the Relation so the being hears itself.
+func ExpressSpeak(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
 	return func(r *Relation) *Relation {
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		var parts []string
-		for _, t := range sl.Thoughts {
-			if cell, ok := t.(*Skyra); ok {
-				parts = append(parts, cell.Content)
+		hasContent := len(sl.Understandings) > 0 || len(sl.TrainOfThought) > 0
+		sl.mu.Unlock()
+		if !hasContent {
+			return r
+		}
+
+		present := Present(r, s.BeingID)
+		prompt := speakInternalPrompt
+
+		debug.Being(s.BeingID, "provider", "SPEAK call")
+		debug.Being(s.BeingID, "provider", "system:", prompt)
+		debug.Being(s.BeingID, "provider", "present:", present)
+		result, err := call(prompt, present)
+		if err != nil {
+			debug.Being(s.BeingID, "provider", "SPEAK ERROR:", err)
+			return r
+		}
+		debug.Being(s.BeingID, "provider", "SPEAK RESULT:", result)
+
+		spoken := extractTag(result, "speak")
+		if spoken == "" {
+			spoken = result
+		}
+
+		out := s.Create(&Relation{}).(*Skyra)
+		out.Content = spoken
+		sl.mu.Lock()
+		sl.Understandings = append(sl.Understandings, out)
+		sl.mu.Unlock()
+
+		return r
+	}
+}
+
+// ExpressMotor — the leaf where cognition crosses into consequence.
+// Reads thread state + speak intent, calls provider with speakActPrompt,
+// produces the being's actual words. Does not touch Thoughts — those are
+// the being's internal memory.
+func ExpressMotor(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
+	return func(r *Relation) *Relation {
+		sl := r.GetSlice(s.BeingID)
+		sl.mu.Lock()
+		intent := sl.Intent
+		var threadParts []string
+		for _, t := range sl.Thread {
+			if cell, ok := t.(*Skyra); ok && cell.Content != "" {
+				threadParts = append(threadParts, cell.Content)
 			}
 		}
 		sl.mu.Unlock()
-		if len(parts) > 0 {
-			result := execute(strings.Join(parts, "\n"))
-			if result != "" {
-				out := s.Create(&Relation{}).(*Skyra)
-				out.Content = result
-				sl.mu.Lock()
-				sl.Thoughts = []Reality{out}
-				sl.Load = len(result)
-				sl.mu.Unlock()
-			}
+
+		speakContent := extractTag(intent, "speak")
+		if speakContent == "" && len(threadParts) == 0 {
+			return r
 		}
+
+		var sections []string
+		if len(threadParts) > 0 {
+			sections = append(sections, "## Thread\n"+strings.Join(threadParts, "\n"))
+		}
+		if speakContent != "" {
+			sections = append(sections, "## Speak\n"+speakContent)
+		}
+		motorPresent := strings.Join(sections, "\n\n")
+
+		prompt := fmt.Sprintf(speakActPrompt, s.BeingID)
+
+		debug.Being(s.BeingID, "provider", "MOTOR call")
+		debug.Being(s.BeingID, "provider", "system:", prompt)
+		debug.Being(s.BeingID, "provider", "present:", motorPresent)
+		result, err := call(prompt, motorPresent)
+		if err != nil {
+			debug.Being(s.BeingID, "provider", "MOTOR ERROR:", err)
+			return r
+		}
+		debug.Being(s.BeingID, "provider", "MOTOR RESULT:", result)
+
+		spoken := extractTag(result, "speak")
+		if spoken == "" {
+			spoken = result
+		}
+
+		out := s.Create(&Relation{}).(*Skyra)
+		out.Content = spoken
+		sl.mu.Lock()
+		sl.PreviousActions = append(sl.PreviousActions, out)
+		sl.Thread = append(sl.Thread, out)
+		sl.mu.Unlock()
+
+		r.SetImpulse(s.BeingID, spoken)
+
 		return r
 	}
 }
@@ -408,13 +494,13 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 	return func(r *Relation) *Relation {
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		if sl.Load < r.MaxLoad/2 || len(sl.Thoughts) < 2 {
+		if sl.Load < r.MaxLoad/2 || len(sl.TrainOfThought) < 2 {
 			sl.mu.Unlock()
 			return r
 		}
 
-		thoughts := make([]*Skyra, 0, len(sl.Thoughts))
-		for _, t := range sl.Thoughts {
+		thoughts := make([]*Skyra, 0, len(sl.TrainOfThought))
+		for _, t := range sl.TrainOfThought {
 			if cell, ok := t.(*Skyra); ok {
 				thoughts = append(thoughts, cell)
 			}
@@ -466,7 +552,7 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 			if thought != "" {
 				t := s.Create(&Relation{}).(*Skyra)
 				t.Content = thought
-				sl.Thoughts = append(sl.Thoughts, t)
+				sl.Understandings = append(sl.Understandings, t)
 			}
 			if newGoal != "" {
 				sl.Goal = newGoal
@@ -492,7 +578,7 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 		}
 
 		sl.mu.Lock()
-		sl.Thoughts = compressed
+		sl.Understandings = append(sl.Understandings, compressed...)
 		sl.Load = totalLoad
 		sl.mu.Unlock()
 
@@ -534,10 +620,13 @@ func clusterBySimilarity(thoughts []*Skyra, threshold float64) [][]*Skyra {
 }
 
 // Express — mutual expression. The Relation expresses itself first,
-// then the cell's type-specific output fires.
+// then competence-selected output fires, then speak (always, if registered).
 func (s *Skyra) Express(r *Relation) *Relation {
 	r = r.Express(r)
 	if fn, ok := s.ExpressFns[s.Type]; ok {
+		r = fn(r)
+	}
+	if fn, ok := s.ExpressFns["speak"]; ok && s.Type != "speak" {
 		r = fn(r)
 	}
 	return r

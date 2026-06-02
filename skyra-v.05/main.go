@@ -82,13 +82,9 @@ func createSkyra() (*reality.Skyra, *reality.Thread) {
 	skyra.ObserveFns["propagate"] = reality.ObservePropagate(skyra, inference.CallDeepSeek)
 
 	skyra.ExpressFns["compress"] = reality.ExpressCompress(skyra, inference.CallDeepSeek)
-	skyra.ExpressFns["motor"] = reality.ExpressMotor(skyra, func(s string) string {
-		return s
-	})
+	skyra.ExpressFns["speak"] = reality.ExpressSpeak(skyra, inference.CallDeepSeek)
+	skyra.ExpressFns["motor"] = reality.ExpressMotor(skyra, inference.CallDeepSeek)
 
-	skyra.Primitives["look"] = reality.PrimitiveLook(skyra)
-	skyra.Primitives["engage"] = reality.PrimitiveEngage(skyra)
-	skyra.Primitives["listen"] = reality.PrimitiveListen(skyra)
 	skyra.Primitives["speak"] = reality.PrimitiveSpeak(skyra)
 
 	thread := reality.NewThread("thread:skyra:main", "skyra")
@@ -101,7 +97,6 @@ func createSkyra() (*reality.Skyra, *reality.Thread) {
 func createMichael(inputCh chan string, outputCh chan tui.ResponseMsg, world *reality.Relation) *reality.User {
 	michael := reality.NewUser("michael", "I build Skyra. I decide what matters.")
 
-	// Express — block on TUI input, handle commands or set impulse
 	cmdCh := make(chan reality.CommandOutput, 1)
 	go func() {
 		for cmd := range cmdCh {
@@ -109,45 +104,42 @@ func createMichael(inputCh chan string, outputCh chan tui.ResponseMsg, world *re
 		}
 	}()
 
+	// Express — block on TUI input, set impulse, trigger world routing
 	michael.ExpressFns["terminal"] = func(r *reality.Relation) *reality.Relation {
+		debug.Being("michael", "express", "waiting for input...")
 		msg := <-inputCh
+		debug.Being("michael", "express", "received:", msg)
 		if handled := reality.HandleCommand(msg, r, cmdCh); handled {
+			debug.Being("michael", "express", "handled as command")
 			return r
 		}
 		r.SetImpulse("michael", msg)
+		debug.Being("michael", "express", "impulse set, routing...")
+		r.Observe(r)
+		debug.Being("michael", "express", "routing complete")
 		return r
 	}
 
-	// Observe — route through the world, deliver response to TUI
+	// Observe — read from the Relation, not from other beings' Slices.
 	michael.ObserveFns["terminal"] = func(r *reality.Relation) {
-		// world routes — activation selects the target
-		r.Observe(r)
+		r.RLock()
+		origin := r.Origin
+		impulse := r.Impulse
+		r.RUnlock()
+		debug.Being("michael", "observe", "origin:", origin, "impulse:", impulse)
 
-		// read the response from whoever the world routed to
-		for name := range r.World {
-			if name == "michael" {
-				continue
-			}
-			sl := r.GetSlice(name)
-			sl.Lock()
-			var response string
-			for _, t := range sl.Thoughts {
-				if cell, ok := t.(*reality.Skyra); ok && cell.Content != "" {
-					if response != "" {
-						response += "\n"
-					}
-					response += cell.Content
-				}
-			}
-			sl.Thoughts = nil
-			sl.Load = 0
-			sl.Unlock()
-
-			if response != "" {
-				outputCh <- tui.ResponseMsg{From: name, Content: response}
-			}
+		if origin != "" && origin != "michael" && impulse != "" {
+			debug.Being("michael", "observe", "delivering response from", origin)
+			outputCh <- tui.ResponseMsg{From: origin, Content: impulse}
+		} else {
+			debug.Being("michael", "observe", "nothing to deliver")
 		}
 	}
+
+	// Michael's thread binding reality
+	michaelThread := reality.NewThread("thread:michael:main", "michael")
+	michaelThread.Bind(michael.ID())
+	world.Threads[michaelThread.ID()] = michaelThread
 
 	return michael
 }

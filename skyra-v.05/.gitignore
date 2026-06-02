@@ -4,4 +4,4 @@ logs/
 .gocache/
 skyra-tui
 skyra-v05
-tui
+/tui

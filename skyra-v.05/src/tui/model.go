@@ -266,7 +266,7 @@ func (m Model) renderSidebar() string {
 		m.world.RLock()
 		for name, slice := range m.world.Slices {
 			slice.Lock()
-			thoughts := len(slice.Thoughts)
+			thoughts := len(slice.TrainOfThought)
 			signal := slice.Signal
 			load := slice.Load
 			goal := truncate(slice.Goal, 18)

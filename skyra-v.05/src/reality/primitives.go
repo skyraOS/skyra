@@ -85,7 +85,7 @@ func PrimitiveSpeak(s *Skyra) func(*Relation, string) {
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
 		var touchedIDs []string
-		for _, t := range sl.Thoughts {
+		for _, t := range sl.TrainOfThought {
 			touchedIDs = append(touchedIDs, t.ID())
 		}
 		sl.mu.Unlock()

@@ -4,3 +4,8 @@ __pycache__/
 .env
 skyra/voice/audit.log.jsonl
 NeuroNote/
+
+# Frontend
+node_modules/
+dist/
+.next/

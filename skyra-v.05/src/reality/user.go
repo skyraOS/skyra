@@ -29,8 +29,8 @@ func (u *User) Create(r *Relation) Reality { return nil }
 
 func (u *User) Realize(r *Relation) *Relation {
 	u.Competence(r)
-	u.Observe(r)
 	r = u.Express(r)
+	u.Observe(r)
 	return r
 }
 
