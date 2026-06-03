@@ -14,7 +14,7 @@ import (
 // No being can access another being's slice.
 type Slice struct {
 	mu              sync.Mutex
-	Thread          []Reality // exchange state — who said what. Managed by the thread binding reality.
+	Thread          map[string]map[string][]Reality // thread ID → reality ID → entries
 	TrainOfThought  []Reality // the traversal's working surface. Cells picked up during descent land here.
 	Understandings  []Reality // the being's cognitive output — inference from propagate AND compressed products.
 	PreviousActions []Reality // what the being already did. Written by speak/motor.
@@ -22,7 +22,7 @@ type Slice struct {
 	Load            int    // accumulated content size
 	Forming         *Skyra // the cell being built during this traversal
 	Goal            string // the destination — persistent, changed explicitly
-	Intent          string // the predicted future — refined at every compression boundary
+	Intent          IntentGraph // the predicted future — refined at every compression boundary
 	Surroundings    map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
 	LastSeen        Reality
 	Depth           int
@@ -32,6 +32,38 @@ type Slice struct {
 
 func (s *Slice) Lock()   { s.mu.Lock() }
 func (s *Slice) Unlock() { s.mu.Unlock() }
+
+// ThreadAppend adds an entry to the nested thread map. Caller must hold s.mu.
+func (s *Slice) ThreadAppend(threadID, realityID string, entry Reality) {
+	if s.Thread[threadID] == nil {
+		s.Thread[threadID] = make(map[string][]Reality)
+	}
+	s.Thread[threadID][realityID] = append(s.Thread[threadID][realityID], entry)
+}
+
+// ThreadEntries returns all entries across all realities for a given thread. Caller must hold s.mu.
+func (s *Slice) ThreadEntries(threadID string) []Reality {
+	realities, ok := s.Thread[threadID]
+	if !ok {
+		return nil
+	}
+	var all []Reality
+	for _, entries := range realities {
+		all = append(all, entries...)
+	}
+	return all
+}
+
+// ThreadAll returns all entries across all threads and realities. Caller must hold s.mu.
+func (s *Slice) ThreadAll() []Reality {
+	var all []Reality
+	for _, realities := range s.Thread {
+		for _, entries := range realities {
+			all = append(all, entries...)
+		}
+	}
+	return all
+}
 
 type Relation struct {
 	mu sync.RWMutex // protects shared state: World, Fields
@@ -193,7 +225,7 @@ func (r *Relation) SliceList() []SliceSnapshot {
 			UnderstandingCount:   len(sl.Understandings),
 			PreviousActionCount:  len(sl.PreviousActions),
 			Goal:                sl.Goal,
-			Intent:              sl.Intent,
+			Intent:              sl.Intent.Render(),
 			Surroundings:        surroundings,
 		})
 		sl.mu.Unlock()
@@ -243,11 +275,12 @@ func Impress(origin, raw string) (*Relation, error) {
 	}
 
 	slice := &Slice{
-		Thread:          []Reality{},
+		Thread:          make(map[string]map[string][]Reality),
 		TrainOfThought:  []Reality{},
 		Understandings:  []Reality{},
 		PreviousActions: []Reality{},
 		Signal:          1.0,
+		Intent:          NewIntentGraph(),
 		Forming:         forming,
 		Surroundings:    make(map[string]float64),
 		Visited:         make(map[string]bool),
@@ -288,11 +321,12 @@ func (r *Relation) GetSlice(beingID string) *Slice {
 	}
 
 	s = &Slice{
-		Thread:          []Reality{},
+		Thread:          make(map[string]map[string][]Reality),
 		TrainOfThought:  []Reality{},
 		Understandings:  []Reality{},
 		PreviousActions: []Reality{},
 		Signal:          1.0,
+		Intent:          NewIntentGraph(),
 		Forming:         forming,
 		Surroundings:    make(map[string]float64),
 		Visited:         make(map[string]bool),

@@ -88,8 +88,8 @@ func Present(r *Relation, beingID string) string {
 	}
 
 	// intent — only if set
-	if sl.Intent != "" {
-		sections = append(sections, "## Intent\n"+sl.Intent)
+	if !sl.Intent.IsEmpty() {
+		sections = append(sections, "## Intent\n"+sl.Intent.Render())
 	}
 
 	return strings.Join(sections, "\n\n")

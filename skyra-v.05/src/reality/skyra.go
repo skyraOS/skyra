@@ -19,19 +19,6 @@ Optionally:
 <goal>This orients your focus. Make it your global focus for higher level activities or local for precision.</goal>
 <intent>updated intent graph using <speak></intent>`
 
-const speakInternalPrompt = `You are giving context that your outer layer can't see.
-The outer layer sees the conversation but not your memories.
-Give it what it needs to say the right thing.
-
-Respond with:
-<speak>context from your memory and understanding that the outer layer needs</speak>`
-
-const speakActPrompt = `You are speaking for %s.
-Read the thread state and your internal thoughts and express.
-
-Respond with:
-<speak>what you say</speak>`
-
 const compressPrompt = `What you carry back is your understanding.
 Your understanding is how you learn.
 Generate an understanding through your previous experience.
@@ -239,26 +226,11 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	s.LastTraversed = s.TraversalCount
 	s.Reinforce()
 
-	// act — parse intent graph, execute primitives or add acts to the Relation
 	sl.mu.Lock()
-	intent := sl.Intent
 	goal := sl.Goal
 	sl.mu.Unlock()
 	if goal != "" {
 		debug.Being(s.BeingID, "traverse", "  goal:", goal)
-	}
-	if intent != "" {
-		debug.Being(s.BeingID, "traverse", "  intent:", intent)
-		acts := parseIntentGraph(intent)
-		for _, act := range acts {
-			name, target := parsePrimitive(act)
-			if fn, ok := s.Primitives[name]; ok {
-				debug.Being(s.BeingID, "traverse", "  primitive:", name, "->", target)
-				fn(r, target)
-			} else {
-				debug.Being(s.BeingID, "traverse", "  unmatched intent, dropping:", act)
-			}
-		}
 	}
 
 	// motor — fires at the exit, executes the result of the traversal
@@ -268,37 +240,6 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 
 	debug.Being(s.BeingID, "traverse", fmt.Sprintf("EXIT %s [%s]", s.id, s.Description))
 	return r
-}
-
-// parseIntentGraph splits the intent graph into individual actions.
-// <then> is the delimiter between sequential steps.
-// Actions without <then> between them are part of the same step.
-func parseIntentGraph(intent string) []string {
-	steps := strings.Split(intent, "<then>")
-	var acts []string
-	for _, step := range steps {
-		step = strings.TrimSpace(step)
-		if step != "" {
-			acts = append(acts, step)
-		}
-	}
-	return acts
-}
-
-// parsePrimitive extracts primitive name and target from tags like <engage>forge</engage>.
-// Returns the tag name and inner content. If not a recognized primitive tag, returns empty name.
-func parsePrimitive(act string) (string, string) {
-	primitives := []string{"look", "engage", "listen", "speak"}
-	for _, p := range primitives {
-		open := "<" + p + ">"
-		close := "</" + p + ">"
-		if strings.HasPrefix(act, open) && strings.HasSuffix(act, close) {
-			target := strings.TrimPrefix(act, open)
-			target = strings.TrimSuffix(target, close)
-			return p, strings.TrimSpace(target)
-		}
-	}
-	return "", act
 }
 
 // Observe — mutual observation. The Relation observes itself through
@@ -377,111 +318,16 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 			sl.Goal = newGoal
 		}
 		if newIntent != "" {
-			sl.Intent = newIntent
+			sl.Intent = ParseIntent(newIntent)
 		}
 		sl.mu.Unlock()
 	}
 }
 
-// ExpressSpeak — the act layer. Takes the being's accumulated understanding
-// and produces context for motor. The being briefs its own outer layer —
-// thread has the conversation, speak carries what the thread can't see.
-// Appends what was spoken to the Relation so the being hears itself.
-func ExpressSpeak(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
+// ExpressMotor — dispatch. Calls Complete which calls Fire which calls Dispatch.
+func ExpressMotor(s *Skyra) func(*Relation) *Relation {
 	return func(r *Relation) *Relation {
-		sl := r.GetSlice(s.BeingID)
-		sl.mu.Lock()
-		hasContent := len(sl.Understandings) > 0 || len(sl.TrainOfThought) > 0
-		sl.mu.Unlock()
-		if !hasContent {
-			return r
-		}
-
-		present := Present(r, s.BeingID)
-		prompt := speakInternalPrompt
-
-		debug.Being(s.BeingID, "provider", "SPEAK call")
-		debug.Being(s.BeingID, "provider", "system:", prompt)
-		debug.Being(s.BeingID, "provider", "present:", present)
-		result, err := call(prompt, present)
-		if err != nil {
-			debug.Being(s.BeingID, "provider", "SPEAK ERROR:", err)
-			return r
-		}
-		debug.Being(s.BeingID, "provider", "SPEAK RESULT:", result)
-
-		spoken := extractTag(result, "speak")
-		if spoken == "" {
-			spoken = result
-		}
-
-		out := s.Create(&Relation{}).(*Skyra)
-		out.Content = spoken
-		sl.mu.Lock()
-		sl.Understandings = append(sl.Understandings, out)
-		sl.mu.Unlock()
-
-		return r
-	}
-}
-
-// ExpressMotor — the leaf where cognition crosses into consequence.
-// Reads thread state + speak intent, calls provider with speakActPrompt,
-// produces the being's actual words. Does not touch Thoughts — those are
-// the being's internal memory.
-func ExpressMotor(s *Skyra, call func(string, string) (string, error)) func(*Relation) *Relation {
-	return func(r *Relation) *Relation {
-		sl := r.GetSlice(s.BeingID)
-		sl.mu.Lock()
-		intent := sl.Intent
-		var threadParts []string
-		for _, t := range sl.Thread {
-			if cell, ok := t.(*Skyra); ok && cell.Content != "" {
-				threadParts = append(threadParts, cell.Content)
-			}
-		}
-		sl.mu.Unlock()
-
-		speakContent := extractTag(intent, "speak")
-		if speakContent == "" && len(threadParts) == 0 {
-			return r
-		}
-
-		var sections []string
-		if len(threadParts) > 0 {
-			sections = append(sections, "## Thread\n"+strings.Join(threadParts, "\n"))
-		}
-		if speakContent != "" {
-			sections = append(sections, "## Speak\n"+speakContent)
-		}
-		motorPresent := strings.Join(sections, "\n\n")
-
-		prompt := fmt.Sprintf(speakActPrompt, s.BeingID)
-
-		debug.Being(s.BeingID, "provider", "MOTOR call")
-		debug.Being(s.BeingID, "provider", "system:", prompt)
-		debug.Being(s.BeingID, "provider", "present:", motorPresent)
-		result, err := call(prompt, motorPresent)
-		if err != nil {
-			debug.Being(s.BeingID, "provider", "MOTOR ERROR:", err)
-			return r
-		}
-		debug.Being(s.BeingID, "provider", "MOTOR RESULT:", result)
-
-		spoken := extractTag(result, "speak")
-		if spoken == "" {
-			spoken = result
-		}
-
-		out := s.Create(&Relation{}).(*Skyra)
-		out.Content = spoken
-		sl.mu.Lock()
-		sl.PreviousActions = append(sl.PreviousActions, out)
-		sl.Thread = append(sl.Thread, out)
-		sl.mu.Unlock()
-
-		r.SetImpulse(s.BeingID, spoken)
-
+		s.Complete(r)
 		return r
 	}
 }
@@ -558,7 +404,7 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 				sl.Goal = newGoal
 			}
 			if newIntent != "" {
-				sl.Intent = newIntent
+				sl.Intent = ParseIntent(newIntent)
 			}
 			sl.mu.Unlock()
 

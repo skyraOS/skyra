@@ -82,10 +82,11 @@ func createSkyra() (*reality.Skyra, *reality.Thread) {
 	skyra.ObserveFns["propagate"] = reality.ObservePropagate(skyra, inference.CallDeepSeek)
 
 	skyra.ExpressFns["compress"] = reality.ExpressCompress(skyra, inference.CallDeepSeek)
-	skyra.ExpressFns["speak"] = reality.ExpressSpeak(skyra, inference.CallDeepSeek)
-	skyra.ExpressFns["motor"] = reality.ExpressMotor(skyra, inference.CallDeepSeek)
+	skyra.ExpressFns["motor"] = reality.ExpressMotor(skyra)
 
-	skyra.Primitives["speak"] = reality.PrimitiveSpeak(skyra)
+	skyra.Primitives["look"] = reality.PrimitiveLook(skyra)
+	skyra.Primitives["listen"] = reality.PrimitiveListen(skyra)
+	skyra.Primitives["engage"] = reality.PrimitiveEngage(skyra, inference.CallDeepSeek)
 
 	thread := reality.NewThread("thread:skyra:main", "skyra")
 	thread.Bind(skyra.ID())
