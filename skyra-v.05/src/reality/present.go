@@ -72,7 +72,11 @@ func Present(r *Relation, beingID string) string {
 	// thoughts — accumulated during traversal
 	if len(sl.TrainOfThought) > 0 {
 		var lines []string
-		for _, t := range sl.TrainOfThought {
+		for _, id := range sl.TrainOfThoughtKeys {
+			t := sl.TrainOfThought[id]
+			if t == nil {
+				continue
+			}
 			if sk, ok := t.(*Skyra); ok && sk.Content != "" {
 				lines = append(lines, sk.Content)
 			}
@@ -80,6 +84,42 @@ func Present(r *Relation, beingID string) string {
 		if len(lines) > 0 {
 			sections = append(sections, "## Train of Thought\n"+strings.Join(lines, "\n"))
 		}
+	}
+
+	// previous actions — what the being did, ordered by action history strength
+	if len(sl.PreviousActions) > 0 {
+		strengthMap := make(map[string]float64)
+		r.mu.RLock()
+		for _, ah := range r.ActionHistories {
+			if ah.BeingID != beingID {
+				continue
+			}
+			ah.mu.Lock()
+			for id, str := range ah.Members {
+				strengthMap[id] = str
+			}
+			ah.mu.Unlock()
+		}
+		r.mu.RUnlock()
+
+		type actionEntry struct {
+			desc     string
+			strength float64
+		}
+		var actionEntries []actionEntry
+		for _, a := range sl.PreviousActions {
+			if sk, ok := a.(*Skyra); ok {
+				actionEntries = append(actionEntries, actionEntry{sk.Description, strengthMap[sk.ID()]})
+			}
+		}
+		sort.Slice(actionEntries, func(i, j int) bool {
+			return actionEntries[i].strength > actionEntries[j].strength
+		})
+		var actionLines []string
+		for _, e := range actionEntries {
+			actionLines = append(actionLines, fmt.Sprintf("%s (%.2f)", e.desc, e.strength))
+		}
+		sections = append(sections, "## Previous Actions\n"+strings.Join(actionLines, "\n"))
 	}
 
 	// goal — only if set

@@ -39,6 +39,19 @@ func (s *Skyra) Fire(ig *IntentGraph, r *Relation) {
 		out.Content = result
 		out.Description = entry.Primitive + ":" + entry.Target
 
+		r.mu.RLock()
+		if targetEntity, ok := r.World[entry.Target]; ok {
+			out.Relationships[entry.Target] = targetEntity
+		}
+		ahID := "action:" + s.BeingID
+		if ah, ok := r.ActionHistories[ahID]; ok {
+			ah.Bind(out.ID())
+			if targetEntity, ok := r.World[entry.Target]; ok {
+				ah.Bind(targetEntity.ID())
+			}
+		}
+		r.mu.RUnlock()
+
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
 		sl.PreviousActions = append(sl.PreviousActions, out)

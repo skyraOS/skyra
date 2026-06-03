@@ -45,13 +45,14 @@ func main() {
 func createWorld(inputCh chan string, outputCh chan tui.ResponseMsg) *reality.Relation {
 	rel, _ := reality.Impress("world", "boot")
 
-	skyra, thread := createSkyra()
+	skyra, thread, actionHistory := createSkyra()
 	michael := createMichael(inputCh, outputCh, rel)
 
 	rel.World["skyra"] = skyra
 	rel.World["michael"] = michael
 	rel.ThreadID = thread.ID()
 	rel.Threads[thread.ID()] = thread
+	rel.ActionHistories[actionHistory.ID()] = actionHistory
 
 	// the world loop — michael's Realize drives it
 	go func() {
@@ -72,7 +73,7 @@ func createWorld(inputCh chan string, outputCh chan tui.ResponseMsg) *reality.Re
 	return rel
 }
 
-func createSkyra() (*reality.Skyra, *reality.Thread) {
+func createSkyra() (*reality.Skyra, *reality.Thread, *reality.ActionHistory) {
 	skyra := &reality.Skyra{}
 	skyra.Init("skyra", "skyra")
 	skyra.Content = "I hold the world together. I think, respond, and relate on behalf of the system."
@@ -92,7 +93,10 @@ func createSkyra() (*reality.Skyra, *reality.Thread) {
 	thread.Bind(skyra.ID())
 	skyra.Relationships["thread:main"] = thread
 
-	return skyra, thread
+	actionHistory := reality.NewActionHistory("action:skyra", "skyra")
+	skyra.Relationships["action:history"] = actionHistory
+
+	return skyra, thread, actionHistory
 }
 
 func createMichael(inputCh chan string, outputCh chan tui.ResponseMsg, world *reality.Relation) *reality.User {

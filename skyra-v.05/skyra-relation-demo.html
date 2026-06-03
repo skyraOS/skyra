@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skyra Relation Projection Demo</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: rgba(17, 20, 24, 0.86);
+      --panel-strong: rgba(20, 24, 30, 0.94);
+      --line: rgba(185, 205, 225, 0.14);
+      --text: #e8edf2;
+      --muted: #8d99a6;
+      --accent: #7cc7ff;
+      --warn: #f6c96f;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+    }
+
+    #scene {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(75, 93, 118, 0.18), transparent 38%),
+        linear-gradient(180deg, #0c1015, #08090b 62%, #050607);
+    }
+
+    .hud {
+      position: relative;
+      height: 100vh;
+      padding: 16px;
+      background: linear-gradient(180deg, var(--panel-strong), rgba(10, 12, 15, 0.96));
+      border-left: 1px solid var(--line);
+      overflow: auto;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .section {
+      padding: 12px;
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: #c8d2dc;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 13px;
+    }
+
+    .row:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .value {
+      color: #dce6ee;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .label {
+      color: var(--muted);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(159, 184, 210, 0.24);
+      background: rgba(125, 155, 186, 0.11);
+      color: var(--text);
+      border-radius: 7px;
+      padding: 9px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: rgba(130, 201, 255, 0.55);
+      background: rgba(125, 190, 255, 0.16);
+    }
+
+    button.active {
+      border-color: rgba(126, 202, 255, 0.78);
+      box-shadow: 0 0 18px rgba(87, 173, 255, 0.16) inset;
+    }
+
+    .legend {
+      display: grid;
+      gap: 8px;
+    }
+
+    .agent {
+      display: grid;
+      grid-template-columns: 16px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      box-shadow: 0 0 18px currentColor;
+      background: currentColor;
+    }
+
+    .event-log {
+      display: grid;
+      gap: 7px;
+      max-height: 230px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .event {
+      padding: 8px;
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      color: #aeb9c4;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .event strong {
+      color: #edf6ff;
+      font-weight: 600;
+    }
+
+    .hint {
+      color: #8d99a6;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) 290px;
+      }
+
+      .hud {
+        height: 290px;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-label="Skyra relation projection canvas"></canvas>
+
+  <aside class="hud">
+    <h1>Relation Projection</h1>
+    <p class="sub">Mock demo. The pane is global relation state. Agents sit outside memory and project activation into it.</p>
+
+    <div class="section">
+      <h2>Scenario</h2>
+      <div class="buttons">
+        <button data-mode="conversation" class="active">Conversation</button>
+        <button data-mode="memory">Memory Search</button>
+        <button data-mode="thread">Thread Binding</button>
+        <button data-mode="overlap">Co-Activation</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Current Relation</h2>
+      <div class="row"><span class="label">Origin</span><span class="value" id="origin">michael</span></div>
+      <div class="row"><span class="label">Impulse</span><span class="value" id="impulse">what matters now?</span></div>
+      <div class="row"><span class="label">Hot Node</span><span class="value" id="hotNode">identity-core</span></div>
+      <div class="row"><span class="label">Overlap</span><span class="value" id="overlap">0.42</span></div>
+    </div>
+
+    <div class="section">
+      <h2>Agents</h2>
+      <div class="legend" id="agentLegend"></div>
+    </div>
+
+    <div class="section">
+      <h2>Event Stream</h2>
+      <div class="event-log" id="eventLog"></div>
+    </div>
+
+    <div class="section">
+      <h2>Visual Grammar</h2>
+      <p class="hint">Core is identity. Glow is activation. Color is agent/source. Rings are threads. Wakes are traversal. Blended pools are co-activation.</p>
+    </div>
+  </aside>
+
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const buttons = Array.from(document.querySelectorAll("button[data-mode]"));
+    const originEl = document.getElementById("origin");
+    const impulseEl = document.getElementById("impulse");
+    const hotNodeEl = document.getElementById("hotNode");
+    const overlapEl = document.getElementById("overlap");
+    const agentLegendEl = document.getElementById("agentLegend");
+    const eventLogEl = document.getElementById("eventLog");
+
+    const agents = [
+      {
+        id: "skyra",
+        name: "Skyra",
+        color: [124, 199, 255],
+        x: 0.52,
+        y: 0.16,
+        state: "listening",
+        signal: 0.91
+      },
+      {
+        id: "michael",
+        name: "Michael",
+        color: [246, 199, 111],
+        x: 0.20,
+        y: 0.28,
+        state: "speaking",
+        signal: 0.84
+      },
+      {
+        id: "tool",
+        name: "Tool",
+        color: [113, 232, 172],
+        x: 0.82,
+        y: 0.34,
+        state: "idle",
+        signal: 0.38
+      }
+    ];
+
+    const nodes = [
+      { id: "identity-core", label: "identity", x: -0.28, y: -0.08, base: 0.42, threads: ["thread:skyra:main"] },
+      { id: "current-impulse", label: "impulse", x: 0.05, y: -0.24, base: 0.52, threads: ["thread:michael:input"] },
+      { id: "memory-field", label: "memory", x: 0.32, y: -0.02, base: 0.36, threads: ["thread:skyra:main"] },
+      { id: "task-economy", label: "task", x: -0.52, y: 0.26, base: 0.22, threads: ["thread:work"] },
+      { id: "provider-state", label: "provider", x: 0.58, y: 0.22, base: 0.18, threads: ["thread:runtime"] },
+      { id: "thread-main", label: "main", x: -0.02, y: 0.18, base: 0.46, threads: ["thread:skyra:main", "thread:michael:input"] },
+      { id: "relation-fields", label: "fields", x: -0.36, y: -0.34, base: 0.28, threads: ["thread:runtime"] },
+      { id: "coactivation", label: "overlap", x: 0.18, y: 0.35, base: 0.31, threads: ["thread:skyra:main", "thread:michael:input"] }
+    ];
+
+    const scenarioData = {
+      conversation: {
+        origin: "michael",
+        impulse: "what matters now?",
+        hot: "current-impulse",
+        agentWeights: { skyra: 0.62, michael: 0.92, tool: 0.08 },
+        focus: {
+          "identity-core": { skyra: 0.62, michael: 0.36 },
+          "current-impulse": { skyra: 0.74, michael: 1.0 },
+          "thread-main": { skyra: 0.58, michael: 0.72 },
+          "memory-field": { skyra: 0.48 },
+          "coactivation": { skyra: 0.34, michael: 0.52 },
+          "relation-fields": { skyra: 0.24 },
+          "task-economy": { michael: 0.18 },
+          "provider-state": { skyra: 0.22 }
+        },
+        events: [
+          ["device.input", "michael sends impulse into relation"],
+          ["traversal.enter", "skyra enters current-impulse"],
+          ["activation.update", "michael and skyra overlap on thread-main"],
+          ["slice.update", "skyra goal becomes conversational coherence"]
+        ]
+      },
+      memory: {
+        origin: "skyra",
+        impulse: "retrieve relevant memory",
+        hot: "memory-field",
+        agentWeights: { skyra: 0.96, michael: 0.22, tool: 0.16 },
+        focus: {
+          "identity-core": { skyra: 0.78 },
+          "current-impulse": { skyra: 0.38, michael: 0.18 },
+          "thread-main": { skyra: 0.62 },
+          "memory-field": { skyra: 1.0, michael: 0.12 },
+          "coactivation": { skyra: 0.48 },
+          "relation-fields": { skyra: 0.58 },
+          "task-economy": { skyra: 0.24 },
+          "provider-state": { skyra: 0.5, tool: 0.12 }
+        },
+        events: [
+          ["traversal.enter", "skyra enters memory-field"],
+          ["thread.field", "thread:skyra:main strengthens memory-field"],
+          ["provider.start", "memory context prepares provider call"],
+          ["activation.update", "identity-core rises as nearby context"]
+        ]
+      },
+      thread: {
+        origin: "skyra",
+        impulse: "listen to main thread",
+        hot: "thread-main",
+        agentWeights: { skyra: 0.82, michael: 0.48, tool: 0.28 },
+        focus: {
+          "identity-core": { skyra: 0.44 },
+          "current-impulse": { michael: 0.38 },
+          "thread-main": { skyra: 1.0, michael: 0.72, tool: 0.34 },
+          "memory-field": { skyra: 0.46 },
+          "coactivation": { skyra: 0.62, michael: 0.42 },
+          "relation-fields": { skyra: 0.68, tool: 0.42 },
+          "task-economy": { michael: 0.22 },
+          "provider-state": { tool: 0.28 }
+        },
+        events: [
+          ["thread.field", "thread-main alignment opens"],
+          ["activation.update", "thread rings become visible"],
+          ["traversal.enter", "relation-fields modifies node heat"],
+          ["traversal.exit", "thread-main remains warm after traversal"]
+        ]
+      },
+      overlap: {
+        origin: "relation",
+        impulse: "shared attention forms",
+        hot: "coactivation",
+        agentWeights: { skyra: 0.88, michael: 0.86, tool: 0.46 },
+        focus: {
+          "identity-core": { skyra: 0.52, michael: 0.36 },
+          "current-impulse": { skyra: 0.64, michael: 0.76 },
+          "thread-main": { skyra: 0.76, michael: 0.74, tool: 0.28 },
+          "memory-field": { skyra: 0.72, michael: 0.58 },
+          "coactivation": { skyra: 1.0, michael: 0.94, tool: 0.48 },
+          "relation-fields": { skyra: 0.46, tool: 0.38 },
+          "task-economy": { michael: 0.4 },
+          "provider-state": { skyra: 0.24, tool: 0.54 }
+        },
+        events: [
+          ["activation.update", "skyra and michael hot zones overlap"],
+          ["relation.surface", "coactivation becomes visible as light pool"],
+          ["thread.field", "shared thread keeps overlap warm"],
+          ["traversal.enter", "coactivation becomes the active surface"]
+        ]
+      }
+    };
+
+    let mode = "conversation";
+    let width = 0;
+    let height = 0;
+    let pixelRatio = 1;
+    let time = 0;
+    let dragAgent = null;
+    let lastEventTick = -1;
+
+    function rgb(c, alpha = 1) {
+      return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + alpha + ")";
+    }
+
+    function resize() {
+      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    }
+
+    function paneMetrics() {
+      const w = Math.min(width * 0.78, 920);
+      const h = Math.min(height * 0.48, 430);
+      return {
+        cx: width * 0.49,
+        cy: height * 0.61,
+        w,
+        h,
+        tilt: Math.max(70, h * 0.28)
+      };
+    }
+
+    function project(nx, ny, z = 0) {
+      const p = paneMetrics();
+      const px = p.cx + nx * p.w;
+      const py = p.cy + ny * p.h * 0.62 - z * 72;
+      return { x: px, y: py };
+    }
+
+    function agentScreen(agent) {
+      return {
+        x: agent.x * width,
+        y: agent.y * height
+      };
+    }
+
+    function scenario() {
+      return scenarioData[mode];
+    }
+
+    function nodeActivations(node) {
+      return scenario().focus[node.id] || {};
+    }
+
+    function totalActivation(node) {
+      const acts = nodeActivations(node);
+      let total = node.base * 0.25;
+      for (const value of Object.values(acts)) total += value;
+      return Math.min(total / 1.65, 1);
+    }
+
+    function overlapScore() {
+      let sum = 0;
+      let count = 0;
+      for (const node of nodes) {
+        const acts = nodeActivations(node);
+        const active = Object.values(acts).filter((v) => v > 0.28);
+        if (active.length > 1) {
+          sum += active.reduce((a, b) => a + b, 0) / active.length;
+          count++;
+        }
+      }
+      return count ? Math.min(sum / count, 1) : 0;
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, width, height);
+      const g = ctx.createRadialGradient(width * 0.48, height * 0.42, 0, width * 0.48, height * 0.42, Math.max(width, height) * 0.72);
+      g.addColorStop(0, "rgba(42, 55, 70, 0.46)");
+      g.addColorStop(0.5, "rgba(10, 13, 17, 0.74)");
+      g.addColorStop(1, "rgba(3, 4, 5, 1)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    function drawPane() {
+      const p = paneMetrics();
+      const top = p.cy - p.h * 0.36;
+      const bottom = p.cy + p.h * 0.39;
+      const leftTop = p.cx - p.w * 0.43;
+      const rightTop = p.cx + p.w * 0.43;
+      const leftBottom = p.cx - p.w * 0.5;
+      const rightBottom = p.cx + p.w * 0.5;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(leftTop, top);
+      ctx.lineTo(rightTop, top);
+      ctx.lineTo(rightBottom, bottom);
+      ctx.lineTo(leftBottom, bottom);
+      ctx.closePath();
+      const fill = ctx.createLinearGradient(0, top, 0, bottom);
+      fill.addColorStop(0, "rgba(34, 44, 55, 0.64)");
+      fill.addColorStop(1, "rgba(12, 16, 20, 0.9)");
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(190, 218, 244, 0.18)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.clip();
+      ctx.globalAlpha = 0.48;
+      ctx.strokeStyle = "rgba(160, 188, 218, 0.12)";
+      for (let i = -8; i <= 8; i++) {
+        const a = project(i / 8 * 0.55, -0.55);
+        const b = project(i / 8 * 0.7, 0.6);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      for (let j = -5; j <= 6; j++) {
+        const a = project(-0.65, j / 6 * 0.55);
+        const b = project(0.65, j / 6 * 0.55);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawFields() {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const node of nodes) {
+        const pos = project(node.x, node.y, totalActivation(node) * 0.55);
+        const acts = nodeActivations(node);
+        for (const agent of agents) {
+          const amount = acts[agent.id] || 0;
+          if (amount <= 0.02) continue;
+          const pulse = 0.84 + Math.sin(time * 2.2 + node.x * 9 + node.y * 5) * 0.12;
+          const radius = 52 + amount * 112;
+          const g = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * pulse);
+          g.addColorStop(0, rgb(agent.color, 0.34 * amount));
+          g.addColorStop(0.42, rgb(agent.color, 0.17 * amount));
+          g.addColorStop(1, rgb(agent.color, 0));
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius * pulse, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawThreads() {
+      const pairs = [
+        ["identity-core", "thread-main", [124, 199, 255]],
+        ["thread-main", "memory-field", [124, 199, 255]],
+        ["current-impulse", "thread-main", [246, 199, 111]],
+        ["relation-fields", "provider-state", [113, 232, 172]],
+        ["memory-field", "coactivation", [191, 156, 255]]
+      ];
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const [from, to, color] of pairs) {
+        const aNode = nodes.find((n) => n.id === from);
+        const bNode = nodes.find((n) => n.id === to);
+        const a = project(aNode.x, aNode.y, totalActivation(aNode) * 0.45);
+        const b = project(bNode.x, bNode.y, totalActivation(bNode) * 0.45);
+        const strength = (totalActivation(aNode) + totalActivation(bNode)) / 2;
+        const lift = 42 + strength * 82;
+        ctx.strokeStyle = rgb(color, 0.16 + strength * 0.28);
+        ctx.lineWidth = 1 + strength * 3;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 - lift, b.x, b.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawNodes() {
+      const sorted = [...nodes].sort((a, b) => a.y - b.y);
+      for (const node of sorted) {
+        const activation = totalActivation(node);
+        const pos = project(node.x, node.y, activation * 0.72);
+        const hot = scenario().hot === node.id;
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const wake = (Math.sin(time * 4.1 + node.x * 7) + 1) / 2;
+        if (hot) {
+          ctx.strokeStyle = "rgba(240, 250, 255, " + (0.25 + wake * 0.22) + ")";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 29 + wake * 18, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+        ctx.save();
+        ctx.shadowColor = "rgba(185, 220, 255, " + (0.25 + activation * 0.45) + ")";
+        ctx.shadowBlur = 18 + activation * 30;
+        ctx.fillStyle = "rgba(222, 233, 242, " + (0.5 + activation * 0.42) + ")";
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 5 + activation * 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        const ringBase = 14 + activation * 20;
+        node.threads.forEach((thread, i) => {
+          ctx.strokeStyle = i % 2 === 0 ? "rgba(123, 198, 255, 0.35)" : "rgba(246, 199, 111, 0.3)";
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(pos.x, pos.y, ringBase + i * 6, (ringBase + i * 6) * 0.45, time * 0.15 + i, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+
+        if (activation > 0.24 || hot) {
+          ctx.font = "12px Inter, system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "rgba(235, 242, 248, " + Math.min(activation + 0.2, 1) + ")";
+          ctx.fillText(node.label, pos.x, pos.y + 34 + activation * 8);
+        }
+      }
+    }
+
+    function drawAgents() {
+      for (const agent of agents) {
+        const pos = agentScreen(agent);
+        const weight = scenario().agentWeights[agent.id] || 0.1;
+        const pulse = 0.9 + Math.sin(time * 2.6 + pos.x * 0.01) * 0.08;
+        const radius = 34 + weight * 42;
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const g = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2.2);
+        g.addColorStop(0, rgb(agent.color, 0.34 * weight));
+        g.addColorStop(0.46, rgb(agent.color, 0.16 * weight));
+        g.addColorStop(1, rgb(agent.color, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius * 2.2 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        const hotTargets = nodes
+          .filter((node) => (nodeActivations(node)[agent.id] || 0) > 0.36)
+          .sort((a, b) => (nodeActivations(b)[agent.id] || 0) - (nodeActivations(a)[agent.id] || 0))
+          .slice(0, 2);
+
+        for (const node of hotTargets) {
+          const target = project(node.x, node.y, totalActivation(node) * 0.7);
+          const amount = nodeActivations(node)[agent.id] || 0;
+          ctx.strokeStyle = rgb(agent.color, 0.08 + amount * 0.16);
+          ctx.lineWidth = 1 + amount * 3;
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y + radius * 0.45);
+          ctx.bezierCurveTo(pos.x, pos.y + 100, target.x, target.y - 110, target.x, target.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.shadowColor = rgb(agent.color, 0.72);
+        ctx.shadowBlur = 26;
+        ctx.fillStyle = rgb(agent.color, 0.92);
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 15 + weight * 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.52)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 24 + weight * 17, 0, Math.PI * 2 * agent.signal);
+        ctx.stroke();
+
+        ctx.font = "600 13px Inter, system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(240, 246, 250, 0.92)";
+        ctx.fillText(agent.name, pos.x, pos.y + 50);
+        ctx.font = "11px Inter, system-ui, sans-serif";
+        ctx.fillStyle = "rgba(170, 183, 196, 0.82)";
+        ctx.fillText(agent.state, pos.x, pos.y + 66);
+      }
+    }
+
+    function drawLabels() {
+      ctx.save();
+      ctx.font = "12px Inter, system-ui, sans-serif";
+      ctx.fillStyle = "rgba(160, 174, 188, 0.72)";
+      ctx.fillText("agent layer", 24, 32);
+      const p = paneMetrics();
+      ctx.fillText("global relation / active memory pane", p.cx - p.w * 0.48, p.cy + p.h * 0.48);
+      ctx.restore();
+    }
+
+    function renderLegend() {
+      agentLegendEl.innerHTML = agents.map((agent) => {
+        const weight = scenario().agentWeights[agent.id] || 0;
+        return [
+          "<div class=\"agent\">",
+          "<span class=\"dot\" style=\"color:", rgb(agent.color, 1), "\"></span>",
+          "<span>", agent.name, "</span>",
+          "<span class=\"value\">", agent.state, " ", Math.round(weight * 100), "%</span>",
+          "</div>"
+        ].join("");
+      }).join("");
+    }
+
+    function renderEvents(force = false) {
+      const tick = Math.floor(time / 2.4);
+      if (!force && tick === lastEventTick) return;
+      lastEventTick = tick;
+      const events = scenario().events;
+      const offset = tick % events.length;
+      const ordered = events.slice(offset).concat(events.slice(0, offset));
+      eventLogEl.innerHTML = ordered.map(([type, text]) => {
+        return "<div class=\"event\"><strong>" + type + "</strong><br>" + text + "</div>";
+      }).join("");
+    }
+
+    function renderHud(force = false) {
+      const data = scenario();
+      originEl.textContent = data.origin;
+      impulseEl.textContent = data.impulse;
+      hotNodeEl.textContent = data.hot;
+      overlapEl.textContent = overlapScore().toFixed(2);
+      renderLegend();
+      renderEvents(force);
+    }
+
+    function draw() {
+      time += 1 / 60;
+      drawBackground();
+      drawPane();
+      drawFields();
+      drawThreads();
+      drawNodes();
+      drawAgents();
+      drawLabels();
+      renderHud();
+      requestAnimationFrame(draw);
+    }
+
+    function nearestAgent(x, y) {
+      for (const agent of agents) {
+        const pos = agentScreen(agent);
+        const dx = x - pos.x;
+        const dy = y - pos.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 42) return agent;
+      }
+      return null;
+    }
+
+    function pointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener("pointerdown", (event) => {
+      const pos = pointerPosition(event);
+      dragAgent = nearestAgent(pos.x, pos.y);
+      if (dragAgent) canvas.setPointerCapture(event.pointerId);
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      if (!dragAgent) return;
+      const pos = pointerPosition(event);
+      dragAgent.x = Math.max(0.08, Math.min(0.92, pos.x / width));
+      dragAgent.y = Math.max(0.08, Math.min(0.48, pos.y / height));
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      dragAgent = null;
+    });
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        mode = button.dataset.mode;
+        buttons.forEach((b) => b.classList.toggle("active", b === button));
+        time = 0;
+        lastEventTick = -1;
+        renderHud(true);
+      });
+    });
+
+    window.addEventListener("resize", resize);
+    resize();
+    renderHud(true);
+    requestAnimationFrame(draw);
+  </script>
+</body>
+</html>

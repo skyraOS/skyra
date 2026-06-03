@@ -76,9 +76,9 @@ func (t *Thread) Observe(r *Relation) {
 func (t *Thread) Express(r *Relation) *Relation {
 	sl := r.GetSlice(t.BeingID)
 	sl.mu.Lock()
-	visited := make(map[string]bool, len(sl.Visited))
-	for k, v := range sl.Visited {
-		visited[k] = v
+	visited := make(map[string]bool, len(sl.TrainOfThought))
+	for k := range sl.TrainOfThought {
+		visited[k] = true
 	}
 	sl.mu.Unlock()
 

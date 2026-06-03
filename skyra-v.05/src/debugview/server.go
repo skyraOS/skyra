@@ -42,13 +42,20 @@ type ThreadView struct {
 	Members map[string]float64 `json:"members"`
 }
 
+type ActionHistoryView struct {
+	ID      string             `json:"id"`
+	BeingID string             `json:"beingId"`
+	Members map[string]float64 `json:"members"`
+}
+
 type WorldView struct {
-	Entities []NodeView   `json:"entities"`
-	Slices   []SliceView  `json:"slices"`
-	Threads  []ThreadView `json:"threads"`
-	Origin   string       `json:"origin"`
-	Impulse  string       `json:"impulse"`
-	ThreadID string       `json:"threadId"`
+	Entities        []NodeView          `json:"entities"`
+	Slices          []SliceView         `json:"slices"`
+	Threads         []ThreadView        `json:"threads"`
+	ActionHistories []ActionHistoryView `json:"actionHistories"`
+	Origin          string              `json:"origin"`
+	Impulse         string              `json:"impulse"`
+	ThreadID        string              `json:"threadId"`
 }
 
 func sliceViewFrom(s reality.SliceSnapshot) SliceView {
@@ -81,9 +88,10 @@ func Start(addr string, world *reality.Relation) {
 
 func handleState(w http.ResponseWriter, r *http.Request, world *reality.Relation) {
 	view := WorldView{
-		Entities: []NodeView{},
-		Slices:   []SliceView{},
-		Threads:  []ThreadView{},
+		Entities:        []NodeView{},
+		Slices:          []SliceView{},
+		Threads:         []ThreadView{},
+		ActionHistories: []ActionHistoryView{},
 	}
 
 	world.RLock()
@@ -109,6 +117,14 @@ func handleState(w http.ResponseWriter, r *http.Request, world *reality.Relation
 			ID:      t.ID,
 			BeingID: t.BeingID,
 			Members: t.Members,
+		})
+	}
+
+	for _, ah := range world.ActionHistoryList() {
+		view.ActionHistories = append(view.ActionHistories, ActionHistoryView{
+			ID:      ah.ID,
+			BeingID: ah.BeingID,
+			Members: ah.Members,
 		})
 	}
 	world.RUnlock()

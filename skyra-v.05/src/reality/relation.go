@@ -14,20 +14,20 @@ import (
 // No being can access another being's slice.
 type Slice struct {
 	mu              sync.Mutex
-	Thread          map[string]map[string][]Reality // thread ID → reality ID → entries
-	TrainOfThought  []Reality // the traversal's working surface. Cells picked up during descent land here.
-	Understandings  []Reality // the being's cognitive output — inference from propagate AND compressed products.
-	PreviousActions []Reality // what the being already did. Written by speak/motor.
-	Signal          float64
-	Load            int    // accumulated content size
-	Forming         *Skyra // the cell being built during this traversal
-	Goal            string // the destination — persistent, changed explicitly
-	Intent          IntentGraph // the predicted future — refined at every compression boundary
-	Surroundings    map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
-	LastSeen        Reality
-	Depth           int
-	Trace           []string
-	Visited         map[string]bool
+	Thread             map[string]map[string][]Reality // thread ID → reality ID → entries
+	TrainOfThought     map[string]Reality // cell ID → Reality. Presence = visited. Non-nil = picked up.
+	TrainOfThoughtKeys []string           // insertion order for stable iteration
+	Understandings     []Reality // the being's cognitive output — inference from propagate AND compressed products.
+	PreviousActions    []Reality // what the being already did. Written by speak/motor.
+	Signal             float64
+	Load               int    // accumulated content size
+	Forming            *Skyra // the cell being built during this traversal
+	Goal               string // the destination — persistent, changed explicitly
+	Intent             IntentGraph // the predicted future — refined at every compression boundary
+	Surroundings       map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
+	LastSeen           Reality
+	Depth              int
+	Trace              []string
 }
 
 func (s *Slice) Lock()   { s.mu.Lock() }
@@ -74,8 +74,9 @@ type Relation struct {
 	World     map[string]Reality             // shared — beings, places, tools. The world is the Relation.
 	Providers map[string]Reality             // shared — inference endpoints
 	Fields    map[string]map[string]float64  // shared — binding fields
-	Threads   map[string]*Thread             // active threads — keyed by thread ID. A being can listen to many.
-	Slices    map[string]*Slice              // private — keyed by being ID, tenant-isolated
+	Threads         map[string]*Thread           // active threads — keyed by thread ID. A being can listen to many.
+	ActionHistories map[string]*ActionHistory   // action binding — keyed by "action:" + beingID
+	Slices          map[string]*Slice            // private — keyed by being ID, tenant-isolated
 	MaxLoad   int
 	MaxDepth  int
 	Cancelled bool
@@ -112,6 +113,13 @@ func (r *Relation) Competence(rel *Relation) {
 // Observe — the world observes the impulse. Scores every entity in the
 // World map by activation. The highest scoring targets receive the traversal.
 func (r *Relation) Observe(rel *Relation) {
+	for _, sl := range r.Slices {
+		sl.mu.Lock()
+		sl.TrainOfThought = make(map[string]Reality)
+		sl.TrainOfThoughtKeys = nil
+		sl.mu.Unlock()
+	}
+
 	r.mu.RLock()
 	world := r.World
 	r.mu.RUnlock()
@@ -159,7 +167,11 @@ func (r *Relation) Deposit(beingID string) {
 		return
 	}
 	var parts []string
-	for _, t := range s.TrainOfThought {
+	for _, id := range s.TrainOfThoughtKeys {
+		t := s.TrainOfThought[id]
+		if t == nil {
+			continue
+		}
 		if sk, ok := t.(*Skyra); ok {
 			parts = append(parts, sk.Content)
 			cell.Relationships[sk.id] = sk
@@ -251,6 +263,30 @@ func (r *Relation) ThreadList() []ThreadSnapshot {
 	return out
 }
 
+type ActionHistorySnapshot struct {
+	ID      string
+	BeingID string
+	Members map[string]float64
+}
+
+func (r *Relation) ActionHistoryList() []ActionHistorySnapshot {
+	var out []ActionHistorySnapshot
+	for _, ah := range r.ActionHistories {
+		ah.mu.Lock()
+		members := make(map[string]float64, len(ah.Members))
+		for k, v := range ah.Members {
+			members[k] = v
+		}
+		out = append(out, ActionHistorySnapshot{
+			ID:      ah.id,
+			BeingID: ah.BeingID,
+			Members: members,
+		})
+		ah.mu.Unlock()
+	}
+	return out
+}
+
 func (r *Relation) Reinforce() {
 }
 
@@ -276,14 +312,13 @@ func Impress(origin, raw string) (*Relation, error) {
 
 	slice := &Slice{
 		Thread:          make(map[string]map[string][]Reality),
-		TrainOfThought:  []Reality{},
+		TrainOfThought:  make(map[string]Reality),
 		Understandings:  []Reality{},
 		PreviousActions: []Reality{},
 		Signal:          1.0,
 		Intent:          NewIntentGraph(),
 		Forming:         forming,
 		Surroundings:    make(map[string]float64),
-		Visited:         make(map[string]bool),
 	}
 
 	return &Relation{
@@ -293,8 +328,9 @@ func Impress(origin, raw string) (*Relation, error) {
 		World:     make(map[string]Reality),
 		Providers: make(map[string]Reality),
 		Fields:    make(map[string]map[string]float64),
-		Threads:   make(map[string]*Thread),
-		Slices:    map[string]*Slice{origin: slice},
+		Threads:         make(map[string]*Thread),
+		ActionHistories: make(map[string]*ActionHistory),
+		Slices:          map[string]*Slice{origin: slice},
 		MaxLoad:   75000,
 		MaxDepth:  50,
 	}, nil
@@ -322,14 +358,13 @@ func (r *Relation) GetSlice(beingID string) *Slice {
 
 	s = &Slice{
 		Thread:          make(map[string]map[string][]Reality),
-		TrainOfThought:  []Reality{},
+		TrainOfThought:  make(map[string]Reality),
 		Understandings:  []Reality{},
 		PreviousActions: []Reality{},
 		Signal:          1.0,
 		Intent:          NewIntentGraph(),
 		Forming:         forming,
 		Surroundings:    make(map[string]float64),
-		Visited:         make(map[string]bool),
 	}
 
 	r.mu.Lock()

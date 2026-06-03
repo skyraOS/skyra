@@ -133,7 +133,11 @@ func ThoughtDensity(r *Relation, beingID string) float64 {
 	sl := r.GetSlice(beingID)
 	sl.mu.Lock()
 	thoughts := make([]*Skyra, 0, len(sl.TrainOfThought))
-	for _, t := range sl.TrainOfThought {
+	for _, id := range sl.TrainOfThoughtKeys {
+		t := sl.TrainOfThought[id]
+		if t == nil {
+			continue
+		}
 		if cell, ok := t.(*Skyra); ok && len(cell.Vector) > 0 {
 			thoughts = append(thoughts, cell)
 		}
@@ -165,12 +169,13 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	}
 	sl := r.GetSlice(s.BeingID)
 	sl.mu.Lock()
-	if sl.Visited[s.id] {
+	if _, visited := sl.TrainOfThought[s.id]; visited {
 		sl.mu.Unlock()
 		debug.Being(s.BeingID, "traverse", "SKIP (already visited):", s.id, s.Description)
 		return r
 	}
-	sl.Visited[s.id] = true
+	sl.TrainOfThought[s.id] = nil
+	sl.TrainOfThoughtKeys = append(sl.TrainOfThoughtKeys, s.id)
 	sl.mu.Unlock()
 
 	activation := s.Activation(r)
@@ -201,7 +206,7 @@ func (s *Skyra) Realize(r *Relation) *Relation {
 	// decay unvisited neighbors — cancelled traversal, one level deep
 	for id, rel := range s.Relationships {
 		sl.mu.Lock()
-		visited := sl.Visited[id]
+		_, visited := sl.TrainOfThought[id]
 		sl.mu.Unlock()
 		if !visited {
 			rel.Realize(&Relation{Cancelled: true})
@@ -270,7 +275,7 @@ func ObservePickUp(s *Skyra) func(*Relation) {
 		}
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		sl.TrainOfThought = append(sl.TrainOfThought, s)
+		sl.TrainOfThought[s.id] = s
 		sl.Load += len(s.Content)
 		sl.Signal -= 0.01
 		sl.mu.Unlock()
@@ -287,7 +292,7 @@ func ObservePropagate(s *Skyra, call func(string, string) (string, error)) func(
 		}
 		sl := r.GetSlice(s.BeingID)
 		sl.mu.Lock()
-		sl.TrainOfThought = append(sl.TrainOfThought, s)
+		sl.TrainOfThought[s.id] = s
 		sl.Load += len(s.Content)
 		sl.mu.Unlock()
 
@@ -346,7 +351,11 @@ func ExpressCompress(s *Skyra, call func(string, string) (string, error)) func(*
 		}
 
 		thoughts := make([]*Skyra, 0, len(sl.TrainOfThought))
-		for _, t := range sl.TrainOfThought {
+		for _, id := range sl.TrainOfThoughtKeys {
+			t := sl.TrainOfThought[id]
+			if t == nil {
+				continue
+			}
 			if cell, ok := t.(*Skyra); ok {
 				thoughts = append(thoughts, cell)
 			}
