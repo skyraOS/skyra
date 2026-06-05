@@ -9,7 +9,6 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/debugview"
-	"skyra-v1/src/inference"
 	"skyra-v1/src/reality"
 	"skyra-v1/src/tui"
 )
@@ -80,14 +79,11 @@ func createSkyra() (*reality.Skyra, *reality.Thread, *reality.ActionHistory) {
 
 	skyra.ObserveFns["pass-through"] = reality.ObservePassThrough(skyra)
 	skyra.ObserveFns["pick-up"] = reality.ObservePickUp(skyra)
-	skyra.ObserveFns["propagate"] = reality.ObservePropagate(skyra, inference.CallDeepSeek)
 
-	skyra.ExpressFns["compress"] = reality.ExpressCompress(skyra, inference.CallDeepSeek)
 	skyra.ExpressFns["motor"] = reality.ExpressMotor(skyra)
 
 	skyra.Primitives["look"] = reality.PrimitiveLook(skyra)
 	skyra.Primitives["listen"] = reality.PrimitiveListen(skyra)
-	skyra.Primitives["engage"] = reality.PrimitiveEngage(skyra, inference.CallDeepSeek)
 
 	thread := reality.NewThread("thread:skyra:main", "skyra")
 	thread.Bind(skyra.ID())

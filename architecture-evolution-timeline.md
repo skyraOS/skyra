@@ -2,7 +2,7 @@
 
 ## Scope
 
-This is a high-level but fairly detailed timeline of how the architecture changed from the beginning of the project to the current `skyra-v.03` beings-and-relationships model.
+This is a high-level but fairly detailed timeline of how the architecture changed from the beginning of the project to the current `skyra-v.05` beings-and-relationships model.
 
 It is based on the git history from:
 

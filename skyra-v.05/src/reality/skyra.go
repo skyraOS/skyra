@@ -112,18 +112,8 @@ func (s *Skyra) Competence(r *Relation) {
 	}
 }
 
-// CompetenceExpress — ascent competence read. Decides whether
-// to compress based on thought density on the Relation.
 func (s *Skyra) CompetenceExpress(r *Relation) {
-	density := ThoughtDensity(r, s.BeingID)
-
-	switch {
-	case density > 0.5:
-		s.Type = "compress"
-	default:
-		s.Type = "pass-through"
-	}
-	// motor fires at the exit of Realize(), not through competence
+	s.Type = "motor"
 }
 
 // ThoughtDensity — average pairwise cosine similarity across
@@ -474,16 +464,8 @@ func clusterBySimilarity(thoughts []*Skyra, threshold float64) [][]*Skyra {
 	return clusters
 }
 
-// Express — mutual expression. The Relation expresses itself first,
-// then competence-selected output fires, then speak (always, if registered).
 func (s *Skyra) Express(r *Relation) *Relation {
 	r = r.Express(r)
-	if fn, ok := s.ExpressFns[s.Type]; ok {
-		r = fn(r)
-	}
-	if fn, ok := s.ExpressFns["speak"]; ok && s.Type != "speak" {
-		r = fn(r)
-	}
 	return r
 }
 
