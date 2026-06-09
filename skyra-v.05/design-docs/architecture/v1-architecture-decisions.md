@@ -22,9 +22,11 @@ The being exists one level up from its internal topology. It's not a node in its
 
 Three layers, clean ownership:
 
-- **Being (Brain)** — durable. Per-being. The being's binding realities. Thread, Action, Goal, Motivation, Emotion. This is the being's private topology. Persists whether or not a signal is passing through.
-- **Slice** — transient. Per-being, on the Relation. Universal structure regardless of DNA. TrainOfThought, Signal, Load, Fields. The physics of traversal — same for every being.
-- **Relation** — the wave. Holds Slices and references to each being's Brain. Doesn't own any being's state. Just the medium.
+- **Being (Brain)** — durable. Per-being. The being's specialized binding realities. Thread, Action, Goal, Motivation, Emotion. This is the being's private topology. Persists whether or not a signal is passing through.
+- **Slice** — durable. Per-being. Universal activation substrate regardless of DNA. Activation records, traversal count, thresholds, fields, and traversal trees. The physics of traversal — same for every being.
+- **Relation** — transient wave. Carries impulse, energy, and references needed to traverse. Doesn't own any being's state. Just the medium.
+
+Ownership is separate from reachability. The Relation holds references so it can traverse realities, but durable state belongs to the Being and its Slice. Brain state is specialized and per-Being. Slice state is universal and per-Being. Relation state exists only for the current wave.
 
 **Why:** Binding realities (Thread, ActionHistory) were sitting on the Relation — shared state holding private history. The being's topology was on the wrong struct. Fields are per-being (different brains produce different imprints) so they belong on the Slice, not the Relation. The being can't own its own traversal — traversal is physics.
 

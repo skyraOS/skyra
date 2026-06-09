@@ -1,342 +1,188 @@
 package reality
 
-import (
-	"fmt"
-	"strings"
-	"sync"
-	"time"
+import "sync"
 
-	"skyra-v1/src/inference"
-)
+// Node — the kernel's traversal frame. Wraps a cell and its activation record.
+type Node struct {
+	CellID    string
+	Cell      Reality
+	Record    ActivationRecord
+	Score     float64
+	Children  []*Node   // all children — above and below threshold
+	Survivors []Reality // above threshold — queued for descent
+	NextChild int       // index into Survivors for iterative DFS
+}
 
-// Slice — a being's private cognitive state on the Relation.
-// Each being gets its own slice. Own lock. Own goroutine.
-// No being can access another being's slice.
+type TraversalPair struct {
+	Current []*Node
+	Prior   []*Node
+}
+
 type Slice struct {
-	mu              sync.Mutex
-	Thread             map[string]map[string][]Reality // thread ID → reality ID → entries
-	TrainOfThought     map[string]Reality // cell ID → Reality. Presence = visited. Non-nil = picked up.
-	TrainOfThoughtKeys []string           // insertion order for stable iteration
-	Understandings     []Reality // the being's cognitive output — inference from propagate AND compressed products.
-	PreviousActions    []Reality // what the being already did. Written by speak/motor.
-	Signal             float64
-	Load               int    // accumulated content size
-	Forming            *Skyra // the cell being built during this traversal
-	Goal               string // the destination — persistent, changed explicitly
-	Intent             IntentGraph // the predicted future — refined at every compression boundary
-	Surroundings       map[string]float64 // what the being can see right now — keyed by Reality ID, value is activation score. Falls off below threshold.
-	LastSeen           Reality
-	Depth              int
-	Trace              []string
-}
-
-func (s *Slice) Lock()   { s.mu.Lock() }
-func (s *Slice) Unlock() { s.mu.Unlock() }
-
-// ThreadAppend adds an entry to the nested thread map. Caller must hold s.mu.
-func (s *Slice) ThreadAppend(threadID, realityID string, entry Reality) {
-	if s.Thread[threadID] == nil {
-		s.Thread[threadID] = make(map[string][]Reality)
-	}
-	s.Thread[threadID][realityID] = append(s.Thread[threadID][realityID], entry)
-}
-
-// ThreadEntries returns all entries across all realities for a given thread. Caller must hold s.mu.
-func (s *Slice) ThreadEntries(threadID string) []Reality {
-	realities, ok := s.Thread[threadID]
-	if !ok {
-		return nil
-	}
-	var all []Reality
-	for _, entries := range realities {
-		all = append(all, entries...)
-	}
-	return all
-}
-
-// ThreadAll returns all entries across all threads and realities. Caller must hold s.mu.
-func (s *Slice) ThreadAll() []Reality {
-	var all []Reality
-	for _, realities := range s.Thread {
-		for _, entries := range realities {
-			all = append(all, entries...)
-		}
-	}
-	return all
+	mu             sync.Mutex
+	TraversalCount int                       // monotonic global clock — increments once per BeginTraversal
+	Records        map[string]ActivationRecord // cellID → persistent activation record
+	LastChildren   map[string][]string       // cellID → child IDs from last observation
+	Attention      map[string]float64        // filtered subset of surroundings — what survived the prediction gate
+	Threshold      float64                   // DNA-defined minimum score to descend
+	Stack          []*Node                   // the DFS state machine
+	Trees          map[string]*TraversalPair // keyed by binding reality ID
 }
 
 type Relation struct {
-	mu sync.RWMutex // protects shared state: World, Fields
-	id        string
-	Origin    string
-	ThreadID  string
-	Impulse   string
-	World     map[string]Reality             // shared — beings, places, tools. The world is the Relation.
-	Providers map[string]Reality             // shared — inference endpoints
-	Fields    map[string]map[string]float64  // shared — binding fields
-	Threads         map[string]*Thread           // active threads — keyed by thread ID. A being can listen to many.
-	ActionHistories map[string]*ActionHistory   // action binding — keyed by "action:" + beingID
-	Slices          map[string]*Slice            // private — keyed by being ID, tenant-isolated
-	MaxLoad   int
-	MaxDepth  int
-	Cancelled bool
-}
-
-func (r *Relation) RLock()   { r.mu.RLock() }
-func (r *Relation) RUnlock() { r.mu.RUnlock() }
-
-func (r *Relation) SetImpulse(origin, impulse string) {
-	r.mu.Lock()
-	r.Origin = origin
-	r.Impulse = impulse
-	r.mu.Unlock()
+	mu     sync.RWMutex
+	id     string
+	Slices map[string]*Slice
+	Energy float64
 }
 
 func (r *Relation) ID() string {
 	return r.id
 }
 
-func (r *Relation) Create(rel *Relation) Reality {
-	return nil
-}
+// Realize — the kernel. Iterative DFS. Calls Observe on descent, Express on ascent.
+func (r *Relation) Realize(beingID string, brID string, root Reality) {
+	sl := r.GetSlice(beingID)
 
-// Realize — the world loop. Observe routes the impulse to the
-// highest scoring entity. The entity traverses. Express delivers.
-func (r *Relation) Realize(rel *Relation) *Relation {
-	r.Observe(rel)
-	return rel
-}
-
-func (r *Relation) Competence(rel *Relation) {
-}
-
-// Observe — the world observes the impulse. Scores every entity in the
-// World map by activation. The highest scoring targets receive the traversal.
-func (r *Relation) Observe(rel *Relation) {
-	for _, sl := range r.Slices {
-		sl.mu.Lock()
-		sl.TrainOfThought = make(map[string]Reality)
-		sl.TrainOfThoughtKeys = nil
-		sl.mu.Unlock()
+	sl.mu.Lock()
+	sl.TraversalCount++
+	pair := sl.Trees[brID]
+	if pair == nil {
+		pair = &TraversalPair{}
+		sl.Trees[brID] = pair
 	}
+	pair.Prior = pair.Current
+	pair.Current = nil
+	sl.Stack = nil
+	sl.mu.Unlock()
 
-	r.mu.RLock()
-	world := r.World
-	r.mu.RUnlock()
-
-	var best Reality
-	var bestScore float64
-
-	for _, entity := range world {
-		score := entity.Activation(rel)
-		if score > bestScore {
-			bestScore = score
-			best = entity
-		}
-	}
-
-	if best != nil {
-		best.Realize(rel)
-	}
-}
-
-func (r *Relation) Express(rel *Relation) *Relation {
-	s := r.GetSlice(r.Origin)
-	s.mu.Lock()
-	spent := s.Signal < 0.1
-	s.mu.Unlock()
-	if spent {
-		r.Deposit(r.Origin)
-	}
-	return rel
-}
-
-func (r *Relation) Activation(rel *Relation) float64 {
-	s := r.GetSlice(r.Origin)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.Signal
-}
-
-func (r *Relation) Deposit(beingID string) {
-	s := r.GetSlice(beingID)
-	s.mu.Lock()
-	cell := s.Forming
-	if cell == nil {
-		s.mu.Unlock()
+	root.Observe(r)
+	rootNode := r.observe(beingID, root.ID(), root, root.Children())
+	if rootNode == nil {
 		return
 	}
-	var parts []string
-	for _, id := range s.TrainOfThoughtKeys {
-		t := s.TrainOfThought[id]
-		if t == nil {
-			continue
-		}
-		if sk, ok := t.(*Skyra); ok {
-			parts = append(parts, sk.Content)
-			cell.Relationships[sk.id] = sk
-		}
-	}
-	cell.Content = strings.Join(parts, "\n")
-	cell.FamiliarityWeight = s.Signal
-	cell.IdentityWeight = s.Signal
-	host := s.LastSeen
-	s.mu.Unlock()
 
-	vec, err := inference.Embed(cell.Content)
-	if err == nil {
-		cell.Vector = vec
-	}
+	sl.mu.Lock()
+	sl.Stack = append(sl.Stack, rootNode)
+	sl.mu.Unlock()
 
-	if h, ok := host.(*Skyra); ok {
-		h.Relationships[cell.id] = cell
-	}
-
-	r.mu.RLock()
-	for _, thread := range r.Threads {
-		if thread.BeingID == beingID {
-			thread.Bind(cell.id)
-		}
-	}
-	r.mu.RUnlock()
-}
-
-type SliceSnapshot struct {
-	BeingID              string
-	Signal               float64
-	Load                 int
-	ThreadCount          int
-	TrainOfThoughtCount  int
-	UnderstandingCount   int
-	PreviousActionCount  int
-	Goal                 string
-	Intent               string
-	Surroundings         map[string]float64
-}
-
-type ThreadSnapshot struct {
-	ID      string
-	BeingID string
-	Members map[string]float64
-}
-
-func (r *Relation) SliceList() []SliceSnapshot {
-	var out []SliceSnapshot
-	for name, sl := range r.Slices {
+	for {
 		sl.mu.Lock()
-		surroundings := make(map[string]float64, len(sl.Surroundings))
-		for k, v := range sl.Surroundings {
-			surroundings[k] = v
+		if len(sl.Stack) == 0 {
+			sl.mu.Unlock()
+			break
 		}
-		out = append(out, SliceSnapshot{
-			BeingID:             name,
-			Signal:              sl.Signal,
-			Load:                sl.Load,
-			ThreadCount:          len(sl.Thread),
-			TrainOfThoughtCount:  len(sl.TrainOfThought),
-			UnderstandingCount:   len(sl.Understandings),
-			PreviousActionCount:  len(sl.PreviousActions),
-			Goal:                sl.Goal,
-			Intent:              sl.Intent.Render(),
-			Surroundings:        surroundings,
-		})
-		sl.mu.Unlock()
-	}
-	return out
-}
 
-func (r *Relation) ThreadList() []ThreadSnapshot {
-	var out []ThreadSnapshot
-	for _, t := range r.Threads {
-		t.mu.Lock()
-		members := make(map[string]float64, len(t.Members))
-		for k, v := range t.Members {
-			members[k] = v
+		top := sl.Stack[len(sl.Stack)-1]
+
+		if top.NextChild < len(top.Survivors) && r.Energy > 0 {
+			child := top.Survivors[top.NextChild]
+			top.NextChild++
+			sl.mu.Unlock()
+
+			r.Energy--
+			child.Observe(r)
+			childNode := r.observe(beingID, child.ID(), child, child.Children())
+
+			sl.mu.Lock()
+			if childNode != nil {
+				sl.Stack = append(sl.Stack, childNode)
+			}
+			sl.mu.Unlock()
+		} else {
+			sl.Stack = sl.Stack[:len(sl.Stack)-1]
+			sl.mu.Unlock()
+
+			top.Cell.Express(r)
+
+			sl.mu.Lock()
+			if len(sl.Stack) > 0 {
+				parent := sl.Stack[len(sl.Stack)-1]
+				parent.Children = append(parent.Children, top)
+			} else {
+				pair.Current = append(pair.Current, top)
+			}
+			sl.mu.Unlock()
 		}
-		out = append(out, ThreadSnapshot{
-			ID:      t.id,
-			BeingID: t.BeingID,
-			Members: members,
-		})
-		t.mu.Unlock()
 	}
-	return out
 }
 
-type ActionHistorySnapshot struct {
-	ID      string
-	BeingID string
-	Members map[string]float64
-}
+// observe — scores children via their activation records. The kernel owns traversal, cells own scoring.
+func (r *Relation) observe(beingID string, cellID string, cell Reality, cells map[string]Reality) *Node {
+	sl := r.GetSlice(beingID)
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
 
-func (r *Relation) ActionHistoryList() []ActionHistorySnapshot {
-	var out []ActionHistorySnapshot
-	for _, ah := range r.ActionHistories {
-		ah.mu.Lock()
-		members := make(map[string]float64, len(ah.Members))
-		for k, v := range ah.Members {
-			members[k] = v
+	var children []*Node
+	var survivors []Reality
+
+	// Score present children
+	for id, child := range cells {
+		rec := sl.Records[id]
+		if rec == nil {
+			rec = child.NewActivation()
+			sl.Records[id] = rec
 		}
-		out = append(out, ActionHistorySnapshot{
-			ID:      ah.id,
-			BeingID: ah.BeingID,
-			Members: members,
+		score := rec.Activate(true, sl.TraversalCount)
+
+		children = append(children, &Node{
+			CellID: id,
+			Cell:   child,
+			Record: rec,
+			Score:  score,
 		})
-		ah.mu.Unlock()
-	}
-	return out
-}
 
-func (r *Relation) Reinforce() {
-}
-
-func (r *Relation) Decay() {
-}
-
-func Impress(origin, raw string) (*Relation, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, fmt.Errorf("reality: empty input")
+		if score > sl.Threshold {
+			survivors = append(survivors, child)
+		}
 	}
 
-	forming := &Skyra{
-		id:                NewID(),
-		IdentityWeight:    1.0,
-		FamiliarityWeight: 1.0,
-		CreatedAt:         time.Now().Unix(),
-		Relationships:     make(map[string]Reality),
-		Expressors:        make(map[string]Reality),
-		ObserveFns:        make(map[string]func(*Relation)),
-		ExpressFns:        make(map[string]func(*Relation) *Relation),
+	// Decay absent children
+	if prior, ok := sl.LastChildren[cellID]; ok {
+		present := make(map[string]bool, len(cells))
+		for id := range cells {
+			present[id] = true
+		}
+		for _, childID := range prior {
+			if !present[childID] {
+				rec := sl.Records[childID]
+				if rec != nil {
+					score := rec.Activate(false, sl.TraversalCount)
+					children = append(children, &Node{
+						CellID: childID,
+						Record: rec,
+						Score:  score,
+					})
+				}
+			}
+		}
 	}
 
-	slice := &Slice{
-		Thread:          make(map[string]map[string][]Reality),
-		TrainOfThought:  make(map[string]Reality),
-		Understandings:  []Reality{},
-		PreviousActions: []Reality{},
-		Signal:          1.0,
-		Intent:          NewIntentGraph(),
-		Forming:         forming,
-		Surroundings:    make(map[string]float64),
+	// Update last children for next traversal
+	childIDs := make([]string, 0, len(cells))
+	for id := range cells {
+		childIDs = append(childIDs, id)
 	}
+	sl.LastChildren[cellID] = childIDs
 
-	return &Relation{
-		id:        NewID(),
-		Origin:    origin,
-		Impulse:   raw,
-		World:     make(map[string]Reality),
-		Providers: make(map[string]Reality),
-		Fields:    make(map[string]map[string]float64),
-		Threads:         make(map[string]*Thread),
-		ActionHistories: make(map[string]*ActionHistory),
-		Slices:          map[string]*Slice{origin: slice},
-		MaxLoad:   75000,
-		MaxDepth:  50,
-	}, nil
+	// Self
+	selfRec := sl.Records[cellID]
+	if selfRec == nil {
+		selfRec = cell.NewActivation()
+		sl.Records[cellID] = selfRec
+	}
+	selfScore := selfRec.Activate(true, sl.TraversalCount)
+
+	return &Node{
+		CellID:    cellID,
+		Cell:      cell,
+		Record:    selfRec,
+		Score:     selfScore,
+		Children:  children,
+		Survivors: survivors,
+	}
 }
 
-// GetSlice returns the being's private slice, creating one if it doesn't exist.
 func (r *Relation) GetSlice(beingID string) *Slice {
 	r.mu.RLock()
 	s, ok := r.Slices[beingID]
@@ -345,26 +191,11 @@ func (r *Relation) GetSlice(beingID string) *Slice {
 		return s
 	}
 
-	forming := &Skyra{
-		id:                NewID(),
-		IdentityWeight:    1.0,
-		FamiliarityWeight: 1.0,
-		CreatedAt:         time.Now().Unix(),
-		Relationships:     make(map[string]Reality),
-		Expressors:        make(map[string]Reality),
-		ObserveFns:        make(map[string]func(*Relation)),
-		ExpressFns:        make(map[string]func(*Relation) *Relation),
-	}
-
 	s = &Slice{
-		Thread:          make(map[string]map[string][]Reality),
-		TrainOfThought:  make(map[string]Reality),
-		Understandings:  []Reality{},
-		PreviousActions: []Reality{},
-		Signal:          1.0,
-		Intent:          NewIntentGraph(),
-		Forming:         forming,
-		Surroundings:    make(map[string]float64),
+		Records:      make(map[string]ActivationRecord),
+		LastChildren: make(map[string][]string),
+		Attention:    make(map[string]float64),
+		Trees:        make(map[string]*TraversalPair),
 	}
 
 	r.mu.Lock()

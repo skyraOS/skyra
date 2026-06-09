@@ -1,45 +1,23 @@
 package reality
 
-import "math"
+// ActivationRecord — the one interface the kernel calls.
+// Each cell type defines its own implementation with whatever internals it wants.
+type ActivationRecord interface {
+	Activate(visited bool, traversalCount int) float64
+}
 
+// IRelation — the wave + shared substrate. Drives traversal, holds per-being state.
+type IRelation interface {
+	ID() string
+	Realize(beingID string, brID string, root Reality)
+	GetSlice(beingID string) *Slice
+}
+
+// Reality — the inhabitant. Cells implement this. The kernel traverses these.
 type Reality interface {
 	ID() string
-	Create(r *Relation) Reality
-	Realize(r *Relation) *Relation
-	Competence(r *Relation)
+	NewActivation() ActivationRecord
 	Observe(r *Relation)
-	Express(r *Relation) *Relation
-	Activation(rel *Relation) float64
-	Reinforce()
-	Decay()
-}
-
-// Recency — short term memory. Power law decay.
-// Crashes fast, whispers forever. The echo.
-func Recency(traversalCount, lastTraversed int) float64 {
-	delta := traversalCount - lastTraversed
-	if delta <= 0 {
-		return 1.0
-	}
-	return math.Pow(float64(delta), -0.5)
-}
-
-// Familiarity — medium term memory. EMA with high α (0.1).
-// What the being has been doing. Responsive, fades in weeks.
-func Familiarity(current float64, traversed bool) float64 {
-	const alpha = 0.1
-	if traversed {
-		return alpha*1.0 + (1-alpha)*current
-	}
-	return (1 - alpha) * current
-}
-
-// Identity — long term memory. EMA with low α (0.02).
-// What the being IS. Barely moves. The groove.
-func Identity(current float64, traversed bool) float64 {
-	const alpha = 0.02
-	if traversed {
-		return alpha*1.0 + (1-alpha)*current
-	}
-	return (1 - alpha) * current
+	Express(r *Relation)
+	Children() map[string]Reality
 }
