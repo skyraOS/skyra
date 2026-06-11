@@ -241,6 +241,37 @@ O(n) push + O(n) pop = O(n). Theoretical minimum for tree construction.
 
 If traversal ever goes parallel, the stack model breaks — interleaving destroys parent lookup. Would need separate stacks per subtree. Not now.
 
+## Two Recursions
+
+This is the single hardest thing to hold about the kernel, and once you see it the whole system reads cleanly: the kernel runs **two different recursions at once, using two different mechanisms.** Both live in the same function — `Realize`. Keep them separate and it makes sense; conflate them and nothing does.
+
+**1. In-plane traversal — the explicit stack.** A wave moving across *one* topology (one plane: a world, or a being's interior) is the iterative DFS above, driven by a manual stack (`[]*Node`). No Go recursion here. The kernel owns every frame so it can apply policy at each step — visit-once, energy, threshold, scoring, tree-building. This is the wave spreading through a graph.
+
+**2. Cross-plane crossing — the Go call stack.** When the wave hits a cell whose `Content` is itself a Reality (a being on the grid, a specialist inside a being), the kernel crosses into that inner plane by calling `Realize` on itself — a real Go function call, a real stack frame. The inner plane runs its *own* in-plane DFS with its *own* explicit stack, returns its result, and the outer plane continues. This is descending from one environment into the one nested inside it.
+
+So the shape is: **an explicit stack-machine running inside each frame of a Go call-stack recursion.** Each Go frame is one plane; inside that frame the explicit stack walks that plane; hit a boundary, make a Go call, a new frame opens with its own explicit stack, all the way down.
+
+### Why the split
+
+Each recursion is matched to the mechanism that fits it:
+
+- **In-plane is large and policy-heavy** → explicit stack. A plane can hold a huge topology, so you want a heap-allocated stack, not Go's. And the kernel must own the frame state (survivors, NextChild, score) to gate and score each step — which it can't if the frames are hidden in Go's stack.
+- **Cross-plane is shallow and return-shaped** → Go stack. Crossing a boundary *is* a function call: enter a context, run to completion, return a result. Nesting is only a few environments deep, so Go stack depth is never a concern.
+
+### The return path is the invariant
+
+The Go call stack does one more thing for free: its return path **is** the [Perception Invariant](../invariants/perception-invariant.md). "Deliver the result to the origin" is the value bubbling back up the Go stack when an inner `Realize` returns. The explicit stack delivers in-plane; the Go return delivers cross-plane. The invariant is the one rule true in *both* recursions — which is why getting it right is what makes the two-layer structure reasoning-able at all.
+
+### A third mechanism, above both
+
+Concurrent *waves* are goroutines — a layer above these two, and not the same as the "Parallel Future" caveat above (that warns against parallelizing a *single* plane's DFS, which stays sequential). Goroutines run whole independent waves. The full vocabulary:
+
+- **spawn** a new wave → a goroutine (concurrent, async; its result returns to origin when done).
+- **cross** into content → a Go call (synchronous, within one wave).
+- **traverse** a plane → the explicit stack (one wave, one topology).
+
+Three mechanisms, three jobs. They only stay confusing while the first two are tangled.
+
 ## What the Kernel Does NOT Know
 
 - What scoring means
