@@ -249,5 +249,6 @@ If traversal ever goes parallel, the stack model breaks — interleaving destroy
 - What binding fields are
 - How decay works internally
 - What emotion, episodic overlap, or motivation relevance are
+- What a wave's shape is — it carries the shape on the Relation and traverses the survivors the cell returns; it never interprets shape or resolves direction (see [world-kernel-coupling.md](world-kernel-coupling.md#wave-shape--three-way-ownership))
 
 The kernel is mechanism. The cell is policy. DNA is the distro.
