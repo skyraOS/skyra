@@ -57,8 +57,8 @@ The kernel is stateless. No impulse field, no request accumulator. The payload e
 func (r *Relation) Realize(root Reality, payload any) any {
     // DFS traversal
     // payload passes through Observe/Express
-    // content type check recurses: r.Realize(innerReality, payload)
-    // Express return value bubbles back up
+    // content type check crosses an actor boundary → spawns a goroutine
+    // each actor delivers its result to its own origin (no return-bubble across actors)
 }
 ```
 
@@ -126,7 +126,7 @@ if r, ok := cell.Content.(Reality); ok {
 }
 ```
 
-Content is a Reality → the kernel calls Realize on itself with that Reality as a new root and the same payload. Full DFS — descent, scoring, tree building, ascent. The kernel recurses into itself. The outer traversal is the world. The inner traversal is the agent. Same function. The return value bubbles back up.
+Content is a Reality → the kernel crosses an actor boundary. Because that reality has its own slice (its own frame and proper-time clock), the crossing **spawns a goroutine** running the same function on the inner topology — not a synchronous call. The inner actor runs its own full DFS and delivers its result to *its own* origin (the [Perception Invariant](../invariants/perception-invariant.md)); nothing bubbles back up across the boundary. The outer traversal is the world; the inner is the agent; same function, concurrent. A response from the inner actor is a separate wave back, not a return value. (See [Two Recursions](activation-and-traversal.md#two-recursions): traverse in-plane on the explicit stack, cross an actor boundary by spawning.)
 
 Content is anything else (string, state, nil) → the kernel ignores it. Not its business. The cell reads its own Content during Observe/Express. Skyra's Content might be a string — her durable state, her context. The kernel never touches it.
 

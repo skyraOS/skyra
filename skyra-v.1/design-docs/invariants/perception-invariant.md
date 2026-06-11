@@ -38,7 +38,7 @@ So "the kernel calls `origin.observe` at the end" is correct and the same in bot
 
 The invariant never names the level it applies at. "Every wave delivers its result to its origin" speaks only of *wave*, *origin*, and *result* — things that exist at every level of the nesting. An invariant stated only in terms that exist at every level is automatically recursive; it has no level to be specific to. That is the test of a real invariant rather than a top-level rule dressed up as one, and this one passes.
 
-It falls out of two uniformities already in the runtime: every participant implements the same `Reality` interface, and the crossing rule is uniform (Content that is a Reality → the kernel recurses into it). So an agent's interior is a world to the realities inside it, and the same `origin.observe`-at-the-end applies there. The inner universe — specialists as beings inside an agent — inherits the invariant for free: an inner being perceives the result of its waves exactly the way a top-level being does. The rule is written once.
+It falls out of two uniformities already in the runtime: every participant implements the same `Reality` interface, and the crossing rule is uniform (Content that is a Reality → the kernel spawns a goroutine that crosses into it). So an agent's interior is a world to the realities inside it, and the same `origin.observe`-at-the-end applies there — each actor, on its own goroutine, delivers to its own origin. The inner universe — specialists as beings inside an agent — inherits the invariant for free: an inner being perceives the result of its waves exactly the way a top-level being does. The rule is written once.
 
 The signature carries this. The kernel is called as:
 

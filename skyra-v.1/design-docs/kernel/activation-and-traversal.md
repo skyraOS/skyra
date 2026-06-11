@@ -243,34 +243,33 @@ If traversal ever goes parallel, the stack model breaks — interleaving destroy
 
 ## Two Recursions
 
-This is the single hardest thing to hold about the kernel, and once you see it the whole system reads cleanly: the kernel runs **two different recursions at once, using two different mechanisms.** Both live in the same function — `Realize`. Keep them separate and it makes sense; conflate them and nothing does.
+This is the single hardest thing to hold about the kernel, and once you see it the whole system reads cleanly: the kernel runs **two different recursions, using two different mechanisms.** Keep them separate and it makes sense; conflate them and nothing does.
 
-**1. In-plane traversal — the explicit stack.** A wave moving across *one* topology (one plane: a world, or a being's interior) is the iterative DFS above, driven by a manual stack (`[]*Node`). No Go recursion here. The kernel owns every frame so it can apply policy at each step — visit-once, energy, threshold, scoring, tree-building. This is the wave spreading through a graph.
+**1. In-plane traversal — the explicit stack, synchronous.** A wave moving across *one* actor's topology (its own binding realities, memories — reached through `Children()`) is the iterative DFS above, driven by a manual stack (`[]*Node`). No recursion here, no goroutines — one wave, one stack. The kernel owns every frame so it can apply policy at each step (visit-once, energy, threshold, scoring) and build the actor's result on the ascent. This is the wave spreading through a graph, and it is sequential.
 
-**2. Cross-plane crossing — the Go call stack.** When the wave hits a cell whose `Content` is itself a Reality (a being on the grid, a specialist inside a being), the kernel crosses into that inner plane by calling `Realize` on itself — a real Go function call, a real stack frame. The inner plane runs its *own* in-plane DFS with its *own* explicit stack, returns its result, and the outer plane continues. This is descending from one environment into the one nested inside it.
+**2. Cross-actor crossing — goroutine spawn, asynchronous.** When the wave hits a cell whose `Content` is itself a Reality, that is not a sub-structure of the current computation — it is **another actor.** The tell is in the code: the crossing looks up *that reality's own slice* in `ActiveState`, and a separate slice means a separate frame, a separate proper-time clock, a separate being. Actors are concurrent, so the crossing **spawns a goroutine** (`go realize(inner, inner, impulse)`) — it does not call down the Go stack. The inner actor runs its own in-plane DFS on its own goroutine and delivers its result to *its own* origin. The outer wave does not wait.
 
-So the shape is: **an explicit stack-machine running inside each frame of a Go call-stack recursion.** Each Go frame is one plane; inside that frame the explicit stack walks that plane; hit a boundary, make a Go call, a new frame opens with its own explicit stack, all the way down.
+So the shape is: **an explicit stack-machine inside each actor, and a goroutine per actor.** The goroutine tree *is* the actor tree. Within an actor, one stack walks the topology sequentially; cross an actor boundary and a new goroutine opens with its own stack — concurrently.
 
 ### Why the split
 
 Each recursion is matched to the mechanism that fits it:
 
-- **In-plane is large and policy-heavy** → explicit stack. A plane can hold a huge topology, so you want a heap-allocated stack, not Go's. And the kernel must own the frame state (survivors, NextChild, score) to gate and score each step — which it can't if the frames are hidden in Go's stack.
-- **Cross-plane is shallow and return-shaped** → Go stack. Crossing a boundary *is* a function call: enter a context, run to completion, return a result. Nesting is only a few environments deep, so Go stack depth is never a concern.
+- **In-plane is large, policy-heavy, and one being's own thought** → explicit stack, sequential. A plane can hold a huge topology, so you want a heap-allocated stack; and the kernel must own the frame state (survivors, NextChild, score) to gate and score each step.
+- **Cross-actor is a boundary between concurrent beings** → goroutine spawn, async. Crossing into another actor synchronously would mean one being blocking inside another's interior and ripping out its response — wrong. The other being is its own goroutine; it processes on its own clock and answers when it answers.
 
-### The return path is the invariant
+### Delivery to origin is the relay
 
-The Go call stack does one more thing for free: its return path **is** the [Perception Invariant](../invariants/perception-invariant.md). "Deliver the result to the origin" is the value bubbling back up the Go stack when an inner `Realize` returns. The explicit stack delivers in-plane; the Go return delivers cross-plane. The invariant is the one rule true in *both* recursions — which is why getting it right is what makes the two-layer structure reasoning-able at all.
+There is **no return bubbling up a Go stack across actors.** Each goroutine delivers its result to *its own* origin — that is the [Perception Invariant](../invariants/perception-invariant.md), and it is the only relay. The explicit stack delivers in-plane (it builds the actor's own result on the ascent); the goroutine delivers cross-actor (to the inner being). A response from one being to another is not a return value — it is a **separate wave back**, another goroutine. Async message passing between concurrent actors.
 
-### A third mechanism, above both
+That this is async is not a compromise, it is more correct: it respects being boundaries (no blocking inside another being), it gives the concurrency temporal binding wants (many staggered waves over the shared substrate), and it matches the physics — active sensing has propagation delay, so a perception returning a cycle later *is* the reafference loop, not a bug.
 
-Concurrent *waves* are goroutines — a layer above these two, and not the same as the "Parallel Future" caveat above (that warns against parallelizing a *single* plane's DFS, which stays sequential). Goroutines run whole independent waves. The full vocabulary:
+### The two-word vocabulary
 
-- **spawn** a new wave → a goroutine (concurrent, async; its result returns to origin when done).
-- **cross** into content → a Go call (synchronous, within one wave).
-- **traverse** a plane → the explicit stack (one wave, one topology).
+- **traverse** a plane → the explicit stack (one actor, one topology, sequential).
+- **cross** an actor boundary → a goroutine spawn (async; the inner actor delivers to its own origin).
 
-Three mechanisms, three jobs. They only stay confusing while the first two are tangled.
+Sync exists only *inside* an actor; crossing an actor boundary is always a spawn. Whether something is sync or async is therefore a **placement decision** — make it a `Child` (in-plane, part of my thought, sequential) or put it behind `Content` as its own actor (cross, concurrent). The genome decides by where it puts the reality. (The "Parallel Future" caveat above still holds: a *single* plane's DFS stays sequential — the concurrency is across actors, never within one stack.)
 
 ## What the Kernel Does NOT Know
 
