@@ -38,19 +38,19 @@ So "the kernel calls `origin.observe` at the end" is correct and the same in bot
 
 The invariant never names the level it applies at. "Every wave delivers its result to its origin" speaks only of *wave*, *origin*, and *result* — things that exist at every level of the nesting. An invariant stated only in terms that exist at every level is automatically recursive; it has no level to be specific to. That is the test of a real invariant rather than a top-level rule dressed up as one, and this one passes.
 
-It falls out of two uniformities already in the runtime: every participant implements the same `Reality` interface, and the crossing rule is uniform (Content that is a Reality → the kernel spawns a goroutine that crosses into it). So an agent's interior is a world to the realities inside it, and the same `origin.observe`-at-the-end applies there — each actor, on its own goroutine, delivers to its own origin. The inner universe — specialists as beings inside an agent — inherits the invariant for free: an inner being perceives the result of its waves exactly the way a top-level being does. The rule is written once.
+It falls out of two uniformities already in the runtime: every participant implements the same `Reality` interface, and the crossing rule is uniform (Content that is a Reality → the kernel spawns a goroutine that crosses into it). So an agent's interior is a world to the realities inside it, and the same `origin.observe`-at-the-end applies there — each wave, on its own goroutine, delivers to *its* origin (the being that started it, threaded unchanged across crossings). The inner universe — specialists as beings inside an agent — inherits the invariant for free: an inner being perceives the result of its waves exactly the way a top-level being does. The rule is written once.
 
 The signature carries this. The kernel is called as:
 
 ```
-realize(ContentReality, Self, content)
+realize(UpperReality, LowerReality, impulse)
 ```
 
-- **ContentReality** — the reality to traverse (the substrate for this wave).
-- **Self** — the origin; whoever the result is delivered back to.
-- **content** — the act.
+- **UpperReality** — the wave's owner: the being whose wave it is. Threaded unchanged through crossings, the `Observe` discriminator, and whoever the result is delivered back to.
+- **LowerReality** — the realm traversed at this level (the world, then a crossed-into being's interior); it descends at each crossing while Upper stays put.
+- **impulse** — the act.
 
-No world-specific parameter (no grid location) appears — location is the environment's knowledge about its own occupants, at whatever level, never threaded through the kernel. Because the signature names only what exists everywhere, the same call works at every depth. And because **`Self` is a required argument, the invariant is mechanical**: you cannot start a kernel wave without naming who perceives the result, and the kernel will deliver it there. The origin is not a rule to remember — it is an argument you cannot omit.
+No world-specific parameter (no grid location) appears — location is the environment's knowledge about its own occupants, at whatever level, never threaded through the kernel. Because the signature names only what exists everywhere, the same call works at every depth. And because **`UpperReality` is a required argument, the invariant is mechanical**: you cannot start a kernel wave without naming who perceives the result, and the kernel will deliver it there. The owner is not a rule to remember — it is an argument you cannot omit.
 
 A being acts by calling into its environment — `world.observe(self, content)` at the top level, `innerWorld.observe(self, content)` for a being inside an agent. This looks inverted: the environment *contains* the being, yet the being *calls into* it to act. There is no contradiction — **containment and call-direction are different axes.** You are *in* an environment, and you act by *invoking* it. The container is also the executor; the recursion is what lets one Reality be both.
 

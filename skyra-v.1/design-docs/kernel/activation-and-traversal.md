@@ -20,8 +20,8 @@ They meet at the interface but they don't own each other. The Relation is mechan
 2. **Kernel reads Children()** — gets the cell's visible neighbors by reference
 3. **Kernel calls Activate(true)** — on each present child's activation record
 4. **Kernel calls Activate(false)** — on absent children (previously seen, not in current report)
-5. **Kernel filters by threshold** — above threshold = survivor
-6. **Kernel checks energy** — enough to descend?
+5. **Kernel filters by threshold** — above threshold = survivor (the wave's amplitude is already folded into the score, so a quiet wave fails here)
+6. **Kernel applies the rail** — a node already on the current path is skipped (visited-once)
 7. **Survivors get pushed onto the stack** — iterative DFS continues
 
 The cell is the sensor. The activation record is the scorer. The kernel is the driver.
@@ -137,7 +137,7 @@ What depends on what. If something accumulates across traversals, the Slice owns
 - **Trees** — `map[string]*TraversalPair` — current/prior trees per binding reality
 
 ### What the Relation owns:
-- **Energy** — the wave's remaining budget. Each descent step costs 1.
+- **Amplitude** — the wave's signal strength, set at spawn (the agent's investment). Folds into activation (`activation = base × amplitude`) and attenuates as the wave descends, so a quiet wave simply fails threshold. Not a step-budget — visited-once is the rail. Attenuates across crossings too, which bounds the goroutine tree.
 - **Slices** — `map[string]*Slice` — one per being
 
 ### What the ActivationRecord owns:
@@ -146,16 +146,16 @@ What depends on what. If something accumulates across traversals, the Slice owns
 - Persists across traversals via the Slice's Records map
 
 ### Traversal itself
-- **Depends on:** score > threshold AND energy > 0
-- **Therefore:** both Slice (score) and Relation (energy) must pass for descent
+- **Depends on:** score > threshold (amplitude is already a factor in the score) AND the node is not already on the current path (visited-once)
+- **Therefore:** the Slice's score gates descent; amplitude rides inside the score, and visited-once guarantees termination
 
 ### Order of operations per cell:
 1. Kernel calls cell.Observe(Relation)
 2. Kernel reads cell.Children()
 3. Kernel looks up or creates ActivationRecord for each child
 4. Kernel calls Activate(true) on present, Activate(false) on absent
-5. Kernel filters by threshold
-6. Kernel checks energy
+5. Kernel filters by threshold (amplitude folded in)
+6. Kernel skips nodes already on the path (visited-once)
 7. Survivors pushed to stack
 
 ## The Node
@@ -184,11 +184,11 @@ No recursion. No suspended stack frames. The kernel drives the loop explicitly.
 push root
 loop:
     top = stack peek
-    if top has unvisited survivors AND energy > 0:
+    if top has unvisited survivors:        # survivors already passed threshold (amplitude folded in) and visited-once
         child = next survivor
         child.Observe(r)
-        score children, push child node
-        energy--
+        attenuate amplitude
+        score children (amplitude folds into the score), push child node
     else:
         pop top
         top.Cell.Express(r)
@@ -247,7 +247,7 @@ This is the single hardest thing to hold about the kernel, and once you see it t
 
 **1. In-plane traversal — the explicit stack, synchronous.** A wave moving across *one* actor's topology (its own binding realities, memories — reached through `Children()`) is the iterative DFS above, driven by a manual stack (`[]*Node`). No recursion here, no goroutines — one wave, one stack. The kernel owns every frame so it can apply policy at each step (visit-once, energy, threshold, scoring) and build the actor's result on the ascent. This is the wave spreading through a graph, and it is sequential.
 
-**2. Cross-actor crossing — goroutine spawn, asynchronous.** When the wave hits a cell whose `Content` is itself a Reality, that is not a sub-structure of the current computation — it is **another actor.** The tell is in the code: the crossing looks up *that reality's own slice* in `ActiveState`, and a separate slice means a separate frame, a separate proper-time clock, a separate being. Actors are concurrent, so the crossing **spawns a goroutine** (`go realize(inner, inner, impulse)`) — it does not call down the Go stack. The inner actor runs its own in-plane DFS on its own goroutine and delivers its result to *its own* origin. The outer wave does not wait.
+**2. Cross-actor crossing — goroutine spawn, asynchronous.** When the wave hits a cell whose `Content` is itself a Reality, that is not a sub-structure of the current computation — it is **another actor.** The tell is in the code: the crossing looks up *that reality's own slice* in `ActiveState`, and a separate slice means a separate frame, a separate proper-time clock, a separate being. Actors are concurrent, so the crossing **spawns a goroutine** (`go realize(upper, inner, impulse)` — `UpperReality` threaded, `LowerReality` = the inner reality) — it does not call down the Go stack. **`UpperReality` (the owner) is threaded unchanged** — the wave still belongs to whoever started it, so the inner actor's cells read it as external (`upper != my being`) and the result returns to the owner, not to the inner actor. The inner actor runs its own in-plane DFS on its own goroutine — concurrent, non-blocking, merely *labeled* with the external origin. The outer wave does not wait.
 
 So the shape is: **an explicit stack-machine inside each actor, and a goroutine per actor.** The goroutine tree *is* the actor tree. Within an actor, one stack walks the topology sequentially; cross an actor boundary and a new goroutine opens with its own stack — concurrently.
 

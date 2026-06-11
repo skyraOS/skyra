@@ -14,9 +14,9 @@ What predates the session's design: no origin/`Self`, no result delivery, no dis
 
 Every wave must deliver its result to its origin, with `Self` carried in the signature.
 
-- **Signature** (`reality.go`, `Kernel.Realize`): `Realize(root, payload any) any` → `Realize(root, self, payload any) any`. **The only change is adding `Self`** — the origin the result is delivered to, a required argument so the invariant is mechanical. The act/medium **stays `any`** (it already is): the kernel never reads it, its shape is endpoint knowledge (`world.observe` and the executing cells treat it as the string act, but the kernel carries it opaquely). `Observe`/`Express` keep their `any`. Breaking interface change (pre-1.0, fine). Parameter names being disambiguated — see Naming.
+- **Signature** (`reality.go`, `Kernel.Realize`): `Realize(root, payload any) any` → `Realize(upperReality, lowerReality, impulse any) any`. `UpperReality` is the wave's **owner** (the being whose wave it is) — threaded unchanged through crossings, the discriminator passed to `Observe`, and who the result returns to. `LowerReality` is the **realm** traversed at this level (the world, then a crossed-into being's interior); it descends at each crossing while Upper stays put. The act/medium **stays `any`** (it already is): the kernel never reads it, its shape is endpoint knowledge (`world.observe` and the executing cells treat it as the string act, but the kernel carries it opaquely). `Observe`/`Express` keep their `any` (renamed `payload` → `impulse`). Breaking interface change (pre-1.0, fine). Names locked — see Naming.
 - **Delivery**: at the end of `realize`, after the loop, call `self.Observe(r, result)` — the reafference. Today the result only returns up the Go stack; nothing perceives it.
-- **Recursive origin**: the cross-plane call sets the inner wave's origin to the inner reality itself — `r.realize(inner, inner, content, …)`. The inner being perceives its own interior wave's output. The invariant holding recursively, in code.
+- **Recursive origin**: the cross-plane spawn threads `UpperReality` unchanged and sets `LowerReality` to the inner reality — `go realize(upper, inner, impulse)` — so the inner being reads the wave as external (`upper != my being`) and the result returns to the owner. A being perceives waves *it* owns (upper = itself → reafference); waves that cross in from outside are exafference. The invariant holding recursively, in code. (See Resolved: crossing semantics.)
 - **Result representation**: minimally the root's Express output; properly a per-traversal **result field on the slice** (the "record of what it did" decision). Origin reads it.
 
 Landing this fully needs a `Self` to deliver to, which at the top level comes from `world.observe(self, content)` (group 2) — so it pulls in the World.
@@ -34,8 +34,8 @@ None of this is in the code. Without it, .1001's activation numbers are meaningl
 - **Double-bump**: `score()` activates each cell twice — once as a child (survivor selection), once as self (node score). A descended cell is bumped twice per traversal. Fix: a non-root cell's self-score is the value its parent already computed for it as a child — pass it into the Node; activate self only for the root.
 - **Decay**: `Activate(false)` is never called; bump-only EMAs flatten toward 1.0. Needs `LastChildren` on the Slice (what each cell reported last pass), diffed against the current report; absent children get `Activate(false)`.
 - **Tree double-buffer**: the ascent builds `parent.Children` and drops it; `slice.Tree()` Prior/Current never populate. At traversal start `Prior=Current, Current=nil`; on root pop, write the tree to `Current`.
-- **Visited-once / cycle brake**: the grid is bidirectionally wired; energy is the only thing stopping A→B→A, which the locked decision forbids (energy is the rail, not the mechanism). Add stack-membership (`onPath`) to block re-descending a node on the current path. Directionality-via-attention is the richer version — future; visited-once suffices for .1001's single being.
-- **Energy minting**: `NewRelation` leaves `Energy=0`, so nothing descends. Seed it at wave creation.
+- **Visited-once = the rail.** The grid is bidirectionally wired; visited-once is what guarantees termination (a traversal can't visit more nodes than exist). Add stack-membership (`onPath`) to block re-descending a node on the current path. This *is* the runaway safety — it replaces the step-counter (below). Directionality-via-attention is the richer version — future; visited-once suffices for .1001's single being.
+- **Energy → amplitude (not a step-counter).** Drop `r.Energy--` and the `Energy > 0` descent gate. Energy is the wave's **amplitude / signal strength**: set by the agent at spawn (its investment — for v.1 a generous constant, later Motivation/Emotion-driven), it **folds into activation** (`activation = base × amplitude`) and **attenuates** as the wave propagates. The wave stops *naturally* when amplitude drops `activation` below threshold — no separate budget gate. Locked at the start (initial value fixed; only attenuates after). Amplitude also attenuates **across crossings**, so a sub-wave inherits the attenuated value — this is what bounds the goroutine tree (too quiet → don't spawn the crossing). Open tuning sub-question: attenuate per *step* or per *distance / activation-cost* (structural model is settled either way).
 
 ## 4. Supporting interface additions
 
@@ -49,24 +49,30 @@ None of this is in the code. Without it, .1001's activation numbers are meaningl
 
 **Recommendation: Path B.** Self-contained, every item a known fix, turns the skeleton into something whose numbers mean something. The invariant signature is small and lands cleanly once `world.observe` is locked; it does not block the experiment.
 
-## Naming — to disambiguate
+## Naming — resolved
 
-The act/medium type is settled (`any`). What's left is naming: **"content" is overloaded.** The four roles in and around the kernel signature, with their jobs, to be named cleanly (see discussion):
+The act/medium type is settled (`any`); the names are locked:
 
-| Role / job | Current / sketched name | Issue |
-|---|---|---|
-| The reality this wave traverses (its root substrate) | `root` (code) / `ContentReality` (sketch) | "Content" in the sketched name |
-| The origin — who perceives the result, delivery target | `Self` | clear, no collision |
-| The act/message the wave carries and executes (`any`, opaque to kernel) | `payload` (code) / `content` (sketch) | "content" collides with `Content()` |
-| The cell's nested slot — may hold a Reality → boundary crossing | `Content() any` (Reality method) | source of the collision |
+| Role / job | Name |
+|---|---|
+| The wave's **owner** — the being whose wave it is; threaded unchanged, the `Observe` discriminator, the result recipient | `UpperReality` |
+| The **realm** traversed at this level (world → crossed-into being's interior); descends at each crossing | `LowerReality` |
+| The act/message the wave carries and executes (`any`, opaque to kernel) | `impulse` |
+| The cell's nested slot — may hold a Reality → boundary crossing | `Content()` (unchanged) |
+
+`UpperReality` / `LowerReality` capture the directional intuition — the owner reaches *down* into the realm — and Upper is threaded unchanged while Lower descends. Upper is the **owner, not the structural container** (skyra sits inside the world but owns the wave). Order is owner-first: `realize(UpperReality, LowerReality, impulse)`. `impulse` matches the spec's existing language and v.05's `Relation.Impulse`, pairing with `result` — impulse in, result out. `Content()` keeps the word "content" (it genuinely means *what the cell contains*).
+
+Signature: **`Realize(UpperReality, LowerReality, impulse any) any`**.
 
 ## Resolved this session
 
-- **Spawn vs cross → always spawn at the actor boundary.** Every wave is a goroutine. In-plane traversal (a being's own `Children`) is the explicit stack, sequential. Crossing into a `Content` Reality is crossing into another actor (it has its own slice), so it **spawns a goroutine** — async — and that actor delivers its result to its own origin; nothing bubbles back. A response is a separate wave. Sync exists only within an actor; sync-vs-async is a placement decision (`Child` vs `Content`). This changes the content-check from `r.realize(inner, …)` to `go realize(inner, inner, …)`, and makes concurrency-safety (slice mutex, shared-substrate reads) real work, not later. See [Two Recursions](activation-and-traversal.md#two-recursions).
+- **Spawn vs cross → always spawn at the actor boundary.** Every wave is a goroutine. In-plane traversal (a being's own `Children`) is the explicit stack, sequential. Crossing into a `Content` Reality is crossing into another actor (it has its own slice), so it **spawns a goroutine** — async. This changes the content-check from `r.realize(inner, …)` to `go realize(upper, inner, …)` (`UpperReality` threaded, `LowerReality` = the inner reality), and makes concurrency-safety (slice mutex, shared-substrate reads) real work, not later. See [Two Recursions](activation-and-traversal.md#two-recursions).
+- **Crossing semantics / origin threading → thread `UpperReality`.** The spawned wave keeps `UpperReality` (the owner) unchanged and sets `LowerReality` to the inner reality (`go realize(upper, inner, …)`). So the inner actor's cells read the wave as external (`upper != my being` → exafference), and the result returns to the owner, not the inner actor. The inner actor's interior runs on its own goroutine — concurrent and non-blocking — merely *labeled* with the external owner (no boundary violation). A being processes another's wave (labeled external, result to the owner); a being responds with its *own* new wave (it becomes the `UpperReality`).
+- **Result representation → a dedicated per-traversal result field on the slice.** The wave's result is written to the origin's slice (`Result` / `SetResult`) — for an agent, the action it just fired and its outcome; for the world, the result of primitive execution. The being's record of what it did and the perception-invariant delivery target in one.
+- **Result delivery → `origin.observe(result)` is the ending wave condition.** When a wave completes, the kernel calls the origin's `Observe` with the result — the actor that started the wave perceives what it produced. **Reuses `Observe`** (no separate method): the origin observes at the *start* (the impulse it sends — efference) and at the *end* (the result that returns — reafference). That is exactly episodic-encoding's dual-mode Observe, and the prediction-error delta lives in the bracket between them. Result content is primitive-specific and opaque to the kernel (`any`): `perceive` → the collected perception; `engage` → engaged / missed. Delivered via `Observe`, recorded on the slice `Result` field.
+  - **Sub-detail (a) → resolved by identity.** `Observe` carries the wave's owner: `Observe(upper, impulse any)`, where `upper` is the `UpperReality` threaded through `realize`. The cell compares it to its own **being** (`upper.ID() == myBeingID`, the slice's `BeingID` — not the individual cell): upper is my being → the wave is mine (efference/reafference); upper is someone else → external (exafference). No flag — identity is the discriminator (von Holst). This makes the old `k Kernel` param on `Observe` vestigial (cells don't start waves during intake).
+  - Sub-detail (b): latest-wins vs queue when multiple concurrent waves deliver to one origin (mutex-guarded either way).
 
 ## Open questions
 
-1. **Result representation** — root Express output, or a dedicated per-traversal result field on the slice? The "record of what it did" decision leans toward the slice field.
-3. **Result delivery and Observe** — does `self.Observe(result)` overload the descent `Observe`, or do we add the dual-mode reafference entry (episodic-encoding) now rather than later?
-4. **Energy budget** — what seeds it, and what value/curve? Per-wave constant for now, or attenuation-based (Phase 23)?
-5. **Path choice** — A or B first.
+1. **Path choice** — A or B first.
