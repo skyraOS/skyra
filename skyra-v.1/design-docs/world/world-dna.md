@@ -50,7 +50,7 @@ The kernel is dumb. It just traverses. The cell defines what happens.
 
 Same kernel. Same traversal. The affordance changes what each world cell does in Observe and Express.
 
-The affordance carries a wave shape, and shape ownership is a clean three-way split: the **primitive** owns the shape (spread, signal division, attenuation, heading — born at emission, rides on the Relation); the **cell** owns adjacency resolution (given that heading, which of *my* edges are forward); the **kernel** only carries the shape and traverses the survivors the cell returns. The geometry never reaches the kernel — that is what keeps it dumb. Full statement in [world-kernel-coupling.md](../kernel/world-kernel-coupling.md#wave-shape--three-way-ownership).
+The affordance executes through a wave shape it does not own. Shape ownership is a four-way split: **attention** owns the shape (the aperture — heading and width — the being's orientation, set by look and focus); the **primitive** owns the verb and the boundary effect (pure execution); the **cell** owns adjacency resolution (given the aperture, which of *my* edges are forward); the **kernel** only carries and traverses. The geometry never reaches the kernel — that is what keeps it dumb. Full statement in [world-kernel-coupling.md](../kernel/world-kernel-coupling.md#wave-shape--ownership).
 
 ## Privileged Affordances
 

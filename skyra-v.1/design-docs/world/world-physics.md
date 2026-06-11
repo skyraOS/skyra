@@ -1,5 +1,7 @@
 # World Physics
 
+> Governed by the **[Perception Invariant](../invariants/perception-invariant.md)** — foundational and load-bearing for all of v.1: what a being sends is chosen, what it perceives is not; every wave delivers its result to its origin. The physics here shape what a wave carries; that invariant governs how the result reaches the being.
+
 Every world boots with the same base realities already in its hashmap. These are the physics — realities that are always present, always firing, invisible to the beings that inhabit the world.
 
 A being never addresses a physics reality. It never sees one in its peers. It doesn't know they exist. But every relation that moves through the world passes through them. Each physics reality updates its own state and applies fields to the relation as it passes. By the time the relation reaches the port, it carries the accumulated weight of every layer it passed through.

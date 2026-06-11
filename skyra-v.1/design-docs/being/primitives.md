@@ -42,13 +42,15 @@ express    listen     speak
 
 These four are the complete surface. Everything else — search, browse, bash, plan — is a tool that lives in a place. The being reaches tools through engage. But it reaches the world through these.
 
-## Shape
+## Shape Comes From Attention
 
-Each primitive owns the shape of the wave it launches — spread, how signal divides across forward edges, attenuation per step, the initial heading. Shape is set once, at emission, and propagates forward. No wave radiates in all directions; energy isn't spent backward.
+A primitive does not own the shape of its wave. It owns the verb and the effect — what the being does, and what happens when the wave lands. The shape — the aperture, a heading and a width — belongs to attention: the being's orientation, set by what it last looked at and holds focus on.
 
-- **look** is wide and shallow — signal divides across a cone, attenuates fast, surveys the neighborhood. Returns what's near.
-- **engage** is narrow and deep — signal stays concentrated on a ray, penetrates, reaches a specific target and crosses in.
+So look and engage are not wide and narrow by nature. They are *perceive* and *commit*, executed through whatever aperture attention currently holds:
 
-Same launch energy, different distribution. Spread and reach are inverse: narrow conserves signal and penetrates, wide divides signal and surveys.
+- **look** — perceive through the current aperture. Diffuse attention makes it a wide sweep; focused attention makes it a narrow scrutiny. Look is also how the being *aims*: a broad look discovers what resonates and updates the heading.
+- **engage** — commit through the current aperture, and cross the boundary when it lands. Narrow in the usual case, because you commit to what you are already oriented to.
 
-A primitive is two halves. **Shape** steers traversal, consumed by cells on the descent. **Effect** is what the world does when the wave lands — emit to the thread, cross the boundary — fired on the ascent. The primitive owns shape; the cell owns which of its own edges are forward; the kernel only carries. Full ownership split in [world-kernel-coupling.md](../kernel/world-kernel-coupling.md#wave-shape--three-way-ownership).
+The narrow-deep / wide-shallow reach tradeoff is therefore a fact about attention, not the primitive: focused attention penetrates, diffuse attention surveys. Width sets how signal divides across forward edges, which sets reach.
+
+The sequence is **look aims, focus holds, engage commits** — orientation precedes action. The primitive table (`{observe, express} × {passive, active}`) is pure verbs, orthogonal to shape. Ownership: attention owns shape, the primitive owns verb + effect, the cell owns adjacency, the kernel owns transport. Full split in [world-kernel-coupling.md](../kernel/world-kernel-coupling.md#wave-shape--ownership).

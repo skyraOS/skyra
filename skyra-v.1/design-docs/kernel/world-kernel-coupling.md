@@ -160,29 +160,44 @@ Points are the world's internal data structure for spatial relationships. The ke
 
 No routing in the request. The primitive *is* the routing. The world resolves the rest from the calling cell's position and the current traversal context.
 
-## Wave Shape — Three-Way Ownership
+## Wave Shape — Ownership
 
-Every wave is born from a primitive. There are no shapeless waves — an inbound signal addressed to a being is an engage *toward* it; a being's motor emitting look is a look *from* its point. Because every wave has a launching primitive, every wave has one author for its shape.
+Every wave has a shape — an aperture (a heading and a width), and how its signal divides and attenuates as it travels. The question is who owns each part. Four parties, each owning exactly what it alone knows.
 
-Three parties, each owning exactly what it alone knows:
+- **Attention owns shape** — the aperture: heading and width. This is the being's orientation, its stance. It is not computed per-act; it is attentional state, set by what the being last looked at and holds focus on. Width is the thing the old model mistook for a primitive property: focused attention is narrow, diffuse attention is wide. Width sets how signal divides across forward edges, which sets reach — narrow penetrates, wide surveys. Attention is durable (the stance persists across traversals); on emission it imprints the aperture onto the Relation as transient wave state, the same prior-and-learner pattern the Thread Reality uses (see [activation-and-traversal.md](activation-and-traversal.md)). Cells read it off the Relation; on ascent attention updates from what the traversal proved. One field, read from both directions — see [*Attention Is One Field, Read Twice*](#attention-is-one-field-read-twice) below.
+- **Primitive owns verb + effect** — the verb (perceive, commit, sustain, emit, receive) and the boundary effect (cross into the target, emit to the thread). Pure execution. No geometry. `look` is *perceive* through the current aperture; `engage` is *commit* through it. The narrow-vs-wide was never the primitive's — it was the aperture's.
+- **Cell owns adjacency resolution** — given the aperture off the Relation, which of *my* edges are forward / in-cone. Only the cell knows its own neighbors, so only the cell can turn a cone into edges. The kernel never learns geometry; the cell resolves it.
+- **Kernel owns transport** — carry the Relation (which carries the aperture), hand it to each cell, traverse whatever the cell returns as survivors. Never interprets shape, never knows geometry.
 
-- **Primitive owns shape** — spread (how many forward edges the wave considers), how signal divides across them, attenuation per step, the initial heading. The *what*. Topology-agnostic intent, set once at emission. Rides on the Relation like Energy does — transient wave physics, gone when the wave ends.
-- **Cell owns adjacency resolution** — given a heading off the Relation, which of *my* edges are forward. The *where*. Only the cell knows its own neighbors, so only the cell can turn a cone into edges. The kernel never learns geometry; the cell resolves it.
-- **Kernel owns transport and composition** — carry the shape, hand it to each cell, traverse whatever the cell returns as forward survivors. The *how-it-moves*. Never interprets shape, never knows geometry.
+Attenuation belongs to none of them — it is wave physics, the signal weakening as it propagates (the Energy on the Relation). Independent of verb and aperture both.
 
-The config that reaches the kernel is intent, not resolved edges. If it were resolved, grid geometry would be back in the kernel and the affordances split (see [world-dna.md](../world/world-dna.md)) would be undone. The kernel relays the descriptor; the cell plus the descriptor produce the survivors.
+The aperture that reaches the kernel is intent, not resolved edges. If it were resolved, grid geometry would be back in the kernel and the affordances split (see [world-dna.md](../world/world-dna.md)) would be undone. The kernel relays the aperture; the cell plus the aperture produce the survivors.
+
+### Attention Is One Field, Read Twice
+
+The aperture is not two things — an inbound filter and a separate outbound heading. It is one field, heading and width, that the membrane's two faces read in opposite directions:
+
+- **Sensory (Observe, descent)** reads it as a *containment test*. A signal arrives by propagation; attention asks whether it falls within the cone — aligned with the heading, inside the width. Within → it penetrates the membrane and reaches the binding realities. Outside → filtered. This is the resonance filter.
+- **Motor (Express, ascent)** reads it as the *emission aperture*. The act fires through the same cone — same heading, same width. The wave launches along the field.
+
+Inbound it gates; outbound it aims. The sensory/motor asymmetry is the *direction of the read*, not two mechanisms. (The membrane itself stays pure routing — the gating lives in the Attention cell the membrane routes into, not in the membrane.)
+
+Two consequences fall out:
+
+- **The efference copy is free.** Because motor and sensory share the field, the being predicts its own action's sensory return: the predicted reafference is "what falls within my own aperture," so it subtracts cleanly (von Holst). This is the mechanism [episodic-encoding.md](../cognition/episodic-encoding.md) assumes when it splits Observe into efference (self-signal) and exafference (other-signal) modes — the shared field is the efference copy.
+- **You can only act where you attend.** One field means tracking one thing while acting on another is impossible in a single pass — the being must reorient, which serializes. That is the attention bottleneck, and it is correct: no precise action toward what you are not attending to.
 
 ### Shape Is Data, Not Kernel Code
 
-Because shape is a descriptor the kernel carries rather than logic the kernel runs, a new wave shape is a new primitive with new config values — broadcast is spread = all edges, a whisper is spread = 1 with fast attenuation — and the kernel never changes. Same extensibility as a new Reality dropping into the graph without touching the Relation. The kernel's wave mechanics are frozen; the vocabulary of waves grows above it.
+The kernel carries the aperture; it never runs it. So the vocabulary grows in two independent directions without touching the kernel: a new **verb** is a new primitive (perceive / commit / … — pure execution), and a new **aperture** is an attentional state (a focused sweep, a wide scan). Both are data the kernel relays. The kernel's wave mechanics are frozen; verbs and apertures grow above it. Same extensibility as a new Reality dropping into the graph without touching the Relation.
 
-### A Primitive Has Two Halves
+### The Primitive Collapsed to Execution
 
-**Shape** steers traversal and is consumed by cells on the descent. **Effect** is what the world does at the boundary when the wave lands — cross into the target, emit to the thread — and fires on the ascent through the world's primitive function. Same primitive, two faces, used at opposite ends of one traversal.
+A primitive used to read as two halves — shape and effect. Shape migrated to attention. What remains is verb + effect: what the being does, and what happens when the wave lands. "Primitives just execute" is the precise statement of that collapse. The aperture they execute through is attention's, read off the Relation; the primitive contributes none of it.
 
 ### Direction Is the Third Relative Quantity
 
-Distance is activation strength relative to the observer. Time is proper time per being. Direction is heading relative to emission — there is no global north. "Toward michael" resolves to a bearing relative to the *emitting* being's point; another being engaging the same michael launches a different absolute direction for the same relative intent. Three relativities, one substrate.
+Distance is activation strength relative to the observer. Time is proper time per being. Direction is heading relative to the being's own attention — there is no global north, and no per-act bearing computation. "Toward michael" is just where the being is already oriented, because it looked at michael and held focus. Three relativities, one substrate; all three live in the being's frame, not the world's.
 
 ## Signal Flow
 
@@ -200,12 +215,14 @@ Distance is activation strength relative to the observer. Time is proper time pe
 11. Loop waits for next signal
 ```
 
+**Supersedes steps 9–11.** A being's `Express` produces *output*, not a dispatch signal. Outward action is an explicit `world.observe(self, primitive)` call the motor makes when it decides to act, and the wave's result is delivered back to the origin (`origin.observe`) on completion. Every wave delivers its result to its origin — internal or external, self-started or not. This is the **[Perception Invariant](../invariants/perception-invariant.md)**, foundational and load-bearing for all of v.1. The return-based dispatch above will be reconciled here once the `world.observe` mechanism settles.
+
 ## What the Kernel Does NOT Know
 
 - What primitives mean — it dispatches them through the world, doesn't interpret them
 - Where signals come from or where primitive effects land
 - The payload's shape — it passes it, never reads it
-- The wave's shape — it carries the shape descriptor on the Relation and hands it to cells, never resolves it into edges
+- The wave's shape — it carries the aperture on the Relation and hands it to cells, never resolves it into edges
 - The grid's spatial layout
 
 ## What Agents Do NOT Know
@@ -227,7 +244,7 @@ Distance is activation strength relative to the observer. Time is proper time pe
 
 - The world (it's a field on the Relation)
 - Which cell it just called Express on (it's on the stack)
-- The wave's shape descriptor, carried on the Relation — relayed to cells, never interpreted
+- The wave's shape (the aperture), carried on the Relation — relayed to cells, never interpreted
 - How to dispatch: reads Express return value, calls `world.Primitives[req.Primitive](cell, req.Payload)`
 
 ## The Payload
@@ -236,6 +253,6 @@ The payload has no struct in this spec. It is opaque above the membrane: main pl
 
 ## Open
 
-- **Engage navigation:** for a target not on one of the 8 straight lines from the being, does the ray conserve pure momentum (fixed forward neighbor, travels straight, may approximate) or re-lock each step (greedy seek toward the target)? `look` is unambiguously momentum — no target to seek. `engage` is the fork: launched-and-conserved, or homing.
+- **Engage navigation — resolved:** the momentum-vs-homing fork dissolved once direction moved to attention. Engage does not navigate toward a target; it commits along the aperture attention already established (look aims, focus holds, engage commits). The heading is set upstream, in attention, so there is nothing to re-lock — momentum by construction. Remaining sub-question: the **capture basin** — a being on the grid radiates a weak presence field so a near-miss resonates partially rather than all-or-nothing, turning hit/miss into a gradient (clean / glancing / missed) that reads out how well the being was oriented.
 - **Broadcast signals:** an impulse with no target — does the world route it to all agents? To nearby agents on the grid? Under the shape model this is just a primitive with spread = all edges; the question is whether it earns a name.
 - **Multiple worlds:** the personal network means multiple worlds. Each world has its own grid and its own primitives. Worlds connect at their boundaries. Future — but the World struct should not assume singleton.

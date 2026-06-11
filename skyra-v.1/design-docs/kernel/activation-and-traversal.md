@@ -26,7 +26,7 @@ They meet at the interface but they don't own each other. The Relation is mechan
 
 The cell is the sensor. The activation record is the scorer. The kernel is the driver.
 
-**Note:** Attention is a separate concept from activation records. Attention represents what's around the being — mechanics TBD. Activation records are the scoring system. They are not the same thing.
+**Note:** Attention is a separate concept from activation records. Attention is the being's aperture — heading and width — one field the membrane reads from both directions: sensory gates incoming signal against it, motor fires through it (see [world-kernel-coupling.md](world-kernel-coupling.md#attention-is-one-field-read-twice)). Activation records are the scoring system. They are not the same thing.
 
 ## The Interfaces
 
@@ -249,6 +249,6 @@ If traversal ever goes parallel, the stack model breaks — interleaving destroy
 - What binding fields are
 - How decay works internally
 - What emotion, episodic overlap, or motivation relevance are
-- What a wave's shape is — it carries the shape on the Relation and traverses the survivors the cell returns; it never interprets shape or resolves direction (see [world-kernel-coupling.md](world-kernel-coupling.md#wave-shape--three-way-ownership))
+- What a wave's shape is — it carries the aperture on the Relation and traverses the survivors the cell returns; it never interprets shape or resolves direction. Shape is attention's, not the kernel's (see [world-kernel-coupling.md](world-kernel-coupling.md#wave-shape--ownership))
 
 The kernel is mechanism. The cell is policy. DNA is the distro.
