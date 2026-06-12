@@ -10,22 +10,25 @@
 
 What predates the session's design: no origin/`Self`, no result delivery, no dispatch entry point, and none of the activation-physics correctness (decay, visited-once, tree buffering, energy) is wired.
 
-## 1. Perception Invariant — signature + delivery  [decided]
+## 1. Perception Invariant — signature + delivery  [Path A1 — DONE at `9c86cbe`]
 
-Every wave must deliver its result to its origin, with `Self` carried in the signature.
+The invariant is mechanical in the kernel, tested (mock-based, in `relation_test.go`).
+Every wave delivers its result to its origin, with the owner carried in the signature.
 
 - **Signature** (`reality.go`, `Kernel.Realize`): `Realize(root, payload any) any` → `Realize(originReality, traversedReality, impulse any) any`. `OriginReality` is the wave's **owner** (the being whose wave it is) — threaded unchanged through crossings, the discriminator passed to `Observe`, and who the result returns to. `TraversedReality` is the **realm** this wave traverses; if traversal finds another Reality in `Content`, that discovery starts a *new* wave rather than making this one wait. The act/medium **stays `any`** (it already is): the kernel never reads it, its shape is endpoint knowledge (`world.observe` and the executing cells treat it as the string act, but the kernel carries it opaquely). `Observe`/`Express` keep their `any` (renamed `payload` → `impulse`). Breaking interface change (pre-1.0, fine). Names locked — see Naming.
 - **Delivery**: at the end of `realize`, after the loop, call `origin.Observe(r, result)` — the reafference (`origin` = `OriginReality`). Today the result only returns up the Go stack; nothing perceives it.
 - **Recursive origin**: the cross-plane spawn threads `OriginReality` unchanged and sets `TraversedReality` to the inner reality — `go realize(origin, inner, impulse)` — so the inner being reads the wave as external (`origin != my being`) and the result returns to the owner. A being perceives waves *it* owns (origin = itself → reafference); waves that cross in from outside are exafference. The invariant holding recursively, in code. (See Resolved: crossing semantics.)
-- **Result representation**: minimally the root's Express output; properly a per-traversal **result field on the slice** (the "record of what it did" decision). Origin reads it.
+**Done in A1/A2:** signature (`Realize(origin, traversed, impulse any) any`); `Observe`/`Express` take `(origin Reality, impulse any)` (kernel param dropped); `origin.Observe(origin, result)` delivery at every wave's end; the cross-actor spawn threads origin unchanged (A2). Tests: `TestDeliversToOrigin`, `TestOriginThreaded`, `TestCrossingSpawnsAndDelivers`.
 
-Landing this fully needs a `Self` to deliver to, which at the top level comes from `world.observe(self, content)` (group 2) — so it pulls in the World.
+**Remaining:** the per-traversal **`Result` field on the slice** (record-what-it-did) — delivery currently goes via `origin.Observe`; the slice `Result` field for introspection is not yet wired. Small.
 
-## 2. Dispatch — world.observe entry point  [partly open]
+## 2. Dispatch — world.observe entry point  [goroutine DONE; world.observe remaining]
 
-- The kernel does **not** auto-dispatch Express returns today — it captures only the root return. Already matches the superseded "no dispatch-via-return" decision; nothing to remove. **[decided]**
-- `Express` keeps returning output (`any`), never a wave-start trigger. **[decided]**
-- New, world-side: `world.Observe(self, content)` spins a kernel wave — a goroutine (see Resolved) — when `content` is present, threading `self` as origin. **[open — build]** — spawn-vs-cross is resolved (always spawn); what remains is building the World Reality, which doesn't exist in code yet.
+- The kernel does **not** auto-dispatch Express returns; `Express` returns output, never a wave-start. **[decided, holds in code]**
+- **Goroutine spawn at the crossing → DONE (A2, `19925b4`).** `go realize(origin, inner, impulse)`, slice-locked, WaitGroup-tracked, race-clean.
+- **`world.observe` entry point → remaining [build + 1 decision].** A being acts outward by calling into the world, which spawns `realize(self, world, content)`. Two things gate it:
+  1. **Naming collision to resolve.** The being-facing emit API can't be called `Observe` — that's the kernel's intake callback (`Reality.Observe(origin, impulse)`). The World needs a *different* name for "a being acts through me" — e.g., `World.Act(self, content)` / `Emit` / `Send`. Pick one.
+  2. **The World Reality must be built** (grid `Children`, the `Reality` methods, a kernel handle), and a being must hold a reference to its environment to call it. This overlaps with migrating a minimal being layer (the current DNA imports the deleted `src/reality` and doesn't compile) — the same work the .1001 harness needs.
 
 ## 3. Activation physics — the .1001 correctness layer  [Path B — mostly DONE at `5067903`]
 
@@ -39,8 +42,8 @@ The kernel correctness layer, implemented and tested (mock-based) in `relation_t
 
 ## 4. Supporting interface additions
 
-- **Slice** (`reality.go`): `LastChildren()` + setter (decay); `Result()` / `SetResult()` (record-what-it-did). Future, not .1001: `Orientation()` — the attention aperture the kernel reads for the directionality activation term.
-- **Reality**: `Observe` eventually dual-mode (descent-intake vs result-reafference, per [episodic-encoding](../cognition/episodic-encoding.md)). For now reuse `Observe` with the result as payload; the cell branches. Refinement.
+- **Slice** (`reality.go`): `Lock()` / `Unlock()` → **DONE (A2)** — the kernel owns wave locking. Remaining: `Result()` / `SetResult()` (record-what-it-did, small); `LastChildren()` + setter (decay, deferred). Future, not .1001: `Orientation()` — the attention aperture for the directionality activation term.
+- **Reality**: `Observe(origin, impulse)` → **DONE (A1)** — origin replaces the kernel param; the cell tells self-wave from external by identity. The finer descent-intake vs result-reafference distinction (per [episodic-encoding](../cognition/episodic-encoding.md)) is the cell's own business for now.
 
 ## Sequencing
 
