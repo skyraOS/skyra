@@ -15,20 +15,20 @@ What predates the session's design: no origin/`Self`, no result delivery, no dis
 The invariant is mechanical in the kernel, tested (mock-based, in `relation_test.go`).
 Every wave delivers its result to its origin, with the owner carried in the signature.
 
-- **Signature** (`reality.go`, `Kernel.Realize`): `Realize(root, payload any) any` → `Realize(originReality, traversedReality, impulse any) any`. `OriginReality` is the wave's **owner** (the being whose wave it is) — threaded unchanged through crossings, the discriminator passed to `Observe`, and who the result returns to. `TraversedReality` is the **realm** this wave traverses; if traversal finds another Reality in `Content`, that discovery starts a *new* wave rather than making this one wait. The act/medium **stays `any`** (it already is): the kernel never reads it, its shape is endpoint knowledge (`world.Act` and the executing cells treat it as the string act, but the kernel carries it opaquely). `Observe`/`Express` keep their `any` (renamed `payload` → `impulse`). Breaking interface change (pre-1.0, fine). Names locked — see Naming.
+- **Signature** (`reality.go`, `Kernel.Realize`): `Realize(root, payload any) any` → `Realize(originReality, traversedReality, impulse any) any`. `OriginReality` is the wave's **owner** (the being whose wave it is) — threaded unchanged through crossings, the discriminator passed to `Observe`, and who the result returns to. `TraversedReality` is the **realm** this wave traverses; if traversal finds another Reality in `Content`, that discovery starts a *new* wave rather than making this one wait. The act/medium **stays `any`** (it already is): the kernel never reads it, its shape is endpoint knowledge (`world.observe` and the executing cells treat it as the string act, but the kernel carries it opaquely). `Observe`/`Express` keep their `any` (renamed `payload` → `impulse`). Breaking interface change (pre-1.0, fine). Names locked — see Naming.
 - **Delivery**: at the end of `realize`, after the loop, call `origin.Observe(r, result)` — the reafference (`origin` = `OriginReality`). Today the result only returns up the Go stack; nothing perceives it.
 - **Recursive origin**: the cross-plane spawn threads `OriginReality` unchanged and sets `TraversedReality` to the inner reality — `go realize(origin, inner, impulse)` — so the inner being reads the wave as external (`origin != my being`) and the result returns to the owner. A being perceives waves *it* owns (origin = itself → reafference); waves that cross in from outside are exafference. The invariant holding recursively, in code. (See Resolved: crossing semantics.)
 **Done in A1/A2:** signature (`Realize(origin, traversed, impulse any) any`); `Observe`/`Express` take `(origin Reality, impulse any)` (kernel param dropped); `origin.Observe(origin, result)` delivery at every wave's end; the cross-actor spawn threads origin unchanged (A2). Tests: `TestDeliversToOrigin`, `TestOriginThreaded`, `TestCrossingSpawnsAndDelivers`.
 
 **Remaining:** the per-traversal **`Result` field on the slice** (record-what-it-did) — delivery currently goes via `origin.Observe`; the slice `Result` field for introspection is not yet wired. Small.
 
-## 2. Dispatch — world.Act entry point (A3)  [goroutine DONE; world.Act to build]
+## 2. Dispatch — world.observe entry point (A3)  [goroutine DONE; world.observe to build]
 
 - The kernel does **not** auto-dispatch Express returns; `Express` returns output, never a wave-start. **[decided, holds in code]**
 - **Goroutine spawn at the crossing → DONE (A2, `19925b4`).** `go realize(origin, inner, impulse)`, slice-locked, WaitGroup-tracked, race-clean.
-- **`world.Act(self, content)` entry point → A3, to build.** A being acts outward by calling into the world it stands on, which spawns `realize(self, world, content)`. Resolved design:
-  - **Verb: `Act`** (not `Observe` — that's the kernel's intake callback `Reality.Observe(origin, impulse)`). `Emit`/`Send` are alternatives; `Act` chosen.
-  - **Reach: the environment reference.** Each cell holds a reference to the layer below it (its environment), set at registration — "a reference to what it's standing on." A being acts via `self.Environment.Act(self, content)`. The world holds the kernel; the chain is being → world → kernel → slices.
+- **`world.observe(self, content)` entry point → A3, to build.** A being acts outward by calling into the world it stands on, which spawns `realize(self, world, content)`. Resolved design:
+  - **No new verb.** `observe` is the universal "receive a signal," with different competence per Reality: the world's `observe` *facilitates* (relays to the kernel); a memory's absorbs; the origin's perceives the result. `world.observe` (world receives the act) and `self.observe` (being receives the result) are the same uniform method on different objects — not a collision. The world is a facilitator.
+  - **Reach: the environment reference.** Each cell holds a reference to the layer below it (its environment), set at registration — "a reference to what it's standing on." A being acts via `self.Environment.observe(self, content)`. The world holds the kernel; the chain is being → world → kernel → slices.
   - **Agent owns its slice; the kernel holds a reference.** Registration wires both directions: the being's environment ref (down, to act) and its slice ref handed to the kernel (so the kernel can build active state into it). `ActiveState` is a registry of references, not kernel-owned containers.
   - **The kernel is durable** — built once at boot, it persists slice references and the active state it builds across waves. Not `NewRelation`-per-signal (that would evaporate the active state every wave).
   - **Build remaining:** the World Reality (grid `Children`, the `Reality` methods, holding the kernel). Overlaps with migrating a minimal being layer (the current DNA imports the deleted `src/reality` and doesn't compile) — the same work the .1001 harness needs. See [slice-and-world.md](../world/slice-and-world.md#how-a-being-acts).
@@ -46,15 +46,15 @@ The kernel correctness layer, implemented and tested (mock-based) in `relation_t
 ## 4. Supporting interface additions
 
 - **Slice** (`reality.go`): `Lock()` / `Unlock()` → **DONE (A2)** — the kernel owns wave locking. Remaining: `Result()` / `SetResult()` (record-what-it-did, small); `LastChildren()` + setter (decay, deferred). Future, not .1001: `Orientation()` — the attention aperture for the directionality activation term.
-- **Reality**: `Observe(origin, impulse)` → **DONE (A1)**. Remaining `[A3]`: an `Environment` reference — set at registration ("a reference to what it's standing on"), used for outward action (`self.Environment.Act(self, content)`). Uniform: every Reality carries it (nil for leaf cells).
+- **Reality**: `Observe(origin, impulse)` → **DONE (A1)**. Remaining `[A3]`: an `Environment` reference — set at registration ("a reference to what it's standing on"), used for outward action (`self.Environment.observe(self, content)`). Uniform: every Reality carries it (nil for leaf cells).
 - **Registration / boot `[A3]`**: the **agent owns its slice** and hands a *reference* to the kernel — `ActiveState` is a registry of references, not kernel-minted containers. The kernel is made **durable** (persists slice refs and built active state across waves; not `NewRelation`-per-signal). Registration wires both directions: environment ref down, slice ref up to the kernel.
 
 ## Sequencing
 
-- **Path A — invariant first**: the signature + `origin.observe` delivery. Architecturally the keystone, but pulls in the World (`world.Act`).
+- **Path A — invariant first**: the signature + `origin.observe` delivery. Architecturally the keystone, but pulls in the World (`world.observe`).
 - **Path B — activation physics first**: double-bump, decay, tree buffer, visited-once, energy, plus the two Slice additions. Pure kernel, no new design decisions, no World needed, and it's what unblocks a measurable .1001.
 
-**Chosen: B, then A1/A2.** Path B landed first (`5067903`), then the invariant signature + delivery (A1) and the goroutine spawn (A2) followed since they don't need the World. A3 (`world.Act` + the World) is the remaining piece.
+**Chosen: B, then A1/A2.** Path B landed first (`5067903`), then the invariant signature + delivery (A1) and the goroutine spawn (A2) followed since they don't need the World. A3 (`world.observe` + the World) is the remaining piece.
 
 ## Naming — resolved
 
@@ -86,5 +86,5 @@ Signature: **`Realize(OriginReality, TraversedReality, impulse any) any`**.
 
 Remaining work, not open questions:
 - **Path B finish** — decay (deferred above), and the two delivery sub-details (latest-vs-queue; the reafference Observe). None block .1001's first measurement.
-- **Path A** — A1 (signature + delivery) and A2 (goroutine spawn) **DONE**. Remaining: **A3** — the World Reality + `world.Act`, the `Environment` ref, agent-owns-slice, and the durable kernel (see §2). Needed for multi-being / external action, not for single-being .1001.
+- **Path A** — A1 (signature + delivery) and A2 (goroutine spawn) **DONE**. Remaining: **A3** — the World Reality + `world.observe`, the `Environment` ref, agent-owns-slice, and the durable kernel (see §2). Needed for multi-being / external action, not for single-being .1001.
 - **To run .1001** — promote `BaseActivation` to the live `skyra` package; build the fake-memory harness; read the activation product off the tree.

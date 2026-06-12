@@ -32,7 +32,7 @@ func main() {
 }
 ```
 
-The kernel is **durable** — built once at boot, it holds the slice references (and the active state it builds into them) across waves. It is **not** recreated per signal; the active state a wave builds would evaporate every time. `Realize(origin, traversed, impulse)` runs a wave; the impulse and origin pass through the call chain as parameters — the kernel doesn't store them. A being acts outward with `world.Act(self, content)`, which runs a wave on that same persistent kernel.
+The kernel is **durable** — built once at boot, it holds the slice references (and the active state it builds into them) across waves. It is **not** recreated per signal; the active state a wave builds would evaporate every time. `Realize(origin, traversed, impulse)` runs a wave; the impulse and origin pass through the call chain as parameters — the kernel doesn't store them. A being acts outward with `world.observe(self, content)`, which runs a wave on that same persistent kernel.
 
 The world is both:
 - **An active process** — it collects signals at its boundary and writes them to the `Signals()` channel
@@ -214,7 +214,7 @@ Distance is activation strength relative to the observer. Time is proper time pe
 11. Loop waits for next signal
 ```
 
-**Supersedes steps 9–11.** A being's `Express` produces *output*, not a dispatch signal. Outward action is an explicit `world.Act(self, content)` call the motor makes when it decides to act, and the wave's result is delivered back to the origin (`origin.observe`) on completion. Every wave delivers its result to its origin — internal or external, self-started or not. This is the **[Perception Invariant](../invariants/perception-invariant.md)**, foundational and load-bearing for all of v.1. The signature, delivery, and goroutine spawn are implemented (A1/A2); the `world.Act` entry point itself is A3 (build the World), so the return-based steps 9–11 above are obsolete.
+**Supersedes steps 9–11.** A being's `Express` produces *output*, not a dispatch signal. Outward action is an explicit `world.observe(self, content)` call the motor makes when it decides to act, and the wave's result is delivered back to the origin (`origin.observe`) on completion. Every wave delivers its result to its origin — internal or external, self-started or not. This is the **[Perception Invariant](../invariants/perception-invariant.md)**, foundational and load-bearing for all of v.1. The signature, delivery, and goroutine spawn are implemented (A1/A2); the `world.observe` facilitator entry point itself is A3 (build the World), so the return-based steps 9–11 above are obsolete.
 
 ## What the Kernel Does NOT Know
 

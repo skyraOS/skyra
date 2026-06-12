@@ -15,7 +15,7 @@ In full:
 ## What It Means
 
 - **Perception is involuntary.** A being does not choose what it perceives. Whatever a wave brings back, and whatever wave passes through the being, the being perceives its result. There is no filter that lets a being decline to see the outcome of a wave that touched it.
-- **Sending is the only choice.** The single volitional act is initiating a wave outward — `world.Act(self, content)`. A being decides whether and what to send. It does not decide what returns.
+- **Sending is the only choice.** The single volitional act is initiating a wave outward — `world.observe(self, content)`. A being decides whether and what to send. It does not decide what returns.
 - **Self-started or not, it perceives.** A wave the being initiated and a wave another being or the world sent through it are perceived the same way. The being always sees the output of any wave that ran through it.
 - **Internal or external, it perceives.** A wave through the being's own interior (thought) and a wave out into the world (action) both deliver their result back to the being. The being sees the output of its internal pass with no more choice than it sees the world's response to its act.
 
@@ -52,7 +52,7 @@ realize(OriginReality, TraversedReality, impulse)
 
 No world-specific parameter (no grid location) appears — location is the environment's knowledge about its own occupants, at whatever level, never threaded through the kernel. Because the signature names only what exists everywhere, the same call works at every depth. And because **`OriginReality` is a required argument, the invariant is mechanical**: you cannot start a kernel wave without naming who perceives the result, and the kernel will deliver it there. The owner is not a rule to remember — it is an argument you cannot omit.
 
-A being acts by calling into its environment — `world.Act(self, content)` at the top level, `innerWorld.Act(self, content)` for a being inside an agent. This looks inverted: the environment *contains* the being, yet the being *calls into* it to act. There is no contradiction — **containment and call-direction are different axes.** You are *in* an environment, and you act by *invoking* it. The container is also the executor; the recursion is what lets one Reality be both.
+A being acts by calling into its environment — `world.observe(self, content)` at the top level, `innerWorld.observe(self, content)` for a being inside an agent. This looks inverted: the environment *contains* the being, yet the being *calls into* it to act. There is no contradiction — **containment and call-direction are different axes.** You are *in* an environment, and you act by *invoking* it. The container is also the executor; the recursion is what lets one Reality be both.
 
 ## Enforcement Boundary
 
@@ -68,7 +68,7 @@ The invariant rules out a class of designs, permanently for v.1:
 
 - **No silent waves.** A wave cannot run through a being and leave no perceivable result. Every traversal delivers.
 - **No opt-out perception.** A being cannot choose not to perceive the result of a wave that touched it. Perception is not gated by the being's will.
-- **Dispatch is not a return.** A cell's `Express` returns its *output*, never a signal that starts a wave. Starting a wave is an explicit `world.Act(self, content)` call, made by the motor when it decides to act. Burning wave-initiation into the `Express` return would steal the developer's control over *when* the kernel fires, and would make every expression an involuntary send — violating "sending is the only choice."
+- **Dispatch is not a return.** A cell's `Express` returns its *output*, never a signal that starts a wave. Starting a wave is an explicit `world.observe(self, content)` call, made by the motor when it decides to act. Burning wave-initiation into the `Express` return would steal the developer's control over *when* the kernel fires, and would make every expression an involuntary send — violating "sending is the only choice."
 
 ## Why It Must Hold
 

@@ -65,10 +65,10 @@ This is why the slices live with their agents and the world holds none. A wave t
 A being is situated: it holds a reference to **what it's standing on** — its environment, the layer below it — set at registration alongside its slice. To **think**, a being traverses *itself*: `realize(self, self, impulse)` over its own `Children`. To **act**, it calls into its environment:
 
 ```
-world.Act(self, content)   →   realize(self, world, content)
+world.observe(self, content)   →   realize(self, world, content)
 ```
 
-`Act` (not `Observe` — that name is the kernel's intake callback, `Reality.Observe(origin, impulse)`) is the world's affordance for "a being acts through me." The world holds the durable kernel and spawns the wave. The chain is **being → world → kernel → slices**: the being knows its ground, the world holds the kernel, the kernel holds the slice references. You act *down* (push on the layer below); you perceive *up* (the result returns to your origin — the [Perception Invariant](../invariants/perception-invariant.md)).
+`observe` is the universal "receive a signal" — one verb everywhere, different competence per Reality. The world's `observe` is a **facilitator**: it just relays to the kernel (`realize(self, world, content)`). A memory cell's `observe` absorbs; the origin's `observe` perceives the result. There is no new verb and no collision — `world.observe` (the world receiving the act) and `self.observe` (the being receiving the result) are the same uniform method on different objects. The being passed *itself* as the owner, so the kernel's callback (`self.observe(result)`) lands on it. The chain is **being → world → kernel → slices**. You act *down* (push on the layer below); you perceive *up* (the result returns to your origin — the [Perception Invariant](../invariants/perception-invariant.md)).
 
 ## Three Layers of State
 
