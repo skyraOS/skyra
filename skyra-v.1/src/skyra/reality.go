@@ -31,9 +31,10 @@ type Node struct {
 	CellID    string
 	Cell      Reality
 	Record    ActivationRecord
-	Score     float64
-	Children  []*Node
-	Survivors []Reality
+	Score     float64    // single activation, carried from when the parent scored this cell
+	Amplitude float64    // the wave's signal strength at this node's depth
+	Children  []*Node    // the tree, built on ascent
+	Survivors []*Node    // pre-scored child nodes above threshold, queued for descent
 	NextChild int
 }
 
