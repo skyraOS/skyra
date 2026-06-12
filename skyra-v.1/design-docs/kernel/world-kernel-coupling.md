@@ -24,15 +24,15 @@ How signals get produced and how primitive execution reaches the outside are not
 
 ```go
 func main() {
-    world := Boot(genome)
+    world := Boot(genome)   // builds the durable kernel; registration hands each being's
+                            // slice reference to the kernel and its environment reference to the being
     for impulse := range world.Signals() {
-        rel := NewRelation(world)
-        rel.Realize(world, impulse)
+        world.Receive(impulse)  // routes to the target and runs a wave on the ONE persistent kernel
     }
 }
 ```
 
-The Relation takes the world at construction. `Realize()` takes a root Reality and a payload. The impulse passes through the call chain as a parameter — the kernel never stores it.
+The kernel is **durable** — built once at boot, it holds the slice references (and the active state it builds into them) across waves. It is **not** recreated per signal; the active state a wave builds would evaporate every time. `Realize(origin, traversed, impulse)` runs a wave; the impulse and origin pass through the call chain as parameters — the kernel doesn't store them. A being acts outward with `world.Act(self, content)`, which runs a wave on that same persistent kernel.
 
 The world is both:
 - **An active process** — it collects signals at its boundary and writes them to the `Signals()` channel
@@ -44,17 +44,16 @@ These aren't contradictory. The boundary is the ears. The Reality interface is t
 
 ```go
 type Relation struct {
-    World     *World
-    Energy    float64
-    Records   map[string]ActivationRecord
-    Count     int
+    ActiveState map[string]Slice   // references to agent-owned slices (the registry)
+    Amplitude   float64            // initial wave amplitude, reset per Realize
+    wg          sync.WaitGroup     // tracks the current wave tree (it + its cross-actor sub-waves)
 }
 ```
 
-The kernel is stateless. No impulse field, no request accumulator. The payload enters as a parameter to `Realize()` and passes through the call chain — `Observe(rel, payload)`, `Express(rel, payload)`. Express returns values rather than depositing them on the Relation. The kernel reads the return on the ascent and has the world to resolve execution.
+The kernel holds **references** to agent-owned slices, populated at registration — it builds active state into them but does not own them. The per-wave state (amplitude, the wait group) is fresh per `Realize`; the impulse and origin pass as parameters, not stored. `Observe(origin, impulse)` / `Express(origin, impulse)` thread the wave's owner so a cell can tell a self-wave from an external one. Express returns its output (never a dispatch trigger).
 
 ```go
-func (r *Relation) Realize(root Reality, payload any) any {
+func (r *Relation) Realize(origin, traversed Reality, impulse any) any {
     // DFS traversal
     // payload passes through Observe/Express
     // content type check crosses an actor boundary → spawns a goroutine
@@ -215,7 +214,7 @@ Distance is activation strength relative to the observer. Time is proper time pe
 11. Loop waits for next signal
 ```
 
-**Supersedes steps 9–11.** A being's `Express` produces *output*, not a dispatch signal. Outward action is an explicit `world.observe(self, primitive)` call the motor makes when it decides to act, and the wave's result is delivered back to the origin (`origin.observe`) on completion. Every wave delivers its result to its origin — internal or external, self-started or not. This is the **[Perception Invariant](../invariants/perception-invariant.md)**, foundational and load-bearing for all of v.1. The return-based dispatch above will be reconciled here once the `world.observe` mechanism settles.
+**Supersedes steps 9–11.** A being's `Express` produces *output*, not a dispatch signal. Outward action is an explicit `world.Act(self, content)` call the motor makes when it decides to act, and the wave's result is delivered back to the origin (`origin.observe`) on completion. Every wave delivers its result to its origin — internal or external, self-started or not. This is the **[Perception Invariant](../invariants/perception-invariant.md)**, foundational and load-bearing for all of v.1. The signature, delivery, and goroutine spawn are implemented (A1/A2); the `world.Act` entry point itself is A3 (build the World), so the return-based steps 9–11 above are obsolete.
 
 ## What the Kernel Does NOT Know
 

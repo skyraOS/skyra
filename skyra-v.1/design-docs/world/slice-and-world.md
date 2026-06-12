@@ -4,9 +4,9 @@
 
 - **World (grid)** — the full 1000x1000 grid of Points. Each Point is a Reality with bidirectional pointers to its neighbors. The world is an executable like everything else — most of it is dormant (untraversed). Only the points the kernel visits are active. The world follows the same pattern as any organism: full state on disk, active subset in the slice.
 - **Organism (Skyra DNA)** — the executable image on disk. Everything the being could be. All memories, all binding realities, all weights. Durable. Not everything is active at once. Exists independently — the kernel doesn't own it, the world doesn't own it.
-- **Slice** — the running process. What's real about the being RIGHT NOW. The active subset. Lives as a reference in the kernel's ActiveState map — never on the world. Does NOT hold a reference back to the organism. Doesn't know where it came from. Just active state.
+- **Slice** — the running process. What's real about the being RIGHT NOW. The active subset. **Owned by the agent** — it is the agent's active mind. The kernel holds a *reference* to it (handed over at registration) so it can build active state into it. The slice never lives on the world or the kernel. Does NOT hold a reference back to the organism.
 - **DNA** — the text segment. The compiled instructions. What the organism can do. Read-only. Doesn't change. Multiple Slices can share the same DNA.
-- **Kernel (Relation)** — the OS. Manages traversal through the heap. Scores, filters, decides what gets paged in. Doesn't live on the grid — passes through it. Holds the active state: a map of slices, keyed by being.
+- **Kernel (Relation)** — the OS. Manages traversal through the heap. Scores, filters, **builds** what gets paged in. Doesn't live on the grid — passes through it. Holds *references* to the slices (a registry, populated at registration). Durable — it persists across waves; it is not recreated per signal.
 
 ## Who Holds What
 
@@ -18,15 +18,15 @@ World.Executables: organism ID → organism
 
 The full set of organisms that exist. The disk. What's available to be loaded. The world holds this — and the world is itself an executable. No special case. Placement puts an executable on a Point; the registry says it exists at all.
 
-### The kernel holds active state (the process table)
+### The kernel references the slices (the process table)
 
 ```
-Relation.ActiveState: being ID → Slice
+Relation.ActiveState: being ID → *Slice   // references to agent-owned slices
 ```
 
-The kernel's bookkeeping about what's running. One slice per active being. The Slice doesn't know which organism it came from. The organism doesn't know it has a slice. The kernel holds the mapping, the same way the OS holds the process table — the process doesn't carry its own PCB.
+A registry of *references*, populated at registration. **The agent owns its slice; the kernel only holds a reference** — so it can realize active state into it. One slice per active being, owned by that being. The agent hands the reference to the kernel at boot; the kernel never mints slices. The kernel is the durable runtime — it holds these references across waves, the same way the OS holds the process table (the process doesn't carry its own PCB, and the OS doesn't own the process).
 
-When traversal crosses into an executable, the kernel looks up its slice in ActiveState and binds the frame — records, threshold, count. The executable doesn't do the lookup. The kernel does. The mapping goes one direction from the kernel's perspective. The loaded state doesn't point back to its source.
+When traversal crosses into an executable, the kernel looks up its slice reference in ActiveState, binds the frame — records, threshold, count — and **builds** active state into it as it traverses. The mapping goes one direction: the kernel references the slice; the slice doesn't point back, and the organism doesn't know it has one.
 
 ## The Traversal
 
@@ -51,8 +51,24 @@ Nothing owns anything else. Everything exists independently. The kernel manages 
 
 - **World** — exists independently. The grid. Hardware. Holds the executables — and is itself an executable.
 - **Organisms** — exist independently. On disk. The executables.
-- **Slices** — live as references in the kernel's ActiveState map. Active state in RAM. Never on the world. Don't know their origin.
-- **Kernel (Relation)** — holds ActiveState (being ID → Slice). Traverses the world. Binds the frame at each membrane crossing. Manages access between disk and RAM.
+- **Slices** — **owned by their agent** (its active mind, RAM). The kernel holds a reference, handed over at registration. Never on the world. Don't know their origin.
+- **Kernel (Relation)** — durable, not recreated per signal. Holds *references* to slices (a registry) and builds active state into them by traversing. Traverses the world. Binds the frame at each membrane crossing. Manages access between disk and RAM.
+
+## Active State Is Built, Not Traversed
+
+The kernel does not traverse active state — it **builds** it. The wave walks the **passive** Reality (the organism on disk, the full topology reachable through `Children`/`Content`) and realizes the active subset into the slice as it goes. Active state is the *product* of a traversal, not an input to it.
+
+This is why the slices live with their agents and the world holds none. A wave that "hit active state on the world" could only traverse what was already lit — and at boot nothing is lit. The wave has to walk the disk and build the active set. The world is simply more disk to traverse, not a store of pre-lit state.
+
+## How a Being Acts
+
+A being is situated: it holds a reference to **what it's standing on** — its environment, the layer below it — set at registration alongside its slice. To **think**, a being traverses *itself*: `realize(self, self, impulse)` over its own `Children`. To **act**, it calls into its environment:
+
+```
+world.Act(self, content)   →   realize(self, world, content)
+```
+
+`Act` (not `Observe` — that name is the kernel's intake callback, `Reality.Observe(origin, impulse)`) is the world's affordance for "a being acts through me." The world holds the durable kernel and spawns the wave. The chain is **being → world → kernel → slices**: the being knows its ground, the world holds the kernel, the kernel holds the slice references. You act *down* (push on the layer below); you perceive *up* (the result returns to your origin — the [Perception Invariant](../invariants/perception-invariant.md)).
 
 ## Three Layers of State
 
