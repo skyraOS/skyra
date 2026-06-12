@@ -18,13 +18,17 @@ func (m *mockRecord) Activate(visited bool, count int) float64 {
 	return m.base
 }
 
+type obs struct {
+	origin  string
+	impulse any
+}
+
 type mockCell struct {
-	id        string
-	children  map[string]skyra.Reality
-	rec       *mockRecord
-	content   any
-	observed  int
-	expressed int
+	id       string
+	children map[string]skyra.Reality
+	rec      *mockRecord
+	content  any
+	observes []obs // every Observe call: who owned the wave, and what it carried
 }
 
 func newCell(id string, base float64) *mockCell {
@@ -35,13 +39,15 @@ func newCell(id string, base float64) *mockCell {
 	}
 }
 
-func (c *mockCell) ID() string                               { return c.id }
-func (c *mockCell) NewActivation() skyra.ActivationRecord    { return c.rec }
-func (c *mockCell) Observe(k skyra.Kernel, payload any)      { c.observed++ }
-func (c *mockCell) Express(k skyra.Kernel, payload any) any  { c.expressed++; return c.id }
-func (c *mockCell) Children() map[string]skyra.Reality       { return c.children }
-func (c *mockCell) Content() any                             { return c.content }
-func (c *mockCell) link(child *mockCell)                     { c.children[child.id] = child }
+func (c *mockCell) ID() string                            { return c.id }
+func (c *mockCell) NewActivation() skyra.ActivationRecord { return c.rec }
+func (c *mockCell) Observe(origin skyra.Reality, impulse any) {
+	c.observes = append(c.observes, obs{origin.ID(), impulse})
+}
+func (c *mockCell) Express(origin skyra.Reality, impulse any) any { return c.id }
+func (c *mockCell) Children() map[string]skyra.Reality           { return c.children }
+func (c *mockCell) Content() any                                 { return c.content }
+func (c *mockCell) link(child *mockCell)                         { c.children[child.id] = child }
 
 type mockSlice struct {
 	id        string
@@ -62,11 +68,11 @@ func (s *mockSlice) Threshold() float64                         { return s.thres
 func (s *mockSlice) Count() int                                 { return s.count }
 func (s *mockSlice) SetCount(c int)                             { s.count = c }
 
-// run wires a being's slice and traverses from root.
+// run wires a being's own wave: the root both owns and is traversed.
 func run(root *mockCell, sl *mockSlice) *Relation {
 	r := NewRelation()
 	r.ActiveState[root.id] = sl
-	r.Realize(root, nil)
+	r.Realize(root, root, nil)
 	return r
 }
 
@@ -98,12 +104,15 @@ func TestVisitedOnceTerminates(t *testing.T) {
 	root.link(a)
 	a.link(root) // cycle: root -> a -> root
 
-	// threshold 0 means amplitude never stops it; only visited-once can.
 	run(root, newSlice("being", 0))
 
-	// reaching here at all means it terminated. root must not be re-descended.
-	if root.observed != 1 {
-		t.Errorf("root observed %d times, want 1 (cycle re-descended)", root.observed)
+	// reaching here at all means it terminated. root is observed twice:
+	// once on descent, once on delivery — never re-descended by the cycle.
+	if len(root.observes) != 2 {
+		t.Errorf("root observed %d times, want 2 (descent + delivery)", len(root.observes))
+	}
+	if len(a.observes) != 1 {
+		t.Errorf("a observed %d times, want 1", len(a.observes))
 	}
 }
 
@@ -112,30 +121,28 @@ func TestAmplitudeLimitsDepth(t *testing.T) {
 	// base 1.0, decay 0.9/depth, threshold 0.7:
 	// root 1.0 | a 0.9 | b 0.81 | c 0.729 (survive) | d 0.656 (< 0.7, dies)
 	root := newCell("root", 1.0)
-	a := newCell("a", 1.0)
-	b := newCell("b", 1.0)
-	c := newCell("c", 1.0)
-	d := newCell("d", 1.0)
-	e := newCell("e", 1.0)
-	root.link(a)
-	a.link(b)
-	b.link(c)
-	c.link(d)
-	d.link(e)
+	cells := map[string]*mockCell{}
+	prev := root
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		cur := newCell(id, 1.0)
+		cells[id] = cur
+		prev.link(cur)
+		prev = cur
+	}
 
 	run(root, newSlice("being", 0.7))
 
-	if c.observed != 1 {
-		t.Errorf("c observed %d, want 1 (should be reached)", c.observed)
+	if len(cells["c"].observes) != 1 {
+		t.Errorf("c observed %d, want 1 (reached)", len(cells["c"].observes))
 	}
-	if d.observed != 0 {
-		t.Errorf("d observed %d, want 0 (below threshold, not traversed)", d.observed)
+	if len(cells["d"].observes) != 0 {
+		t.Errorf("d observed %d, want 0 (below threshold, not traversed)", len(cells["d"].observes))
 	}
-	if d.rec.calls != 1 {
-		t.Errorf("d activated %d, want 1 (scored once by c, just didn't survive)", d.rec.calls)
+	if cells["d"].rec.calls != 1 {
+		t.Errorf("d activated %d, want 1 (scored once by c, didn't survive)", cells["d"].rec.calls)
 	}
-	if e.rec.calls != 0 {
-		t.Errorf("e activated %d, want 0 (never reached)", e.rec.calls)
+	if cells["e"].rec.calls != 0 {
+		t.Errorf("e activated %d, want 0 (never reached)", cells["e"].rec.calls)
 	}
 }
 
@@ -157,5 +164,41 @@ func TestTreeDoubleBuffer(t *testing.T) {
 	}
 	if len(tree.Current[0].Children) != 1 || tree.Current[0].Children[0].CellID != "a" {
 		t.Errorf("tree root children = %+v, want [a]", tree.Current[0].Children)
+	}
+}
+
+// Perception Invariant: the wave delivers its result to its origin.
+func TestDeliversToOrigin(t *testing.T) {
+	root := newCell("root", 1.0)
+	a := newCell("a", 1.0)
+	root.link(a)
+
+	run(root, newSlice("being", 0))
+
+	// the last thing the origin observes is its own wave's result (root's
+	// Express output is "root"), owned by itself — the reafference.
+	last := root.observes[len(root.observes)-1]
+	if last.origin != "root" {
+		t.Errorf("delivery origin = %q, want root", last.origin)
+	}
+	if last.impulse != "root" {
+		t.Errorf("delivered result = %v, want \"root\"", last.impulse)
+	}
+}
+
+// Origin is threaded unchanged: every cell sees the wave's owner.
+func TestOriginThreaded(t *testing.T) {
+	root := newCell("root", 1.0)
+	a := newCell("a", 1.0)
+	b := newCell("b", 1.0)
+	root.link(a)
+	a.link(b) // owner is root, two levels deep
+
+	run(root, newSlice("being", 0))
+
+	for _, cell := range []*mockCell{a, b} {
+		if len(cell.observes) == 0 || cell.observes[0].origin != "root" {
+			t.Errorf("%s saw origin %v, want root threaded through", cell.id, cell.observes)
+		}
 	}
 }

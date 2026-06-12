@@ -29,8 +29,11 @@ func main() {
 	// user sends: <engage> Skyra hello <engage>
 	signal := "<engage> Skyra hello <engage>"
 
-	// runtime dispatches — calls the kernel with the world as root
-	kernel.Realize(grid[500][500], signal)
+	// runtime dispatches — Realize(origin, traversed, impulse). placeholder
+	// boot: no being on the grid yet, so this is a no-op (the point's ID
+	// isn't in ActiveState). The real entry is world.observe(self, content).
+	point := grid[500][500]
+	kernel.Realize(point, point, signal)
 
 	// kernel traversed, Express returned a response
 	// runtime reads it, decides what to do next

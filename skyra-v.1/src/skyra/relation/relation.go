@@ -29,14 +29,15 @@ func (r *Relation) ID() string {
 	return r.id
 }
 
-// Realize — the wave hits a reality node, calls ID on it, and that
-// lookup binds the frame. No slice in ActiveState means the thing
-// isn't running — the kernel walks past it.
-func (r *Relation) Realize(root skyra.Reality, payload any) any {
-	return r.realize(root, payload, r.ActiveState[root.ID()])
+// Realize runs a wave. origin owns it (the discriminator threaded to every
+// Observe, and who the result is delivered to); traversed is the realm this
+// wave walks. The slice is bound from the traversed reality's ID — no slice
+// means it isn't running, and the kernel walks past it.
+func (r *Relation) Realize(origin, traversed skyra.Reality, impulse any) any {
+	return r.realize(origin, traversed, impulse, r.ActiveState[traversed.ID()])
 }
 
-func (r *Relation) realize(root skyra.Reality, payload any, sl skyra.Slice) any {
+func (r *Relation) realize(origin, traversed skyra.Reality, impulse any, sl skyra.Slice) any {
 	if sl == nil {
 		return nil
 	}
@@ -51,8 +52,8 @@ func (r *Relation) realize(root skyra.Reality, payload any, sl skyra.Slice) any 
 	// re-descends a node already on its path, so it always terminates.
 	onPath := map[string]bool{}
 
-	root.Observe(r, payload)
-	rootNode := r.rootNode(root, sl)
+	traversed.Observe(origin, impulse)
+	rootNode := r.rootNode(traversed, sl)
 	r.scoreChildren(rootNode, sl)
 	onPath[rootNode.CellID] = true
 	stack := []*skyra.Node{rootNode}
@@ -71,22 +72,21 @@ func (r *Relation) realize(root skyra.Reality, payload any, sl skyra.Slice) any 
 			}
 
 			onPath[childNode.CellID] = true
-			childNode.Cell.Observe(r, payload)
+			childNode.Cell.Observe(origin, impulse)
 			r.scoreChildren(childNode, sl)
 			stack = append(stack, childNode)
 		} else {
 			stack = stack[:len(stack)-1]
 			onPath[top.CellID] = false
 
-			// content type check — the boundary crossing.
-			// Content is a Reality → ID() is the ActiveState lookup,
-			// and the inner traversal runs in the inner frame.
-			// (Path A converts this to a goroutine spawn.)
+			// content type check — the boundary crossing into another actor.
+			// origin is threaded unchanged, so the inner actor reads the wave
+			// as external. (Path A2 converts this to a goroutine spawn.)
 			if inner, ok := top.Cell.Content().(skyra.Reality); ok {
-				r.realize(inner, payload, r.ActiveState[inner.ID()])
+				r.realize(origin, inner, impulse, r.ActiveState[inner.ID()])
 			}
 
-			out := top.Cell.Express(r, payload)
+			out := top.Cell.Express(origin, impulse)
 
 			if len(stack) > 0 {
 				parent := stack[len(stack)-1]
@@ -98,6 +98,8 @@ func (r *Relation) realize(root skyra.Reality, payload any, sl skyra.Slice) any 
 		}
 	}
 
+	// Perception Invariant: every wave delivers its result to its origin.
+	origin.Observe(origin, result)
 	return result
 }
 

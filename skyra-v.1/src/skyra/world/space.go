@@ -17,8 +17,8 @@ type Point struct {
 
 func (p *Point) ID() string                              { return p.id }
 func (p *Point) NewActivation() skyra.ActivationRecord   { return nil }
-func (p *Point) Observe(k skyra.Kernel, payload any)     {}
-func (p *Point) Express(k skyra.Kernel, payload any) any { return nil }
+func (p *Point) Observe(origin skyra.Reality, impulse any)     {}
+func (p *Point) Express(origin skyra.Reality, impulse any) any { return nil }
 func (p *Point) Children() map[string]skyra.Reality      { return p.Neighbors }
 func (p *Point) Content() any                            { return p.content }
 func (p *Point) SetContent(c any)                        { p.content = c }

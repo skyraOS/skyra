@@ -6,14 +6,18 @@ type ActivationRecord interface {
 
 type Kernel interface {
 	ID() string
-	Realize(root Reality, payload any) any
+	// Realize runs a wave: OriginReality owns it (the discriminator and the
+	// result recipient), TraversedReality is the realm this wave traverses.
+	Realize(origin, traversed Reality, impulse any) any
 }
 
 type Reality interface {
 	ID() string
 	NewActivation() ActivationRecord
-	Observe(k Kernel, payload any)
-	Express(k Kernel, payload any) any
+	// origin is the wave's owner — the cell compares it to its own being to
+	// tell a self-wave (reafference) from an external one (exafference).
+	Observe(origin Reality, impulse any)
+	Express(origin Reality, impulse any) any
 	Children() map[string]Reality
 	Content() any
 }
