@@ -1,6 +1,7 @@
 package relation
 
 import (
+	"sync"
 	"testing"
 
 	"skyra-v1/src/skyra"
@@ -50,6 +51,7 @@ func (c *mockCell) Content() any                                 { return c.cont
 func (c *mockCell) link(child *mockCell)                         { c.children[child.id] = child }
 
 type mockSlice struct {
+	mu        sync.Mutex
 	id        string
 	records   map[string]skyra.ActivationRecord
 	threshold float64
@@ -67,6 +69,8 @@ func (s *mockSlice) Records() map[string]skyra.ActivationRecord { return s.recor
 func (s *mockSlice) Threshold() float64                         { return s.threshold }
 func (s *mockSlice) Count() int                                 { return s.count }
 func (s *mockSlice) SetCount(c int)                             { s.count = c }
+func (s *mockSlice) Lock()                                      { s.mu.Lock() }
+func (s *mockSlice) Unlock()                                    { s.mu.Unlock() }
 
 // run wires a being's own wave: the root both owns and is traversed.
 func run(root *mockCell, sl *mockSlice) *Relation {
@@ -183,6 +187,35 @@ func TestDeliversToOrigin(t *testing.T) {
 	}
 	if last.impulse != "root" {
 		t.Errorf("delivered result = %v, want \"root\"", last.impulse)
+	}
+}
+
+// A Content Reality is another actor: the crossing spawns its wave on a
+// goroutine, threads the origin (so the inner being reads it as external),
+// and the inner wave delivers its result back to the owner.
+func TestCrossingSpawnsAndDelivers(t *testing.T) {
+	root := newCell("root", 1.0)
+	inner := newCell("inner", 1.0)
+	root.content = inner // root's Content is another being → boundary crossing
+
+	r := NewRelation()
+	r.ActiveState["root"] = newSlice("root", 0)
+	r.ActiveState["inner"] = newSlice("inner", 0)
+	r.Realize(root, root, nil) // waits for the spawned sub-wave
+
+	// the inner being's wave ran, labeled with the external owner.
+	if len(inner.observes) != 1 || inner.observes[0].origin != "root" {
+		t.Errorf("inner observes = %+v, want one Observe owned by root", inner.observes)
+	}
+	// the owner received the inner wave's result ("inner") as a delivery.
+	gotInner := false
+	for _, o := range root.observes {
+		if o.impulse == "inner" {
+			gotInner = true
+		}
+	}
+	if !gotInner {
+		t.Errorf("owner never received the inner wave's result; observes = %+v", root.observes)
 	}
 }
 

@@ -12,10 +12,10 @@ const (
 )
 
 type Relation struct {
-	mu          sync.RWMutex
 	id          string
 	ActiveState map[string]skyra.Slice
-	Amplitude   float64 // initial amplitude, set at spawn; per-node amplitude attenuates from it
+	Amplitude   float64        // initial amplitude, set at spawn; per-node amplitude attenuates from it
+	wg          sync.WaitGroup // tracks cross-actor sub-waves spawned during this wave tree
 }
 
 func NewRelation() *Relation {
@@ -29,18 +29,34 @@ func (r *Relation) ID() string {
 	return r.id
 }
 
-// Realize runs a wave. origin owns it (the discriminator threaded to every
-// Observe, and who the result is delivered to); traversed is the realm this
-// wave walks. The slice is bound from the traversed reality's ID — no slice
-// means it isn't running, and the kernel walks past it.
+// Realize runs a wave and waits for the whole wave tree (it and every
+// cross-actor sub-wave it spawned) to settle. origin owns the wave (the
+// discriminator threaded to every Observe, and who the result is delivered
+// to); traversed is the realm this wave walks.
 func (r *Relation) Realize(origin, traversed skyra.Reality, impulse any) any {
-	return r.realize(origin, traversed, impulse, r.ActiveState[traversed.ID()])
+	result := r.realize(origin, traversed, impulse, r.ActiveState[traversed.ID()])
+	r.wg.Wait()
+	return result
 }
 
+// realize is one wave: a locked traversal, then delivery to the origin. The
+// two locks are never held at once, so cross-actor waves can't deadlock.
 func (r *Relation) realize(origin, traversed skyra.Reality, impulse any, sl skyra.Slice) any {
 	if sl == nil {
 		return nil
 	}
+	result := r.traverse(origin, traversed, impulse, sl)
+	r.deliver(origin, result) // Perception Invariant
+	return result
+}
+
+// traverse walks `traversed` under its slice lock and returns the wave's
+// result. A cell whose Content is a Reality is another actor: the kernel
+// spawns a goroutine for it, threading origin unchanged, and does not wait.
+func (r *Relation) traverse(origin, traversed skyra.Reality, impulse any, sl skyra.Slice) any {
+	sl.Lock()
+	defer sl.Unlock()
+
 	sl.SetCount(sl.Count() + 1) // proper time — this frame's clock
 
 	// double buffer: last traversal's tree becomes Prior; Current rebuilds.
@@ -79,11 +95,15 @@ func (r *Relation) realize(origin, traversed skyra.Reality, impulse any, sl skyr
 			stack = stack[:len(stack)-1]
 			onPath[top.CellID] = false
 
-			// content type check — the boundary crossing into another actor.
-			// origin is threaded unchanged, so the inner actor reads the wave
-			// as external. (Path A2 converts this to a goroutine spawn.)
+			// boundary crossing — Content is a Reality → another actor.
+			// Spawn its wave on its own goroutine, origin threaded unchanged.
 			if inner, ok := top.Cell.Content().(skyra.Reality); ok {
-				r.realize(origin, inner, impulse, r.ActiveState[inner.ID()])
+				isl := r.ActiveState[inner.ID()]
+				r.wg.Add(1)
+				go func(in skyra.Reality, s skyra.Slice) {
+					defer r.wg.Done()
+					r.realize(origin, in, impulse, s)
+				}(inner, isl)
 			}
 
 			out := top.Cell.Express(origin, impulse)
@@ -98,9 +118,18 @@ func (r *Relation) realize(origin, traversed skyra.Reality, impulse any, sl skyr
 		}
 	}
 
-	// Perception Invariant: every wave delivers its result to its origin.
-	origin.Observe(origin, result)
 	return result
+}
+
+// deliver hands the wave's result to its origin under the origin's slice lock
+// (held separately from the traversed lock), so concurrent deliveries to one
+// being serialize and can't race.
+func (r *Relation) deliver(origin skyra.Reality, result any) {
+	if osl := r.ActiveState[origin.ID()]; osl != nil {
+		osl.Lock()
+		defer osl.Unlock()
+	}
+	origin.Observe(origin, result)
 }
 
 // rootNode scores the root once — it has no parent to carry its score.

@@ -24,9 +24,11 @@ func NewSlice(id, beingID string) *Slice {
 	}
 }
 
-func (s *Slice) ID() string                                  { return s.id }
-func (s *Slice) Tree() *skyra.TraversalPair                  { return &s.tree }
-func (s *Slice) Records() map[string]skyra.ActivationRecord  { return s.records }
-func (s *Slice) Threshold() float64                          { return s.threshold }
-func (s *Slice) Count() int                                  { return s.count }
-func (s *Slice) SetCount(c int)                              { s.count = c }
+func (s *Slice) ID() string                                 { return s.id }
+func (s *Slice) Tree() *skyra.TraversalPair                 { return &s.tree }
+func (s *Slice) Records() map[string]skyra.ActivationRecord { return s.records }
+func (s *Slice) Threshold() float64                         { return s.threshold }
+func (s *Slice) Count() int                                 { return s.count }
+func (s *Slice) SetCount(c int)                             { s.count = c }
+func (s *Slice) Lock()                                      { s.mu.Lock() }
+func (s *Slice) Unlock()                                    { s.mu.Unlock() }

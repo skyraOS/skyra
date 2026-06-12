@@ -29,6 +29,10 @@ type Slice interface {
 	Threshold() float64
 	Count() int
 	SetCount(int)
+	// Lock/Unlock serialize the waves touching one being's slice. The kernel
+	// holds the lock for a wave; cell methods run under it and never re-lock.
+	Lock()
+	Unlock()
 }
 
 type Node struct {
