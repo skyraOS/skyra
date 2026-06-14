@@ -49,6 +49,43 @@ Sources:
 
 Instability is the signal that persistence is no longer cheap.
 
+## Coherence (ACC) as Stress Center
+
+Coherence is the ACC — the general mismatch detector. But the ACC in biology doesn't just detect conflict — it allocates cognitive control resources. Coherence is not a detector that hands deltas to a separate stress aggregator. Coherence IS the stress center. It finds the mismatch, reads the magnitude, and routes energy based on the type of mismatch.
+
+Three mismatch domains, each routing energy differently:
+
+- **Content mismatch** (setpoint vs members) → energy to contradicting cells. Topology pressure. Split or absorb.
+- **Prediction mismatch** (predicted vs actual) → energy to the failing goal. Goal dominance. Gather-before-commit.
+- **Articulation mismatch** (intent vs expression) → energy to motor/action loop. Self-correction.
+
+Stress on the slice is the readable state of what Coherence is currently doing — not a separate aggregation step. Coherence writes it. Other binding realities read it. The instability components in the formula below are Coherence's outputs, not independent signals collected from everywhere.
+
+The error signal IS energy. Coherence signals the mismatch magnitude, that magnitude becomes activation energy on the relevant pathway. A failing goal gets louder because the error signal is energy, not because a rule amplified it. Suppression of other goals is the shadow of amplification — finite energy, one goal running hot, everything else gets less. Resolution drops the activation, attention redistributes automatically. No explicit restore step.
+
+### The Mechanism — Per-Goal Delta Pass
+
+Coherence is a dumb method. It takes prediction errors and propagates the network. The mechanism is:
+
+1. **Stimulus arrives** — lands in the attention map on the slice.
+2. **Read active goals** — all goals currently tracked on the slice.
+3. **Cheap per-goal comparison** — for each goal in isolation: does this stimulus close the gap or widen it? Goal setpoint vs stimulus. Directional delta: positive (closer), negative (further), zero (irrelevant). No inference. Activation math.
+4. **Coherence aggregates** — reads the collection of per-goal deltas. Net direction, magnitude, which goals moved which way.
+5. **Coherence routes energy** — based on the aggregate.
+
+Step 3 is N cheap passes, one per active goal. Not one big evaluation. Each pass is the goal's content (setpoint) against what just arrived.
+
+### Aggregate Patterns
+
+The aggregation is where behavior comes from. One stimulus can help one goal and hurt another simultaneously. Coherence sees both.
+
+- **All deltas positive** → low stress, proceed, reinforce. Everything got closer.
+- **Mixed deltas** → some goals helped, some hurt. Conflict. Energy routes to the hurt goals. This tension IS the stress signal.
+- **All deltas negative** → high stress. Everything got worse. Gather-before-commit. Frontopolar activates, questions generate.
+- **One large negative, rest neutral** → single goal under threat. Goal dominance — that goal runs hot, others starve temporarily. Resolution drops it back.
+
+**Status: directionally correct.** The formula and components below still hold as a shape — persistence × instability — but instability may collapse from a sum of independent components to Coherence's magnitude across its three domains.
+
 ## Cross-Binding Disagreement
 
 Stress can emerge from inner communication across binding realities. It rises when different binding realities report incompatible interpretations of the same active pattern.
@@ -61,6 +98,7 @@ Motivation: reason is uncertain
 Episodic: weak match / no precedent
 Action: prior attempts failed
 Prediction: expected next state did not arrive
+Coherence: mismatch magnitude high across multiple domains
 ```
 
 No single signal here is "stress" by itself. Stress is the combined pressure of the disagreement.
@@ -86,6 +124,7 @@ type StressState struct {
     GoalErrorTrend         float64
     DependencyUncertainty  float64
     PredictionError        float64
+    ArticulationFailure    float64
     ActionFailure          float64
     FieldDisagreement      float64
     LoadPressure           float64
@@ -113,6 +152,7 @@ instability =
   goal_error_trend
   + dependency_uncertainty
   + prediction_error
+  + articulation_failure
   + action_failure
   + field_disagreement
   + load_pressure
@@ -215,6 +255,7 @@ High stress can:
 - increase compression priority
 - cause stronger memory encoding after the result
 - slow motor firing until dependencies are checked
+- **bias primitive weighting toward perception over action** — over-communicate, ask more questions, gather more signal before committing. Stress shifts motor proposals from `engage` toward `perceive`. The being becomes cautious: wrong predictions mean the world-model is stale, so the response is to observe more before acting. This is the gather-before-commit reflex.
 
 ## Audit Record
 

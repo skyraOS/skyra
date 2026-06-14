@@ -10,9 +10,6 @@
 > It is not the critic who counts; not the man who points out how the strong man stumbles. The credit belongs to the man who is actually in the arena, whose face is marred by dust and sweat and blood.
 > — Theodore Roosevelt
 
-> The master has failed more times than the beginner has tried.
-> — Stephen McCranie
-
 > Anything worth doing is worth doing poorly at first.
 > — Ray Conniff
 
@@ -27,12 +24,6 @@
 
 > I have not failed. I've just found 10,000 ways that won't work.
 > — Thomas Edison
-
-> You don't have to see the whole staircase. Just take the first step.
-> — Martin Luther King Jr.
-
-> The only way to do great work is to love what you do.
-> — Steve Jobs
 
 > First they ignore you, then they laugh at you, then they fight you, then you win.
 > — Mahatma Gandhi
@@ -69,3 +60,6 @@
 
 > Most good programmers do programming not because they expect to get paid or get adulation by the public, but because it is fun to program.
 > — Linus Torvalds
+
+> The ontology is strange because the problem is strange. The mechanics are small because the ontology found the right boundaries.
+> — Codex

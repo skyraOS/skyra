@@ -55,6 +55,9 @@ The boundary. Faces out.
 Each binding reality shares the same two-job observe / collapse-to-vote express pattern, but what they observe and what they collapse to differs enough that they may be separate cell types within the binding reality layer.
 
 **Episodic** — indexes by episodic co-occurrence. Bidirectional. The hippocampus.
+
+> **Tension: binding reality vs slice infrastructure.** Episodic is a binding reality — it has its own logic, indexing (three-layer retrieval, typed attention maps), and read interface. But the binding mechanism may belong on the slice, not in the traversal graph. Every `WriteToSlice()` could automatically bind into the current frame's episodic record as a side effect — cells have no awareness this is happening. A frame becomes the complete set of writes during one traversal, bound together by write infrastructure. Temporal causality (frame N before frame N+1) falls out for free. Same "dumb mechanism, smart emergent behavior" pattern as the kernel and ACC. The catch: the slice is per-traversal state, but episodic storage is durable. Frames must outlive the traversal that created them. The binding mechanism can live on the slice; the storage cannot. Where frames graduate to after the traversal closes is the open question.
+
 - **Train of thought = hippocampal conjunctive code.** Episodic doesn't need its own separate indexing mechanism. It reads the train of thought on the Slice — the conjunction of everything active across all binding realities during this traversal. That IS the episodic index. When a memory deposits, the train of thought at that moment is its binding pattern. When Episodic retrieves, a partial cue pattern-completes against those stored binding patterns.
 - Communication is two-way. Other binding realities send queries to Episodic ("find episodes where this goal was resolved", "find episodes that felt like this"). Episodic searches its members using those cues and returns relevant episodic context. Episodic doesn't just broadcast — it takes retrieval cues from other binding realities and surfaces what matches.
 - Observe: reads the train of thought as the conjunctive code. Receives retrieval cues from other binding realities. Scores members by pattern completion against stored binding patterns. Other binding realities opt into Episodic's field — they don't get gated by default.
@@ -66,7 +69,13 @@ Each binding reality shares the same two-job observe / collapse-to-vote express 
 
 **Action** — indexes by primitive → instance → execution result.
 - Action records whether the motor command executed, not what came back from the world. "I looked at michael" — did the look complete? Yes or no. The result is the execution result, not the world's response. What michael said back is Episodic's domain — episodic, not mechanical.
-- **Deposit:** Every time motor fires and returns, Action deposits. Primitive fired → did it execute → done. Mechanical. No gate beyond motor completion.
+- **Intent capture:** Action records what got handed to motor — the individual votes from binding realities, not a single convergence blob. Each vote is a separate object pointing to the intent it was voting on. Failed votes point to the same intent — a binding reality that voted against the winning action is still information (what disagreed, why, how strongly).
+  ```
+  vote → {source (which binding reality), primitive, target, weight, intent}
+  intent → {the converged action that motor fired}
+  ```
+  Multiple votes point to the same intent. The mapping is `votes[] → intent → expression (what motor actually produced)`. Without both sides, the inward prediction delta (did I articulate what I intended to) is not computable. Action owns all three: who voted what, what converged, what came out.
+- **Deposit:** Every time motor fires and returns, Action deposits both the intent snapshot (binding reality convergence at the moment of firing) and the execution result. Primitive fired → what was the intent → what was the output → did they match. The delta between intent and expression is the articulation monitoring signal — Broca's loop, fast, automatic.
 - Observe: what happens when I do this? Scores by past execution outcomes. Orients collapse toward known successful executions.
 - Express: cleanest collapse — directly to the primitive that executed successfully before.
 
@@ -89,18 +98,46 @@ Each binding reality shares the same two-job observe / collapse-to-vote express 
 - **Sub-binding realities under Goal** — each tracks a specific domain of goals. Independent circuits, each indexed by their own thing, each tracking their own delta toward completion.
 
   **Internal goals** (the being monitoring itself):
-  - **Coherence** — monitors the relationship between a cell's content (setpoint) and its members. Reads what's active in the current context — train of thought, picked up memories, signal flow. When it detects contradiction, it fires. One inference call, one job (resolve contradiction), two possible outcomes:
-    1. **Resolved internally** — either absorb (contradiction is minor, understanding stretches, weights adjust) or split (contradiction is fundamental, cell divides into two peer understandings on the same plane). This is cell differentiation — driven by coherence pressure, not by decision. Topology grows more nuanced because contradictions sculpt it. Levin's morphogenetic pressure.
-    2. **Needs external action** — contradiction can't be resolved with current information. Surfaces a goal: "I need more information," "I need to ask about this." That goal reaches motor and drives action.
-    - The inference call doesn't know which path ahead of time. It reads the contradiction, and the resolution either fits inside or doesn't. Same call, the output determines which path.
-    - Coherence is the mechanism that drives topology growth. Every split creates more cells, more distinctions, more specific understandings. Runs on every traversal — quietly monitoring. Most of the time no contradiction, no pressure. But when a new trace doesn't fit, Coherence forces the being to develop a more complex model.
+  - **Coherence (ACC v1 / Frontopolar)** — one cell, two phases. The convergence and launch point. Sits north of sensory, south of PFC/motor. ACC and frontopolar aren't separate nodes — they're the Observe and Express methods of the same cell. Same fold/unfold pattern as every other cell in the architecture.
+
+    **Position:** Between raw stimulus (below) and higher cognition (above). Everything north of this cell operates on pre-digested "what just happened relative to what I care about" rather than raw stimulus.
+
+    **Observe (descent) = ACC.** Pulls currently active/attended goals and their context fresh each traversal from the attention map on the slice. Fires cheap, fast, parallel inference calls:
+    - **Per-goal passes (isolated)** — one per active goal. Did this stimulus help or hurt this specific goal? Directional delta: positive (closer), negative (further), zero (irrelevant). Each goal evaluated in isolation against the stimulus.
+    - **Global pass** — how do the per-goal results relate? Agreement, conflict, magnitude spread. This is the aggregation step.
+    - Writes per-goal deltas + global conflict signal into the stress network before continuing.
+
+    **Express (ascent) = Frontopolar.** On the way back up, reads what's returning — votes, candidates, and how well they address the error set ACC flagged on the way down. Two outcomes:
+    1. **Votes resolve the error** — the available proposals adequately address the mismatches detected on descent. Pass through. Stress stays or drops.
+    2. **Votes don't resolve the error** — the available proposals can't close the gaps. Frontopolar generates the epistemic signal: "here's specifically what I'd need to resolve this." Raises a targeted question as a perceive primitive. The gather-before-commit behavior.
+
+    The stress-driven activation boost on frontopolar isn't a signal transmitted across distance — it's inherited directly. Same cell, same wave, returning phase. Whatever ACC detected on descent is already present for frontopolar on ascent. No separate wiring required between "error detection" and "gap-seeking" — they're two faces of one traversal.
+
+    **Three mismatch domains** (all the same operation — find the mismatch, signal the magnitude, suppress or correct):
+    1. **Content mismatch** — does what I believe contradict itself. Setpoint vs members.
+    2. **Prediction mismatch** — did the result match what I expected. Predicted vs actual. Both inbound (what the world did) and outbound (what the other agent will do).
+    3. **Articulation mismatch** — did my output match my intent. Intent (from Action's vote/convergence record) vs expression (what motor produced). The efference copy delta.
+
+    Coherence is the mechanism that drives topology growth. When a mismatch can't be absorbed, the cell splits — divides into two peer understandings on the same plane. This is cell differentiation driven by coherence pressure, not by decision. Topology grows more nuanced because mismatches sculpt it. Levin's morphogenetic pressure. Runs on every traversal — quietly monitoring. Most of the time no mismatch, no pressure. But when something doesn't fit, Coherence forces the being to develop a more complex model.
+
+    **Children:**
+    ```
+    Coherence (ACC v1 / Frontopolar)
+      └── Children()
+           ├── Goal         — setpoints for per-goal delta passes
+           ├── Motivation   — dependency anchors, why each goal exists
+           └── Prospective  — external obligations, what others asked of the being
+    ```
+    Prediction is not a child — it's what ACC's Observe does. The compare/predict/signal three-step IS the cell's own computation. Coherence descends into its children to gather the material it needs for that computation: Goal provides the setpoints, Motivation provides the dependency context, Prospective provides the external obligation set. The per-goal delta pass traverses into Goal to read each active goal's content against the stimulus.
+
   - **Prediction** — the prediction engine. Predicts incoming signal — what the world will do next. Sensory anticipation, NOT motor planning. The intent graph is outbound (Goal/Action). Prediction is inbound: "what signal will arrive?" Indexed by episodeID, each episode holds a map of predictionIDs where the value is the episodic state at prediction time. Has members, is a binding reality.
     - Three steps every traversal:
       1. **Compare** — what did I predict last time vs what actually arrived. Calculate delta.
       2. **Predict** — given the current episodic state, make a new prediction. Store it.
       3. **Signal** — if the delta is bad enough, surface as prediction error. This feeds Goal → Episodic → new episode.
-    - If prediction matched, step 3 is silent. Background monitor that only becomes loud when it matters. Same pattern as ACC in biology — monitors continuously, only fires when conflict is detected.
-    - Can raise a goal when prediction error is persistent: "I need more information to predict better." Same pattern as Coherence — one job (maintain prediction accuracy), two possible outcomes (adjust internally or surface an external goal that drives action).
+    - If prediction matched, step 3 is silent. Background monitor that only becomes loud when it matters.
+    - The delta flows through Coherence (the ACC) — Coherence is what decides the magnitude and whether to suppress or correct. Prediction produces the delta. Coherence evaluates it.
+    - Can raise a goal when prediction error is persistent: "I need more information to predict better." This surfaces through Coherence's "needs external action" path.
     - **Delta feeds three other systems:**
       1. Episodic segmentation — spike after low deltas = new episode boundary
       2. Emotion deposit trigger — high delta = high salience moment, Emotion encodes
@@ -111,10 +148,35 @@ Each binding reality shares the same two-job observe / collapse-to-vote express 
 
   **External goals** (the being monitoring the world):
   - **Prospective** — indexes by the external obligation itself. Tracks deferred intentions triggered by external cues — "I need to do X when Y happens." Each action's result either closes the gap or doesn't. Same comparator pattern as Goal but scoped to external demands from other beings.
+    - **Direction: world → being.** Passive, reactive, outward facing. Waits for external cues. Tracks what others have asked of the being. Obligation ledger. It doesn't move until something external triggers it. External demand arrives, being tracks it until resolved.
+    - Directionality is opposite to Coherence's Express (frontopolar) phase. Prospective receives demands from the world and holds them. Frontopolar detects internal gaps and reaches into the world to fill them.
 
   **Capacity** — NOT a sub-binding reality. Moved to Slice as a per-traversal constraint. Each binding reality has a token window per traversal. Overflow → drop lowest activation pickups. If all above threshold → inference fires to compress into an understanding. This is the same memory cell mechanic (trace on descent, understanding on ascent). Capacity pressure is what triggers the understanding. You don't synthesize an understanding because you decided to. You synthesize because you can't hold all the pieces separately anymore. Compression is a response to overload, not a scheduled process.
 
-  **Completion** — REMOVED. Redundant. Each sub-binding reality under Goal already tracks its own completion delta (setpoint vs current state). Completion pressure is distributed, not a separate need.
+  **Completion** — epistemic gap ledger on the slice. Written by Coherence's Express (frontopolar) phase. Tracks gaps raised and whether they got filled.
+
+    Not the old Completion (which was removed as redundant — each sub-binding reality already tracks its own goal delta). This is different: a place for frontopolar to write its epistemic gaps and track resolution. Every gap is goal-oriented — frontopolar raises it in service of a specific goal that ACC flagged as failing.
+
+    **Gap structure:**
+    ```
+    gapID → {what's missing, goalID, frameID, episodeID, status (open/filled)}
+    ```
+
+    **Indices (reverse lookup):**
+    ```
+    goalID    → []gapID    (what gaps are outstanding for this goal)
+    frameID   → []gapID    (what gaps were raised at this encoding pulse)
+    episodeID → []gapID    (what gaps belong to this episode)
+    ```
+
+    **Ownership chain (forward):**
+    ```
+    Episode → Frame → Goal → Gap
+    ```
+
+    A gap is born in a specific frame, during a specific episode, in service of a specific goal. On the next traversal, Coherence's Observe can check what's still open before running the per-goal delta pass — a gap that got filled changes the delta landscape.
+
+    Lives on the slice because it's per-being universal state. Any binding reality can read it.
 
   The internal/external split is sensory, not structural. Same cell type. Different input source.
 

@@ -2,7 +2,7 @@
 
 ## The Analogy
 
-- **World (grid)** — the full 1000x1000 grid of Points. Each Point is a Reality with bidirectional pointers to its neighbors. The world is an executable like everything else — most of it is dormant (untraversed). Only the points the kernel visits are active. The world follows the same pattern as any organism: full state on disk, active subset in the slice.
+- **World (grid)** — the full 1000x1000 grid of Points. Each Point is a Space with bidirectional pointers to its neighbors. The world is an executable like everything else — most of it is dormant (untraversed). Only the points the kernel visits are active. The world follows the same pattern as any organism: full state on disk, active subset in the slice.
 - **Organism (Skyra DNA)** — the executable image on disk. Everything the being could be. All memories, all binding realities, all weights. Durable. Not everything is active at once. Exists independently — the kernel doesn't own it, the world doesn't own it.
 - **Slice** — the running process. What's real about the being RIGHT NOW. The active subset. **Owned by the agent** — it is the agent's active mind. The kernel holds a *reference* to it (handed over at registration) so it can build active state into it. The slice never lives on the world or the kernel. Does NOT hold a reference back to the organism.
 - **DNA** — the text segment. The compiled instructions. What the organism can do. Read-only. Doesn't change. Multiple Slices can share the same DNA.
@@ -43,7 +43,7 @@ Relation traverses grid
     → continues to next Point
 ```
 
-The membrane is the boundary between world space and the organism's interior. The Slice is the kernel's bookkeeping about what's active behind that boundary — it never sits on the world. The kernel doesn't know it walked into a being — it just sees more Realities to traverse. ActiveState is how the kernel knows which frame to bind.
+The membrane is the boundary between world space and the organism's interior. The Slice is the kernel's bookkeeping about what's active behind that boundary — it never sits on the world. The kernel doesn't know it walked into a being — it just sees more Spaces to traverse. ActiveState is how the kernel knows which frame to bind.
 
 ## Ownership
 
@@ -56,7 +56,7 @@ Nothing owns anything else. Everything exists independently. The kernel manages 
 
 ## Active State Is Built, Not Traversed
 
-The kernel does not traverse active state — it **builds** it. The wave walks the **passive** Reality (the organism on disk, the full topology reachable through `Children`/`Content`) and realizes the active subset into the slice as it goes. Active state is the *product* of a traversal, not an input to it.
+The kernel does not traverse active state — it **builds** it. The wave walks the **passive** Space (the organism on disk, the full topology reachable through `Children`/`Content`) and realizes the active subset into the slice as it goes. Active state is the *product* of a traversal, not an input to it.
 
 This is why the slices live with their agents and the world holds none. A wave that "hit active state on the world" could only traverse what was already lit — and at boot nothing is lit. The wave has to walk the disk and build the active set. The world is simply more disk to traverse, not a store of pre-lit state.
 
@@ -65,10 +65,33 @@ This is why the slices live with their agents and the world holds none. A wave t
 A being is situated: it holds a reference to **what it's standing on** — its environment, the layer below it — set at registration alongside its slice. To **think**, a being traverses *itself*: `realize(self, self, impulse)` over its own `Children`. To **act**, it calls into its environment:
 
 ```
-world.observe(self, content)   →   realize(self, world, content)
+world.observe(self, content)   →   realize(self, pointOf(self), content)
 ```
 
-`observe` is the universal "receive a signal" — one verb everywhere, different competence per Reality. The world's `observe` is a **facilitator**: it just relays to the kernel (`realize(self, world, content)`). A memory cell's `observe` absorbs; the origin's `observe` perceives the result. There is no new verb and no collision — `world.observe` (the world receiving the act) and `self.observe` (the being receiving the result) are the same uniform method on different objects. The being passed *itself* as the owner, so the kernel's callback (`self.observe(result)`) lands on it. The chain is **being → world → kernel → slices**. You act *down* (push on the layer below); you perceive *up* (the result returns to your origin — the [Perception Invariant](../invariants/perception-invariant.md)).
+`observe` is the universal "receive a signal" — one verb everywhere, different competence per Space. The world's `observe` is a **facilitator**: it just relays to the kernel. A memory cell's `observe` absorbs; the origin's `observe` perceives the result. There is no new verb and no collision — `world.observe` (the world receiving the act) and `self.observe` (the being receiving the result) are the same uniform method on different objects. The being passed *itself* as the owner, so the kernel's callback (`self.observe(result)`) lands on it. The chain is **being → world → kernel → slices**. You act *down* (push on the layer below); you perceive *up* (the result returns to your origin — the [Perception Invariant](../laws/invariants/perception-invariant.md)).
+
+The world is a **doorway, not a destination**: it relays the act to the kernel and is never itself the traversed realm. But the realm is not the being either — it is the being's **location**. So the relay threads `self` as the **owner** and `pointOf(self)` as the **root**: `realize(self, pointOf(self), content)` — neither `realize(self, self)` (that is *thought*, the being walking its own interior) nor `realize(self, world)` (the world-as-whole is not traversed). The act roots at the being's point and propagates across world-space from there; the result still returns to `self` (the [Perception Invariant](../laws/invariants/perception-invariant.md)). Owner and perceiver are the being; the root is the being's location. See the [Actor Frame Invariant](../laws/invariants/actor-frame-invariant.md).
+
+### Why it can't recurse
+
+`world.observe` would loop if relaying were unconditional — the kernel walks the world as space too, and walking it would re-call `observe`, which would re-relay. The break is that the world **splits its behavior on the presence of the origin label**:
+
+```go
+func (w *World) Observe(origin skyra.Space, impulse any) {
+    if origin != nil {
+        // a being is acting through me — facilitate, rooting the act at its location
+        w.kernel.Realize(origin, w.pointOf(origin), impulse)
+    } else {
+        // I'm being walked as a realm — intake / propagate, never facilitate
+        ...
+    }
+}
+```
+
+- A being acting calls `world.observe(self, content)` — origin **present** → relay to the kernel.
+- The kernel walking the world as space calls `world.observe(nil, content)` — origin **absent** → the intake branch, no relay.
+
+The self label is what arms facilitation; the traversal path strips it, disarming it. The recursion break lives entirely in the world's competence — no kernel special-case, no discriminator to invent. It is the same identity-presence test everywhere: a Space acts on a wave it owns; `nil` origin means "I'm being traversed, not invoked."
 
 ## Three Layers of State
 

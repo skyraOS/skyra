@@ -1,8 +1,10 @@
 # DNA — The Cell Reads Itself
 
+> **Status: Out of date.** The competence model and observe/express mode lists predate the v.1 kernel rewrite (stateless kernel, Perception Invariant, origin-based ObserveFn split). Kept for reference — not yet archived.
+
 ## Competence — Why It's Load-Bearing
 
-The v.1 runtime is one struct (Skyra), one interface (Reality), one traversal method (Realize). 311 lines. Everything — beings, memories, operators, skills — is the same type. The only differentiation is topology: where the cell sits, what its weights are, what relationships it has.
+The v.1 runtime is one struct (Skyra), one interface (Space), one traversal method (Realize). 311 lines. Everything — beings, memories, operators, skills — is the same type. The only differentiation is topology: where the cell sits, what its weights are, what relationships it has.
 
 Competence is the mechanism that makes this work. Without it, a cell is whatever type it was created as — forever. You'd need separate structs: Memory, Thread, Think, Act, Specialist. Back to 5k lines. Back to v.05.
 
@@ -26,22 +28,22 @@ Three layers in biology:
 2. **Active transcription factor network** — what's currently running. Medium-term state.
 3. **Bioelectric resting potential (Levin)** — voltage state acts as the upstream self-read, independent of which ion channel produces it. The cell reads its own voltage before deciding what to become.
 
-In Realize, competence is the first step. The Reality reads its own weights and the binding fields on the Relation to determine what it currently is. This gates which Observe and Express branches are available this frame.
+In Realize, competence is the first step. The Space reads its own weights and the binding fields on the Relation to determine what it currently is. This gates which Observe and Express branches are available this frame.
 
-There is no declared type. There is no genome label that says "you are an emotional observer." The Reality determines itself from its weights at the moment the Relation arrives. The weights are the bioelectric field. The Relation is the signal. The competence step is the cell asking "what am I right now, given my accumulated experience and what's arriving?"
+There is no declared type. There is no genome label that says "you are an emotional observer." The Space determines itself from its weights at the moment the Relation arrives. The weights are the bioelectric field. The Relation is the signal. The competence step is the cell asking "what am I right now, given my accumulated experience and what's arriving?"
 
-This means a Reality's type can change frame to frame. Dense emotional weights and an emotionally charged Relation — the Reality expresses as an emotional processor. Same Reality, next traversal, task-heavy Relation and reinforced task weights — it expresses as a task processor. One DNA. The field determines expression. The cell determines itself.
+This means a Space's type can change frame to frame. Dense emotional weights and an emotionally charged Relation — the Space expresses as an emotional processor. Same Space, next traversal, task-heavy Relation and reinforced task weights — it expresses as a task processor. One DNA. The field determines expression. The cell determines itself.
 
 ## Observe and Express Are Independently Composable
 
-Every Reality has the same DNA — same interface, same maps. What differentiates a Reality isn't its type. It's the weight field determining which branches of the DNA express. But Observe and Express are not coupled. A Reality can be one thing on the way down and a different thing on the way back up.
+Every Space has the same DNA — same interface, same maps. What differentiates a Space isn't its type. It's the weight field determining which branches of the DNA express. But Observe and Express are not coupled. A Space can be one thing on the way down and a different thing on the way back up.
 
 Biology confirms this. Receptor expression and effector expression are separate gene regulatory networks composed orthogonally:
 
 - **Same Observe, different Express:** Muscle cells, fat cells, and liver cells all bind insulin (same intake). Muscle stores glycogen, fat makes lipids, liver suppresses glucose production (three different outputs). M1 and M2 macrophages share identical phagocytic intake machinery but M1 outputs inflammatory cytokines while M2 outputs anti-inflammatory.
 - **Different Observe, same Express:** Macrophages, neutrophils, and dendritic cells all perform phagocytosis (same output) but are triggered by different receptor families (different intake).
 
-### Three fields per Reality
+### Three fields per Space
 
 ```
 what the cell IS          → weight field (position in topology)
@@ -66,13 +68,13 @@ The DNA is two independent switch statements — one for Observe, one for Expres
 
 ### System prompt composed from DNA fields
 
-The system prompt isn't a handwritten string. It's assembled from the DNA composition — what this Reality is, what its Observe branch does, what its Express branch does. The Provider receives a prompt composed from all three — derived from the genome, not authored.
+The system prompt isn't a handwritten string. It's assembled from the DNA composition — what this Space is, what its Observe branch does, what its Express branch does. The Provider receives a prompt composed from all three — derived from the genome, not authored.
 
 The prompt can evolve. If the weights shift and a different Observe branch starts firing, the system prompt changes because the DNA is expressing differently. The prompt is alive.
 
 ## One Type — Topology Is the Differentiation
 
-One Reality struct. One Realize method. One Observe. One Express. The behavior emerges from what's in the Relationships map, what's in the Expressors map, and what the weights are. Think isn't a different type from Act — it's the same Reality with different relationships and different expressors. Memory isn't a different type from an operator. Same Reality, different contents, different weights.
+One Space struct. One Realize method. One Observe. One Express. The behavior emerges from what's in the Relationships map, what's in the Expressors map, and what the weights are. Think isn't a different type from Act — it's the same Space with different relationships and different expressors. Memory isn't a different type from an operator. Same Space, different contents, different weights.
 
 The only real differentiation is at the leaf nodes — the base cases that actually execute. The provider calls an LLM. The terminal runs bash. The filesystem writes to disk. Those do different work. Everything above them is the same traversal: route by weight, observe, express, return.
 
@@ -128,7 +130,7 @@ This is the chromatin landscape from competence — the promoted node gates whic
 
 Levin's morphogenetic attractors work the same way. "Head" is an attractor state — a bioelectric prepattern distributed across many cells. When enough cells participate in the pattern, the attractor deepens and the ensemble converges on the morphogenetic goal. The act of convergence IS the promotion — the pattern becomes a structure that sits above its constituent cells and shapes what they express.
 
-The promoted node doesn't know it was promoted. It's a Reality like everything else. Its Competence reads its weights and determines what it is. Promotion is just what the topology looks like after enough traversals reinforced the same region.
+The promoted node doesn't know it was promoted. It's a Space like everything else. Its Competence reads its weights and determines what it is. Promotion is just what the topology looks like after enough traversals reinforced the same region.
 
 ## Differentiation Under Activation
 

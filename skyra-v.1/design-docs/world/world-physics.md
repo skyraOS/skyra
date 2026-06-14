@@ -1,6 +1,6 @@
 # World Physics
 
-> Governed by the **[Perception Invariant](../invariants/perception-invariant.md)** — foundational and load-bearing for all of v.1: what a being sends is chosen, what it perceives is not; every wave delivers its result to its origin. The physics here shape what a wave carries; that invariant governs how the result reaches the being.
+> Governed by the **[Perception Invariant](../laws/invariants/perception-invariant.md)** — foundational and load-bearing for all of v.1: what a being sends is chosen, what it perceives is not; every wave delivers its result to its origin. The physics here shape what a wave carries; that invariant governs how the result reaches the being.
 
 Every world boots with the same base realities already in its hashmap. These are the physics — realities that are always present, always firing, invisible to the beings that inhabit the world.
 

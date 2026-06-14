@@ -2,11 +2,11 @@
 
 ## What Skyra Is
 
-A cognitive runtime where every entity implements a single `Reality` interface. A Relation (the signal) propagates through a topology of cells. Descent is observation — the being absorbs from its topology. Ascent is expression — the being outputs through the same topology. Weight updates happen on the return path. One pass does perception, cognition, memory, and action.
+A cognitive runtime where every entity implements a single `Space` interface. A Relation (the signal) propagates through a topology of cells. Descent is observation — the being absorbs from its topology. Ascent is expression — the being outputs through the same topology. Weight updates happen on the return path. One pass does perception, cognition, memory, and action.
 
 ## The Current Runtime
 
-Go binary. Bubbletea TUI. Debug view on `:3333`. The genome declares beings and their relationships. `Realize()` is the main method of every Reality. The world loop routes impulses to the highest-scoring entity by activation.
+Go binary. Bubbletea TUI. Debug view on `:3333`. The genome declares beings and their relationships. `Realize()` is the main method of every Space. The world loop routes impulses to the highest-scoring entity by activation.
 
 ---
 
@@ -32,7 +32,7 @@ Ownership is separate from reachability. The Relation holds references so it can
 
 ### 3. Relationships Map Removed from Skyra
 
-The `Relationships map[string]Reality` on the Skyra cell is replaced by `Brain map[string]Reality`. Binding realities are cells. Cells have members that are cells. All the way down. Same type everywhere.
+The `Relationships map[string]Space` on the Skyra cell is replaced by `Brain map[string]Space`. Binding realities are cells. Cells have members that are cells. All the way down. Same type everywhere.
 
 **Why:** Relationships was redundant with the binding realities' member maps. Both tracked the same things. The binding realities already have weights, already gate through activation, already learn on the return path. They ARE the topology.
 
@@ -90,7 +90,7 @@ Every cell has a goal — itself. The content is what the cell is trying to be. 
 
 ### 11. Cell Deposit by Signal Convergence
 
-A new cell forms when signals from multiple binding fields converge — high co-activation product. The cell inherits membership in every binding reality that was active when it formed. Same Reality instance, referenced by multiple binding realities.
+A new cell forms when signals from multiple binding fields converge — high co-activation product. The cell inherits membership in every binding reality that was active when it formed. Same Space instance, referenced by multiple binding realities.
 
 **Why:** Biology doesn't place memories into regions. Traces form where signals intersect. The hippocampus isn't special — it's where co-occurring signals from different areas meet. The mechanism is the same everywhere.
 

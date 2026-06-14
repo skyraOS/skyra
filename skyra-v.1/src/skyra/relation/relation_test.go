@@ -1,8 +1,10 @@
 package relation
 
 import (
+	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"skyra-v1/src/skyra"
 )
@@ -25,30 +27,67 @@ type obs struct {
 }
 
 type mockCell struct {
-	id       string
-	children map[string]skyra.Reality
-	rec      *mockRecord
-	content  any
-	observes []obs // every Observe call: who owned the wave, and what it carried
+	id             string
+	children       map[string]skyra.Space
+	rec            *mockRecord
+	slice          skyra.Slice
+	content        any
+	observes       []obs // every Observe call: nil during traversal, owner on delivery
+	onObserve      func(obs)
+	blockExpress   chan struct{}
+	expressStarted chan struct{}
+	expressOnce    sync.Once
 }
 
 func newCell(id string, base float64) *mockCell {
 	return &mockCell{
 		id:       id,
-		children: map[string]skyra.Reality{},
+		children: map[string]skyra.Space{},
 		rec:      &mockRecord{base: base},
 	}
 }
 
 func (c *mockCell) ID() string                            { return c.id }
+func (c *mockCell) Slice() skyra.Slice                    { return c.slice }
 func (c *mockCell) NewActivation() skyra.ActivationRecord { return c.rec }
-func (c *mockCell) Observe(origin skyra.Reality, impulse any) {
-	c.observes = append(c.observes, obs{origin.ID(), impulse})
+func (c *mockCell) Observe(origin skyra.Space, impulse any) {
+	originID := "<nil>"
+	if origin != nil {
+		originID = origin.ID()
+	}
+	o := obs{originID, impulse}
+	c.observes = append(c.observes, o)
+	if c.onObserve != nil {
+		c.onObserve(o)
+	}
 }
-func (c *mockCell) Express(origin skyra.Reality, impulse any) any { return c.id }
-func (c *mockCell) Children() map[string]skyra.Reality           { return c.children }
-func (c *mockCell) Content() any                                 { return c.content }
-func (c *mockCell) link(child *mockCell)                         { c.children[child.id] = child }
+func (c *mockCell) Express(origin skyra.Space, impulse any) any {
+	if c.expressStarted != nil {
+		c.expressOnce.Do(func() { close(c.expressStarted) })
+	}
+	if c.blockExpress != nil {
+		<-c.blockExpress
+	}
+	return c.id
+}
+func (c *mockCell) Children() map[string]skyra.Space { return c.children }
+func (c *mockCell) Content() any                     { return c.content }
+func (c *mockCell) link(child *mockCell)             { c.children[child.id] = child }
+func (c *mockCell) setPlane(sl skyra.Slice) {
+	c.setPlaneSeen(sl, map[string]bool{})
+}
+func (c *mockCell) setPlaneSeen(sl skyra.Slice, seen map[string]bool) {
+	if seen[c.id] {
+		return
+	}
+	seen[c.id] = true
+	c.slice = sl
+	for _, child := range c.children {
+		if mc, ok := child.(*mockCell); ok {
+			mc.setPlaneSeen(sl, seen)
+		}
+	}
+}
 
 type mockSlice struct {
 	mu        sync.Mutex
@@ -57,14 +96,19 @@ type mockSlice struct {
 	threshold float64
 	count     int
 	tree      skyra.TraversalPair
+	result    any
+	maps      map[string]any
 }
 
 func newSlice(id string, threshold float64) *mockSlice {
-	return &mockSlice{id: id, records: map[string]skyra.ActivationRecord{}, threshold: threshold}
+	return &mockSlice{id: id, records: map[string]skyra.ActivationRecord{}, threshold: threshold, maps: map[string]any{}}
 }
 
 func (s *mockSlice) ID() string                                 { return s.id }
 func (s *mockSlice) Tree() *skyra.TraversalPair                 { return &s.tree }
+func (s *mockSlice) Result() any                                { return s.result }
+func (s *mockSlice) SetResult(result any)                       { s.result = result }
+func (s *mockSlice) Maps() map[string]any                       { return s.maps }
 func (s *mockSlice) Records() map[string]skyra.ActivationRecord { return s.records }
 func (s *mockSlice) Threshold() float64                         { return s.threshold }
 func (s *mockSlice) Count() int                                 { return s.count }
@@ -75,8 +119,8 @@ func (s *mockSlice) Unlock()                                    { s.mu.Unlock() 
 // run wires a being's own wave: the root both owns and is traversed.
 func run(root *mockCell, sl *mockSlice) *Relation {
 	r := NewRelation()
-	r.ActiveState[root.id] = sl
-	r.Realize(root, root, nil)
+	root.setPlane(sl)
+	r.Realize(root, root, skyra.Impulse{Return: true})
 	return r
 }
 
@@ -110,10 +154,10 @@ func TestVisitedOnceTerminates(t *testing.T) {
 
 	run(root, newSlice("being", 0))
 
-	// reaching here at all means it terminated. root is observed twice:
-	// once on descent, once on delivery — never re-descended by the cycle.
-	if len(root.observes) != 2 {
-		t.Errorf("root observed %d times, want 2 (descent + delivery)", len(root.observes))
+	// reaching here at all means it terminated. This helper runs a marked
+	// return wave, so there is no second return-perception wave.
+	if len(root.observes) != 1 {
+		t.Errorf("root observed %d times, want 1 (traversal intake)", len(root.observes))
 	}
 	if len(a.observes) != 1 {
 		t.Errorf("a observed %d times, want 1", len(a.observes))
@@ -150,6 +194,49 @@ func TestAmplitudeLimitsDepth(t *testing.T) {
 	}
 }
 
+func TestImpulseAmplitudeSetsInitialWaveStrength(t *testing.T) {
+	root := newCell("root", 1.0)
+	a := newCell("a", 1.0)
+	root.link(a)
+	sl := newSlice("being", 0.7)
+	root.setPlane(sl)
+
+	r := NewRelation()
+	r.Realize(root, root, skyra.Impulse{Primitive: "look", Amplitude: 2.0, Return: true})
+
+	if len(a.observes) != 1 {
+		t.Fatalf("a observed %d times, want 1 from amplified impulse", len(a.observes))
+	}
+	if math.Abs(sl.Tree().Current[0].Children[0].Amplitude-1.8) > 0.000001 {
+		t.Fatalf("child amplitude = %v, want 1.8", sl.Tree().Current[0].Children[0].Amplitude)
+	}
+}
+
+// Branching divides amplitude across candidate children. A wide wave should
+// dissipate instead of duplicating energy into every survivor.
+func TestBranchingDividesAmplitude(t *testing.T) {
+	root := newCell("root", 1.0)
+	a := newCell("a", 1.0)
+	b := newCell("b", 1.0)
+	root.link(a)
+	root.link(b)
+
+	run(root, newSlice("being", 0.5))
+
+	if len(a.observes) != 0 {
+		t.Errorf("a observed %d times, want 0 (split score below threshold)", len(a.observes))
+	}
+	if len(b.observes) != 0 {
+		t.Errorf("b observed %d times, want 0 (split score below threshold)", len(b.observes))
+	}
+	if a.rec.calls != 1 {
+		t.Errorf("a activated %d times, want 1 (scored once)", a.rec.calls)
+	}
+	if b.rec.calls != 1 {
+		t.Errorf("b activated %d times, want 1 (scored once)", b.rec.calls)
+	}
+}
+
 // The finished tree lands in the slice's double buffer.
 func TestTreeDoubleBuffer(t *testing.T) {
 	root := newCell("root", 1.0)
@@ -177,50 +264,127 @@ func TestDeliversToOrigin(t *testing.T) {
 	a := newCell("a", 1.0)
 	root.link(a)
 
-	run(root, newSlice("being", 0))
+	sl := newSlice("being", 0)
+	root.setPlane(sl)
+	r := NewRelation()
+	r.Realize(root, root, skyra.Impulse{Primitive: "perceive", ResultMap: "perception"})
 
-	// the last thing the origin observes is its own wave's result (root's
-	// Express output is "root"), owned by itself — the reafference.
-	last := root.observes[len(root.observes)-1]
-	if last.origin != "root" {
-		t.Errorf("delivery origin = %q, want root", last.origin)
+	var ret skyra.Impulse
+	found := false
+	for _, o := range root.observes {
+		if imp, ok := o.impulse.(skyra.Impulse); ok && imp.Return {
+			ret = imp
+			found = true
+			break
+		}
 	}
-	if last.impulse != "root" {
-		t.Errorf("delivered result = %v, want \"root\"", last.impulse)
+	if !found {
+		t.Fatalf("no return perception impulse observed; observes = %+v", root.observes)
+	}
+	result, ok := ret.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("return payload type = %T, want map[string]any", ret.Payload)
+	}
+	perception, ok := result["perception"].(map[string]any)
+	if !ok {
+		t.Fatalf("perception map type = %T, want map[string]any", result["perception"])
+	}
+	if perception["root"] != "root" {
+		t.Errorf("delivered root result = %v, want \"root\"", perception["root"])
+	}
+	if perception["a"] != "a" {
+		t.Errorf("delivered child result = %v, want \"a\"", perception["a"])
 	}
 }
 
-// A Content Reality is another actor: the crossing spawns its wave on a
-// goroutine, threads the origin (so the inner being reads it as external),
-// and the inner wave delivers its result back to the owner.
-func TestCrossingSpawnsAndDelivers(t *testing.T) {
+// A Content Space is another actor: the crossing spawns an independent wave
+// owned by the inner actor. The parent does not wait and does not receive the
+// inner result.
+func TestCrossingSpawnsIndependentWave(t *testing.T) {
 	root := newCell("root", 1.0)
 	inner := newCell("inner", 1.0)
 	root.content = inner // root's Content is another being → boundary crossing
+	root.setPlane(newSlice("root", 0))
+	inner.setPlane(newSlice("inner", 0))
+	inner.blockExpress = make(chan struct{})
+	inner.expressStarted = make(chan struct{})
+
+	done := make(chan struct{})
+	parentReturned := make(chan struct{})
+	var once sync.Once
+	inner.onObserve = func(o obs) {
+		if imp, ok := o.impulse.(skyra.Impulse); ok && imp.Return && resultHas(imp.Payload, "perceive", "inner", "inner") {
+			once.Do(func() { close(done) })
+		}
+	}
 
 	r := NewRelation()
-	r.ActiveState["root"] = newSlice("root", 0)
-	r.ActiveState["inner"] = newSlice("inner", 0)
-	r.Realize(root, root, nil) // waits for the spawned sub-wave
+	go func() {
+		r.Realize(root, root, skyra.Impulse{Primitive: "perceive"})
+		close(parentReturned)
+	}()
 
-	// the inner being's wave ran, labeled with the external owner.
-	if len(inner.observes) != 1 || inner.observes[0].origin != "root" {
-		t.Errorf("inner observes = %+v, want one Observe owned by root", inner.observes)
+	select {
+	case <-inner.expressStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for inner wave to start; observes = %+v", inner.observes)
 	}
-	// the owner received the inner wave's result ("inner") as a delivery.
+
+	select {
+	case <-parentReturned:
+	case <-time.After(time.Second):
+		t.Fatalf("parent wave waited on blocked child wave")
+	}
+
+	close(inner.blockExpress)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for inner wave delivery; observes = %+v", inner.observes)
+	}
+
+	if len(inner.observes) < 2 {
+		t.Fatalf("inner observes = %+v, want intake + return perception", inner.observes)
+	}
+	if inner.observes[0].origin != "<nil>" {
+		t.Errorf("inner intake origin = %q, want <nil>", inner.observes[0].origin)
+	}
+	hasReturn := false
+	for _, o := range inner.observes {
+		if imp, ok := o.impulse.(skyra.Impulse); ok && imp.Return && resultHas(imp.Payload, "perceive", "inner", "inner") {
+			hasReturn = true
+		}
+	}
+	if !hasReturn {
+		t.Errorf("inner observes = %+v, want return perception with result[inner] inner", inner.observes)
+	}
+
 	gotInner := false
 	for _, o := range root.observes {
 		if o.impulse == "inner" {
 			gotInner = true
 		}
 	}
-	if !gotInner {
-		t.Errorf("owner never received the inner wave's result; observes = %+v", root.observes)
+	if gotInner {
+		t.Errorf("parent received child result; observes = %+v", root.observes)
 	}
 }
 
-// Origin is threaded unchanged: every cell sees the wave's owner.
-func TestOriginThreaded(t *testing.T) {
+func resultHas(value any, mapKey string, resultKey string, want any) bool {
+	result, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	results, ok := result[mapKey].(map[string]any)
+	if !ok {
+		return false
+	}
+	return results[resultKey] == want
+}
+
+// In-plane traversal Observe calls carry nil; owner appears only on delivery.
+func TestTraversalObserveUsesNil(t *testing.T) {
 	root := newCell("root", 1.0)
 	a := newCell("a", 1.0)
 	b := newCell("b", 1.0)
@@ -230,8 +394,8 @@ func TestOriginThreaded(t *testing.T) {
 	run(root, newSlice("being", 0))
 
 	for _, cell := range []*mockCell{a, b} {
-		if len(cell.observes) == 0 || cell.observes[0].origin != "root" {
-			t.Errorf("%s saw origin %v, want root threaded through", cell.id, cell.observes)
+		if len(cell.observes) == 0 || cell.observes[0].origin != "<nil>" {
+			t.Errorf("%s saw origin %v, want nil during traversal", cell.id, cell.observes)
 		}
 	}
 }
