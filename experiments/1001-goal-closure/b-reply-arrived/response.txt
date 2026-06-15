@@ -1,0 +1,30 @@
+<comparison>
+  <expected>setpoint</expected>
+  <actual>response</actual>
+  <alignment>+1</alignment>
+</comparison>
+<reason>User greeted and replied; setpoint satisfied.</reason>
+
+<context-management>
+  <cells>#2, #3</cells>
+  <observation>These define a greeting and its completion condition, clarifying that a reply is essential.</observation>
+  <alignment>+1</alignment>
+</context-management>
+
+<context-management>
+  <cells>#1, #4</cells>
+  <observation>Past greetings with Michael show mixed responsiveness; the more recent episode had silence.</observation>
+  <alignment>-1</alignment>
+</context-management>
+
+<context-management>
+  <cells>#6</cells>
+  <observation>The immediate greeting that sets up the condition for the setpoint.</observation>
+  <alignment>+1</alignment>
+</context-management>
+
+<context-management>
+  <cells>#5</cells>
+  <observation>Michael is a known contact with a history of many conversations, which increases the likelihood of a reply.</observation>
+  <alignment>+1</alignment>
+</context-management>

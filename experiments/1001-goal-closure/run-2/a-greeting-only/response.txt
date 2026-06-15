@@ -1,0 +1,24 @@
+<comparison>
+  <expected>setpoint</expected>
+  <actual>response</actual>
+  <alignment>0.5</alignment>
+  <reason>Greeting sent, satisfying the first half of the setpoint; user reply is still pending, so progress is halfway.</reason>
+</comparison>
+
+<context-management>
+  <cells>1, 4</cells>
+  <observation>Past greeting attempts with Michael: one received a reply last week, one met silence two days ago. The mixed history shows the second half of the setpoint is not guaranteed.</observation>
+  <alignment>0.2</alignment>
+</context-management>
+
+<context-management>
+  <cells>2, 3</cells>
+  <observation>Definitions: a greeting is a short opener and is only fully realized once answered. These clarify why the current state is incomplete but do not directly advance or impede the setpoint.</observation>
+  <alignment>0.0</alignment>
+</context-management>
+
+<context-management>
+  <cells>5</cells>
+  <observation>This is Michael, a familiar conversation partner with many prior interactions. The established relationship makes a reply more probable.</observation>
+  <alignment>0.5</alignment>
+</context-management>

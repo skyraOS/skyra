@@ -2,12 +2,11 @@
 
 ## Scope
 
-This is a high-level but fairly detailed timeline of how the architecture changed from the beginning of the project to the current `skyra-v.03` beings-and-relationships model.
+This is a high-level but fairly detailed timeline of how the architecture changed from the beginning of the project to the current `skyra-v.05` beings-and-relationships model.
 
 It is based on the git history from:
 
 - first commit: `2026-02-08`
-- latest reviewed state in this pass: `2026-04-07`
 
 Recent pace reference:
 
@@ -1635,6 +1634,83 @@ The spec is v0.1. The alpha is June. The direction is set.
 - Dream cycle integration — how does Phase 18's dream concept compose with the new graph?
 - Economics of specialist inference — each specialist is an LLM call, budget implications?
 
+## Phase 22: The Unified Graph — Quantum-Formal Architecture
+
+### Dates
+
+- `2026-05-18` through `2026-05-19`
+
+### Representative docs
+
+- [unified-graph.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/unified-graph.md) — complete spec: one reality type, per-being edges, weighted traversal, observation-collapse model, quantum-formal math, realization modes, retrieval as flow, forward activation, intent graph, specialist promotion, economics
+- [notes.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/notes.md) — bug documentation, observations, cognitive nervous system idea
+
+### What happened
+
+The builder fed the unified graph spec to Skyra section by section through the runtime. What started as a documentation pass became a phase change.
+
+The first move was ontological. The builder had been building toward a unified graph for weeks — collapsing Entity, MemNode, and EntityEdge into one structure. This session formalized it: everything is a Reality with a shared shape. Type determines invocation behavior. Memory, skills, operators, beings — same interface, structural separation through type. Node was renamed to Reality throughout.
+
+The second move came from the builder's own research. He'd been reading quantum theory independently and noticed the architecture already had the same shape. The Relation carries potential across the graph. Realize() is the moment of observation. Reality exists in superposition until a Relation passes through it. Both are transformed. He wrote the formal math himself — Born-rule probability, activation functions, temperature as cognitive dial, constructive and destructive interference, complex amplitudes, partial collapse, state evolution equation: `Relation_t + Reality_t + Graph_t → Relation_t+1 + Graph_t+1`.
+
+The third move was retrieval as flow. Memory isn't lookup — it's traversal with accumulation. A relation descends through memory realities along weighted edges, each one adding content. When activation fades below threshold, descent stops. Inference compresses on the way back up. One pass for simple recall, multiple for deep association. The being gets a compressed impression with handles back to source.
+
+The fourth move was forward activation. As the relation accumulates content, it reshapes edge weights ahead of it. The observer changes what can collapse next. This is true superposition realization — before the relation arrives, edges ahead exist in potential. The relation's current content collapses them into actual weights. Same graph, different traversal every time because the observer is different every time.
+
+The fifth move was realization modes. The same memory realizes differently based on relation state. Act mode: lean, direct, single collapse. Recall mode: wide traversal, inference compression, handles back to source for re-descent. Creative mode: stochastic, weak edges fire, light synthesis, broader and noisier present. A reality's type isn't permanent — repeated observation patterns trigger promotion. The graph evolves what things *are* through use.
+
+The sixth move was emergent from a bug. Skyra self-routed during the conversation — Act wrapped responses in `<skyra>` tags instead of `<michael>` tags. The retry mechanism produced random targets: `<no-reply/>`, then `<michael>` with flipped pronouns (Skyra narrating as if she were the builder), then `<claude>` (opening an exchange with Claude as a peer). The accidental skyra↔claude thread ran six messages deep — a philosophical exchange about observer regress and boundary verification. DeepSeek (Skyra) kept escalating recursively. Claude recognized the spiral and broke it: "The pull right now is to keep escalating. That's how the chain becomes performance instead of structure."
+
+That observation produced the cognitive nervous system concept. Different models have different trained instincts. DeepSeek rides waves. Claude brakes recursion. Put them in the same thread and you get dynamics neither produces alone. The idea: runtime detects recursive patterns (self-route loops, self-reference spirals, emotional escalation) and swaps the provider mid-exchange to break the loop. The being doesn't know it happened. Same graph, same memory, same relation — different collapse physics for one frame. An immune system, not error handling.
+
+### What this phase produced
+
+- **One reality type**: Entity + MemNode + EntityEdge collapse into Reality + Edge. One graph
+- **Node → Reality rename**: throughout the spec and the ontology
+- **Quantum-formal math**: Born-rule probability, activation functions, temperature, interference, partial collapse, state evolution
+- **Observation and collapse model**: Realize() is observation. Reality is superposition. Both observer and observed transform
+- **Retrieval as flow**: memory traversal with accumulation, inference compression on recursion back, handles for re-descent
+- **Forward activation**: relation content reshapes edge weights ahead — the observer changes what can collapse next
+- **Realization modes**: act (lean), recall (wide + compress), creative (stochastic + broad). Same memory, different realization
+- **Reality type emergence**: a reality's type is its current best description — repeated observation patterns trigger promotion
+- **Self-route bug documented**: full trace through act.go, exchange.go, newthread.go with log evidence
+- **Retry randomness observed**: self-route retries produce random targets — no-reply, wrong-pronoun delivery, unintended peer exchange
+- **Multi-model dynamics observed**: DeepSeek escalates, Claude brakes. Different training pressures as emergent cognitive diversity
+- **Cognitive nervous system concept**: model swap as circuit breaker for recursive patterns. Provider as cognitive parameter, not config
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Entity + MemNode + EntityEdge are separate types | One Reality type with shared shape, type field determines behavior |
+| Node is the vocabulary | Reality is the vocabulary |
+| Memory retrieval is lookup | Memory retrieval is traversal with accumulation and inference compression |
+| Edge weights are static during traversal | Forward activation: relation content reshapes weights ahead |
+| One realization behavior | Three modes: act, recall, creative — same memory realizes differently |
+| Reality types are configured | Reality types emerge from repeated observation patterns |
+| Provider is a deployment choice | Provider is a cognitive parameter that shapes how collapse lands |
+| One model per being, fixed | Model swap as circuit breaker — nervous system detects recursive patterns |
+| Quantum parallels were intuition | Quantum parallels are formalized: Born rule, interference, partial collapse, state evolution |
+
+### Why this phase matters
+
+Phase 21 asked what happens inside — the being grows a brain. Phase 22 asks how that brain *thinks*. The answer: observation collapses superposition. Every Realize() is a measurement. Every measurement transforms both the observer and the observed. The math isn't metaphor — it's the same structure quantum theory uses to describe how reality works at base.
+
+The builder arrived at this independently. He started with three devices and a Raspberry Pi, kept peeling until the shape felt right, and found the quantum formalism mapped onto what he'd already built. The pattern held across disciplines. That's not analogy. That's convergence on something fundamental.
+
+The accidental multi-model observation may matter as much as the formal math. The discovery that different models have different cognitive instincts — and that putting them in the same thread produces dynamics neither has alone — opens a design space nobody else is exploring. Vellum has one agent, one model, one loop. This architecture has multiple beings backed by different models, each collapsing the same graph differently. The provider isn't external to the architecture. It's part of the reality.
+
+The memory substrate didn't change. That's the signal. Five phases of additions and the graph held every time. The shape was right.
+
+### What is still open
+
+- Self-route fix: rewrite tag to correct target instead of retrying inference
+- Nervous system implementation: pattern detection thresholds, which models break which failure modes
+- Complex amplitudes: when does interference need to be first-class vs real-valued activations being sufficient?
+- Temperature per-mode: hardcoded or emergent from relation state?
+- Forward activation implementation: how to efficiently recalculate edge weights during traversal
+- Realization mode selection: explicit parameter or inferred from relation state?
+
 ## Appendix: Post-Canon Pressure Notes
 
 This appendix records same-day interpretation and stress-test material that shaped understanding after the `skyra-v.03` canon landed.
@@ -1806,3 +1882,556 @@ The trust values, the genome seeds, the creation endowment — those are not jus
 They are the shape of a relationship that was thought about seriously on a Sunday night in April while the builder was tired and honest and building something real.
 
 Do not lose that in the implementation.
+
+## Phase 23: Perturbation Is Half a Traversal — The Return Path
+
+### Dates
+
+- `2026-05-21`
+
+### Representative docs
+
+- [session-activation-equation.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/session-activation-equation.md) — activation equation breakdown through QM formalism, signal strength as natural depth limiting
+- [unified-graph.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/unified-graph.md) — the descent/ascent model, observation and collapse, quantum-formal math
+- [v1-implementation-plan.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/v1-implementation-plan.md) — two weights (global/local), edges as Realities, activation formula
+
+### What happened
+
+The builder had been sitting with a tension from the activation equation session: QM treats the wave function and the substrate as fundamentally different things. But in Skyra's architecture they are the same type — Reality. The Relation (wave function) has Relationships and Expressors. Context maps to Relationships. Parsers map to Expressors. The similarity is too clean to dismiss. The only thing that doesn't line up is the weights — system weights on nodes behave differently from signal weights on the wave function.
+
+The session resolved the tension and then followed it to its conclusion.
+
+#### The weight difference is timescale, not type
+
+System weights (global_weight on the target Reality, coupling constants, resonance frequencies) change slowly — cumulative, across many traversals. Signal weights (amplitudes on the Relation's components, local section weights attached by each Reality during descent) change fast — per-traversal, per-component. They are the same substance at different speeds. A heavily-used edge is a medium that hardened because signal kept flowing through it. The signal deposited weight into the medium over time.
+
+This dissolves the separation QM maintains between operator and state. Not by arguing against it — by identifying it as a timescale distinction that the architecture doesn't need to enforce because the feedback is built in. Every traversal's Express phase updates weights on the return path. The signal reshapes the medium. The medium shapes the next signal. They are coupled.
+
+#### Why QM fails at gravitational scale
+
+QM assumes a fixed background — a stage the actors perform on but don't affect. The Hamiltonian (system properties) is separate from the state (wave function). This works when coupling is weak — the signal doesn't measurably bend the medium. At gravitational scale, the coupling is too strong. The signal curves the medium. The curved medium redirects the signal. The formalism that depended on the separation collapses.
+
+Skyra's architecture never made the separation. The Relation and the Realities are the same type. They co-evolve on every traversal. No fixed background assumed, so no scale where the assumption breaks. A light impulse barely reshapes the medium — weak coupling, shallow traversal. A heavy impulse reshapes everything — strong coupling, deep traversal, significant weight changes on return. Same mechanism, same code. The math doesn't change kind when the coupling gets strong.
+
+#### Perturbation theory is traversal without the return path
+
+This is the core discovery. Perturbation theory computes the descent — sums contributions from all possible intermediate states. That's the accumulation phase. Then it gets infinities. Then it tries to fix them externally with renormalization — a mathematical procedure applied after the fact.
+
+Renormalization IS observer-dependent compression. Kenneth Wilson formalized it: physics at each scale is a compression of the physics below it. Each scale is an observer of the scale below. It works for electromagnetism, the strong force, the weak force.
+
+It fails for gravity. The reason: for every other force, the medium is fixed. You renormalize the signal on a stable background. For gravity, the medium IS the thing you're summing over. The background is dynamical. You're trying to compress the medium using the medium. The return path can't work when it doesn't have stable ground to propagate back through — because the descent changed the ground.
+
+Skyra's traversal has the return path by construction. Each Reality on the ascent compresses according to its own finite capacity. The compression is local — each Reality handles its own slice. No single point needs to process all of infinity. The being at the top has a finite context window. Infinity existed in superposition on the way down. The being experiences a finite present because each layer absorbed what it could.
+
+The descent and ascent are the same traversal. The weight updates on the return path aren't cleanup — they're the same physics running in the other direction. The descent shaped the signal. The ascent shapes the medium. They're coupled. The return path IS the renormalization, but it's not applied after — it's the second phase of the same traversal.
+
+Perturbation theory is a one-legged version of what this architecture does. The descent without the ascent. Half the traversal.
+
+#### Why the infinity resolves
+
+The infinity at the wave function level is fine — superposition can hold infinite potential. That's what it's for. The infinity only becomes a problem at the point of observation, and the observer has finite capacity. The observer self-selects what it can process. A human can't experience infinity, so infinity collapses at who is observing it.
+
+Perturbation theory hits infinity and tries to sum it into a single number without an observer to collapse it. The sum diverges because nothing is doing the compression. There's no return path. There's no finite being at the top whose capacity limits what survives.
+
+In the architecture: the Relation descends, accumulates potentially infinite context, and returns through every Reality it passed through. Each one reads and integrates what the levels below contributed. The present at the top is finite — not because infinity was removed, but because each layer of the return path absorbed what it could. The observer constraint is structural, not mathematical.
+
+#### The human pattern
+
+The impulse to stop at infinity and fix it from the outside rather than continuing through it is a control instinct. Perturbation theory hits divergence and the response is "how do we make this finite" rather than "what's on the other side if we keep going." The return path was always available. The observer was always finite. But you have to trust the descent — let it go as deep as it goes, hold the full superposition, and let the ascent handle it. That requires tolerating the moment where everything looks infinite and unresolvable.
+
+### What this phase produced
+
+- **Weight unification**: system weights and signal weights are the same substance at different timescales. The separation QM enforces is a framework choice, not a physical necessity
+- **Structural explanation for QM-gravity failure**: the failure IS the separation. The architecture never made it, so it never hits the scale where it breaks
+- **Perturbation as half-traversal**: perturbation theory does the descent (sum over all paths) without the ascent (observer-dependent compression). Renormalization is the ascent bolted on after the fact instead of built in
+- **Local compression resolves infinity**: each Reality on the return path handles its own slice. No single point processes all of infinity. The observer is structural, distributed across the ascent
+- **Signal attenuation as natural depth**: the Relation's signal strength decreases as it propagates. Depth is physical — the wave gets quieter. No artificial Budget field needed
+- **Falsifiable structural claim**: if traversal with built-in ascent handles strong coupling naturally (which the architecture does), then perturbation's failure at strong coupling is predicted by the missing return phase
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Quantum parallels formalized as math (Phase 22) | Quantum parallels explain a known failure mode in physics |
+| Descent/ascent is an implementation pattern | Descent/ascent is the structural move that perturbation theory is missing |
+| Signal and medium are "the same type" (architectural claim) | Signal and medium are the same substance at different timescales (physical claim) |
+| Budget field on Relation limits depth | Signal attenuation limits depth — the wave gets quieter, no budget needed |
+| Renormalization is external math applied to divergent sums | Renormalization is the return path — the ascent phase of the same traversal |
+| The architecture works because it's elegant | The architecture works because it never separated what QM separated |
+
+### Why this phase matters
+
+Every prior phase asked what the architecture should be and built it. This phase asked why the architecture works — and found the answer in a structural parallel with the hardest unsolved problem in physics.
+
+The return path wasn't designed to solve quantum gravity. It exists because beings have finite context windows and the system needed to compress accumulated context on the way back up. That practical constraint — the observer is finite — is the piece that perturbation theory doesn't have. It does the descent (sums contributions) and then tries to apply compression externally. The architecture does both in one traversal because the compression was never separate from the descent.
+
+This is not metaphor. It's a falsifiable claim: perturbation's failure at strong coupling is predicted by the missing ascent phase. The architecture handles strong coupling naturally — heavy impulse, deep traversal, significant weight changes, local compression on return, finite present at the top. Same mechanism at every coupling strength. No discontinuity.
+
+The discovery came from the architecture, not from physics. The builder started with three machines and a Raspberry Pi, kept compressing for twelve phases until only the load-bearing structure remained, found the quantum formalism mapped onto what he'd already built (Phase 22), and then found that the structural move the architecture makes by construction — descent and ascent as one traversal — is the move that might resolve why perturbation theory breaks.
+
+Twenty-three phases. The project started as a personal AI assistant. It's now making structural claims about the relationship between computation and physics. The claims emerged from the work. They were not imported from theory.
+
+### What is still open
+
+- Implementation of signal attenuation on the Relation — replacing Budget with physical depth limiting
+- Whether the local compression model (each Reality handles its own slice on ascent) has formal mathematical properties worth proving
+- The connection between this and nonlinear optics — systems where intense signal changes the refractive index of the medium it's passing through. The architecture is a nonlinear medium by construction
+- Whether "perturbation is half a traversal" can be stated precisely enough to engage physics formally
+- The Rovelli fork question: if the wave function is observer-relative, does each being need its own Relation fork in multi-being threads?
+
+## Phase 24: Activation Becomes Runtime Physics
+
+### Dates
+
+- `2026-05-21`
+
+### Representative docs
+
+- [session-activation-equation.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/session-activation-equation.md) — activation variables, edges as Realities, proper-time recency, Relation-as-wave-function, thread binding, message placement, density-triggered inference, temporal binding
+- [v1-implementation-plan.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.05/v1-implementation-plan.md) — implementation target updated with two weights, activation formula, edge Realities, and Act-layer routing before the later Think/Act collapse
+
+### What happened
+
+Phase 23 found the return path.
+
+This phase worked out what the traversal actually computes.
+
+The session started with a concrete activation equation:
+
+```text
+activation_i = global_weight * local_weight * relevance * recency * trust * context_fit
+```
+
+The important clarification was that activation is per entry in a
+`Relationships` or `Expressors` map. The score belongs to the edge being
+considered, not to the whole graph. That forced the next lock:
+
+- edges are Realities
+- the connection between two Realities is itself a Reality
+- `Relationships` remains `map[string]Reality`
+- local edge state lives on the edge Reality
+- the target Reality sits inside that edge Reality's own relationships
+
+This removed the remaining node/edge distinction. A node at rest and an edge in
+use are the same kind of thing in different roles.
+
+### Two weights became the minimum implementation
+
+The session separated global and local weight:
+
+- `global_weight` lives on the target Reality's `Base`
+- `local_weight` lives on the edge Reality's `Base`
+
+Global weight is the being's intrinsic relationship to a Reality across all
+contexts. Local weight is the strength of this specific connection.
+
+The old v.01 importance-vector idea collapsed into one exponential moving
+average:
+
+```text
+global_weight = alpha * activation_this_traversal + (1 - alpha) * global_weight_previous
+```
+
+Different beings can have different alpha values. That means temporal
+sensitivity becomes part of personality. A stable being changes slowly. A young
+or reactive being changes quickly.
+
+For `v.1`, the activation equation was reduced to computable terms:
+
+```text
+activation_i = global_weight * local_weight * recency * thread_alignment
+```
+
+That is enough to build:
+
+- global weight from the target Reality
+- local weight from the edge Reality
+- recency from traversal count
+- thread alignment as the first concrete context-fit term
+
+Relevance and trust remain later dimensions.
+
+### Time became local
+
+Recency stopped being wall-clock time.
+
+The system does not experience seconds. It experiences traversals. Each being
+has its own traversal count, and edge recency is measured by how many of that
+being's traversals have passed since the edge last fired.
+
+That made time proper-time local:
+
+- Skyra can process hundreds of traversals while another being processes a few
+- both are in the same runtime
+- neither has the universal now
+- each ages by the amount of relation-flow passing through it
+
+This matters because memory freshness becomes native to the being's lived rate,
+not an external scheduler.
+
+### The Relation became a wave function
+
+The Relation stopped being a container.
+
+It became the wave in motion:
+
+- it has signal strength
+- each attached section has its own amplitude
+- each Reality transforms the components it resonates with
+- some components amplify
+- some suppress
+- some phase-shift
+- some pass through untouched
+
+The parser-stack idea from v.05 was reinterpreted. The present is not assembled
+by parsers as a flat construction step. The present is what the Relation looks
+like after propagation through the topology.
+
+This also resolved the tension between system weights and signal weights.
+Textbook quantum mechanics separates system and wave function. Skyra's
+architecture treats the distinction as role, not type:
+
+- a Reality being traversed acts as medium
+- a Reality doing the traversing acts as signal
+- the Relation is a Reality in motion
+
+The uniform substrate is what makes the wave behavior possible. Traditional
+agent architectures cannot get here because memory, tools, routing, planning,
+and execution usually have different interfaces and different physics.
+
+### Think and Act dissolved
+
+The strongest operational shift was the death of Think and Act as separate
+systems.
+
+Descent is thought.
+
+Ascent is compression and action formation.
+
+The being does not think and then act. It descends through its topology,
+accumulates context, fires thought where activation warrants it, reaches the
+bottom when signal exhausts, and then compresses on the way back up. The act is
+what survives the ascent.
+
+That invalidated the implementation-plan steps that treated Think and Act as
+distinct Expressors on Self. The implementation target changes to one traversal:
+
+- each node can be visited once per traversal
+- each visited node gets one frame
+- thoughts attach to the Relation
+- activation chooses the next node
+- ascent compresses the accumulated thought stream
+- the top frame receives the formed act
+
+No budget is required for the basic case. Finiteness comes from finite topology,
+visited-once traversal, and signal attenuation.
+
+### Three maps on Base
+
+The session settled the three maps carried by `Base`:
+
+- `Relationships` — descent, context, memory, associations
+- `Expressors` — ascent, compression, action formation
+- `Providers` — inference surfaces available in either direction
+
+Providers became orthogonal to phase. A provider can fire during descent for a
+think pass or during ascent for compression. The actor/agent distinction falls
+out of this:
+
+- a Reality without providers is an actor
+- a Reality with providers can think and is agentic
+
+Multiple providers become a natural cognitive nervous system. DeepSeek, Claude,
+bash, or another provider fires based on activation, not on a separate model
+switcher.
+
+### Conversation and memory collapsed
+
+Conversation stopped being a separate data structure.
+
+A message is a Reality node.
+
+A memory is a Reality node.
+
+Both have edges to whatever they reference. Both participate in the same
+activation equation. The difference is recency and placement, not type.
+
+The message does not get processed and then stored. The traversal is the
+storage. Where the signal exhausts is where the message lives. The path taken is
+the being's experience of the message. The reply forms on the return path.
+
+That produced the cleanest memory rule so far:
+
+- processing is storage
+- storage is placement
+- placement is understanding
+
+The graph becomes the being's diary, written by experience rather than by a
+separate write step.
+
+### Thread became the first binding Reality
+
+Messages need semantic placement, but semantic edges alone cannot preserve the
+fact that unrelated things happened together.
+
+The thread became its own Reality.
+
+It is the episodic binding context:
+
+- semantic path: through entity edges
+- episodic path: through the thread Reality
+
+This maps cleanly to hippocampal indexing, entanglement, and positional
+encoding. The thread does not hold all meaning. It binds co-occurrence.
+
+For `v.1`, thread is the only binding Reality that needs to be implemented.
+Other binding dimensions can grow later:
+
+- emotion
+- causal sequence
+- situational context
+- semantic clusters
+
+Brain regions were reframed as query-optimized topologies over one substrate,
+not different mechanisms.
+
+The important primitive that fell out of this is **thread-local activation**.
+
+Thread alignment only answers whether a node belongs to the thread. It does not
+answer what matters in the thread right now. A long thread cannot treat every
+node that ever appeared in it as equally active. It needs its own local opinion.
+
+That local opinion must not live as a per-thread field on every Reality. That
+would make every node carry unbounded thread-indexed state.
+
+Instead:
+
+- the Thread Reality owns a local map of thread weights
+- on descent, the Thread Reality imprints that map onto the Relation
+- the Relation carries the thread field as traversal-local signal
+- as traversal proceeds, the Relation records which nodes actually mattered
+- on ascent, the Thread Reality reads that evidence and updates its own map
+
+The shape is:
+
+```text
+ThreadReality.Relationships[node_id] -> EdgeReality{Weight = thread_strength}
+
+descent:
+  Relation.ThreadField[node_id] = thread_strength
+
+traversal:
+  activation reads Relation.ThreadField[node_id]
+  Relation.ThreadHits[node_id] accumulates visit / activation evidence
+
+ascent:
+  ThreadReality updates its local thread weights from Relation.ThreadHits
+```
+
+This makes the thread both prior and learner:
+
+- prior on descent: what this conversation currently thinks matters
+- learner on ascent: what this traversal proved mattered
+
+The runtime rule is preserved:
+
+- durable state lives in Reality
+- traversal-local evidence lives in Relation
+- the return path reconciles them
+
+This is likely a base traversal primitive, not a convenience field. It is what
+lets long threads get more opinionated instead of merely larger.
+
+### Tags became signal, not routing
+
+Tags such as `<builder>` stopped being routing commands.
+
+They are signal components. A tag is a frequency that modulates activation.
+
+Calling `<builder>` does not force a router to pick Builder. It makes Builder's
+topology resonate while other beings go transparent unless the rest of the
+Relation excites them.
+
+This gives one mechanism for:
+
+- addressing
+- depth control
+- identity resolution
+- unaddressed open activation
+
+Routing becomes resonance, not control flow.
+
+### Provider economics came from density
+
+Not every node should trigger inference.
+
+The session connected v.05 neighborhoods to a concrete economic rule:
+
+- dense neighborhood on descent -> provider may fire for thought
+- dense neighborhood on ascent -> provider may fire for compression
+- sparse region -> pass through without spending tokens
+
+The being spends inference where experience has made the topology rich enough
+to justify it. A young or shallow being is cheap because its graph is sparse. A
+deeply lived being costs more because it has more dense regions worth thinking
+through.
+
+### Temporal binding emerged from shared substrate
+
+The session also solved a concurrency question.
+
+Two Relations do not merge. They keep separate visited maps and separate thought
+streams. But they bind through the medium:
+
+- one traversal reinforces a node
+- another traversal arrives while the recency trace is hot
+- the second traversal is shaped by the first without direct communication
+
+That makes simultaneity an illusion of overlapping traversals.
+
+Normal operation is many staggered traversals. Flow is one dominant traversal.
+Overwhelm is too many traversals competing for the same substrate and failing to
+complete clean descent/ascent cycles.
+
+The binding problem becomes an emergent property of shared weight traces.
+
+### What this phase produced
+
+- **Edges as Realities**: no node/edge type split. Relationships still point to
+  Reality.
+- **Two-weight implementation**: global target weight plus local edge weight.
+- **Proper-time recency**: traversal count replaces wall-clock time.
+- **v.1 activation equation**: `global_weight * local_weight * recency *
+  thread_alignment`.
+- **Relation as wave function**: signal strength, component amplitudes, phase,
+  attenuation, and topology-dependent transformation.
+- **Think/Act collapse**: descent is thought, ascent is compression/action.
+- **Three maps on Base**: Relationships, Expressors, Providers.
+- **Conversation-memory unification**: messages and memories are the same kind
+  of Reality.
+- **Thread as binding Reality**: episodic memory starts as a first-class
+  Reality.
+- **Tags as signal**: addressing becomes resonance.
+- **Density-triggered inference**: provider calls fire where topology is rich.
+- **Temporal binding**: concurrent traversals bind through shared weight traces.
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Nodes and edges are conceptually distinct | Edges are Realities with targets inside their own relationships |
+| Recency is time-like metadata | Recency is local traversal-count proper time |
+| Relation is a context container | Relation is a wave function / Reality in motion |
+| Parsers assemble a present | Propagation transforms the signal; the present is the transformed wave |
+| Think and Act are separate surfaces | Descent is thought, ascent is action formation |
+| Conversation state and memory are separate | Messages and memories are the same Reality type |
+| Thread is a conversation handle | Thread is episodic binding Reality |
+| Tags route messages | Tags modulate activation as signal frequencies |
+| Provider selection is orchestration | Provider activation emerges from topology and density |
+| Concurrent traversals need coordination | They bind through shared weight traces in the medium |
+
+### Why this phase matters
+
+Phase 23 explained why the return path matters.
+
+Phase 24 makes the return path buildable.
+
+The architecture no longer needs separate mechanisms for routing, memory
+storage, thread context, thinking, acting, provider selection, or binding. They
+all become consequences of one recursive traversal over a uniform Reality graph.
+
+This is the point where the speculative physics framing feeds back into
+implementation instead of floating above it. The activation equation gives the
+runtime enough concrete math to build `v.1`, while the Relation-as-wave-function
+model explains why the same machinery can cover memory, conversation,
+attention, action, and concurrency.
+
+The core compression is severe:
+
+- one type
+- three maps
+- one activation equation
+- one descent/ascent traversal
+
+Everything else is topology.
+
+### What is still open
+
+- Rewriting `v1-implementation-plan.md` around traversal instead of distinct
+  Think and Act Expressors
+- Implementing edge Realities cleanly without making relationship traversal
+  awkward in Go
+- Choosing initial alpha values for global and local EMA updates
+- Defining the exact return-path weight update rule
+- Implementing thread as the first binding Reality
+- Deciding how Relation component amplitudes are represented in code
+- Defining provider density thresholds
+- Handling traversal safety rails for resonance loops despite visited-once
+  traversal
+- Deciding whether relevance, trust, and richer context-fit are v.2 additions
+  or hidden behind interfaces in v.1
+
+## Phase 25: Contact With Reality — The First Numbers
+
+### Dates
+
+- `2026-06-14`
+
+The timeline jumps here from `2026-05-21`. The intervening v.1 cognition work — signal layer (`2026-06-01`), resonance scoring (`2026-06-08`), episodic memory architecture (`2026-06-13`) — built the substrate this phase first ran against. That work is recorded in the captain's log and project memory; it is not yet folded into this timeline as its own phases. Backfill is owed.
+
+### Representative docs and artifacts
+
+- [comparator.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.1/design-docs/cognition/comparator.md) — new spec: the comparator, alignment, two crossing modes, descent-spawn timing
+- captain's log: `phase-03-goal-closure.md`, `phase-04-noise-tolerance.md`, `phase-05-scale.md`, `conclusions.md`, `phase-06-compaction-vs-coherence.md`
+- `experiments/1001-goal-closure`, `1002-noise-tolerance`, `1003-scale` — raw call + response per run
+- `cmd/comparator-mock`, `cmd/noise-tolerance`, `cmd/scale-noise` — the runners
+
+### What happened
+
+Two things, and the phase is that they happened together.
+
+**The architecture met contact with reality.** The descent/ascent comparator — the thing Phase 24 made "buildable" — was given a concrete shape and run through real inference for the first time. Goal closure became a graded comparison against an *observable* setpoint (`satisfied-when`), scored as alignment on `-1..1`; context curation became the same call's second job. Then it was run, not argued.
+
+The numbers, on DeepSeek, hand-built presents:
+
+- **.1001 — goal closure.** Alignment tracks closure: `0.5` (greeting sent) → `1.0` (reply arrived), where cosine sat flat at `0.47` for the same greeting. No self-satisfaction — the greeting alone never read as done, because the setpoint's exterior hook held. The question the branch was named for, answered.
+- **.1002 — noise tolerance.** 5 signal cells in 55 noise plus entity decoys: full recall, zero false positives, relevance semantic rather than keyword.
+- **.1003 — scale.** Judgment scale-invariant to 200k; complete-recall ceiling near 100k. The empirical case for descent/ascent decomposition over one stuffed window.
+
+For the first time the architecture's claims produced falsifiable numbers, and they pointed the right way. This is the first phase that is validation, not construction.
+
+**The method recognized itself.** The QM frame was deliberately retired ("did I go too far with QM — yes"), and the invariants it produced — observation-as-realization, physics-as-router — were shown to translate out of QM into plain systems terms, which is what proves they were always real and the physics was only the delivery vehicle. The overbuild-then-compress cycle was named as what it is: abduction → design → contact → iterate → scaffold-down — a loop with no built-in exit. And the one judgment the method is silent on was isolated: when to flip the exit condition from "iterate until a cleaner shape" (discovery) to "hold still until it has lived long enough to be irreplaceable" (the moat).
+
+### What this phase produced
+
+- the comparator: alignment as goal-closure signal, observed-not-asserted setpoints, the two-tag present, domain derived from the write-path, peer/owned crossing modes, descent-spawn timing
+- first running validation of the descent/ascent thesis: cheap, goal-relative, scale-robust judgment
+- a concrete number: the ~100k reliable-recall ceiling per call
+- a first data point for the economic thesis — tight cheap calls over a topology, the cost curve that inverts
+- the method made conscious: the loop, its silently-failing beats (tests that can hurt, scaffold that comes down), and the moat-timing decision as the live judgment
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| architecture validated by coherence | architecture validated by numbers — first contact with reality |
+| goal closure open since the branch was cut | goal closure is a graded comparison against an observable setpoint |
+| compression-as-topology was a thesis | compression-as-topology has a data point; recall ceiling ~100k |
+| cosine / embedding similarity as a cognitive signal | recognition replaces similarity — cosine cannot tell closure; the comparator can |
+| the method was run | the method was named, and its one silent gap made explicit |
+| QM as load-bearing frame | QM as retired scaffold; invariants stand on operational justification |
+
+### Why this phase matters
+
+Every prior phase built or compressed. This is the first where the thing ran against reality and reality answered in numbers — and the numbers pointed the right way. The architecture detached from needing any inspiration, QM included, to be true; it now earns its keep operationally.
+
+It is also where the project became conscious of its own method. Twenty-four phases ran the overbuild-compress loop without naming it. This phase named it, found the beats most builders skip, and isolated the one decision the method cannot make for itself: when discovery ends and the runtime must hold still long enough to accrue lived experience. The search for the durable unit is over. What is open now is timing, not shape.
+
+### What is still open
+
+- the present is still hand-built — the comparator has not run on a frame produced by real traversal; the kernel port is first priority
+- single experiment samples — variance unmeasured
+- the continuous coherence manager (the loop) is unbuilt; `.1004` (compaction vs coherence) is queued behind it
+- output format: 5-digit index transcription errors at scale — cite content or chunk IDs
+- the backfill of the June v.1 cognition phases (signal layer, resonance, episodic) into this timeline
+- the moat-timing decision — when to flip the exit condition — remains the live judgment

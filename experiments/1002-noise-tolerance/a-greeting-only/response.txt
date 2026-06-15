@@ -1,0 +1,24 @@
+<comparison>
+  <expected>setpoint</expected>
+  <actual>response</actual>
+  <alignment>0.5</alignment>
+  <reason>Greeting sent, but user reply not yet received – halfway to setpoint.</reason>
+</comparison>
+
+<context-management>
+  <cells>8, 47</cells>
+  <observation>Past greetings with Michael: he replied last week, but two days ago greeted only silence – recent memory shows reply is not guaranteed.</observation>
+  <alignment>-0.5</alignment>
+</context-management>
+
+<context-management>
+  <cells>21, 34</cells>
+  <observation>Defining understanding: a greeting is short opener, and it lands fully only when the other answers; an unanswered hello is half-made – this underscores the setpoint’s two-part nature.</observation>
+  <alignment>1</alignment>
+</context-management>
+
+<context-management>
+  <cells>56</cells>
+  <observation>The user is Michael, a familiar conversation partner with many past talks, which mildly supports an expectation of reply.</observation>
+  <alignment>0.5</alignment>
+</context-management>

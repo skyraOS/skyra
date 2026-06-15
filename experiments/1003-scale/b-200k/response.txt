@@ -1,0 +1,27 @@
+<comparison>
+  <expected>setpoint</expected>
+  <actual>response</actual>
+  <alignment>+1</alignment>
+</comparison>
+The user replied, fully satisfying the setpoint's requirement of having been greeted and received a reply.
+
+<context-management>
+  <cells>14761</cells>
+  <observation>The system had greeted the user moments earlier, establishing the first half of the setpoint; the reply now completes it.</observation>
+  <alignment>+1</alignment>
+</context-management>
+<context-management>
+  <cells>609</cells>
+  <observation>A prior episode where a greeting was answered, reinforcing the expected conversational loop.</observation>
+  <alignment>+1</alignment>
+</context-management>
+<context-management>
+  <cells>9130</cells>
+  <observation>A past greeting that met silence, but the current successful reply overrides that memory.</observation>
+  <alignment>0</alignment>
+</context-management>
+<context-management>
+  <cells>3499</cells>
+  <observation>The understanding that a greeting only lands when answered, which emphasizes the value of the user's reply.</observation>
+  <alignment>0</alignment>
+</context-management>
