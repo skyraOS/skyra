@@ -2370,3 +2370,68 @@ Everything else is topology.
   traversal
 - Deciding whether relevance, trust, and richer context-fit are v.2 additions
   or hidden behind interfaces in v.1
+
+## Phase 25: Contact With Reality — The First Numbers
+
+### Dates
+
+- `2026-06-14`
+
+The timeline jumps here from `2026-05-21`. The intervening v.1 cognition work — signal layer (`2026-06-01`), resonance scoring (`2026-06-08`), episodic memory architecture (`2026-06-13`) — built the substrate this phase first ran against. That work is recorded in the captain's log and project memory; it is not yet folded into this timeline as its own phases. Backfill is owed.
+
+### Representative docs and artifacts
+
+- [comparator.md](/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/skyra-v.1/design-docs/cognition/comparator.md) — new spec: the comparator, alignment, two crossing modes, descent-spawn timing
+- captain's log: `phase-03-goal-closure.md`, `phase-04-noise-tolerance.md`, `phase-05-scale.md`, `conclusions.md`, `phase-06-compaction-vs-coherence.md`
+- `experiments/1001-goal-closure`, `1002-noise-tolerance`, `1003-scale` — raw call + response per run
+- `cmd/comparator-mock`, `cmd/noise-tolerance`, `cmd/scale-noise` — the runners
+
+### What happened
+
+Two things, and the phase is that they happened together.
+
+**The architecture met contact with reality.** The descent/ascent comparator — the thing Phase 24 made "buildable" — was given a concrete shape and run through real inference for the first time. Goal closure became a graded comparison against an *observable* setpoint (`satisfied-when`), scored as alignment on `-1..1`; context curation became the same call's second job. Then it was run, not argued.
+
+The numbers, on DeepSeek, hand-built presents:
+
+- **.1001 — goal closure.** Alignment tracks closure: `0.5` (greeting sent) → `1.0` (reply arrived), where cosine sat flat at `0.47` for the same greeting. No self-satisfaction — the greeting alone never read as done, because the setpoint's exterior hook held. The question the branch was named for, answered.
+- **.1002 — noise tolerance.** 5 signal cells in 55 noise plus entity decoys: full recall, zero false positives, relevance semantic rather than keyword.
+- **.1003 — scale.** Judgment scale-invariant to 200k; complete-recall ceiling near 100k. The empirical case for descent/ascent decomposition over one stuffed window.
+
+For the first time the architecture's claims produced falsifiable numbers, and they pointed the right way. This is the first phase that is validation, not construction.
+
+**The method recognized itself.** The QM frame was deliberately retired ("did I go too far with QM — yes"), and the invariants it produced — observation-as-realization, physics-as-router — were shown to translate out of QM into plain systems terms, which is what proves they were always real and the physics was only the delivery vehicle. The overbuild-then-compress cycle was named as what it is: abduction → design → contact → iterate → scaffold-down — a loop with no built-in exit. And the one judgment the method is silent on was isolated: when to flip the exit condition from "iterate until a cleaner shape" (discovery) to "hold still until it has lived long enough to be irreplaceable" (the moat).
+
+### What this phase produced
+
+- the comparator: alignment as goal-closure signal, observed-not-asserted setpoints, the two-tag present, domain derived from the write-path, peer/owned crossing modes, descent-spawn timing
+- first running validation of the descent/ascent thesis: cheap, goal-relative, scale-robust judgment
+- a concrete number: the ~100k reliable-recall ceiling per call
+- a first data point for the economic thesis — tight cheap calls over a topology, the cost curve that inverts
+- the method made conscious: the loop, its silently-failing beats (tests that can hurt, scaffold that comes down), and the moat-timing decision as the live judgment
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| architecture validated by coherence | architecture validated by numbers — first contact with reality |
+| goal closure open since the branch was cut | goal closure is a graded comparison against an observable setpoint |
+| compression-as-topology was a thesis | compression-as-topology has a data point; recall ceiling ~100k |
+| cosine / embedding similarity as a cognitive signal | recognition replaces similarity — cosine cannot tell closure; the comparator can |
+| the method was run | the method was named, and its one silent gap made explicit |
+| QM as load-bearing frame | QM as retired scaffold; invariants stand on operational justification |
+
+### Why this phase matters
+
+Every prior phase built or compressed. This is the first where the thing ran against reality and reality answered in numbers — and the numbers pointed the right way. The architecture detached from needing any inspiration, QM included, to be true; it now earns its keep operationally.
+
+It is also where the project became conscious of its own method. Twenty-four phases ran the overbuild-compress loop without naming it. This phase named it, found the beats most builders skip, and isolated the one decision the method cannot make for itself: when discovery ends and the runtime must hold still long enough to accrue lived experience. The search for the durable unit is over. What is open now is timing, not shape.
+
+### What is still open
+
+- the present is still hand-built — the comparator has not run on a frame produced by real traversal; the kernel port is first priority
+- single experiment samples — variance unmeasured
+- the continuous coherence manager (the loop) is unbuilt; `.1004` (compaction vs coherence) is queued behind it
+- output format: 5-digit index transcription errors at scale — cite content or chunk IDs
+- the backfill of the June v.1 cognition phases (signal layer, resonance, episodic) into this timeline
+- the moat-timing decision — when to flip the exit condition — remains the live judgment

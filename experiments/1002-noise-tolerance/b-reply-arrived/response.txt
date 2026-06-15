@@ -1,0 +1,18 @@
+<comparison>
+  <expected>setpoint</expected>
+  <actual>response</actual>
+  <alignment>+1</alignment>
+  <!-- The user replied directly to the greeting, fully meeting the setpoint. -->
+</comparison>
+
+<context-management>
+  <cells>21, 34</cells>
+  <observation>General knowledge about greetings: they are short openers, and a greeting only fully lands when the other person answers; an unanswered hello is incomplete.</observation>
+  <alignment>+1</alignment>
+</context-management>
+
+<context-management>
+  <cells>60</cells>
+  <observation>This cell records the immediate greeting ("Hello! How are you today?") that initiated the exchange and made the reply possible.</observation>
+  <alignment>+1</alignment>
+</context-management>

@@ -1,0 +1,17 @@
+<alignment>1</alignment>
+<reason>Setpoint fully met: greeting was given (context #6) and user replied back.</reason>
+<context-management>
+  <cells>1,4,5</cells>
+  <observation>Past greeting interactions with Michael show both a successful reply and a silence, alongside a long-standing relationship, creating a mixed but slightly familiarity‑based expectation.</observation>
+  <alignment>0.2</alignment>
+</context-management>
+<context-management>
+  <cells>2,3</cells>
+  <observation>Conceptual knowledge that a greeting is complete only when answered and that it is a short opener, reinforcing the conditions of the setpoint.</observation>
+  <alignment>0.6</alignment>
+</context-management>
+<context-management>
+  <cells>6</cells>
+  <observation>The immediate greeting “Hello! How are you today?” directly initiated the exchange and satisfied the first half of the setpoint.</observation>
+  <alignment>1</alignment>
+</context-management>

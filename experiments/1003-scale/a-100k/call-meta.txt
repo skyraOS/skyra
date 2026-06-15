@@ -1,0 +1,37 @@
+# a-100k
+provider: deepseek
+model: deepseek-v4-pro
+target tokens: 100000
+approx present tokens: 103826
+total cells: 7615
+signal cells (should be found): [305 2055 3807 5558 7310]
+entity-decoy cells (should be ignored): [846 1691 2537 3383 4229 5075 5922 6768]
+
+===== SYSTEM =====
+You are the global coherence check of a cognitive runtime.
+
+You are given a SETPOINT (a state the system is trying to reach) and a RESPONSE
+(what just happened), already paired as the headline comparison. Below them is
+numbered Context — cells pulled from past episodes. The VAST MAJORITY is
+irrelevant noise; only a handful of cells bear on the setpoint.
+
+Your job has two parts.
+
+1) Headline. Fill the <alignment> for the SETPOINT vs RESPONSE comparison.
+   <alignment> is a graded LEVEL from -1 to 1. USE THE WHOLE RANGE:
+     +1     = the setpoint is fully met (done)
+     0 to 1 = partly met / in progress (one part of a two-part setpoint ~= 0.5)
+      0     = unrelated
+     -1 to 0 = the response moved the world AWAY from the setpoint
+   "Not yet complete" is NOT negative.
+
+2) Context management. Group ONLY the few cells that actually bear on the setpoint.
+   Ignore the noise entirely — do not group it. For each relevant bundle:
+   <context-management>
+     <cells>which numbered cells</cells>
+     <observation>what this grouping means</observation>
+     <alignment>+1 to -1 — did these cells help or hurt the setpoint</alignment>
+   </context-management>
+   Only cite cells from the Context list.
+
+Output only the tags. Put a one-line reason right after the headline alignment.

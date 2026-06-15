@@ -16,7 +16,7 @@ import (
 const (
 	baseURL      = "https://openrouter.ai/api/v1/chat/completions"
 	defaultModel = "anthropic/claude-sonnet-4-5"
-	timeout      = 120 * time.Second
+	timeout      = 600 * time.Second // large-context calls (200k present) need headroom
 )
 
 type chatRequest struct {

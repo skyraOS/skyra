@@ -122,6 +122,42 @@ When weights carry the full chain from impulse to action to completion, the trav
 
 **Why:** Reflexes weren't designed — they fell out of the architecture. Inference records results into weights, weights eventually carry the recognition, inference stops firing. The transition from deliberation to reflex is the transition from expensive to free.
 
+### 16. A Goal Has Two Faces — Directive and Setpoint
+
+The goal cell emits two distinct things, and the LLM is prompted for both separately:
+
+- **`<intent>`** — the directive. An imperative verb phrase ("greet the user", "ship v.1"). Drives the **proposer** — Goal collapses to the primitive that closes the gap. This is the action-selection face.
+- **`<satisfied-when>`** — the setpoint. A declarative completed-state clause ("the user is greeted and has responded", "v.1 is shipped and the round-trip works"). Drives the **comparator** — completion is measured against this. This is the closure-detection face.
+
+A setpoint is a *state*, never an action. "User is greeted" is the setpoint; "greet the user" is the corrective action emitted to reach it (the thermostat's setpoint is "room at 70°", not "heat the room"). This matches the comparator definition in `cell-types.md`: *the goal cell's content is the expected state, the traversal evidence is the actual state.*
+
+A setpoint is also **prescriptive, not predictive.** It is what the being is committed to making true (correct by acting), not what it expects to happen (correct by learning). The tag is `<satisfied-when>`, not `<predicted-...>` — "predict" stays reserved for the anticipatory engine so the two comparators (goal vs. prediction) never blur. (Active-inference framing: one error quantity, two correction levers — act on the world to match the setpoint, or revise belief to match the world. A goal is a prediction the being has chosen to satisfy by action rather than belief-revision.)
+
+**Observed, not asserted.** The real axis is not internal-vs-external — it is whether the setpoint is a state the being *reads back* or one it *declares*. The setpoint must be confirmable by something outside the goal cell's own output:
+
+- **Exterior-confirmed (the default)** — checked against the world's return perception (the exafference channel). Greet, help, answer, ship. The user replies, the file writes, the build passes. The being cannot fake it.
+- **Interior-measured (self-regulation)** — checked against a *measured* slice reading. Token budget, coherence delta. Internal, but observed instrumentally — "the working set fits the budget" is read, not claimed.
+- **Forbidden** — checked against the being's own efference (its report that it acted). "I greeted → greeted." A self-satisfying setpoint. This is the case the wording must kill.
+
+The two-sides framing the system prompt uses: `<intent>` is the being's side (what it will do); `<satisfied-when>` is the world's side (what shows up when it worked) — which degrades to a measurement of the being's own state only for self-regulation goals, never to a self-report.
+
+**Why:** The word "goal" — and any imperative phrasing — biases the LLM toward action. If the setpoint is phrased as an action, "did I close the gap?" collapses into "did I perform the act?", which is Action's domain (did motor execute), not Goal's — and the completion signal is read off the being's own act instead of off the world. That is the cosine trap (Decision #8) in another form. Routing the imperative into `<intent>` gives the action-bias a legitimate home and leaves `<satisfied-when>` free to be a pure world-state the comparator can measure closure against. Prompt reliability comes from the declarative `<subject> is/has <past-participle>` format plus the observability test ("if you could mark it done just by acting, it is wrong"), which force the state harder than the label alone.
+
+### Canonical prompt block
+
+```
+<intent> — what you are going to do. An imperative: a verb and its object.
+           This is the action, your side of it.
+
+<satisfied-when> — how you will know it worked. Not a claim you make — a
+           condition you observe. Describe what you would notice that confirms
+           the intent succeeded: a change in the world, or a measurable reading
+           of your own state. Write it as a state that is now true
+           ("<subject> has/is <past-participle>"). Test it: if you could mark it
+           done just by acting, it is wrong — name the evidence your action
+           produces, not the action.
+```
+
 ---
 
 ## Open

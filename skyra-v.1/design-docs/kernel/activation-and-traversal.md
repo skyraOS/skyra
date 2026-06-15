@@ -26,6 +26,8 @@ They meet at the interface but they don't own each other. The Relation is mechan
 
 The cell is the sensor. The activation record is the scorer. The kernel is the driver.
 
+**Competence brackets the cell's own work.** When a wave carries passed competence (a parent cell throwing its method down — e.g. global coherence localizing), the cell runs it **first on Observe, last on Express**: context primes before the cell scores, the check audits after the cell votes. This is a cell-execution contract, not a kernel mechanic — the kernel never reads the payload, it just delivers the wave. See [comparator.md](../cognition/comparator.md#the-cell-execution-contract).
+
 **Note:** Attention is a separate concept from activation records. Attention is the being's aperture — heading and width — one field the membrane reads from both directions: sensory gates incoming signal against it, motor fires through it (see [world-kernel-coupling.md](world-kernel-coupling.md#attention-is-one-field-read-twice)). Activation records are the scoring system. They are not the same thing.
 
 ## The Interfaces

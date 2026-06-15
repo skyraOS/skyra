@@ -116,19 +116,61 @@ The world's `Children()` doesn't return all million points. It returns the occup
 
 ## Content Type Check Rule
 
-Every cell can have a `Content` field. The kernel applies one rule, inside the traversal loop — not at the front, but after processing each cell:
+Every cell can have a `Content` field. The kernel applies one rule, inside the traversal loop, **on descent — right after the cell's own `Observe`, before descending its children:**
 
 ```go
+cell.Observe(payload)                  // the cell sets up its own Content (setpoint, sub-actors)
 if r, ok := cell.Content.(Reality); ok {
-    go rel.Realize(r, r, payload)  // independent wave for the inner actor
+    go rel.Realize(r, r, payload)      // independent wave for the inner actor — fires now, not on the way back
 }
+// ...then score and descend children
 ```
 
 Content is a Reality → the kernel crosses an actor boundary. Because that reality has its own slice (its own frame and proper-time clock), the crossing **spawns a goroutine** running the same function on the inner topology — not a synchronous call. The parent wave's origin is not threaded through the boundary. The spawned wave has its own origin and delivers its own result there (the [Perception Invariant](../laws/invariants/perception-invariant.md)); nothing bubbles back up the call stack and the parent wave does not wait. The outer traversal is the world; the inner is the agent; same function, concurrent. A response from the inner actor is a separate wave back, not a return value. (See [Two Recursions](activation-and-traversal.md#two-recursions): traverse in-plane on the explicit stack, cross an actor boundary by spawning.)
 
+### When the Crossing Fires — Descent, After Observe
+
+The spawn fires **on descent, immediately after the cell's `Observe`** — not on the pop (ascent). The instant the wave sees an inner actor, it fires; it does not wait until the cell's subtree is done. This overlaps the inner actor's work (binding realities firing inference) with the *entire* rest of the parent's wave — children descent *and* ascent — instead of starting it only on the way back. For a fan-out of specialists each making an LLM call, that overlap is the whole point.
+
+It is **after Observe, not before**, because Observe is the one window where a cell legitimately sets up its own Content — its setpoint, its sub-actors. Run Observe, then check Content and spawn, then descend children.
+
+Firing this early is safe, and the safety falls out of decisions already made — no new guardrail:
+
+1. **The fan-out target is already fixed.** Content is never scored (Children hold activation, Content is the execute-domain). So nothing in the children traversal can change *who* the cell crosses into — the set of inner actors is settled by the time Observe returns. Descent-spawn fires the *same* waves as a pop-spawn would; only the timing differs.
+2. **Amplitude is timing-independent.** The spawn carries the `impulse`, and the inner wave derives its amplitude from the impulse, not from the parent node's locally-attenuated amplitude. Descent vs. pop gives the inner actor identical strength.
+3. **The slice lock serializes early returns.** A fast inner actor can finish and send its "from me" wave back while the parent is still traversing. That return must lock the parent's slice — which the parent holds for its in-flight wave — so the vote simply queues behind the current wave and lands cleanly after it releases. No race.
+
+The only thing this rules out is a cell that decides who to fan out to in its *Express* (ascent) — but that is circular (choosing your specialists after you have finished thinking), and the Content/Children split already says crossing-Content is settled, not computed late.
+
 Content is anything else (string, state, nil) → the kernel ignores it. Not its business. The cell reads its own Content during Observe/Express. Skyra's Content might be a string — her durable state, her context. The kernel never touches it.
 
 This is the boundary crossing. The grid point holds Skyra as Content. The kernel hits the point, processes it normally, checks Content, sees a Reality, and starts an independent wave for Skyra. Skyra's Children() returns her binding realities. The spawned wave traverses those and delivers to Skyra; the grid point's traversal continues on its own path. One type check bridges the world topology and the agent topology — without the kernel knowing what a grid is, what an agent is, or that a boundary was crossed.
+
+### Content Is the Execute Domain; Children Hold Activation
+
+A standing invariant the next rule rests on: **`Children()` is the scored topology, `Content` is not.** Activation scoring only ever runs over Children (the DFS walks them, scores them, thresholds them). Content is the cell's *execute-against domain* — the actor(s) it crosses into. The kernel type-checks Content to decide whether to cross; it never scores it. A cell's setpoint, its sub-actors, its durable state all live in Content, invisible to activation.
+
+### Two Crossing Modes — Peer and Owned
+
+The single-Reality check above generalizes to a second type case, and the difference between them is not cosmetic — it's *who the spawned wave belongs to*.
+
+```go
+switch c := cell.Content.(type) {
+case Reality:                 // peer being
+    go rel.Realize(c, c, payload)        // origin = self (inner)
+case map[string]Reality:      // owned specialists
+    for _, sub := range c {
+        go rel.Realize(parent, sub, payload)  // origin = parent
+    }
+}
+```
+
+- **`Content` is a `Reality` → a peer being.** Origin = self. The spawned wave is detached — it lives on its own, delivers to its own origin, and the parent has no claim on its result. This is crossing into *another* being (a grid point holding Skyra, one agent messaging another).
+- **`Content` is a `map[string]Reality` → owned specialists.** The kernel spawns one wave per entry, concurrently, with **origin = the parent.** Each specialist therefore delivers its result *back to the parent* as a "from me" wave (still the [Perception Invariant](../laws/invariants/perception-invariant.md) — the wave goes to its origin, the origin is just set to the parent). This is the global coherence cell fanning out to its binding realities: they run in parallel (each fires its own inference — serializing those LLM round-trips is the latency this avoids), and their votes return to global.
+
+**The kernel still never blocks.** The map case is a fan-out, not a join. The kernel spawns the waves and moves on; it does not wait for them, tally them, or know a "vote" is being collected. The returning "from me" waves arrive at the parent as ordinary perception, and **the parent cell decides what to do with them** — accumulate on its slice, count, ignite when the set is complete, break a tie, or re-enter through sensory. Gather policy is the cell's; transport and fan-out are the kernel's. This keeps "the parent does not wait" intact: a barrier that *stalls* the parent is forbidden; an *event* the parent fires on when the last vote lands is the cell's own logic. Because the policy lives in the cell, different cells can gather differently (race, quorum, full count, re-fire stragglers) with zero kernel change.
+
+The two modes give the topology a vocabulary it didn't have: **peer** (detached, its own origin, its own life) vs. **owned sub-processor** (attached, reports back to me). That is exactly the global↔binding-reality relationship — global owns its specialists; Skyra is no one's specialist.
 
 ## Point Changes
 
