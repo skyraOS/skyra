@@ -20,7 +20,8 @@ func main() {
 
 	// once a being implements Space and is placed in the world:
 	// space.Place(skyraMembrane, 500, 500)
-	// space.Observe(skyraMembrane, signal)
-	// the world translates owner -> pointOf(owner), roots action there, and
-	// delivery returns through origin.Observe(origin, result).
+	// space.Observe(skyraMembrane, signal)   // entry; World.Observe delegates to Emit
+	// the world translates owner -> pointOf(owner), roots the wave there, and
+	// delivery returns to the owner. origin = the wave owner in Observe/Express;
+	// the sender (for entity resolution) rides on impulse.Source.
 }

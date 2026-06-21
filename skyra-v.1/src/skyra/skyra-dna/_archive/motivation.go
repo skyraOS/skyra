@@ -1,4 +1,4 @@
-package binding
+package dna
 
 // Motivation — the need engine. OFC/vmPFC + hypothalamic nuclei.
 // The inverse of Goal: "should we still care?"

@@ -60,19 +60,26 @@ func (w *World) ID() string                            { return w.id }
 func (w *World) Slice() skyra.Slice                    { return w.slice }
 func (w *World) NewActivation() skyra.ActivationRecord { return newSpaceActivation() }
 
+// Observe is the world's entry point — how the program drives a wave into the
+// world. A being acts outward by calling its environment's Observe with itself
+// as origin (the wave owner); Observe delegates the wave-rooting to Emit. This
+// is the live pattern: the run goes through Observe; Emit is the helper.
 func (w *World) Observe(origin skyra.Space, impulse any) {
-	if origin == nil {
+	w.Emit(origin, impulse)
+}
+
+// Emit roots a wave into the world from the owner's location (the helper Observe
+// delegates to). The seed of the world.observe facilitator.
+func (w *World) Emit(owner skyra.Space, impulse any) {
+	if owner == nil || w.kernel == nil {
 		return
 	}
-	if w.kernel == nil {
-		return
-	}
-	point := w.pointOf(origin)
+	point := w.pointOf(owner)
 	if point == nil {
 		return
 	}
 	impulse = withSource(impulse, point.source())
-	w.kernel.Realize(origin, point, impulse)
+	w.kernel.Realize(owner, point, impulse)
 }
 
 func (w *World) Express(origin skyra.Space, impulse any) any { return nil }
@@ -173,9 +180,7 @@ func (p *Point) Slice() skyra.Slice                    { return p.world.slice }
 func (p *Point) NewActivation() skyra.ActivationRecord { return newSpaceActivation() }
 
 func (p *Point) Observe(origin skyra.Space, impulse any) {
-	if origin != nil {
-		return
-	}
+	// Traversal intake: gather neighbors. origin is the wave owner (unused here).
 	p.neighbors = p.world.neighborsOf(p.x, p.y)
 }
 

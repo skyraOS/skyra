@@ -40,8 +40,8 @@ func (r *Relation) realize(origin, traversed skyra.Space, impulse any) {
 }
 
 // traverse walks `traversed` under its slice lock and returns the wave's
-// result. A cell whose Content is a Space is another actor: the kernel
-// spawns an independent wave for it and does not wait.
+// result. Pure transport: in-plane DFS only. Beings are rooted directly
+// by the caller; no crossing.
 func (r *Relation) traverse(origin, traversed skyra.Space, impulse any, sl skyra.Slice, amplitude float64) any {
 	sl.Lock()
 	defer sl.Unlock()
@@ -58,7 +58,7 @@ func (r *Relation) traverse(origin, traversed skyra.Space, impulse any, sl skyra
 	// re-descends a node already on its path, so it always terminates.
 	onPath := map[string]bool{}
 
-	traversed.Observe(nil, impulse)
+	traversed.Observe(origin, impulse)
 	rootNode := r.rootNode(traversed, sl, amplitude)
 	r.scoreChildren(rootNode, sl)
 	onPath[rootNode.CellID] = true
@@ -76,20 +76,12 @@ func (r *Relation) traverse(origin, traversed skyra.Space, impulse any, sl skyra
 			}
 
 			onPath[childNode.CellID] = true
-			childNode.Cell.Observe(nil, impulse)
+			childNode.Cell.Observe(origin, impulse)
 			r.scoreChildren(childNode, sl)
 			stack = append(stack, childNode)
 		} else {
 			stack = stack[:len(stack)-1]
 			onPath[top.CellID] = false
-
-			// boundary crossing — Content is a Space → another actor.
-			// Spawn an independent wave whose origin is the inner actor.
-			// Return-perception waves do not cross: perceiving a result is
-			// inward and must not re-stimulate the actors in the topology.
-			if inner, ok := top.Cell.Content().(skyra.Space); ok && !isReturnImpulse(impulse) {
-				go r.realize(inner, inner, impulse)
-			}
 
 			out := top.Cell.Express(origin, impulse)
 			if out != nil {
@@ -125,7 +117,7 @@ func (r *Relation) returnToOrigin(origin skyra.Space, result any, amplitude floa
 
 // rootNode scores the root once — it has no parent to carry its score.
 func (r *Relation) rootNode(cell skyra.Space, sl skyra.Slice, amplitude float64) *skyra.Node {
-	rec := recordFor(cell, sl)
+	rec := recordFor(cell.ID(), cell, sl)
 	node := &skyra.Node{
 		CellID:    cell.ID(),
 		Cell:      cell,
@@ -154,7 +146,7 @@ func (r *Relation) scoreChildren(node *skyra.Node, sl skyra.Slice) {
 	var candidates []candidate
 
 	for id, child := range node.Cell.Children() {
-		rec := recordFor(child, sl)
+		rec := recordFor(id, child, sl)
 		if rec == nil {
 			continue // no record — doesn't participate in activation this frame
 		}
@@ -184,14 +176,20 @@ func (r *Relation) scoreChildren(node *skyra.Node, sl skyra.Slice) {
 	}
 }
 
-// recordFor returns the cell's activation record, creating it on first sight.
-func recordFor(cell skyra.Space, sl skyra.Slice) skyra.ActivationRecord {
+// recordFor returns the activation record under `key`, creating it on first
+// sight. The key is the caller's name for this slot, not the cell's own ID: the
+// root keys by cell ID, but a child keys by its parent's map key — which lets a
+// cell hand the kernel edge-scoped keys (A→B vs C→B) so activation is owned by
+// the edge, not the node. The kernel stays oblivious: it just keys a record off
+// the identity it was handed. The world's map keys equal its point IDs, so this
+// is a no-op there.
+func recordFor(key string, cell skyra.Space, sl skyra.Slice) skyra.ActivationRecord {
 	records := sl.Records()
-	rec := records[cell.ID()]
+	rec := records[key]
 	if rec == nil {
 		rec = cell.NewActivation()
 		if rec != nil {
-			records[cell.ID()] = rec
+			records[key] = rec
 		}
 	}
 	return rec

@@ -84,18 +84,192 @@ A default implementation for embedding:
 
 ```go
 type BaseActivation struct {
-    Identity       float64  // EMA α=0.02 — the groove
-    Familiarity    float64  // EMA α=0.1 — recent relationship
+    Identity       float64  // EMA α=0.02 — the groove (long tail)
+    Familiarity    float64  // EMA α=0.1  — recent relationship
     LocalTraversal int      // per-cell visit count
     LastTraversed  int      // global count when last bumped
+
+    // Per-edge inputs — written by the cell (in Observe or Express) before the
+    // kernel calls Activate. The kernel never writes these; the cell owns them.
+    IndexScore  float64  // surroundings overlap (one-shot per cycle)
+    Alignment   float64  // alignment spectrum value (-1 to 1), lagged from Frame 2
+    // NOTE: stress is NOT here — it is global (read from the slice at Activate
+    // time). Intrinsic excitability is NOT here either — it is per-node
+    // (MemoryCell.BirthAlignment). See the bump equation below.
 }
 
 func (b *BaseActivation) Activate(visited bool, traversalCount int) float64 {
-    // bump or decay EMAs, compute recency, return product
+    // bump = (IndexScore × Alignment) × stress_modulator(slice) × intrinsic(node)
+    // bump or decay the EMAs with it, return product
 }
 ```
 
-Binding realities embed this and extend:
+### The bump equation
+
+```
+bump = ( IndexScore × Alignment ) × stress_modulator × intrinsic
+       └── per-edge, relational ──┘   └── global ──┘   └─ per-node ─┘
+```
+
+Three loci, three different homes — this is the load-bearing distinction:
+
+- **`IndexScore`, `Alignment`** — **per-edge** (relational). On the activation record, keyed by the edge. "How much does *this connection* overlap the surroundings / how aligned was *this connection*." Synaptic weights.
+- **`stress_modulator`** — **global** (the being's state). One value on the slice, read at `Activate` time. A neuromodulator (cortisol / norepinephrine): diffuse, brain-wide gain, **not** stored per-edge. (See "Stress is global" below.)
+- **`intrinsic`** — **per-node** (`MemoryCell.Intrinsic`, a struct; its composed `Value()`). Cell-intrinsic excitability, set **once at crystallization** from `{ClosureGrade, StressAtBirth}`. The memory's born confidence/precision, distinct from any synapse. (See "Birth alignment" below.)
+
+Both EMAs receive the same composite bump — they differ only in α:
+
+| EMA | α | Character |
+|---|---|---|
+| Identity | 0.02 | Hard to shift; represents what is persistently true about this cell |
+| Familiarity | 0.1 | Moves faster; reflects the recent picture |
+
+A spike in all three inputs bumps Familiarity noticeably and Identity barely. Only
+consistent signal over many cycles deepens the Identity groove. One-off spikes
+show in Familiarity but don't move Identity.
+
+**`IndexScore` is the surroundings overlap, computed once per cycle.** It is *how
+many of the currently active surroundings entities connect to this cell* — the
+overlap that gives high-overlap setpoints priority. Compute it **once per cycle**
+as a one-shot count (gather `entity.Children()` across the surroundings, or let the
+entity-waves converge) and feed it into a **single** bump. Do **not** let a cell
+take N separate bumps because N entity-waves reached it in one cycle — that would
+over-groove the durable EMAs and conflate "relevant to a lot *right now*" with
+"consistently relevant *over time*." Overlap is the this-cycle IndexScore
+multiplier; the EMAs groove once per cycle. (See
+[entities-and-surroundings.md](../cognition/entities-and-surroundings.md).)
+
+### Ownership: the cell writes its inputs before the kernel calls Activate
+
+The `Activate(visited, traversalCount)` signature is unchanged — the kernel stays
+clean. The cell updates the **per-edge** inputs (`IndexScore`, `Alignment`) on its own
+activation record before the kernel calls `Activate`; the record reads **global stress**
+off the slice and the **node's intrinsic** birth value at compute time. By the time the
+kernel calls, everything it needs is reachable.
+
+```
+1. Cell.Observe / Cell.Express → writes IndexScore, Alignment onto its (per-edge) record
+2. Kernel calls Activate(visited, traversalCount)
+3. Record reads global stress (slice) + node intrinsic (BirthAlignment)
+4. Record computes bump = (IndexScore × Alignment) × stress_modulator × intrinsic
+5. Record updates Identity EMA (α=0.02) and Familiarity EMA (α=0.1)
+6. Returns score → kernel gates by threshold
+```
+
+No signature change. Per-edge state is the cell's; stress is the being's (slice); intrinsic is the node's.
+
+### Stress is global, not per-edge
+
+Stress is a **neuromodulator** — cortisol (HPA axis, blood-borne) and norepinephrine
+(locus coeruleus, diffuse cortical projection). Neuromodulators are *defined* by being
+broadcast, brain-wide, **not** point-to-point. So stress is **one value for the being**,
+held on the slice next to the surroundings map and WM buffer — read as a global gain in
+the bump, never stored per-edge. It rises with cascade / prediction-error and decays.
+One global stress drives several gates at once (the conflict-monitor compression): the
+bump modulator, episode-segmentation sensitivity (`threshold / (1 + stress)`), and the
+cascade-stop threshold. (Likely one of a small set of global modulators — stress, and
+later valence/emotion — so leave room for an affective-state vector, but one scalar to
+start.)
+
+### Birth alignment — cell-intrinsic excitability (per-node)
+
+Memories aren't born equal. Beyond the synaptic (edge) weights, a memory carries an
+**intrinsic** strength set **once at crystallization** — the brain's *memory-allocation*
+mechanism (cell-intrinsic excitability, CREB; Silva/Josselyn): cells more excitable at
+encoding are recruited into the engram and carry a baseline strength independent of any
+synapse, stamped by the global state at that instant (why high-arousal moments form
+"flashbulb" memories). In predictive-coding terms it's the memory's **precision** — its
+born confidence, the prior on how much it pulls before relational evidence accumulates.
+
+It is kept as a **struct**, not a single float, so the constituents stay separable —
+room to reweight or add fields (valence/emotion-at-birth, novelty) later without losing
+the raw inputs (same philosophy as keeping IndexScore/Alignment distinct):
+
+```
+Intrinsic { ClosureGrade, StressAtBirth }        // stamped ONCE, at completion
+BirthAlignment = Intrinsic.Value() = ClosureGrade × StressAtBirth   // the composed value used in the bump
+```
+
+It is **distinct from the EMAs**: Identity/Familiarity are *accumulated* activation
+(groove/recency, per-edge); BirthAlignment is a *one-time intrinsic stamp* (per-node). A
+memory can be born strong yet rarely revisited, or born marginal yet grooved over time —
+independent axes, as in the biology. Where it earns its keep:
+
+1. **Cold-start confidence** — a fresh setpoint has no edge history; its BirthAlignment is
+   the baseline that lets it participate before edges accumulate (else it's invisible).
+2. **Solid ground (cascade-stop)** — a high-BirthAlignment node is *intrinsically solid*;
+   a cascade should halt on it. BirthAlignment is a natural input to the solid-ground
+   threshold ([error-recovery-loop.md](../cognition/error-recovery-loop.md)).
+3. **Precision-weighting** — the node's pull scales by it: `node_score ≈ intrinsic × relational`.
+
+**Alignment is a lagged value.** The `Alignment` field on the activation record is
+written from the *previous* Frame 2 output for this cell — not computed fresh during
+the kernel traversal. The kernel traversal runs first; Frame 2 scoring runs after;
+the resulting alignment scores are written back onto the activation records before
+the *next* traversal. The cycle is:
+
+```
+kernel traversal (reads Alignment from last cycle)
+  → Frame 1 (one LLM call → N predictions)
+  → Frame 2 (N concurrent LLM calls → N alignment scores)
+  → scores written back onto activation records
+  → next kernel traversal reads updated Alignment
+```
+
+This makes the kernel traversal fully self-contained (no LLM calls inside it) and
+the alignment feedback a natural part of the episode cycle.
+
+### Activation is edge-owned, not node-owned (the synaptic model)
+
+A record belongs to a **connection**, not a cell. The same shared content cell B
+can be excited differently by A and by C — A→B and C→B are independent weights.
+
+This needs **no new interface and no edge-node objects.** Records still live on
+the slice; the kernel just keys them off the **map key** the cell provides, not
+the child's own `ID()`:
+
+```
+recordFor(key, cell, sl) → records[key]
+```
+
+A cell achieves edge-ownership by handing edge-scoped map keys (`"A→B"` vs
+`"C→B"`) in its `Children()` map — the records then differ automatically. The
+kernel stays oblivious: it keys a record off whatever identity it was handed.
+The world keeps node-keying for free (its map keys equal its point IDs).
+
+**Ownership split:** the cell owns its `Children()` *adjacency* (which edges
+exist); the slice owns the edge-keyed *weights* (persistent across traversals).
+Footprint is `O(actual edges)` — keys exist only for edges a cell declares.
+
+**Transitive reach is a path, not a stored edge.** A declares edges only to its
+direct neighbors. Its excitation of a 2-hop cell is the path composition
+(`ab ⊗ bc`) — computed at traversal time by amplitude attenuation
+(`activation × amplitude-that-arrived`), not stored. A-specific because the
+amplitude started at A. Spend-then-spill is emergent, not a kernel mechanic:
+direct edges spend the loud amplitude, leftover attenuates to potentials.
+
+**Path → edge crystallization (Hebbian).** A path-value (a *potential*) that
+grades above the keep-threshold (the same `0.1` that gates adding stimulus to a
+setpoint's children) crystallizes into a direct edge: the source cell adds the
+target to its own `Children()` adjacency (DNA-side — the kernel doesn't do this),
+born at the value that triggered it, then grooving or decaying like any edge.
+**History** = edge-keyed records with no adjacency (scored potentials that didn't
+crystallize, incl. negatives): they persist with their value but the kernel never
+walks them. Edges that stop earning grades decay below threshold and fall away —
+the graph forms *and* prunes, the structural-learning channel.
+
+**Decay trends to 0 from both directions.** A fading relationship returns to
+neutral (0), not to an extreme — multiplicative decay does this symmetrically
+(positive shrinks toward 0, negative rises toward 0). Bumps are **signed**
+(negative `Alignment` → negative bump → EMA moves negative), so a
+consistently-and-recently-negative relationship holds its negative value while a
+negative-once-long-ago one drifts back to ~0 (effectively unknown again) — the
+two-EMA timescales encode that distinction (Familiarity = recent, Identity =
+persistent). If negatives should be *stickier* than positives (aversive memory),
+let **stress** carry it (a high-stress negative grooves harder / decays slower),
+keeping stickiness state-dependent rather than a hardcoded sign-asymmetry.
+
+Binding realities embed BaseActivation and extend with domain-specific fields:
 
 ```go
 type EpisodicActivation struct {
@@ -115,9 +289,10 @@ Each binding reality defines what activation means for its own cells. No shared 
 
 The kernel calls `Activate(true)` for present children, `Activate(false)` for absent ones. What happens inside is the activation record's business.
 
-The BaseActivation implementation:
-- **Visited = true** → bump Identity EMA toward 1.0, bump Familiarity EMA toward 1.0, increment LocalTraversal, update LastTraversed
+- **Visited = true** → compute `bump = IndexScore × Alignment × stress_modulator`; advance Identity and Familiarity EMAs toward bump; increment LocalTraversal; update LastTraversed
 - **Visited = false** → decay Identity EMA toward 0.0, decay Familiarity EMA toward 0.0
+
+Stress modulates both bump magnitude and decay rate (open — exact stress_modulator function TBD).
 
 Other implementations can do whatever they want. The kernel doesn't care.
 
@@ -131,7 +306,7 @@ What depends on what. If something accumulates across traversals, the Slice owns
 
 ### What the Slice owns:
 - **TraversalCount** — monotonic global clock, increments once per BeginTraversal
-- **Records** — `map[string]ActivationRecord` — persistent per-cell scoring state
+- **Records** — `map[string]ActivationRecord` — persistent scoring state, **keyed by the map key the cell hands the kernel** (an edge key like `"A→B"` for DNA cells, a point ID for the world). Under edge-owned activation this becomes per-edge rather than per-node, but it stays on the slice — only the key changed (`recordFor(key, …)`), not the home.
 - **LastChildren** — `map[string][]string` — what children each cell reported last time (for decay)
 - **Attention** — what's around the being (placeholder)
 - **Threshold** — DNA-defined minimum score to descend

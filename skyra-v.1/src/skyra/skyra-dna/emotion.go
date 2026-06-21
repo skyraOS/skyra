@@ -1,4 +1,4 @@
-package binding
+package dna
 
 // Emotion — the amygdala. Episodic pattern → valence.
 // Indexes by signal flow shape, not content.

@@ -1,4 +1,4 @@
-package binding
+package dna
 
 // Goal — the PFC. Composed of sub-binding realities.
 // Tracks progress via comparator: setpoint vs actual state.

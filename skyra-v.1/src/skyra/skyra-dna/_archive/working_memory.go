@@ -1,4 +1,4 @@
-package binding
+package dna
 
 // WorkingMemory — conversation buffer.
 // Indexed by EpisodeID. Decays fast. Small capacity.

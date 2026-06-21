@@ -1,4 +1,4 @@
-package binding
+package dna
 
 // Action — execution tracking.
 // Indexes by primitive → instance → execution result.
