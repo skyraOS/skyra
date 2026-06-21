@@ -2,6 +2,8 @@
 
 **Date:** 2026-06-19 · **Status:** in spec (updated)
 
+> Working-memory indexes (`groupID → setpoints` (observe), `action → {self,other prediction}` (express), the grouping spine, loose coupling) are specced in [working-memory.md](../../../design-docs/cognition/working-memory.md).
+
 ## File
 - `../../../src/skyra/skyra-dna/global.go`
 
