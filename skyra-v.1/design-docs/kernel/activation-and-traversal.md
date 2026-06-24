@@ -168,8 +168,8 @@ No signature change. Per-edge state is the cell's; stress is the being's (slice)
 Stress is a **neuromodulator** — cortisol (HPA axis, blood-borne) and norepinephrine
 (locus coeruleus, diffuse cortical projection). Neuromodulators are *defined* by being
 broadcast, brain-wide, **not** point-to-point. So stress is **one value for the being**,
-held on the being's substrate (the concrete slice) next to the surroundings map and WM
-buffer — read as a global gain in the bump, never stored per-edge. **It is NOT on the
+held on the being's substrate (the concrete slice) next to the surroundings map (WM is
+the lit subset of the one graph, not a side store) — read as a global gain in the bump, never stored per-edge. **It is NOT on the
 `skyra.Slice` (kernel) interface** — the kernel is mechanism and must not know about a
 cognition signal; cells read it via a capability assertion, not the kernel contract.
 It rises with cascade / prediction-error and decays.

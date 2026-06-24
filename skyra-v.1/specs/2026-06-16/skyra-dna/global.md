@@ -30,7 +30,7 @@ Recursive: when groupings get dense, group the groupings — an index over an in
 **This replaces the parent/future edge.** Setpoints are past-only; the future is not stored per-setpoint. It lives here, as Global's grouping index, and is **passed down as context** to the active setpoints — so each setpoint is **reinterpreted under whatever long-term goal is currently active** ("mention skyra project" means one thing under "help with skyra," another under "wrap up the call").
 
 ### Grouping runs in Global's Observe (on impulse)
-- On impulse, score the impulse against the **active groupings**, in the context of the working-memory buffer — really *buffer-vs-grouping*, **one inference call**.
+- On impulse, score the impulse against the **active groupings**, in the context of the lit subgraph (working memory) — really *lit-set-vs-grouping*, **one inference call**.
 - **Skips entirely if there is no completed setpoint** (cold start has nothing to abstract over).
 - The chosen/active grouping becomes the context passed down for the rest of the cycle.
 
@@ -51,27 +51,27 @@ This supersedes both the WorkingMemory+Category two-hemisphere model and the "on
 ## The cognitive cycle
 
 ### Step 0 — Observe / grouping (Global, one LLM call)
-On impulse: score it against the active groupings in the buffer's context, set the active grouping as the cycle's top-down context. Skips if no completed setpoint exists. (See "Grouping" above.)
+On impulse: score it against the active groupings in the lit set's context, set the active grouping as the cycle's top-down context. Skips if no completed setpoint exists. (See "Grouping" above.)
 
 ### Step 1 — Filter (Global, kernel, no LLM, pure math)
-The kernel walks the setpoint topology, scoring by `activation × stress × alignment` (cell-owned — kernel calls `Activate()`, gates by threshold). The impulse + warm activation cut down which setpoints are live. Survivors (> 0.1) carry forward and assemble the working memory buffer on the slice.
+The kernel walks the setpoint topology, scoring by `activation × stress × alignment` (cell-owned — kernel calls `Activate()`, gates by threshold). The impulse + warm activation cut down which setpoints are live. Survivors (> 0.1) **are the lit subset** — working memory is not a buffer assembled alongside the graph, it is the activation-selected *view* of the one graph the traversal produces (see [working-memory.md](../../../design-docs/cognition/working-memory.md)).
 
-**The working memory buffer** — transient activation on the slice, not a storage system. Exists only while a prediction is active. Contents:
-- Incoming evidence (responses, actions, observations)
-- Recent failed predictions (kept explicitly — the gap between expected and actual is the most informative signal for the next prediction)
+**Working memory is the lit subgraph, not a separate store.** Everything is appended to the one graph; what makes a node "in working memory" is its recency activation (the fast Familiarity EMA), not membership in a second structure. So the lit set just *is* the high-activation nodes the wave reaches this cycle:
+- Incoming evidence (responses, actions, observations) — appended, lit because fresh
+- Recent failed predictions — lit because recent (the gap between expected and actual is the most informative signal for the next prediction); they fade by decay, not by being drained from a buffer
 
-On episode closure:
-- **Success** → buffer becomes children of the resulting Understanding
-- **Failure cascade** → buffer becomes children of the resulting Stress
+On episode closure nothing is moved between stores — the lit arc's nodes (already in the graph) are **relinked in place** as children of the closure node and the new node is stamped:
+- **Success** → the resolved arc becomes children of the resulting Understanding
+- **Failure cascade** → the retracted delta becomes children of the resulting Stress
 
 ### Step 2 — The self/other pass — **per grouping** (not per setpoint)
 One predict-score-close pass **per active grouping**, with the grouping's constituent setpoints as *material*, not as the unit of iteration. (Supersedes the earlier per-setpoint fan-out.) This is cheaper and ties grouping width to explore/exploit: a narrow grouping (few setpoints) leaves more spillover per setpoint to explore; a wide grouping spreads attention thinner and exploits.
 
 **Frame for the pass:** high-activation history of the grouping's setpoints + the currently selected setpoints + Global's **gist** (the framing) + predictions carried from the previous pass on the slice.
 
-**Self and other fire concurrently (closure phase).** A grouping holds both self-content and other-content under one gist (one situation, two faces). At closure they ask independent retrospective questions — self: "did my action close my commitment?"; other: "did this impulse close the other's open setpoint?" — so the pass spawns **N ≥ 2 concurrent waves** (≥1 self, ≥1 other). Each is a separate-slice agent reading a **snapshot** of the shared frame; Global owns the buffer and integrates only at the join. Safe by construction: **snapshot-in, join-out.** (Concurrent at closure; still ordered other→self at prediction — "self relies on other.")
+**Self and other fire concurrently (closure phase).** A grouping holds both self-content and other-content under one gist (one situation, two faces). At closure they ask independent retrospective questions — self: "did my action close my commitment?"; other: "did this impulse close the other's open setpoint?" — so the pass spawns **N ≥ 2 concurrent waves** (≥1 self, ≥1 other). Each is a separate-slice agent reading a **snapshot** of the shared frame; Global owns the lit set and integrates only at the join. Safe by construction: **snapshot-in, join-out.** (Concurrent at closure; still ordered other→self at prediction — "self relies on other.")
 
-- **predict / grade.** Produce the grouping's prediction (attaches to the grouping, lives in the WM buffer); grade against incoming evidence (broadcast WM, each constituent self-selects relevance, alignment accumulates).
+- **predict / grade.** Produce the grouping's prediction (appended to the graph under the grouping, lit because fresh); grade against incoming evidence (broadcast the lit set, each constituent self-selects relevance, alignment accumulates).
 - **closure.** On proven-true: the prediction **graduates into a new setpoint at level n**; constituents become its **history (children, n-1)**; the **gist crystallizes into a durable Understanding**; setpoint(n) is eligible at n+1 (stacking).
 
 Same predict-score-close loop as Frame 1 / Frame 2 below, run at the grouping altitude. See [groupings-and-understandings.md](../../../design-docs/cognition/groupings-and-understandings.md).
@@ -94,7 +94,7 @@ Hopfield weighted sum over the scores. Threshold crossing → action. No clear c
 
 | Internal fn | Triggers when | Does |
 |---|---|---|
-| `observeExternal` | incoming signal from outside | **the grouping pass** — score impulse vs active groupings (buffer-vs-grouping, one inference call); skip if no completed setpoint; set the active grouping as context for the cycle |
+| `observeExternal` | incoming signal from outside | **the grouping pass** — score impulse vs active groupings (lit-set-vs-grouping, one inference call); skip if no completed setpoint; set the active grouping as context for the cycle |
 | `observeSelf` | returning result from an agent Global dispatched | integrate the returned scores (toward the vote) |
 
 ## Visibility (scoped altitude)
@@ -119,8 +119,8 @@ Global reads exactly two things: **crystallized understandings** of completed se
 - **self/other vs. Frame 1 / Frame 2:** captured as the same predict-score-close mechanism at two altitudes — split if they're meant to be distinct
 
 ## Done when
-- Grouping runs in Observe: impulse scored vs active groupings (buffer context), active grouping passed down; skips if no completed setpoint
-- The self/other pass runs **per grouping** (constituents as material); prediction attaches to the grouping in the buffer; on closure → new setpoint(n), constituents → children(n-1), gist → durable Understanding
+- Grouping runs in Observe: impulse scored vs active groupings (lit-set context), active grouping passed down; skips if no completed setpoint
+- The self/other pass runs **per grouping** (constituents as material); prediction appended to the graph under the grouping (lit, uncrystallized); on closure → new setpoint(n), constituents → children(n-1), gist → durable Understanding
 - Self/other fire concurrently at closure (N≥2 waves, snapshot-in/join-out)
 - The 3-branch orchestration routes the 2-D outcome in code (cascade > closure > open)
 - Runs the Hopfield vote over returned scores; fires on conflict (tie-break)

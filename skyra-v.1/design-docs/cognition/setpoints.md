@@ -115,17 +115,14 @@ dependency misaligned and not repairable
   -> weaken, pause, or abandon the parent setpoint
 ```
 
-This keeps the two graphs distinct while letting them interact:
+This is **one setpoint graph read two ways**, not two graphs. The desired substates and the dependency conditions are both setpoint nodes — children in the one graph ([working-memory.md](working-memory.md)) — distinguished only by *how the wave reads them*, per the recursive-primitive section below: **descended as gates** (validity — "does my ground still hold?", old-Motivation, now the setpoint's descent = other) and **ascended as build** (closure — "am I satisfied?", old-Goal, the ascent = self):
 
 ```text
-Goal tree:
-  desired states and substates
-
-Motivation graph:
-  reasons, prerequisites, blockers, and value conditions
+read on ascent (build):   desired states and substates
+read on descent (gate):   reasons, prerequisites, blockers, value conditions
 ```
 
-A Motivation dependency can birth a Goal subgoal, but it is not itself the subgoal. The dependency says "this must hold for the wanting to remain valid." The subgoal says "make this repair state true."
+A dependency can birth a subgoal, but it is not itself the subgoal. The dependency says "this must hold for the wanting to remain valid" (a gate); the subgoal says "make this repair state true" (a build).
 
 This implies Motivation has the same global/local shape as Coherence:
 

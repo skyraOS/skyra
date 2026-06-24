@@ -36,7 +36,7 @@ A setpoint is **created when the predicted self AND other both come true** (both
 - **stamp `BirthAlignment = closure-grade × global-stress-at-birth`** on the node (set once — the intrinsic excitability);
 - **append the setpoint to each involved entity's `Children()`** — the reverse-index edge. *The reverse read depends on this append* (same write-time discipline as the justification index / epistemic stamp).
 
-In-flight predictions are **not** stored here — they live transiently in the WM buffer and only graduate to a setpoint on completion. Failure cascade is the mirror: the retracted delta → WM → children of a **Stress**.
+In-flight predictions **are** appended to the one graph like everything else — there is no separate buffer or second store. A fresh prediction is just **lit** (high recency) and **uncrystallized** (no `BirthAlignment` yet); it is reachable by the wave because it was recorded. Completion does not *move* it — it **stamps it in place** (`BirthAlignment`) and appends the closure edges (the prediction graduates into the setpoint; the surroundings + evidence become its children; each entity gets it appended). An unresolved prediction is not held open: its EMAs decay and it drops out of the lit subset (the wave stops reaching it), and an uncrystallized artifact whose `Alignment` goes negative is evicted (true forget). Failure cascade is the mirror of success: the retracted delta is deposited into the lit set and crystallizes as the children of a **Stress** — same in-place deposit-then-stamp, opposite sign. See [working-memory.md](../../../design-docs/cognition/working-memory.md) (WM = the lit-up subgraph, not a buffer).
 
 ## Edges vs potentials
 

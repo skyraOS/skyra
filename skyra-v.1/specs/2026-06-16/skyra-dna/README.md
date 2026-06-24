@@ -15,7 +15,7 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
       │     passed DOWN as context; replaces the parent edge). Recursive, loosely coupled.
       │     Each carries a GIST = an understanding that hasn't crystallized yet.
       ├── Agent: other / self — ONE predict-score-close pass PER GROUPING (constituents as material)
-      └── cycle: observe/grouping (impulse vs active groupings, buffer ctx; skip if no completed setpoint)
+      └── cycle: observe/grouping (impulse vs active groupings, lit-set ctx; skip if no completed setpoint)
              → filter (kernel, activation × stress × alignment)
              → per-grouping CONCURRENT self/other (N≥2 waves, snapshot-in/join-out;
                    predict → grade → on closure: prediction→setpoint(n), constituents→children(n-1), gist→Understanding)

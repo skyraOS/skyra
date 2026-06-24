@@ -18,7 +18,7 @@ And the larger recognition: **the grouping/gist pipeline and the episode-closure
 pipeline are the same pipeline, entered from two directions.** Nothing new is
 invented here — Hebbian crystallization, EMA decay, the relevance gate,
 broadcast-and-self-select grading, and episode closure producing
-Understandings/Stresses from buffer contents were all already present. This is the
+Understandings/Stresses from the lit set's nodes were all already present. This is the
 recognition that they compose into one altitude-recursive loop.
 
 ## The pipeline
@@ -41,8 +41,8 @@ recognition that they compose into one altitude-recursive loop.
    the currently selected setpoints + Global's gist (the framing) + predictions
    carried from the previous pass on the slice.
 
-4. **The resulting prediction attaches to the grouping**, living in the working
-   memory buffer — not yet structural, not yet a setpoint.
+4. **The resulting prediction attaches to the grouping**, appended to the graph
+   as a lit (high-recency), uncrystallized node — not yet structural, not yet a setpoint.
 
 5. **The prediction is graded against incoming evidence** the normal way:
    broadcast working memory, each constituent setpoint self-selects relevance,
@@ -52,7 +52,7 @@ recognition that they compose into one altitude-recursive loop.
    - the **prediction graduates into a new setpoint** at level n — per the
      founding definition, *setpoints are predictions that came true*;
    - the grouping's original constituent setpoints (active going in) become its
-     **history at n-1 — children**, the same as buffer contents becoming children
+     **history at n-1 — children**, the same as the lit set's nodes becoming children
      of any Understanding;
    - the **gist crystallizes** — it stops being a potential understanding attached
      to an active grouping and becomes a real, durable **Understanding**: stored,
@@ -114,7 +114,7 @@ significance.**
 
 Every underlying mechanism already existed: Hebbian crystallization, EMA decay, the
 relevance gate, broadcast-and-self-select grading, episode closure producing
-Understandings/Stresses from buffer contents. This document is the recognition that
+Understandings/Stresses from the lit set's nodes. This document is the recognition that
 the grouping/gist pipeline and the original episode-closure pipeline were always
 the same pipeline.
 
