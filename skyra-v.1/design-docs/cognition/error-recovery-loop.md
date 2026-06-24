@@ -112,28 +112,28 @@ Routing is **code** — the branch is a function of `(stress-delta, closure-grad
 
 ### Cascade = a failure wave (de-crystallization)
 
-A cascade is the **inverse of crystallization**: crystallization takes potential→stable on success; a cascade takes stable→potential on failure. Mechanically it reuses the kernel's wave discipline — **propagation-with-attenuation-meets-threshold** — pointed *down the dependency chain*:
+A cascade is the **inverse of crystallization**: crystallization takes potential→stable on success; a cascade takes stable→potential on failure. It propagates *down the supporting chain* (a setpoint's supporting setpoints = the constituent `n-1` setpoints it crystallized from):
 
-- A contradiction bites at layer **L**; the cascade propagates down, **attenuating**, until it drops to the **solid-ground threshold (~0.2, TBD)** — a layer genuinely held.
-- **Delta = the span (G, L]** — everything that rested on the refuted ground. It is **rolled back out of the setpoint's state** (TMS dependency-directed backtracking — retract to the last consistent layer) and **deposited into WM**.
-- The popped span becomes **potential groupings again**; Global reorganizes; the failed grouping's gist crystallizes as a **Stress** (the failure-understanding — reusable: "this configuration cascaded before").
+- **Trigger: a supporting setpoint is judged `completed < 0`** — the `completed` score is a signed −1..1 **inference judgment** on a lit setpoint (see [setpoint.md](../../specs/2026-06-16/skyra-dna/setpoint.md#the-completed-score-signed-inference-judged-transitory)). The cascade fires not from a setpoint's own dip but from the **ground underneath** going negative — pure TMS, the justification is refuted.
+- The wave propagates down through supporting setpoints that are `< 0`, **halting at the first one still held** (`completed ≥ 0` — solid ground). `BirthAlignment` makes a node intrinsically more likely to hold.
+- **Delta** = the span from the contradiction (L) down to solid ground (G) — everything resting on the refuted ground. **Rolled back out of state** (retract to the last consistent layer), **deposited into WM**.
+- The popped span becomes **potential groupings again**; Global reorganizes; the failed grouping's gist crystallizes as a **Stress** (reusable: "this configuration cascaded before").
 - **Nothing deleted** — rollback into WM, recoverable; solid ground survives intact.
 
-Symmetric with success closure: success deposits the resolved arc (WM buffer) as children of an **Understanding**; cascade deposits the retracted delta (WM) as children of a **Stress** — same deposit-then-crystallize move, opposite sign.
+Symmetric with success closure: success deposits the resolved arc (WM) as children of an **Understanding**; cascade deposits the retracted delta (WM) as children of a **Stress** — same deposit-then-crystallize move, opposite sign.
 
-### Threshold family
+`completed` is the inference judgment; the cascade *propagation* (walk supporting setpoints, stop where `completed ≥ 0`) is **code**.
 
-| Threshold | Job | Value |
-|---|---|---|
-| traversal survival | kernel gate for descent | `sl.Threshold()` |
-| keep / crystallization | add to children; path→edge | ~0.1 |
-| solid ground / cascade-stop | where a cascade halts | ~0.2 (TBD) |
+### `completed` vs `Alignment` — two comparison quantities, not one
 
-Solid-ground (~0.2) sits **above** crystallization (~0.1): a cascade should halt on something genuinely held, a higher bar than merely-crystallized. The exact numbers are empirical; the **ordering** (solid-ground > crystallization) is the invariant to preserve.
+- **`Alignment`** (per-edge, node↔setpoint relational match) feeds the **activation bump** — it decides how *excited / in-view* a node is. Lives in the activation equation.
+- **`completed`** (per lit setpoint, the setpoint's own done-ness) is the **signed closure judgment** — `+threshold → crystallize`, `supporting < 0 → cascade`, between → in-progress. Transitory; meaningful only while the setpoint is lit. Does **not** drive excitation.
+
+(Crystallization's `+threshold` and the exact solid-ground bar are empirical; the cascade trigger is fixed at supporting `< 0`. The kernel's own traversal-survival threshold, `sl.Threshold()`, is a separate, activation-side gate.)
 
 ## This Places Action
 
-Stage 2's descent walks an index: **assumption-id → the actions justified by it.** That index *is* the **Action binding reality** (`cell-types.md`: "Action records the intent it was voting on"). So Action — previously unplaced in the voting reorg ([owned-specialist-crossing.md](../kernel/owned-specialist-crossing.md#6-the-voting-set)) — is the **self-pass's substrate**: the store of past actions tagged with the assumptions that justified them, which Stage 2 descends.
+Stage 2's descent walks an index: **assumption-id → the actions justified by it.** That index *is* the **Action store** (`MemoryCell` of `Kind` action — "Action records the intent it was voting on"). So Action — previously unplaced in the voting reorg ([owned-specialist-crossing.md](../kernel/owned-specialist-crossing.md#6-the-voting-set)) — is the **self-pass's substrate**: the store of past actions tagged with the assumptions that justified them, which Stage 2 descends.
 
 (Conjecture for the other unplaced reality, **Emotion**: the *fast trigger* — the "this feels off" valence that kicks the loop off before the full alignment is computed. A natural slot, not yet settled.)
 

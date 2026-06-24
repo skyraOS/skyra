@@ -1,5 +1,15 @@
 # Episodic Encoding — Working Memory to Hippocampus
 
+> **Reconciliation (2026-06-23).** Vocabulary drift; the retrieval mechanics
+> (frames, episodes, typed indexes, retrieval-as-traversal, state modulation) hold
+> and this doc is still the reference for them. Read **"Coherence" → Global**,
+> **"binding realities" → the self/other agents + entity cells**. Its core WM claim
+> ("working memory is not a separate buffer — it is the activated subset… in the
+> focus of attention," §"Working Memory Is the Attention Map") is **consistent with
+> the current model** (WM = the lit-up subgraph). The `goalID/agentID → []episode`
+> typed indexes are now realized as **entity cells whose `Children()` are the
+> setpoints stamped on them** (see [entities-and-surroundings.md](entities-and-surroundings.md)).
+
 ## The Gap
 
 We have when episodes switch (prediction delta + stress modulation). We don't have how working memory contents flow into episodic binding — the gating, the filtering, and the structure of what gets recorded.

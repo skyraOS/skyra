@@ -2,6 +2,12 @@
 
 **Date:** 2026-06-20
 
+> **Note (2026-06-23):** "working memory buffer" below is a wording artifact — WM is
+> **not a separate buffer**, it's the lit-up (high-recency) subgraph. A prediction
+> "in the buffer" = a lit, uncrystallized prediction-`Kind` node. "alignment
+> accumulates" → the setpoint's **`completed`** score is judged. See
+> [working-memory.md](working-memory.md).
+
 ## Core claim
 
 **A gist is an understanding that hasn't crystallized yet.** These were never two

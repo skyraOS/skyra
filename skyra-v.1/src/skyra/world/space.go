@@ -70,6 +70,11 @@ func (w *World) Observe(origin skyra.Space, impulse any) {
 
 // Emit roots a wave into the world from the owner's location (the helper Observe
 // delegates to). The seed of the world.observe facilitator.
+//
+// The sender self-identifies: the Source carries the OWNER's id, not "world" —
+// the agent authored the wave; the world is only the medium (it supplies the
+// owner's coord). So a recipient's membrane reads who (Source.SpaceID = sender)
+// and where (Source.Coord) directly off the impulse.
 func (w *World) Emit(owner skyra.Space, impulse any) {
 	if owner == nil || w.kernel == nil {
 		return
@@ -78,7 +83,12 @@ func (w *World) Emit(owner skyra.Space, impulse any) {
 	if point == nil {
 		return
 	}
-	impulse = withSource(impulse, point.source())
+	src := &skyra.ImpulseSource{
+		SpaceID: owner.ID(),
+		PointID: point.ID(),
+		Coord:   skyra.Coord{X: point.x, Y: point.y},
+	}
+	impulse = withSource(impulse, src)
 	w.kernel.Realize(owner, point, impulse)
 }
 

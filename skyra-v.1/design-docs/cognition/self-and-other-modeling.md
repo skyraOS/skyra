@@ -2,7 +2,21 @@
 
 ## Status
 
-**Planning — discuss before implementing.** The Theory-of-Mind layer. **Perspective (self/other) is a method-level distinction — descent (Observe) = other, ascent (Express) = self — not two binding realities.** This *supersedes* the earlier "ego/alter as two binding realities sharing a slice" framing in this doc. The binding realities are **categorical/episodic** ([setpoints.md](setpoints.md)); perspective is the two faces they run, **burned in at execution time**. This is the layer that anchors completion against lazy collapse and that receives the human's setpoint across the perspective gap. Pairs with [setpoints.md](setpoints.md), [comparator.md](comparator.md), [abductive-reasoning.md](abductive-reasoning.md).
+**Planning — discuss before implementing.** The Theory-of-Mind layer.
+
+> **Reconciliation (2026-06-23).** This doc has been through two framings of *where*
+> self/other live: (1) "ego/alter as two binding realities," then (2) "self/other as
+> sub-binding-realities under episodic + categorical (four stores)." **Both are
+> superseded.** Current model: the binding-reality layer dissolved entirely, and
+> **self and other are Global's two agents** — each its own descent/ascent. The
+> *principle this doc argues* is unchanged and is what matters: self and other are
+> **hard-separate structures** (now two agents), not one store held apart by a
+> write-time stamp — so the ToM bleed is structurally impossible. Read "sub-realities"
+> below as "the self / other agent." Also: **concurrent at closure, ordered (other→self)
+> at prediction** — see [global.md](../../specs/2026-06-16/skyra-dna/global.md),
+> [error-recovery-loop.md](error-recovery-loop.md).
+
+The core: **perspective (self/other) is descent (Observe) = other, ascent (Express) = self.** This is the layer that anchors completion against lazy collapse and receives the human's setpoint across the perspective gap. Pairs with [setpoints.md](setpoints.md), [comparator.md](comparator.md), [abductive-reasoning.md](abductive-reasoning.md).
 
 ## The Core Claim
 
@@ -33,9 +47,9 @@ This is the convergence of four threads:
 
 **The mechanical statement, on the corrected direction:** the self-action/closure is on the **ascent (self)**, but it **cannot self-assert** — closure is confirmed only by **re-reading the other on the next descent**. Confirmation lives on the *other* side; it's a cross-wave loop (act now, confirm on the next intake). Lazy collapse = treating the ascent (self-act) as closure instead of waiting for the next descent (other-confirmation). So observed-not-asserted is a *mechanical consequence* of the method split, not a separate rule.
 
-## Mechanics — Perspective Is Structural (Self/Other Sub-Binding-Realities)
+## Mechanics — Perspective Is Structural (the `self` and `other` agents)
 
-**Perspective is carried by structure, not a stamp.** Under *each* of the two binding realities (episodic, categorical) sit **self and other sub-binding-realities** — four stores: episodic-self, episodic-other, categorical-self, categorical-other. Self and other are *genuinely separate structures*, not one store held apart by a write-time tag.
+**Perspective is carried by structure, not a stamp.** Self and other are **Global's two agents** — *genuinely separate structures*, not one store held apart by a write-time tag. (The earlier "four stores: episodic-self/other × categorical-self/other" dissolved with the binding-reality layer; the hard-separation guarantee it provided is preserved by the two agents being distinct.)
 
 - **Why structural, not a stamp.** A stamp is a *soft* separation — one structure pretending to be two, held apart by a discipline that can be mis-applied (mis-stamp one other-belief as self → egocentric collapse). For the ToM boundary — the *most* load-bearing one, where collapse *is* the core LLM failure — soft separation is too fragile. Hard-separate sub-realities make the bleed **structurally impossible**: you cannot leak self into other when they are different stores. This **retires** the earlier "stamp integrity is the critical mechanism" risk — the guarantee is now enforced by the topology, not by a runtime discipline.
 - **Sally-Anne holds by structure.** Query the *other* sub-reality ("Sally thinks: basket") vs. the *self* sub-reality ("marble in box") — the two beliefs live in different stores, so they coexist by construction.
@@ -60,7 +74,7 @@ Simulation *creates* the reality-monitoring problem: once the being can imagine 
 
 ## The Payoff — Cross-Perspective Comparator
 
-Because both perspectives carry their stamps in the shared workspace, Coherence's comparator runs **cross-perspective comparisons for free** — it already accepts any cells in the frame:
+Because both perspectives surface in the shared workspace, Global's comparator runs **cross-perspective comparisons for free** — it already accepts any cells in the frame:
 
 ```
 <expected>  other-setpoint   — what I infer you actually want (top of the other-model)
@@ -72,7 +86,7 @@ Serving the human becomes an alignment comparison between two perspective-stampe
 
 ## Collapse Happens at Voting
 
-Predictions never collapse during generation. The collapse is the **vote**: the categorical and episodic binding realities each present their self-model with its alignment (= confidence); a **clear winner fires**, a **tie is broken by Coherence** (the central cell, vote-only-on-conflict). See [owned-specialist-crossing.md](../kernel/owned-specialist-crossing.md) for the gather/ignite/tie-break mechanics.
+Predictions never collapse during generation. The collapse is the **vote**: the `self` and `other` agents present their models with alignment (= confidence); a **clear winner fires**, a **tie is broken by Global** (the central cell, vote-only-on-conflict). See [owned-specialist-crossing.md](../kernel/owned-specialist-crossing.md) for the gather/ignite/tie-break mechanics.
 
 ## Open Questions
 

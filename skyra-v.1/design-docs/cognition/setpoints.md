@@ -1,5 +1,15 @@
 # Setpoints — The Global Setpoint and the Subgoal Tree
 
+> **Reconciliation (2026-06-23).** Vocabulary drift; reasoning holds. Read
+> **"Coherence" → Global**, **"binding realities" → the self/other agents**. A
+> setpoint is now **one `MemoryCell`** (`Content` = the understanding/gist;
+> `Children` = the closure snapshot — entities + responses + actions + stresses;
+> past-only, no parent/future edge — the future is Global's grouping index). Closure
+> is judged by **`completed`** (signed −1..1; `+thr → crystallize`, supporting `< 0`
+> → cascade), distinct from the relational `alignment` in the activation bump. Current
+> spec: [../../specs/2026-06-16/skyra-dna/setpoint.md](../../specs/2026-06-16/skyra-dna/setpoint.md);
+> [working-memory.md](working-memory.md).
+
 ## Status
 
 **Planning — discuss before implementing.** Records the ownership of the global setpoint (settled this session) and holds the subgoal-structure work (open, next). Pairs with [comparator.md](comparator.md) (alignment as the closure signal) and the [voting set](../kernel/owned-specialist-crossing.md#6-the-voting-set--brain-region-grounding).

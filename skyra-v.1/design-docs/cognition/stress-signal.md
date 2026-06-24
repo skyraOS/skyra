@@ -1,5 +1,13 @@
 # Stress Signal
 
+> **Reconciliation (2026-06-23).** Vocabulary drift — the reasoning holds. Read
+> **"Coherence" → Global**, **"binding realities" → the self/other agents**.
+> Placement: stress lives on the being's slice but **not** on the `skyra.Slice`
+> kernel interface (see "Slice Ownership"). The `stress = persistence × instability`
+> model predates the `completed` (notDone) score and isn't yet reconciled with it —
+> persistence overlaps "an open prediction kept being re-presented"; treat the exact
+> relationship as open.
+
 ## The Insight
 
 Stress is not an unresolved goal. A long-running goal can be calm if its dependencies are valid, progress is predictable, and the being knows how to continue.
@@ -59,7 +67,7 @@ Three mismatch domains, each routing energy differently:
 - **Prediction mismatch** (predicted vs actual) → energy to the failing goal. Goal dominance. Gather-before-commit.
 - **Articulation mismatch** (intent vs expression) → energy to motor/action loop. Self-correction.
 
-Stress on the slice is the readable state of what Coherence is currently doing — not a separate aggregation step. Coherence writes it. Other binding realities read it. The instability components in the formula below are Coherence's outputs, not independent signals collected from everywhere.
+Stress on the slice is the readable state of what Global is currently doing — not a separate aggregation step. Global writes it; cells read it. The instability components in the formula below are Global's outputs, not independent signals collected from everywhere. (Historical note: "Coherence" = Global; "binding realities" = the self/other agents.)
 
 The error signal IS energy. Coherence signals the mismatch magnitude, that magnitude becomes activation energy on the relevant pathway. A failing goal gets louder because the error signal is energy, not because a rule amplified it. Suppression of other goals is the shadow of amplification — finite energy, one goal running hot, everything else gets less. Resolution drops the activation, attention redistributes automatically. No explicit restore step.
 
@@ -105,11 +113,16 @@ No single signal here is "stress" by itself. Stress is the combined pressure of 
 
 ## Slice Ownership
 
-Stress lives on the Slice because it is universal per-being activation state.
+Stress lives on the being's slice because it is universal per-being activation state — a **global neuromodulator** (one value per being, not per-edge). It modulates the activation bump (the `stress_modulator` term), episode-segmentation sensitivity, and the cascade-stop reading.
 
-The Brain owns specialized binding realities. Each binding reality can contribute stress components. The Slice aggregates the components into a current stress signal and stores stress traces across traversals.
+> **Placement (2026-06-23):** stress is held on the **concrete being-slice**, *not* on
+> the `skyra.Slice` **kernel interface** — the kernel is mechanism and must not know a
+> cognition signal. Cells read it via a capability assertion, never the kernel contract.
+> See [activation-and-traversal.md](../kernel/activation-and-traversal.md#stress-is-global-not-per-edge).
 
-The Relation does not own stress. A Relation can carry current-wave pressure such as energy cost or buffered arrivals, but durable stress history belongs to the Slice.
+The cells contribute stress components (Global and its agents, on cascade / prediction-error); the slice holds the aggregated current signal and stress traces across traversals.
+
+The Relation does not own stress. A Relation can carry current-wave pressure such as energy cost or buffered arrivals, but durable stress history belongs to the slice.
 
 ## Stress Components
 

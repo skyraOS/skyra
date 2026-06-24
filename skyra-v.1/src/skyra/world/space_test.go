@@ -103,8 +103,9 @@ func TestWorldObserveAddsImpulseSourceAtActorLocation(t *testing.T) {
 	if imp.Source == nil {
 		t.Fatalf("source is nil")
 	}
-	if imp.Source.SpaceID != "world" || imp.Source.PointID != "3,4" {
-		t.Fatalf("source = %+v, want world 3,4", imp.Source)
+	// The sender self-identifies: Source.SpaceID is the actor (owner), not "world".
+	if imp.Source.SpaceID != "skyra" || imp.Source.PointID != "3,4" {
+		t.Fatalf("source = %+v, want sender skyra @ 3,4", imp.Source)
 	}
 	if imp.Source.Coord != (skyra.Coord{X: 3, Y: 4}) {
 		t.Fatalf("coord = %+v, want 3,4", imp.Source.Coord)

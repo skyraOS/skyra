@@ -1,5 +1,10 @@
 # Resonance & Impulse Reception
 
+> **Reconciliation (2026-06-23).** Read **"binding realities" → the self/other
+> agents + the graph's `MemoryCell`s**. Activation/resonance is now the edge-owned
+> bump (`IndexScore × Alignment × stress × intrinsic` into Identity/Familiarity EMAs);
+> see [../kernel/activation-and-traversal.md](../kernel/activation-and-traversal.md).
+
 ## The Problem
 
 The being receives signals from the world. How do those signals land? What determines whether an impulse actually penetrates the Membrane or bounces off?

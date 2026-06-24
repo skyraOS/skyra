@@ -1,5 +1,9 @@
 # Abductive Reasoning — Decomposition
 
+> **Reconciliation (2026-06-23).** Read **"Coherence" → Global**, **"binding
+> realities" → the self/other agents**. The missing-vs-wrong fork is realized in
+> [error-recovery-loop.md](error-recovery-loop.md) (the prediction × assumption 2×2).
+
 ## Status
 
 **Research / planning — to map onto the architecture.** A decomposition of abductive reasoning (inference to the best explanation) into ten steps. Captured to discuss where each step already lives in Skyra's machinery and where it doesn't yet. The running example is a first-contact scenario; the steps are general. Pairs with [comparator.md](comparator.md) (graded alignment, uncertainty), [predictive-hierarchy.md](predictive-hierarchy.md), and [setpoints.md](setpoints.md) (goal inference).

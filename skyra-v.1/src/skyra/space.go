@@ -90,6 +90,10 @@ type Slice interface {
 	Lock()
 	Unlock()
 }
+// NOTE: stress (the being's global neuromodulator) is deliberately NOT here.
+// The kernel is mechanism and must not know about cognition signals. Stress is
+// DNA state — held on the being's substrate and read by cells via a capability
+// assertion, never through this kernel contract.
 
 type Node struct {
 	CellID    string

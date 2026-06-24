@@ -99,8 +99,13 @@ type BaseActivation struct {
 }
 
 func (b *BaseActivation) Activate(visited bool, traversalCount int) float64 {
-    // bump = (IndexScore × Alignment) × stress_modulator(slice) × intrinsic(node)
-    // bump or decay the EMAs with it, return product
+    // sample = visited ? (IndexScore × Alignment) × stress_modulator × intrinsic : 0
+    // Identity    += αI · (sample − Identity)    // αI = 0.02
+    // Familiarity += αF · (sample − Familiarity) // αF = 0.1
+    // return Identity + Familiarity              // groove + recency (tunable blend)
+    // The bump IS the sample fed into the EMAs — no fixed +1 constant. Signed:
+    // a negative Alignment gives a negative sample → EMAs (and the result) go
+    // negative → threshold drops it (below-0 eviction).
 }
 ```
 
@@ -163,8 +168,11 @@ No signature change. Per-edge state is the cell's; stress is the being's (slice)
 Stress is a **neuromodulator** — cortisol (HPA axis, blood-borne) and norepinephrine
 (locus coeruleus, diffuse cortical projection). Neuromodulators are *defined* by being
 broadcast, brain-wide, **not** point-to-point. So stress is **one value for the being**,
-held on the slice next to the surroundings map and WM buffer — read as a global gain in
-the bump, never stored per-edge. It rises with cascade / prediction-error and decays.
+held on the being's substrate (the concrete slice) next to the surroundings map and WM
+buffer — read as a global gain in the bump, never stored per-edge. **It is NOT on the
+`skyra.Slice` (kernel) interface** — the kernel is mechanism and must not know about a
+cognition signal; cells read it via a capability assertion, not the kernel contract.
+It rises with cascade / prediction-error and decays.
 One global stress drives several gates at once (the conflict-monitor compression): the
 bump modulator, episode-segmentation sensitivity (`threshold / (1 + stress)`), and the
 cascade-stop threshold. (Likely one of a small set of global modulators — stress, and

@@ -16,6 +16,7 @@ type Slice struct {
 	tree      skyra.TraversalPair
 	result    any
 	maps      map[string]any
+	stress    float64 // global stress (neuromodulator); mechanics wired later
 }
 
 func NewSlice(id, beingID string) *Slice {
@@ -41,5 +42,7 @@ func (s *Slice) Records() map[string]skyra.ActivationRecord { return s.records }
 func (s *Slice) Threshold() float64                         { return s.threshold }
 func (s *Slice) Count() int                                 { return s.count }
 func (s *Slice) SetCount(c int)                             { s.count = c }
+func (s *Slice) Stress() float64                            { return s.stress }
+func (s *Slice) SetStress(v float64)                        { s.stress = v }
 func (s *Slice) Lock()                                      { s.mu.Lock() }
 func (s *Slice) Unlock()                                    { s.mu.Unlock() }

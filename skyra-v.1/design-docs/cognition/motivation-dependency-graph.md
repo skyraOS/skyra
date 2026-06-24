@@ -1,5 +1,10 @@
 # Motivation — Dependency Graph Architecture
 
+> **Reconciliation (2026-06-23).** Read **"binding realities" → the self/other
+> agents**. Motivation is no longer a cell — it's the setpoint's **descent (other)**
+> method (gate-check dependencies); Goal is the **ascent (self)**. See
+> [self-and-other-modeling.md](self-and-other-modeling.md), [setpoints.md](setpoints.md).
+
 ## The Insight
 
 Motivation (OFC) maintains a dependency graph of what must remain true for each goal to be valid. It doesn't track goal progress — Goal does that. Motivation tracks whether the *reason* for the goal still holds.

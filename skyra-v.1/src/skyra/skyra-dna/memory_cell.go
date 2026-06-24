@@ -75,7 +75,7 @@ func (m *MemoryCell) Kind() Kind                            { return m.kind }
 func (m *MemoryCell) Slice() skyra.Slice                    { return m.slice }
 func (m *MemoryCell) Content() any                          { return m.content }
 func (m *MemoryCell) Children() map[string]skyra.Space      { return m.children }
-func (m *MemoryCell) NewActivation() skyra.ActivationRecord { return &memoryActivation{} }
+func (m *MemoryCell) NewActivation() skyra.ActivationRecord { return newMemoryActivation() }
 
 // Intrinsic returns the node's birth excitability constituents.
 func (m *MemoryCell) Intrinsic() Intrinsic { return m.intrinsic }
@@ -104,32 +104,55 @@ func (m *MemoryCell) AddChild(edgeKey string, cell skyra.Space) {
 	m.children[edgeKey] = cell
 }
 
+const (
+	alphaIdentity    = 0.02 // the groove (long tail)
+	alphaFamiliarity = 0.1  // recent relationship
+)
+
 // memoryActivation — edge-owned activation. The kernel keys one per EDGE (the
 // Children map key), so A→B and C→B score independently.
 //
-// Target equation (design-docs/kernel/activation-and-traversal.md) — three loci:
+// The bump is the PRODUCT of the activation equation, fed as the SAMPLE into two
+// EMAs (no fixed +1 constant):
 //
-//	bump = ( IndexScore × Alignment ) × stress_modulator × intrinsic
-//	       └── per-edge (here) ─────┘   └ global (slice) ┘  └ node ┘
+//	bump = ( IndexScore × Alignment ) × stress × intrinsic
+//	       └── per-edge (here) ─────┘   └ global ┘  └ node ┘
+//	Identity    += αI · (bump − Identity)      // αI = 0.02, the groove
+//	Familiarity += αF · (bump − Familiarity)   // αF = 0.1,  recent
+//	activation   = Identity + Familiarity      // groove + recency (tunable blend)
 //
-// fed into two EMAs — Identity (α=0.02, the groove) and Familiarity (α=0.1,
-// recent). Only the PER-EDGE inputs live here (IndexScore = surroundings
-// overlap, one-shot per cycle; Alignment = lagged from Frame 2). Stress is
-// GLOBAL — read from the slice (a neuromodulator, not per-edge). intrinsic is
-// PER-NODE — the MemoryCell's BirthAlignment. Exact tuning (stress_modulator,
-// threshold family) is TBD by experiment.
+// Absent (visited=false) → sample 0 → both EMAs decay toward 0. Signed: a
+// negative Alignment yields a negative bump → the EMAs and the returned
+// activation go negative → the kernel's threshold drops it (the below-0 WM
+// eviction).
+//
+// Inputs default neutral (1.0) so a visited cell bumps toward 1 until their real
+// channels write them: IndexScore (surroundings overlap, per-edge), Alignment
+// (lagged from Frame 2, per-edge), Stress (global — set from the slice when
+// wired), Intrinsic (per-node BirthAlignment, set at crystallization). Tuning
+// (the stress_modulator function, the threshold family, the blend) is TBD.
 type memoryActivation struct {
-	Identity    float64 // EMA α=0.02
-	Familiarity float64 // EMA α=0.1
-	IndexScore  float64 // surroundings overlap, written by the cell (per-edge)
-	Alignment   float64 // lagged from the previous closure scoring (per-edge)
+	Identity    float64
+	Familiarity float64
+	IndexScore  float64
+	Alignment   float64
+	Stress      float64
+	Intrinsic   float64
 }
 
-// Activate — minimal for now: keeps traversed cells alive so waves flow. The
-// real signed bump/decay into the EMAs is the next step.
-func (a *memoryActivation) Activate(visited bool, _ int) float64 {
-	if visited {
-		return 1.0
-	}
-	return 0
+func newMemoryActivation() *memoryActivation {
+	return &memoryActivation{IndexScore: 1, Alignment: 1, Stress: 1, Intrinsic: 1}
 }
+
+func (a *memoryActivation) Activate(visited bool, _ int) float64 {
+	sample := 0.0
+	if visited {
+		sample = a.IndexScore * a.Alignment * a.Stress * a.Intrinsic
+	}
+	a.Identity += alphaIdentity * (sample - a.Identity)
+	a.Familiarity += alphaFamiliarity * (sample - a.Familiarity)
+	return a.Value()
+}
+
+// Value is the current activation (groove + recency) without bumping or decaying.
+func (a *memoryActivation) Value() float64 { return a.Identity + a.Familiarity }

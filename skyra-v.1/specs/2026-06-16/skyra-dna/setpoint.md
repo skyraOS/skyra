@@ -81,31 +81,37 @@ BirthAlignment = Intrinsic.Value() = ClosureGrade × StressAtBirth
 
 A clean, high-stress closure is born strong (a "flashbulb" memory); a marginal one is born weak. It is **not** an EMA (those are accumulated/per-edge) and **not** stress (that's global) — it's a one-time per-node stamp. It gives a fresh setpoint cold-start confidence (before edges accumulate) and feeds **solid ground** for the cascade (a high-BirthAlignment node is intrinsically solid — the cascade halts on it).
 
-## Cascade — state rollback to solid ground
+## The `completed` score (signed, inference-judged, transitory)
 
-A setpoint's **state** is its tower of crystallized layers (its accumulated children/levels). A **cascade** is a failure wave that propagates *down* this tower from a contradiction, **attenuating**, until it hits **solid ground** — the first layer at/below the cascade-stop threshold (~0.2, TBD). A node's `BirthAlignment` (intrinsic excitability) is a natural input here: a high-BirthAlignment node is intrinsically solid, so the cascade halts on it even with little accumulated edge history.
+A **lit** setpoint carries a `completed` score — "how done is this, really," a **signed −1..1 inference judgment** (a judgment call, not arithmetic from edge alignments). It is **distinct from `Alignment`**:
 
-- **Delta** = the span between cascade-start and solid ground — everything that rested on the refuted ground.
-- The delta is **rolled back out of the setpoint's state** (TMS dependency-directed backtracking) and **deposited into the WM buffer**. Solid ground survives intact.
-- The popped span becomes **potential groupings again** → Global reorganizes → crystallizes as a **Stress** (the failure-understanding).
-- **Nothing deleted** — rollback into WM, recoverable. The mirror of success closure (resolved arc → Understanding); cascade (retracted delta → Stress).
-
-Cascade detection + bounding is **code**: follow dependency edges, read stress, stop at the threshold. Only the reorganization afterward is inference. See [error-recovery-loop.md](../../../design-docs/cognition/error-recovery-loop.md#cascade--a-failure-wave-de-crystallization).
-
-### Threshold family
-| Threshold | Job | Value |
+| | Alignment | Completed |
 |---|---|---|
-| traversal survival | kernel gate for descent | `sl.Threshold()` |
-| keep / crystallization | add to children; path→edge | ~0.1 |
-| solid ground / cascade-stop | where a cascade halts | ~0.2 (TBD) |
+| what | node ↔ setpoint relational match | the setpoint's own done-ness |
+| source | feeds the **activation bump** (excitation) | **inference judgment** on lit setpoints |
+| scope | per-edge | per **lit** setpoint, **transitory** |
+| triggers | how excited / in-view | **+threshold → crystallize; supporting `< 0` → cascade**; between → in-progress |
 
-Invariant: solid-ground > crystallization (a cascade halts on something genuinely held). Exact values empirical.
+**`completed` does not drive excitation** — excitation (the bump) decides what's lit/in-view; `completed` is a readout *on* the lit setpoints, gated by lit-ness. A setpoint that loses excitation drops out of view ("not important at the moment") regardless of its `completed`. So `completed` is transitory: meaningful only while lit, not maintained out of view.
+
+## Cascade — state rollback, triggered by a supporting setpoint going negative
+
+A setpoint's **state** is its tower of crystallized layers — and its **supporting setpoints** are the constituent `n-1` setpoints in its `Children()` (what it crystallized from; the stacking). A setpoint rests on its supporting setpoints.
+
+**Cascade trigger: a supporting setpoint is judged `completed < 0`.** Not the setpoint's own dip — the **ground underneath** going negative (pure TMS: the justification is refuted). The cascade is a failure wave propagating *down* through supporting setpoints that are `< 0`, halting at the first one still **held** (`completed ≥ 0` — solid ground). `BirthAlignment` makes a node intrinsically more likely to hold.
+
+- **Delta** = the span from the contradiction down to solid ground — everything resting on the refuted ground.
+- Rolled back out of state (TMS dependency-directed backtracking), **deposited into WM**. Solid ground survives intact.
+- The popped span becomes **potential groupings again** → Global reorganizes → crystallizes as a **Stress** (the failure-understanding).
+- **Nothing deleted** — rollback into WM, recoverable. Mirror of success closure (resolved arc → Understanding); cascade (retracted delta → Stress).
+
+`completed` is the inference judgment; the cascade *propagation* (walk supporting setpoints, stop where `completed ≥ 0`) is **code**. See [error-recovery-loop.md](../../../design-docs/cognition/error-recovery-loop.md#cascade--a-failure-wave-de-crystallization).
 
 ## Open
 - Exact shape of Understanding and Stress as child cells (their own specs TBD)
 - How Responses and Actions attach structurally
 - Root drive: is it a setpoint (a prediction that always comes true) or membrane `Content`?
-- The three threshold values (find by experiment); preserve the solid-ground > crystallization ordering
+- `completed` thresholds (find by experiment): the +bar for crystallize; whether solid-ground is exactly `≥ 0` or a small positive bar. Cascade trigger is fixed at supporting `< 0`.
 
 ## Done when
 - A setpoint with a confirmed prediction exists, is traversed by the kernel, survives the Phase 1 filter, and participates in the Phase 2 LLM cycle (Frame 1 → Frame 2 → Vote).

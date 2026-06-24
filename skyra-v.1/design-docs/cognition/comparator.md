@@ -1,10 +1,28 @@
-# The Comparator — Coherence's Output Structure
+# The Comparator — Global's Output Structure
+
+> **Reconciliation (2026-06-23).** This doc predates three renames; the *reasoning*
+> below holds, the *vocabulary* drifted. Read it through this map:
+> - **Coherence → Global.** "Coherence (ACC) / the central cell" = `GlobalCell`.
+> - **Binding realities (Temporal/Episodic, Goal/Prediction/Action) → self/other
+>   agents.** The two-hemisphere / four-store binding-reality model dissolved;
+>   Global has two agents, `self` and `other`. "Reached through Goal/Prediction" =
+>   "reached through that competence," not a binding-reality cell.
+> - **`<alignment>` here conflates two quantities we have since split:**
+>   - **`alignment`** (current) = the *relational* match (node ↔ setpoint) that
+>     feeds the **activation bump** — how excited / in-view a node is.
+>   - **`completed`** (current) = the *signed closure judgment* on a lit setpoint —
+>     the throughline metric this doc calls "goal closure." `+threshold →
+>     crystallize`, `supporting setpoint < 0 → cascade`.
+>   Where this doc says "`<alignment>` → 1 is goal closure," read **`completed`**.
+>   The `<comparison>` output structure is unchanged; it produces the closure
+>   judgment. See [setpoints.md](setpoints.md), [working-memory.md](working-memory.md),
+>   [error-recovery-loop.md](error-recovery-loop.md).
 
 ## What It Is
 
-The comparator is what Coherence (ACC) emits on descent. It is one structure for all three mismatch domains, because content, prediction, and articulation are three instances of a single operation: **compare a reference against an observation, and signal how aligned they are.** This is the same comparator the whole goal/prediction thread converges on — completion is a comparison (satisfied-when vs. world), prediction is a comparison, articulation is a comparison. One primitive, three domains.
+The comparator is what Global emits on descent. It is one structure for all three mismatch domains, because content, prediction, and articulation are three instances of a single operation: **compare a reference against an observation, and signal how aligned they are.** This is the same comparator the whole goal/prediction thread converges on — completion is a comparison (satisfied-when vs. world), prediction is a comparison, articulation is a comparison. One primitive, three domains.
 
-Coherence's descent output collapses to a list of these comparisons. Nothing else — no separate delta, domain label, or result flag. Each comparison is one junction; the set of them is the frame.
+Global's descent output collapses to a list of these comparisons. Nothing else — no separate delta, domain label, or result flag. Each comparison is one junction; the set of them is the frame.
 
 ## The Structure
 
@@ -46,7 +64,7 @@ Sign carries match vs. mismatch; magnitude carries strength. This replaces a sep
 
 ## Domain Is Derived, Not Declared
 
-> **Dissolution note:** Goal / Prediction / Action below are no longer separate binding realities — **Goal** = the setpoint's *ascent face*, **Prediction** = Coherence's *Observe/Predict*, **Action** = the *Action store*. The domain-from-path mechanism is unchanged; only the *names* of the paths moved. The two live binding realities are **Temporal + Episodic** (each with self/other sub-realities). Read "reached through Goal/Prediction/Action" below as "reached through that competence," not "through a binding-reality cell."
+> **Dissolution note (updated 2026-06-23):** Goal / Prediction / Action below are not separate binding realities — **Goal** = the setpoint's *ascent face*, **Prediction** = Global's *Observe/Predict*, **Action** = the *Action store*. The domain-from-path mechanism is unchanged; only the *names* of the paths moved. The binding-reality model (Temporal/Episodic with sub-realities) has since fully dissolved into **Global's `self` and `other` agents** — read "reached through Goal/Prediction/Action" as "reached through that competence," not a binding-reality cell.
 
 The LLM never emits `content | prediction | articulation`. It never sees those words. The engine derives the domain from the cells the LLM cited.
 
@@ -72,7 +90,7 @@ The three domains are the three things a being can be wrong about: its own consi
 
 ## Match Reinforces, Mismatch Routes
 
-- **Mismatch** (alignment < 0) → the engine routes energy per the derived domain (split the cell, raise goal dominance and gather, or tighten the motor loop). Coherence is the stress center — the error signal *is* the energy (see [predictive-hierarchy](predictive-hierarchy.md)).
+- **Mismatch** (alignment < 0) → the engine routes energy per the derived domain (split the cell, raise goal dominance and gather, or tighten the motor loop). Global is the stress center — the error signal *is* the energy (see [predictive-hierarchy](predictive-hierarchy.md)).
 - **Match** (alignment > 0) → reinforce the expected↔actual coupling. These thoughts *confirmed* the reference; deepen the groove. This is how "the thoughts that drove a good decision" get saved, and how a reflex forms ([Decision #15](../architecture/v1-architecture-decisions.md)) — repeated matches are what let inference stop firing.
 
 ## The LLM Contract
@@ -103,7 +121,7 @@ Make as many as you see. Only cite cells from the list above.
 
 ## Goal Closure — the Throughline
 
-`<alignment>` → 1 on a goal's *satisfied-when* comparison **is the goal-closure signal** — the throughline experiment .1001 went looking for. The being knows it's done not because the act resembles the goal, but because the world matches the setpoint, and the comparator reads that match as a 1.
+The closure judgment → 1 on a goal's *satisfied-when* comparison **is the goal-closure signal** — the throughline experiment .1001 went looking for. (In current vocabulary this judgment is **`completed`**, the signed −1..1 closure score on a lit setpoint — distinct from the relational `alignment` that feeds activation; see the reconciliation note at top.) The being knows it's done not because the act resembles the goal, but because the world matches the setpoint, and the comparator reads that match as a 1.
 
 ## The Frame Is Comparisons, Not Just Cells
 
@@ -111,7 +129,7 @@ A frame is not a flat list of co-present cells — it is the **junctions** among
 
 ## Global and Local Coherence — One Method, Two Scopes
 
-Coherence runs at two scales, and it is the *same method* both times. The central cell sits behind the membrane (north of sensory, south of motor) and owns **global** alignment — does the being, as a whole, cohere? The binding realities own **local** alignment — does this one index cohere internally? But local coherence isn't separately implemented. The central cell **throws the coherence and frontopolar competence down the wave**; when it reaches the binding realities, it runs there, localized.
+Global runs coherence at two scales, and it is the *same method* both times. The central cell (Global) sits behind the membrane (north of sensory, south of motor) and owns **global** alignment — does the being, as a whole, cohere? The binding realities own **local** alignment — does this one index cohere internally? But local coherence isn't separately implemented. The central cell **throws the coherence and frontopolar competence down the wave**; when it reaches the binding realities, it runs there, localized.
 
 **Scope is positional, not parametric.** Nothing passes a "run locally" flag. The coherence method reads *"my slice / my members."* Where it executes rebinds what "my" means — at the central cell, "my slice" is the integrated returns from all binding realities; thrown down to Goal, it is Goal's own members. Same code, scope set by position. This is the [local-relativity invariant](../laws/invariants/local-relativity-invariant.md) doing the work: the same law evaluated in each frame yields local results. Local coherence falls out for free because coherence run *at a location is already scoped to that location.* No machinery moves.
 
@@ -156,7 +174,7 @@ once votes are cast, they return to global
                                           the topology re-propagates and the regions re-resolve
 ```
 
-**(b) is inner speech.** Vygotsky's self-regulating inner voice, realized as re-entrant processing (Edelman/Dehaene) — the broadcast loops back as input. It fits the machinery exactly: it reuses the **sensory path** (the inner voice enters where external perception does); it carries the **"from me"** tag, so on return it folds into the workspace as reafference, not as new external news; it is the *"deliberation as re-descent"* of [predictive-hierarchy](predictive-hierarchy.md), routed through sensory so the *whole* topology reframes rather than one stuck branch; and it is **powered by the conflict itself** — the tie is a mismatch → stress → Coherence routes that energy into the re-entry, and **amplitude attenuation bounds the loop** (it fades after a few passes). That bound is the line between deliberating and ruminating: the being thinks until it resolves or runs out of energy. Mode (a) imposes; mode (b) reframes and lets the autonomous regions own the resolution — truer to the non-gating spirit.
+**(b) is inner speech.** Vygotsky's self-regulating inner voice, realized as re-entrant processing (Edelman/Dehaene) — the broadcast loops back as input. It fits the machinery exactly: it reuses the **sensory path** (the inner voice enters where external perception does); it carries the **"from me"** tag, so on return it folds into the workspace as reafference, not as new external news; it is the *"deliberation as re-descent"* of [predictive-hierarchy](predictive-hierarchy.md), routed through sensory so the *whole* topology reframes rather than one stuck branch; and it is **powered by the conflict itself** — the tie is a mismatch → stress → Global routes that energy into the re-entry, and **amplitude attenuation bounds the loop** (it fades after a few passes). That bound is the line between deliberating and ruminating: the being thinks until it resolves or runs out of energy. Mode (a) imposes; mode (b) reframes and lets the autonomous regions own the resolution — truer to the non-gating spirit.
 
 ## This Is a Global Workspace
 
