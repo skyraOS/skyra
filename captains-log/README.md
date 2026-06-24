@@ -2,9 +2,17 @@
 
 Observations and conclusions about activation dynamics across experiment runs.
 
-Each document is an activation phase. Each run gets logged with what was set up, what was observed, and what it means.
+Two kinds of entry:
 
-## Format
+- **Activation phases** (`phase-NN-*.md`) — the core log. Each is a Skyra experiment run:
+  what was set up, what was observed, what it means. Numbers-driven (see Format + Rules).
+- **Field observations** (`observations/NN-*.md`) — qualitative observations of *existing*
+  systems (e.g. an agentic harness), kept when they bear directly on the architecture.
+  Not experiments, no debug numbers, no next phase — they deliberately break the
+  numbers-not-feelings rule and say so in a banner. Filed as standing evidence, cited when
+  the relevant design is questioned.
+
+## Format (activation phases)
 
 Each log entry:
 
