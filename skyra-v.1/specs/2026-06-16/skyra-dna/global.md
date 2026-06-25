@@ -34,6 +34,14 @@ Recursive: when groupings get dense, group the groupings — an index over an in
 - **Skips entirely if there is no completed setpoint** (cold start has nothing to abstract over).
 - The chosen/active grouping becomes the context passed down for the rest of the cycle.
 
+> **MVP (above) vs. the improvement.** The single inference call here is the **MVP** — build
+> it first. The planned upgrade — Global as an **active LLM-driven probe loop** that explores
+> nodes *before* grouping (passed-competence probe waves, a mini-BSP join on the slice) with a
+> **drift-diffusion stop controller** (alignment-plateau + model-tier cascade + time→stress
+> urgency bound) — is specced separately in
+> [global-active-grouping.md](global-active-grouping.md). Same metric (alignment), better
+> groupings; layered on once the loop runs.
+
 ### The reverse read is a wave, not a hash
 Turning the **surroundings map** (current active entities, updated on every `perceive`) into the relevant setpoints is **not** an index lookup — it's a **wave fired from the surroundings entities**. Entities are cells whose `Children()` are the setpoints stamped on them at completion; the wave spreads `understanding → entity → understanding → entity …`, bounded by amplitude. Associative recall = spreading activation, free from the kernel, no separate index to maintain or scan. Decay is automatic (edge-owned activation + threshold); salience falls out of branching (hub entities spread thin). See [entities-and-surroundings.md](../../../design-docs/cognition/entities-and-surroundings.md).
 
