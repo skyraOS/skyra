@@ -179,6 +179,34 @@ cascade-stop threshold. (Likely one of a small set of global modulators — stre
 later valence/emotion — so leave room for an affective-state vector, but one scalar to
 start.)
 
+> **Parked idea — stress as a sharded counter (decide with the public/private slice
+> split).** The single shared-mutable scalar is fine as long as every stress write
+> lands at a *serialized* point — which it does in the one-slice design (decay during
+> the single-wave traversal, cascade-bump at the join). If we ever go to **separate-slice
+> concurrent agents** (model (b) — self/other traversing their own topologies at once;
+> see [working-memory.md](../cognition/working-memory.md#concurrency)), concurrent writers
+> would race on that scalar. The lock-free fix is the **sharded-counter / `LongAdder`
+> pattern**: stress is stored **local** (per cell/agent, written only by its owner →
+> no write contention), and **"being stress" is a reduction over the locals, materialized
+> at the join**. Notes for when we pick this up:
+> - **Safety is in *where the read lands*, not in the reduction.** Summing slots that
+>   others are still writing is still a race. It's safe because the aggregate read happens
+>   at **crystallization**, which is a **join-time event** (writers already frozen by
+>   snapshot-in/join-out). Live mid-fan-out reads would need per-cell **atomic** floats
+>   (sum-of-atomics — lock-free, slightly inconsistent, fine for a slow modulator).
+> - **Two reads, two sources.** The in-flight bump gain reads an agent's **own local**
+>   stress (private, lock-free); `StressAtBirth` reads the **reduction** at the join.
+>   Diffuse-within-an-agent during fan-out, reconciled-to-global at the join (one cycle
+>   lagged — acceptable, stress is slow).
+> - **Reducer choice is a separate, semantic question.** Sum is fine only if local stress
+>   is **0-baseline and sparse** (sum = "total active stress mass"); otherwise it grows
+>   with cell count and the being is permanently panicked → normalize (mean / decaying
+>   pool). Independent of the concurrency win.
+> - **Net:** stored local (lock-free writes), read diffuse (aggregate at join) — keeps the
+>   neuromodulator's diffuse-on-read property without a shared mutable on the public slice.
+>   Not needed for the one-slice / model-(a) design; it's the mechanism that makes model (b)
+>   safe.
+
 ### Birth alignment — cell-intrinsic excitability (per-node)
 
 Memories aren't born equal. Beyond the synaptic (edge) weights, a memory carries an

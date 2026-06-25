@@ -35,8 +35,15 @@ func (r *Relation) realize(origin, traversed skyra.Space, impulse any) {
 	if sl == nil {
 		return
 	}
-	result := r.traverse(origin, traversed, impulse, sl, amplitudeOf(impulse, r.Amplitude))
-	r.returnToOrigin(origin, result, amplitudeOf(impulse, r.Amplitude), impulse) // Perception Invariant
+	r.traverse(origin, traversed, impulse, sl, amplitudeOf(impulse, r.Amplitude))
+	// Perception Invariant SUSPENDED for the sensorimotor-boundary build: the kernel
+	// returns void (no return-perception wave). The forward pipeline carries results
+	// via explicit cell-initiated spawns (go kernel.Realize) instead. Restore the line
+	// below once the forward path works. See specs/2026-06-16/skyra-dna/sensorimotor.md
+	// §5 and design-docs/laws/invariants/perception-invariant.md (suspension banner).
+	//
+	//	result := r.traverse(origin, traversed, impulse, sl, amplitudeOf(impulse, r.Amplitude))
+	//	r.returnToOrigin(origin, result, amplitudeOf(impulse, r.Amplitude), impulse)
 }
 
 // traverse walks `traversed` under its slice lock and returns the wave's

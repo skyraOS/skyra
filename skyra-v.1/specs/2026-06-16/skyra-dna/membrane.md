@@ -1,5 +1,14 @@
 # Membrane — Cell Type Spec
 
+> **⚠️ Boundary model superseded (2026-06-25) — see [sensorimotor.md](sensorimotor.md).**
+> The membrane is now a **thin trampoline** (Observe no-op, **no children**, fires a wave to
+> sensory on Express); **sensory/motor are separate sub-actors on their own slices**, and the
+> **surroundings write lives on sensory**, not here. The wave reaches cognition by a **forward
+> spawn**, not by descending into Global as a child. The Observe/Express *face-semantics* below
+> (attention gate / motor) still describe the boundary conceptually, but their **placement has
+> moved to the sub-actors**, and the kernel currently **returns void** (Perception Invariant
+> suspended for the build).
+
 **Date:** 2026-06-16 · **Status:** skeleton (implementation stubbed for MVP; **ownership is explicit**)
 
 ## File

@@ -39,7 +39,8 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
 
 | Spec | Cell type | MVP? |
 |---|---|---|
-| [membrane.md](membrane.md) | the sensorimotor boundary — attention gate (Observe) / motor (Express) | `[MVP]` |
+| [sensorimotor.md](sensorimotor.md) | **the boundary system** (2026-06-25) — membrane (thin trampoline) + sensory/motor sub-actors + three-slice topology + cell-initiated crossing; **kernel returns void / Perception Invariant suspended for the build** | `[MVP]` |
+| [membrane.md](membrane.md) | the sensorimotor boundary — attention gate (Observe) / motor (Express) *(boundary model superseded by `sensorimotor.md`; face-semantics still apply)* | `[MVP]` |
 | [global.md](global.md) | Global — vote tally / tie-break; agents `self` + `other`; Hopfield vote; reverse read = wave | `[MVP]` (minimal) |
 | [setpoint.md](setpoint.md) | confirmed predictions — content = understanding; children = entities + responses/actions/stresses | `[MVP]` (one) |
 | [entity.md](entity.md) | person/place/thing — children = setpoints stamped at completion; the reverse-index hub | `[next]` |
@@ -47,6 +48,7 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
 | [temporal.md](temporal.md) | *(superseded — two-hemisphere model folded into the self/other agents)* | — |
 | [action.md](action.md) | the action store — justification index | `[after]` |
 
+> `membrane.md` **boundary model** — superseded by `sensorimotor.md` (2026-06-25): the membrane is a thin trampoline (Observe no-op, no children, fires a wave to sensory on Express); sensory/motor are separate sub-actors on their own slices; the surroundings write lives on **sensory**; the wave reaches cognition by a **forward spawn**, not as a child. The cognitive layer is unchanged.
 > `coherence.md` — superseded by `global.md` (2026-06-17).
 > two-hemisphere model (WorkingMemory/Category) → one binding reality (2026-06-19) → **self/other agents** (2026-06-19, current).
 

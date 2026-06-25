@@ -4,6 +4,19 @@
 
 **Foundational.** This is the first concrete invariant on world physics, and it must hold unchanged through the entirety of v.1. Every mechanism — internal traversal, external action, dispatch, and return perception — is built to preserve it. If a design choice would break this invariant, the design choice is wrong, not the invariant.
 
+### ⚠️ Temporarily suspended during implementation (2026-06-25)
+
+The invariant is **knowingly suspended for the current build.** While the sensorimotor
+**forward pipeline** (membrane → sensory → cognition → motor) is being stood up,
+**`kernel.Realize` returns void and does not fire the return perception wave** — there is no
+reafference loop yet. This is a deliberate **build-time scaffold to get the forward path
+right first**, not a revision of the design: the invariant remains foundational and is the
+destination. The return perception wave (and this suspension's removal) is restored once the
+forward pipeline works and the reafference loop is wired back in. Tracking spec:
+[../../../specs/2026-06-16/skyra-dna/sensorimotor.md](../../../specs/2026-06-16/skyra-dna/sensorimotor.md)
+(§5). **Until then, read "every wave returns to its origin" as the target state, not current
+runtime behavior.**
+
 ## The Invariant
 
 > **What a being sends is chosen; what it perceives is not.**

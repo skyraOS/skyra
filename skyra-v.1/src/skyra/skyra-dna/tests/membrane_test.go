@@ -2,93 +2,91 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
-	"skyra-v1/src/skyra/world"
 )
 
-// The pipeline's start: an external wave names its sender (Source.SpaceID) and
-// where it came from (Source.Coord). The membrane records who/where/what into
-// the surroundings map it owns on the slice.
-func TestMembraneObserveWritesSurroundings(t *testing.T) {
-	sl := world.NewSlice("being", "skyra")
-	m := dna.NewMembraneCell("skyra", "be helpful", sl)
+// The membrane is a thin boundary: no perception, no children. Observe does
+// nothing (perception is sensory's), and there is nothing for the kernel to
+// descend — it goes straight to Express.
+func TestMembraneIsThin(t *testing.T) {
+	m, _ := newBeing("skyra")
 
+	if len(m.Children()) != 0 {
+		t.Fatalf("membrane children = %d, want 0 (thin boundary)", len(m.Children()))
+	}
+	if m.Content() != "be helpful" {
+		t.Fatalf("membrane content = %v, want the root drive", m.Content())
+	}
+
+	// Observe is a no-op — it must NOT write the surroundings (sensory does that).
 	m.Observe(nil, skyra.Impulse{
-		Source:  &skyra.ImpulseSource{SpaceID: "michael", PointID: "3,4", Coord: skyra.Coord{X: 3, Y: 4}},
-		Payload: "hello skyra",
-	})
-
-	sur := dna.SurroundingsOf(sl)
-	got, ok := sur["michael"]
-	if !ok {
-		t.Fatalf("michael not in surroundings: %+v", sur)
-	}
-	if got.Location != (skyra.Coord{X: 3, Y: 4}) {
-		t.Errorf("location = %+v, want 3,4", got.Location)
-	}
-	if got.LastSaid != "hello skyra" {
-		t.Errorf("lastSaid = %q, want %q", got.LastSaid, "hello skyra")
-	}
-}
-
-// Return-perception waves (the being's own inward delivery) are not sensory
-// intake — they must not pollute the surroundings.
-func TestMembraneObserveSkipsReturnWave(t *testing.T) {
-	sl := world.NewSlice("being", "skyra")
-	m := dna.NewMembraneCell("skyra", "be helpful", sl)
-
-	m.Observe(nil, skyra.Impulse{
-		Return:  true,
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
-		Payload: "inner",
+		Payload: "hello",
 	})
-
-	if sur := dna.SurroundingsOf(sl); len(sur) != 0 {
-		t.Fatalf("return wave wrote surroundings: %+v", sur)
+	if len(m.Sensory().ByEntity) != 0 {
+		t.Fatalf("membrane Observe wrote the surroundings: %+v", m.Sensory().ByEntity)
 	}
 }
 
-// Surroundings recency: the perceived sender bumps, everyone absent decays — so
-// who's "currently around" fades as attention moves to others (the WM fast pool).
-func TestSurroundingsActivationDecays(t *testing.T) {
-	sl := world.NewSlice("being", "skyra")
-	m := dna.NewMembraneCell("skyra", "be helpful", sl)
-	perceive := func(sender string) {
-		m.Observe(nil, skyra.Impulse{Source: &skyra.ImpulseSource{SpaceID: sender}, Payload: "x"})
-	}
+// On Express the membrane fires an inward wave to SENSORY, owned by sensory
+// (origin = traversed = sensory) — the membrane only launches and drops out.
+func TestMembraneFiresSensoryOnExpress(t *testing.T) {
+	spy := newSpyKernel()
+	m := newBeingWithKernel("skyra", spy)
 
-	perceive("michael")
-	perceive("michael")
-	sur := dna.SurroundingsOf(sl)
-	michaelHot := sur["michael"].Activation()
-	if michaelHot <= 0 {
-		t.Fatalf("michael not active after perceive: %v", michaelHot)
+	imp := skyra.Impulse{
+		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Payload: "hello skyra",
 	}
+	m.Express(nil, imp)
 
-	// Attention moves to sarah; michael is now absent and should decay.
-	perceive("sarah")
-	perceive("sarah")
-	if got := sur["michael"].Activation(); got >= michaelHot {
-		t.Fatalf("michael activation %v did not decay (was %v)", got, michaelHot)
-	}
-	if got := sur["sarah"].Activation(); got <= 0 {
-		t.Fatalf("sarah not active: %v", got)
+	select {
+	case call := <-spy.calls:
+		if call.origin == nil || call.origin.ID() != "skyra:sensory" {
+			t.Fatalf("spawn origin = %v, want skyra:sensory (sensory owns its perception)", call.origin)
+		}
+		if call.traversed == nil || call.traversed.ID() != "skyra:sensory" {
+			t.Fatalf("spawn traversed = %v, want skyra:sensory", call.traversed)
+		}
+		got, ok := call.impulse.(skyra.Impulse)
+		if !ok || got.Payload != "hello skyra" {
+			t.Fatalf("spawn impulse = %+v, want the original perceive impulse", call.impulse)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("membrane did not spawn a sensory wave on Express")
 	}
 }
 
-// A self-originated wave isn't a surrounding entity.
-func TestMembraneObserveSkipsSelf(t *testing.T) {
-	sl := world.NewSlice("being", "skyra")
-	m := dna.NewMembraneCell("skyra", "be helpful", sl)
+// The fire is UNCONDITIONAL — even a wave that perceives no known entity still
+// runs the sensory wave (traffic-relative decay needs it).
+func TestMembraneFiresUnconditionally(t *testing.T) {
+	spy := newSpyKernel()
+	m := newBeingWithKernel("skyra", spy)
 
-	m.Observe(nil, skyra.Impulse{
-		Source:  &skyra.ImpulseSource{SpaceID: "skyra", Coord: skyra.Coord{X: 0, Y: 0}},
-		Payload: "self",
-	})
+	m.Express(nil, skyra.Impulse{Payload: "ambient, no sender"})
 
-	if sur := dna.SurroundingsOf(sl); len(sur) != 0 {
-		t.Fatalf("self wave wrote surroundings: %+v", sur)
+	select {
+	case call := <-spy.calls:
+		if call.traversed == nil || call.traversed.ID() != "skyra:sensory" {
+			t.Fatalf("spawn traversed = %v, want skyra:sensory", call.traversed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("membrane did not fire sensory on a no-sender wave")
+	}
+}
+
+// The motor sub-actor exists with its indexes initialized (out-wave not wired in
+// step 1).
+func TestMembraneBuildsMotorIndexes(t *testing.T) {
+	m, _ := newBeing("skyra")
+	motor := m.Motor()
+
+	if motor.ByIntent == nil || motor.ByEntity == nil {
+		t.Fatalf("motor indexes nil: ByIntent=%v ByEntity=%v", motor.ByIntent, motor.ByEntity)
+	}
+	if len(motor.Children()) != 0 {
+		t.Fatalf("motor children = %d, want empty", len(motor.Children()))
 	}
 }

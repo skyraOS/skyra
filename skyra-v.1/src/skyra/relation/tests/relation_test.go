@@ -260,6 +260,9 @@ func TestTreeDoubleBuffer(t *testing.T) {
 
 // Perception Invariant: the wave delivers its result to its origin.
 func TestDeliversToOrigin(t *testing.T) {
+	t.Skip("Perception Invariant SUSPENDED for the sensorimotor-boundary build: the kernel " +
+		"returns void (returnToOrigin not called). Restore alongside the return wave. See " +
+		"specs/2026-06-16/skyra-dna/sensorimotor.md §5 and the perception-invariant suspension banner.")
 	root := newCell("root", 1.0)
 	a := newCell("a", 1.0)
 	root.link(a)
