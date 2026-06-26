@@ -22,16 +22,30 @@ type SensoryCell struct {
 	ownerID  string
 	slice    skyra.Slice
 	ByEntity map[string]skyra.Space // keyed by stable entity id (internal lookup)
+
+	// kernel + global wire the forward pipeline link: sensory spawns a wave into
+	// cognition (Global) on Express. Global is sensory's sub-actor on its own
+	// (injected) slice — the same pattern as the membrane's sensory/motor.
+	kernel skyra.Time
+	global *GlobalCell
 }
 
-func NewSensoryCell(id, ownerID string, slice skyra.Slice) *SensoryCell {
-	return &SensoryCell{
+func NewSensoryCell(id, ownerID string, slice, globalSlice skyra.Slice, kernel skyra.Time) *SensoryCell {
+	s := &SensoryCell{
 		id:       id,
 		ownerID:  ownerID,
 		slice:    slice,
 		ByEntity: map[string]skyra.Space{},
+		kernel:   kernel,
 	}
+	// Global is the cognitive core, the next pipeline stage; keyed at the being
+	// level (ownerID), on its own injected slice.
+	s.global = NewGlobalCell(ownerID+":global", globalSlice)
+	return s
 }
+
+// Global is sensory's forward target (the cognitive core).
+func (s *SensoryCell) Global() *GlobalCell { return s.global }
 
 func (s *SensoryCell) ID() string                            { return s.id }
 func (s *SensoryCell) Slice() skyra.Slice                    { return s.slice }
@@ -93,7 +107,17 @@ func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	})
 }
 
-func (s *SensoryCell) Express(origin skyra.Space, impulse any) any { return nil }
+// Express fires the forward wave into cognition (Global) — the next pipeline
+// link. origin=Global: cognition owns its own wave; sensory only launches and
+// drops out. async (go) so the spawn locks Global's own slice, never sensory's
+// held lock. Payload = the impulse forwarded as-is for now; the surroundings
+// snapshot handoff (so Global can read what sensory perceived) is the next step.
+func (s *SensoryCell) Express(origin skyra.Space, impulse any) any {
+	if s.kernel != nil && s.global != nil {
+		go s.kernel.Realize(s.global, s.global, impulse)
+	}
+	return nil
+}
 
 // refreshPresence writes the per-edge IndexScore for this wave across every
 // sensory→entity edge: the perceived entity overlaps the current surroundings

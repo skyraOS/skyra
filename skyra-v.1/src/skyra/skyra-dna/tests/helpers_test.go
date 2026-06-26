@@ -23,6 +23,7 @@ func newBeingWithKernel(id string, kernel skyra.Time) *dna.MembraneCell {
 		world.NewSlice(id+":membrane", id),
 		world.NewSlice(id+":sensory", id),
 		world.NewSlice(id+":motor", id),
+		world.NewSlice(id+":global", id),
 		kernel)
 }
 

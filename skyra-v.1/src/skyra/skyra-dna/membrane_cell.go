@@ -26,17 +26,18 @@ type MembraneCell struct {
 }
 
 // NewMembraneCell wires the boundary. Slices are INJECTED — one per actor
-// (membrane, sensory, motor) — so dna stays free of a world dependency (the
-// caller mints the concrete slices). kernel is the runtime's send primitive
-// (skyra.Time), used to spawn the inward sensory wave on Express.
-func NewMembraneCell(id, rootDrive string, slice, sensorySlice, motorSlice skyra.Slice, kernel skyra.Time) *MembraneCell {
+// (membrane, sensory, motor, global) — so dna stays free of a world dependency
+// (the caller mints the concrete slices). kernel is the runtime's send primitive
+// (skyra.Time), used to spawn the inward sensory wave on Express; it is also
+// handed to sensory for the next forward link (sensory → Global).
+func NewMembraneCell(id, rootDrive string, slice, sensorySlice, motorSlice, globalSlice skyra.Slice, kernel skyra.Time) *MembraneCell {
 	m := &MembraneCell{
 		id:        id,
 		rootDrive: rootDrive,
 		slice:     slice,
 		kernel:    kernel,
 	}
-	m.sensory = NewSensoryCell(id+":sensory", id, sensorySlice)
+	m.sensory = NewSensoryCell(id+":sensory", id, sensorySlice, globalSlice, kernel)
 	m.motor = NewMotorCell(id+":motor", id, motorSlice)
 	return m
 }

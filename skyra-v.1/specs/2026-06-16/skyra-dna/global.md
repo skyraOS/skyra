@@ -34,6 +34,12 @@ Recursive: when groupings get dense, group the groupings — an index over an in
 - **Skips entirely if there is no completed setpoint** (cold start has nothing to abstract over).
 - The chosen/active grouping becomes the context passed down for the rest of the cycle.
 
+> **The read-half mechanics** of this pass — how Global gathers the candidate setpoints
+> (entity-outward from sensory's warm surroundings, scored by overlap × recency, cell-written
+> IndexScore, dynamic `Children()`) — are specced in
+> [global-observe-gather.md](global-observe-gather.md). The inference call here is the write
+> trigger on top of that gather.
+>
 > **MVP (above) vs. the improvement.** The single inference call here is the **MVP** — build
 > it first. The planned upgrade — Global as an **active LLM-driven probe loop** that explores
 > nodes *before* grouping (passed-competence probe waves, a mini-BSP join on the slice) with a

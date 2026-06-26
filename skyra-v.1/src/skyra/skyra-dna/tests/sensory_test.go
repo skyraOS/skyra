@@ -2,6 +2,7 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
@@ -214,6 +215,36 @@ func TestSensoryObserveUpdatesEntityTimestamp(t *testing.T) {
 	}
 	if !seenSecondState || !seenSecond {
 		t.Fatalf("second observation not appended: state=%v interaction=%v", seenSecondState, seenSecond)
+	}
+}
+
+// The next pipeline link: on Express, sensory fires a forward wave into cognition
+// (Global), owned by Global (origin = traversed = Global) — sensory only launches.
+func TestSensoryFiresGlobalOnExpress(t *testing.T) {
+	spy := newSpyKernel()
+	m := newBeingWithKernel("skyra", spy)
+	sensory := m.Sensory()
+
+	imp := skyra.Impulse{
+		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Payload: "hello skyra",
+	}
+	sensory.Express(nil, imp)
+
+	select {
+	case call := <-spy.calls:
+		if call.origin == nil || call.origin.ID() != "skyra:global" {
+			t.Fatalf("spawn origin = %v, want skyra:global (cognition owns its wave)", call.origin)
+		}
+		if call.traversed == nil || call.traversed.ID() != "skyra:global" {
+			t.Fatalf("spawn traversed = %v, want skyra:global", call.traversed)
+		}
+		got, ok := call.impulse.(skyra.Impulse)
+		if !ok || got.Payload != "hello skyra" {
+			t.Fatalf("spawn impulse = %+v, want the forwarded impulse", call.impulse)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("sensory did not spawn a cognition (Global) wave on Express")
 	}
 }
 

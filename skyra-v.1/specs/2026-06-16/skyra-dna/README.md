@@ -42,6 +42,7 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
 | [sensorimotor.md](sensorimotor.md) | **the boundary system** (2026-06-25) — membrane (thin trampoline) + sensory/motor sub-actors + three-slice topology + cell-initiated crossing; **kernel returns void / Perception Invariant suspended for the build** | `[MVP]` |
 | [membrane.md](membrane.md) | the sensorimotor boundary — attention gate (Observe) / motor (Express) *(boundary model superseded by `sensorimotor.md`; face-semantics still apply)* | `[MVP]` |
 | [global.md](global.md) | Global — vote tally / tie-break; agents `self` + `other`; Hopfield vote; reverse read = wave | `[MVP]` (minimal) |
+| [global-observe-gather.md](global-observe-gather.md) | Global's Observe **read-half** (2026-06-25) — gather candidate setpoints entity-outward from sensory's warm surroundings, score by overlap × recency (cell-written IndexScore), build `Children()`; inference call is the continuation | `[MVP]` |
 | [global-active-grouping.md](global-active-grouping.md) | Global's grouping pass, the **improvement** (2026-06-25) — active LLM-driven probe loop + drift-diffusion stop controller; passive single-call MVP ships first | `[improvement / post-MVP]` |
 | [setpoint.md](setpoint.md) | confirmed predictions — content = understanding; children = entities + responses/actions/stresses | `[MVP]` (one) |
 | [entity.md](entity.md) | person/place/thing — children = setpoints stamped at completion; the reverse-index hub | `[next]` |
