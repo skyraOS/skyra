@@ -35,11 +35,20 @@ type BuildContext struct {
 	BeingID  string
 	NewSlice func(id string) skyra.Slice
 	Kernel   skyra.Time
+	// Infer is the LLM seam (system, present) → response. Injected so dna stays
+	// free of the inference package (the app passes inference.Call; tests pass a
+	// mock). nil → cells that would infer simply skip it.
+	Infer InferFunc
 	// Motor — the pipeline terminus (the being's out-face). Created by the
 	// membrane and threaded so the chain's tail (voting) spawns into this same
 	// motor rather than minting a second one.
 	Motor *MotorCell
 }
+
+// InferFunc is the injected LLM call: a system prompt + the present (the frame),
+// returning the model's text. The cell composes what it sends and parses what
+// comes back (see parse.go).
+type InferFunc func(system, present string) (string, error)
 
 // sliceFor mints a slice for a sub-actor (suffix like ":sensory"); nil if no
 // factory was supplied (every real build supplies one).

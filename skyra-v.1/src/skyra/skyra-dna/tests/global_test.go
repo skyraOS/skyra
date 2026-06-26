@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,39 @@ func TestGlobalAssemblesTimestampOrderedFrame(t *testing.T) {
 	}
 	if !sawFirst || !sawSecond {
 		t.Fatalf("frame missing exchange: first=%v second=%v", sawFirst, sawSecond)
+	}
+}
+
+// The first real behavior: cold-start grouping pass. Global reads the warm
+// surroundings, renders them into the prompt, calls inference (mocked), and stores
+// the parsed <label> as the cycle's gist (framing).
+func TestGlobalColdStartPredictsLabel(t *testing.T) {
+	var gotPresent string
+	mock := func(system, present string) (string, error) {
+		gotPresent = present
+		return "<label>help michael with the skyra project</label>", nil
+	}
+	m, kernel := newBeingWithInfer("skyra", mock)
+	sensory := m.Sensory()
+	global := sensory.Global()
+
+	sensory.Slice().SetCount(1)
+	sensory.Observe(nil, skyra.Impulse{
+		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Payload: "can you help me with the skyra project",
+	})
+
+	kernel.Realize(nil, global, skyra.Impulse{
+		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Payload: "now",
+	})
+
+	if global.Gist() != "help michael with the skyra project" {
+		t.Fatalf("gist = %q, want the parsed label", global.Gist())
+	}
+	// The exchange reached the prompt (frame rendered into the present).
+	if !strings.Contains(gotPresent, "skyra project") {
+		t.Fatalf("present did not carry the exchange: %q", gotPresent)
 	}
 }
 

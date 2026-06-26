@@ -30,6 +30,19 @@ func newBeingWithKernel(id string, kernel skyra.Time) *dna.MembraneCell {
 	return dna.NewMembraneCell("be helpful", ctx)
 }
 
+// newBeingWithInfer builds a being with the real kernel and an injected inference
+// seam (a mock in tests) — for exercising the grouping pass without a network call.
+func newBeingWithInfer(id string, infer dna.InferFunc) (*dna.MembraneCell, *relation.Relation) {
+	kernel := relation.NewRelation()
+	ctx := dna.BuildContext{
+		BeingID:  id,
+		NewSlice: func(sliceID string) skyra.Slice { return world.NewSlice(sliceID, id) },
+		Kernel:   kernel,
+		Infer:    infer,
+	}
+	return dna.NewMembraneCell("be helpful", ctx), kernel
+}
+
 // sensoryEntity reads the sensory entity index under the sensory slice lock, so a
 // test polling for the effect of an async (spawned) sensory wave is synchronized
 // with that wave's locked Observe writes — no data race.

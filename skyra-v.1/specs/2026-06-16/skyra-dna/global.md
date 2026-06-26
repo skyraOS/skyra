@@ -29,6 +29,34 @@ Recursive: when groupings get dense, group the groupings — an index over an in
 
 **This replaces the parent/future edge.** Setpoints are past-only; the future is not stored per-setpoint. It lives here, as Global's grouping index, and is **passed down as context** to the active setpoints — so each setpoint is **reinterpreted under whatever long-term goal is currently active** ("mention skyra project" means one thing under "help with skyra," another under "wrap up the call").
 
+### Grouping vs. framing — stable anchor, swappable gist (2026-06-26)
+
+The grouping and its gist are **two nodes, not one** — that is what lets the framing change
+while the grouping persists:
+
+- **Grouping** (stable anchor) — the groupID setpoints tag, where the self/other predictions
+  hang. Persists across re-framings. This is the "groupings must persist (stable id)"
+  requirement that keeps `grouping → prediction` stable while setpoint tags churn
+  ([working-memory.md](../../../design-docs/cognition/working-memory.md)).
+- **Framing / gist** (swappable) — the compressed understanding/label. A **separate node**
+  attached to the grouping; it is the thing that turns over.
+
+On Observe the LLM does one of three things to the active groupings: **match** an existing
+framing, **re-frame** one (a new gist), or **start** a new grouping. Re-framing **births a new
+framing node** on the *same* grouping and lets the old one decay — it does **not** replace the
+grouping or migrate the children (the setpoints stay tagged to the stable anchor; only the gist
+node turns over). Framings therefore **compete by weight**: a re-selected framing grooves, an
+abandoned one decays below threshold and prunes. The sequence of framing nodes hanging off a
+grouping **is** its version history (recent hot, old decaying) — no separate versioning system;
+**death is by decay, not deletion.** Same Hebbian crystallize/prune as everywhere, pointed at
+gists.
+
+**The framing is the top-down context for the layer below.** Global sets the framing;
+**self/other do the fine-grained setpoint alignment *under* it** (predictive coding: frame /
+precision down, detailed alignment up). The same setpoint grades differently under different
+framings — which is exactly why the framing must be a *stable* thing self/other can predict
+against without it shifting mid-cycle.
+
 ### Grouping runs in Global's Observe (on impulse)
 - On impulse, score the impulse against the **active groupings**, in the context of the lit subgraph (working memory) — really *lit-set-vs-grouping*, **one inference call**.
 - **Skips entirely if there is no completed setpoint** (cold start has nothing to abstract over).

@@ -1,7 +1,9 @@
 package dna
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	"skyra-v1/src/skyra"
 )
@@ -46,6 +48,15 @@ type GlobalCell struct {
 	// frame — the assembled read-half output this cycle: the parsed,
 	// timestamp-ordered surroundings (the grouping inference call's input).
 	frame []ParsedNode
+
+	// infer — the injected LLM seam (nil → skip inference).
+	infer InferFunc
+
+	// gist — the current framing (the grouping label predicted this cycle). The
+	// cold-start form: a plain string. Becomes a framing node on a stable grouping
+	// once the warm case lands. See specs/2026-06-16/skyra-dna/global.md
+	// ("Grouping vs. framing").
+	gist string
 }
 
 func NewGlobalCell(ctx BuildContext, sensory *SensoryCell) *GlobalCell {
@@ -54,6 +65,7 @@ func NewGlobalCell(ctx BuildContext, sensory *SensoryCell) *GlobalCell {
 		slice:     ctx.sliceFor(":global"),
 		sensory:   sensory,
 		kernel:    ctx.Kernel,
+		infer:     ctx.Infer,
 		groupings: map[string]skyra.Space{},
 	}
 	g.other = NewOtherCell(ctx) // the next pipeline stage (Global → other)
@@ -91,10 +103,49 @@ func (g *GlobalCell) Observe(origin skyra.Space, impulse any) {
 // See specs/2026-06-16/skyra-dna/global-observe-gather.md.
 func (g *GlobalCell) observeExternal(impulse any) {
 	g.frame = g.assembleFrame()
-	// TODO (write-half): score candidates by overlap × recency (IndexScore);
-	// inference call (score impulse vs active groupings, skip if no completed
-	// setpoint); write the grouping tags.
+
+	// Cold-start grouping pass: predict the framing/gist for this exchange. No
+	// setpoints to group yet, no existing groupings to match — just impulse → gist.
+	// (Warm case — match/re-frame/create over existing groupings + setpoint
+	// grouping — is the next layer.) TODO (write-half after this): score by
+	// overlap × recency, group setpoints under the gist, write setpoint→groupID.
+	if g.infer == nil {
+		return
+	}
+	present := renderFrame(g.frame)
+	if present == "" {
+		return // nothing perceived yet — nothing to frame
+	}
+	resp, err := g.infer(coldStartSystem, present)
+	if err != nil {
+		return // a failed call leaves last cycle's gist standing
+	}
+	if label, ok := ParseLabel(resp); ok {
+		g.gist = label
+	}
 }
+
+// coldStartSystem instructs the grouping pass to predict a single framing for the
+// exchange — the gist that becomes the cycle's top-down context.
+const coldStartSystem = "You are an evolving being reading a live exchange. In one short " +
+	"phrase, predict what this exchange is about and what you should be trying to do. " +
+	"Respond with only the tag: <label>your framing</label>"
+
+// renderFrame turns the timestamp-ordered frame into a readable transcript for
+// the prompt — the interaction records (who said what), the content the framing
+// is predicted from. Entity/state nodes are metadata and omitted.
+func renderFrame(frame []ParsedNode) string {
+	var b strings.Builder
+	for _, e := range frame {
+		if rec, ok := e.Content.(InteractionRecord); ok {
+			fmt.Fprintf(&b, "[t%d] %s: %s\n", e.Timestamp, rec.From, rec.Utterance)
+		}
+	}
+	return b.String()
+}
+
+// Gist is the current framing (the grouping label predicted this cycle).
+func (g *GlobalCell) Gist() string { return g.gist }
 
 // assembleFrame reads sensory's warm surroundings and parses them entity-outward
 // — each entity plus its children (interaction/state records now; stamped

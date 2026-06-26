@@ -3,6 +3,7 @@ package dna
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Interpreting an inference response is a Space's concern, not inference's —
@@ -33,4 +34,23 @@ func ParseAlignment(response string) (float64, bool) {
 		v = -1
 	}
 	return v, true
+}
+
+// labelRe matches a `<label>` gist tolerantly: case-insensitive, captures the
+// text after the opening tag up to the closing tag, a `<`, or a newline (so a
+// missing/garbled closing tag still parses, same forgiveness as alignmentRe).
+var labelRe = regexp.MustCompile(`(?i)<label>\s*([^<\n]+)`)
+
+// ParseLabel extracts the grouping framing/gist from a grouping-pass response.
+// ok=false if no parseable label is present.
+func ParseLabel(response string) (string, bool) {
+	m := labelRe.FindStringSubmatch(response)
+	if m == nil {
+		return "", false
+	}
+	label := strings.TrimSpace(m[1])
+	if label == "" {
+		return "", false
+	}
+	return label, true
 }
