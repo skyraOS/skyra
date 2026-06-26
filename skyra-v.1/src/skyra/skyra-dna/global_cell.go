@@ -32,10 +32,13 @@ type GlobalCell struct {
 	// identity (the map key), so activation is edge-owned on the slice.
 	groupings map[string]skyra.Space
 
-	// agents — self and other, each its own descent/ascent. Dispatched (not
-	// traversed). Not on the skyra.Space interface yet (Agents() is [after]).
-	self  skyra.Space
-	other skyra.Space
+	// kernel — the send primitive; used to spawn the next pipeline stage on
+	// Express.
+	kernel skyra.Time
+
+	// other — the "other" agent: the next pipeline stage after Global, spawned on
+	// Express (Global → other). self/voting come after.
+	other *OtherCell
 
 	// synthesis — the transient held vote state for the current cycle.
 	synthesis any
@@ -45,13 +48,16 @@ type GlobalCell struct {
 	frame []ParsedNode
 }
 
-func NewGlobalCell(id string, slice skyra.Slice, sensory *SensoryCell) *GlobalCell {
-	return &GlobalCell{
-		id:        id,
-		slice:     slice,
+func NewGlobalCell(ctx BuildContext, sensory *SensoryCell) *GlobalCell {
+	g := &GlobalCell{
+		id:        ctx.BeingID + ":global",
+		slice:     ctx.sliceFor(":global"),
 		sensory:   sensory,
+		kernel:    ctx.Kernel,
 		groupings: map[string]skyra.Space{},
 	}
+	g.other = NewOtherCell(ctx) // the next pipeline stage (Global → other)
+	return g
 }
 
 func (g *GlobalCell) ID() string                            { return g.id }
@@ -135,21 +141,20 @@ func (g *GlobalCell) observeSelf(impulse any) {
 	// TODO: accumulate returned self/other scores for the Hopfield tally.
 }
 
-// Express — dispatch the agents (per-grouping self/other), then orchestrate the
-// 2-D outcome (cascade > closure > open) and run the vote. [stub]
+// Express forwards into the next pipeline stage (the other agent) and returns
+// the held synthesis. origin=other (the agent owns its own wave); async (go) so
+// the spawn locks other's own slice, not Global's. The vote/orchestration
+// (per-grouping self/other, cascade > closure > open, Hopfield tally) is the
+// write-half [stub] — it lands once the agents predict and score.
 func (g *GlobalCell) Express(origin skyra.Space, impulse any) any {
-	// TODO:
-	//   - per active grouping: one concurrent self/other pass (snapshot-in / join-out)
-	//   - route (stress-delta, closure-grade): cascade > closure > open
-	//   - Hopfield weighted sum -> action, or fire on conflict (tie-break)
+	if g.kernel != nil && g.other != nil {
+		go g.kernel.Realize(g.other, g.other, impulse)
+	}
 	return g.synthesis
 }
 
-// SetAgents wires the self and other agents (dispatched, not traversed).
-func (g *GlobalCell) SetAgents(self, other skyra.Space) {
-	g.self = self
-	g.other = other
-}
+// Other is Global's forward target (the "other" agent, next pipeline stage).
+func (g *GlobalCell) Other() *OtherCell { return g.other }
 
 // AddGrouping registers a grouping under its edge-identity key.
 func (g *GlobalCell) AddGrouping(key string, grouping skyra.Space) {

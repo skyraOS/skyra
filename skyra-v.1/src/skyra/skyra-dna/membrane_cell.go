@@ -25,20 +25,45 @@ type MembraneCell struct {
 	kernel    skyra.Time
 }
 
-// NewMembraneCell wires the boundary. Slices are INJECTED — one per actor
-// (membrane, sensory, motor, global) — so dna stays free of a world dependency
-// (the caller mints the concrete slices). kernel is the runtime's send primitive
-// (skyra.Time), used to spawn the inward sensory wave on Express; it is also
-// handed to sensory for the next forward link (sensory → Global).
-func NewMembraneCell(id, rootDrive string, slice, sensorySlice, motorSlice, globalSlice skyra.Slice, kernel skyra.Time) *MembraneCell {
-	m := &MembraneCell{
-		id:        id,
-		rootDrive: rootDrive,
-		slice:     slice,
-		kernel:    kernel,
+// BuildContext is threaded once down the pipeline so the constructors don't
+// balloon as stages are added (membrane → sensory → global → other → …). It
+// carries the being id, a slice FACTORY (so dna stays free of any concrete
+// slice/world dependency — the caller provides it), and the kernel (the send
+// primitive each stage uses to spawn the next). Still injection — a factory
+// instead of N concrete slices.
+type BuildContext struct {
+	BeingID  string
+	NewSlice func(id string) skyra.Slice
+	Kernel   skyra.Time
+	// Motor — the pipeline terminus (the being's out-face). Created by the
+	// membrane and threaded so the chain's tail (voting) spawns into this same
+	// motor rather than minting a second one.
+	Motor *MotorCell
+}
+
+// sliceFor mints a slice for a sub-actor (suffix like ":sensory"); nil if no
+// factory was supplied (every real build supplies one).
+func (c BuildContext) sliceFor(suffix string) skyra.Slice {
+	if c.NewSlice == nil {
+		return nil
 	}
-	m.sensory = NewSensoryCell(id+":sensory", id, sensorySlice, globalSlice, kernel)
-	m.motor = NewMotorCell(id+":motor", id, motorSlice)
+	return c.NewSlice(c.BeingID + suffix)
+}
+
+// NewMembraneCell wires the boundary from a BuildContext. Each actor mints its
+// own slice via the factory; the kernel is handed down for the forward spawns.
+func NewMembraneCell(rootDrive string, ctx BuildContext) *MembraneCell {
+	m := &MembraneCell{
+		id:        ctx.BeingID,
+		rootDrive: rootDrive,
+		slice:     ctx.sliceFor(":membrane"),
+		kernel:    ctx.Kernel,
+	}
+	// Motor is the out-face AND the pipeline terminus — create it once and thread
+	// it (ctx.Motor) so the chain's tail (voting) spawns into this same motor.
+	m.motor = NewMotorCell(ctx)
+	ctx.Motor = m.motor
+	m.sensory = NewSensoryCell(ctx)
 	return m
 }
 

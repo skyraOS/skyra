@@ -14,11 +14,11 @@ type MotorCell struct {
 	ByEntity map[string]ActionRecord
 }
 
-func NewMotorCell(id, ownerID string, slice skyra.Slice) *MotorCell {
+func NewMotorCell(ctx BuildContext) *MotorCell {
 	return &MotorCell{
-		id:       id,
-		ownerID:  ownerID,
-		slice:    slice,
+		id:       ctx.BeingID + ":motor",
+		ownerID:  ctx.BeingID,
+		slice:    ctx.sliceFor(":motor"),
 		children: map[string]skyra.Space{},
 		ByIntent: map[string]ActionRecord{},
 		ByEntity: map[string]ActionRecord{},

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
@@ -64,6 +65,28 @@ func TestGlobalAssemblesTimestampOrderedFrame(t *testing.T) {
 	}
 	if !sawFirst || !sawSecond {
 		t.Fatalf("frame missing exchange: first=%v second=%v", sawFirst, sawSecond)
+	}
+}
+
+// Global spawns the next pipeline stage (the other agent) on Express, owned by
+// other (origin = traversed = other) — the same forward-spawn pattern.
+func TestGlobalFiresOtherOnExpress(t *testing.T) {
+	spy := newSpyKernel()
+	m := newBeingWithKernel("skyra", spy)
+	global := m.Sensory().Global()
+
+	global.Express(nil, skyra.Impulse{Payload: "frame"})
+
+	select {
+	case call := <-spy.calls:
+		if call.origin == nil || call.origin.ID() != "skyra:other" {
+			t.Fatalf("spawn origin = %v, want skyra:other", call.origin)
+		}
+		if call.traversed == nil || call.traversed.ID() != "skyra:other" {
+			t.Fatalf("spawn traversed = %v, want skyra:other", call.traversed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Global did not spawn the other-agent wave on Express")
 	}
 }
 

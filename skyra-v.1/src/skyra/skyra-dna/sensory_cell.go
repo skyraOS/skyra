@@ -30,17 +30,17 @@ type SensoryCell struct {
 	global *GlobalCell
 }
 
-func NewSensoryCell(id, ownerID string, slice, globalSlice skyra.Slice, kernel skyra.Time) *SensoryCell {
+func NewSensoryCell(ctx BuildContext) *SensoryCell {
 	s := &SensoryCell{
-		id:       id,
-		ownerID:  ownerID,
-		slice:    slice,
+		id:       ctx.BeingID + ":sensory",
+		ownerID:  ctx.BeingID,
+		slice:    ctx.sliceFor(":sensory"),
 		ByEntity: map[string]skyra.Space{},
-		kernel:   kernel,
+		kernel:   ctx.Kernel,
 	}
-	// Global is the cognitive core, the next pipeline stage; keyed at the being
-	// level (ownerID), on its own injected slice.
-	s.global = NewGlobalCell(ownerID+":global", globalSlice, s)
+	// Global is the cognitive core, the next pipeline stage; it mints its own
+	// slice from the same context.
+	s.global = NewGlobalCell(ctx, s)
 	return s
 }
 
