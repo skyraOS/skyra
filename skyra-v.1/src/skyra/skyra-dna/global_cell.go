@@ -1,6 +1,10 @@
 package dna
 
-import "skyra-v1/src/skyra"
+import (
+	"sort"
+
+	"skyra-v1/src/skyra"
+)
 
 // Global — the orchestrator (supersedes the old Coherence cell).
 //
@@ -18,6 +22,10 @@ type GlobalCell struct {
 	id    string
 	slice skyra.Slice
 
+	// sensory — back-reference to the boundary's sensory agent. Global reads its
+	// warm surroundings (under sensory's slice lock) to assemble the frame.
+	sensory *SensoryCell
+
 	// groupings — Global's index over the active field; the cells the kernel
 	// walks as Global's Children(). Each is a higher-order setpoint carrying a
 	// gist (an understanding that hasn't crystallized yet). Keyed by edge
@@ -31,12 +39,17 @@ type GlobalCell struct {
 
 	// synthesis — the transient held vote state for the current cycle.
 	synthesis any
+
+	// frame — the assembled read-half output this cycle: the parsed,
+	// timestamp-ordered surroundings (the grouping inference call's input).
+	frame []ParsedNode
 }
 
-func NewGlobalCell(id string, slice skyra.Slice) *GlobalCell {
+func NewGlobalCell(id string, slice skyra.Slice, sensory *SensoryCell) *GlobalCell {
 	return &GlobalCell{
 		id:        id,
 		slice:     slice,
+		sensory:   sensory,
 		groupings: map[string]skyra.Space{},
 	}
 }
@@ -66,12 +79,56 @@ func (g *GlobalCell) Observe(origin skyra.Space, impulse any) {
 	g.observeExternal(impulse)
 }
 
-// observeExternal — the grouping pass. [stub]
+// observeExternal — the grouping pass. The read-half (built): assemble the frame
+// from sensory's warm surroundings. The write-half (TODO): score by overlap ×
+// recency, run the grouping inference call, write setpoint→groupID.
+// See specs/2026-06-16/skyra-dna/global-observe-gather.md.
 func (g *GlobalCell) observeExternal(impulse any) {
-	// TODO: score impulse vs active groupings within the WM buffer (one
-	// inference call); skip if no completed setpoint; set the active grouping as
-	// the cycle's top-down context.
+	g.frame = g.assembleFrame()
+	// TODO (write-half): score candidates by overlap × recency (IndexScore);
+	// inference call (score impulse vs active groupings, skip if no completed
+	// setpoint); write the grouping tags.
 }
+
+// assembleFrame reads sensory's warm surroundings and parses them entity-outward
+// — each entity plus its children (interaction/state records now; stamped
+// setpoints once they exist) — into a chronological (timestamp-sorted) frame.
+//
+// Global already holds the references (via the sensory back-ref), so it calls
+// each node's Parse() directly rather than routing through the kernel's Express
+// payload. Read under SENSORY's slice lock (SWMR): waits for sensory's wave to
+// finish, safe against the next one. Lock order is Global → sensory, never the
+// reverse.
+func (g *GlobalCell) assembleFrame() []ParsedNode {
+	if g.sensory == nil || g.sensory.Slice() == nil {
+		return nil
+	}
+	sl := g.sensory.Slice()
+	sl.Lock()
+	defer sl.Unlock()
+
+	var frame []ParsedNode
+	for _, entity := range g.sensory.ByEntity {
+		mc, ok := entity.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		frame = append(frame, mc.Parse())
+		for _, child := range mc.Children() { // entity-outward
+			if cc, ok := child.(*MemoryCell); ok {
+				frame = append(frame, cc.Parse())
+			}
+		}
+	}
+	sort.SliceStable(frame, func(i, j int) bool {
+		return frame[i].Timestamp < frame[j].Timestamp
+	})
+	return frame
+}
+
+// Frame is the assembled read-half output (parsed, timestamp-ordered
+// surroundings) for the current cycle.
+func (g *GlobalCell) Frame() []ParsedNode { return g.frame }
 
 // observeSelf — integrate returning agent scores toward the vote. [stub]
 func (g *GlobalCell) observeSelf(impulse any) {

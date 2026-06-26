@@ -1,10 +1,10 @@
 # Global — Observe / Setpoint Gather (read-half of the MVP grouping pass)
 
-**Date:** 2026-06-25 · **Status:** in spec — **start of a spec.** The MVP read-half of
-`Global.observeExternal`: how Global assembles the candidate setpoints (the grouping input)
-from sensory's warm surroundings. The **inference call** (score impulse vs. groupings) and the
-**grouping write** (`setpoint → groupID`) are the **continuation** (stubbed for now). The
-active-probe / DDM upgrade is [global-active-grouping.md](global-active-grouping.md).
+**Date:** 2026-06-25 · **Status:** read-half **BUILT** (frame assembly); write-half stubbed.
+The read-half of `Global.observeExternal`: how Global assembles the grouping input from
+sensory's warm surroundings. The **inference call** (score impulse vs. groupings) and the
+**grouping write** (`setpoint → groupID`) are the **continuation** (stubbed). The active-probe /
+DDM upgrade is [global-active-grouping.md](global-active-grouping.md).
 
 > Pipeline context: membrane → sensory → **Global** is wired (sensory's Express spawns Global).
 > Global is *reached* but *blind* — this spec is how it reads what sensory perceived.
@@ -51,12 +51,23 @@ The relevance question is "which setpoints does the current situation bear on" �
   *cell writes IndexScore/Alignment; kernel folds into the EMAs + threshold* (it never computes
   overlap itself).
 
-## Build `Children()` — the dynamic map
+## Frame assembly — `Parse()` direct (built)
 
-- `Global.Children()` returns a **fresh map of the scored candidate setpoints**, computed *this
-  cycle* by reading the surroundings — the canonical "author the map-reading `Children()`; the
-  kernel loops" pattern (working-memory.md).
-- The kernel then traverses + thresholds the survivors. **No kernel change.**
+Global already **holds the gathered references** (it read them from sensory), so it assembles
+the frame by calling each node's `Parse()` **directly** — *not* by routing through the kernel's
+Express payload (that path only earns its keep for cross-actor result delivery; here Global is
+both holder and assembler).
+
+- **`MemoryCell.Parse() → ParsedNode{Content, Timestamp, GroupID}`** — a self-description:
+  structured (not formatted text), generic (the content carries itself; only the occurrence
+  time is lifted out for ordering). `GroupID` empty until grouped.
+- **Global organizes:** sort by `Timestamp` — the MVP frame, a chronological transcript of the
+  surroundings, the only structure available at cold start; group by `GroupID` with the
+  understanding attached **once groupings exist** (the grading frame). Same inference call,
+  richer input.
+- **The kernel does NOT descend Global's children for the frame.** Children-traversal +
+  `Activate` (IndexScore fold, EMA, threshold — the *activation/scoring* half) is a **separate,
+  deferred** concern, wired when the bump equation matters. The frame is a direct read.
 
 ## Cell reads Kind; the kernel does not
 
@@ -83,12 +94,15 @@ discriminator is *intersection* of multiple present entities").
 No completed setpoints → nothing to gather → **skip grouping** (per [global.md](global.md)).
 Global carries the surroundings as context; no grouping until setpoints exist.
 
-## Wiring deltas
+## Wiring deltas (built)
 
-- `NewGlobalCell(id, slice, sensory)` — the sensory back-reference.
-- `Global.Observe` (`observeExternal`): lock sensory → gather hot entities → their setpoints →
-  score (overlap × recency, write IndexScore) → build the candidate map.
-- `Global.Children()` returns the gathered map.
+- `NewGlobalCell(id, slice, sensory)` — the sensory back-reference (sensory passes itself in).
+- `MemoryCell.Parse() → ParsedNode` + `contentTimestamp` (occurrence time lifted from typed
+  content).
+- `Global.observeExternal` → `assembleFrame`: lock sensory → parse entities + their children
+  entity-outward → timestamp-sort → `g.frame`; `Global.Frame()` exposes it.
+- *Deferred (write-half):* overlap × recency scoring (IndexScore), the grouping inference call,
+  the `setpoint → groupID` write, and the kernel scoring of Global's children.
 
 ## Continuation (not this spec)
 

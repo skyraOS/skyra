@@ -40,7 +40,7 @@ func NewSensoryCell(id, ownerID string, slice, globalSlice skyra.Slice, kernel s
 	}
 	// Global is the cognitive core, the next pipeline stage; keyed at the being
 	// level (ownerID), on its own injected slice.
-	s.global = NewGlobalCell(ownerID+":global", globalSlice)
+	s.global = NewGlobalCell(ownerID+":global", globalSlice, s)
 	return s
 }
 

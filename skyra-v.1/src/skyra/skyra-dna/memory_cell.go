@@ -104,6 +104,47 @@ func (m *MemoryCell) AddChild(edgeKey string, cell skyra.Space) {
 	m.children[edgeKey] = cell
 }
 
+// ParsedNode is a node's self-description for frame assembly: its content, when
+// it happened (for chronological ordering), and the grouping it belongs to
+// (empty until grouped). Structured, NOT formatted text — the assembler (Global)
+// decides the frame's final shape. See
+// specs/2026-06-16/skyra-dna/global-observe-gather.md.
+type ParsedNode struct {
+	ID        string
+	Kind      Kind
+	Content   any
+	Timestamp int
+	GroupID   string
+}
+
+// Parse returns the node's self-description for frame assembly. Generic: the
+// content is already typed so it carries itself; only the occurrence time is
+// lifted out (for chronological ordering). GroupID is empty until the node is
+// grouped.
+func (m *MemoryCell) Parse() ParsedNode {
+	return ParsedNode{
+		ID:        m.id,
+		Kind:      m.kind,
+		Content:   m.content,
+		Timestamp: contentTimestamp(m.content),
+		GroupID:   "",
+	}
+}
+
+// contentTimestamp lifts the occurrence time out of a node's typed content for
+// chronological frame ordering. (A node-level timestamp field is the cleaner
+// long-term home; this localizes the knowledge to the parse readout for now.)
+func contentTimestamp(content any) int {
+	switch c := content.(type) {
+	case EntityState:
+		return c.Timestamp
+	case InteractionRecord:
+		return c.Timestamp
+	default:
+		return 0
+	}
+}
+
 const (
 	alphaIdentity    = 0.02 // the groove (long tail)
 	alphaFamiliarity = 0.1  // recent relationship
