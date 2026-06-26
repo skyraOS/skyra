@@ -65,6 +65,18 @@ both holder and assembler).
   surroundings, the only structure available at cold start; group by `GroupID` with the
   understanding attached **once groupings exist** (the grading frame). Same inference call,
   richer input.
+
+> **Cleanup target — the sectioned view (2026-06-26).** The flat timestamp transcript is the
+> degenerate case (only the *Exchange* section populated). The full view is Global's "conscious
+> field": group by **Kind** into labeled sections — **Surroundings** (entities + presence),
+> **Exchange** (utterances), **Active groupings** (each gist + its member setpoints),
+> **Standalone setpoints** (ungrouped, by gist). Rules: recency-ordered but direction differs
+> (Exchange ascending — it's a transcript; knowledge sections descending — recent/relevant on
+> top); recency = timestamp now, the Familiarity EMA later; **capped per section** (top-K — a
+> curated readout, not a dump; the gather's overlap × recency selects, this renders the
+> selection); cognitive Kinds render at **gist altitude** (a setpoint as its understanding/label,
+> not raw internals — Global's scoped visibility); the setpoint section is internally organized
+> **by grouping**. (Mirrored in the `renderFrame` doc comment.)
 - **The kernel does NOT descend Global's children for the frame.** Children-traversal +
   `Activate` (IndexScore fold, EMA, threshold — the *activation/scoring* half) is a **separate,
   deferred** concern, wired when the bump equation matters. The frame is a direct read.

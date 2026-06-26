@@ -135,6 +135,27 @@ const coldStartSystem = "You are an evolving being reading a live exchange. In o
 // the prompt — the incoming utterances (who said what), the content the framing
 // is predicted from. Filters by Kind (KindResponse = the exchange), so presence/
 // state and entity nodes are skipped.
+//
+// CLEANUP TARGET — the sectioned view (2026-06-26 framing). This flat transcript
+// is the degenerate case (only the Exchange section populated). The full view is
+// Global's "conscious field": group by Kind into labeled sections —
+//
+//	## Surroundings        entities + presence (who's here, where)
+//	## Exchange            the utterances (the transcript)
+//	## Active groupings    each grouping's gist + its member setpoints
+//	## Standalone setpoints ungrouped, by gist
+//
+// When we build it:
+//   - Recency-ordered, but direction differs by section: Exchange ascending
+//     (it's a transcript, reading order is the meaning); knowledge sections
+//     descending (most recent/relevant on top). "recency" = timestamp for now,
+//     the Familiarity EMA later (it folds in relevance too).
+//   - CAPPED per section (top-K) — a curated readout, never a dump. The gather's
+//     overlap × recency already selects which setpoints are relevant; this just
+//     renders the selection. Respects the ~100k recall ceiling.
+//   - Cognitive Kinds render at GIST altitude — a setpoint shows as its
+//     understanding/label, not its raw internals (Global's scoped visibility).
+//   - Within the setpoint section, organize by grouping (the warm case).
 func renderFrame(frame []ParsedNode) string {
 	var b strings.Builder
 	for _, e := range frame {

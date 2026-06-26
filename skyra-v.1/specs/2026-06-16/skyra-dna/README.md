@@ -44,6 +44,7 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
 | [global.md](global.md) | Global — vote tally / tie-break; agents `self` + `other`; Hopfield vote; reverse read = wave | `[MVP]` (minimal) |
 | [global-observe-gather.md](global-observe-gather.md) | Global's Observe **read-half** (2026-06-25) — gather candidate setpoints entity-outward from sensory's warm surroundings, score by overlap × recency (cell-written IndexScore), build `Children()`; inference call is the continuation | `[MVP]` |
 | [global-active-grouping.md](global-active-grouping.md) | Global's grouping pass, the **improvement** (2026-06-25) — active LLM-driven probe loop + drift-diffusion stop controller; passive single-call MVP ships first | `[improvement / post-MVP]` |
+| [agent.md](agent.md) | the self/other agent (2026-06-26) — **one `AgentCell{role}`**; grade-then-predict loop (pop Prior → grade last bet → read activeGroupings → per-grouping traverse → grade-against-framing + predict → append); collapses the `SelfCell`/`OtherCell` stubs | `[MVP]` |
 | [setpoint.md](setpoint.md) | confirmed predictions — content = understanding; children = entities + responses/actions/stresses | `[MVP]` (one) |
 | [entity.md](entity.md) | person/place/thing — children = setpoints stamped at completion; the reverse-index hub | `[next]` |
 | [episodic.md](episodic.md) | *(superseded — the binding-reality framing folded into the self/other agents)* | — |
