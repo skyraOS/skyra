@@ -56,8 +56,9 @@ const (
 	KindEntity        Kind = "entity"        // content = descriptor; children = stamped setpoints
 	KindUnderstanding Kind = "understanding" // a setpoint's crystallized gist
 	KindStress        Kind = "stress"        // failure-understanding (cascade closure)
-	KindResponse      Kind = "response"
-	KindAction        Kind = "action"
+	KindPresence      Kind = "presence"      // an entity's presence/location at a time (EntityState)
+	KindResponse      Kind = "response"      // an incoming move — the other's utterance/action (InteractionRecord)
+	KindAction        Kind = "action"        // an outgoing move — the being's own action (motor)
 )
 
 func NewMemoryCell(id string, kind Kind, content any, slice skyra.Slice) *MemoryCell {

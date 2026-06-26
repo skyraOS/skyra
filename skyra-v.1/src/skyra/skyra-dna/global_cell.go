@@ -132,11 +132,15 @@ const coldStartSystem = "You are an evolving being reading a live exchange. In o
 	"Respond with only the tag: <label>your framing</label>"
 
 // renderFrame turns the timestamp-ordered frame into a readable transcript for
-// the prompt — the interaction records (who said what), the content the framing
-// is predicted from. Entity/state nodes are metadata and omitted.
+// the prompt — the incoming utterances (who said what), the content the framing
+// is predicted from. Filters by Kind (KindResponse = the exchange), so presence/
+// state and entity nodes are skipped.
 func renderFrame(frame []ParsedNode) string {
 	var b strings.Builder
 	for _, e := range frame {
+		if e.Kind != KindResponse {
+			continue
+		}
 		if rec, ok := e.Content.(InteractionRecord); ok {
 			fmt.Fprintf(&b, "[t%d] %s: %s\n", e.Timestamp, rec.From, rec.Utterance)
 		}

@@ -193,7 +193,7 @@ func (s *SensoryCell) appendEntityState(entity *MemoryCell, state EntityState) {
 		return
 	}
 	stateID := fmt.Sprintf("%s:state:%d:%d", entity.ID(), state.Timestamp, len(entity.Children()))
-	stateCell := NewMemoryCell(stateID, KindResponse, state, s.slice)
+	stateCell := NewMemoryCell(stateID, KindPresence, state, s.slice)
 	entity.AddChild(fmt.Sprintf("%s→%s", entity.ID(), stateID), stateCell)
 }
 
