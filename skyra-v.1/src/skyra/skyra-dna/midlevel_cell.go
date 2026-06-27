@@ -28,12 +28,6 @@ type MidLevelCell struct {
 	// warm surroundings (under sensory's slice lock) to assemble the frame.
 	sensory *SensoryCell
 
-	// groupings — MidLevel's index over the active field; the cells the kernel
-	// walks as MidLevel's Children(). Each is a higher-order setpoint carrying a
-	// gist (an understanding that hasn't crystallized yet). Keyed by edge
-	// identity (the map key), so activation is edge-owned on the slice.
-	groupings map[string]skyra.Space
-
 	// kernel — the send primitive; used to spawn the next pipeline stage on
 	// Express.
 	kernel skyra.Time
@@ -61,12 +55,11 @@ type MidLevelCell struct {
 
 func NewMidLevelCell(ctx BuildContext, sensory *SensoryCell) *MidLevelCell {
 	g := &MidLevelCell{
-		id:        ctx.BeingID + ":global",
-		slice:     ctx.sliceFor(":global"),
-		sensory:   sensory,
-		kernel:    ctx.Kernel,
-		infer:     ctx.Infer,
-		groupings: map[string]skyra.Space{},
+		id:      ctx.BeingID + ":midlevel",
+		slice:   ctx.sliceFor(":midlevel"),
+		sensory: sensory,
+		kernel:  ctx.Kernel,
+		infer:   ctx.Infer,
 	}
 	g.other = NewOtherCell(ctx) // the next pipeline stage (MidLevel → other)
 	return g
@@ -78,10 +71,29 @@ func (g *MidLevelCell) NewActivation() skyra.ActivationRecord { return &midLevel
 
 // Children — the groupings (the kernel walks these). Past-only adjacency; the
 // future lives here as the grouping index, applied top-down as context.
-func (g *MidLevelCell) Children() map[string]skyra.Space { return g.groupings }
+func (g *MidLevelCell) Children() map[string]skyra.Space { return g.groupingIndex() }
 
-// Content — the grouping index (durable future layer) + the transient vote
-// synthesis. (The grouping index is g.groupings; synthesis is per-cycle.)
+// groupingsKey is the slice-map key under which the grouping index lives.
+const groupingsKey = "groupings"
+
+// groupingIndex is MidLevel's grouping map, resident on its SLICE (Maps), not a
+// private field — so the agents (self/other) can read it cross-slice and append
+// their predictions to the grouping cells under the lock. Lazily created; the map
+// key is the groupID, each value a higher-order setpoint carrying a gist.
+func (g *MidLevelCell) groupingIndex() map[string]skyra.Space {
+	if g.slice == nil {
+		return nil
+	}
+	idx, ok := g.slice.Maps()[groupingsKey].(map[string]skyra.Space)
+	if !ok {
+		idx = map[string]skyra.Space{}
+		g.slice.Maps()[groupingsKey] = idx
+	}
+	return idx
+}
+
+// Content — the transient vote synthesis (the grouping index lives on the slice;
+// see groupingIndex). synthesis is per-cycle.
 func (g *MidLevelCell) Content() any { return g.synthesis }
 
 // Observe routes to one of two internal functions based on the impulse. The
@@ -136,21 +148,25 @@ type Gist struct {
 }
 
 // startGrouping creates a fresh grouping anchor carrying the gist and publishes it
-// into g.groupings (already exposed via Children()), for the agents to read and
-// fire a wave on. Cold-start = the "create" action; warm = match/re-frame an
-// existing grouping instead (later).
+// into the slice-resident grouping index (groupingIndex), for the agents to read,
+// fire a wave on, and append predictions to. Cold-start = the "create" action;
+// warm = match/re-frame an existing grouping instead (later).
 func (g *MidLevelCell) startGrouping(gist string) {
 	ts := 0
 	if g.slice != nil {
 		ts = g.slice.Count()
 	}
 	groupID := fmt.Sprintf("%s:g:%d", g.id, ts)
-	g.groupings[groupID] = NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
+	if idx := g.groupingIndex(); idx != nil {
+		idx[groupID] = NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
+	}
 }
 
-// Groupings publishes the grouping index by reference (same map Children() walks)
-// — the agents read it, filter by most recent gist, and fire a wave on one.
-func (g *MidLevelCell) Groupings() map[string]skyra.Space { return g.groupings }
+// Groupings publishes the grouping index by reference — the slice-resident map
+// (the same one Children() walks). The agents read it (cross-slice, under
+// MidLevel's lock), filter by most recent gist, fire a wave on one, and append
+// their predictions to that grouping cell.
+func (g *MidLevelCell) Groupings() map[string]skyra.Space { return g.groupingIndex() }
 
 // coldStartSystem instructs the grouping pass to predict a single framing for the
 // exchange — the gist that becomes the cycle's top-down context.
@@ -261,7 +277,9 @@ func (g *MidLevelCell) Other() *OtherCell { return g.other }
 
 // AddGrouping registers a grouping under its edge-identity key.
 func (g *MidLevelCell) AddGrouping(key string, grouping skyra.Space) {
-	g.groupings[key] = grouping
+	if idx := g.groupingIndex(); idx != nil {
+		idx[key] = grouping
+	}
 }
 
 // midLevelActivation — minimal activation record. The full bump equation
