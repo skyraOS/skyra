@@ -34,7 +34,7 @@ func NewOtherCell(ctx BuildContext, midLevel *MidLevelCell) *OtherCell {
 		midLevel: midLevel,
 		infer:    ctx.Infer,
 	}
-	o.self = NewSelfCell(ctx) // next stage (other → self; "self relies on other")
+	o.self = NewSelfCell(ctx, midLevel) // next stage (other → self; passes the back-ref down)
 	return o
 }
 
