@@ -23,11 +23,11 @@ type SensoryCell struct {
 	slice    skyra.Slice
 	ByEntity map[string]skyra.Space // keyed by stable entity id (internal lookup)
 
-	// kernel + global wire the forward pipeline link: sensory spawns a wave into
-	// cognition (Global) on Express. Global is sensory's sub-actor on its own
+	// kernel + midLevel wire the forward pipeline link: sensory spawns a wave into
+	// cognition (MidLevel) on Express. MidLevel is sensory's sub-actor on its own
 	// (injected) slice — the same pattern as the membrane's sensory/motor.
-	kernel skyra.Time
-	global *GlobalCell
+	kernel   skyra.Time
+	midLevel *MidLevelCell
 }
 
 func NewSensoryCell(ctx BuildContext) *SensoryCell {
@@ -38,14 +38,14 @@ func NewSensoryCell(ctx BuildContext) *SensoryCell {
 		ByEntity: map[string]skyra.Space{},
 		kernel:   ctx.Kernel,
 	}
-	// Global is the cognitive core, the next pipeline stage; it mints its own
+	// MidLevel is the cognitive core, the next pipeline stage; it mints its own
 	// slice from the same context.
-	s.global = NewGlobalCell(ctx, s)
+	s.midLevel = NewMidLevelCell(ctx, s)
 	return s
 }
 
-// Global is sensory's forward target (the cognitive core).
-func (s *SensoryCell) Global() *GlobalCell { return s.global }
+// MidLevel is sensory's forward target (the cognitive core).
+func (s *SensoryCell) MidLevel() *MidLevelCell { return s.midLevel }
 
 func (s *SensoryCell) ID() string                            { return s.id }
 func (s *SensoryCell) Slice() skyra.Slice                    { return s.slice }
@@ -107,14 +107,14 @@ func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	})
 }
 
-// Express fires the forward wave into cognition (Global) — the next pipeline
-// link. origin=Global: cognition owns its own wave; sensory only launches and
-// drops out. async (go) so the spawn locks Global's own slice, never sensory's
+// Express fires the forward wave into cognition (MidLevel) — the next pipeline
+// link. origin=MidLevel: cognition owns its own wave; sensory only launches and
+// drops out. async (go) so the spawn locks MidLevel's own slice, never sensory's
 // held lock. Payload = the impulse forwarded as-is for now; the surroundings
-// snapshot handoff (so Global can read what sensory perceived) is the next step.
+// snapshot handoff (so MidLevel can read what sensory perceived) is the next step.
 func (s *SensoryCell) Express(origin skyra.Space, impulse any) any {
-	if s.kernel != nil && s.global != nil {
-		go s.kernel.Realize(s.global, s.global, impulse)
+	if s.kernel != nil && s.midLevel != nil {
+		go s.kernel.Realize(s.midLevel, s.midLevel, impulse)
 	}
 	return nil
 }

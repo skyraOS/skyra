@@ -14,21 +14,21 @@ import (
 func TestOtherFiresSelfOnExpress(t *testing.T) {
 	spy := newSpyKernel()
 	m := newBeingWithKernel("skyra", spy)
-	other := m.Sensory().Global().Other()
+	other := m.Sensory().MidLevel().Other()
 	assertSpawn(t, spy, other.Express, "skyra:self")
 }
 
 func TestSelfFiresVotingOnExpress(t *testing.T) {
 	spy := newSpyKernel()
 	m := newBeingWithKernel("skyra", spy)
-	self := m.Sensory().Global().Other().Self()
+	self := m.Sensory().MidLevel().Other().Self()
 	assertSpawn(t, spy, self.Express, "skyra:voting")
 }
 
 func TestVotingFiresMotorOnExpress(t *testing.T) {
 	spy := newSpyKernel()
 	m := newBeingWithKernel("skyra", spy)
-	voting := m.Sensory().Global().Other().Self().Voting()
+	voting := m.Sensory().MidLevel().Other().Self().Voting()
 	assertSpawn(t, spy, voting.Express, "skyra:motor")
 }
 
@@ -36,7 +36,7 @@ func TestVotingFiresMotorOnExpress(t *testing.T) {
 // not a second motor.
 func TestVotingMotorIsMembraneMotor(t *testing.T) {
 	m := newBeingWithKernel("skyra", newSpyKernel())
-	votingMotor := m.Sensory().Global().Other().Self().Voting().Motor()
+	votingMotor := m.Sensory().MidLevel().Other().Self().Voting().Motor()
 	if votingMotor == nil || votingMotor != m.Motor() {
 		t.Fatalf("voting's motor (%p) is not the membrane's out-face (%p)", votingMotor, m.Motor())
 	}

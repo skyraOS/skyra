@@ -8,28 +8,28 @@ import (
 	"skyra-v1/src/skyra"
 )
 
-// Global — the orchestrator (supersedes the old Coherence cell).
+// MidLevel — the orchestrator (supersedes the old Coherence cell).
 //
 // Three jobs: vote tally, tie-break, and grouping. It holds two agents (self,
 // other), each its own descent/ascent. Its Children() are GROUPINGS — higher-
 // order setpoints over the active field — not the raw setpoints (those are
-// below Global's altitude: the kernel filter + the raw predict/score layer).
+// below MidLevel's altitude: the kernel filter + the raw predict/score layer).
 //
-// Visibility is scoped: Global reads only crystallized understandings of
+// Visibility is scoped: MidLevel reads only crystallized understandings of
 // completed setpoints and the potential gists of active groupings.
 //
 // See specs/2026-06-16/skyra-dna/global.md and
 // design-docs/cognition/groupings-and-understandings.md.
-type GlobalCell struct {
+type MidLevelCell struct {
 	id    string
 	slice skyra.Slice
 
-	// sensory — back-reference to the boundary's sensory agent. Global reads its
+	// sensory — back-reference to the boundary's sensory agent. MidLevel reads its
 	// warm surroundings (under sensory's slice lock) to assemble the frame.
 	sensory *SensoryCell
 
-	// groupings — Global's index over the active field; the cells the kernel
-	// walks as Global's Children(). Each is a higher-order setpoint carrying a
+	// groupings — MidLevel's index over the active field; the cells the kernel
+	// walks as MidLevel's Children(). Each is a higher-order setpoint carrying a
 	// gist (an understanding that hasn't crystallized yet). Keyed by edge
 	// identity (the map key), so activation is edge-owned on the slice.
 	groupings map[string]skyra.Space
@@ -38,8 +38,8 @@ type GlobalCell struct {
 	// Express.
 	kernel skyra.Time
 
-	// other — the "other" agent: the next pipeline stage after Global, spawned on
-	// Express (Global → other). self/voting come after.
+	// other — the "other" agent: the next pipeline stage after MidLevel, spawned on
+	// Express (MidLevel → other). self/voting come after.
 	other *OtherCell
 
 	// synthesis — the transient held vote state for the current cycle.
@@ -59,8 +59,8 @@ type GlobalCell struct {
 	gist string
 }
 
-func NewGlobalCell(ctx BuildContext, sensory *SensoryCell) *GlobalCell {
-	g := &GlobalCell{
+func NewMidLevelCell(ctx BuildContext, sensory *SensoryCell) *MidLevelCell {
+	g := &MidLevelCell{
 		id:        ctx.BeingID + ":global",
 		slice:     ctx.sliceFor(":global"),
 		sensory:   sensory,
@@ -68,28 +68,28 @@ func NewGlobalCell(ctx BuildContext, sensory *SensoryCell) *GlobalCell {
 		infer:     ctx.Infer,
 		groupings: map[string]skyra.Space{},
 	}
-	g.other = NewOtherCell(ctx) // the next pipeline stage (Global → other)
+	g.other = NewOtherCell(ctx) // the next pipeline stage (MidLevel → other)
 	return g
 }
 
-func (g *GlobalCell) ID() string                            { return g.id }
-func (g *GlobalCell) Slice() skyra.Slice                    { return g.slice }
-func (g *GlobalCell) NewActivation() skyra.ActivationRecord { return &globalActivation{} }
+func (g *MidLevelCell) ID() string                            { return g.id }
+func (g *MidLevelCell) Slice() skyra.Slice                    { return g.slice }
+func (g *MidLevelCell) NewActivation() skyra.ActivationRecord { return &midLevelActivation{} }
 
 // Children — the groupings (the kernel walks these). Past-only adjacency; the
 // future lives here as the grouping index, applied top-down as context.
-func (g *GlobalCell) Children() map[string]skyra.Space { return g.groupings }
+func (g *MidLevelCell) Children() map[string]skyra.Space { return g.groupings }
 
 // Content — the grouping index (durable future layer) + the transient vote
 // synthesis. (The grouping index is g.groupings; synthesis is per-cycle.)
-func (g *GlobalCell) Content() any { return g.synthesis }
+func (g *MidLevelCell) Content() any { return g.synthesis }
 
 // Observe routes to one of two internal functions based on the impulse. The
-// discriminator is not generalized beyond Global yet.
+// discriminator is not generalized beyond MidLevel yet.
 //   - external impulse  -> observeExternal: the grouping pass (score impulse vs
 //     active groupings in the buffer's context; skip if no completed setpoint).
 //   - returning result  -> observeSelf: integrate the returned scores.
-func (g *GlobalCell) Observe(origin skyra.Space, impulse any) {
+func (g *MidLevelCell) Observe(origin skyra.Space, impulse any) {
 	if isReturn(impulse) {
 		g.observeSelf(impulse)
 		return
@@ -101,7 +101,7 @@ func (g *GlobalCell) Observe(origin skyra.Space, impulse any) {
 // from sensory's warm surroundings. The write-half (TODO): score by overlap ×
 // recency, run the grouping inference call, write setpoint→groupID.
 // See specs/2026-06-16/skyra-dna/global-observe-gather.md.
-func (g *GlobalCell) observeExternal(impulse any) {
+func (g *MidLevelCell) observeExternal(impulse any) {
 	g.frame = g.assembleFrame()
 
 	// Cold-start grouping pass: predict the framing/gist for this exchange. No
@@ -139,7 +139,7 @@ type Gist struct {
 // into g.groupings (already exposed via Children()), for the agents to read and
 // fire a wave on. Cold-start = the "create" action; warm = match/re-frame an
 // existing grouping instead (later).
-func (g *GlobalCell) startGrouping(gist string) {
+func (g *MidLevelCell) startGrouping(gist string) {
 	ts := 0
 	if g.slice != nil {
 		ts = g.slice.Count()
@@ -150,7 +150,7 @@ func (g *GlobalCell) startGrouping(gist string) {
 
 // Groupings publishes the grouping index by reference (same map Children() walks)
 // — the agents read it, filter by most recent gist, and fire a wave on one.
-func (g *GlobalCell) Groupings() map[string]skyra.Space { return g.groupings }
+func (g *MidLevelCell) Groupings() map[string]skyra.Space { return g.groupings }
 
 // coldStartSystem instructs the grouping pass to predict a single framing for the
 // exchange — the gist that becomes the cycle's top-down context.
@@ -165,7 +165,7 @@ const coldStartSystem = "You are an evolving being reading a live exchange. In o
 //
 // CLEANUP TARGET — the sectioned view (2026-06-26 framing). This flat transcript
 // is the degenerate case (only the Exchange section populated). The full view is
-// Global's "conscious field": group by Kind into labeled sections —
+// MidLevel's "conscious field": group by Kind into labeled sections —
 //
 //	## Surroundings        entities + presence (who's here, where)
 //	## Exchange            the utterances (the transcript)
@@ -181,7 +181,7 @@ const coldStartSystem = "You are an evolving being reading a live exchange. In o
 //     overlap × recency already selects which setpoints are relevant; this just
 //     renders the selection. Respects the ~100k recall ceiling.
 //   - Cognitive Kinds render at GIST altitude — a setpoint shows as its
-//     understanding/label, not its raw internals (Global's scoped visibility).
+//     understanding/label, not its raw internals (MidLevel's scoped visibility).
 //   - Within the setpoint section, organize by grouping (the warm case).
 func renderFrame(frame []ParsedNode) string {
 	var b strings.Builder
@@ -197,18 +197,18 @@ func renderFrame(frame []ParsedNode) string {
 }
 
 // Gist is the current framing (the grouping label predicted this cycle).
-func (g *GlobalCell) Gist() string { return g.gist }
+func (g *MidLevelCell) Gist() string { return g.gist }
 
 // assembleFrame reads sensory's warm surroundings and parses them entity-outward
 // — each entity plus its children (interaction/state records now; stamped
 // setpoints once they exist) — into a chronological (timestamp-sorted) frame.
 //
-// Global already holds the references (via the sensory back-ref), so it calls
+// MidLevel already holds the references (via the sensory back-ref), so it calls
 // each node's Parse() directly rather than routing through the kernel's Express
 // payload. Read under SENSORY's slice lock (SWMR): waits for sensory's wave to
-// finish, safe against the next one. Lock order is Global → sensory, never the
+// finish, safe against the next one. Lock order is MidLevel → sensory, never the
 // reverse.
-func (g *GlobalCell) assembleFrame() []ParsedNode {
+func (g *MidLevelCell) assembleFrame() []ParsedNode {
 	if g.sensory == nil || g.sensory.Slice() == nil {
 		return nil
 	}
@@ -237,39 +237,39 @@ func (g *GlobalCell) assembleFrame() []ParsedNode {
 
 // Frame is the assembled read-half output (parsed, timestamp-ordered
 // surroundings) for the current cycle.
-func (g *GlobalCell) Frame() []ParsedNode { return g.frame }
+func (g *MidLevelCell) Frame() []ParsedNode { return g.frame }
 
 // observeSelf — integrate returning agent scores toward the vote. [stub]
-func (g *GlobalCell) observeSelf(impulse any) {
+func (g *MidLevelCell) observeSelf(impulse any) {
 	// TODO: accumulate returned self/other scores for the Hopfield tally.
 }
 
 // Express forwards into the next pipeline stage (the other agent) and returns
 // the held synthesis. origin=other (the agent owns its own wave); async (go) so
-// the spawn locks other's own slice, not Global's. The vote/orchestration
+// the spawn locks other's own slice, not MidLevel's. The vote/orchestration
 // (per-grouping self/other, cascade > closure > open, Hopfield tally) is the
 // write-half [stub] — it lands once the agents predict and score.
-func (g *GlobalCell) Express(origin skyra.Space, impulse any) any {
+func (g *MidLevelCell) Express(origin skyra.Space, impulse any) any {
 	if g.kernel != nil && g.other != nil {
 		go g.kernel.Realize(g.other, g.other, impulse)
 	}
 	return g.synthesis
 }
 
-// Other is Global's forward target (the "other" agent, next pipeline stage).
-func (g *GlobalCell) Other() *OtherCell { return g.other }
+// Other is MidLevel's forward target (the "other" agent, next pipeline stage).
+func (g *MidLevelCell) Other() *OtherCell { return g.other }
 
 // AddGrouping registers a grouping under its edge-identity key.
-func (g *GlobalCell) AddGrouping(key string, grouping skyra.Space) {
+func (g *MidLevelCell) AddGrouping(key string, grouping skyra.Space) {
 	g.groupings[key] = grouping
 }
 
-// globalActivation — minimal activation record. The full bump equation
+// midLevelActivation — minimal activation record. The full bump equation
 // (IndexScore × Alignment × stress_modulator into Identity/Familiarity EMAs)
 // lives in design-docs/kernel/activation-and-traversal.md and is the next step.
-type globalActivation struct{}
+type midLevelActivation struct{}
 
-func (a *globalActivation) Activate(_ bool, _ int) float64 { return 1.0 }
+func (a *midLevelActivation) Activate(_ bool, _ int) float64 { return 1.0 }
 
 // isReturn reports whether an impulse is a return-perception wave.
 func isReturn(impulse any) bool {

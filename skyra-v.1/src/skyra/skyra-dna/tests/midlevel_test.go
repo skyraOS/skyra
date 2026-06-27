@@ -13,10 +13,10 @@ import (
 // warm surroundings (under sensory's lock), parses them entity-outward, and
 // assembles a chronological (timestamp-ordered) frame — its own slice, calling
 // each node's Parse() directly (no kernel payload). Inference call is stubbed.
-func TestGlobalAssemblesTimestampOrderedFrame(t *testing.T) {
+func TestMidLevelAssemblesTimestampOrderedFrame(t *testing.T) {
 	m, kernel := newBeing("skyra")
 	sensory := m.Sensory()
-	global := sensory.Global()
+	mid := sensory.MidLevel()
 
 	// Warm sensory with two exchanges at different proper-times.
 	sensory.Slice().SetCount(1)
@@ -32,14 +32,14 @@ func TestGlobalAssemblesTimestampOrderedFrame(t *testing.T) {
 
 	// Global's wave assembles the frame from sensory's warm surroundings
 	// (traversed directly → synchronous; no spawn).
-	kernel.Realize(nil, global, skyra.Impulse{
+	kernel.Realize(nil, mid, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 2, Y: 2}},
 		Payload: "now",
 	})
 
-	frame := global.Frame()
+	frame := mid.Frame()
 	if len(frame) == 0 {
-		t.Fatal("global assembled an empty frame")
+		t.Fatal("mid assembled an empty frame")
 	}
 
 	// Chronological: timestamps non-decreasing.
@@ -72,7 +72,7 @@ func TestGlobalAssemblesTimestampOrderedFrame(t *testing.T) {
 // The first real behavior: cold-start grouping pass. Global reads the warm
 // surroundings, renders them into the prompt, calls inference (mocked), and stores
 // the parsed <label> as the cycle's gist (framing).
-func TestGlobalColdStartPredictsLabel(t *testing.T) {
+func TestMidLevelColdStartPredictsLabel(t *testing.T) {
 	var gotPresent string
 	mock := func(system, present string) (string, error) {
 		gotPresent = present
@@ -80,7 +80,7 @@ func TestGlobalColdStartPredictsLabel(t *testing.T) {
 	}
 	m, kernel := newBeingWithInfer("skyra", mock)
 	sensory := m.Sensory()
-	global := sensory.Global()
+	mid := sensory.MidLevel()
 
 	sensory.Slice().SetCount(1)
 	sensory.Observe(nil, skyra.Impulse{
@@ -88,13 +88,13 @@ func TestGlobalColdStartPredictsLabel(t *testing.T) {
 		Payload: "can you help me with the skyra project",
 	})
 
-	kernel.Realize(nil, global, skyra.Impulse{
+	kernel.Realize(nil, mid, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
 		Payload: "now",
 	})
 
-	if global.Gist() != "help michael with the skyra project" {
-		t.Fatalf("gist = %q, want the parsed label", global.Gist())
+	if mid.Gist() != "help michael with the skyra project" {
+		t.Fatalf("gist = %q, want the parsed label", mid.Gist())
 	}
 	// The exchange reached the prompt (frame rendered into the present).
 	if !strings.Contains(gotPresent, "skyra project") {
@@ -102,7 +102,7 @@ func TestGlobalColdStartPredictsLabel(t *testing.T) {
 	}
 
 	// Cold-start "create": a grouping anchor carrying the gist was published.
-	groupings := global.Groupings()
+	groupings := mid.Groupings()
 	if len(groupings) != 1 {
 		t.Fatalf("groupings = %d, want 1 created from the gist", len(groupings))
 	}
@@ -120,12 +120,12 @@ func TestGlobalColdStartPredictsLabel(t *testing.T) {
 
 // Global spawns the next pipeline stage (the other agent) on Express, owned by
 // other (origin = traversed = other) — the same forward-spawn pattern.
-func TestGlobalFiresOtherOnExpress(t *testing.T) {
+func TestMidLevelFiresOtherOnExpress(t *testing.T) {
 	spy := newSpyKernel()
 	m := newBeingWithKernel("skyra", spy)
-	global := m.Sensory().Global()
+	mid := m.Sensory().MidLevel()
 
-	global.Express(nil, skyra.Impulse{Payload: "frame"})
+	mid.Express(nil, skyra.Impulse{Payload: "frame"})
 
 	select {
 	case call := <-spy.calls:
@@ -141,13 +141,13 @@ func TestGlobalFiresOtherOnExpress(t *testing.T) {
 }
 
 // Cold start: no surroundings → an empty frame, not a panic.
-func TestGlobalFrameEmptyWhenNoSurroundings(t *testing.T) {
+func TestMidLevelFrameEmptyWhenNoSurroundings(t *testing.T) {
 	m, kernel := newBeing("skyra")
-	global := m.Sensory().Global()
+	mid := m.Sensory().MidLevel()
 
-	kernel.Realize(nil, global, skyra.Impulse{Payload: "ambient"})
+	kernel.Realize(nil, mid, skyra.Impulse{Payload: "ambient"})
 
-	if len(global.Frame()) != 0 {
-		t.Fatalf("cold-start frame = %+v, want empty", global.Frame())
+	if len(mid.Frame()) != 0 {
+		t.Fatalf("cold-start frame = %+v, want empty", mid.Frame())
 	}
 }
