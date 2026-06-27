@@ -54,3 +54,21 @@ func ParseLabel(response string) (string, bool) {
 	}
 	return label, true
 }
+
+// predictionRe matches a `<prediction>` move tolerantly (same forgiveness as the
+// others: case-insensitive, captures to the closing tag / a `<` / a newline).
+var predictionRe = regexp.MustCompile(`(?i)<prediction>\s*([^<\n]+)`)
+
+// ParsePrediction extracts an agent's predicted move from a predict-pass response.
+// ok=false if no parseable prediction is present.
+func ParsePrediction(response string) (string, bool) {
+	m := predictionRe.FindStringSubmatch(response)
+	if m == nil {
+		return "", false
+	}
+	pred := strings.TrimSpace(m[1])
+	if pred == "" {
+		return "", false
+	}
+	return pred, true
+}

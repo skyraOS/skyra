@@ -78,7 +78,7 @@ func TestMidLevelColdStartPredictsLabel(t *testing.T) {
 		gotPresent = present
 		return "<label>help michael with the skyra project</label>", nil
 	}
-	m, kernel := newBeingWithInfer("skyra", mock)
+	m, _ := newBeingWithInfer("skyra", mock)
 	sensory := m.Sensory()
 	mid := sensory.MidLevel()
 
@@ -88,7 +88,9 @@ func TestMidLevelColdStartPredictsLabel(t *testing.T) {
 		Payload: "can you help me with the skyra project",
 	})
 
-	kernel.Realize(nil, mid, skyra.Impulse{
+	// Observe directly — exercises MidLevel's gist/grouping pass without spawning
+	// the downstream agents (which would call the shared mock concurrently).
+	mid.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
 		Payload: "now",
 	})

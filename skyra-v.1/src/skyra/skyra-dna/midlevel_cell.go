@@ -61,7 +61,7 @@ func NewMidLevelCell(ctx BuildContext, sensory *SensoryCell) *MidLevelCell {
 		kernel:  ctx.Kernel,
 		infer:   ctx.Infer,
 	}
-	g.other = NewOtherCell(ctx) // the next pipeline stage (MidLevel → other)
+	g.other = NewOtherCell(ctx, g) // the next pipeline stage (MidLevel → other); g = the back-ref
 	return g
 }
 

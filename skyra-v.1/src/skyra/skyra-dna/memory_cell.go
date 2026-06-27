@@ -60,6 +60,7 @@ const (
 	KindResponse      Kind = "response"      // an incoming move — the other's utterance/action (InteractionRecord)
 	KindAction        Kind = "action"        // an outgoing move — the being's own action (motor)
 	KindGrouping      Kind = "grouping"      // a higher-order setpoint over the active field; content = Gist
+	KindPrediction    Kind = "prediction"    // an open bet — a predicted next move (self/other); content = Prediction
 )
 
 func NewMemoryCell(id string, kind Kind, content any, slice skyra.Slice) *MemoryCell {
