@@ -122,8 +122,35 @@ func (g *GlobalCell) observeExternal(impulse any) {
 	}
 	if label, ok := ParseLabel(resp); ok {
 		g.gist = label
+		g.startGrouping(label) // cold-start "create" — a grouping anchor carrying this gist
 	}
 }
+
+// Gist is a grouping's framing: the label + when it was set (for "most recent
+// gist" recency). The swappable framing on the stable grouping anchor; cold-start
+// holds it directly on the grouping, the separate-framing-node split is the warm
+// case. See specs/2026-06-16/skyra-dna/global.md ("Grouping vs. framing").
+type Gist struct {
+	Text      string
+	Timestamp int
+}
+
+// startGrouping creates a fresh grouping anchor carrying the gist and publishes it
+// into g.groupings (already exposed via Children()), for the agents to read and
+// fire a wave on. Cold-start = the "create" action; warm = match/re-frame an
+// existing grouping instead (later).
+func (g *GlobalCell) startGrouping(gist string) {
+	ts := 0
+	if g.slice != nil {
+		ts = g.slice.Count()
+	}
+	groupID := fmt.Sprintf("%s:g:%d", g.id, ts)
+	g.groupings[groupID] = NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
+}
+
+// Groupings publishes the grouping index by reference (same map Children() walks)
+// — the agents read it, filter by most recent gist, and fire a wave on one.
+func (g *GlobalCell) Groupings() map[string]skyra.Space { return g.groupings }
 
 // coldStartSystem instructs the grouping pass to predict a single framing for the
 // exchange — the gist that becomes the cycle's top-down context.

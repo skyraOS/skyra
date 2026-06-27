@@ -100,6 +100,22 @@ func TestGlobalColdStartPredictsLabel(t *testing.T) {
 	if !strings.Contains(gotPresent, "skyra project") {
 		t.Fatalf("present did not carry the exchange: %q", gotPresent)
 	}
+
+	// Cold-start "create": a grouping anchor carrying the gist was published.
+	groupings := global.Groupings()
+	if len(groupings) != 1 {
+		t.Fatalf("groupings = %d, want 1 created from the gist", len(groupings))
+	}
+	for _, gr := range groupings {
+		mc, ok := gr.(*dna.MemoryCell)
+		if !ok || mc.Kind() != dna.KindGrouping {
+			t.Fatalf("grouping = %T kind %v, want *MemoryCell KindGrouping", gr, mc.Kind())
+		}
+		gist, ok := mc.Content().(dna.Gist)
+		if !ok || gist.Text != "help michael with the skyra project" {
+			t.Fatalf("grouping gist = %+v, want the predicted label", mc.Content())
+		}
+	}
 }
 
 // Global spawns the next pipeline stage (the other agent) on Express, owned by
