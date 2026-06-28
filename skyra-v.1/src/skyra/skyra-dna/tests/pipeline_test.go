@@ -4,12 +4,12 @@ import (
 	"testing"
 )
 
-// The cognitive chain forwards stage to stage, each spawning the next on Express,
-// each wave owned by the stage it lands on:
+// The cognitive chain forwards stage to stage, each spawning the next on Express:
 //
-//	other → self → voting → motor
+//	other → self → motor   (voting parked for the MVP — self hands straight to motor)
 //
-// (Behavior is stubbed; these assert the spawn wiring only.)
+// These assert the spawn wiring; the predict behavior is covered in other_test.go
+// / self_test.go.
 
 func TestOtherFiresSelfOnExpress(t *testing.T) {
 	spy := newSpyKernel()
@@ -18,26 +18,19 @@ func TestOtherFiresSelfOnExpress(t *testing.T) {
 	assertSpawn(t, spy, other.Express, "skyra:self")
 }
 
-func TestSelfFiresVotingOnExpress(t *testing.T) {
+func TestSelfFiresMotorOnExpress(t *testing.T) {
 	spy := newSpyKernel()
 	m := newBeingWithKernel("skyra", spy)
 	self := m.Sensory().MidLevel().Other().Self()
-	assertSpawn(t, spy, self.Express, "skyra:voting")
+	assertSpawn(t, spy, self.Express, "skyra:motor")
 }
 
-func TestVotingFiresMotorOnExpress(t *testing.T) {
-	spy := newSpyKernel()
-	m := newBeingWithKernel("skyra", spy)
-	voting := m.Sensory().MidLevel().Other().Self().Voting()
-	assertSpawn(t, spy, voting.Express, "skyra:motor")
-}
-
-// The terminus: voting's motor is the SAME instance as the membrane's out-face,
+// The terminus: self's motor is the SAME instance as the membrane's out-face,
 // not a second motor.
-func TestVotingMotorIsMembraneMotor(t *testing.T) {
+func TestSelfMotorIsMembraneMotor(t *testing.T) {
 	m := newBeingWithKernel("skyra", newSpyKernel())
-	votingMotor := m.Sensory().MidLevel().Other().Self().Voting().Motor()
-	if votingMotor == nil || votingMotor != m.Motor() {
-		t.Fatalf("voting's motor (%p) is not the membrane's out-face (%p)", votingMotor, m.Motor())
+	selfMotor := m.Sensory().MidLevel().Other().Self().Motor()
+	if selfMotor == nil || selfMotor != m.Motor() {
+		t.Fatalf("self's motor (%p) is not the membrane's out-face (%p)", selfMotor, m.Motor())
 	}
 }

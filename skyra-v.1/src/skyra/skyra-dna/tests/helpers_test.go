@@ -34,13 +34,20 @@ func newBeingWithKernel(id string, kernel skyra.Time) *dna.MembraneCell {
 // seam (a mock in tests) — for exercising the grouping pass without a network call.
 func newBeingWithInfer(id string, infer dna.InferFunc) (*dna.MembraneCell, *relation.Relation) {
 	kernel := relation.NewRelation()
+	return newBeingWith(id, kernel, infer), kernel
+}
+
+// newBeingWith builds a being with both a caller-supplied kernel and inference
+// seam — e.g. a spy kernel + a mock infer, to run the predict chain (Observe uses
+// infer, not the kernel) and then capture a spawn (Express uses the kernel).
+func newBeingWith(id string, kernel skyra.Time, infer dna.InferFunc) *dna.MembraneCell {
 	ctx := dna.BuildContext{
 		BeingID:  id,
 		NewSlice: func(sliceID string) skyra.Slice { return world.NewSlice(sliceID, id) },
 		Kernel:   kernel,
 		Infer:    infer,
 	}
-	return dna.NewMembraneCell("be helpful", ctx), kernel
+	return dna.NewMembraneCell("be helpful", ctx)
 }
 
 // sensoryEntity reads the sensory entity index under the sensory slice lock, so a

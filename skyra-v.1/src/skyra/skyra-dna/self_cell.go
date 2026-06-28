@@ -18,12 +18,13 @@ import (
 // Deliberately a near-copy of OtherCell (MVP spread-out, duplicated); the two
 // collapse to one AgentCell{role} once the shared shape is visible in code.
 type SelfCell struct {
-	id       string
-	slice    skyra.Slice
-	kernel   skyra.Time
-	midLevel *MidLevelCell
-	infer    InferFunc
-	voting   *VotingCell
+	id         string
+	slice      skyra.Slice
+	kernel     skyra.Time
+	midLevel   *MidLevelCell
+	infer      InferFunc
+	motor      *MotorCell // MVP: self → motor directly (voting is parked)
+	prediction string     // skyra's latest predicted move, handed to motor on Express
 }
 
 func NewSelfCell(ctx BuildContext, midLevel *MidLevelCell) *SelfCell {
@@ -33,8 +34,8 @@ func NewSelfCell(ctx BuildContext, midLevel *MidLevelCell) *SelfCell {
 		kernel:   ctx.Kernel,
 		midLevel: midLevel,
 		infer:    ctx.Infer,
+		motor:    ctx.Motor, // MVP: bypass voting, hand self's move straight to the out-face
 	}
-	s.voting = NewVotingCell(ctx) // next stage (self → voting)
 	return s
 }
 
@@ -43,7 +44,7 @@ func (s *SelfCell) Slice() skyra.Slice                    { return s.slice }
 func (s *SelfCell) NewActivation() skyra.ActivationRecord { return &memActivation{} }
 func (s *SelfCell) Content() any                          { return nil }
 func (s *SelfCell) Children() map[string]skyra.Space      { return nil }
-func (s *SelfCell) Voting() *VotingCell                   { return s.voting }
+func (s *SelfCell) Motor() *MotorCell                     { return s.motor }
 
 // Observe — the predict half: read the most-recent grouping (carrying other's
 // prediction), predict skyra's own next move under its framing, and append the
@@ -61,14 +62,17 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 		return
 	}
 	if text, ok := ParsePrediction(resp); ok {
+		s.prediction = text
 		s.appendPrediction(groupID, grouping, text)
 	}
 }
 
-// Express — spawns voting (the next stage). [later: grade against reafference]
+// Express — hands self's predicted move to motor (the out-face). MVP: bypasses
+// voting entirely. The move rides the impulse payload. [later: voting tallies
+// self/other; grade against reafference]
 func (s *SelfCell) Express(origin skyra.Space, impulse any) any {
-	if s.kernel != nil && s.voting != nil {
-		go s.kernel.Realize(s.voting, s.voting, impulse)
+	if s.kernel != nil && s.motor != nil {
+		go s.kernel.Realize(s.motor, s.motor, skyra.Impulse{Primitive: "act", Payload: s.prediction})
 	}
 	return nil
 }

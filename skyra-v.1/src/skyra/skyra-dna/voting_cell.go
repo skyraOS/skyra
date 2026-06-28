@@ -2,6 +2,10 @@ package dna
 
 import "skyra-v1/src/skyra"
 
+// PARKED (MVP) — voting is cancelled for the MVP: self hands its move straight to
+// motor (see SelfCell.Express). Nothing constructs this cell until the tally is
+// wired back in; it's kept as the placeholder for that.
+//
 // VotingCell — the vote/tally agent (the Hopfield weighted sum + tie-break),
 // split out of self as its own stage. Pipeline: self → voting → motor. Reached
 // by a spawn, owning its own slice; its terminus is the being's motor (the
