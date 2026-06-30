@@ -1,12 +1,21 @@
 # Agent (self / other) — Cell Type Spec
 
-**Date:** 2026-06-26 · **Status:** in spec — the **predict half** is designed (this doc); the
-**closure half** is the continuation. **Supersedes the separate `SelfCell`/`OtherCell` stubs**:
-they collapse to **one `AgentCell` with a role** (`self | other`).
+**Date:** 2026-06-26 (updated 2026-06-30) · **Status:** the **predict half** is **BUILT** (both
+`OtherCell` and `SelfCell` predict — see `other_cell.go` / `self_cell.go`); the **closure half**
+is the continuation. `SelfCell`/`OtherCell` are kept **separate** for the MVP (spread out,
+duplicated on purpose) — they collapse to one `AgentCell{role}` *later*, not now.
 
 > Theory: [self-and-other-modeling.md](../../../design-docs/cognition/self-and-other-modeling.md)
 > (descent/ascent, "self relies on other"). This spec is the concrete loop. Pipeline stage:
-> Global → **other → self** → voting (other first — "self relies on other").
+> Global → **other → self** → motor (other first — "self relies on other"). **Voting is PARKED for
+> the MVP** — self hands its move straight to motor (`SelfCell.Express`); the tally returns with
+> the closure half.
+>
+> **Where this is headed** ([world-assertions-and-policy.md](../../../design-docs/cognition/world-assertions-and-policy.md)):
+> the MVP predicts a free-text *move*; the target is for the agent to emit **expected world
+> assertions** (present-tense, falsifiable graph edges) graded by **overlap with the observed
+> graph** — other = the goal-world, self = the goal-conditioned policy. Every prediction must obey
+> the [prediction-falsifiability invariant](../../../design-docs/laws/invariants/prediction-falsifiability-invariant.md).
 
 ## What it is
 
@@ -49,7 +58,8 @@ traversal reads the updated activation).
 
 ## Express — hand off
 
-Spawn the next stage: **other → self**, **self → voting** (the forward spawn already wired).
+Spawn the next stage: **other → self**, **self → motor** (voting parked — see above). The forward
+spawn is wired.
 
 ## Role — the only asymmetry
 
@@ -76,9 +86,10 @@ closure later** (no rework when the per-grouping waves go concurrent).
 
 ## MVP vs. later
 
-- **MVP:** sequential per-grouping; inference stubbed/mocked (like Global's cold-start);
-  `SelfCell`/`OtherCell` collapse to one `AgentCell{role}`.
-- **Later:** **concurrent** per-grouping waves — the BSP closure phase (snapshot-in / join-out).
+- **MVP:** sequential per-grouping; inference mocked in tests; `SelfCell`/`OtherCell` kept
+  **separate** (spread out, duplicated); voting parked, self → motor.
+- **Later:** **concurrent** per-grouping waves (the BSP closure phase, snapshot-in / join-out);
+  collapse self/other to one `AgentCell{role}`; voting returns; expected-world-assertion grading.
 
 ## Continuation (not this spec) — the closure half
 

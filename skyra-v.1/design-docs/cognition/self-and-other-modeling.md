@@ -4,6 +4,14 @@
 
 **Planning — discuss before implementing.** The Theory-of-Mind layer.
 
+> **The active-inference reading (2026-06-30).** Under the world-assertion frame, the roles
+> sharpen: **other = the goal** (the expected end-state / where the other's trajectory is headed),
+> **self = the goal-conditioned policy** (the action bridging *now → end*). Both emit **expected
+> world assertions** graded by overlap with the observed graph. Full model:
+> [world-assertions-and-policy.md](world-assertions-and-policy.md); the rule predictions must obey:
+> [prediction-falsifiability-invariant.md](../laws/invariants/prediction-falsifiability-invariant.md).
+> (The concrete build of the predict half is [agent.md](../../specs/2026-06-16/skyra-dna/agent.md).)
+
 > **Reconciliation (2026-06-23).** This doc has been through two framings of *where*
 > self/other live: (1) "ego/alter as two binding realities," then (2) "self/other as
 > sub-binding-realities under episodic + categorical (four stores)." **Both are
