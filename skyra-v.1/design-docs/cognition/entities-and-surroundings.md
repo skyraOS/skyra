@@ -5,7 +5,7 @@
 ## The problem
 
 Given the current context (who/what/where is around right now), find the setpoints
-relevant to it — every time Global fires, cheaply, no inference. This is the
+relevant to it — every time MidLevel fires, cheaply, no inference. This is the
 "reverse index" function. The resolution: **there is no separate index structure.**
 The entities are cells in the graph; the reverse read is a wave.
 
@@ -51,7 +51,7 @@ Two *different* forward edges between *different* node-pairs (`understanding→e
 
 ## Reverse read = a wave (retrieval as traversal)
 
-Global's reverse read is **not** a hash lookup. It is a **wave fired from the
+MidLevel's reverse read is **not** a hash lookup. It is a **wave fired from the
 surroundings entities**: it spreads `understanding → entity → understanding → entity
 …`, bouncing between the two layers, **bounded by amplitude**. Entity nodes are
 routing hubs that let the wave hop between setpoints that share context. That *is*
@@ -117,4 +117,4 @@ the understanding crystallizes.
 ## Source
 
 - `design-docs/cognition/episodic-encoding.md` — Layer 1 typed indexes, retrieval as traversal (this is its realization)
-- `specs/2026-06-16/skyra-dna/entity.md`, `setpoint.md`, `global.md`
+- `specs/2026-06-16/skyra-dna/entity.md`, `setpoint.md`, `midlevel.md`

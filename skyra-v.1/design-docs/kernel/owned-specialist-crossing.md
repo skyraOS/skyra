@@ -110,8 +110,8 @@ So the response and the audit run on different clocks: **speak, then reconsider.
 
 **So global-before-locals is NOT enforced by ordering Coherence's neighbors.** It is enforced by the **descent/ascent bracket**, which is structural:
 
-- Coherence's `Observe` (Predict) runs before the kernel processes Coherence's `Content` — Observe always precedes the Content-check in a node's lifecycle. Global frame first, by construction.
-- Coherence's Resolve fires on the returning votes (the gather event), which by definition arrive after the specialists ran. Global verdict last, by construction.
+- Coherence's `Observe` (Predict) runs before the kernel processes Coherence's `Content` — Observe always precedes the Content-check in a node's lifecycle. MidLevel frame first, by construction.
+- Coherence's Resolve fires on the returning votes (the gather event), which by definition arrive after the specialists ran. MidLevel verdict last, by construction.
 
 This is why a **separate "neighbor cell to hold the binding realities"** is not needed for sequencing: Coherence holding them in its own `Content` already runs Predict-before-spawn. (See Open for the one case that might still want the split.)
 

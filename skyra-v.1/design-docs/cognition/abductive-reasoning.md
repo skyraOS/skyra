@@ -1,6 +1,6 @@
 # Abductive Reasoning — Decomposition
 
-> **Reconciliation (2026-06-23).** Read **"Coherence" → Global**, **"binding
+> **Reconciliation (2026-06-23).** Read **"Coherence" → MidLevel**, **"binding
 > realities" → the self/other agents**. The missing-vs-wrong fork is realized in
 > [error-recovery-loop.md](error-recovery-loop.md) (the prediction × assumption 2×2).
 

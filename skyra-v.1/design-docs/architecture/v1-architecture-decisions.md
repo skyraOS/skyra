@@ -76,7 +76,7 @@ First time: inference recognizes the resolution. Weights record it. Second time:
 
 **Why:** We chased the loop — cosine doesn't work (proved experimentally, 0.47 for "hello" against "greet the user"), history doesn't capture meaning, prediction needs trained weights. The LLM is the only thing that understands resolution.
 
-### 9. Inference Is Local on the Ascent, Expands to Global
+### 9. Inference Is Local on the Ascent, Expands to MidLevel
 
 No inference on descent — only on ascent. Error exists locally at each cell (does the cell's content match its members?). Each level fixes locally. As the recursion unwinds, each level sees the already-corrected state from below. Local fixes compound to global coherence.
 

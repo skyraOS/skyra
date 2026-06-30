@@ -1,10 +1,10 @@
 # Setpoints — The Global Setpoint and the Subgoal Tree
 
 > **Reconciliation (2026-06-23).** Vocabulary drift; reasoning holds. Read
-> **"Coherence" → Global**, **"binding realities" → the self/other agents**. A
+> **"Coherence" → MidLevel**, **"binding realities" → the self/other agents**. A
 > setpoint is now **one `MemoryCell`** (`Content` = the understanding/gist;
 > `Children` = the closure snapshot — entities + responses + actions + stresses;
-> past-only, no parent/future edge — the future is Global's grouping index). Closure
+> past-only, no parent/future edge — the future is MidLevel's grouping index). Closure
 > is judged by **`completed`** (signed −1..1; `+thr → crystallize`, supporting `< 0`
 > → cascade), distinct from the relational `alignment` in the activation bump. Current
 > spec: [../../specs/2026-06-16/skyra-dna/setpoint.md](../../specs/2026-06-16/skyra-dna/setpoint.md);
@@ -130,7 +130,7 @@ This implies Motivation has the same global/local shape as Coherence:
 Local Motivation:
   evaluate dependency setpoints for one parent setpoint
 
-Global Motivation:
+MidLevel Motivation:
   evaluate which active parent setpoints remain justified under the root drive
 ```
 

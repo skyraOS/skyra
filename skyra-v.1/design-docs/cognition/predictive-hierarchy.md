@@ -1,7 +1,7 @@
 # Predictive Hierarchy — How Prediction Flows Through Layers
 
 > **Reconciliation (2026-06-23).** Vocabulary drift; reasoning holds. Read
-> **"Coherence" → Global**, **"binding realities" → the self/other agents**. The
+> **"Coherence" → MidLevel**, **"binding realities" → the self/other agents**. The
 > grouping/altitude recursion in [groupings-and-understandings.md](groupings-and-understandings.md)
 > is the current home of the "prediction flows through layers" idea.
 

@@ -1,11 +1,11 @@
-# The Comparator — Global's Output Structure
+# The Comparator — MidLevel's Output Structure
 
 > **Reconciliation (2026-06-23).** This doc predates three renames; the *reasoning*
 > below holds, the *vocabulary* drifted. Read it through this map:
-> - **Coherence → Global.** "Coherence (ACC) / the central cell" = `GlobalCell`.
+> - **Coherence → MidLevel.** "Coherence (ACC) / the central cell" = `MidLevelCell`.
 > - **Binding realities (Temporal/Episodic, Goal/Prediction/Action) → self/other
 >   agents.** The two-hemisphere / four-store binding-reality model dissolved;
->   Global has two agents, `self` and `other`. "Reached through Goal/Prediction" =
+>   MidLevel has two agents, `self` and `other`. "Reached through Goal/Prediction" =
 >   "reached through that competence," not a binding-reality cell.
 > - **`<alignment>` here conflates two quantities we have since split:**
 >   - **`alignment`** (current) = the *relational* match (node ↔ setpoint) that
@@ -20,9 +20,9 @@
 
 ## What It Is
 
-The comparator is what Global emits on descent. It is one structure for all three mismatch domains, because content, prediction, and articulation are three instances of a single operation: **compare a reference against an observation, and signal how aligned they are.** This is the same comparator the whole goal/prediction thread converges on — completion is a comparison (satisfied-when vs. world), prediction is a comparison, articulation is a comparison. One primitive, three domains.
+The comparator is what MidLevel emits on descent. It is one structure for all three mismatch domains, because content, prediction, and articulation are three instances of a single operation: **compare a reference against an observation, and signal how aligned they are.** This is the same comparator the whole goal/prediction thread converges on — completion is a comparison (satisfied-when vs. world), prediction is a comparison, articulation is a comparison. One primitive, three domains.
 
-Global's descent output collapses to a list of these comparisons. Nothing else — no separate delta, domain label, or result flag. Each comparison is one junction; the set of them is the frame.
+MidLevel's descent output collapses to a list of these comparisons. Nothing else — no separate delta, domain label, or result flag. Each comparison is one junction; the set of them is the frame.
 
 ## The Structure
 
@@ -64,7 +64,7 @@ Sign carries match vs. mismatch; magnitude carries strength. This replaces a sep
 
 ## Domain Is Derived, Not Declared
 
-> **Dissolution note (updated 2026-06-23):** Goal / Prediction / Action below are not separate binding realities — **Goal** = the setpoint's *ascent face*, **Prediction** = Global's *Observe/Predict*, **Action** = the *Action store*. The domain-from-path mechanism is unchanged; only the *names* of the paths moved. The binding-reality model (Temporal/Episodic with sub-realities) has since fully dissolved into **Global's `self` and `other` agents** — read "reached through Goal/Prediction/Action" as "reached through that competence," not a binding-reality cell.
+> **Dissolution note (updated 2026-06-23):** Goal / Prediction / Action below are not separate binding realities — **Goal** = the setpoint's *ascent face*, **Prediction** = MidLevel's *Observe/Predict*, **Action** = the *Action store*. The domain-from-path mechanism is unchanged; only the *names* of the paths moved. The binding-reality model (Temporal/Episodic with sub-realities) has since fully dissolved into **MidLevel's `self` and `other` agents** — read "reached through Goal/Prediction/Action" as "reached through that competence," not a binding-reality cell.
 
 The LLM never emits `content | prediction | articulation`. It never sees those words. The engine derives the domain from the cells the LLM cited.
 
@@ -90,7 +90,7 @@ The three domains are the three things a being can be wrong about: its own consi
 
 ## Match Reinforces, Mismatch Routes
 
-- **Mismatch** (alignment < 0) → the engine routes energy per the derived domain (split the cell, raise goal dominance and gather, or tighten the motor loop). Global is the stress center — the error signal *is* the energy (see [predictive-hierarchy](predictive-hierarchy.md)).
+- **Mismatch** (alignment < 0) → the engine routes energy per the derived domain (split the cell, raise goal dominance and gather, or tighten the motor loop). MidLevel is the stress center — the error signal *is* the energy (see [predictive-hierarchy](predictive-hierarchy.md)).
 - **Match** (alignment > 0) → reinforce the expected↔actual coupling. These thoughts *confirmed* the reference; deepen the groove. This is how "the thoughts that drove a good decision" get saved, and how a reflex forms ([Decision #15](../architecture/v1-architecture-decisions.md)) — repeated matches are what let inference stop firing.
 
 ## The LLM Contract
@@ -129,7 +129,7 @@ A frame is not a flat list of co-present cells — it is the **junctions** among
 
 ## Global and Local Coherence — One Method, Two Scopes
 
-Global runs coherence at two scales, and it is the *same method* both times. The central cell (Global) sits behind the membrane (north of sensory, south of motor) and owns **global** alignment — does the being, as a whole, cohere? The binding realities own **local** alignment — does this one index cohere internally? But local coherence isn't separately implemented. The central cell **throws the coherence and frontopolar competence down the wave**; when it reaches the binding realities, it runs there, localized.
+MidLevel runs coherence at two scales, and it is the *same method* both times. The central cell (MidLevel) sits behind the membrane (north of sensory, south of motor) and owns **global** alignment — does the being, as a whole, cohere? The binding realities own **local** alignment — does this one index cohere internally? But local coherence isn't separately implemented. The central cell **throws the coherence and frontopolar competence down the wave**; when it reaches the binding realities, it runs there, localized.
 
 **Scope is positional, not parametric.** Nothing passes a "run locally" flag. The coherence method reads *"my slice / my members."* Where it executes rebinds what "my" means — at the central cell, "my slice" is the integrated returns from all binding realities; thrown down to Goal, it is Goal's own members. Same code, scope set by position. This is the [local-relativity invariant](../laws/invariants/local-relativity-invariant.md) doing the work: the same law evaluated in each frame yields local results. Local coherence falls out for free because coherence run *at a location is already scoped to that location.* No machinery moves.
 
@@ -151,16 +151,16 @@ The ordering is not arbitrary — it falls out of dataflow direction: context be
 The frontopolar audit fires at both scales:
 
 - **Local** — a binding reality votes, then its localized frontopolar asks "did *my* evidence cover this?" If not, it can raise a local `<need>`.
-- **Global** — the central cell integrates the votes, then its frontopolar asks "does the being, as a whole, have what it needs — or do I gather before I respond?" This is how a being decides to ask a question before answering.
+- **MidLevel** — the central cell integrates the votes, then its frontopolar asks "does the being, as a whole, have what it needs — or do I gather before I respond?" This is how a being decides to ask a question before answering.
 
-**The global verdict completes on ascent.** When the central cell "makes its global case" on descent, it is only setting the global frame and throwing it down — it has no local results yet. Global resolution is the ascent frontopolar, the last thing before motor. Prime down, verify up — predictions down, errors up. This is `predictive-hierarchy.md` realized through competence-on-the-wave: the hierarchy's "each layer translates the prediction into its own vocabulary" *is* the same coherence method re-executing, localized, at each level.
+**The global verdict completes on ascent.** When the central cell "makes its global case" on descent, it is only setting the global frame and throwing it down — it has no local results yet. MidLevel resolution is the ascent frontopolar, the last thing before motor. Prime down, verify up — predictions down, errors up. This is `predictive-hierarchy.md` realized through competence-on-the-wave: the hierarchy's "each layer translates the prediction into its own vocabulary" *is* the same coherence method re-executing, localized, at each level.
 
 ## The Vote Flow — Global and Local Behave Differently
 
-Global and local run the *same* vote/question pair, but with the emphasis flipped by position:
+MidLevel and local run the *same* vote/question pair, but with the emphasis flipped by position:
 
 - **Local: vote-primary, question-after.** A binding reality fires its prediction, runs its wave, and on the return casts its vote, then self-checks — the deterministic **vote → question** order (the own-first / passed-last express contract). It always proposes.
-- **Global: question-primary, vote-exceptional.** The central cell monitors, and casts a vote **only to break a tie.** It stays silent while the regions agree.
+- **MidLevel: question-primary, vote-exceptional.** The central cell monitors, and casts a vote **only to break a tie.** It stays silent while the regions agree.
 
 That asymmetry is the ACC's real job — engage on conflict, not on smooth processing. Aligned votes fire action reflexively (basal-ganglia coincidence detection, no center needed); the center only engages when the regions can't resolve among themselves. The non-gating property survives even into the tie-break.
 
@@ -174,11 +174,11 @@ once votes are cast, they return to global
                                           the topology re-propagates and the regions re-resolve
 ```
 
-**(b) is inner speech.** Vygotsky's self-regulating inner voice, realized as re-entrant processing (Edelman/Dehaene) — the broadcast loops back as input. It fits the machinery exactly: it reuses the **sensory path** (the inner voice enters where external perception does); it carries the **"from me"** tag, so on return it folds into the workspace as reafference, not as new external news; it is the *"deliberation as re-descent"* of [predictive-hierarchy](predictive-hierarchy.md), routed through sensory so the *whole* topology reframes rather than one stuck branch; and it is **powered by the conflict itself** — the tie is a mismatch → stress → Global routes that energy into the re-entry, and **amplitude attenuation bounds the loop** (it fades after a few passes). That bound is the line between deliberating and ruminating: the being thinks until it resolves or runs out of energy. Mode (a) imposes; mode (b) reframes and lets the autonomous regions own the resolution — truer to the non-gating spirit.
+**(b) is inner speech.** Vygotsky's self-regulating inner voice, realized as re-entrant processing (Edelman/Dehaene) — the broadcast loops back as input. It fits the machinery exactly: it reuses the **sensory path** (the inner voice enters where external perception does); it carries the **"from me"** tag, so on return it folds into the workspace as reafference, not as new external news; it is the *"deliberation as re-descent"* of [predictive-hierarchy](predictive-hierarchy.md), routed through sensory so the *whole* topology reframes rather than one stuck branch; and it is **powered by the conflict itself** — the tie is a mismatch → stress → MidLevel routes that energy into the re-entry, and **amplitude attenuation bounds the loop** (it fades after a few passes). That bound is the line between deliberating and ruminating: the being thinks until it resolves or runs out of energy. Mode (a) imposes; mode (b) reframes and lets the autonomous regions own the resolution — truer to the non-gating spirit.
 
 ## This Is a Global Workspace
 
-The gather mechanism is Global Workspace Theory, derived rather than imposed. Global spawns the binding realities (the [owned-specialists crossing](../kernel/world-kernel-coupling.md#two-crossing-modes--peer-and-owned) — `Content` as a map of Spaces, threaded, origin = global). Each returns its top-aligning items as a "from me" wave. Global **deposits** them to its slice — it does not fire its question on these self-returns, because the origin split ("is this from me?") makes a self-return a silent deposit, not a question-fire (the same kernel rule that return waves don't re-stimulate the topology). A **cutoff** keeps only the top-aligning first-pass returns.
+The gather mechanism is Global Workspace Theory, derived rather than imposed. MidLevel spawns the binding realities (the [owned-specialists crossing](../kernel/world-kernel-coupling.md#two-crossing-modes--peer-and-owned) — `Content` as a map of Spaces, threaded, origin = global). Each returns its top-aligning items as a "from me" wave. MidLevel **deposits** them to its slice — it does not fire its question on these self-returns, because the origin split ("is this from me?") makes a self-return a silent deposit, not a question-fire (the same kernel rule that return waves don't re-stimulate the topology). A **cutoff** keeps only the top-aligning first-pass returns.
 
 The correspondence is exact:
 

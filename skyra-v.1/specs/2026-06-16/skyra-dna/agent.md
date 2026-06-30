@@ -7,7 +7,7 @@ duplicated on purpose) — they collapse to one `AgentCell{role}` *later*, not n
 
 > Theory: [self-and-other-modeling.md](../../../design-docs/cognition/self-and-other-modeling.md)
 > (descent/ascent, "self relies on other"). This spec is the concrete loop. Pipeline stage:
-> Global → **other → self** → motor (other first — "self relies on other"). **Voting is PARKED for
+> MidLevel → **other → self** → motor (other first — "self relies on other"). **Voting is PARKED for
 > the MVP** — self hands its move straight to motor (`SelfCell.Express`); the tally returns with
 > the closure half.
 >
@@ -33,7 +33,7 @@ the cell-collapse direction).
 
 The prediction hangs off the **groupID** (the grouping spine): the agent appends
 `grouping → {self,other}-prediction` to its **own** slice; the spine is the **union read across**
-Global + self + other by groupID (one writer per kind, the merge at traversal).
+MidLevel + self + other by groupID (one writer per kind, the merge at traversal).
 
 ## The Observe loop — the predict half
 
@@ -46,7 +46,7 @@ traversal reads the updated activation).
 2. **Grade the past** — grade last cycle's prediction against **what happened** (the new
    incoming). `incoming → prediction` finds the prediction the evidence tests; the **comparator
    grades**; alignment is written back. Closes the open bet. *(Backward-looking — grade #1.)*
-3. **Read `activeGroupings`** off Global's slice (cross-slice read, under Global's lock — the
+3. **Read `activeGroupings`** off MidLevel's slice (cross-slice read, under MidLevel's lock — the
    upstream-read pattern) → the active groupings + their **entities** (the anchors).
 4. **Per grouping** (sequential loop for the MVP) — run an **entity-outward traversal** to
    surface the lit context under that framing (fresh, because the grade/regroup just moved the
@@ -79,7 +79,7 @@ Same Observe loop; the role swaps the model target and the evidence source.
 
 ## The `activeGroupings` handoff
 
-Global publishes `activeGroupings` (the **groupID + gist anchors**) on its slice. Agents read it;
+MidLevel publishes `activeGroupings` (the **groupID + gist anchors**) on its slice. Agents read it;
 predictions append to the agent's **own** slice keyed by the shared groupID; the grouping spine
 is the union read across slices. **Write-your-own-slice → safe sequential now and concurrent at
 closure later** (no rework when the per-grouping waves go concurrent).

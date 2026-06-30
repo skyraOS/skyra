@@ -24,7 +24,7 @@ recognition that they compose into one altitude-recursive loop.
 ## The pipeline
 
 1. **A grouping forms** when setpoints cluster densely enough — Hebbian
-   crystallization, the same threshold as edge formation. It lives on Global's
+   crystallization, the same threshold as edge formation. It lives on MidLevel's
    children map, indexed by person/place/thing + stress, and decays/persists like
    anything else (Identity / Familiarity / Recency EMAs).
 
@@ -38,7 +38,7 @@ recognition that they compose into one altitude-recursive loop.
    setpoints) spreads attention thinner and exploits.
 
    **Frame for the pass:** high-activation history of the grouping's setpoints +
-   the currently selected setpoints + Global's gist (the framing) + predictions
+   the currently selected setpoints + MidLevel's gist (the framing) + predictions
    carried from the previous pass on the slice.
 
 4. **The resulting prediction attaches to the grouping**, appended to the graph
@@ -62,9 +62,9 @@ recognition that they compose into one altitude-recursive loop.
 
 The same predict-score-close loop runs at two (and then more) altitudes:
 
-- **Below Global** — the raw layer: kernel traversal + the per-setpoint
+- **Below MidLevel** — the raw layer: kernel traversal + the per-setpoint
   predict/score (Frame 1 / Frame 2). Operates on raw selected setpoints.
-- **At Global** — the abstract layer: one self/other pass per grouping, over the
+- **At MidLevel** — the abstract layer: one self/other pass per grouping, over the
   grouping's constituents.
 
 A newly-crystallized setpoint at n is itself eligible to become a constituent of a
@@ -75,18 +75,18 @@ therefore recursive: it caps the level below it and is a constituent of the leve
 above it — same object, different level.
 
 **Cold start:** with no completed setpoints there are no groupings (the grouping
-pass skips). The system runs purely on the below-Global layer until enough
+pass skips). The system runs purely on the below-MidLevel layer until enough
 setpoints resolve to form groupings — the abstraction layer grows on top of
 accumulated experience.
 
-## Global's visibility (scoped)
+## MidLevel's visibility (scoped)
 
-Global reads exactly two things:
+MidLevel reads exactly two things:
 1. **crystallized gists/understandings** belonging to completed setpoints, and
 2. **potential gists/understandings** of its currently active groupings.
 
-Global never reads raw, ungrouped, unresolved setpoints directly — that altitude
-belongs to the kernel traversal and Frame 1 / Frame 2, below Global's view.
+MidLevel never reads raw, ungrouped, unresolved setpoints directly — that altitude
+belongs to the kernel traversal and Frame 1 / Frame 2, below MidLevel's view.
 
 ## The incentive structure (emergent, not designed)
 
@@ -105,7 +105,7 @@ alone.
 
 Groupings **do not have explicit, graded alignment** the way a setpoint does. A
 grouping's "is this currently true" is read **implicitly off how much attention
-Global continues to give it** — attention paid *is* the evidence of relevance, not
+MidLevel continues to give it** — attention paid *is* the evidence of relevance, not
 a separately computed score. This matches relevance-realization in cognitive
 science: selection and significance aren't two steps; **selection constitutes
 significance.**

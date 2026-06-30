@@ -110,7 +110,7 @@ Each binding reality shares the same two-job observe / collapse-to-vote express 
 
     **Observe (descent) = ACC.** Pulls currently active/attended goals and their context fresh each traversal from the attention map on the slice. Fires cheap, fast, parallel inference calls:
     - **Per-goal passes (isolated)** — one per active goal. Did this stimulus help or hurt this specific goal? Directional delta: positive (closer), negative (further), zero (irrelevant). Each goal evaluated in isolation against the stimulus.
-    - **Global pass** — how do the per-goal results relate? Agreement, conflict, magnitude spread. This is the aggregation step.
+    - **MidLevel pass** — how do the per-goal results relate? Agreement, conflict, magnitude spread. This is the aggregation step.
     - Writes per-goal deltas + global conflict signal into the stress network before continuing.
 
     **Express (ascent) = Frontopolar.** On the way back up, reads what's returning — votes, candidates, and how well they address the error set ACC flagged on the way down. Two outcomes:

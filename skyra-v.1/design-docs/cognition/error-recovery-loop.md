@@ -96,7 +96,7 @@ The two-stage loop above is **prediction-time**: other→self sequenced, because
 - **Self:** did my previous action close the prediction I committed to? (closure vs. self's own prior commitment)
 - **Other:** did this impulse close the other's open setpoint? (closure vs. external state)
 
-Different targets, no shared mutable state, no ordering. Run inside a **grouping pass** (one pass per grouping; constituents as material — see [groupings-and-understandings.md](groupings-and-understandings.md)), this spawns **N ≥ 2 concurrent waves** — at least one self, at least one other — each grading into its own lane against the same shared, **immutable** frame (impulse + gist + the lit subset / WM). The frame is a snapshot (the perception-invariant deep-copy hand-off); each agent is a **separate-slice actor** (its own lock → genuine concurrency); Global owns the lit set and integrates only at the **join** (the vote). So "no shared mutable state" is structural: **snapshot-in, join-out.**
+Different targets, no shared mutable state, no ordering. Run inside a **grouping pass** (one pass per grouping; constituents as material — see [groupings-and-understandings.md](groupings-and-understandings.md)), this spawns **N ≥ 2 concurrent waves** — at least one self, at least one other — each grading into its own lane against the same shared, **immutable** frame (impulse + gist + the lit subset / WM). The frame is a snapshot (the perception-invariant deep-copy hand-off); each agent is a **separate-slice actor** (its own lock → genuine concurrency); MidLevel owns the lit set and integrates only at the **join** (the vote). So "no shared mutable state" is structural: **snapshot-in, join-out.**
 
 **Concurrent at closure, ordered at prediction** — both halves of self/other are present; which discipline applies depends on the phase.
 
@@ -105,7 +105,7 @@ Different targets, no shared mutable state, no ordering. Run inside a **grouping
 The concurrent waves return independently, so the outcome is 2-D (self-outcome × other-outcome). A **pure-code selector** resolves the pair by priority — **cascade dominates**:
 
 1. **Any cascade → reconcile (failure).** Unstable ground invalidates any closure the other wave reported. Roll back to solid ground, pop the delta to WM, reorganize → **Stress**.
-2. **Else any closure → record + continue (success).** Completed setpoints recorded into self/other; recurse to Global; regroup; kick off the next wave (predict → self). Gist → **Understanding**; setpoint(n) eligible as a constituent at n+1 (stacking).
+2. **Else any closure → record + continue (success).** Completed setpoints recorded into self/other; recurse to MidLevel; regroup; kick off the next wave (predict → self). Gist → **Understanding**; setpoint(n) eligible as a constituent at n+1 (stacking).
 3. **Else open → act + await.** No cascade, no closure: re-predict, feed to self, self emits a setpoint action; emit and **await the next impulse** (predict-act-perceive). Bounded by amplitude; internal re-prediction before acting (deliberation) is a bounded knob.
 
 Routing is **code** — the branch is a function of `(stress-delta, closure-grade)`, no inference to *select*. Inference lives only in the work each branch does (regroup / predict / act). These three branches are the two learning channels (alignment vs. system-failure) plus "keep going," expressed as control flow.
@@ -117,7 +117,7 @@ A cascade is the **inverse of crystallization**: crystallization takes potential
 - **Trigger: a supporting setpoint is judged `completed < 0`** — the `completed` score is a signed −1..1 **inference judgment** on a lit setpoint (see [setpoint.md](../../specs/2026-06-16/skyra-dna/setpoint.md#the-completed-score-signed-inference-judged-transitory)). The cascade fires not from a setpoint's own dip but from the **ground underneath** going negative — pure TMS, the justification is refuted.
 - The wave propagates down through supporting setpoints that are `< 0`, **halting at the first one still held** (`completed ≥ 0` — solid ground). `BirthAlignment` makes a node intrinsically more likely to hold.
 - **Delta** = the span from the contradiction (L) down to solid ground (G) — everything resting on the refuted ground. **Rolled back out of state** (retract to the last consistent layer), **deposited into WM**.
-- The popped span becomes **potential groupings again**; Global reorganizes; the failed grouping's gist crystallizes as a **Stress** (reusable: "this configuration cascaded before").
+- The popped span becomes **potential groupings again**; MidLevel reorganizes; the failed grouping's gist crystallizes as a **Stress** (reusable: "this configuration cascaded before").
 - **Nothing deleted** — rollback into WM, recoverable; solid ground survives intact.
 
 Symmetric with success closure: success deposits the resolved arc (WM) as children of an **Understanding**; cascade deposits the retracted delta (WM) as children of a **Stress** — same deposit-then-crystallize move, opposite sign.

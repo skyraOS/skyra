@@ -18,7 +18,7 @@ import (
 // Visibility is scoped: MidLevel reads only crystallized understandings of
 // completed setpoints and the potential gists of active groupings.
 //
-// See specs/2026-06-16/skyra-dna/global.md and
+// See specs/2026-06-16/skyra-dna/midlevel.md and
 // design-docs/cognition/groupings-and-understandings.md.
 type MidLevelCell struct {
 	id    string
@@ -48,7 +48,7 @@ type MidLevelCell struct {
 
 	// gist — the current framing (the grouping label predicted this cycle). The
 	// cold-start form: a plain string. Becomes a framing node on a stable grouping
-	// once the warm case lands. See specs/2026-06-16/skyra-dna/global.md
+	// once the warm case lands. See specs/2026-06-16/skyra-dna/midlevel.md
 	// ("Grouping vs. framing").
 	gist string
 }
@@ -112,7 +112,7 @@ func (g *MidLevelCell) Observe(origin skyra.Space, impulse any) {
 // observeExternal — the grouping pass. The read-half (built): assemble the frame
 // from sensory's warm surroundings. The write-half (TODO): score by overlap ×
 // recency, run the grouping inference call, write setpoint→groupID.
-// See specs/2026-06-16/skyra-dna/global-observe-gather.md.
+// See specs/2026-06-16/skyra-dna/midlevel-observe-gather.md.
 func (g *MidLevelCell) observeExternal(impulse any) {
 	g.frame = g.assembleFrame()
 
@@ -141,7 +141,7 @@ func (g *MidLevelCell) observeExternal(impulse any) {
 // Gist is a grouping's framing: the label + when it was set (for "most recent
 // gist" recency). The swappable framing on the stable grouping anchor; cold-start
 // holds it directly on the grouping, the separate-framing-node split is the warm
-// case. See specs/2026-06-16/skyra-dna/global.md ("Grouping vs. framing").
+// case. See specs/2026-06-16/skyra-dna/midlevel.md ("Grouping vs. framing").
 type Gist struct {
 	Text      string
 	Timestamp int

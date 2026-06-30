@@ -1,7 +1,7 @@
-# Global — Active-Probe Grouping (Improvement Spec)
+# MidLevel — Active-Probe Grouping (Improvement Spec)
 
 **Date:** 2026-06-25 · **Status:** improvement / **post-MVP**. The MVP grouping pass
-(single inference call) in [global.md](global.md) ships **first**; this is the planned
+(single inference call) in [midlevel.md](midlevel.md) ships **first**; this is the planned
 upgrade, layered on once the loop runs and groupings can be measured.
 
 > Captures the 2026-06-25 design conversation. Not on the step-2 critical path — build the
@@ -10,7 +10,7 @@ upgrade, layered on once the loop runs and groupings can be measured.
 ## The shift — the LLM drives the wave, instead of receiving it
 
 The MVP grouping pass is **passive**: one inference call scores the impulse against the
-active groupings over the lit set (one shot). This spec makes Global an **active driver**:
+active groupings over the lit set (one shot). This spec makes MidLevel an **active driver**:
 it reads the frame, **decides which nodes to probe**, spawns waves into them, grades what
 returns, and groups *based on what it found*. The LLM steers its own attention instead of
 passively receiving whatever the topology surfaced — **"perceive is active sensing" turned
@@ -25,7 +25,7 @@ LLM reorganizes itself rather than being a passive recipient.
 
 ## The mechanism — uses parts that already exist
 
-1. **Passed competence (the "operators").** The probe wave **carries Global's
+1. **Passed competence (the "operators").** The probe wave **carries MidLevel's
    grade-competence**; each probed node **brackets its own Observe/Express with it**
    (first-on-Observe, last-on-Express — the cell-execution contract in
    [../../../design-docs/kernel/activation-and-traversal.md](../../../design-docs/kernel/activation-and-traversal.md)).
@@ -34,14 +34,14 @@ LLM reorganizes itself rather than being a passive recipient.
    the traversal."
 
 2. **Mini-BSP under kernel-void.** Probe waves can't return (no ascent — the kernel returns
-   void). So they **write their grades to the cognitive-core slice**, and Global **joins by
+   void). So they **write their grades to the cognitive-core slice**, and MidLevel **joins by
    reading the slice after a barrier**. Shape:
 
    ```
    read frame  →  spawn concurrent probe waves  →  BARRIER  →  read grades  →  (iterate?)  →  group  →  express/commit
    ```
 
-   A **mini-BSP inside Global's Observe superstep** — fractal with the outer two-pass loop
+   A **mini-BSP inside MidLevel's Observe superstep** — fractal with the outer two-pass loop
    (see [working-memory.md](../../../design-docs/cognition/working-memory.md)). The
    justification index (`intent → preds`) and the grades stay on the **cognitive-core slice**,
    not an agent's private slice.
@@ -52,7 +52,7 @@ LLM reorganizes itself rather than being a passive recipient.
    - LLM **identifies nodes to dig into** (entities or other memory nodes).
    - the system **spawns a wave onto those nodes' children**, carrying the grade-competence.
    - the **Express of those waves grades** → appended to the slice.
-   - Global **reads the grades → groups** (informed by the probe) → commits.
+   - MidLevel **reads the grades → groups** (informed by the probe) → commits.
 
 ## The termination controller — when deliberation stops and action fires
 
@@ -121,7 +121,7 @@ probe → grade (alignment, the existing −1..1 comparator metric)
 
 ## Relationship to the MVP
 
-| | MVP ([global.md](global.md)) | This spec |
+| | MVP ([midlevel.md](midlevel.md)) | This spec |
 |---|---|---|
 | Grouping pass | passive — one inference call (lit-set vs. groupings) | active — LLM-driven probe loop |
 | Driver | the topology surfaces; the LLM receives | the LLM steers; topology is the substrate |
@@ -151,9 +151,9 @@ build now):
 - **Indexes live on the slice** (not per cell); cells become uniform readers/interpreters over
   it. The named pattern is the **blackboard architecture** (Hearsay-II): a shared store +
   opportunistic agents that trigger on its state.
-- **The reactive loop.** Global keeps **swapping the grouping until confident**, while self/
+- **The reactive loop.** MidLevel keeps **swapping the grouping until confident**, while self/
   other **continuously read it and re-fire on grouping change** (gated: they don't fire until a
-  grouping exists). Global-writes / agents-read is **single-writer/multiple-reader** — the
+  grouping exists). MidLevel-writes / agents-read is **single-writer/multiple-reader** — the
   clean, lock-free corner (atomic publish the grouping; readers take the latest), *not* the full
   concurrency problem.
 - **What makes it stable:** the **DDM stop controller above**. The blackboard's historical
@@ -173,7 +173,7 @@ build now):
 
 ## Done when
 
-- Global runs an **active probe loop**: reads frame → identifies nodes → spawns
+- MidLevel runs an **active probe loop**: reads frame → identifies nodes → spawns
   competence-carrying probe waves → reads grades off the slice → groups.
 - The loop **terminates** via the DDM ladder (alignment plateau + tier cascade + urgency
   bound).

@@ -18,7 +18,7 @@ This resolves the old "setpoint(n) vs Understanding(n)" question — **one node:
 - **`Content()` = the understanding** — the crystallized gist (what this setpoint *means*).
 - **`Children()` = the surroundings snapshot + evidence at closure** — the **entities** involved (person/place/thing) + responses + actions + stresses.
 
-So: *"I predicted x → x came true; here's the gist (content); here's what was around when it closed (children)."* Past-facing only; **no parent/future edge** (the future is Global's grouping index, passed down as context — see [global.md](global.md)). Map keyed by edge identity, so activation is edge-owned.
+So: *"I predicted x → x came true; here's the gist (content); here's what was around when it closed (children)."* Past-facing only; **no parent/future edge** (the future is MidLevel's grouping index, passed down as context — see [midlevel.md](midlevel.md)). Map keyed by edge identity, so activation is edge-owned.
 
 ### The directed cycle (all `children`, not bidirectional)
 The entities in a setpoint's children point on to *their* setpoints, forming a cycle through alternating layers — all forward `children` edges:
@@ -50,7 +50,7 @@ The wave carries two things through a setpoint (both in the past direction now):
 **History:** scored potentials that *didn't* crystallize (including negatives) persist as edge-keyed records on the slice with **no** adjacency — they hold their value but the kernel never walks them (it only walks `Children()`). Edges that stop earning grades decay below threshold and fall away. The graph forms *and* prunes — the structural-learning channel.
 
 ## Interface (`skyra.Space`)
-- `Children()` → one map, **keyed by edge identity**, past only: the **entities** involved + responses + actions + stresses (the closure snapshot + evidence). The cell owns the adjacency; the slice owns the edge-keyed activation record (keyed off the map key). No future/parent edge — the future arrives top-down as Global's grouping context.
+- `Children()` → one map, **keyed by edge identity**, past only: the **entities** involved + responses + actions + stresses (the closure snapshot + evidence). The cell owns the adjacency; the slice owns the edge-keyed activation record (keyed off the map key). No future/parent edge — the future arrives top-down as MidLevel's grouping context.
 - `Content()` → the **understanding** (the crystallized gist this setpoint means)
 - `Observe` → descent: gate-check against current impulse (under the active grouping context); contribute to activation score
 - `Express` → ascent: update alignment on the edge's activation record; vote
@@ -102,7 +102,7 @@ A setpoint's **state** is its tower of crystallized layers — and its **support
 
 - **Delta** = the span from the contradiction down to solid ground — everything resting on the refuted ground.
 - Rolled back out of state (TMS dependency-directed backtracking), **deposited into WM**. Solid ground survives intact.
-- The popped span becomes **potential groupings again** → Global reorganizes → crystallizes as a **Stress** (the failure-understanding).
+- The popped span becomes **potential groupings again** → MidLevel reorganizes → crystallizes as a **Stress** (the failure-understanding).
 - **Nothing deleted** — rollback into WM, recoverable. Mirror of success closure (resolved arc → Understanding); cascade (retracted delta → Stress).
 
 `completed` is the inference judgment; the cascade *propagation* (walk supporting setpoints, stop where `completed ≥ 0`) is **code**. See [error-recovery-loop.md](../../../design-docs/cognition/error-recovery-loop.md#cascade--a-failure-wave-de-crystallization).

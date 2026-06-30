@@ -2,7 +2,7 @@
 
 > **Reconciliation (2026-06-23).** Vocabulary drift; the retrieval mechanics
 > (frames, episodes, typed indexes, retrieval-as-traversal, state modulation) hold
-> and this doc is still the reference for them. Read **"Coherence" → Global**,
+> and this doc is still the reference for them. Read **"Coherence" → MidLevel**,
 > **"binding realities" → the self/other agents + entity cells**. Its core WM claim
 > ("working memory is not a separate buffer — it is the activated subset… in the
 > focus of attention," §"Working Memory Is the Attention Map") is **consistent with

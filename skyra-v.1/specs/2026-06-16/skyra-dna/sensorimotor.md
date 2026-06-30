@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-25 · **Status:** in spec — supersedes the **boundary model** in
 [membrane.md](membrane.md) (membrane-does-the-gate-and-surroundings-write). The
-**cognitive layer** (Global / grouping / self·other) is unchanged; only **how the wave
+**cognitive layer** (MidLevel / grouping / self·other) is unchanged; only **how the wave
 reaches it** changes.
 
 > Scope: the membrane boundary, the sensory/motor sub-actors, the per-being slice
@@ -38,7 +38,7 @@ They never share a traversal — sensory on the inbound wave, motor on the outbo
 
 Each being is a small constellation of actors, each with its **own slice**: **membrane**
 (public boundary), **sensory** (private), **motor** (private) — plus the cognitive core
-(Global / self·other; see §8 open). The interface already supports this for free —
+(MidLevel / self·other; see §8 open). The interface already supports this for free —
 `Space.Slice()` is per-cell, so each organelle returning its own slice is all the
 (cell-initiated) crossing needs.
 
@@ -91,7 +91,7 @@ go kernel.Realize(origin=<perceiver>, traversed=<target>, impulse)
   would re-enter and deadlock. Own-slices and cell-spawn are the same decision wearing two
   hats.)
 - **Only dispatchers hold the ref** — membrane (→ sensory/motor), sensory (→ cognition),
-  Global (→ self/other). Passive `MemoryCell`s never spawn.
+  MidLevel (→ self/other). Passive `MemoryCell`s never spawn.
 - **`Realize` is the runtime's "send" primitive**; cells are actors that call it. The kernel
   never knows a crossing happened — it just gets handed a new root.
 
@@ -140,7 +140,7 @@ external send (sender on impulse.Source)
         go Realize(origin=sensory, traversed=sensory, impulse)   // EVERY cycle (unconditional)
   → sensory: resolve sender, write surroundings (own slice), append to shared graph
         → Express: forward → go Realize(origin=cognition, traversed=cognition, frame)
-  → cognition (Global / grouping / self·other): the cognitive cycle (unchanged) → choose action
+  → cognition (MidLevel / grouping / self·other): the cognitive cycle (unchanged) → choose action
         → Express: forward → go Realize(origin=motor, traversed=motor, intent)
   → motor: realize intent → emit action to the world (sender carried for the reply)
 ```
@@ -167,7 +167,7 @@ would skip the decay sweep on ambient / unresolved waves.
 - [ ] **Sensory/motor own slices** — each mints its own at construction instead of receiving
   the membrane's. *[DNA / construction]*
 - [ ] **Dispatcher cells hold the kernel (`Time`) ref** — passed at construction; only
-  membrane / sensory / Global use it. *[DNA / construction]*
+  membrane / sensory / MidLevel use it. *[DNA / construction]*
 - [ ] **Return-guard** on sensory (and each forwarder) `Express` — don't re-spawn on a
   `Return` impulse (moot while the kernel returns void; needed when the return wave is
   restored). *[DNA]*
@@ -177,7 +177,7 @@ would skip the decay sweep on ambient / unresolved waves.
 ## 8. Open
 
 - **Where the durable cognitive graph (the "core" slice) sits** — the membrane's public
-  slice, or a distinct core/Global slice. Leaning core/Global (the membrane is a boundary;
+  slice, or a distinct core/MidLevel slice. Leaning core/MidLevel (the membrane is a boundary;
   the memory is the cognitive core), so "public slice" = the core memory slice the membrane
   routes to.
 - **Origin-threading for the eventual reply** — how the external sender (on

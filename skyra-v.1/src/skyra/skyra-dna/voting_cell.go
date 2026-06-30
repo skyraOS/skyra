@@ -14,7 +14,7 @@ import "skyra-v1/src/skyra"
 // Stub for now: Observe/Express do nothing but forward. Later — Observe runs the
 // tally over the returned self/other scores; Express fires the chosen action
 // through motor (or, on conflict, the tie-break). See
-// specs/2026-06-16/skyra-dna/global.md.
+// specs/2026-06-16/skyra-dna/midlevel.md.
 type VotingCell struct {
 	id     string
 	slice  skyra.Slice

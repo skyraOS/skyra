@@ -60,7 +60,7 @@ Not needed for the MVP kernel traversal. Part of the firing rewrite.
 
 ### 3. Owned-specialist map-crossing — DO NOT BUILD
 
-The `map[string]Space` Content crossing (owned-specialist-crossing §1) is **superseded** by `Agents()` + Space-owns-firing. Global dispatches its agents via its environment. Skip the kernel map-crossing entirely.
+The `map[string]Space` Content crossing (owned-specialist-crossing §1) is **superseded** by `Agents()` + Space-owns-firing. MidLevel dispatches its agents via its environment. Skip the kernel map-crossing entirely.
 
 ### 4. Slice — `Result` introspection field  `[after]`
 
@@ -68,7 +68,7 @@ The `map[string]Space` Content crossing (owned-specialist-crossing §1) is **sup
 
 ## Graph topology — one map, two edge directions
 
-`Children() map[string]Space` on `skyra.Space` is the **single map** the kernel walks. For setpoint nodes it holds **past edges only** (Understandings, Stresses, Responses, Actions — the confirmed past). There is **no parent/future edge**: the future is not stored per-cell — it lives as **Global's grouping index** over the active field and is passed down as context (see [global.md](skyra-dna/global.md)). No `Parents()` method.
+`Children() map[string]Space` on `skyra.Space` is the **single map** the kernel walks. For setpoint nodes it holds **past edges only** (Understandings, Stresses, Responses, Actions — the confirmed past). There is **no parent/future edge**: the future is not stored per-cell — it lives as **MidLevel's grouping index** over the active field and is passed down as context (see [midlevel.md](skyra-dna/midlevel.md)). No `Parents()` method.
 
 The kernel handles this as-is:
 - Iterates the flat map (one direction now — past)

@@ -111,7 +111,7 @@ func (m *MemoryCell) AddChild(edgeKey string, cell skyra.Space) {
 // it happened (for chronological ordering), and the grouping it belongs to
 // (empty until grouped). Structured, NOT formatted text — the assembler (Global)
 // decides the frame's final shape. See
-// specs/2026-06-16/skyra-dna/global-observe-gather.md.
+// specs/2026-06-16/skyra-dna/midlevel-observe-gather.md.
 type ParsedNode struct {
 	ID        string
 	Kind      Kind
