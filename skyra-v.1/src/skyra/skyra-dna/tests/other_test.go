@@ -9,17 +9,18 @@ import (
 )
 
 // The other-agent's predict step: it reads MidLevel's most-recent grouping,
-// predicts the other party's next move, and appends that prediction onto the
-// grouping cell (grouping → other-prediction) — where self will later surface it.
+// produces a probability distribution over the other party's next move, and
+// appends it onto the grouping as a root node with one child per prediction.
 func TestOtherPredictsAndAppends(t *testing.T) {
-	// One injected inference seam serves both calls; branch on the system prompt:
-	// MidLevel asks for a <label>, other asks for a <prediction>.
 	mock := func(system, present string) (string, error) {
-		if strings.Contains(system, "modeling the other") {
+		if strings.Contains(system, "External Perspective") {
 			if !strings.Contains(present, "help michael") {
 				t.Errorf("other's prompt missing the framing: %q", present)
 			}
-			return "<prediction>ask how the runtime is structured</prediction>", nil
+			return `<predictions>
+  <prediction p="0.60">ask how the runtime is structured</prediction>
+  <prediction p="0.40">ask about the kernel</prediction>
+</predictions>`, nil
 		}
 		return "<label>help michael with the skyra project</label>", nil
 	}
@@ -28,8 +29,6 @@ func TestOtherPredictsAndAppends(t *testing.T) {
 	midLevel := sensory.MidLevel()
 	other := midLevel.Other()
 
-	// Warm sensory, then run MidLevel's Observe (creates the grouping + frame) and
-	// other's Observe (predicts + appends) directly — no spawn, deterministic.
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
 		Payload: "can you help me with the skyra project",
@@ -38,29 +37,40 @@ func TestOtherPredictsAndAppends(t *testing.T) {
 	midLevel.Observe(nil, imp)
 	other.Observe(nil, imp)
 
-	// The grouping now carries an other-prediction child.
+	// The grouping carries a root node (role=other) with prediction children.
 	groupings := midLevel.Groupings()
 	if len(groupings) != 1 {
 		t.Fatalf("groupings = %d, want 1", len(groupings))
 	}
-	found := false
+	var root *dna.MemoryCell
 	for _, gr := range groupings {
 		mc := gr.(*dna.MemoryCell)
 		for _, child := range mc.Children() {
-			p, ok := child.Content().(dna.Prediction)
+			cc, ok := child.(*dna.MemoryCell)
 			if !ok {
 				continue
 			}
-			if p.Role != "other" {
-				t.Fatalf("prediction role = %q, want other", p.Role)
+			if p, ok := cc.Content().(dna.Prediction); ok && p.Role == "other" {
+				root = cc
 			}
-			if p.Text != "ask how the runtime is structured" {
-				t.Fatalf("prediction text = %q", p.Text)
-			}
-			found = true
 		}
 	}
-	if !found {
-		t.Fatal("grouping has no other-prediction child")
+	if root == nil {
+		t.Fatal("grouping has no other-pred root node")
+	}
+
+	// Root's children are the individual predictions.
+	children := root.Children()
+	if len(children) != 2 {
+		t.Fatalf("other-pred root has %d children, want 2", len(children))
+	}
+	texts := map[string]bool{}
+	for _, child := range children {
+		if p, ok := child.Content().(dna.Prediction); ok {
+			texts[p.Text] = true
+		}
+	}
+	if !texts["ask how the runtime is structured"] {
+		t.Fatalf("missing expected prediction; got %+v", texts)
 	}
 }

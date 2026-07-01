@@ -32,3 +32,24 @@ func TestParseAlignment(t *testing.T) {
 		})
 	}
 }
+
+func TestParseMotorEmissionEngage(t *testing.T) {
+	got, ok := dna.ParseMotorEmission("<engage><michael>walk through the kernel</michael></engage>")
+	if !ok || got.Primitive != "engage" || got.Target != "michael" || got.Payload != "walk through the kernel" {
+		t.Fatalf("ParseMotorEmission engage = (%+v, %v)", got, ok)
+	}
+}
+
+func TestParseMotorEmissionPerceive(t *testing.T) {
+	got, ok := dna.ParseMotorEmission(`<perceive>"nothing important yet"</perceive>`)
+	if !ok || got.Primitive != "perceive" || got.Target != "" || got.Payload != "nothing important yet" {
+		t.Fatalf("ParseMotorEmission perceive = (%+v, %v)", got, ok)
+	}
+}
+
+func TestParseMotorEmissionToleratesPercieveTypo(t *testing.T) {
+	got, ok := dna.ParseMotorEmission(`<percieve>"nothing important yet"</percieve>`)
+	if !ok || got.Primitive != "perceive" || got.Payload != "nothing important yet" {
+		t.Fatalf("ParseMotorEmission percieve = (%+v, %v)", got, ok)
+	}
+}

@@ -2,7 +2,9 @@ package dna
 
 import (
 	"fmt"
+	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 )
 
@@ -21,7 +23,8 @@ type SensoryCell struct {
 	id       string
 	ownerID  string
 	slice    skyra.Slice
-	ByEntity map[string]skyra.Space // keyed by stable entity id (internal lookup)
+	ByEntity map[string]skyra.Space  // keyed by stable entity id (internal lookup)
+	ByToken  map[string]*MemoryCell  // flat token index; shared nodes across all impulses
 
 	// kernel + midLevel wire the forward pipeline link: sensory spawns a wave into
 	// cognition (MidLevel) on Express. MidLevel is sensory's sub-actor on its own
@@ -36,6 +39,7 @@ func NewSensoryCell(ctx BuildContext) *SensoryCell {
 		ownerID:  ctx.BeingID,
 		slice:    ctx.sliceFor(":sensory"),
 		ByEntity: map[string]skyra.Space{},
+		ByToken:  map[string]*MemoryCell{},
 		kernel:   ctx.Kernel,
 	}
 	// MidLevel is the cognitive core, the next pipeline stage; it mints its own
@@ -65,6 +69,13 @@ func (s *SensoryCell) Children() map[string]skyra.Space {
 	return out
 }
 
+func (s *SensoryCell) Agents() map[string]skyra.Space {
+	if s.midLevel == nil {
+		return nil
+	}
+	return map[string]skyra.Space{s.midLevel.ID(): s.midLevel}
+}
+
 // Observe records the surroundings and refreshes presence on every wave.
 //   - the perceived sender (if any) is resolved, indexed, and stamped with fresh
 //     state + interaction records;
@@ -89,11 +100,13 @@ func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	s.refreshPresence(entity, perceived)
 
 	if !perceived {
+		debug.Being("skyra", "sensory", "observe no-entity (return or self-wave)")
 		return
 	}
 
 	at := s.timestamp()
 	said, _ := imp.Payload.(string)
+	debug.Being("skyra", "sensory", fmt.Sprintf("observe entity=%s said=%q", entity, said))
 	s.appendEntityState(entityCell, EntityState{
 		Location:  imp.Source.Coord,
 		Timestamp: at,
@@ -107,13 +120,20 @@ func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	})
 }
 
-// Express fires the forward wave into cognition (MidLevel) — the next pipeline
-// link. origin=MidLevel: cognition owns its own wave; sensory only launches and
-// drops out. async (go) so the spawn locks MidLevel's own slice, never sensory's
-// held lock. Payload = the impulse forwarded as-is for now; the surroundings
-// snapshot handoff (so MidLevel can read what sensory perceived) is the next step.
+// Express fires the forward wave into cognition (MidLevel) — only when this wave
+// carried a perceived entity. Return waves and self-waves are no-ops here:
+// if they fired MidLevel they'd trigger a second pipeline pass per turn.
+// The perceived check is derived from the impulse (same logic as Observe) so
+// concurrent traversals can't race on shared state.
 func (s *SensoryCell) Express(origin skyra.Space, impulse any) any {
+	imp, ok := asImpulse(impulse)
+	perceived := ok && !imp.Return && imp.Source != nil &&
+		imp.Source.SpaceID != "" && imp.Source.SpaceID != s.ownerID
+	if !perceived {
+		return nil
+	}
 	if s.kernel != nil && s.midLevel != nil {
+		debug.Being("skyra", "sensory", "express → midlevel")
 		go s.kernel.Realize(s.midLevel, s.midLevel, impulse)
 	}
 	return nil
@@ -204,6 +224,88 @@ func (s *SensoryCell) appendInteractionRecord(entity *MemoryCell, record Interac
 	recordID := fmt.Sprintf("%s:interaction:%d:%d", entity.ID(), record.Timestamp, len(entity.Children()))
 	recordCell := NewMemoryCell(recordID, KindResponse, record, s.slice)
 	entity.AddChild(fmt.Sprintf("%s→%s", entity.ID(), recordID), recordCell)
+	// tokenize the utterance — each content word becomes a shared token node
+	// child of this record, connecting this impulse into the token web.
+	for _, tok := range s.tokenize(record.Utterance) {
+		recordCell.AddChild(recordCell.ID()+"→"+tok.ID(), tok)
+	}
+}
+
+// ensureToken resolves a word to a graph node, in priority order:
+//  1. ByEntity exact match — "skyra", "michael" resolve to their entity nodes
+//  2. ByToken exact match  — reuse an existing token node from a prior impulse
+//  3. Create a new KindToken node and register it in ByToken
+//
+// This is Phase 1 of the entity resolution pipeline: deterministic string
+// lookup before any LLM involvement.
+func (s *SensoryCell) ensureToken(word string) *MemoryCell {
+	if entity, ok := s.ByEntity[word].(*MemoryCell); ok {
+		return entity
+	}
+	if existing, ok := s.ByToken[word]; ok {
+		return existing
+	}
+	tok := NewMemoryCell("token:"+word, KindToken, word, s.slice)
+	s.ByToken[word] = tok
+	return tok
+}
+
+// tokenize splits text on whitespace, strips punctuation, lowercases, and
+// filters stop words. Returns the resolved token nodes for the remaining
+// content-bearing words.
+func (s *SensoryCell) tokenize(text string) []*MemoryCell {
+	words := strings.Fields(text)
+	var tokens []*MemoryCell
+	seen := map[string]bool{} // deduplicate within one utterance
+	for _, w := range words {
+		w = strings.ToLower(strings.Trim(w, `.,!?;:"'()[]{}—-`))
+		if w == "" || stopWords[w] || seen[w] {
+			continue
+		}
+		seen[w] = true
+		tokens = append(tokens, s.ensureToken(w))
+	}
+	return tokens
+}
+
+// stopWords is the set of structural filler words stripped before tokenization.
+// These carry no semantic content and would become massively connected hubs
+// that dominate traversal if left in.
+var stopWords = map[string]bool{
+	// articles / determiners
+	"the": true, "a": true, "an": true,
+	// prepositions
+	"of": true, "to": true, "for": true, "in": true, "on": true,
+	"at": true, "by": true, "with": true, "from": true, "about": true,
+	"into": true, "through": true, "during": true, "before": true,
+	"after": true, "above": true, "below": true, "between": true,
+	// conjunctions
+	"and": true, "or": true, "but": true, "so": true, "yet": true,
+	"nor": true, "as": true, "if": true, "than": true,
+	// negation / modals
+	"not": true, "no": true, "will": true, "would": true, "could": true,
+	"should": true, "may": true, "might": true, "shall": true, "can": true,
+	// be-verbs
+	"is": true, "are": true, "was": true, "were": true, "be": true,
+	"been": true, "being": true, "am": true,
+	// auxiliaries
+	"have": true, "has": true, "had": true, "do": true, "does": true,
+	"did": true, "having": true, "doing": true, "done": true,
+	// pronouns
+	"i": true, "you": true, "he": true, "she": true, "we": true,
+	"they": true, "me": true, "him": true, "her": true, "us": true,
+	"them": true, "it": true, "its": true,
+	// possessives
+	"my": true, "your": true, "his": true, "our": true, "their": true,
+	// demonstratives
+	"this": true, "that": true, "these": true, "those": true,
+	// interrogatives
+	"what": true, "how": true, "when": true, "where": true, "who": true,
+	"which": true, "why": true,
+	// common filler
+	"just": true, "really": true, "very": true, "also": true, "too": true,
+	"up": true, "out": true, "like": true, "get": true, "got": true,
+	"go": true, "going": true, "gone": true, "s": true,
 }
 
 func (s *SensoryCell) timestamp() int {

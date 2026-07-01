@@ -6,6 +6,7 @@ type ActivationRecord interface {
 
 type Impulse struct {
 	Primitive string
+	TargetID  string
 	ResultMap string
 	Payload   any
 	// Source describes where the impulse appears to arise. It is contextual
@@ -58,13 +59,17 @@ type Space interface {
 	NewActivation() ActivationRecord
 	// origin is the wave OWNER (who the wave returns to) — the same meaning in
 	// both Observe and Express, always non-nil during traversal. It is NOT a
-	// "nil means traversal" marker anymore. A being's own Observe is pure intake;
-	// a being acts outward by calling its environment's entry (World.Observe,
-	// which delegates to World.Emit) with itself as origin — not through its own
-	// Observe. The SENDER of a signal (for entity resolution / the surroundings
-	// map) is separate — it rides on the impulse (impulse.Source), not on origin.
+	// traversal marker. A being's own Observe is pure intake. Outward action is
+	// an explicit primitive call into its environment, rooted at the relevant
+	// environmental Space (for the world, a Point). The SENDER of a signal (for
+	// entity resolution / the surroundings map) is separate — it rides on the
+	// impulse (impulse.Source), not on origin.
 	Observe(origin Space, impulse any)
 	Express(origin Space, impulse any) any
+	// Agents are Spaces resident on this Space: placed occupants for a world or
+	// point, and owned sub-actors/specialists for a being cell. The kernel does
+	// not traverse this map as past adjacency; Children remains the traversal graph.
+	Agents() map[string]Space
 	// Children is the ONE map the kernel walks — past edges only
 	// (understandings, stresses, responses, actions; for setpoints, the
 	// confirmed past). There is no "parent"/future edge: the future is not
@@ -90,6 +95,7 @@ type Slice interface {
 	Lock()
 	Unlock()
 }
+
 // NOTE: stress (the being's global neuromodulator) is deliberately NOT here.
 // The kernel is mechanism and must not know about cognition signals. Stress is
 // DNA state — held on the being's substrate and read by cells via a capability

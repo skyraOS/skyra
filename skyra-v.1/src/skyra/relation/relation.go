@@ -1,6 +1,11 @@
 package relation
 
-import "skyra-v1/src/skyra"
+import (
+	"fmt"
+
+	"skyra-v1/src/debug"
+	"skyra-v1/src/skyra"
+)
 
 const (
 	defaultAmplitude = 1.0 // fallback initial wave amplitude when impulse does not specify one
@@ -25,6 +30,18 @@ func (r *Relation) ID() string {
 // Realize runs one wave. Its only result path is return perception; callers
 // do not receive a return value.
 func (r *Relation) Realize(origin, traversed skyra.Space, impulse any) {
+	prim := ""
+	if imp, ok := impulse.(skyra.Impulse); ok {
+		prim = imp.Primitive
+	}
+	originID, traversedID := "", ""
+	if origin != nil {
+		originID = origin.ID()
+	}
+	if traversed != nil {
+		traversedID = traversed.ID()
+	}
+	debug.Being("kernel", "traverse", fmt.Sprintf("realize origin=%s traversed=%s primitive=%s", originID, traversedID, prim))
 	r.realize(origin, traversed, impulse)
 }
 

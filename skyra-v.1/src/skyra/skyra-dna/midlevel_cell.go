@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 )
 
@@ -73,6 +74,13 @@ func (g *MidLevelCell) NewActivation() skyra.ActivationRecord { return &midLevel
 // future lives here as the grouping index, applied top-down as context.
 func (g *MidLevelCell) Children() map[string]skyra.Space { return g.groupingIndex() }
 
+func (g *MidLevelCell) Agents() map[string]skyra.Space {
+	if g.other == nil {
+		return nil
+	}
+	return map[string]skyra.Space{g.other.ID(): g.other}
+}
+
 // groupingsKey is the slice-map key under which the grouping index lives.
 const groupingsKey = "groupings"
 
@@ -134,7 +142,8 @@ func (g *MidLevelCell) observeExternal(impulse any) {
 	}
 	if label, ok := ParseLabel(resp); ok {
 		g.gist = label
-		g.startGrouping(label) // cold-start "create" — a grouping anchor carrying this gist
+		g.startGrouping(label)
+		debug.Being("skyra", "midlevel", "grouping gist="+label)
 	}
 }
 
@@ -267,6 +276,7 @@ func (g *MidLevelCell) observeSelf(impulse any) {
 // write-half [stub] — it lands once the agents predict and score.
 func (g *MidLevelCell) Express(origin skyra.Space, impulse any) any {
 	if g.kernel != nil && g.other != nil {
+		debug.Being("skyra", "midlevel", "express → other")
 		go g.kernel.Realize(g.other, g.other, impulse)
 	}
 	return g.synthesis

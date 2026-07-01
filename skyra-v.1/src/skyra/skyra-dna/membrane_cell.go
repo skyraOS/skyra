@@ -1,6 +1,9 @@
 package dna
 
-import "skyra-v1/src/skyra"
+import (
+	"skyra-v1/src/debug"
+	"skyra-v1/src/skyra"
+)
 
 // Membrane — the being's sensorimotor boundary, as a thin dispatcher.
 //
@@ -73,6 +76,7 @@ func NewMembraneCell(rootDrive string, ctx BuildContext) *MembraneCell {
 	m.motor = NewMotorCell(ctx)
 	ctx.Motor = m.motor
 	m.sensory = NewSensoryCell(ctx)
+	m.motor.SetMidLevel(m.sensory.MidLevel()) // motor's read path → the grouping spine
 	return m
 }
 
@@ -85,8 +89,27 @@ func (m *MembraneCell) Content() any                          { return m.rootDri
 // and goes straight to Express.
 func (m *MembraneCell) Children() map[string]skyra.Space { return nil }
 
+func (m *MembraneCell) Agents() map[string]skyra.Space {
+	agents := map[string]skyra.Space{}
+	if m.sensory != nil {
+		agents[m.sensory.ID()] = m.sensory
+	}
+	if m.motor != nil {
+		agents[m.motor.ID()] = m.motor
+	}
+	return agents
+}
+
 // Observe — nothing. Perception is sensory's, not the boundary's.
-func (m *MembraneCell) Observe(origin skyra.Space, impulse any) {}
+func (m *MembraneCell) Observe(origin skyra.Space, impulse any) {
+	if imp, ok := asImpulse(impulse); ok {
+		src := ""
+		if imp.Source != nil {
+			src = imp.Source.SpaceID
+		}
+		debug.Being("skyra", "membrane", "observe from="+src+" primitive="+imp.Primitive)
+	}
+}
 
 // Express — fire the inward wave to sensory, on EVERY wave (unconditional:
 // traffic-relative decay needs sensory's wave to run even when nothing known is
@@ -95,6 +118,7 @@ func (m *MembraneCell) Observe(origin skyra.Space, impulse any) {}
 // nothing and drops out of the loop.
 func (m *MembraneCell) Express(origin skyra.Space, impulse any) any {
 	if m.kernel != nil {
+		debug.Being("skyra", "membrane", "express → sensory")
 		go m.kernel.Realize(m.sensory, m.sensory, impulse)
 	}
 	return nil

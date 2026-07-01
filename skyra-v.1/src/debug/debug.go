@@ -41,6 +41,9 @@ func Log(args ...any) {
 func Being(name, layer string, args ...any) {
 	mu.Lock()
 	defer mu.Unlock()
+	if beingFiles == nil {
+		return
+	}
 	key := name + "/" + layer
 	f, ok := beingFiles[key]
 	if !ok {

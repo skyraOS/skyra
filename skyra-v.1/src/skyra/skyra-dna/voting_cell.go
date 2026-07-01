@@ -38,6 +38,13 @@ func (v *VotingCell) Content() any                          { return nil }
 func (v *VotingCell) Children() map[string]skyra.Space      { return nil }
 func (v *VotingCell) Motor() *MotorCell                     { return v.motor }
 
+func (v *VotingCell) Agents() map[string]skyra.Space {
+	if v.motor == nil {
+		return nil
+	}
+	return map[string]skyra.Space{v.motor.ID(): v.motor}
+}
+
 // Observe — stub. [later: the Hopfield tally over returned self/other scores]
 func (v *VotingCell) Observe(origin skyra.Space, impulse any) {}
 

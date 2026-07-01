@@ -2,7 +2,9 @@ package dna
 
 import (
 	"fmt"
+	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 )
 
@@ -18,13 +20,12 @@ import (
 // Deliberately a near-copy of OtherCell (MVP spread-out, duplicated); the two
 // collapse to one AgentCell{role} once the shared shape is visible in code.
 type SelfCell struct {
-	id         string
-	slice      skyra.Slice
-	kernel     skyra.Time
-	midLevel   *MidLevelCell
-	infer      InferFunc
-	motor      *MotorCell // MVP: self → motor directly (voting is parked)
-	prediction string     // skyra's latest predicted move, handed to motor on Express
+	id       string
+	slice    skyra.Slice
+	kernel   skyra.Time
+	midLevel *MidLevelCell
+	infer    InferFunc
+	motor    *MotorCell // MVP: self → motor directly (voting is parked)
 }
 
 func NewSelfCell(ctx BuildContext, midLevel *MidLevelCell) *SelfCell {
@@ -46,6 +47,13 @@ func (s *SelfCell) Content() any                          { return nil }
 func (s *SelfCell) Children() map[string]skyra.Space      { return nil }
 func (s *SelfCell) Motor() *MotorCell                     { return s.motor }
 
+func (s *SelfCell) Agents() map[string]skyra.Space {
+	if s.motor == nil {
+		return nil
+	}
+	return map[string]skyra.Space{s.motor.ID(): s.motor}
+}
+
 // Observe — the predict half: read the most-recent grouping (carrying other's
 // prediction), predict skyra's own next move under its framing, and append the
 // prediction onto the grouping.
@@ -62,17 +70,19 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 		return
 	}
 	if text, ok := ParsePrediction(resp); ok {
-		s.prediction = text
 		s.appendPrediction(groupID, grouping, text)
+		debug.Being("skyra", "self", "prediction="+text)
 	}
 }
 
-// Express — hands self's predicted move to motor (the out-face). MVP: bypasses
-// voting entirely. The move rides the impulse payload. [later: voting tallies
-// self/other; grade against reafference]
+// Express — fire motor (the out-face). The proposal is NOT carried on the impulse:
+// self already deposited it on the grouping (appendPrediction, in Observe), so motor
+// reads it off the slice. The spawn is a bare trigger. MVP: bypasses voting entirely.
+// [later: voting tallies self/other; grade against reafference]
 func (s *SelfCell) Express(origin skyra.Space, impulse any) any {
 	if s.kernel != nil && s.motor != nil {
-		go s.kernel.Realize(s.motor, s.motor, skyra.Impulse{Primitive: "act", Payload: s.prediction})
+		debug.Being("skyra", "self", "express → motor")
+		go s.kernel.Realize(s.motor, s.motor, skyra.Impulse{Primitive: "act"})
 	}
 	return nil
 }
@@ -117,19 +127,35 @@ func (s *SelfCell) mostRecentGrouping() (string, skyra.Space) {
 // OTHER is expected to do (other's prediction — surfaced off the grouping, the
 // "self relies on other"), and the exchange.
 func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
-	gist, otherPred := "", ""
+	gist := ""
+	var distLines []string
 	if mc, ok := grouping.(*MemoryCell); ok {
 		if g, ok := mc.Content().(Gist); ok {
 			gist = g.Text
 		}
+		// find the other-pred root node, then read its children (the distribution)
 		for _, child := range mc.Children() {
-			if p, ok := child.Content().(Prediction); ok && p.Role == "other" {
-				otherPred = p.Text
+			root, ok := child.(*MemoryCell)
+			if !ok {
+				continue
+			}
+			p, ok := root.Content().(Prediction)
+			if !ok || p.Role != "other" {
+				continue
+			}
+			for _, grandchild := range root.Children() {
+				if pp, ok := grandchild.Content().(Prediction); ok && pp.Role == "other" {
+					distLines = append(distLines, fmt.Sprintf("  p=%.2f  %s", pp.Probability, pp.Text))
+				}
 			}
 		}
 	}
-	return fmt.Sprintf("Framing: %s\n\nThe other is expected to: %s\n\nRecent exchange:\n%s",
-		gist, otherPred, renderFrame(s.midLevel.Frame()))
+	otherDist := strings.Join(distLines, "\n")
+	if otherDist == "" {
+		otherDist = "(no prediction)"
+	}
+	return fmt.Sprintf("Framing: %s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
+		gist, otherDist, renderFrame(s.midLevel.Frame()))
 }
 
 // appendPrediction stamps skyra's predicted move onto the grouping cell as a child

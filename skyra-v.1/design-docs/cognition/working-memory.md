@@ -84,7 +84,7 @@ them); "buffer as a separate structure" does not.
 |---|---|---|
 | **The graph** (all nodes, crystallized + uncrystallized artifacts) | yes | the slice |
 | **WM** — the lit, traversal-reachable subgraph | a *view*, not a store | (emergent) |
-| **The frame** — the kernel's tree this round | **no** (rebuilt) | Global's map |
+| **The frame** — the kernel's tree this round | **no** (rebuilt) | MidLevel's map |
 
 The frame is the **readout** (top activations this round); WM is the **lit view** the
 traversal produces; the graph is the substrate. Persistence/decay live on the nodes'
@@ -93,8 +93,21 @@ EMAs. **Frame = hard refresh; node activation = graded decay.**
 ## The index set
 
 WM is a set of per-slice indexes — the transient lookups each cell type maintains.
-The **`groupID` is the spine** that joins observe ↔ self ↔ other; the **action** keys
-the justification. All forward-only (reverse direction is the wave / entity overlap).
+The **`groupID` is the spine** that joins observe ↔ self ↔ other *and* keys the
+justification (the self/other predictions hang off it directly); the **motor** records
+what actually fired and where, keyed by **self's proposal**. All forward-only (reverse
+direction is the wave / entity overlap).
+
+> **The `intent` key dissolved (2026-06-30).** A per-cycle intent is identified by the
+> grouping its vote served — `intent ≅ groupID` — so an intent-keyed index is redundant
+> with the grouping spine. Both intent indexes fold in: **justification** is already
+> reachable off the groupID (the predictions hang there), and **realization** is read off
+> the **action node** (its `ProposalID`) — no proposal index at all. The proposal is
+> already a slice node (the self-prediction self appends each cycle), and the realization
+> link is the `self-prediction → action-response` edge already in the traversal chain; a
+> motor `proposal → action` map would just duplicate it. So motor keeps a **single** index,
+> `entity → action`; from it you reach the action, and the action carries which proposal it
+> realized. The gap lives on the node, reachable via the index already there.
 
 | Slice | Index | Role |
 |---|---|---|
@@ -104,27 +117,57 @@ the justification. All forward-only (reverse direction is the wave / entity over
 | **Self** | `incoming stimulus → prediction` | grading / audit (reafference) |
 | **Other** | `groupID → newPrediction` | generation (their expected move) |
 | **Other** | `incoming stimulus → prediction` | grading / audit (their response) |
-| **Global (observe)** | `groupID → setpoints` | grouping membership (**shifts each round**) |
-| **Global (express)** | `action → { selfPrediction, otherPrediction }` | justification |
+| **MidLevel (observe)** | `setpoint → groupID` | grouping-membership tag — **lower→higher**; no tag = **stands alone**; **shifts each round** |
+| **MidLevel** | *(justification)* | the self/other preds hang off the `groupID` — no separate intent index |
+| **Motor** (membrane Express) | `entity → action` | where the action went (recipient hub) — **the only motor index** |
+| *(on the action node)* | `ProposalID` | realization — **proposal ≠ action**, read off the action (no proposal index) |
 | *(on the node)* | `grade / alignment` | cell-parsed, reachable via the indexes above |
 
-### The grouping spine
-Given a `groupID` you assemble its whole frame — its setpoints (observe) + its
-self/other predictions (self/other) — by joining on the id. Given an `action` you
-trace its justification (express). The `incoming → prediction` indexes are the
-**grading audit** — *which evidence tested which prediction* — without storing the
-grade value redundantly (the grade lives on the prediction node, cell-parsed).
+### Why `setpoint → groupID` (not `groupID → setpoints`)
+A grouping **is a setpoint one abstraction layer up**, so `groupID → setpoints` is a
+higher-order→lower-order edge. Keying it **bottom-up** (each lower-order setpoint tags
+the grouping it currently belongs to) does two things the top-down list can't:
+- **Differentiates reliance from standalone.** A setpoint that carries a groupID is a
+  *constituent of a higher abstraction*; one with no tag **stands alone**. The
+  distinction is a property of each setpoint, not a list MidLevel rewrites.
+- **Churns without a rewrite.** Re-grouping is a setpoint **re-tagging** (`G → G'`), not
+  MidLevel owning and replacing a membership list. MidLevel derives a grouping's bucket by
+  reading the tags off the active field.
 
-### Loose coupling — at the `grouping → setpoints` joint
-Predictions are **not** hard-bound to setpoints. `grouping → setpoints` is the index
-that *churns* each round (A,B,C → B,C,D as Global re-groups); `grouping → prediction`
-stays put. So a prediction made under grouping G automatically applies to **G's
-current setpoints**, whatever they are now. On closure the prediction becomes its
-own new setpoint, stamped with the present surroundings — so it never needed a fixed
-setpoint binding.
+The **predictions hang off the `groupID`** (`grouping → {self-pred, other-pred}`), so the
+grouping node still owns its predictions; only the setpoint→grouping membership inverted.
+At **crystallization** the tag inverts into the durable top-down form: the grouping's
+constituents become its `n-1` **children** (the cascade's supporting-setpoint structure).
+So bottom-up while lit, top-down once proven — one relationship, two phases.
+
+The **motor** writes one index: `entity → action` stamps the **recipient** — the same
+reverse-hub discipline as `entity → setpoints`, so an action is recall-reachable from
+whoever it was aimed at. The realization gap rides **on the action node** (its
+`ProposalID`): a **proposal** is what self emits (the move it hands down, already a slice
+node — the self-prediction), the action is what the motor actually emitted, and they
+diverge (a proposal can fire differently than proposed). No separate proposal index — the
+action carries which proposal it realized, reached via `entity → action`.
+
+### The grouping spine
+Given a `groupID` you assemble its whole frame — its member setpoints (the active
+setpoints **tagged** with this groupID, observe) + its self/other predictions (which
+hang off the groupID, self/other) — by joining on the id. The `groupID` *is* the
+justification (its self/other preds are right there); realization is read off the action
+node (its `ProposalID`), reached via `entity → action` (express).
+The `incoming → prediction` indexes are the **grading audit** — *which evidence tested
+which prediction* — without storing the grade value redundantly (the grade lives on the
+prediction node, cell-parsed).
+
+### Loose coupling — at the `setpoint → groupID` joint
+Predictions are **not** hard-bound to setpoints. `setpoint → groupID` is the tag that
+*churns* each round (a setpoint **re-tags** `G → G'` as MidLevel re-groups); `grouping →
+prediction` stays put. So a prediction made under grouping G automatically applies to
+**whatever setpoints currently tag G**. On closure the prediction becomes its own new
+setpoint, stamped with the present surroundings — so it never needed a fixed setpoint
+binding.
 
 **Requires:** groupings **persist** (stable id, decaying, with shifting membership).
-That's what keeps `grouping → prediction` stable while `grouping → setpoints` churns.
+That's what keeps `grouping → prediction` stable while the setpoint tags churn.
 
 ### Self vs. other — symmetric
 "incoming" means different things per side:
@@ -140,7 +183,7 @@ The indexes above realize one layered chain — the structure WM traversal walks
 **Surroundings (entity) is the base layer**; the chain runs:
 
 ```
-entity ──(overlap hop)──▶ grouping ──▶ { setpoints,            ← Global-observe: groupID→setpoints
+entity ──(overlap hop)──▶ grouping ──▶ { setpoints,            ← MidLevel-observe: groupID→setpoints
                                           self-prediction,      ┐ merged: grouping's children
                                           other-prediction }    ┘ are all three kinds
    self-prediction  ──▶ action-response      ("did my intent execute")
@@ -170,13 +213,13 @@ adjacency**. So: one overlap hop at the top, stored lookups the rest of the way.
 **Per-cell append ownership.** Each cell appends into the shared chain at its own
 node; the merged `grouping.Children()` is *assembled* by reading the owners' appends
 for that groupID:
-- Global(observe) appends `grouping → setpoint`
+- MidLevel(observe) appends `grouping → setpoint`
 - self appends `grouping → self-prediction`
 - other appends `grouping → other-prediction`
 One writer per kind (no write conflict), one reader at traversal (the union).
 
 **Each cell's entrypoint.** WM is per-cell-relative over the one shared chain: the
-membrane enters at the surroundings, Global at groupings, self/other at their
+membrane enters at the surroundings, MidLevel at groupings, self/other at their
 predictions — each traverses *outward from its node* by activation, and what it
 reaches is *its* working-memory view.
 
@@ -189,15 +232,15 @@ scores the row by activation, descends the survivors — that *is* the loop. You
 the map-reading `Children()`; the kernel loops.
 
 ```
-Global.Children()    → reads the grouping map      → active groupings
+MidLevel.Children()    → reads the grouping map      → active groupings
 grouping.Children()  → reads groupID→setpoints      → its setpoints
 setpoint.Children()  → its understandings
 action / response    → read action→preds, etc.
 ```
 
 **One slice** holds the several region maps (sensory entity map, self/other prediction
-maps, Global's grouping map) + the durable graph — "reading the other maps" is reading
-distinct maps on the same plane. One base cell (Global / the membrane root) is where
+maps, MidLevel's grouping map) + the durable graph — "reading the other maps" is reading
+distinct maps on the same plane. One base cell (MidLevel / the membrane root) is where
 the wave starts.
 
 **Two hop kinds, both handled by the kernel's activation scoring:**

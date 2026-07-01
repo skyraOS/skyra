@@ -3,6 +3,7 @@ package dna
 import (
 	"fmt"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 )
 
@@ -45,6 +46,13 @@ func (o *OtherCell) Content() any                          { return nil }
 func (o *OtherCell) Children() map[string]skyra.Space      { return nil }
 func (o *OtherCell) Self() *SelfCell                       { return o.self }
 
+func (o *OtherCell) Agents() map[string]skyra.Space {
+	if o.self == nil {
+		return nil
+	}
+	return map[string]skyra.Space{o.self.ID(): o.self}
+}
+
 // Observe — the predict half: read the most-recent grouping (from MidLevel's
 // slice), predict the other's next move under its framing, and append the
 // prediction onto the grouping. Direct-read gather for now — cold-start groupings
@@ -62,8 +70,13 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 	if err != nil {
 		return
 	}
-	if text, ok := ParsePrediction(resp); ok {
-		o.appendPrediction(groupID, grouping, text)
+	preds, ok := ParsePredictions(resp)
+	if !ok {
+		return
+	}
+	o.appendPredictions(groupID, grouping, preds)
+	for _, p := range preds {
+		debug.Being("skyra", "other", fmt.Sprintf("prediction p=%.2f %q", p.Probability, p.Text))
 	}
 }
 
@@ -71,15 +84,33 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 // the incoming evidence]
 func (o *OtherCell) Express(origin skyra.Space, impulse any) any {
 	if o.kernel != nil && o.self != nil {
+		debug.Being("skyra", "other", "express → self")
 		go o.kernel.Realize(o.self, o.self, impulse)
 	}
 	return nil
 }
 
-// otherSystem instructs the other-agent to predict the OTHER party's next move.
-const otherSystem = "You are skyra, modeling the other party in a live exchange. " +
-	"Under the given framing, predict the other's next move — what they will say or do. " +
-	"Reply with only the tag: <prediction>their move</prediction>"
+// otherSystem instructs the other-agent to produce a calibrated probability
+// distribution over the other party's next observable message.
+const otherSystem = `You are operating in the cognitive frame External Perspective.
+
+Your task is to predict several distinct, plausible futures of the conversation.
+
+Given the framing, recent exchange, and latest user message, estimate the probability of several different observable next messages.
+
+Predictions should:
+- Be falsifiable by the very next user message.
+- Describe observable properties of that message.
+- Be distinct from one another.
+- Cover meaningfully different possible futures rather than refinements of the same future.
+- Be calibrated so probabilities sum to 1.0.
+- Avoid inferring hidden mental states.
+
+Output only:
+<predictions>
+  <prediction p="0.41">...</prediction>
+  ...
+</predictions>`
 
 // mostRecentGrouping reads MidLevel's published groupings (under its slice lock)
 // and returns the one whose gist is most recent.
@@ -122,11 +153,12 @@ func (o *OtherCell) renderPrompt(grouping skyra.Space) string {
 	return fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s", gist, renderFrame(o.midLevel.Frame()))
 }
 
-// appendPrediction stamps the other's predicted move onto the grouping cell as a
-// child (grouping → other-prediction), under MidLevel's lock — so self surfaces it
-// when it traverses the grouping ("self relies on other"). Stable key, so the
-// current prediction overwrites last cycle's.
-func (o *OtherCell) appendPrediction(groupID string, grouping skyra.Space, text string) {
+// appendPredictions writes the distribution onto the grouping as a root node
+// (grouping → other-pred-root) with one child per prediction
+// (other-pred-root → other-pred-N). Stable root key so the current cycle's
+// distribution overwrites last cycle's. Self reads the root's children to get
+// the full spread ("self relies on other").
+func (o *OtherCell) appendPredictions(groupID string, grouping skyra.Space, preds []ParsedPrediction) {
 	mc, ok := grouping.(*MemoryCell)
 	if !ok {
 		return
@@ -136,18 +168,30 @@ func (o *OtherCell) appendPrediction(groupID string, grouping skyra.Space, text 
 		sl.Lock()
 		defer sl.Unlock()
 	}
-	key := groupID + "→other-pred"
-	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "other", Timestamp: sliceCount(sl)}, sl)
-	mc.AddChild(key, pred)
+	ts := sliceCount(sl)
+	rootKey := groupID + "→other-pred"
+	root := NewMemoryCell(rootKey, KindPrediction, Prediction{Role: "other", Timestamp: ts}, sl)
+	for i, p := range preds {
+		childKey := fmt.Sprintf("%s→other-pred-%d", groupID, i)
+		child := NewMemoryCell(childKey, KindPrediction, Prediction{
+			Text:        p.Text,
+			Role:        "other",
+			Probability: p.Probability,
+			Timestamp:   ts,
+		}, sl)
+		root.AddChild(childKey, child)
+	}
+	mc.AddChild(rootKey, root)
 }
 
-// Prediction is an agent's predicted next move under the active framing — the open
-// bet, graded against what happens next cycle. Role distinguishes "other" (their
-// move) from "self" (my move).
+// Prediction is an agent's predicted next move under the active framing. Role
+// distinguishes "other" (their move, with a calibrated Probability) from "self"
+// (skyra's move, a point estimate — Probability is 0).
 type Prediction struct {
-	Text      string
-	Role      string
-	Timestamp int
+	Text        string
+	Role        string
+	Probability float64
+	Timestamp   int
 }
 
 func sliceCount(sl skyra.Slice) int {

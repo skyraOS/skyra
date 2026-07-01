@@ -72,6 +72,7 @@ func (c *mockCell) Express(origin skyra.Space, impulse any) any {
 }
 func (c *mockCell) Children() map[string]skyra.Space { return c.children }
 func (c *mockCell) Content() any                     { return c.content }
+func (c *mockCell) Agents() map[string]skyra.Space   { return nil }
 func (c *mockCell) link(child *mockCell)             { c.children[child.id] = child }
 func (c *mockCell) setPlane(sl skyra.Slice) {
 	c.setPlaneSeen(sl, map[string]bool{})

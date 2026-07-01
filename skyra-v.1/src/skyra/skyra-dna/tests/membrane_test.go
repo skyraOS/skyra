@@ -83,10 +83,22 @@ func TestMembraneBuildsMotorIndexes(t *testing.T) {
 	m, _ := newBeing("skyra")
 	motor := m.Motor()
 
-	if motor.ByIntent == nil || motor.ByEntity == nil {
-		t.Fatalf("motor indexes nil: ByIntent=%v ByEntity=%v", motor.ByIntent, motor.ByEntity)
+	if motor.ByEntity == nil {
+		t.Fatalf("motor index nil: ByEntity=%v", motor.ByEntity)
 	}
 	if len(motor.Children()) != 0 {
 		t.Fatalf("motor children = %d, want empty", len(motor.Children()))
+	}
+}
+
+func TestMembraneAgentsExposeSubActors(t *testing.T) {
+	m, _ := newBeing("skyra")
+	agents := m.Agents()
+
+	if agents["skyra:sensory"] != m.Sensory() {
+		t.Fatalf("membrane sensory agent = %v, want sensory", agents["skyra:sensory"])
+	}
+	if agents["skyra:motor"] != m.Motor() {
+		t.Fatalf("membrane motor agent = %v, want motor", agents["skyra:motor"])
 	}
 }

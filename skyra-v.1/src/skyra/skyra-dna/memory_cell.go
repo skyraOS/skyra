@@ -61,6 +61,7 @@ const (
 	KindAction        Kind = "action"        // an outgoing move — the being's own action (motor)
 	KindGrouping      Kind = "grouping"      // a higher-order setpoint over the active field; content = Gist
 	KindPrediction    Kind = "prediction"    // an open bet — a predicted next move (self/other); content = Prediction
+	KindToken         Kind = "token"         // a content-bearing word from a tokenized impulse or emission; content = string
 )
 
 func NewMemoryCell(id string, kind Kind, content any, slice skyra.Slice) *MemoryCell {
@@ -78,6 +79,7 @@ func (m *MemoryCell) Kind() Kind                            { return m.kind }
 func (m *MemoryCell) Slice() skyra.Slice                    { return m.slice }
 func (m *MemoryCell) Content() any                          { return m.content }
 func (m *MemoryCell) Children() map[string]skyra.Space      { return m.children }
+func (m *MemoryCell) Agents() map[string]skyra.Space        { return nil }
 func (m *MemoryCell) NewActivation() skyra.ActivationRecord { return newMemoryActivation() }
 
 // Intrinsic returns the node's birth excitability constituents.
