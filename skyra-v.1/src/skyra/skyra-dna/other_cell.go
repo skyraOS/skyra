@@ -28,6 +28,12 @@ type OtherCell struct {
 	midLevel *MidLevelCell
 	infer    InferFunc
 	self     *SelfCell
+
+	// reframed — per-wave slice-state (dispatch): set when this wave's grade was
+	// a total miss and kicked a reframe, so Express aborts the stroke instead of
+	// spawning self. Reset at Observe entry. (Wave-scoped; concurrency-safety
+	// comes with the substrate pass — one wave per cell today.)
+	reframed bool
 }
 
 func NewOtherCell(ctx BuildContext, midLevel *MidLevelCell) *OtherCell {
@@ -75,9 +81,21 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 	if o.midLevel == nil || o.infer == nil {
 		return
 	}
+	o.reframed = false // per-wave slice-state, reset at entry
 	if imp, ok := asImpulse(impulse); ok && externalEngage(imp, o.ownerID) {
 		if evidence, ok := imp.Payload.(string); ok && evidence != "" {
-			o.gradePrior(evidence)
+			graded, matched, summary := o.gradePrior(evidence)
+			// Total miss → the FRAMING is wrong, not just the bet. Kick MidLevel
+			// to reframe with the failure in the present, and abort this stroke:
+			// the reframe re-run drives a fresh prediction under the corrected
+			// framing. (The re-run is internal, not an external engage, so the
+			// grade gate stays closed on it → no reframe loop; the one-reframe
+			// rail is free.)
+			if graded && !matched {
+				o.spawnReframe(summary)
+				o.reframed = true
+				return // skip predict-under-stale-framing
+			}
 		}
 	}
 	groupID, grouping := o.mostRecentGrouping()
@@ -103,14 +121,33 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 	}
 }
 
-// Express — spawns self (the next stage). [later: grade the prediction against
-// the incoming evidence]
+// Express — spawns self (the next stage), UNLESS this wave reframed (slice-state
+// dispatch: the reframe re-run drives continuation, so this stroke stops here).
 func (o *OtherCell) Express(origin skyra.Space, impulse any) any {
+	if o.reframed {
+		debug.Being("skyra", "other", "express: reframed — stroke aborted, reframe re-run continues")
+		return nil
+	}
 	if o.kernel != nil && o.self != nil {
 		debug.Being("skyra", "other", "express → self")
 		go o.kernel.Realize(o.self, o.self, impulse)
 	}
 	return nil
+}
+
+// spawnReframe kicks MidLevel to re-frame with the failure in the present. The
+// impulse is INTERNAL (Source = self-owner, a reframe Route) so other's grade
+// gate stays closed on the re-run — the one-reframe rail.
+func (o *OtherCell) spawnReframe(summary string) {
+	if o.kernel == nil || o.midLevel == nil {
+		return
+	}
+	debug.Being("skyra", "other", "grade none → spawn MidLevel reframe")
+	go o.kernel.Realize(o.midLevel, o.midLevel, skyra.Impulse{
+		Primitive: "reframe",
+		Source:    &skyra.ImpulseSource{SpaceID: o.ownerID},
+		Route:     &Route{Kind: RouteReframe, Summary: summary},
+	})
 }
 
 // otherSystem instructs the other-agent to produce a calibrated probability
@@ -248,10 +285,15 @@ const graderSystem = "You are a strict, impartial judge. You are given numbered 
 // lock RELEASED (the call can be slow) → write back under the lock. A failed
 // call or parse leaves the bet ungraded — it persists, and the next evidence
 // wave retries (slight evidence drift, accepted for the MVP).
-func (o *OtherCell) gradePrior(evidence string) {
+// gradePrior returns (graded, matched, summary): graded=false if there was no
+// bet to grade or the call failed (carry on unchanged); matched=false with
+// graded=true is a TOTAL MISS (the distribution put zero mass on what happened)
+// — the trigger for grade-driven re-framing. summary is the failure description
+// (dead bets + the evidence that killed them) for the reframe present.
+func (o *OtherCell) gradePrior(evidence string) (graded, matched bool, summary string) {
 	rootKey, root, kidKeys, kids := o.latestUngradedDistribution()
 	if root == nil || len(kids) == 0 {
-		return
+		return false, false, ""
 	}
 
 	var lines []string
@@ -267,12 +309,12 @@ func (o *OtherCell) gradePrior(evidence string) {
 	resp, err := o.infer(graderSystem, present)
 	if err != nil {
 		debug.Being("skyra", "other", fmt.Sprintf("grade inference error: %v", err))
-		return
+		return false, false, ""
 	}
 	idx, matched, ok := ParseMatch(resp)
 	if !ok {
 		debug.Being("skyra", "other", fmt.Sprintf("grade parse failed: %q", resp))
-		return
+		return false, false, ""
 	}
 
 	// Score in CODE from the stored probability — the judge never sees or
@@ -308,6 +350,12 @@ func (o *OtherCell) gradePrior(evidence string) {
 	// Stage C, when framings are nodes.)
 	writeAlignment(sl, rootKey, score)
 	debug.Being("skyra", "other", fmt.Sprintf("graded p=%.2f matched=%v evidence=%q", score, matched, evidence))
+
+	if !matched {
+		summary = fmt.Sprintf("expected one of:\n%s\nbut what arrived was:\n%s",
+			strings.Join(lines, "\n"), evidence)
+	}
+	return true, matched, summary
 }
 
 // latestUngradedDistribution finds the newest ungraded other-pred root across
@@ -385,4 +433,39 @@ func sliceCount(sl skyra.Slice) int {
 		return 0
 	}
 	return sl.Count()
+}
+
+// Route is cognition routing state carried on the impulse (skyra.Impulse.Route),
+// separate from Payload (data). It is how a grade outcome steers what fires next
+// without the kernel knowing what a grade is. See dispatch-model.md.
+type Route struct {
+	Kind    RouteKind
+	Summary string  // reframe: the failure summary (dead bets + the evidence that killed them)
+	Matched bool    // verdict: did the evidence realize a prediction
+	Score   float64 // verdict: the proper score
+}
+
+type RouteKind string
+
+const (
+	// RouteReframe: a dramatic grade failure (other total-miss / self exec-no) —
+	// MidLevel re-frames with the failure in the present. The re-run is internal
+	// (not an external engage), so the grade gates stay closed → no reframe loop
+	// (the one-reframe rail falls out for free).
+	RouteReframe RouteKind = "reframe"
+	// RouteVerdict: other → self, carrying the grade outcome so self conditions on
+	// it without racing a slice read. (Wired when the fan-out lands.)
+	RouteVerdict RouteKind = "verdict"
+)
+
+// routeOf extracts a *Route from an impulse, nil if none.
+func routeOf(impulse any) *Route {
+	imp, ok := asImpulse(impulse)
+	if !ok {
+		return nil
+	}
+	if r, ok := imp.Route.(*Route); ok {
+		return r
+	}
+	return nil
 }

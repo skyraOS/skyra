@@ -22,16 +22,23 @@ import (
 // collapse to one AgentCell{role} once the shared shape is visible in code.
 type SelfCell struct {
 	id       string
+	ownerID  string
 	slice    skyra.Slice
 	kernel   skyra.Time
 	midLevel *MidLevelCell
 	infer    InferFunc
 	motor    *MotorCell // MVP: self → motor directly (voting is parked)
+
+	// reframed — per-wave slice-state (dispatch): set when this wave's execution
+	// grade was a hard failure and kicked a reframe, so Express aborts the stroke
+	// instead of spawning motor. Reset at Observe entry.
+	reframed bool
 }
 
 func NewSelfCell(ctx BuildContext, midLevel *MidLevelCell) *SelfCell {
 	s := &SelfCell{
 		id:       ctx.BeingID + ":self",
+		ownerID:  ctx.BeingID,
 		slice:    ctx.sliceFor(":self"),
 		kernel:   ctx.Kernel,
 		midLevel: midLevel,
@@ -71,7 +78,16 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 	if s.midLevel == nil || s.infer == nil {
 		return
 	}
-	s.gradePrior()
+	s.reframed = false
+	if graded, failed, summary := s.gradePrior(); graded && failed {
+		// Hard execution failure → the framing was wrong (it asked for the
+		// impossible). Kick MidLevel to reframe with the failure in the present
+		// and abort: the reframe re-run replans under a framing that accounts for
+		// what the world actually allows.
+		s.spawnReframe(summary)
+		s.reframed = true
+		return
+	}
 	groupID, grouping := s.mostRecentGrouping()
 	if grouping == nil {
 		return
@@ -96,11 +112,30 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 // reads it off the slice. The spawn is a bare trigger. MVP: bypasses voting entirely.
 // [later: voting tallies self/other; grade against reafference]
 func (s *SelfCell) Express(origin skyra.Space, impulse any) any {
+	if s.reframed {
+		debug.Being("skyra", "self", "express: reframed — stroke aborted, reframe re-run continues")
+		return nil
+	}
 	if s.kernel != nil && s.motor != nil {
 		debug.Being("skyra", "self", "express → motor")
 		go s.kernel.Realize(s.motor, s.motor, skyra.Impulse{Primitive: "act"})
 	}
 	return nil
+}
+
+// spawnReframe kicks MidLevel to re-frame after a hard execution failure. Internal
+// impulse (Primitive "reframe") so the grade gates stay closed on the re-run — the
+// one-reframe rail.
+func (s *SelfCell) spawnReframe(summary string) {
+	if s.kernel == nil || s.midLevel == nil {
+		return
+	}
+	debug.Being("skyra", "self", "exec no → spawn MidLevel reframe")
+	go s.kernel.Realize(s.midLevel, s.midLevel, skyra.Impulse{
+		Primitive: "reframe",
+		Source:    &skyra.ImpulseSource{SpaceID: s.ownerID},
+		Route:     &Route{Kind: RouteReframe, Summary: summary},
+	})
 }
 
 // selfSystem instructs the self-agent to produce an action instruction for motor —
@@ -231,10 +266,16 @@ const execGraderSystem = "You are a strict, impartial judge of execution. You ar
 // MidLevel's lock, infer unlocked, write back under the lock. Unrealized
 // proposals are left alone (superseded ones simply decay — dropping a stale
 // intent is not a failure).
-func (s *SelfCell) gradePrior() {
+// gradePrior returns (graded, failed, summary): failed=true means a HARD
+// execution failure (judge said `no`, score 0) — the intent could not be
+// realized (e.g. a blocked move). That is a framing problem, not just a bad
+// action, so it triggers a reframe (the session-1 blocked-move relapse this
+// fixes: "hide at 520,500" → "find a reachable hiding spot"). `partial` is not
+// a hard failure.
+func (s *SelfCell) gradePrior() (graded, failed bool, summary string) {
 	key, proposal, pred, action, ok := s.latestUngradedRealized()
 	if !ok {
-		return
+		return false, false, ""
 	}
 
 	result := s.worldResultAfter(action.Timestamp)
@@ -248,21 +289,27 @@ func (s *SelfCell) gradePrior() {
 	resp, err := s.infer(execGraderSystem, present)
 	if err != nil {
 		debug.Being("skyra", "self", fmt.Sprintf("grade inference error: %v", err))
-		return
+		return false, false, ""
 	}
 	score, parsed := ParseExecGrade(resp)
 	if !parsed {
 		debug.Being("skyra", "self", fmt.Sprintf("grade parse failed: %q", resp))
-		return
+		return false, false, ""
 	}
 
 	sl := s.midLevel.Slice()
 	sl.Lock()
-	defer sl.Unlock()
 	pred.Graded, pred.Grade, pred.Evidence = true, score, result
 	proposal.SetContent(pred)
 	writeAlignment(sl, key, score)
+	sl.Unlock()
 	debug.Being("skyra", "self", fmt.Sprintf("graded execution=%.1f proposal=%q", score, pred.Text))
+
+	if score == 0 {
+		summary = fmt.Sprintf("you tried to: %s\nbut it could not be done: %s", pred.Text, result)
+		return true, true, summary
+	}
+	return true, false, ""
 }
 
 // latestUngradedRealized finds the newest ungraded self proposal that has an

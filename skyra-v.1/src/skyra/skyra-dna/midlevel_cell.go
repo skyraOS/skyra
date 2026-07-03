@@ -114,14 +114,23 @@ func (g *MidLevelCell) Observe(origin skyra.Space, impulse any) {
 		g.observeSelf(impulse)
 		return
 	}
-	g.observeExternal(impulse)
+	// A reframe Route carries a failure summary — a dramatic grade miss asking for
+	// a corrected framing. Thread the summary into the framing present.
+	reason := ""
+	if r := routeOf(impulse); r != nil && r.Kind == RouteReframe {
+		reason = r.Summary
+		debug.Being("skyra", "midlevel", "reframe requested")
+	}
+	g.observeExternal(reason)
 }
 
 // observeExternal — the grouping pass. The read-half (built): assemble the frame
 // from sensory's warm surroundings. The write-half (TODO): score by overlap ×
 // recency, run the grouping inference call, write setpoint→groupID.
+// reframeReason (non-empty on a grade-driven reframe) puts the failure in the
+// present so the new gist is predicted with the surprise in view.
 // See specs/2026-06-16/skyra-dna/midlevel-observe-gather.md.
-func (g *MidLevelCell) observeExternal(impulse any) {
+func (g *MidLevelCell) observeExternal(reframeReason string) {
 	var trigger *MemoryCell
 	g.frame, trigger = g.assembleFrame()
 
@@ -137,9 +146,17 @@ func (g *MidLevelCell) observeExternal(impulse any) {
 	if present == "" {
 		return // nothing perceived yet — nothing to frame
 	}
+	system := coldStartSystem
+	if reframeReason != "" {
+		// Reframe: the last framing's predictions all missed. Put the failure in
+		// the present and ask for a corrected framing.
+		present = fmt.Sprintf("Your previous framing led to predictions that all failed:\n%s\n\n---\nThe exchange so far:\n%s",
+			reframeReason, present)
+		system = reframeSystem
+	}
 	debug.Being("skyra", "midlevel", fmt.Sprintf("════════════ frame t=%d ════════════\n%s\n════════════════════════════════════", g.slice.Count(), present))
 	debug.Being("skyra", "midlevel", "inference start")
-	resp, err := g.infer(coldStartSystem, present)
+	resp, err := g.infer(system, present)
 	if err != nil {
 		debug.Being("skyra", "midlevel", fmt.Sprintf("inference error: %v", err))
 		return // a failed call leaves last cycle's gist standing
@@ -222,6 +239,13 @@ func (g *MidLevelCell) Groupings() map[string]skyra.Space { return g.groupingInd
 const coldStartSystem = "You are an evolving being reading a live exchange. In one short " +
 	"phrase, predict what this exchange is about and what you should be trying to do. " +
 	"Respond with only the tag: <label>your framing</label>"
+
+// reframeSystem runs when the prior framing's predictions all missed — the
+// surprise is in the present. Ask for a corrected framing that accounts for it.
+const reframeSystem = "You are an evolving being. Your previous framing of this exchange was " +
+	"wrong — every prediction it produced failed. Given what actually happened, re-frame: in " +
+	"one short phrase, say what this exchange is really about and what you should be trying to " +
+	"do now. Respond with only the tag: <label>your corrected framing</label>"
 
 // renderFrame turns the timestamp-ordered frame into a readable transcript for
 // the prompt — the incoming utterances (who said what), the content the framing

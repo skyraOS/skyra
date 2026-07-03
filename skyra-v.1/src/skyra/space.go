@@ -14,6 +14,12 @@ type Impulse struct {
 	Source    *ImpulseSource
 	Amplitude float64
 	Return    bool
+	// Route carries cognition ROUTING state on the wave — a grade verdict, a
+	// reframe reason — kept separate from Payload (data) so the two never
+	// collide. Kernel-opaque (any): the kernel never interprets it; the DNA
+	// defines the concrete type and reads it. This is how "the verdict rides the
+	// wave" (dispatch-model.md) without the kernel knowing what a verdict is.
+	Route any
 }
 
 type ImpulseSource struct {
