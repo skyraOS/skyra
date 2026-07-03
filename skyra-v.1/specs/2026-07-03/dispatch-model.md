@@ -59,6 +59,83 @@ rule:
 So "slice-state" below means: state reachable from a cell's slice (its indexes +
 the grouping spine it publishes), with **per-node locks** on the contested maps.
 
+## The kernel/slice concurrency model (settled 2026-07-03)
+
+This is the prerequisite the whole fan-out sits on. It came out of a walk that
+corrected an earlier over-strong line ("the kernel stops locking entirely" — no;
+see below). The resolution is an **ownership** fix, and the mechanics fall out of it.
+
+### The bug being fixed
+
+`relation.go` `traverse` holds `traversed.Slice()`'s lock across the **entire wave**,
+including any inference a dispatcher cell fires inside `Observe`. That conflates two
+unrelated things: *"I am mutating a map"* (nanoseconds) and *"I am thinking"* (~30s
+of codex). The wave-wide lock exists to protect the **tree the kernel builds**, not
+the thinking — but because the tree-build is threaded through the DFS, the lock ends
+up wrapping the inference too.
+
+### The ownership cut (the real fix)
+
+The kernel should not implicitly own the slice it builds on. **The cell hands the
+kernel a slice to build the tree on** (an explicit parameter, decoupled from
+`traversed.Slice()`); concurrency = hand different slices. Sorting the current
+`Slice` state by owner:
+
+| State | Owner | Notes |
+|---|---|---|
+| **Records** (edge-owned activation — the EMAs, the synaptic weights) | the cell, **durable** | the learned memory; **shared by reference** across a cell's concurrent slices (one being = one set of synapses, not one per wave) |
+| **Maps** (indexes, the grouping spine) | the cell, durable | shared by reference likewise |
+| **Threshold** | the cell, durable | config |
+| **Count** (the being's proper-time clock, stamped on nodes) | the cell, durable | ticked once per wave → the increment must be **atomic/locked** (concurrent waves must not lose a tick). NOT a global "total traversals ever" — that count is killed unless something needs it. |
+| **Tree** (`TraversalPair`, the DFS build + Prior/Current double-buffer) | **the slice handed in this wave** | stays a slice concept (so `Prior`/`Current` is ready when recall makes it load-bearing — it is **not** vestigial, just not-yet-exercised). Two concurrent waves = two slices = two trees, no collision. |
+| **Stack** | the kernel, transient | already a local in `traverse` |
+
+So: two concurrent waves on one cell get **sibling slices** — each its own Tree,
+both pointing at the **same Records/Maps by reference**. The tree stops colliding
+because it's per-slice; the weights stay singular because they're shared.
+
+### Locking (two concerns, both cheap)
+
+Records is a shared `map[string]ActivationRecord`. Two levels need protection, and
+the naive "lock the whole map" is what would cost us — the fix is finer:
+
+1. **The record's value** (the EMA bump) — **a mutex per record.** Two waves bumping
+   *different* edges never contend; two waves bumping the *same* edge serialize for
+   nanoseconds (a few float multiply-adds).
+2. **The map's structure** (adding a new edge key) — **an `RWMutex` on the map.**
+   A per-record lock can't cover this: Go panics if one goroutine adds a key while
+   another reads the map. Reads (bumping existing edges, every wave) take the shared
+   read-lock → concurrent, no contention. The exclusive lock fires **only on edge
+   birth** (Hebbian crystallization — rare). Common path fully concurrent; expensive
+   lock only on the occasional new synapse.
+
+**Why the cost is unmeasurable:** lock hold time is nanoseconds (arithmetic);
+inference is seconds. Nine orders of magnitude apart. The *only* performance crime
+is holding a lock across a think — which is the very thing this cut removes. As long
+as every lock wraps arithmetic and never inference, the locking is free noise.
+
+### What this corrects
+
+- The two-stroke spec's "the kernel stops locking **entirely**" is too strong. The
+  kernel keeps a lock — but **only around its own bookkeeping** (the Count tick, the
+  Records/Maps touches), released around `Observe`/`Express`. Inference always runs
+  lockless.
+- **`activation-and-traversal.md` ownership table is revised:** it currently reads
+  "the Slice owns TraversalCount, Records, Stack, Trees." New: **Records/Maps/
+  Threshold/Count durable on the cell** (Count locked, global-count killed); **Stack
+  the kernel's**; **Tree on the slice handed in per wave** (sibling slices share
+  Records by reference). Update that doc as part of the build.
+
+### Watch-item (correctness, not speed — parked)
+
+If two overlapping waves bump the **same** edge, the per-record lock makes it *safe*
+but maybe not *right*: the standing "one bump per cycle, not per wave" note
+(entities-and-surroundings.md — an edge should groove once per frame) means two
+concurrent bumps could double-count the groove and distort learning. This is a
+cognition-correctness question, separate from the data race. **Parked as a watch-item**
+— surface it if learning looks distorted under concurrency; do not design against it
+pre-emptively.
+
 ## The inference-call inventory (ground truth — the six)
 
 | # | Affordance | Call (system prompt) | Parse fn | Conditions it yields |
@@ -166,7 +243,7 @@ the table is incomplete — that's the test.
 ## Open
 
 - **Route envelope shape** — one typed field vs a small tagged union on the impulse. Lean: tagged struct `Route{Kind, Verdict, Summary}`, nil on plain waves.
-- **Per-node lock vs per-slice lock** — this spec commits to per-node (the grouping's children map carries a mutex). Confirm that's the granularity before building (it's the finer, safer choice; slight memory per grouping).
+- **Lock granularity — settled** (see "The kernel/slice concurrency model"): RWMutex on the Records map (concurrent reads, exclusive only on edge-birth) + a mutex per record (nanosecond serialization on same-edge collisions). Sibling slices share Records by reference; Tree is per-slice. The grouping's children map follows the same pattern (append under a short structural lock).
 - **planned-this-wave lifetime** — reset at wave entry; confirm it's wave-scoped cell-state, not persisted.
 - **Where `active-framing` lives** — MidLevel slice pointer vs derived (highest-activation framing child). Lean: derived (no pointer to keep coherent), computed by `currentFraming()` — but cache per wave.
 - **[B] pending-trigger slot / [E] About stamp / [F] staleness** — still deferred to the scenario-4 pass; their table rows are stubbed above where they'd attach.

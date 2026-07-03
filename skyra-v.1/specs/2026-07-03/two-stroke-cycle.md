@@ -187,13 +187,21 @@ reader of that slice).
 
 **The fix — lock granularity, not slice topology:**
 
-- **The kernel stops locking.** The wave-wide lock is removed. (This matches "the
-  kernel is mechanism, the cell is policy" — the kernel cannot know a wave will
-  think; only the cell knows when it mutates.)
-- **Cells lock their own slice at WRITE TIME only** — grab, append, release. A
-  microsecond critical section per mutation. **Inference always runs lockless.**
+- **The kernel drops the *wave-wide* lock** (not all locking — corrected
+  2026-07-03; the full model is in
+  [dispatch-model.md](dispatch-model.md#the-kernelslice-concurrency-model-settled-2026-07-03)).
+  The kernel keeps a lock only around **its own bookkeeping** — the proper-time
+  Count tick and the Records/Maps touches — released around `Observe`/`Express`.
+  The wave-wide lock was only ever protecting the tree it builds; the ownership fix
+  is that the **cell hands the kernel a slice to build the tree on** (the Tree stays
+  a slice concept; concurrent waves get sibling slices sharing Records **by
+  reference**). Inference always runs lockless.
+- **Records locking is fine-grained:** RWMutex on the map (concurrent reads,
+  exclusive only on Hebbian edge-birth) + a mutex per record (nanosecond same-edge
+  serialization). Cost is unmeasurable — lock hold is arithmetic (ns), inference is
+  seconds; the only crime is a lock held across a think, which this removes.
 - Result: two waves can be mid-inference at once; they serialize only for the
-  instant each spends writing.
+  nanoseconds each spends writing.
 
 This is why **slice topology and the single-cell-collapse question become free
 choices, not forced ones.** The writer-collision cost of collapsing self/other
