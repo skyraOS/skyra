@@ -63,28 +63,35 @@ func (r *Relation) realize(origin, traversed skyra.Space, impulse any) {
 	//	r.returnToOrigin(origin, result, amplitudeOf(impulse, r.Amplitude), impulse)
 }
 
-// traverse walks `traversed` under its slice lock and returns the wave's
-// result. Pure transport: in-plane DFS only. Beings are rooted directly
-// by the caller; no crossing.
+// traverse walks `traversed` and returns the wave's result. Pure transport:
+// in-plane DFS only. Beings are rooted directly by the caller; no crossing.
+//
+// Lock granularity (concurrency substrate, 2026-07-03): the slice lock is held
+// ONLY around the kernel's own bookkeeping bursts — the proper-time tick, the
+// tree double-buffer, the Records scoring (recordFor + Activate), the result
+// write — and is RELEASED around every Observe/Express. So a cell's inference
+// (Observe/Express) never runs under a slice lock, and concurrent waves serialize
+// only on the nanosecond bookkeeping bursts. See
+// specs/2026-07-03/dispatch-model.md ("The kernel/slice concurrency model").
 func (r *Relation) traverse(origin, traversed skyra.Space, impulse any, sl skyra.Slice, amplitude float64) any {
+	// bookkeeping burst: tick proper time + swap the tree double-buffer
 	sl.Lock()
-	defer sl.Unlock()
-
-	sl.SetCount(sl.Count() + 1) // proper time — this frame's clock
-
-	// double buffer: last traversal's tree becomes Prior; Current rebuilds.
+	sl.SetCount(sl.Count() + 1)
 	tree := sl.Tree()
 	tree.Prior = tree.Current
 	tree.Current = nil
 	sl.SetResult(sl.Maps())
+	sl.Unlock()
 
 	// visited-once (the rail): nodes on the current path. A traversal never
 	// re-descends a node already on its path, so it always terminates.
 	onPath := map[string]bool{}
 
-	traversed.Observe(origin, impulse)
+	traversed.Observe(origin, impulse) // lockless — may infer
+	sl.Lock()
 	rootNode := r.rootNode(traversed, sl, amplitude)
 	r.scoreChildren(rootNode, sl)
+	sl.Unlock()
 	onPath[rootNode.CellID] = true
 	stack := []*skyra.Node{rootNode}
 
@@ -100,28 +107,37 @@ func (r *Relation) traverse(origin, traversed skyra.Space, impulse any, sl skyra
 			}
 
 			onPath[childNode.CellID] = true
-			childNode.Cell.Observe(origin, impulse)
+			childNode.Cell.Observe(origin, impulse) // lockless — may infer
+			sl.Lock()
 			r.scoreChildren(childNode, sl)
+			sl.Unlock()
 			stack = append(stack, childNode)
 		} else {
 			stack = stack[:len(stack)-1]
 			onPath[top.CellID] = false
 
-			out := top.Cell.Express(origin, impulse)
+			out := top.Cell.Express(origin, impulse) // lockless — may infer
 			if out != nil {
+				sl.Lock()
 				r.recordResult(sl, top.CellID, impulse, out)
+				sl.Unlock()
 			}
 
 			if len(stack) > 0 {
 				parent := stack[len(stack)-1]
 				parent.Children = append(parent.Children, top)
 			} else {
+				sl.Lock()
 				tree.Current = []*skyra.Node{top} // the finished tree
+				sl.Unlock()
 			}
 		}
 	}
 
-	return sl.Result()
+	sl.Lock()
+	res := sl.Result()
+	sl.Unlock()
+	return res
 }
 
 // returnToOrigin turns a completed wave result into an inward perception wave.

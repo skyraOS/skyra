@@ -317,3 +317,55 @@ func TestTraversalObserveUsesOwner(t *testing.T) {
 		}
 	}
 }
+
+// safeCell is a minimal concurrency-safe cell for the kernel concurrency test:
+// its Observe/Express touch no cell state, so a race the detector reports is the
+// KERNEL's slice bookkeeping, not the cell's.
+type safeCell struct {
+	id       string
+	children map[string]skyra.Space
+	rec      skyra.ActivationRecord
+	slice    skyra.Slice
+}
+
+func newSafeCell(id string, base float64) *safeCell {
+	return &safeCell{id: id, children: map[string]skyra.Space{}, rec: &mockRecord{base: base}}
+}
+func (c *safeCell) ID() string                             { return c.id }
+func (c *safeCell) Slice() skyra.Slice                     { return c.slice }
+func (c *safeCell) NewActivation() skyra.ActivationRecord  { return c.rec }
+func (c *safeCell) Observe(origin skyra.Space, impulse any) {}
+func (c *safeCell) Express(origin skyra.Space, impulse any) any { return nil }
+func (c *safeCell) Children() map[string]skyra.Space { return c.children }
+func (c *safeCell) Content() any                     { return nil }
+func (c *safeCell) Agents() map[string]skyra.Space   { return nil }
+
+// TestConcurrentWavesShareOneSlice fires many waves at the same slice at once.
+// With the wave-wide lock removed and only bookkeeping bursts locked, the kernel
+// state (Count tick, tree double-buffer, Records map + Activate) must stay
+// race-free. This is the substrate pass's kernel-level red/green (run -race).
+func TestConcurrentWavesShareOneSlice(t *testing.T) {
+	root := newSafeCell("root", 1.0)
+	a := newSafeCell("a", 1.0)
+	b := newSafeCell("b", 1.0)
+	root.children["a"] = a
+	root.children["b"] = b
+	sl := newSlice("being", 0)
+	root.slice, a.slice, b.slice = sl, sl, sl
+
+	r := relation.NewRelation()
+	const waves = 64
+	var wg sync.WaitGroup
+	wg.Add(waves)
+	for i := 0; i < waves; i++ {
+		go func() {
+			defer wg.Done()
+			r.Realize(root, root, skyra.Impulse{Return: true})
+		}()
+	}
+	wg.Wait()
+
+	if got := sl.Count(); got != waves {
+		t.Fatalf("count = %d, want %d (every wave must tick proper time exactly once)", got, waves)
+	}
+}
