@@ -2,6 +2,7 @@ package dna
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"skyra-v1/src/debug"
@@ -65,10 +66,15 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 	if grouping == nil {
 		return
 	}
-	resp, err := s.infer(selfSystem, s.renderPrompt(grouping))
+	frame := s.renderPrompt(grouping)
+	debug.Being("skyra", "self", fmt.Sprintf("════════════ frame t=%d ════════════\n%s\n════════════════════════════════════", sliceCount(s.midLevel.Slice()), frame))
+	debug.Being("skyra", "self", "inference start")
+	resp, err := s.infer(selfSystem, frame)
 	if err != nil {
+		debug.Being("skyra", "self", fmt.Sprintf("inference error: %v", err))
 		return
 	}
+	debug.Being("skyra", "self", "inference end")
 	if text, ok := ParsePrediction(resp); ok {
 		s.appendPrediction(groupID, grouping, text)
 		debug.Being("skyra", "self", "prediction="+text)
@@ -87,11 +93,16 @@ func (s *SelfCell) Express(origin skyra.Space, impulse any) any {
 	return nil
 }
 
-// selfSystem instructs the self-agent to predict skyra's OWN next move, given
-// what the other is expected to do.
-const selfSystem = "You are skyra in a live exchange. Under the given framing, and " +
-	"knowing what the other is expected to do, predict your own next move — what you'll " +
-	"say or do to serve the framing. Reply with only the tag: <prediction>your move</prediction>"
+// selfSystem instructs the self-agent to produce an action instruction for motor —
+// what Skyra should DO next, not an observation.
+const selfSystem = "You are Skyra's inner voice. Given the current framing and what the other person is likely to do next, decide what action Skyra should take.\n\n" +
+	"Write your decision as a clear instruction to the motor system — tell it exactly what to do.\n\n" +
+	"Examples:\n" +
+	"- Tell michael his coordinate is 500,500\n" +
+	"- Ask michael what he wants to do next\n" +
+	"- Move toward michael\n" +
+	"- Perceive the surroundings to find my position\n\n" +
+	"Reply with only the tag: <prediction>instruction for motor</prediction>"
 
 // mostRecentGrouping reads MidLevel's published groupings (under its slice lock)
 // and returns the one whose gist is most recent. (Duplicate of OtherCell's —
@@ -133,7 +144,7 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 		if g, ok := mc.Content().(Gist); ok {
 			gist = g.Text
 		}
-		// find the other-pred root node, then read its children (the distribution)
+		// find the other-pred root node, read its children, sort by probability
 		for _, child := range mc.Children() {
 			root, ok := child.(*MemoryCell)
 			if !ok {
@@ -143,10 +154,17 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 			if !ok || p.Role != "other" {
 				continue
 			}
+			var preds []Prediction
 			for _, grandchild := range root.Children() {
 				if pp, ok := grandchild.Content().(Prediction); ok && pp.Role == "other" {
-					distLines = append(distLines, fmt.Sprintf("  p=%.2f  %s", pp.Probability, pp.Text))
+					preds = append(preds, pp)
 				}
+			}
+			sort.Slice(preds, func(i, j int) bool {
+				return preds[i].Probability > preds[j].Probability
+			})
+			for _, pp := range preds {
+				distLines = append(distLines, fmt.Sprintf("  p=%.2f  %s", pp.Probability, pp.Text))
 			}
 		}
 	}
@@ -154,8 +172,8 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 	if otherDist == "" {
 		otherDist = "(no prediction)"
 	}
-	return fmt.Sprintf("Framing: %s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
-		gist, otherDist, renderFrame(s.midLevel.Frame()))
+	return fmt.Sprintf("Framing: %s\n\nWorld state:\n%s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
+		gist, s.midLevel.WorldState(), otherDist, renderFrame(s.midLevel.Frame()))
 }
 
 // appendPrediction stamps skyra's predicted move onto the grouping cell as a child

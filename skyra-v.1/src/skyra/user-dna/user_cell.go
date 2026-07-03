@@ -22,10 +22,11 @@ type UserCell struct {
 	id    string
 	slice skyra.Slice
 
-	mu       sync.Mutex
-	inbound  []ImpulseRecord
-	outbound []ImpulseRecord
-	entities map[string]skyra.Space // known entities — seeded at boot, grown from inbound senders
+	mu        sync.Mutex
+	inbound   []ImpulseRecord
+	outbound  []ImpulseRecord
+	entities  map[string]skyra.Space // known entities — seeded at boot, grown from inbound senders
+	OnInbound func(skyra.Impulse)    // optional hook — called after each inbound impulse is recorded
 }
 
 // ImpulseRecord is a timestamped snapshot of one impulse crossing the user's
@@ -87,7 +88,6 @@ func (u *UserCell) Observe(origin skyra.Space, impulse any) {
 		}
 	}
 	u.mu.Lock()
-	defer u.mu.Unlock()
 	ts := u.count()
 	u.inbound = append(u.inbound, ImpulseRecord{Timestamp: ts, Impulse: imp})
 	src := ""
@@ -100,7 +100,13 @@ func (u *UserCell) Observe(origin skyra.Space, impulse any) {
 			}
 		}
 	}
+	cb := u.OnInbound
+	u.mu.Unlock()
+
 	debug.Being("michael", "observe", fmt.Sprintf("[t%d] from=%s primitive=%s payload=%v", ts, src, imp.Primitive, imp.Payload))
+	if cb != nil && !imp.Return {
+		cb(imp)
+	}
 }
 
 // Send records an outbound impulse authored by the user (call this from the

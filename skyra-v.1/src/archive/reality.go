@@ -1,3 +1,5 @@
+//go:build legacy
+
 package reality
 
 // ActivationRecord — the one interface the kernel calls.

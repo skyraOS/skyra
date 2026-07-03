@@ -1,3 +1,5 @@
+//go:build legacy
+
 package reality
 
 import (
@@ -35,12 +37,12 @@ Optionally:
 // comes from what the genome registers in ObserveFns/ExpressFns
 // and where this Reality sits in the topology.
 type Skyra struct {
-	id             string  // unique per instance, assigned at creation
-	BeingID        string  // which being this cell belongs to — used to get the right Slice on the Relation
-	Type           string  // set by Competence once on descent (before Observe), once on ascent (before Express). One field, two reads.
-	Content        string    // what this cell holds — identity for PFC, memory for memory, skill for skill
-	Vector         []float64 // embedding of Content — set once at creation, used for relevance in activation
-	Description    string    // what this cell type is responsible for — shapes traversal, not shown during inference
+	id          string    // unique per instance, assigned at creation
+	BeingID     string    // which being this cell belongs to — used to get the right Slice on the Relation
+	Type        string    // set by Competence once on descent (before Observe), once on ascent (before Express). One field, two reads.
+	Content     string    // what this cell holds — identity for PFC, memory for memory, skill for skill
+	Vector      []float64 // embedding of Content — set once at creation, used for relevance in activation
+	Description string    // what this cell type is responsible for — shapes traversal, not shown during inference
 
 	// three time horizons — each a different decay curve
 	IdentityWeight    float64 // long term memory — EMA α=0.02. What the being IS. The groove.
@@ -57,8 +59,8 @@ type Skyra struct {
 	Primitives map[string]func(*Relation, string) // look, engage, listen, speak — keyed by name, target is the argument
 
 	// the DNA — keyed by Type, selected by Competence
-	ObserveFns map[string]func(*Relation)            // intake behaviors per type
-	ExpressFns map[string]func(*Relation) *Relation  // output behaviors per type
+	ObserveFns map[string]func(*Relation)           // intake behaviors per type
+	ExpressFns map[string]func(*Relation) *Relation // output behaviors per type
 }
 
 func (s *Skyra) ID() string {

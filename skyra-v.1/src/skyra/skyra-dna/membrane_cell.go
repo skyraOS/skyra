@@ -77,6 +77,7 @@ func NewMembraneCell(rootDrive string, ctx BuildContext) *MembraneCell {
 	ctx.Motor = m.motor
 	m.sensory = NewSensoryCell(ctx)
 	m.motor.SetMidLevel(m.sensory.MidLevel()) // motor's read path → the grouping spine
+	m.sensory.SetMotor(m.motor)               // sensory's write path → motor's event log
 	return m
 }
 

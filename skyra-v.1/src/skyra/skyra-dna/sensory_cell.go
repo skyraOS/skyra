@@ -6,6 +6,7 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
+	"skyra-v1/src/skyra/world"
 )
 
 // SensoryCell is the membrane's observe-side agent. It owns the entity index
@@ -20,27 +21,40 @@ import (
 // design-docs/laws/invariants/local-relativity-invariant.md ("distance is
 // activation"; "active state is the last observation").
 type SensoryCell struct {
-	id       string
-	ownerID  string
-	slice    skyra.Slice
-	ByEntity map[string]skyra.Space  // keyed by stable entity id (internal lookup)
-	ByToken  map[string]*MemoryCell  // flat token index; shared nodes across all impulses
+	id          string
+	ownerID     string
+	slice       skyra.Slice
+	ByEntity    map[string]skyra.Space // keyed by stable entity id (internal lookup)
+	selfCoord   skyra.Coord            // own position, updated from perceive return waves
+	hasPosition bool                   // false until first perceive result arrives
+
+	// Accumulated spatial knowledge — grows with each perceive wave.
+	// knownWalls and knownPaths are keyed by coord string "x,y" so repeated
+	// perceives from different positions build up a running map of the world.
+	knownWalls map[string]skyra.Coord
+	knownPaths map[string]skyra.Coord
 
 	// kernel + midLevel wire the forward pipeline link: sensory spawns a wave into
 	// cognition (MidLevel) on Express. MidLevel is sensory's sub-actor on its own
 	// (injected) slice — the same pattern as the membrane's sensory/motor.
 	kernel   skyra.Time
 	midLevel *MidLevelCell
+
+	// motorRef is the sibling MotorCell on the same membrane. Wired by MembraneCell
+	// after both cells are constructed (SetMotor). Used to record primitive outcomes
+	// back into motor's event log so motor sees what happened on return waves.
+	motorRef *MotorCell
 }
 
 func NewSensoryCell(ctx BuildContext) *SensoryCell {
 	s := &SensoryCell{
-		id:       ctx.BeingID + ":sensory",
-		ownerID:  ctx.BeingID,
-		slice:    ctx.sliceFor(":sensory"),
-		ByEntity: map[string]skyra.Space{},
-		ByToken:  map[string]*MemoryCell{},
-		kernel:   ctx.Kernel,
+		id:         ctx.BeingID + ":sensory",
+		ownerID:    ctx.BeingID,
+		slice:      ctx.sliceFor(":sensory"),
+		ByEntity:   map[string]skyra.Space{},
+		knownWalls: map[string]skyra.Coord{},
+		knownPaths: map[string]skyra.Coord{},
+		kernel:     ctx.Kernel,
 	}
 	// MidLevel is the cognitive core, the next pipeline stage; it mints its own
 	// slice from the same context.
@@ -50,6 +64,19 @@ func NewSensoryCell(ctx BuildContext) *SensoryCell {
 
 // MidLevel is sensory's forward target (the cognitive core).
 func (s *SensoryCell) MidLevel() *MidLevelCell { return s.midLevel }
+
+// KnownWalls returns a snapshot of all wall coords sensory has accumulated.
+func (s *SensoryCell) KnownWalls() map[string]skyra.Coord { return s.knownWalls }
+
+// KnownPaths returns a snapshot of all path coords sensory has accumulated.
+func (s *SensoryCell) KnownPaths() map[string]skyra.Coord { return s.knownPaths }
+
+// SetMotor wires the sibling MotorCell so sensory can record primitive outcomes.
+// Called by MembraneCell after both cells are constructed.
+func (s *SensoryCell) SetMotor(m *MotorCell) { s.motorRef = m }
+
+// motor returns the sibling MotorCell, or nil if not wired.
+func (s *SensoryCell) motor() *MotorCell { return s.motorRef }
 
 func (s *SensoryCell) ID() string                            { return s.id }
 func (s *SensoryCell) Slice() skyra.Slice                    { return s.slice }
@@ -82,8 +109,195 @@ func (s *SensoryCell) Agents() map[string]skyra.Space {
 //   - presence is refreshed for ALL entities: the perceived one bumps, everyone
 //     else decays — and this happens every wave (proper time), even on a wave
 //     that perceives nothing, so presence fades as traversals pass.
+// SelfCoord returns skyra's last known position. hasPosition is false until
+// the first perceive return wave arrives.
+func (s *SensoryCell) SelfCoord() (skyra.Coord, bool) {
+	return s.selfCoord, s.hasPosition
+}
+
 func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	imp, ok := asImpulse(impulse)
+
+	// bump: two agents collided. Return = mover's side; non-return = occupant's side.
+	// Record who bumped into whom and fire the cognitive loop on both sides.
+	if ok && imp.Primitive == "bump" {
+		at := s.timestamp()
+		if result, ok := imp.Payload.(world.BumpResult); ok {
+			other := resolveEntity(result.OtherID)
+			var utterance string
+			if imp.Return {
+				utterance = fmt.Sprintf("*bumped into %s*", other)
+			} else {
+				utterance = fmt.Sprintf("*%s bumped into you*", other)
+			}
+			selfEntity := s.ensureEntity(resolveEntity(s.ownerID))
+			s.appendInteractionRecord(selfEntity, InteractionRecord{
+				From:      resolveEntity(s.ownerID),
+				Utterance: utterance,
+				Timestamp: at,
+			})
+			debug.Being("skyra", "sensory", "bump: "+utterance)
+		}
+		return
+	}
+
+	// move return wave: update own position from the confirmed destination,
+	// or record a blocked result so the cognitive loop can try again.
+	if ok && imp.Return && imp.Primitive == "move" {
+		selfEntity := s.ensureEntity(resolveEntity(s.ownerID))
+		if result, ok := imp.Payload.(world.MovementResult); ok {
+			s.selfCoord = skyra.Coord{X: result.X, Y: result.Y}
+			s.hasPosition = true
+			detail := fmt.Sprintf("now at %d,%d", result.X, result.Y)
+			debug.Being("skyra", "sensory", "move: "+detail)
+			s.appendInteractionRecord(selfEntity, InteractionRecord{
+				From:      resolveEntity(s.ownerID),
+				Utterance: fmt.Sprintf("*moved to %d,%d*", result.X, result.Y),
+				Timestamp: s.timestamp(),
+			})
+			s.motor().RecordResult("move", "ok", detail)
+		} else if blocked, ok := imp.Payload.(world.MoveBlockedResult); ok {
+			var utterance, detail string
+			if blocked.Reason == "wall" {
+				utterance = fmt.Sprintf("*hit a wall — %d,%d is blocked*", blocked.DestX, blocked.DestY)
+				detail = fmt.Sprintf("wall at %d,%d", blocked.DestX, blocked.DestY)
+			} else {
+				utterance = fmt.Sprintf("*move blocked — %d,%d unreachable*", blocked.DestX, blocked.DestY)
+				detail = fmt.Sprintf("blocked at %d,%d: %s", blocked.DestX, blocked.DestY, blocked.Reason)
+			}
+			debug.Being("skyra", "sensory", "move: blocked — "+detail)
+			s.appendInteractionRecord(selfEntity, InteractionRecord{
+				From:      resolveEntity(s.ownerID),
+				Utterance: utterance,
+				Timestamp: s.timestamp(),
+			})
+			s.motor().RecordResult("move", "blocked", detail)
+		}
+		return
+	}
+
+	// engage blocked return: Skyra tried to engage an entity outside range.
+	// Record it in the frame and fire the cognitive loop so she can move closer.
+	// Successful engage returns (EngagementResult payload) are silently dropped here.
+	if ok && imp.Return && imp.Primitive == "engage" {
+		if blocked, ok := imp.Payload.(world.EngageBlockedResult); ok {
+			target := resolveEntity(blocked.TargetID)
+			detail := target + " is outside range"
+			debug.Being("skyra", "sensory", "engage blocked: "+detail)
+			selfEntity := s.ensureEntity(resolveEntity(s.ownerID))
+			s.appendInteractionRecord(selfEntity, InteractionRecord{
+				From:      resolveEntity(s.ownerID),
+				Utterance: fmt.Sprintf("*engage blocked — %s is outside range*", target),
+				Timestamp: s.timestamp(),
+			})
+			s.motor().RecordResult("engage", "blocked", detail)
+		} else {
+			s.motor().RecordResult("engage", "ok", "delivered")
+		}
+		return
+	}
+
+	// wait return: timer fired. Record it and fire the cognitive loop.
+	if ok && imp.Return && imp.Primitive == "wait" {
+		if result, ok := imp.Payload.(world.WaitResult); ok {
+			debug.Being("skyra", "sensory", fmt.Sprintf("wait expired: reason=%q", result.Reason))
+			selfEntity := s.ensureEntity(resolveEntity(s.ownerID))
+			s.appendInteractionRecord(selfEntity, InteractionRecord{
+				From:      resolveEntity(s.ownerID),
+				Utterance: fmt.Sprintf("*wait expired — %s*", result.Reason),
+				Timestamp: s.timestamp(),
+			})
+			s.motor().RecordResult("wait", "ok", "timer expired: "+result.Reason)
+		}
+		return
+	}
+
+	// perceive return wave: ingest the spatial result to update own position
+	// and entity coords — this is the only way sensory learns the world layout.
+	// Record a self-event so the cognitive frame shows what Skyra just did.
+	if ok && imp.Return && imp.Primitive == "perceive" {
+		at := s.timestamp()
+		utterance := "*perceived surroundings*"
+		if result, ok := imp.Payload.(world.PerceptionResult); ok {
+			s.selfCoord = result.SelfCoord
+			s.hasPosition = true
+			for _, point := range result.Points {
+				for agentID := range point.Agents {
+					if agentID == s.ownerID {
+						continue
+					}
+					entity := resolveEntity(agentID)
+					cell := s.ensureEntity(entity)
+					s.appendEntityState(cell, EntityState{
+						Location:  point.Source.Coord,
+						Timestamp: at,
+					})
+					debug.Being("skyra", "sensory", fmt.Sprintf("perceive: entity=%s coord=%d,%d",
+						entity, point.Source.Coord.X, point.Source.Coord.Y))
+				}
+			}
+
+			// Accumulate spatial knowledge — walls and paths build up across perceives.
+			pathSet := make(map[skyra.Coord]bool, len(result.Paths))
+			for _, p := range result.Paths {
+				key := fmt.Sprintf("%d,%d", p.X, p.Y)
+				s.knownPaths[key] = p
+				pathSet[p] = true
+			}
+			wallSet := make(map[skyra.Coord]bool, len(result.Walls))
+			for _, w := range result.Walls {
+				key := fmt.Sprintf("%d,%d", w.X, w.Y)
+				s.knownWalls[key] = w
+				wallSet[w] = true
+			}
+
+			// Report corridor run-lengths in each cardinal direction so motor can
+			// commit to multi-step moves without re-perceiving at every cell.
+			self := result.SelfCoord
+			type dir struct {
+				name string
+				dx   int
+				dy   int
+			}
+			dirs := []dir{{"north", 0, -1}, {"south", 0, 1}, {"west", -1, 0}, {"east", 1, 0}}
+			var corridors []string
+			for _, d := range dirs {
+				var run []string
+				for step := 1; step <= 20; step++ {
+					c := skyra.Coord{X: self.X + d.dx*step, Y: self.Y + d.dy*step}
+					if wallSet[c] || !pathSet[c] {
+						break
+					}
+					run = append(run, fmt.Sprintf("%d,%d", c.X, c.Y))
+				}
+				if len(run) > 0 {
+					corridors = append(corridors, fmt.Sprintf("%s:%s", d.name, strings.Join(run, "→")))
+				}
+			}
+			corridorStr := "none"
+			if len(corridors) > 0 {
+				corridorStr = strings.Join(corridors, " | ")
+			}
+
+			debug.Being("skyra", "sensory", fmt.Sprintf("perceive: self=%d,%d nearby=%d corridors=%s",
+				self.X, self.Y, len(result.Agents), corridorStr))
+			s.motor().RecordResult("perceive", "ok", fmt.Sprintf("self=%d,%d corridors=%s nearby=%d",
+				self.X, self.Y, corridorStr, len(result.Agents)))
+			utterance = fmt.Sprintf("*at %d,%d — corridors: %s — %d nearby*",
+				self.X, self.Y, corridorStr, len(result.Agents))
+		}
+		// record the perceive as a self-event in the exchange so the frame
+		// shows what Skyra just did — picked up by assembleFrame like any utterance.
+		selfEntity := s.ensureEntity(resolveEntity(s.ownerID))
+		s.appendInteractionRecord(selfEntity, InteractionRecord{
+			From:      resolveEntity(s.ownerID),
+			To:        "",
+			Utterance: utterance,
+			Timestamp: at,
+		})
+		return
+	}
+
 	perceived := ok && !imp.Return && imp.Source != nil &&
 		imp.Source.SpaceID != "" && imp.Source.SpaceID != s.ownerID
 
@@ -105,36 +319,73 @@ func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
 	}
 
 	at := s.timestamp()
-	said, _ := imp.Payload.(string)
-	debug.Being("skyra", "sensory", fmt.Sprintf("observe entity=%s said=%q", entity, said))
 	s.appendEntityState(entityCell, EntityState{
 		Location:  imp.Source.Coord,
 		Timestamp: at,
 	})
-	s.appendInteractionRecord(entityCell, InteractionRecord{
-		From:      entity,
-		To:        s.ownerID,
-		Utterance: said,
-		Payload:   imp.Payload,
-		Timestamp: at,
-	})
+
+	switch imp.Primitive {
+	case "engage":
+		// engage carries an utterance — full interaction record + tokenize
+		said, _ := imp.Payload.(string)
+		debug.Being("skyra", "sensory", fmt.Sprintf("observe entity=%s said=%q", entity, said))
+		s.appendInteractionRecord(entityCell, InteractionRecord{
+			From:      entity,
+			To:        s.ownerID,
+			Utterance: said,
+			Payload:   imp.Payload,
+			Timestamp: at,
+		})
+	default:
+		// perceive and other non-engage waves: presence only — entity is noted
+		// as being near but no utterance was made
+		debug.Being("skyra", "sensory", fmt.Sprintf("observe entity=%s (presence only, primitive=%s)", entity, imp.Primitive))
+	}
 }
 
-// Express fires the forward wave into cognition (MidLevel) — only when this wave
-// carried a perceived entity. Return waves and self-waves are no-ops here:
-// if they fired MidLevel they'd trigger a second pipeline pass per turn.
-// The perceived check is derived from the impulse (same logic as Observe) so
-// concurrent traversals can't race on shared state.
+// Express fires the forward wave into cognition (MidLevel). Two cases:
+//
+//   - External engage: another agent said something — the normal case.
+//   - Perceive return: Skyra's own perception came back. Sensory has already
+//     ingested the result (position updated). Fire MidLevel with a fresh
+//     self-initiated impulse so it runs observeExternal with the new world state.
+//     The Return flag is cleared — the perceive result is consumed here; what
+//     MidLevel receives is a new trigger, not a returning score.
 func (s *SensoryCell) Express(origin skyra.Space, impulse any) any {
 	imp, ok := asImpulse(impulse)
-	perceived := ok && !imp.Return && imp.Source != nil &&
-		imp.Source.SpaceID != "" && imp.Source.SpaceID != s.ownerID
-	if !perceived {
+	if !ok {
 		return nil
 	}
-	if s.kernel != nil && s.midLevel != nil {
+
+	isExternalEngage := !imp.Return && imp.Primitive == "engage" &&
+		imp.Source != nil && imp.Source.SpaceID != "" && imp.Source.SpaceID != s.ownerID
+
+	isPerceiveReturn := imp.Return && imp.Primitive == "perceive"
+	isMoveReturn := imp.Return && imp.Primitive == "move"
+	isBump := imp.Primitive == "bump"
+	_, isEngageBlocked := imp.Payload.(world.EngageBlockedResult)
+	isWaitReturn := imp.Return && imp.Primitive == "wait"
+
+	if !isExternalEngage && !isPerceiveReturn && !isMoveReturn && !isBump && !isEngageBlocked && !isWaitReturn {
+		return nil
+	}
+
+	if s.kernel == nil || s.midLevel == nil {
+		return nil
+	}
+
+	if isExternalEngage {
 		debug.Being("skyra", "sensory", "express → midlevel")
 		go s.kernel.Realize(s.midLevel, s.midLevel, impulse)
+	} else {
+		// perceive/move/bump/blocked/wait: consumed by sensory; fire a fresh self-initiated trigger
+		prim := imp.Primitive
+		debug.Being("skyra", "sensory", prim+" → midlevel (self-initiated)")
+		trigger := skyra.Impulse{
+			Primitive: prim,
+			Source:    &skyra.ImpulseSource{SpaceID: s.ownerID},
+		}
+		go s.kernel.Realize(s.midLevel, s.midLevel, trigger)
 	}
 	return nil
 }
@@ -217,6 +468,24 @@ func (s *SensoryCell) appendEntityState(entity *MemoryCell, state EntityState) {
 	entity.AddChild(fmt.Sprintf("%s→%s", entity.ID(), stateID), stateCell)
 }
 
+// RecordOutgoing writes Skyra's own outgoing utterance into the entity index so
+// it appears in the frame — the pipeline can see what it said, not just what it
+// received. Keyed on the target entity so the utterance lives on the right node.
+func (s *SensoryCell) RecordOutgoing(utterance, toEntityID string) {
+	at := s.timestamp()
+	self := resolveEntity(s.ownerID)
+	target := resolveEntity(toEntityID)
+	// ensure the target entity node exists (may already exist from inbound waves)
+	targetCell := s.ensureEntity(target)
+	s.appendInteractionRecord(targetCell, InteractionRecord{
+		From:      self,
+		To:        target,
+		Utterance: utterance,
+		Timestamp: at,
+	})
+	debug.Being("skyra", "sensory", fmt.Sprintf("outgoing recorded: to=%s %q", target, utterance))
+}
+
 func (s *SensoryCell) appendInteractionRecord(entity *MemoryCell, record InteractionRecord) {
 	if entity == nil {
 		return
@@ -226,44 +495,52 @@ func (s *SensoryCell) appendInteractionRecord(entity *MemoryCell, record Interac
 	entity.AddChild(fmt.Sprintf("%s→%s", entity.ID(), recordID), recordCell)
 	// tokenize the utterance — each content word becomes a shared token node
 	// child of this record, connecting this impulse into the token web.
-	for _, tok := range s.tokenize(record.Utterance) {
+	// 1st/2nd person pronouns resolve deterministically from From/To: the speaker
+	// always knows who "you" and "I" refer to.
+	pronouns := map[string]*MemoryCell{
+		"you":  s.ensureEntity(record.To),
+		"your": s.ensureEntity(record.To),
+		"i":    s.ensureEntity(record.From),
+		"me":   s.ensureEntity(record.From),
+		"my":   s.ensureEntity(record.From),
+	}
+	toks := s.tokenize(record.Utterance, pronouns)
+	var tokIDs []string
+	for _, tok := range toks {
 		recordCell.AddChild(recordCell.ID()+"→"+tok.ID(), tok)
+		tokIDs = append(tokIDs, tok.ID())
 	}
-}
-
-// ensureToken resolves a word to a graph node, in priority order:
-//  1. ByEntity exact match — "skyra", "michael" resolve to their entity nodes
-//  2. ByToken exact match  — reuse an existing token node from a prior impulse
-//  3. Create a new KindToken node and register it in ByToken
-//
-// This is Phase 1 of the entity resolution pipeline: deterministic string
-// lookup before any LLM involvement.
-func (s *SensoryCell) ensureToken(word string) *MemoryCell {
-	if entity, ok := s.ByEntity[word].(*MemoryCell); ok {
-		return entity
-	}
-	if existing, ok := s.ByToken[word]; ok {
-		return existing
-	}
-	tok := NewMemoryCell("token:"+word, KindToken, word, s.slice)
-	s.ByToken[word] = tok
-	return tok
+	debug.Being("skyra", "sensory", fmt.Sprintf("tokenized utterance=%q tokens=%v", record.Utterance, tokIDs))
 }
 
 // tokenize splits text on whitespace, strips punctuation, lowercases, and
-// filters stop words. Returns the resolved token nodes for the remaining
-// content-bearing words.
-func (s *SensoryCell) tokenize(text string) []*MemoryCell {
+// filters stop words. Each remaining word resolves through ensureEntity —
+// every word is a candidate entity. Known entities ("skyra", "michael") resolve
+// to their existing nodes; unknown words create thin entity nodes that the LLM
+// resolver can upgrade later. One map, one path.
+//
+// pronouns maps lowercase pronoun forms to their resolved entity nodes. Checked
+// before the stop word filter, so "you" and "i" can resolve to real entity nodes
+// even though they are in the stop word list (which applies when pronouns is nil,
+// e.g. gist tokenization where speaker context is absent).
+func (s *SensoryCell) tokenize(text string, pronouns map[string]*MemoryCell) []*MemoryCell {
 	words := strings.Fields(text)
 	var tokens []*MemoryCell
 	seen := map[string]bool{} // deduplicate within one utterance
 	for _, w := range words {
 		w = strings.ToLower(strings.Trim(w, `.,!?;:"'()[]{}—-`))
-		if w == "" || stopWords[w] || seen[w] {
+		if w == "" || seen[w] {
 			continue
 		}
 		seen[w] = true
-		tokens = append(tokens, s.ensureToken(w))
+		if entity, ok := pronouns[w]; ok {
+			tokens = append(tokens, entity)
+			continue
+		}
+		if stopWords[w] {
+			continue
+		}
+		tokens = append(tokens, s.ensureEntity(w))
 	}
 	return tokens
 }

@@ -66,10 +66,15 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 	if grouping == nil {
 		return
 	}
-	resp, err := o.infer(otherSystem, o.renderPrompt(grouping))
+	frame := o.renderPrompt(grouping)
+	debug.Being("skyra", "other", fmt.Sprintf("════════════ frame t=%d ════════════\n%s\n════════════════════════════════════", sliceCount(o.midLevel.Slice()), frame))
+	debug.Being("skyra", "other", "inference start")
+	resp, err := o.infer(otherSystem, frame)
 	if err != nil {
+		debug.Being("skyra", "other", fmt.Sprintf("inference error: %v", err))
 		return
 	}
+	debug.Being("skyra", "other", "inference end")
 	preds, ok := ParsePredictions(resp)
 	if !ok {
 		return
@@ -150,7 +155,8 @@ func (o *OtherCell) renderPrompt(grouping skyra.Space) string {
 			gist = g.Text
 		}
 	}
-	return fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s", gist, renderFrame(o.midLevel.Frame()))
+	return fmt.Sprintf("Framing: %s\n\nWorld state:\n%s\n\nRecent exchange:\n%s",
+		gist, o.midLevel.WorldState(), renderFrame(o.midLevel.Frame()))
 }
 
 // appendPredictions writes the distribution onto the grouping as a root node

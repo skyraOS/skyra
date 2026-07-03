@@ -5,8 +5,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
-
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,11 +22,12 @@ import (
 // ── styles ────────────────────────────────────────────────────────────────────
 
 var (
-	subtle  = lipgloss.Color("8")
-	accent  = lipgloss.Color("12")
-	brand   = lipgloss.Color("5")
-	warn    = lipgloss.Color("11")
-	success = lipgloss.Color("10")
+	subtle   = lipgloss.Color("8")
+	accent   = lipgloss.Color("12")
+	brand    = lipgloss.Color("5")
+	warn     = lipgloss.Color("11")
+	success  = lipgloss.Color("10")
+	moveColor = lipgloss.Color("14") // cyan for move mode
 
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(brand)
 
@@ -77,6 +76,7 @@ const (
 	stateInput        uiState = iota // primitive selector + text input
 	stateEntityPicker                // engage entity selection overlay
 	stateWaiting                     // impulse fired, waiting for motor
+	stateMove                        // arrow-key navigation mode
 )
 
 // ── messages ──────────────────────────────────────────────────────────────────
@@ -89,16 +89,19 @@ type resultMsg struct {
 	err     string
 }
 
+type inboundMsg struct{ impulse skyra.Impulse }
+
 type tickMsg struct{}
 
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type model struct {
 	// runtime
-	realm  *world.World
-	user   *userdna.UserCell
-	being  *dna.MembraneCell
-	kernel *relation.Relation
+	realm     *world.World
+	user      *userdna.UserCell
+	being     *dna.MembraneCell
+	kernel    *relation.Relation
+	inboundCh chan skyra.Impulse
 
 	// ui state
 	state     uiState
@@ -108,6 +111,16 @@ type model struct {
 	// entity picker
 	entities []string // sorted entity IDs
 	selIdx   int
+
+	// positions
+	michaelCoord skyra.Coord
+
+	// map camera — independent of agent position
+	cameraOffset skyra.Coord // pan offset from michaelCoord (0,0 = centered on michael)
+	viewCells    int         // world cells shown across the viewport; 0 = auto (fill screen)
+	dragging     bool
+	dragStartPx  skyra.Coord // terminal cell where drag began
+	dragStartCam skyra.Coord // cameraOffset at drag start
 
 	// widgets
 	input  textarea.Model
@@ -120,7 +133,7 @@ type model struct {
 	lines []string
 }
 
-func newModel(realm *world.World, user *userdna.UserCell, being *dna.MembraneCell, kernel *relation.Relation) model {
+func newModel(realm *world.World, user *userdna.UserCell, being *dna.MembraneCell, kernel *relation.Relation, inboundCh chan skyra.Impulse) model {
 	ti := textarea.New()
 	ti.Placeholder = "write something..."
 	ti.Focus()
@@ -130,17 +143,25 @@ func newModel(realm *world.World, user *userdna.UserCell, being *dna.MembraneCel
 	ti.CharLimit = 0
 
 	return model{
-		realm:     realm,
-		user:      user,
-		being:     being,
-		kernel:    kernel,
-		primitive: "perceive",
-		input:     ti,
+		realm:        realm,
+		user:         user,
+		being:        being,
+		kernel:       kernel,
+		inboundCh:    inboundCh,
+		primitive:    "perceive",
+		input:        ti,
+		michaelCoord: skyra.Coord{X: world.MazeEntranceX, Y: world.MazeOriginY - 2},
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, waitInbound(m.inboundCh))
+}
+
+func waitInbound(ch chan skyra.Impulse) tea.Cmd {
+	return func() tea.Msg {
+		return inboundMsg{impulse: <-ch}
+	}
 }
 
 // ── update ────────────────────────────────────────────────────────────────────
@@ -164,17 +185,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case resultMsg:
 		m.state = stateInput
-		if msg.err != "" {
-			m.pushLine(dimStyle.Render("error: " + msg.err))
-		} else {
-			m.pushLine(labelStyle.Render("framing: ") + msg.framing)
-			m.pushLine(dimStyle.Render("  other: ") + msg.other)
-			m.pushLine(dimStyle.Render("   self: ") + msg.self)
-			m.pushLine(dimStyle.Render("  motor: ") + msg.motor)
-		}
-		m.pushLine("")
 		m.refreshOutput()
 		return m, nil
+
+	case inboundMsg:
+		imp := msg.impulse
+		src := "skyra"
+		if imp.Source != nil && imp.Source.SpaceID != "" {
+			src = imp.Source.SpaceID
+		}
+		msgWidth := m.outputWidth() - 4
+		switch imp.Primitive {
+		case world.PrimitivePerceive:
+			m.pushLine(senderSkyra.Render(src) + dimStyle.Render(" perceived you"))
+			m.pushLine("")
+		case world.PrimitiveEngage:
+			text, _ := imp.Payload.(string)
+			m.pushLine(senderSkyra.Render(src) + dimStyle.Render(" → engage → michael"))
+			for _, line := range strings.Split(wordWrap(text, msgWidth), "\n") {
+				m.pushLine(dimStyle.Render("  " + line))
+			}
+			m.pushLine("")
+			// Exit agent teleports michael back outside the entrance — update local coord.
+			if src == world.ExitAgentID {
+				m.michaelCoord = skyra.Coord{X: world.MazeEntranceX, Y: world.MazeOriginY - 2}
+			}
+		case world.PrimitiveBump:
+			result, _ := imp.Payload.(world.BumpResult)
+			other := result.OtherID
+			if other == "" {
+				other = src
+			}
+			m.pushLine(senderSkyra.Render(src) + dimStyle.Render(" bumped into "+other))
+			m.pushLine("")
+		}
+		m.refreshOutput()
+		return m, waitInbound(m.inboundCh)
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -187,6 +236,60 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	return m, nil
+}
+
+func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	const zoomStep = 8
+	const zoomMin = 20
+	const zoomMax = 300
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		// zoom in — show fewer world cells
+		cells := m.viewCells
+		if cells == 0 {
+			cells = m.width - 4
+		}
+		cells -= zoomStep
+		if cells < zoomMin {
+			cells = zoomMin
+		}
+		m.viewCells = cells
+		return m, nil
+
+	case tea.MouseButtonWheelDown:
+		// zoom out — show more world cells
+		cells := m.viewCells
+		if cells == 0 {
+			cells = m.width - 4
+		}
+		cells += zoomStep
+		if cells > zoomMax {
+			cells = zoomMax
+		}
+		m.viewCells = cells
+		return m, nil
+	}
+
+	// Left button drag — pan the camera
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button == tea.MouseButtonLeft {
+			m.dragging = true
+			m.dragStartPx = skyra.Coord{X: msg.X, Y: msg.Y}
+			m.dragStartCam = m.cameraOffset
+		}
+	case tea.MouseActionRelease:
+		m.dragging = false
+	case tea.MouseActionMotion:
+		if m.dragging {
+			m.cameraOffset = skyra.Coord{
+				X: m.dragStartCam.X + (m.dragStartPx.X - msg.X),
+				Y: m.dragStartCam.Y + (m.dragStartPx.Y - msg.Y),
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -205,6 +308,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.primitive = "perceive"
 			}
 			return m, nil
+
+		case tea.KeyEsc:
+			if strings.TrimSpace(m.input.Value()) == "" {
+				m.state = stateMove
+				return m, nil
+			}
 
 		case tea.KeyEnter:
 			text := strings.TrimSpace(m.input.Value())
@@ -225,6 +334,33 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
+
+	case stateMove:
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			return m, tea.Quit
+
+		case tea.KeyEsc:
+			m.state = stateInput
+			m.cameraOffset = skyra.Coord{}
+			m.input.Focus()
+			return m, textarea.Blink
+
+		case tea.KeyUp:
+			return m.move(0, -1)
+		case tea.KeyDown:
+			return m.move(0, 1)
+		case tea.KeyLeft:
+			return m.move(-1, 0)
+		case tea.KeyRight:
+			return m.move(1, 0)
+
+		default:
+			// any other key exits move mode
+			m.state = stateInput
+			m.input.Focus()
+			return m, textarea.Blink
+		}
 
 	case stateEntityPicker:
 		switch msg.Type {
@@ -267,12 +403,34 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) move(dx, dy int) (tea.Model, tea.Cmd) {
+	dest := skyra.Coord{X: m.michaelCoord.X + dx, Y: m.michaelCoord.Y + dy}
+	if m.realm.IsWall(dest.X, dest.Y) {
+		return m, nil
+	}
+	m.michaelCoord = dest
+
+	imp := skyra.Impulse{
+		Primitive: world.PrimitiveMove,
+		TargetID:  fmt.Sprintf("%d,%d", dest.X, dest.Y),
+		Amplitude: 1.0,
+		Source:    &skyra.ImpulseSource{SpaceID: m.user.ID(), Coord: m.michaelCoord},
+	}
+
+	realm := m.realm
+	user := m.user
+	return m, func() tea.Msg {
+		realm.Observe(user, imp)
+		return nil
+	}
+}
+
 func (m model) fire(text string) (tea.Model, tea.Cmd) {
 	m.state = stateWaiting
 
 	src := &skyra.ImpulseSource{
 		SpaceID: m.user.ID(),
-		Coord:   skyra.Coord{X: 500, Y: 500},
+		Coord:   m.michaelCoord,
 	}
 
 	var imp skyra.Impulse
@@ -286,43 +444,30 @@ func (m model) fire(text string) (tea.Model, tea.Cmd) {
 		}
 		m.pushLine(senderUser.Render("michael") + dimStyle.Render(" → engage → "+m.targetID))
 	} else {
+		// perceive carries no utterance — it's spatial sensing, not communication
 		imp = skyra.Impulse{
 			Primitive: world.PrimitivePerceive,
 			ResultMap: world.MapPerception,
-			Payload:   text,
 			Amplitude: 1.0,
 			Source:    src,
 		}
 		m.pushLine(senderUser.Render("michael") + dimStyle.Render(" → perceive"))
 	}
-	m.pushLine(dimStyle.Render("  \"" + text + "\""))
+	if m.primitive == "engage" {
+		for _, line := range strings.Split(wordWrap(text, m.outputWidth()-4), "\n") {
+			m.pushLine(dimStyle.Render("  " + line))
+		}
+	}
 	m.input.Reset()
 	m.refreshOutput()
 
-	before := m.being.Motor().ActionCount()
 	realm := m.realm
 	user := m.user
-	being := m.being
 
 	return m, func() tea.Msg {
 		user.Send(imp)
-		realm.Observe(being, imp)
-
-		deadline := time.Now().Add(3 * time.Minute)
-		for time.Now().Before(deadline) {
-			if being.Motor().ActionCount() > before {
-				mid := being.Sensory().MidLevel()
-				selfPred, otherPred := predictions(mid)
-				return resultMsg{
-					framing: mid.Gist(),
-					other:   otherPred,
-					self:    selfPred,
-					motor:   being.Motor().LastAction(),
-				}
-			}
-			time.Sleep(150 * time.Millisecond)
-		}
-		return resultMsg{err: "timed out waiting for motor"}
+		realm.Observe(user, imp)
+		return resultMsg{}
 	}
 }
 
@@ -335,42 +480,67 @@ func (m model) View() string {
 
 	var sections []string
 
-	// title
-	sections = append(sections, titleStyle.Render(" skyra v.1"))
+	// title + status bar
+	sections = append(sections, m.renderTitleBar())
 
-	// primitive selector
-	sections = append(sections, m.renderPrimitiveBar())
+	if m.state == stateMove {
+		// move mode: show map panel + directional hint
+		sections = append(sections, m.renderMapPanel())
+		sections = append(sections, hintStyle.Render("  ↑↓←→: move  esc: back to chat  ctrl+c: quit"))
+	} else {
+		// chat mode
+		sections = append(sections, m.renderPrimitiveBar())
 
-	// entity picker (inline, only when in picker state)
-	if m.state == stateEntityPicker {
-		sections = append(sections, m.renderEntityPicker())
+		if m.state == stateEntityPicker {
+			sections = append(sections, m.renderEntityPicker())
+		}
+
+		sections = append(sections,
+			outputStyle.Width(m.outputWidth()).Height(m.outputHeight()).Render(m.output.View()),
+		)
+
+		if m.primitive == "engage" && m.targetID != "" {
+			sections = append(sections, hintStyle.Render("  target: "+m.targetID))
+		}
+
+		sections = append(sections,
+			inputStyle.Width(m.inputWidth()).Render(m.input.View()),
+		)
+
+		sections = append(sections, hintStyle.Render("  tab: perceive/engage  enter: send  esc: move mode  ctrl+c: quit"))
 	}
-
-	// output log
-	sections = append(sections,
-		outputStyle.Width(m.outputWidth()).Height(m.outputHeight()).Render(m.output.View()),
-	)
-
-	// target hint for engage
-	if m.primitive == "engage" && m.targetID != "" {
-		sections = append(sections, hintStyle.Render("  target: "+m.targetID))
-	}
-
-	// input
-	waitLabel := ""
-	if m.state == stateWaiting {
-		waitLabel = dimStyle.Render(" waiting...")
-	}
-	inputContent := m.input.View() + waitLabel
-	sections = append(sections,
-		inputStyle.Width(m.inputWidth()).Render(inputContent),
-	)
-
-	// hints
-	hints := "tab: perceive/engage  enter: send  ↑↓: navigate picker  esc: cancel  ctrl+c: quit"
-	sections = append(sections, hintStyle.Render(hints))
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+func (m model) renderTitleBar() string {
+	title := titleStyle.Render(" skyra v.1")
+
+	// michael's coord
+	mCoord := fmt.Sprintf("michael@%d,%d", m.michaelCoord.X, m.michaelCoord.Y)
+
+	// skyra's coord — read from the world directly so it updates on any move,
+	// not only when skyra herself perceives.
+	sCoord := "skyra@?"
+	if m.being != nil {
+		if coord, ok := m.realm.CoordOf(m.being); ok {
+			sCoord = fmt.Sprintf("skyra@%d,%d", coord.X, coord.Y)
+		}
+	}
+
+	var modeStr string
+	if m.state == stateMove {
+		modeStr = lipgloss.NewStyle().Bold(true).Foreground(moveColor).Render("[move]")
+	} else {
+		modeStr = dimStyle.Render("[chat]")
+	}
+
+	right := dimStyle.Render(mCoord+"  "+sCoord) + "  " + modeStr
+	gap := m.width - lipgloss.Width(title) - lipgloss.Width(right) - 2
+	if gap < 1 {
+		gap = 1
+	}
+	return title + strings.Repeat(" ", gap) + right
 }
 
 func (m model) renderPrimitiveBar() string {
@@ -403,6 +573,70 @@ func (m model) renderEntityPicker() string {
 	return pickerStyle.Width(m.outputWidth()).Render(strings.Join(rows, "\n"))
 }
 
+// renderMapPanel draws a 2D view of the maze centered on Michael's position.
+// Symbols: █ wall  · path  @ michael  S skyra  (space) unknown
+func (m model) renderMapPanel() string {
+	contentW := m.width - 4
+	contentH := m.height - 4
+	if contentW < 10 {
+		contentW = 10
+	}
+	if contentH < 3 {
+		contentH = 3
+	}
+
+	// viewCells controls zoom: how many world cells span the terminal width.
+	// 0 = auto (fill screen). Smaller = zoomed in, larger = zoomed out.
+	worldW := contentW
+	if m.viewCells > 0 {
+		worldW = m.viewCells
+	}
+	// Maintain aspect ratio for world height.
+	worldH := worldW * contentH / contentW
+	if worldH < 1 {
+		worldH = 1
+	}
+
+	// Camera center = michael's position + independent pan offset.
+	centerX := m.michaelCoord.X + m.cameraOffset.X
+	centerY := m.michaelCoord.Y + m.cameraOffset.Y
+	startX := centerX - worldW/2
+	startY := centerY - worldH/2
+
+	skyraCoord, hasSkyra := m.realm.CoordOf(m.being)
+
+	var sb strings.Builder
+	for row := 0; row < contentH; row++ {
+		// Map terminal row → world y (scale worldH → contentH).
+		wy := startY + row*worldH/contentH
+		for col := 0; col < contentW; col++ {
+			// Map terminal col → world x (scale worldW → contentW).
+			wx := startX + col*worldW/contentW
+			switch {
+			case wx == m.michaelCoord.X && wy == m.michaelCoord.Y:
+				sb.WriteString(lipgloss.NewStyle().Foreground(accent).Bold(true).Render("@"))
+			case hasSkyra && wx == skyraCoord.X && wy == skyraCoord.Y:
+				sb.WriteString(lipgloss.NewStyle().Foreground(brand).Bold(true).Render("S"))
+			case wx == world.MazeExitX && wy == world.MazeExitY:
+				sb.WriteString(lipgloss.NewStyle().Foreground(success).Bold(true).Render("X"))
+			case wx == world.MazeEntranceX && wy == world.MazeOriginY:
+				sb.WriteString(lipgloss.NewStyle().Foreground(warn).Bold(true).Render("E"))
+			case m.realm.IsWall(wx, wy):
+				sb.WriteString(lipgloss.NewStyle().Foreground(subtle).Render("█"))
+			case m.realm.IsPath(wx, wy):
+				sb.WriteString(dimStyle.Render("·"))
+			default:
+				sb.WriteString(" ")
+			}
+		}
+		if row < contentH-1 {
+			sb.WriteByte('\n')
+		}
+	}
+
+	return outputStyle.Width(contentW).Render(sb.String())
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func (m *model) pushLine(line string) {
@@ -426,6 +660,14 @@ func (m model) outputWidth() int {
 }
 
 func (m model) outputHeight() int {
+	if m.state == stateMove {
+		// title(1) + hints(1) + padding(2)
+		h := m.height - 4
+		if h < 3 {
+			h = 3
+		}
+		return h
+	}
 	// title(1) + primitive bar(3) + input(3) + hints(1) + padding(4)
 	h := m.height - 12
 	if m.state == stateEntityPicker {
@@ -443,6 +685,27 @@ func (m model) inputWidth() int {
 		w = 20
 	}
 	return w
+}
+
+// wordWrap breaks text at word boundaries so it fits within width characters.
+func wordWrap(text string, width int) string {
+	if width <= 0 || len(text) <= width {
+		return text
+	}
+	var result strings.Builder
+	lineLen := 0
+	for i, word := range strings.Fields(text) {
+		if i > 0 && lineLen+1+len(word) > width {
+			result.WriteByte('\n')
+			lineLen = 0
+		} else if i > 0 {
+			result.WriteByte(' ')
+			lineLen++
+		}
+		result.WriteString(word)
+		lineLen += len(word)
+	}
+	return result.String()
 }
 
 func sortedEntityIDs(entities map[string]skyra.Space) []string {
@@ -475,12 +738,30 @@ func predictions(mid *dna.MidLevelCell) (self, other string) {
 		return "", ""
 	}
 	for _, child := range mc.Children() {
-		if p, ok := child.Content().(dna.Prediction); ok {
-			switch p.Role {
-			case "self":
-				self = p.Text
-			case "other":
-				other = p.Text
+		cm, ok := child.(*dna.MemoryCell)
+		if !ok {
+			continue
+		}
+		p, ok := cm.Content().(dna.Prediction)
+		if !ok {
+			continue
+		}
+		switch p.Role {
+		case "self":
+			self = p.Text
+		case "other":
+			// other stores a root node (no text) with one child per prediction;
+			// pick the highest-probability child for display.
+			var best dna.Prediction
+			for _, grandchild := range cm.Children() {
+				if gp, ok := grandchild.(*dna.MemoryCell); ok {
+					if pred, ok := gp.Content().(dna.Prediction); ok && pred.Probability > best.Probability {
+						best = pred
+					}
+				}
+			}
+			if best.Text != "" {
+				other = best.Text
 			}
 		}
 	}
@@ -507,8 +788,15 @@ func main() {
 	user := userdna.NewUserCell("michael", func(id string) skyra.Slice {
 		return world.NewSlice(id, "michael")
 	})
-	realm.Place(user, 500, 500)
-	realm.Place(being, 501, 500)
+	realm.GenerateMaze(42)
+	entrance := world.NewEntranceAgent(realm)
+	exit := world.NewExitAgent(realm)
+	realm.Place(entrance, world.MazeEntranceX, world.MazeEntranceY)
+	realm.Place(exit, world.MazeExitX, world.MazeExitY)
+	realm.Place(user, world.MazeEntranceX, world.MazeOriginY-2)
+	realm.Place(being, world.MazeEntranceX+2, world.MazeOriginY-2)
+	user.Seed(entrance)
+	user.Seed(exit)
 	user.Seed(being)
 
 	// Wire motor → world: motor's concrete action is delivered to the world so the
@@ -517,8 +805,24 @@ func main() {
 		realm.Observe(being, imp)
 	})
 
-	m := newModel(realm, user, being, kernel)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	// Wire inbound notifications → TUI channel so michael's received impulses
+	// (skyra's engage replies, perceive pings) appear in the UI.
+	// Filter: skip return waves and self-delivered impulses (the world echoes
+	// michael's own engage back to him when he's in the delivery set).
+	inboundCh := make(chan skyra.Impulse, 16)
+	userID := user.ID()
+	user.OnInbound = func(imp skyra.Impulse) {
+		if imp.Source != nil && imp.Source.SpaceID == userID {
+			return // own echo — skip
+		}
+		select {
+		case inboundCh <- imp:
+		default:
+		}
+	}
+
+	m := newModel(realm, user, being, kernel, inboundCh)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "tui error:", err)
 		os.Exit(1)

@@ -30,7 +30,7 @@ const codexTimeout = 600 * time.Second // agent runs are slower than a raw API c
 //
 // Model selection follows the user's codex config; set CODEX_MODEL to override.
 func CallCodex(system, present string) (string, error) {
-	work, err := os.MkdirTemp("", "skyra-codex-")
+	work, err := os.MkdirTemp("", "skyra-codex-*")
 	if err != nil {
 		return "", fmt.Errorf("codex: workdir: %w", err)
 	}
@@ -53,12 +53,30 @@ func CallCodex(system, present string) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
-	cmd.Dir = work // the agent's working root: empty, so it has nothing to crawl
+	cmd.Dir = work
 	cmd.Stdin = strings.NewReader(system + "\n\n" + present)
-	var stderr bytes.Buffer
+	// Isolated TMPDIR per invocation so concurrent calls don't collide on temp files.
+	// CODEX_HOME is left as-is so auth credentials remain accessible.
+	cmd.Env = append(os.Environ(), "TMPDIR="+work)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("codex exec: %w (%s)", err, strings.TrimSpace(stderr.String()))
+
+	err = cmd.Run()
+
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("codex timed out/cancelled: %w\nstderr:\n%s", ctx.Err(), stderr.String())
+	}
+	if err != nil {
+		return "", fmt.Errorf("codex failed: %w\nstderr:\n%s\nstdout:\n%s", err, stderr.String(), stdout.String())
+	}
+
+	// Validate the temp file after process exit — the process may have exited
+	// successfully before flushing the final message.
+	info, statErr := os.Stat(lastPath)
+	if statErr != nil || info.Size() == 0 {
+		return "", fmt.Errorf("codex exited clean but final message file missing/empty\nstderr:\n%s\nstdout:\n%s", stderr.String(), stdout.String())
 	}
 
 	out, err := os.ReadFile(lastPath)
@@ -67,7 +85,7 @@ func CallCodex(system, present string) (string, error) {
 	}
 	answer := strings.TrimSpace(string(out))
 	if answer == "" {
-		return "", fmt.Errorf("codex: empty answer (model returned nothing)")
+		return "", fmt.Errorf("codex: empty answer\nstderr:\n%s", stderr.String())
 	}
 	return answer, nil
 }

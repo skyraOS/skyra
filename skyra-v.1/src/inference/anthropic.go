@@ -15,7 +15,7 @@ import (
 const (
 	anthropicURL     = "https://api.anthropic.com/v1/messages"
 	anthropicVersion = "2023-06-01"
-	defaultAnthModel = "claude-sonnet-4-5-20241022"
+	defaultAnthModel = "claude-sonnet-4-6"
 )
 
 type anthropicRequest struct {

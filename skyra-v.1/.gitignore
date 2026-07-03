@@ -5,3 +5,5 @@ logs/
 skyra-tui
 skyra-v05
 /tui
+/skyra-v1
+*.log

@@ -120,6 +120,10 @@ func ParsePredictions(response string) ([]ParsedPrediction, bool) {
 
 var engageRe = regexp.MustCompile(`(?is)<engage>\s*<([^>/\s]+)>\s*(.*?)\s*</[^>]+>\s*</engage>`)
 var perceiveRe = regexp.MustCompile(`(?is)<perc(?:ei|ie)ve>\s*(.*?)\s*</perc(?:ei|ie)ve>`)
+// inner closing tag is optional — models often emit <move><5,3></move> for coords
+var moveRe = regexp.MustCompile(`(?is)<move>\s*<([^>/\s]+)>\s*(.*?)\s*(?:</[^>]+>\s*)?</move>`)
+// <wait><10>reason</wait> — seconds as inner tag, reason as content
+var waitRe = regexp.MustCompile(`(?is)<wait>\s*<(\d+(?:\.\d+)?)\s*>\s*(.*?)\s*</wait>`)
 
 // PrimitiveEmission is the concrete primitive the motor emits.
 type PrimitiveEmission struct {
@@ -132,6 +136,9 @@ type PrimitiveEmission struct {
 // Supported forms:
 //
 //	<engage><michael>words</michael></engage>
+//	<move><5,3>context</5,3></move>        — move to absolute coord
+//	<move><michael></michael></move>       — move to where an agent is
+//	<move><kitchen></kitchen></move>       — move to a named place (future)
 //	<perceive>"nothing important yet"</perceive>
 func ParseMotorEmission(response string) (PrimitiveEmission, bool) {
 	if m := engageRe.FindStringSubmatch(response); m != nil {
@@ -140,11 +147,17 @@ func ParseMotorEmission(response string) (PrimitiveEmission, bool) {
 			return PrimitiveEmission{Primitive: "engage", Target: strings.TrimSpace(m[1]), Payload: payload}, true
 		}
 	}
-	if m := perceiveRe.FindStringSubmatch(response); m != nil {
-		payload := cleanMotorPayload(m[1])
-		if payload != "" {
-			return PrimitiveEmission{Primitive: "perceive", Payload: payload}, true
+	if m := moveRe.FindStringSubmatch(response); m != nil {
+		target := strings.TrimSpace(m[1])
+		if target != "" {
+			return PrimitiveEmission{Primitive: "move", Target: target, Payload: cleanMotorPayload(m[2])}, true
 		}
+	}
+	if perceiveRe.MatchString(response) {
+		return PrimitiveEmission{Primitive: "perceive"}, true
+	}
+	if m := waitRe.FindStringSubmatch(response); m != nil {
+		return PrimitiveEmission{Primitive: "wait", Target: strings.TrimSpace(m[1]), Payload: cleanMotorPayload(m[2])}, true
 	}
 	return PrimitiveEmission{}, false
 }

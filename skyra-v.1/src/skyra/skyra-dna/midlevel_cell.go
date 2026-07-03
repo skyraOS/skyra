@@ -122,7 +122,8 @@ func (g *MidLevelCell) Observe(origin skyra.Space, impulse any) {
 // recency, run the grouping inference call, write setpoint→groupID.
 // See specs/2026-06-16/skyra-dna/midlevel-observe-gather.md.
 func (g *MidLevelCell) observeExternal(impulse any) {
-	g.frame = g.assembleFrame()
+	var trigger *MemoryCell
+	g.frame, trigger = g.assembleFrame()
 
 	// Cold-start grouping pass: predict the framing/gist for this exchange. No
 	// setpoints to group yet, no existing groupings to match — just impulse → gist.
@@ -136,13 +137,17 @@ func (g *MidLevelCell) observeExternal(impulse any) {
 	if present == "" {
 		return // nothing perceived yet — nothing to frame
 	}
+	debug.Being("skyra", "midlevel", fmt.Sprintf("════════════ frame t=%d ════════════\n%s\n════════════════════════════════════", g.slice.Count(), present))
+	debug.Being("skyra", "midlevel", "inference start")
 	resp, err := g.infer(coldStartSystem, present)
 	if err != nil {
+		debug.Being("skyra", "midlevel", fmt.Sprintf("inference error: %v", err))
 		return // a failed call leaves last cycle's gist standing
 	}
+	debug.Being("skyra", "midlevel", "inference end")
 	if label, ok := ParseLabel(resp); ok {
 		g.gist = label
-		g.startGrouping(label)
+		g.startGrouping(label, trigger)
 		debug.Being("skyra", "midlevel", "grouping gist="+label)
 	}
 }
@@ -160,15 +165,50 @@ type Gist struct {
 // into the slice-resident grouping index (groupingIndex), for the agents to read,
 // fire a wave on, and append predictions to. Cold-start = the "create" action;
 // warm = match/re-frame an existing grouping instead (later).
-func (g *MidLevelCell) startGrouping(gist string) {
+//
+// Two sets of children are wired at creation time:
+//
+//  1. Gist tokens — each content word in the gist becomes a shared token node
+//     child. These are the attention roots: the first nodes traversed when entering
+//     this grouping, defining the current working memory frontier.
+//
+//  2. Triggering interaction — the interaction record that caused this grouping
+//     (the latest inbound utterance). Its children are already tokenized utterance
+//     tokens (some resolving to entity nodes). Adding it here connects utterance
+//     tokens to gist tokens through the grouping: hello→interaction→grouping→greeting.
+//     Traversed repeatedly, that path accumulates activation — the semantic
+//     relationship between surface word and framing grows from topology, not
+//     from any explicit declaration.
+func (g *MidLevelCell) startGrouping(gist string, trigger *MemoryCell) {
 	ts := 0
 	if g.slice != nil {
 		ts = g.slice.Count()
 	}
 	groupID := fmt.Sprintf("%s:g:%d", g.id, ts)
-	if idx := g.groupingIndex(); idx != nil {
-		idx[groupID] = NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
+	idx := g.groupingIndex()
+	if idx == nil {
+		return
 	}
+	groupingCell := NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
+	// gist tokens — attention roots / working memory seeds; no pronoun map
+	// (gist is LLM-generated third-person framing, speaker context absent).
+	if g.sensory != nil {
+		toks := g.sensory.tokenize(gist, nil)
+		var tokIDs []string
+		for _, tok := range toks {
+			groupingCell.AddChild(groupID+"→"+tok.ID(), tok)
+			tokIDs = append(tokIDs, tok.ID())
+		}
+		debug.Being("skyra", "midlevel", fmt.Sprintf("grouping tokens=%v", tokIDs))
+	}
+	// triggering interaction — the utterance that caused this framing
+	if trigger != nil {
+		groupingCell.AddChild(groupID+"→trigger", trigger)
+		if rec, ok := trigger.Content().(InteractionRecord); ok {
+			debug.Being("skyra", "midlevel", fmt.Sprintf("grouping trigger utterance=%q tokens=%d", rec.Utterance, len(trigger.Children())))
+		}
+	}
+	idx[groupID] = groupingCell
 }
 
 // Groupings publishes the grouping index by reference — the slice-resident map
@@ -233,15 +273,17 @@ func (g *MidLevelCell) Gist() string { return g.gist }
 // payload. Read under SENSORY's slice lock (SWMR): waits for sensory's wave to
 // finish, safe against the next one. Lock order is MidLevel → sensory, never the
 // reverse.
-func (g *MidLevelCell) assembleFrame() []ParsedNode {
+func (g *MidLevelCell) assembleFrame() ([]ParsedNode, *MemoryCell) {
 	if g.sensory == nil || g.sensory.Slice() == nil {
-		return nil
+		return nil, nil
 	}
 	sl := g.sensory.Slice()
 	sl.Lock()
 	defer sl.Unlock()
 
 	var frame []ParsedNode
+	var latestInteraction *MemoryCell
+	var latestTS int = -1
 	for _, entity := range g.sensory.ByEntity {
 		mc, ok := entity.(*MemoryCell)
 		if !ok {
@@ -249,20 +291,68 @@ func (g *MidLevelCell) assembleFrame() []ParsedNode {
 		}
 		frame = append(frame, mc.Parse())
 		for _, child := range mc.Children() { // entity-outward
-			if cc, ok := child.(*MemoryCell); ok {
-				frame = append(frame, cc.Parse())
+			cc, ok := child.(*MemoryCell)
+			if !ok {
+				continue
+			}
+			frame = append(frame, cc.Parse())
+			if cc.Kind() == KindResponse {
+				if ts := contentTimestamp(cc.Content()); ts > latestTS {
+					latestTS = ts
+					latestInteraction = cc
+				}
 			}
 		}
 	}
 	sort.SliceStable(frame, func(i, j int) bool {
 		return frame[i].Timestamp < frame[j].Timestamp
 	})
-	return frame
+	return frame, latestInteraction
 }
 
 // Frame is the assembled read-half output (parsed, timestamp-ordered
 // surroundings) for the current cycle.
 func (g *MidLevelCell) Frame() []ParsedNode { return g.frame }
+
+// WorldState returns a formatted snapshot of known positions for the prompt:
+// skyra's own position (if known) and each entity's last seen coord.
+// Reads directly from sensory — no lock needed (single writer, called from
+// the same goroutine that runs the pipeline).
+func (g *MidLevelCell) WorldState() string {
+	if g.sensory == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Below is your world state — the locations of each entity within the world you inhabit.\n")
+	if coord, ok := g.sensory.SelfCoord(); ok {
+		fmt.Fprintf(&b, "Self: %d,%d\n", coord.X, coord.Y)
+	} else {
+		fmt.Fprintf(&b, "Self: unknown — fire perceive to orient\n")
+	}
+	for id, entity := range g.sensory.ByEntity {
+		mc, ok := entity.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		var latestTS int = -1
+		var latestCoord skyra.Coord
+		for _, child := range mc.Children() {
+			cc, ok := child.(*MemoryCell)
+			if !ok || cc.Kind() != KindPresence {
+				continue
+			}
+			if es, ok := cc.Content().(EntityState); ok && es.Timestamp > latestTS {
+				latestTS = es.Timestamp
+				latestCoord = es.Location
+			}
+		}
+		// only show entities with real position data — skip thin token-only nodes
+		if latestTS >= 0 {
+			fmt.Fprintf(&b, "  %s: %d,%d\n", id, latestCoord.X, latestCoord.Y)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
 
 // observeSelf — integrate returning agent scores toward the vote. [stub]
 func (g *MidLevelCell) observeSelf(impulse any) {
@@ -284,6 +374,9 @@ func (g *MidLevelCell) Express(origin skyra.Space, impulse any) any {
 
 // Other is MidLevel's forward target (the "other" agent, next pipeline stage).
 func (g *MidLevelCell) Other() *OtherCell { return g.other }
+
+// Sensory exposes the boundary's sensory cell so motor can record outgoing utterances.
+func (g *MidLevelCell) Sensory() *SensoryCell { return g.sensory }
 
 // AddGrouping registers a grouping under its edge-identity key.
 func (g *MidLevelCell) AddGrouping(key string, grouping skyra.Space) {

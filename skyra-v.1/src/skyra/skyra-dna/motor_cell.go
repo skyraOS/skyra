@@ -44,6 +44,40 @@ type MotorCell struct {
 	lastAction  string // latest concrete emitted action, for CLI/debug display
 	actionCount int
 	pending     *ActionRecord
+	events      []MotorEvent // ring buffer of recent primitive outcomes, newest last
+}
+
+const motorEventCap = 5
+
+// MotorEvent is one entry in motor's recent-action log. Status is "pending"
+// until the return wave arrives, then "ok" or "blocked".
+type MotorEvent struct {
+	Primitive string
+	Target    string
+	Status    string
+	Detail    string
+}
+
+// RecordResult updates the most recent pending event for the given primitive
+// with its outcome. Called by sensory when a return wave arrives.
+func (m *MotorCell) RecordResult(primitive, status, detail string) {
+	if m == nil {
+		return
+	}
+	for i := len(m.events) - 1; i >= 0; i-- {
+		if m.events[i].Primitive == primitive && m.events[i].Status == "pending" {
+			m.events[i].Status = status
+			m.events[i].Detail = detail
+			return
+		}
+	}
+}
+
+func (m *MotorCell) appendEvent(ev MotorEvent) {
+	m.events = append(m.events, ev)
+	if len(m.events) > motorEventCap {
+		m.events = m.events[len(m.events)-motorEventCap:]
+	}
 }
 
 func NewMotorCell(ctx BuildContext) *MotorCell {
@@ -155,15 +189,41 @@ func (m *MotorCell) readProposal() (string, *MemoryCell, Prediction, bool) {
 	return "", nil, Prediction{}, false
 }
 
+const motorMaxRetries = 2
+
 func (m *MotorCell) inferAction(proposal Prediction) (PrimitiveEmission, bool) {
 	if m.infer == nil {
 		return PrimitiveEmission{}, false
 	}
-	resp, err := m.infer(motorSystem, fmt.Sprintf("Proposal:\n%s", proposal.Text))
-	if err != nil {
-		return PrimitiveEmission{}, false
+	worldState := ""
+	gist := ""
+	if m.midLevel != nil {
+		worldState = m.midLevel.WorldState()
+		gist = m.midLevel.Gist()
 	}
-	return ParseMotorEmission(resp)
+	recentActions := m.formatEvents()
+	present := fmt.Sprintf("Framing: %s\n\n%s\n\nRecent actions:\n%s\n\nInner thought:\n%s", gist, worldState, recentActions, proposal.Text)
+
+	for attempt := 1; attempt <= motorMaxRetries; attempt++ {
+		debug.Being("skyra", "motor", fmt.Sprintf("inference start (attempt %d): %q", attempt, proposal.Text))
+		resp, err := m.infer(motorSystem, present)
+		if err != nil {
+			debug.Being("skyra", "motor", fmt.Sprintf("inference error: %v", err))
+			return PrimitiveEmission{}, false
+		}
+		debug.Being("skyra", "motor", fmt.Sprintf("inference end (attempt %d)", attempt))
+		debug.Being("skyra", "motor", fmt.Sprintf("raw response: %q", resp))
+
+		if emission, ok := ParseMotorEmission(resp); ok {
+			return emission, true
+		}
+
+		debug.Being("skyra", "motor", fmt.Sprintf("parse failed (attempt %d) — retrying with correction", attempt))
+		present = fmt.Sprintf("%s\n\n---\nYour previous response was:\n%s\n\nThat could not be parsed. You MUST reply with exactly one of these forms and nothing else:\n<engage><michael>words to say</michael></engage>\n<move><michael></michael></move>\n<perceive></perceive>", present, resp)
+	}
+
+	debug.Being("skyra", "motor", "parse failed after all retries")
+	return PrimitiveEmission{}, false
 }
 
 func (m *MotorCell) appendAction(proposal *MemoryCell, action ActionRecord) {
@@ -184,8 +244,26 @@ func (m *MotorCell) appendAction(proposal *MemoryCell, action ActionRecord) {
 	}
 }
 
+func (m *MotorCell) formatEvents() string {
+	if len(m.events) == 0 {
+		return "  (none)"
+	}
+	var b []byte
+	for _, ev := range m.events {
+		line := fmt.Sprintf("  - %s → %s: %s", ev.Primitive, ev.Target, ev.Status)
+		if ev.Detail != "" {
+			line += " (" + ev.Detail + ")"
+		}
+		b = append(b, line...)
+		b = append(b, '\n')
+	}
+	return string(b)
+}
+
 // Express emits the concrete action collapsed in Observe. Fires the action to the
 // world in a goroutine so the kernel's traversal lock is not held during the new wave.
+// For engage actions, records the utterance back into sensory so the frame includes
+// what Skyra said (not just what she received).
 func (m *MotorCell) Express(origin skyra.Space, impulse any) any {
 	if m.pending == nil {
 		return nil
@@ -195,10 +273,35 @@ func (m *MotorCell) Express(origin skyra.Space, impulse any) any {
 	if m.emit != nil {
 		go m.emit(action.Impulse)
 	}
+	m.appendEvent(MotorEvent{
+		Primitive: action.Primitive,
+		Target:    action.EntityID,
+		Status:    "pending",
+	})
+	if action.Primitive == "engage" && m.midLevel != nil {
+		if payload, ok := action.Content.(string); ok && payload != "" {
+			if s := m.midLevel.Sensory(); s != nil {
+				s.RecordOutgoing(payload, action.EntityID)
+			}
+		}
+	}
 	return action
 }
 
-const motorSystem = "You are Skyra's motor. Convert the proposal into one concrete primitive emission. Reply with only one of these forms: <engage><michael>words</michael></engage> or <perceive>what to attend to</perceive>"
+const motorSystem = "You are Skyra's motor system. You receive an instruction from Skyra's inner voice telling you what to do next. Execute it as exactly one concrete primitive.\n\n" +
+	"Rules:\n" +
+	"- If the instruction is to say or communicate something — use engage, then wait a few seconds to give the other person time to reply before acting again.\n" +
+	"- If the instruction is to move somewhere — use move.\n" +
+	"- If the instruction is to sense the surroundings or find Skyra's position — use perceive.\n" +
+	"- If the instruction is to wait or pause — use wait with the number of seconds.\n" +
+	"- After sending a message (engage), use wait (3-5 seconds) rather than immediately engaging again — let the conversation breathe.\n" +
+	"- When actively exploring (maze, environment) and not waiting for a reply — prefer move or perceive over engage.\n\n" +
+	"Reply with only one of these forms:\n" +
+	"<engage><michael>words to say</michael></engage>   — say something to an entity\n" +
+	"<move><5,3></move>                                 — move to absolute coord (x,y)\n" +
+	"<move><michael></move>                             — move to where an agent is\n" +
+	"<perceive></perceive>                              — sense the surroundings\n" +
+	"<wait><10>reason for waiting</wait>                — pause for N seconds, then continue"
 
 // ActionRecord is the motor-side record for proposal/action realization.
 // ProposalID is the realization marker — which proposal this action realized
@@ -216,9 +319,13 @@ type ActionRecord struct {
 func (a ActionRecord) String() string {
 	switch a.Primitive {
 	case "engage":
-		return fmt.Sprintf("<engage><%s>%v</%s></engage>", a.EntityID, a.Content, a.EntityID)
+		return fmt.Sprintf("<engage><%s/></engage>", a.EntityID)
+	case "move":
+		return fmt.Sprintf("<move><%s></%s></move>", a.EntityID, a.EntityID)
 	case "perceive":
-		return fmt.Sprintf("<perceive>%v</perceive>", a.Content)
+		return "<perceive/>"
+	case "wait":
+		return fmt.Sprintf("<wait><%s/></wait>", a.EntityID)
 	default:
 		return fmt.Sprint(a.Content)
 	}

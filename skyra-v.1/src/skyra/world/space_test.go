@@ -150,8 +150,9 @@ func TestPointContentReadsWorldOccupancy(t *testing.T) {
 
 	p := w.newPoint(2, 3)
 
-	if got := p.Content(); got != actor {
-		t.Fatalf("content = %v, want actor", got)
+	occupants, ok := p.Content().(map[string]skyra.Space)
+	if !ok || occupants["skyra"] != actor {
+		t.Fatalf("content = %v, want occupants map containing actor", p.Content())
 	}
 }
 
@@ -186,8 +187,8 @@ func TestPointExpressPerceive(t *testing.T) {
 	if result.PointID != "0,0" {
 		t.Fatalf("point id = %q, want 0,0", result.PointID)
 	}
-	if result.Content != actor {
-		t.Fatalf("content = %v, want actor", result.Content)
+	if occ, ok := result.Content.(map[string]skyra.Space); !ok || occ["skyra"] != actor {
+		t.Fatalf("content = %v, want occupants map containing actor", result.Content)
 	}
 	if result.Agents["skyra"] != actor {
 		t.Fatalf("agents = %+v, want skyra occupant", result.Agents)
@@ -226,8 +227,8 @@ func TestPointExpressEngage(t *testing.T) {
 	if !result.OK {
 		t.Fatalf("engage failed: %+v", result)
 	}
-	if result.Content != actor {
-		t.Fatalf("content = %v, want actor", result.Content)
+	if occ, ok := result.Content.(map[string]skyra.Space); !ok || occ["skyra"] != actor {
+		t.Fatalf("content = %v, want occupants map containing actor", result.Content)
 	}
 	if result.Agents["skyra"] != actor {
 		t.Fatalf("agents = %+v, want skyra occupant", result.Agents)
@@ -386,5 +387,69 @@ func TestWorldEngageBoundaryDeliversImpulseAndReturnsRecipients(t *testing.T) {
 	}
 	if report.Delivered["michael"] != target {
 		t.Fatalf("delivered = %+v, want michael target", report.Delivered)
+	}
+}
+
+// Regression for the 2026-07-02 ghost bug (captains-log/observations/
+// 03-first-embodied-runs.md): agents overlap on a cell, and the world must
+// keep every occupant addressable. Under the old map[coord]Space placement,
+// the last arrival overwrote the occupant — the buried agent stayed in
+// position but vanished from occupancy, and agentByID (which resolved through
+// the cell) returned the burier. Skyra stood on the exit and erased it;
+// michael stood on skyra and erased her; every engage "to skyra" after that
+// was delivered to michael alone.
+func TestOverlapKeepsAllOccupantsAddressable(t *testing.T) {
+	w := NewSized(nil, 20)
+	exit := &fakeSpace{id: "exit", slice: NewSlice("exit-slice", "exit")}
+	skyraB := &fakeSpace{id: "skyra", slice: NewSlice("skyra-slice", "skyra")}
+	michael := &fakeSpace{id: "michael", slice: NewSlice("michael-slice", "michael")}
+
+	w.Place(exit, 7, 8)
+	w.Place(skyraB, 5, 5)
+	w.Place(michael, 3, 3)
+
+	// skyra steps onto the exit's cell — overlap, exit reported as occupant.
+	occupants, moved := w.Place(skyraB, 7, 8)
+	if !moved {
+		t.Fatalf("overlap move did not complete")
+	}
+	if len(occupants) != 1 || occupants[0] != exit {
+		t.Fatalf("occupants = %v, want [exit]", occupants)
+	}
+
+	// michael joins the same cell — both existing occupants reported.
+	occupants, _ = w.Place(michael, 7, 8)
+	if len(occupants) != 2 {
+		t.Fatalf("occupants = %v, want exit and skyra", occupants)
+	}
+
+	// the cell reports every occupant (perception/delivery read path).
+	agents := w.newPoint(7, 8).Agents()
+	for _, id := range []string{"exit", "skyra", "michael"} {
+		if agents[id] == nil {
+			t.Fatalf("point agents missing %q: %+v", id, agents)
+		}
+	}
+
+	// identity never routes through occupancy: everyone still resolves to
+	// themselves, no matter who stands on whom.
+	if got := w.agentByID("exit"); got != exit {
+		t.Fatalf("agentByID(exit) = %v, want exit", got)
+	}
+	if got := w.agentByID("skyra"); got != skyraB {
+		t.Fatalf("agentByID(skyra) = %v, want skyra", got)
+	}
+
+	// michael moves away — the others remain on the cell, michael lands cleanly.
+	w.Place(michael, 9, 9)
+	agents = w.newPoint(7, 8).Agents()
+	if agents["michael"] != nil {
+		t.Fatalf("michael still on 7,8 after leaving: %+v", agents)
+	}
+	if agents["exit"] == nil || agents["skyra"] == nil {
+		t.Fatalf("departure evicted co-occupants: %+v", agents)
+	}
+	if got := w.newPoint(9, 9).Agents()["michael"]; got != michael {
+		t.Fatalf("michael not at 9,9 after move")
 	}
 }
