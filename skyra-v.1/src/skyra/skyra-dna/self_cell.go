@@ -29,10 +29,12 @@ type SelfCell struct {
 	infer    InferFunc
 	motor    *MotorCell // MVP: self → motor directly (voting is parked)
 
-	// reframed — per-wave slice-state (dispatch): set when this wave's execution
-	// grade was a hard failure and kicked a reframe, so Express aborts the stroke
-	// instead of spawning motor. Reset at Observe entry.
-	reframed bool
+	// plannedThisWave — per-wave slice-state (dispatch): the C wiring rule. Motor
+	// is spawned only if self actually deposited a plan this wave. False on a
+	// grade-only wave (stroke 2 reafference) or a reframe-aborted wave → motor is
+	// not fired on a stale intent. Reset false at Observe entry, set true when a
+	// proposal is appended.
+	plannedThisWave bool
 }
 
 func NewSelfCell(ctx BuildContext, midLevel *MidLevelCell) *SelfCell {
@@ -78,21 +80,21 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 	if s.midLevel == nil || s.infer == nil {
 		return
 	}
-	s.reframed = false
+	s.plannedThisWave = false
 	if graded, failed, summary := s.gradePrior(); graded && failed {
 		// Hard execution failure → the framing was wrong (it asked for the
 		// impossible). Kick MidLevel to reframe with the failure in the present
 		// and abort: the reframe re-run replans under a framing that accounts for
-		// what the world actually allows.
+		// what the world actually allows. plannedThisWave stays false → Express
+		// skips motor (the C rule subsumes the reframe skip).
 		s.spawnReframe(summary)
-		s.reframed = true
 		return
 	}
 	groupID, grouping := s.mostRecentGrouping()
 	if grouping == nil {
 		return
 	}
-	frame := s.renderPrompt(grouping)
+	frame := s.renderPrompt(grouping, routeOf(impulse))
 	debug.Being("skyra", "self", fmt.Sprintf("════════════ frame t=%d ════════════\n%s\n════════════════════════════════════", sliceCount(s.midLevel.Slice()), frame))
 	debug.Being("skyra", "self", "inference start")
 	resp, err := s.infer(selfSystem, frame)
@@ -103,6 +105,7 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 	debug.Being("skyra", "self", "inference end")
 	if text, ok := ParsePrediction(resp); ok {
 		s.appendPrediction(groupID, grouping, text)
+		s.plannedThisWave = true // the C rule: motor may fire this wave
 		debug.Being("skyra", "self", "prediction="+text)
 	}
 }
@@ -112,8 +115,10 @@ func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 // reads it off the slice. The spawn is a bare trigger. MVP: bypasses voting entirely.
 // [later: voting tallies self/other; grade against reafference]
 func (s *SelfCell) Express(origin skyra.Space, impulse any) any {
-	if s.reframed {
-		debug.Being("skyra", "self", "express: reframed — stroke aborted, reframe re-run continues")
+	if !s.plannedThisWave {
+		// The C wiring rule: no plan deposited this wave (grade-only / reframe-
+		// aborted) → do NOT spawn motor, or it would fire a stale intent.
+		debug.Being("skyra", "self", "express: no plan this wave — motor not spawned")
 		return nil
 	}
 	if s.kernel != nil && s.motor != nil {
@@ -179,10 +184,11 @@ func (s *SelfCell) mostRecentGrouping() (string, skyra.Space) {
 	return bestID, best
 }
 
-// renderPrompt assembles the self-agent's present: the framing (gist), what the
-// OTHER is expected to do (other's prediction — surfaced off the grouping, the
-// "self relies on other"), and the exchange.
-func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
+// renderPrompt assembles the self-agent's present: the framing (gist), how well
+// the last read of the other held up (the verdict on the wave), what the OTHER is
+// expected to do next (other's prediction — "self relies on other"), and the
+// exchange.
+func (s *SelfCell) renderPrompt(grouping skyra.Space, verdict *Route) string {
 	gist := ""
 	var distLines []string
 	if mc, ok := grouping.(*MemoryCell); ok {
@@ -226,8 +232,16 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 	if otherDist == "" {
 		otherDist = "(no prediction)"
 	}
-	return fmt.Sprintf("Framing: %s\n\nWorld state:\n%s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
-		gist, s.midLevel.WorldState(), otherDist, renderFrame(s.midLevel.Frame()))
+	tracking := ""
+	if verdict != nil && verdict.Kind == RouteVerdict {
+		if verdict.Matched {
+			tracking = fmt.Sprintf("Your read of the other has been holding up (last move landed at confidence %.2f).\n\n", verdict.Score)
+		} else {
+			tracking = "Your read of the other just missed — stay flexible.\n\n"
+		}
+	}
+	return fmt.Sprintf("Framing: %s\n\n%sWorld state:\n%s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
+		gist, tracking, s.midLevel.WorldState(), otherDist, renderFrame(s.midLevel.Frame()))
 }
 
 // appendPrediction stamps skyra's predicted move onto the grouping cell as a child

@@ -34,6 +34,10 @@ type OtherCell struct {
 	// spawning self. Reset at Observe entry. (Wave-scoped; concurrency-safety
 	// comes with the substrate pass — one wave per cell today.)
 	reframed bool
+	// verdict — the grade outcome to hand self on the wave this stroke
+	// (verdict-on-wave). nil when there was nothing to grade. Attached to the
+	// self-spawn impulse's Route in Express.
+	verdict *Route
 }
 
 func NewOtherCell(ctx BuildContext, midLevel *MidLevelCell) *OtherCell {
@@ -82,9 +86,10 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 		return
 	}
 	o.reframed = false // per-wave slice-state, reset at entry
+	o.verdict = nil    // the grade outcome handed to self this wave (verdict-on-wave)
 	if imp, ok := asImpulse(impulse); ok && externalEngage(imp, o.ownerID) {
 		if evidence, ok := imp.Payload.(string); ok && evidence != "" {
-			graded, matched, summary := o.gradePrior(evidence)
+			graded, matched, score, summary := o.gradePrior(evidence)
 			// Total miss → the FRAMING is wrong, not just the bet. Kick MidLevel
 			// to reframe with the failure in the present, and abort this stroke:
 			// the reframe re-run drives a fresh prediction under the corrected
@@ -95,6 +100,11 @@ func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 				o.spawnReframe(summary)
 				o.reframed = true
 				return // skip predict-under-stale-framing
+			}
+			// Match → carry the verdict to self on the wave (verdict-on-wave), so
+			// self conditions on the grade outcome without racing a slice read.
+			if graded {
+				o.verdict = &Route{Kind: RouteVerdict, Matched: matched, Score: score}
 			}
 		}
 	}
@@ -130,9 +140,18 @@ func (o *OtherCell) Express(origin skyra.Space, impulse any) any {
 	}
 	if o.kernel != nil && o.self != nil {
 		debug.Being("skyra", "other", "express → self")
-		go o.kernel.Realize(o.self, o.self, impulse)
+		go o.kernel.Realize(o.self, o.self, o.selfImpulse(impulse))
 	}
 	return nil
+}
+
+// selfImpulse forwards the wave to self, attaching this stroke's grade verdict on
+// the Route (verdict-on-wave) so self conditions on it directly. Preserves the
+// incoming impulse's fields; only the Route is set.
+func (o *OtherCell) selfImpulse(impulse any) skyra.Impulse {
+	imp, _ := asImpulse(impulse)
+	imp.Route = o.verdict // nil on a wave with nothing graded — self plans unconditioned
+	return imp
 }
 
 // spawnReframe kicks MidLevel to re-frame with the failure in the present. The
@@ -290,10 +309,10 @@ const graderSystem = "You are a strict, impartial judge. You are given numbered 
 // graded=true is a TOTAL MISS (the distribution put zero mass on what happened)
 // — the trigger for grade-driven re-framing. summary is the failure description
 // (dead bets + the evidence that killed them) for the reframe present.
-func (o *OtherCell) gradePrior(evidence string) (graded, matched bool, summary string) {
+func (o *OtherCell) gradePrior(evidence string) (graded, matched bool, score float64, summary string) {
 	rootKey, root, kidKeys, kids := o.latestUngradedDistribution()
 	if root == nil || len(kids) == 0 {
-		return false, false, ""
+		return false, false, 0, ""
 	}
 
 	var lines []string
@@ -309,17 +328,17 @@ func (o *OtherCell) gradePrior(evidence string) (graded, matched bool, summary s
 	resp, err := o.infer(graderSystem, present)
 	if err != nil {
 		debug.Being("skyra", "other", fmt.Sprintf("grade inference error: %v", err))
-		return false, false, ""
+		return false, false, 0, ""
 	}
 	idx, matched, ok := ParseMatch(resp)
 	if !ok {
 		debug.Being("skyra", "other", fmt.Sprintf("grade parse failed: %q", resp))
-		return false, false, ""
+		return false, false, 0, ""
 	}
 
 	// Score in CODE from the stored probability — the judge never sees or
 	// reports a number.
-	score := 0.0
+	score = 0.0
 	if matched && idx >= 1 && idx <= len(kids) {
 		if p, ok := kids[idx-1].Content().(Prediction); ok {
 			score = p.Probability
@@ -355,7 +374,7 @@ func (o *OtherCell) gradePrior(evidence string) (graded, matched bool, summary s
 		summary = fmt.Sprintf("expected one of:\n%s\nbut what arrived was:\n%s",
 			strings.Join(lines, "\n"), evidence)
 	}
-	return true, matched, summary
+	return true, matched, score, summary
 }
 
 // latestUngradedDistribution finds the newest ungraded other-pred root across

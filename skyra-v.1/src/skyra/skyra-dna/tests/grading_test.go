@@ -123,7 +123,9 @@ func TestOtherGradesPriorDistribution(t *testing.T) {
 
 // A full miss scores zero — the distribution put no mass on what happened.
 func TestOtherGradeNoneScoresZero(t *testing.T) {
-	m, _ := newBeingWithInfer("skyra", gradingMock(t, "<match>none</match>", "<grade>yes</grade>", nil))
+	// spy kernel: the grade-none reframe spawn is captured, not cascaded (async
+	// re-entry would race the per-wave cell fields — the deferred substrate pass).
+	m := newBeingWith("skyra", newSpyKernel(), gradingMock(t, "<match>none</match>", "<grade>yes</grade>", nil))
 	mid := m.Sensory().MidLevel()
 
 	runCycle(m, 1, engageFrom("michael", "can you help me with the skyra project"))
@@ -164,7 +166,7 @@ func TestOtherGradeSkipsSelfInitiated(t *testing.T) {
 // execution judge → grade stamped on the proposal. And a realized proposal is
 // consumed — motor never fires it twice.
 func TestSelfGradesRealizedProposal(t *testing.T) {
-	m, _ := newBeingWithInfer("skyra", gradingMock(t, "<match>none</match>", "<grade>yes</grade>", nil))
+	m := newBeingWith("skyra", newSpyKernel(), gradingMock(t, "<match>none</match>", "<grade>yes</grade>", nil))
 	sensory := m.Sensory()
 	mid := sensory.MidLevel()
 	self := mid.Other().Self()
@@ -316,7 +318,10 @@ func TestReframeReRunDoesNotRegrade(t *testing.T) {
 			return "<label>init</label>", nil
 		}
 	}
-	m, _ := newBeingWithInfer("skyra", mock)
+	// spy kernel: other's grade-none reframe spawn is captured, not cascaded, so
+	// the reframe re-run is driven deterministically below (a real cascade would
+	// re-enter other concurrently and race the per-wave fields — substrate pass).
+	m := newBeingWith("skyra", newSpyKernel(), mock)
 	mid := m.Sensory().MidLevel()
 	other := mid.Other()
 
@@ -325,7 +330,7 @@ func TestReframeReRunDoesNotRegrade(t *testing.T) {
 	m.Sensory().Slice().SetCount(2)
 	imp := engageFrom("michael", "surprise")
 	m.Sensory().Observe(nil, imp)
-	other.Observe(nil, imp) // grades once → none → reframe
+	other.Observe(nil, imp) // grades once → none → reframe (spawn captured on spy)
 
 	// simulate the reframe re-run reaching other with the internal reframe impulse
 	reframeImp := skyra.Impulse{
@@ -396,5 +401,69 @@ func TestSelfExecFailureTriggersReframe(t *testing.T) {
 	// stroke aborted — Express does not spawn motor
 	if got := self.Express(nil, imp); got != nil {
 		t.Fatalf("self.Express returned %v after reframe, want nil", got)
+	}
+}
+
+// Verdict-on-wave: on a matched grade, other hands the verdict to self on the
+// impulse Route (not via a slice read), and self folds it into its planning
+// prompt. Sequential proof of the plumbing the concurrent fan-out relies on.
+func TestVerdictRidesTheWaveToSelf(t *testing.T) {
+	var selfPresent string
+	mock := func(system, present string) (string, error) {
+		switch {
+		case strings.Contains(system, "impartial judge") && !strings.Contains(system, "execution"):
+			return "<match>2</match>", nil // matched branch 2 (p=0.30)
+		case strings.Contains(system, "External Perspective"):
+			return `<predictions>
+  <prediction p="0.70">ask about A</prediction>
+  <prediction p="0.30">ask about B</prediction>
+</predictions>`, nil
+		case strings.Contains(system, "You are Skyra's inner voice"):
+			selfPresent = present
+			return "<prediction>answer B</prediction>", nil
+		default:
+			return "<label>help</label>", nil
+		}
+	}
+	spy := newSpyKernel()
+	m := newBeingWith("skyra", spy, mock)
+	mid := m.Sensory().MidLevel()
+	other := mid.Other()
+	self := other.Self()
+
+	// cycle 1: bet a distribution
+	m.Sensory().Slice().SetCount(1)
+	mid.Slice().SetCount(1)
+	c1 := engageFrom("michael", "hello")
+	m.Sensory().Observe(nil, c1)
+	mid.Observe(nil, c1)
+	other.Observe(nil, c1)
+
+	// cycle 2: evidence matches branch 2 → other stores a verdict; Express hands
+	// it to self on the wave
+	mid.Slice().SetCount(2)
+	m.Sensory().Slice().SetCount(2)
+	c2 := engageFrom("michael", "tell me about B")
+	m.Sensory().Observe(nil, c2)
+	other.Observe(nil, c2)
+	other.Express(nil, c2) // spawns self with the verdict on the Route
+
+	select {
+	case call := <-spy.calls:
+		if call.traversed == nil || call.traversed.ID() != "skyra:self" {
+			t.Fatalf("other spawned %v, want skyra:self", call.traversed)
+		}
+		r, _ := call.impulse.(skyra.Impulse).Route.(*dna.Route)
+		if r == nil || r.Kind != dna.RouteVerdict || !r.Matched || r.Score != 0.30 {
+			t.Fatalf("verdict on wave = %+v, want RouteVerdict matched score 0.30", r)
+		}
+		// drive self with the verdict-carrying impulse
+		self.Observe(call.origin, call.impulse)
+	case <-time.After(time.Second):
+		t.Fatal("other did not spawn self")
+	}
+
+	if !strings.Contains(selfPresent, "holding up") || !strings.Contains(selfPresent, "0.30") {
+		t.Fatalf("self prompt did not reflect the verdict: %q", selfPresent)
 	}
 }
