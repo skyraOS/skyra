@@ -189,45 +189,12 @@ func (s *SelfCell) mostRecentGrouping() (string, skyra.Space) {
 // expected to do next (other's prediction — "self relies on other"), and the
 // exchange.
 func (s *SelfCell) renderPrompt(grouping skyra.Space, verdict *Route) string {
-	gist := ""
-	var distLines []string
-	if mc, ok := grouping.(*MemoryCell); ok {
-		if g, ok := mc.Content().(Gist); ok {
-			gist = g.Text
-		}
-		// find the LATEST other-pred root (per-cycle keys mean graded history
-		// persists — read this cycle's bet, not an old one), then its children
-		// sorted by probability
-		var latest *MemoryCell
-		latestTS := -1
-		for _, child := range mc.Children() {
-			root, ok := child.(*MemoryCell)
-			if !ok {
-				continue
-			}
-			p, ok := root.Content().(Prediction)
-			if !ok || p.Role != "other" || len(root.Children()) == 0 {
-				continue
-			}
-			if p.Timestamp > latestTS {
-				latestTS, latest = p.Timestamp, root
-			}
-		}
-		if latest != nil {
-			var preds []Prediction
-			for _, grandchild := range latest.Children() {
-				if pp, ok := grandchild.Content().(Prediction); ok && pp.Role == "other" {
-					preds = append(preds, pp)
-				}
-			}
-			sort.Slice(preds, func(i, j int) bool {
-				return preds[i].Probability > preds[j].Probability
-			})
-			for _, pp := range preds {
-				distLines = append(distLines, fmt.Sprintf("  p=%.2f  %s", pp.Probability, pp.Text))
-			}
-		}
-	}
+	// The grouping's children (other's live distribution) are on MidLevel's slice
+	// and other writes them concurrently in the fan-out — snapshot them UNDER
+	// MidLevel's lock (dispatch-model.md, the cross-cell read contract). The lock
+	// is released before the WorldState/renderFrame reads below (those lock their
+	// own slices).
+	gist, distLines := s.readOtherDistribution(grouping)
 	otherDist := strings.Join(distLines, "\n")
 	if otherDist == "" {
 		otherDist = "(no prediction)"
@@ -242,6 +209,56 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space, verdict *Route) string {
 	}
 	return fmt.Sprintf("Framing: %s\n\n%sWorld state:\n%s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
 		gist, tracking, s.midLevel.WorldState(), otherDist, renderFrame(s.midLevel.Frame()))
+}
+
+// readOtherDistribution snapshots (gist, sorted distribution lines) off the
+// grouping UNDER MidLevel's lock — the cross-cell read contract. Returns value
+// copies; no live grouping reference is read outside the lock.
+func (s *SelfCell) readOtherDistribution(grouping skyra.Space) (gist string, distLines []string) {
+	mc, ok := grouping.(*MemoryCell)
+	if !ok {
+		return "", nil
+	}
+	sl := s.midLevel.Slice()
+	if sl != nil {
+		sl.Lock()
+		defer sl.Unlock()
+	}
+	if g, ok := mc.Content().(Gist); ok {
+		gist = g.Text
+	}
+	// the LATEST other-pred root (per-cycle keys → graded history persists), then
+	// its children sorted by probability
+	var latest *MemoryCell
+	latestTS := -1
+	for _, child := range mc.Children() {
+		root, ok := child.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		p, ok := root.Content().(Prediction)
+		if !ok || p.Role != "other" || len(root.Children()) == 0 {
+			continue
+		}
+		if p.Timestamp > latestTS {
+			latestTS, latest = p.Timestamp, root
+		}
+	}
+	if latest != nil {
+		var preds []Prediction
+		for _, grandchild := range latest.Children() {
+			if pp, ok := grandchild.Content().(Prediction); ok && pp.Role == "other" {
+				preds = append(preds, pp)
+			}
+		}
+		sort.Slice(preds, func(i, j int) bool {
+			return preds[i].Probability > preds[j].Probability
+		})
+		for _, pp := range preds {
+			distLines = append(distLines, fmt.Sprintf("  p=%.2f  %s", pp.Probability, pp.Text))
+		}
+	}
+	return gist, distLines
 }
 
 // appendPrediction stamps skyra's predicted move onto the grouping cell as a child

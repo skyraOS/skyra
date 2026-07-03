@@ -209,8 +209,19 @@ func (g *MidLevelCell) startGrouping(gist string, trigger *MemoryCell) {
 	groupingCell := NewMemoryCell(groupID, KindGrouping, Gist{Text: gist, Timestamp: ts}, g.slice)
 	// gist tokens — attention roots / working memory seeds; no pronoun map
 	// (gist is LLM-generated third-person framing, speaker context absent).
+	// tokenize MUTATES sensory's entity index (the shared token web), so it is a
+	// cross-cell write — hold sensory's lock around it (substrate pass). (This
+	// cross-cell write is a known single-writer wart; a cleaner factoring has
+	// sensory own all its writes — deferred.)
 	if g.sensory != nil {
-		toks := g.sensory.tokenize(gist, nil)
+		var toks []*MemoryCell
+		if sl := g.sensory.Slice(); sl != nil {
+			sl.Lock()
+			toks = g.sensory.tokenize(gist, nil)
+			sl.Unlock()
+		} else {
+			toks = g.sensory.tokenize(gist, nil)
+		}
 		var tokIDs []string
 		for _, tok := range toks {
 			groupingCell.AddChild(groupID+"→"+tok.ID(), tok)
@@ -345,6 +356,13 @@ func (g *MidLevelCell) Frame() []ParsedNode { return g.frame }
 func (g *MidLevelCell) WorldState() string {
 	if g.sensory == nil {
 		return ""
+	}
+	// Cross-cell read of sensory's ByEntity + SelfCoord — hold sensory's lock
+	// across the whole iteration (substrate pass; serializes against sensory's
+	// Observe writes). SelfCoord is called only here and does not re-lock.
+	if sl := g.sensory.Slice(); sl != nil {
+		sl.Lock()
+		defer sl.Unlock()
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Below is your world state — the locations of each entity within the world you inhabit.\n")

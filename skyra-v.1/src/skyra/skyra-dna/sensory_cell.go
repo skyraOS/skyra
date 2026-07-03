@@ -116,6 +116,17 @@ func (s *SensoryCell) SelfCoord() (skyra.Coord, bool) {
 }
 
 func (s *SensoryCell) Observe(origin skyra.Space, impulse any) {
+	// Sensory does NO inference here — its whole body is bookkeeping (ByEntity,
+	// entity children, per-edge presence Records). With the kernel no longer
+	// holding the slice lock across Observe (substrate pass), sensory guards its
+	// own state so concurrent waves (and cross-cell readers — assembleFrame,
+	// WorldState) serialize on this lock. Helpers it calls (ensureEntity,
+	// refreshPresence, appendInteractionRecord, tokenize, timestamp) assume the
+	// lock is held and must not re-lock.
+	if s.slice != nil {
+		s.slice.Lock()
+		defer s.slice.Unlock()
+	}
 	imp, ok := asImpulse(impulse)
 
 	// bump: two agents collided. Return = mover's side; non-return = occupant's side.
@@ -419,7 +430,12 @@ func (s *SensoryCell) refreshPresence(perceived string, hasPerceived bool) {
 
 // Presence is the entity's recency on its sensory edge — the fast EMA, the
 // "is this entity around right now" read (working memory). 0 if unknown.
+// Locks sensory's slice (cross-cell read of Records under the substrate model).
 func (s *SensoryCell) Presence(entityID string) float64 {
+	if s.slice != nil {
+		s.slice.Lock()
+		defer s.slice.Unlock()
+	}
 	if rec := s.record(entityID); rec != nil {
 		return rec.Familiarity
 	}
@@ -429,6 +445,10 @@ func (s *SensoryCell) Presence(entityID string) float64 {
 // Groove is the entity's durable familiarity on its sensory edge — the slow EMA,
 // "how well I know this entity," which survives absence. 0 if unknown.
 func (s *SensoryCell) Groove(entityID string) float64 {
+	if s.slice != nil {
+		s.slice.Lock()
+		defer s.slice.Unlock()
+	}
 	if rec := s.record(entityID); rec != nil {
 		return rec.Identity
 	}
@@ -472,6 +492,10 @@ func (s *SensoryCell) appendEntityState(entity *MemoryCell, state EntityState) {
 // it appears in the frame — the pipeline can see what it said, not just what it
 // received. Keyed on the target entity so the utterance lives on the right node.
 func (s *SensoryCell) RecordOutgoing(utterance, toEntityID string) {
+	if s.slice != nil {
+		s.slice.Lock()
+		defer s.slice.Unlock()
+	}
 	at := s.timestamp()
 	self := resolveEntity(s.ownerID)
 	target := resolveEntity(toEntityID)
