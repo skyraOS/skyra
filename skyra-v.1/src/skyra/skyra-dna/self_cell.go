@@ -55,13 +55,23 @@ func (s *SelfCell) Agents() map[string]skyra.Space {
 	return map[string]skyra.Space{s.motor.ID(): s.motor}
 }
 
-// Observe — the predict half: read the most-recent grouping (carrying other's
-// prediction), predict skyra's own next move under its framing, and append the
-// prediction onto the grouping.
+// Observe — grade half then predict half.
+//
+// Grade half (Stage A): self grades its prior proposal against EXECUTION only —
+// the action that realized it (ProposalID pairing) plus the world's reported
+// result (reafference). The other's reaction is other's lane. Destination:
+// motor running autonomously with predictions as guardrails — execution falling
+// outside the predicted envelope is the interrupt; this grade is that
+// mechanism's foundation.
+//
+// Predict half: read the most-recent grouping (carrying other's prediction),
+// predict skyra's own next move under its framing, and append the prediction
+// onto the grouping.
 func (s *SelfCell) Observe(origin skyra.Space, impulse any) {
 	if s.midLevel == nil || s.infer == nil {
 		return
 	}
+	s.gradePrior()
 	groupID, grouping := s.mostRecentGrouping()
 	if grouping == nil {
 		return
@@ -144,18 +154,27 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 		if g, ok := mc.Content().(Gist); ok {
 			gist = g.Text
 		}
-		// find the other-pred root node, read its children, sort by probability
+		// find the LATEST other-pred root (per-cycle keys mean graded history
+		// persists — read this cycle's bet, not an old one), then its children
+		// sorted by probability
+		var latest *MemoryCell
+		latestTS := -1
 		for _, child := range mc.Children() {
 			root, ok := child.(*MemoryCell)
 			if !ok {
 				continue
 			}
 			p, ok := root.Content().(Prediction)
-			if !ok || p.Role != "other" {
+			if !ok || p.Role != "other" || len(root.Children()) == 0 {
 				continue
 			}
+			if p.Timestamp > latestTS {
+				latestTS, latest = p.Timestamp, root
+			}
+		}
+		if latest != nil {
 			var preds []Prediction
-			for _, grandchild := range root.Children() {
+			for _, grandchild := range latest.Children() {
 				if pp, ok := grandchild.Content().(Prediction); ok && pp.Role == "other" {
 					preds = append(preds, pp)
 				}
@@ -177,8 +196,8 @@ func (s *SelfCell) renderPrompt(grouping skyra.Space) string {
 }
 
 // appendPrediction stamps skyra's predicted move onto the grouping cell as a child
-// (grouping → self-prediction), under MidLevel's lock. Stable key, overwrites last
-// cycle's.
+// (grouping → self-pred:ts), under MidLevel's lock. PER-CYCLE key — graded
+// proposals persist as history/closure candidates; motor reads latest-wins.
 func (s *SelfCell) appendPrediction(groupID string, grouping skyra.Space, text string) {
 	mc, ok := grouping.(*MemoryCell)
 	if !ok {
@@ -189,7 +208,147 @@ func (s *SelfCell) appendPrediction(groupID string, grouping skyra.Space, text s
 		sl.Lock()
 		defer sl.Unlock()
 	}
-	key := groupID + "→self-pred"
-	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "self", Timestamp: sliceCount(sl)}, sl)
+	ts := sliceCount(sl)
+	key := fmt.Sprintf("%s→self-pred:%d", groupID, ts)
+	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "self", Timestamp: ts}, sl)
 	mc.AddChild(key, pred)
+}
+
+// execGraderSystem — the execution judge. Adversarial-neutral, same posture as
+// the other-side grader: never told whose instruction it is, only compares
+// instruction to what was actually done.
+const execGraderSystem = "You are a strict, impartial judge of execution. You are given an " +
+	"instruction that was issued, the action that was actually taken, and any result " +
+	"reported by the environment.\n\n" +
+	"Decide whether the action faithfully executed the instruction. Be skeptical: doing " +
+	"something related but different is NOT faithful execution; a blocked or failed result " +
+	"means the instruction was not accomplished (at best partial).\n\n" +
+	"Reply with only one tag: <grade>yes</grade>, <grade>partial</grade>, or <grade>no</grade>."
+
+// gradePrior grades the newest ungraded self proposal that has been REALIZED
+// (has an action child — the ProposalID pairing made literal). Evidence =
+// the action + any world-reported result recorded after it. Snapshot under
+// MidLevel's lock, infer unlocked, write back under the lock. Unrealized
+// proposals are left alone (superseded ones simply decay — dropping a stale
+// intent is not a failure).
+func (s *SelfCell) gradePrior() {
+	key, proposal, pred, action, ok := s.latestUngradedRealized()
+	if !ok {
+		return
+	}
+
+	result := s.worldResultAfter(action.Timestamp)
+	if result == "" {
+		result = "(no result reported)"
+	}
+	present := fmt.Sprintf("Instruction:\n%s\n\nAction taken:\n%s %s %v\n\nEnvironment result:\n%s",
+		pred.Text, action.Primitive, action.EntityID, action.Content, result)
+
+	debug.Being("skyra", "self", "grade start (execution judge)")
+	resp, err := s.infer(execGraderSystem, present)
+	if err != nil {
+		debug.Being("skyra", "self", fmt.Sprintf("grade inference error: %v", err))
+		return
+	}
+	score, parsed := ParseExecGrade(resp)
+	if !parsed {
+		debug.Being("skyra", "self", fmt.Sprintf("grade parse failed: %q", resp))
+		return
+	}
+
+	sl := s.midLevel.Slice()
+	sl.Lock()
+	defer sl.Unlock()
+	pred.Graded, pred.Grade, pred.Evidence = true, score, result
+	proposal.SetContent(pred)
+	writeAlignment(sl, key, score)
+	debug.Being("skyra", "self", fmt.Sprintf("graded execution=%.1f proposal=%q", score, pred.Text))
+}
+
+// latestUngradedRealized finds the newest ungraded self proposal that has an
+// action child, under MidLevel's lock. Returns the proposal's edge key, the
+// cells, and the latest action record on it.
+func (s *SelfCell) latestUngradedRealized() (string, *MemoryCell, Prediction, ActionRecord, bool) {
+	sl := s.midLevel.Slice()
+	if sl == nil {
+		return "", nil, Prediction{}, ActionRecord{}, false
+	}
+	sl.Lock()
+	defer sl.Unlock()
+
+	var bestKey string
+	var best *MemoryCell
+	var bestPred Prediction
+	bestTS := -1
+	for _, gr := range s.midLevel.Groupings() {
+		mc, ok := gr.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		for key, child := range mc.Children() {
+			cc, ok := child.(*MemoryCell)
+			if !ok {
+				continue
+			}
+			p, ok := cc.Content().(Prediction)
+			if !ok || p.Role != "self" || p.Graded || len(cc.Children()) == 0 {
+				continue
+			}
+			if p.Timestamp > bestTS {
+				bestTS, bestKey, best, bestPred = p.Timestamp, key, cc, p
+			}
+		}
+	}
+	if best == nil {
+		return "", nil, Prediction{}, ActionRecord{}, false
+	}
+	var action ActionRecord
+	actionTS := -1
+	for _, child := range best.Children() {
+		cc, ok := child.(*MemoryCell)
+		if !ok || cc.Kind() != KindAction {
+			continue
+		}
+		if rec, ok := cc.Content().(ActionRecord); ok && rec.Timestamp > actionTS {
+			actionTS, action = rec.Timestamp, rec
+		}
+	}
+	if actionTS < 0 {
+		return "", nil, Prediction{}, ActionRecord{}, false
+	}
+	return bestKey, best, bestPred, action, true
+}
+
+// worldResultAfter reads the world's reported self-events (moved / blocked /
+// bumped) recorded at-or-after the action fired — the reafference evidence.
+// Reads sensory under ITS lock (lock order agent → sensory; nothing locks self).
+func (s *SelfCell) worldResultAfter(actionTS int) string {
+	sensory := s.midLevel.Sensory()
+	if sensory == nil || sensory.Slice() == nil {
+		return ""
+	}
+	sl := sensory.Slice()
+	sl.Lock()
+	defer sl.Unlock()
+
+	var lines []string
+	self, ok := sensory.ByEntity[s.midLevel.Sensory().ownerID]
+	if !ok {
+		return ""
+	}
+	mc, ok := self.(*MemoryCell)
+	if !ok {
+		return ""
+	}
+	for _, child := range mc.Children() {
+		cc, ok := child.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		if rec, ok := cc.Content().(InteractionRecord); ok && rec.Timestamp >= actionTS {
+			lines = append(lines, rec.Utterance)
+		}
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
 }

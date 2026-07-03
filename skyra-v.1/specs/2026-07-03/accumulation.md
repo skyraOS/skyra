@@ -40,16 +40,32 @@ Every agent grades its **own prior bets in its Observe, before predicting new on
 (pop the prior bet, grade it against what actually arrived, then bet again). This is
 the "grade half is later" TODO in `other_cell.go` / `self_cell.go` coming due.
 
+- **The grader is a separate, adversarial-neutral call** (ruled 2026-07-03: *"AI
+  will cheat if we tell it this prediction was yours"*). Never folded into the
+  predict call, never told the bets are its own, shown **no probabilities** (no
+  anchoring) — it only **identifies** the realized branch; the **score is assigned
+  by code** from the stored probability. The model cannot inflate a number it never
+  reports.
 - **Other:** grade the prior distribution against the next inbound utterance. The
   distribution is calibrated (sums to 1.0, falsifiable-by-next-message per the
-  prediction-falsifiability invariant), so grading is a **proper scoring rule**: one
-  cheap inference call — *which branch (if any) did this message realize* — and the
-  grade is the probability mass the distribution put on what happened. High p on the
-  realized branch = good bet; mass on a contradicted branch = negative signal.
+  prediction-falsifiability invariant), so grading is a **proper scoring rule**:
+  the judge picks the realized branch (or `none`), and the grade is the probability
+  mass the bet put on what happened. Gate (MVP): **external engage only** — other
+  predicts the *external*; self-initiated triggers (move/perceive returns) are
+  reafference, self's lane. *(Graduation path: other eventually predicts
+  environment change generally, not just utterances.)*
+- **Graded bets persist** (ruled): per-cycle keys, no stable-key overwrite —
+  everything above threshold stays on as closure candidates / history; decay
+  (Stage D) is the only forgetting. Readers (self's prompt, motor's proposal)
+  become latest-wins.
 - **Self:** grade the prior proposal against its **realization + reafference** — the
   `ProposalID` on the fired action already pairs them ("proposal ≠ action"); the
   world's return (engage delivered / move result / blocked) says whether the intent
-  executed.
+  executed. Self grades **execution only** — the other's reaction is other's lane
+  next cycle; keeping the evidence streams separate is what makes two-face closure
+  meaningful. *(Destination: motor running autonomously with predictions as
+  guardrails — execution falling outside the predicted envelope IS the interrupt.
+  Self-grading-against-execution is that mechanism's foundation.)*
 - **The relevance gate first** (error-recovery-loop.md): most inbound tests nothing —
   alignment ≈ 0 → **unchanged**, no grade, no reinforce. Never grade a bet on
   evidence that didn't test it.
@@ -61,10 +77,10 @@ the "grade half is later" TODO in `other_cell.go` / `self_cell.go` coming due.
   prediction becomes a **closure candidate** for Stage B.
 
 ### Changes
-- [ ] other: pop prior distribution on Observe → grading call → write grade + edge Alignment → then predict
-- [ ] self: pop prior proposal → pair via ProposalID + world return → grade → then predict
-- [ ] relevance gate: irrelevant evidence → carry over unchanged (no call where alignment obviously ≈ 0 — cheap check first)
-- [ ] `incoming → prediction` audit trail (which evidence tested which bet) — the WM index, kept while it earns its trace cost
+- [x] other: pop prior distribution on Observe → grading call → write grade + edge Alignment → then predict *(built 2026-07-03: `gradePrior`, per-cycle keys, judge identifies / code scores)*
+- [x] self: pop prior proposal → pair via ProposalID + world return → grade → then predict *(built 2026-07-03: `gradePrior` + `worldResultAfter` reafference; realized proposal = consumed — the duplicate-fire guard landed here)*
+- [x] relevance gate (MVP form): external-engage code gate for other; realized-only gate for self — no inference spent deciding relevance
+- [x] `incoming → prediction` audit trail — the `Evidence` field stamped on every graded prediction (which evidence tested which bet)
 
 ## Stage B — closure: the first setpoint `[after A]`
 

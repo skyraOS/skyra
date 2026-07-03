@@ -111,13 +111,19 @@ func predictions(mid *dna.MidLevelCell) (self, other string) {
 	if !ok {
 		return "", ""
 	}
+	// Per-cycle keys mean prediction history persists — show the LATEST of each.
+	selfTS, otherTS := -1, -1
 	for _, child := range mc.Children() {
 		if p, ok := child.Content().(dna.Prediction); ok {
 			switch p.Role {
 			case "self":
-				self = p.Text
+				if p.Timestamp > selfTS {
+					selfTS, self = p.Timestamp, p.Text
+				}
 			case "other":
-				other = p.Text
+				if p.Timestamp > otherTS {
+					otherTS, other = p.Timestamp, p.Text
+				}
 			}
 		}
 	}

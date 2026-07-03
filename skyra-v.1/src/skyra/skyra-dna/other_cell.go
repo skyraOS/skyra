@@ -2,6 +2,8 @@ package dna
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
@@ -20,6 +22,7 @@ import (
 // collapse to one AgentCell{role} once the shared shape is visible in code.
 type OtherCell struct {
 	id       string
+	ownerID  string
 	slice    skyra.Slice
 	kernel   skyra.Time
 	midLevel *MidLevelCell
@@ -30,6 +33,7 @@ type OtherCell struct {
 func NewOtherCell(ctx BuildContext, midLevel *MidLevelCell) *OtherCell {
 	o := &OtherCell{
 		id:       ctx.BeingID + ":other",
+		ownerID:  ctx.BeingID,
 		slice:    ctx.sliceFor(":other"),
 		kernel:   ctx.Kernel,
 		midLevel: midLevel,
@@ -53,14 +57,28 @@ func (o *OtherCell) Agents() map[string]skyra.Space {
 	return map[string]skyra.Space{o.self.ID(): o.self}
 }
 
-// Observe — the predict half: read the most-recent grouping (from MidLevel's
-// slice), predict the other's next move under its framing, and append the
-// prediction onto the grouping. Direct-read gather for now — cold-start groupings
-// have no setpoints to traverse; the wave-from-grouping enrichment lands once the
-// recursive-slice handling does.
+// Observe — grade half then predict half. Pop the prior bet, grade it against
+// the evidence that just arrived, then bet again.
+//
+// Grade half (Stage A): fires only on an EXTERNAL ENGAGE — other predicts the
+// external; self-initiated triggers (move/perceive returns) are reafference,
+// self's lane. The grader is a separate, adversarial-neutral call: never told
+// the bets are its own, shown no probabilities; it only identifies the realized
+// branch, and the score is assigned by code from the stored probability.
+//
+// Predict half: read the most-recent grouping (from MidLevel's slice), predict
+// the other's next move under its framing, and append the prediction onto the
+// grouping. Direct-read gather for now — cold-start groupings have no setpoints
+// to traverse; the wave-from-grouping enrichment lands once the recursive-slice
+// handling does.
 func (o *OtherCell) Observe(origin skyra.Space, impulse any) {
 	if o.midLevel == nil || o.infer == nil {
 		return
+	}
+	if imp, ok := asImpulse(impulse); ok && externalEngage(imp, o.ownerID) {
+		if evidence, ok := imp.Payload.(string); ok && evidence != "" {
+			o.gradePrior(evidence)
+		}
 	}
 	groupID, grouping := o.mostRecentGrouping()
 	if grouping == nil {
@@ -160,10 +178,10 @@ func (o *OtherCell) renderPrompt(grouping skyra.Space) string {
 }
 
 // appendPredictions writes the distribution onto the grouping as a root node
-// (grouping → other-pred-root) with one child per prediction
-// (other-pred-root → other-pred-N). Stable root key so the current cycle's
-// distribution overwrites last cycle's. Self reads the root's children to get
-// the full spread ("self relies on other").
+// (grouping → other-pred:ts) with one child per prediction
+// (other-pred:ts → other-pred:ts-N). PER-CYCLE keys — graded bets persist as
+// closure candidates / history (no stable-key overwrite; decay is the only
+// forgetting). Self reads the LATEST root's children ("self relies on other").
 func (o *OtherCell) appendPredictions(groupID string, grouping skyra.Space, preds []ParsedPrediction) {
 	mc, ok := grouping.(*MemoryCell)
 	if !ok {
@@ -175,10 +193,10 @@ func (o *OtherCell) appendPredictions(groupID string, grouping skyra.Space, pred
 		defer sl.Unlock()
 	}
 	ts := sliceCount(sl)
-	rootKey := groupID + "→other-pred"
+	rootKey := fmt.Sprintf("%s→other-pred:%d", groupID, ts)
 	root := NewMemoryCell(rootKey, KindPrediction, Prediction{Role: "other", Timestamp: ts}, sl)
 	for i, p := range preds {
-		childKey := fmt.Sprintf("%s→other-pred-%d", groupID, i)
+		childKey := fmt.Sprintf("%s→other-pred:%d-%d", groupID, ts, i)
 		child := NewMemoryCell(childKey, KindPrediction, Prediction{
 			Text:        p.Text,
 			Role:        "other",
@@ -198,6 +216,168 @@ type Prediction struct {
 	Role        string
 	Probability float64
 	Timestamp   int
+	// Grading (Stage A) — set once by the grade half; graded bets persist.
+	// For an other-distribution root, Grade is the probability mass the bet put
+	// on the branch that was realized (0 on a full miss) — the proper score.
+	// For a branch child, Grade is 1 (realized) or 0. For a self proposal,
+	// Grade is the execution verdict (1 / 0.5 / 0).
+	Graded   bool
+	Grade    float64
+	Evidence string
+}
+
+// externalEngage reports whether an impulse is another agent's utterance —
+// the only evidence that tests an other-prediction (the grade gate's MVP form).
+func externalEngage(imp skyra.Impulse, ownerID string) bool {
+	return !imp.Return && imp.Primitive == "engage" && imp.Source != nil &&
+		imp.Source.SpaceID != "" && imp.Source.SpaceID != ownerID
+}
+
+// graderSystem — the adversarial-neutral judge. It is never told the
+// predictions are its own and sees no probabilities (no anchoring); it only
+// identifies. Skeptical by instruction: near-misses are not matches.
+const graderSystem = "You are a strict, impartial judge. You are given numbered candidate " +
+	"predictions of what a message would say, and the message that actually arrived.\n\n" +
+	"Identify which single candidate the message realized, if any. A candidate matches " +
+	"only if the message actually satisfies what the candidate describes — be skeptical; " +
+	"near-misses and partial overlaps are NOT matches.\n\n" +
+	"Reply with only one tag: <match>N</match> (the matching candidate's number) or <match>none</match>."
+
+// gradePrior grades the most recent ungraded other-distribution against the
+// utterance that just arrived. Snapshot under MidLevel's lock → infer with the
+// lock RELEASED (the call can be slow) → write back under the lock. A failed
+// call or parse leaves the bet ungraded — it persists, and the next evidence
+// wave retries (slight evidence drift, accepted for the MVP).
+func (o *OtherCell) gradePrior(evidence string) {
+	rootKey, root, kidKeys, kids := o.latestUngradedDistribution()
+	if root == nil || len(kids) == 0 {
+		return
+	}
+
+	var lines []string
+	for i, kid := range kids {
+		if p, ok := kid.Content().(Prediction); ok {
+			lines = append(lines, fmt.Sprintf("[%d] %s", i+1, p.Text))
+		}
+	}
+	present := fmt.Sprintf("Candidate predictions:\n%s\n\nThe message that actually arrived:\n%s",
+		strings.Join(lines, "\n"), evidence)
+
+	debug.Being("skyra", "other", "grade start (judge)")
+	resp, err := o.infer(graderSystem, present)
+	if err != nil {
+		debug.Being("skyra", "other", fmt.Sprintf("grade inference error: %v", err))
+		return
+	}
+	idx, matched, ok := ParseMatch(resp)
+	if !ok {
+		debug.Being("skyra", "other", fmt.Sprintf("grade parse failed: %q", resp))
+		return
+	}
+
+	// Score in CODE from the stored probability — the judge never sees or
+	// reports a number.
+	score := 0.0
+	if matched && idx >= 1 && idx <= len(kids) {
+		if p, ok := kids[idx-1].Content().(Prediction); ok {
+			score = p.Probability
+		}
+	} else {
+		matched = false
+	}
+
+	sl := o.midLevel.Slice()
+	sl.Lock()
+	defer sl.Unlock()
+	if p, ok := root.Content().(Prediction); ok {
+		p.Graded, p.Grade, p.Evidence = true, score, evidence
+		root.SetContent(p)
+	}
+	for i, kid := range kids {
+		if p, ok := kid.Content().(Prediction); ok {
+			p.Graded, p.Evidence = true, evidence
+			if matched && i == idx-1 {
+				p.Grade = 1
+			}
+			kid.SetContent(p)
+		}
+		writeAlignment(sl, kidKeys[i], boolToGrade(matched && i == idx-1))
+	}
+	// The root's edge carries the bet's proper score — the lagged Alignment the
+	// activation economy (Stage D) consumes. (Framing attribution lands with
+	// Stage C, when framings are nodes.)
+	writeAlignment(sl, rootKey, score)
+	debug.Being("skyra", "other", fmt.Sprintf("graded p=%.2f matched=%v evidence=%q", score, matched, evidence))
+}
+
+// latestUngradedDistribution finds the newest ungraded other-pred root across
+// the groupings, under MidLevel's lock. Branch children are returned sorted by
+// key so prompt numbering is stable.
+func (o *OtherCell) latestUngradedDistribution() (string, *MemoryCell, []string, []*MemoryCell) {
+	sl := o.midLevel.Slice()
+	if sl == nil {
+		return "", nil, nil, nil
+	}
+	sl.Lock()
+	defer sl.Unlock()
+
+	var bestKey string
+	var best *MemoryCell
+	bestTS := -1
+	for _, gr := range o.midLevel.Groupings() {
+		mc, ok := gr.(*MemoryCell)
+		if !ok {
+			continue
+		}
+		for key, child := range mc.Children() {
+			cc, ok := child.(*MemoryCell)
+			if !ok {
+				continue
+			}
+			p, ok := cc.Content().(Prediction)
+			if !ok || p.Role != "other" || p.Graded || len(cc.Children()) == 0 {
+				continue
+			}
+			if p.Timestamp > bestTS {
+				bestTS, bestKey, best = p.Timestamp, key, cc
+			}
+		}
+	}
+	if best == nil {
+		return "", nil, nil, nil
+	}
+	kidKeys := make([]string, 0, len(best.Children()))
+	for key := range best.Children() {
+		kidKeys = append(kidKeys, key)
+	}
+	sort.Strings(kidKeys)
+	kids := make([]*MemoryCell, 0, len(kidKeys))
+	for _, key := range kidKeys {
+		kids = append(kids, best.Children()[key].(*MemoryCell))
+	}
+	return bestKey, best, kidKeys, kids
+}
+
+// writeAlignment writes a grade onto an edge's activation record (creating the
+// record if the kernel hasn't scored that edge yet) — the lagged Alignment
+// input the bump equation reads next traversal.
+func writeAlignment(sl skyra.Slice, edgeKey string, grade float64) {
+	if sl == nil {
+		return
+	}
+	rec, ok := sl.Records()[edgeKey].(*memoryActivation)
+	if !ok {
+		rec = newMemoryActivation()
+		sl.Records()[edgeKey] = rec
+	}
+	rec.Alignment = grade
+}
+
+func boolToGrade(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func sliceCount(sl skyra.Slice) int {

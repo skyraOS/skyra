@@ -201,3 +201,8 @@ func (a *memoryActivation) Activate(visited bool, _ int) float64 {
 
 // Value is the current activation (groove + recency) without bumping or decaying.
 func (a *memoryActivation) Value() float64 { return a.Identity + a.Familiarity }
+
+// SetContent replaces the node's content — used by the grade half to stamp a
+// Prediction's grade in place (the grade lives ON the prediction node,
+// cell-parsed). Callers hold the owning slice's lock.
+func (m *MemoryCell) SetContent(content any) { m.content = content }

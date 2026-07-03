@@ -177,16 +177,27 @@ func (m *MotorCell) readProposal() (string, *MemoryCell, Prediction, bool) {
 	if !ok {
 		return "", nil, Prediction{}, false
 	}
+	// Latest-wins (per-cycle keys mean proposal history persists), and a
+	// proposal that already carries an action child is CONSUMED — realized
+	// once, never re-fired (the duplicate-fire guard; the ProposalID→action
+	// edge is the consumed-marker).
+	var bestKey string
+	var bestProposal *MemoryCell
+	var bestPred Prediction
+	bestPredTS := -1
 	for key, child := range mc.Children() {
 		proposal, ok := child.(*MemoryCell)
 		if !ok {
 			continue
 		}
-		if p, ok := proposal.Content().(Prediction); ok && p.Role == "self" {
-			return key, proposal, p, true
+		if p, ok := proposal.Content().(Prediction); ok && p.Role == "self" && p.Timestamp > bestPredTS {
+			bestPredTS, bestKey, bestProposal, bestPred = p.Timestamp, key, proposal, p
 		}
 	}
-	return "", nil, Prediction{}, false
+	if bestProposal == nil || len(bestProposal.Children()) > 0 {
+		return "", nil, Prediction{}, false
+	}
+	return bestKey, bestProposal, bestPred, true
 }
 
 const motorMaxRetries = 2

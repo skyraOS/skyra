@@ -167,3 +167,50 @@ func cleanMotorPayload(s string) string {
 	s = strings.Trim(s, `"'`)
 	return strings.TrimSpace(s)
 }
+
+// ── grading (Stage A) ─────────────────────────────────────────────────────────
+
+// The judge only IDENTIFIES — it never reports a score. <match>N</match> names
+// the realized candidate (1-based); <match>none</match> means nothing matched.
+// The grade value is assigned by CODE from the stored probability (a proper
+// scoring rule the model cannot inflate).
+var matchRe = regexp.MustCompile(`(?is)<match>\s*(none|\d+)\s*</match>`)
+
+// ParseMatch extracts the judge's verdict. Returns (index, matched, ok):
+// matched=false with ok=true is an explicit <match>none</match>.
+func ParseMatch(response string) (int, bool, bool) {
+	m := matchRe.FindStringSubmatch(response)
+	if m == nil {
+		return 0, false, false
+	}
+	v := strings.ToLower(strings.TrimSpace(m[1]))
+	if v == "none" {
+		return 0, false, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, false, false
+	}
+	return n, true, true
+}
+
+// <grade>yes|partial|no</grade> — the execution judge's verdict on whether an
+// action faithfully executed its instruction. Mapped to 1 / 0.5 / 0 in code.
+var execGradeRe = regexp.MustCompile(`(?is)<grade>\s*(yes|partial|no)\s*</grade>`)
+
+// ParseExecGrade extracts the execution verdict as a score.
+func ParseExecGrade(response string) (float64, bool) {
+	m := execGradeRe.FindStringSubmatch(response)
+	if m == nil {
+		return 0, false
+	}
+	switch strings.ToLower(strings.TrimSpace(m[1])) {
+	case "yes":
+		return 1, true
+	case "partial":
+		return 0.5, true
+	case "no":
+		return 0, true
+	}
+	return 0, false
+}

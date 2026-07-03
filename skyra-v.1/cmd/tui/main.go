@@ -737,6 +737,8 @@ func predictions(mid *dna.MidLevelCell) (self, other string) {
 	if !ok {
 		return "", ""
 	}
+	// Per-cycle keys mean prediction history persists — show the LATEST of each.
+	selfTS, otherTS := -1, -1
 	for _, child := range mc.Children() {
 		cm, ok := child.(*dna.MemoryCell)
 		if !ok {
@@ -748,10 +750,15 @@ func predictions(mid *dna.MidLevelCell) (self, other string) {
 		}
 		switch p.Role {
 		case "self":
-			self = p.Text
+			if p.Timestamp > selfTS {
+				selfTS, self = p.Timestamp, p.Text
+			}
 		case "other":
 			// other stores a root node (no text) with one child per prediction;
-			// pick the highest-probability child for display.
+			// pick the latest root, then its highest-probability child.
+			if p.Timestamp <= otherTS || len(cm.Children()) == 0 {
+				continue
+			}
 			var best dna.Prediction
 			for _, grandchild := range cm.Children() {
 				if gp, ok := grandchild.(*dna.MemoryCell); ok {
@@ -761,7 +768,7 @@ func predictions(mid *dna.MidLevelCell) (self, other string) {
 				}
 			}
 			if best.Text != "" {
-				other = best.Text
+				otherTS, other = p.Timestamp, best.Text
 			}
 		}
 	}
