@@ -168,6 +168,162 @@ Mechanics:
   stress exists — reframe is the acute response, stress the persistent one; one
   event, two timescales.
 
+## Concurrency control — the model (first pass, 2026-07-03)
+
+Walking scenarios 1–3 (below) surfaced the real question: **what keeps state from
+being overwritten when it must persist, and what *should* overwrite.** The answer
+came out smaller than expected — two of michael's ideas (lock at write-time, not
+across the wave; and route on the impulse, not through the slice) deleted most of
+the machinery a naive concurrency design would need.
+
+### The root fix: the kernel must stop holding the slice lock across the wave
+
+Today `relation.go` `traverse` does `sl.Lock(); defer sl.Unlock()` around the
+**entire DFS** — including any inference a dispatcher cell fires inside Observe.
+That conflates two unrelated things: *"I am mutating a map"* (microseconds) and
+*"I am thinking"* (tens of seconds). Under the sequential pipeline it was hidden;
+under concurrent self/other it is the central bug (a 30s framing call parks every
+reader of that slice).
+
+**The fix — lock granularity, not slice topology:**
+
+- **The kernel stops locking.** The wave-wide lock is removed. (This matches "the
+  kernel is mechanism, the cell is policy" — the kernel cannot know a wave will
+  think; only the cell knows when it mutates.)
+- **Cells lock their own slice at WRITE TIME only** — grab, append, release. A
+  microsecond critical section per mutation. **Inference always runs lockless.**
+- Result: two waves can be mid-inference at once; they serialize only for the
+  instant each spends writing.
+
+This is why **slice topology and the single-cell-collapse question become free
+choices, not forced ones.** The writer-collision cost of collapsing self/other
+into one cell was really a *lock-duration* problem; write-time locking removes it.
+So we neither split every agent to its own exclusive plane nor collapse them — we
+defer both (spread-before-collapse; the split isn't even run yet). Lock
+granularity is the whole win.
+
+### The invariant that makes write-time locking safe: every mutation is an APPEND or a CLAIM
+
+Write-time locking is safe **only if no code holds a reference across the think and
+mutates it after.** So every mutation must be one of two shapes:
+
+- **Append** (new prediction node, new action, new framing node) — compute the
+  node fully while lockless, then `lock → add child → unlock`. Unconditional,
+  no coordination, trivially safe.
+- **Claim-then-set** (grading an existing bet) — the *one* shape that touches an
+  existing node. Guard it with a test-and-set inside the write lock:
+  `lock → if !bet.Graded { bet.Graded = true; write grade } → unlock`. This is
+  the claim marker (scenario add A): it lives on the **bet's own owning slice**
+  (other owns its bets), so it is never cross-cell contention — a microsecond
+  test-and-set on the writer's own plane.
+
+The `gradePrior` code built in Stage A must be re-shaped to this: it currently
+snapshots under lock → infers → writes under lock, but nothing stops a second
+evidence wave from grading the same bet in between. The claim (set `Graded` at
+**snapshot** time, under the lock, and skip if already claimed) closes that.
+Correct behavior falls out: a bet is about *the next message*; the second wave's
+message isn't it, so "already claimed → don't grade" is right — that message still
+enters the exchange and conditions the *next* bet.
+
+### The three state classes (what overwrites, what doesn't)
+
+The scenarios kept resolving to one of three disciplines. Naming them is the
+principle:
+
+| Class | Examples | Discipline | Why |
+|---|---|---|---|
+| **Routes** | grade verdicts, reframe reason, trigger cause | **ride the impulse** (per-wave payload) | each wave owns its copy — unoverwritable by construction; routing state never touches the slice |
+| **Accumulates** | bets, grades, exchange records, actions | **graph, append-only** (per-cycle keys — built) | evidence + history must *all* be witnessed; decay is the only forgetting |
+| **Points-at-current** | latest plan, current framing, displays | **last-write-wins** | stale intents *should* die; supersession is correct here |
+
+Last-write-wins was never wrong globally — it was being asked to also carry Routes
+and Accumulates, which belong elsewhere. **The verdict riding the wave** (Routes)
+is the specific move that de-races scenario 2: other's grade-spawn to self carries
+the verdict as payload, so self never reads a slice for it and never races the
+write.
+
+### Scenario walk (the three cases, mechanically)
+
+**1 — cold start.** agent → sensory → MidLevel (cold-create grouping+gist) → fan
+out self ∥ other. Grade halves no-op (latest-ungraded selectors return nothing —
+already built so). Ordering (ML deposits before agents read) is guaranteed by the
+spawn itself (Express fires agents only after Observe wrote). **No buffer, no
+claim needed** — nothing exists to overwrite. (Unanswered bet ever → sits
+ungraded, decays. Multi-agent → see E, deferred.)
+
+**2 — turn-taking, evidence matches a live path.** evidence → other.**grade**
+(claim + score) → the matched pathway *stands* as the confirmed expectation →
+spawn self **carrying the verdict on the impulse** → self keeps/revises plan →
+motor. **Sequential by necessity** (self's keep-or-revise needs the verdict) — but
+sequenced *by the wave carrying the verdict*, not by a lock. Note: other does **not**
+re-predict in stroke 1 here — the fresh distribution is minted in **stroke 2**,
+conditioned on the plan that just executed (better timing; "other relies on self").
+Stroke-1 critical path = `grade → self → motor`, two calls deep.
+
+**3 — turn-taking, total miss (no path above bar).** evidence → other.**grade** →
+`none` → **grade fronts the routing decision**: spawn MidLevel `reframe` (failure
+in present) → new gist / re-framing on same id → *then* self ∥ other fire
+concurrently (neither has a valid prior to condition on, so concurrency returns) →
+all three outputs (framing + both predictions) → motor. This is the scenario that
+**proves grade must front the stroke**: the grade's outcome *chooses who fires
+next*. (Grade-as-intake, not grade-as-aftermath — Stage B's code selector arriving
+early.)
+
+Corrected stroke-1 engine:
+
+```
+evidence → sensory → other.GRADE (claim; verdict rides the wave)
+   ├─ ≥ bar:  matched path stands → self(keep/revise) → motor      [2 deep]
+   └─ none:   MidLevel reframe → other.predict ∥ self.plan → motor  [rare]
+stroke 2 (motor emitted): self.grade-execution ∥ other.predict-fresh
+```
+
+### One wiring rule that falls out (scenario add C)
+
+**Self spawns motor only if self deposited or re-affirmed a plan THIS wave.** Today
+self's Express fires motor unconditionally; under two-stroke a grade-only wave
+(e.g. a stroke-2 execution grade) would trigger motor, which would find an older
+unconsumed proposal and fire a **stale intent**. Self knows locally whether it
+wrote a plan this wave — a per-wave boolean on self's own slice, no cross-cell
+read. (This is the first instance of *slice-state dispatch*: a cell reading its own
+slice-state to decide which downstream fires — the good half of the
+single-cell-methods idea, kept without collapsing the writers.)
+
+### Deferred, flagged here so the build order remembers them
+
+- **[B] The 1-slot trigger coalescer (scenario 4 territory, needs live data).**
+  Triggers parked behind MidLevel (msg2, a reafference return, a relay re-entry)
+  don't get lost — they **serialize**, and each runs a *full pipeline* → N triggers
+  = N framings = N motor actions (the session-1 double-reply, generalized). The fix
+  is a **pending-trigger slot** (a 1-buffer: "run once more when the current cycle
+  finishes"), safe because evidence already accumulated in sensory so the coalesced
+  cycle's frame contains everything that arrived. **Triggers coalesce; evidence
+  never does.** This is a *cognition* dedup, orthogonal to lock granularity — spec
+  it properly once we watch rapid-fire messages actually run. **This is the whole
+  of scenario 4 and is explicitly the next design session.**
+- **[E] The `About:<entity>` bet stamp (multi-agent; forward hook).** A bet is a
+  hypothesis about *a specific source*. With >1 external agent, an unstamped bet
+  gets graded against *any* sender — sarah's "what's for lunch" scores michael's
+  kernel-bet a miss and triggers a needless reframe. Stamp the modeled entity at
+  bet time (other knows it — the grouping's counterpart); the grade gate fires a
+  bet only against evidence *from the entity it's about* (sender's already on the
+  impulse). Small-scale (michael only) needs nothing. **Long-term shape:** other
+  graduates to modeling *all possible external environments* — a distribution over
+  sources is just many stamped bets, so the stamp is the seam that scales the grade
+  routing to that. Add opportunistically; not built now.
+- **[F] Bet staleness** — a bet says "next message"; grading it an hour late is
+  semantically mushy. The latest-ungraded selector bounds it for now; a decay
+  horizon (ungraded past N → decays instead of grading) is a later refinement.
+
+### Build order note (concurrency before fan-out)
+
+The kernel lock change (remove the wave-wide lock; cells lock at write time) and
+the claim re-shape of `gradePrior` are **prerequisites** to wiring the concurrent
+fan-out — building the fan-out first would run inference under the shared lock and
+serialize the very thing we're parallelizing. So: **(1) kernel lock granularity +
+append/claim invariant, (2) verdict-on-the-wave routing, (3) the C wiring rule,
+then (4) the fan-out.** B and E follow when scenario 4 gets its own pass.
+
 ## What stays sequenced
 
 The **error-recovery path** (error-recovery-loop.md), when built: on genuine
@@ -211,20 +367,12 @@ by the system it changes.
 
 ## Open
 
-- **⚠️ FIRST, BEFORE BUILDING — walk the concurrent-firing scenarios** (flagged
-  2026-07-03, session ended here). The lagged/latest-wins posture was designed
-  for the *sequential* pipeline; under true concurrency the scenario table needs
-  to be enumerated before we commit to it: strokes overlapping (stroke 2's
-  reafference arriving while stroke 1's agents are still in flight), two external
-  engages in quick succession, a reframe re-run racing the original stroke, the
-  relay valve's re-entry racing a new external impulse. For some of these,
-  **last-write-wins may be the wrong discipline and a buffer the right one** —
-  a small ordered queue of deposits consumed at the join, instead of readers
-  racing for the newest node. Decide per seam (deposits on the grouping vs
-  motor's read vs MidLevel's trigger intake), not globally — some seams want
-  supersession (stale intents SHOULD die), some may want every event witnessed
-  (grades must not skip evidence). Go scenario by scenario before wiring the
-  fan-out.
+- **Concurrency model — first pass DONE** (see "Concurrency control" above):
+  scenarios 1–3 walked, the kernel-lock-granularity fix + append/claim invariant +
+  three-state-classes settled. **Still open:** scenario 4 (rapid-fire / non-turn-
+  taking messages) and its 1-slot trigger coalescer [B], the `About` multi-agent
+  stamp [E], bet staleness [F] — all flagged in the deferred subsection. Scenario 4
+  is explicitly the next design session.
 
 - Staleness under fast topic shifts: lagged conditioning is one stroke behind — the gist (current, from MidLevel this stroke) is the freshness backstop; watch the grades for degradation.
 - Relay rail form: hard one-per-external-impulse vs stress-gated (relay raises stress; stress gates further relays) — start hard, graduate if stress lands (Stage D).
