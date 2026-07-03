@@ -211,6 +211,21 @@ by the system it changes.
 
 ## Open
 
+- **⚠️ FIRST, BEFORE BUILDING — walk the concurrent-firing scenarios** (flagged
+  2026-07-03, session ended here). The lagged/latest-wins posture was designed
+  for the *sequential* pipeline; under true concurrency the scenario table needs
+  to be enumerated before we commit to it: strokes overlapping (stroke 2's
+  reafference arriving while stroke 1's agents are still in flight), two external
+  engages in quick succession, a reframe re-run racing the original stroke, the
+  relay valve's re-entry racing a new external impulse. For some of these,
+  **last-write-wins may be the wrong discipline and a buffer the right one** —
+  a small ordered queue of deposits consumed at the join, instead of readers
+  racing for the newest node. Decide per seam (deposits on the grouping vs
+  motor's read vs MidLevel's trigger intake), not globally — some seams want
+  supersession (stale intents SHOULD die), some may want every event witnessed
+  (grades must not skip evidence). Go scenario by scenario before wiring the
+  fan-out.
+
 - Staleness under fast topic shifts: lagged conditioning is one stroke behind — the gist (current, from MidLevel this stroke) is the freshness backstop; watch the grades for degradation.
 - Relay rail form: hard one-per-external-impulse vs stress-gated (relay raises stress; stress gates further relays) — start hard, graduate if stress lands (Stage D).
 - Whether OTHER-targeted engages keep radius delivery (overhearing between others = sound's physics, social awareness) — kept for now; revisit if a `whisper` affordance is ever wanted.
