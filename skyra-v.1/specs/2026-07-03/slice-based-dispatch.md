@@ -131,6 +131,66 @@ impulse X → { expects: {G1, G2}, done: {G1.self, G1.other, G2.other}, → pend
   boundaries, preserved history, no transaction that lives forever. (Conversation-as-
   topology, notes.md.)
 
+## The orchestrator — membrane as the workflow engine
+
+Routing is **not** distributed across each cell's `Express` (worker-fires-its-own-next).
+It is **centralized** in an orchestrator, and **the join forces this**: no cell's Express
+can fire motor on "self AND other done," because self's Express doesn't know other
+finished. *Someone* must watch the board and dispatch when a step's dependencies land.
+That someone is the orchestrator. The moment the join is taken seriously, distributed
+routing is off the table.
+
+**Membrane is the orchestrator** (the boundary is already where waves enter/exit). The
+shape is a **workflow engine** (Temporal / Step-Functions): a central dispatcher reading
+durable workflow state and firing the next activity.
+
+| Workflow engine | Here |
+|---|---|
+| the engine / dispatcher | **membrane** |
+| workflow state (per run) | the **impulse node** on the coordination slice (job board), keyed by impulseID |
+| an activity / task | an **ephemeral cell** (one step of work) |
+| the workflow definition | the **transition rules** — live on the orchestrator, not scattered per-cell |
+| run id | the **impulseID** (= processID; the impulse stays pure) |
+
+### The orchestration step (one wave = one bracketed step)
+
+```
+wave arrives at membrane (impulse carries impulseID X)
+  membrane.Observe: look up X on the board → build the ephemeral worker for the
+                    next step, hand it down as membrane's child
+  kernel descends → worker does its ONE step (its selected observe/express),
+                    reports its parse-condition + marks completion on X's board row
+  membrane.Express: read X's board row (condition + workflow def) → decide next:
+                    - a step ready       → spawn the next membrane-bracketed wave
+                    - a fan-out          → spawn TWO (self, other) membrane-bracketed waves
+                    - join satisfied     → fire motor (self AND other done)
+                    - done               → flip X pending→done, flush hook
+```
+
+Membrane is the **always-fires bookend** the transition helper needed: every step is
+`membrane(build) → worker(do) → membrane(route)`. The transition rule is a helper the
+orchestrator calls on Express — `(reported condition, workflow def) → next`.
+
+### Why it's not a bottleneck
+
+Membrane's work is a **board read + a spawn — no inference**. The 30s cost stays in the
+workers, which run concurrently. The orchestrator is the conductor, not a player: a few
+nanoseconds of coordination per step buys the join and a single routing point. The
+extra hop (`worker → membrane → next`) is the price, and it's cheap.
+
+### Source of truth
+
+Step/process state may be *mirrored* on the ephemeral cell (its working context) but the
+**board row (keyed by impulseID) is the source of truth**. If they diverge, the board
+wins — one clock.
+
+### Note for later — two roles, co-located
+
+The **orchestrator** role (workflow engine) and the **sensorimotor-membrane** role
+(attention gate, motor emission) are conceptually distinct — the-engine vs. the-boundary.
+Co-locating on membrane is fine to start; if membrane accretes too much, splitting the
+engine out from the boundary is the natural seam.
+
 ## What this buys
 
 - **Scenario 4 / substrate 3/3 by construction.** Per-wave state on the ephemeral root
@@ -167,34 +227,48 @@ ever needs different wiring.
 ## Migration (increment order)
 
 1. **Ephemeral root + per-wave state off cell fields** — `reframed`/`plannedThisWave`/
-   verdict move onto the per-wave root (or the in-flight impulse it reads). Cells set it
-   in Observe, read in Express. Un-skip `TestConcurrentEngagesRapidFire` (scenario 4) —
-   green with no locks. *(This is substrate 3/3.)*
+   verdict move onto the per-wave root. Un-skip `TestConcurrentEngagesRapidFire`
+   (scenario 4) — green with no locks. *(This is substrate 3/3.)*
 2. **Competence maps on the base cell** — `observeFN`/`expressFN` maps; the ephemeral
    root selects and delegates. Behavior unchanged (one entry per map to start).
-3. **Affordance registry** — `role → base cell`; keep the current routing but resolve
-   the next affordance through the registry (mechanical).
-4. **Transition table** — replace per-cell branch logic with `(role, condition) → next`
-   data; `Express` (the selected `expressFN`) becomes generic.
-5. **The coordination slice + impulse-node join** — impulseID propagates as a
-   correlation ID; MidLevel declares the expected grouping set; agents mark completion;
-   motor fires per impulse on join. Replaces the hardcoded `self→motor` edge with the
-   board read.
-6. **Delete the successor pointers** — once transitions + the join drive everything, the
-   struct fields (`o.self`, `s.motor`, …) are dead; remove them.
+3. **The coordination slice (job board)** — impulse node per impulseID with
+   `expects`/`done` + the append-only history column; impulseID propagates as the
+   correlation ID (impulse stays pure). No behavior change yet — just the board exists
+   and steps write to it.
+4. **Membrane becomes the orchestrator** — its Observe builds the ephemeral worker for
+   the next step and hands it down; its Express reads the board (`condition + workflow
+   def`) and dispatches. Fold the existing routing into the workflow definition one edge
+   at a time (sensory→midlevel→…), verifying `cmd/validate` is unchanged after each.
+5. **The join** — MidLevel declares the expected grouping set; agents mark completion;
+   membrane fires motor per impulse when the join is satisfied. Replaces the hardcoded
+   `self→motor` edge with the board read.
+6. **Delete the successor pointers** — once the orchestrator + board drive everything,
+   the struct fields (`o.self`, `s.motor`, …) and per-cell branch logic are dead; remove
+   them. The transition rules now live only in the workflow definition.
 
 ## Open
 
-- **Who selects the competence / makes the choice for the root** — the spawning cell
-  (it knows what to hand down), the kernel at Realize, or read off the in-flight impulse.
-  Lean: the spawner writes the selection onto the impulse; the kernel builds the
-  ephemeral root from `(base cell, impulse's selection)`. Confirm the kernel seam.
-- **Impulse mutability across the bookend** — the ephemeral root writes the parse-
-  condition in Observe and reads it in Express; confirm the per-wave root (or a pointer
-  the impulse carries) is the mutable home, not a value copy.
-- **Coordination-slice keying detail** — impulse-keyed, grouping-nested (above). Pin the
-  record shape (`expects`/`done` sets) and cleanup (done nodes stay as linked history;
-  when are they GC'd from the *pending* view — decay like everything else?).
+- **Who selects the competence for the worker** — the **orchestrator (membrane)** picks
+  the next step's competence from the workflow definition and builds the worker in its
+  Observe. (Supersedes the earlier "spawner writes selection onto the impulse" — the
+  orchestrator owns selection now.)
+- **Per-wave mutable home across the bookend** — the ephemeral root writes its parse-
+  condition in Observe and reports it out; confirm the root (not a value copy) is the
+  mutable home, and that its report reaches the orchestrator's Express (via the board row
+  or the returned Node).
+- **The workflow definition's form** — a data table `(step, condition) → next-step(s)`
+  on the orchestrator. Includes fan-out edges (one step → two) and join edges (two
+  done → one). Small and concrete for these ~6 steps; not a general engine.
+- **The condition vocabulary** — the finite set a worker reports: `match`/`none`
+  (grade), `proposal`, `yes`/`partial`/`no` (exec), the framing verbs. This is the
+  dispatch-model parse-conditions, now the orchestrator's routing input.
+- **Coordination-slice keying detail** — impulse-keyed, grouping-nested. Pin the record
+  shape (`expects`/`done` sets + append-only history column, row-locked appends / lock-
+  free reads) and cleanup (done nodes stay as linked history; GC'd from the *pending*
+  view — decay like everything else?).
+- **Orchestrator re-entry cost** — every step round-trips through membrane. Confirmed
+  cheap (board read + spawn, no inference), but watch the spawn count under long
+  navigation-heavy loops.
 - **Reframe/self-initiated impulseID inheritance** — reframes inherit; the world's reply
   mints a new linked node. Pin where the link edge is written (on the action node → its
   reafference).
@@ -204,8 +278,8 @@ ever needs different wiring.
 
 ## Done when
 
-- No cell holds a successor pointer; the ephemeral root's `Express` fires whatever the
-  transition selects from the registry.
+- No cell holds a successor pointer; **membrane (the orchestrator)** builds the worker
+  and dispatches the next step from the workflow definition + the board.
 - Per-wave routing state is on the ephemeral root, not cell fields;
   `TestConcurrentEngagesRapidFire` (scenario 4) un-skips and is race-clean, no added
   locks.
