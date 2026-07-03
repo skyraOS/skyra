@@ -105,10 +105,26 @@ Mechanics this requires:
   triggering impulse was an inner-note, the relay form is unavailable; fall back
   to `<perceive>` or hold). One relay per external impulse. Without this rail,
   confusion → relay → confusion → relay is a hot loop on real inference spend.
-- **Neighbors overhear.** A world engage from skyra's position delivers to agents
-  in radius — michael may see her mutter. Accepted for the MVP (embodied inner
-  speech *is* observable muttering, and it's honest); a `whisper`-scoped delivery
-  is a later world affordance if it grates.
+- **Self-dialog is PRIVATE — targeted means targeted** (ruled 2026-07-03). The
+  principle: *an utterance to another is sound in the medium; an utterance to
+  self never becomes sound.* Speech to michael propagates spatially from a point
+  — spreading and being overhearable is sound's physics, kept for other-targeted
+  engages. Inner speech is the efference loop that never enters the shared
+  medium: the world sees `target == origin` and **delivers by identity, directly**
+  — no EngageCell wave, no radius spread, no range check (always in range of
+  yourself), delivery set exactly `{self}`. Non-targeted agents never receive it.
+  (Identity-based delivery, not location-based — the ghost-bug lesson, third
+  appearance.)
+- **Private in-world ≠ invisible to the operator.** The world still logs the
+  self-dialog (its own debug layer, e.g. `world/self-dialog.log`) — michael
+  doesn't perceive it *as michael-in-the-world*, but the captain's log and
+  debugview see everything. Observability is an operator affordance, not an
+  in-world perception.
+- **The lane generalizes.** Motor's confusion valve is the first user, but
+  self-targeted engage is now a first-class channel: **internal dialog, the
+  personal feedback loop** — any organ that can emit may eventually address the
+  being itself, privately, through the same primitive. One grammar for outer and
+  inner speech; only the delivery physics differ.
 
 ## Grade-triggered re-framing — dramatic failure ascends
 
@@ -187,6 +203,7 @@ by the system it changes.
 - [ ] other's prompt: + standing self plan + execution status (stroke-aware: re-predict on reafference waves, grade-gate unchanged)
 - [ ] self's prompt: + own standing plan + its grades + keep-or-revise instruction (carry-over MVP)
 - [ ] motor's present: + other's latest distribution (grounding, subordinate)
+- [ ] world: `target == origin` engage → identity-direct delivery (no EngageCell wave, no spread, delivery = {self}); own debug layer
 - [ ] sensory: accept self-sourced engage as inner-note (InteractionRecord on self entity; no presence bump)
 - [ ] motor: relay valve `<engage><skyra>` in the system prompt + parse; **one-relay rail** (code guard on inner-note-triggered cycles)
 - [ ] grade-triggered re-framing: other on total miss / self on hard execution failure → spawn MidLevel with the `reframe` trigger (failure summary as payload); one-reframe rail
@@ -196,7 +213,7 @@ by the system it changes.
 
 - Staleness under fast topic shifts: lagged conditioning is one stroke behind — the gist (current, from MidLevel this stroke) is the freshness backstop; watch the grades for degradation.
 - Relay rail form: hard one-per-external-impulse vs stress-gated (relay raises stress; stress gates further relays) — start hard, graduate if stress lands (Stage D).
-- Overhearing scope: keep observable vs add `whisper` — decide from live sessions.
+- Whether OTHER-targeted engages keep radius delivery (overhearing between others = sound's physics, social awareness) — kept for now; revisit if a `whisper` affordance is ever wanted.
 - Whether stroke 2 should ever produce a new proposal (currently only on replanning) — leave to the carry-over logic.
 
 ## Done when
