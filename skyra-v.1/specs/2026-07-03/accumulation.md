@@ -88,6 +88,11 @@ the "grade half is later" TODO in `other_cell.go` / `self_cell.go` coming due.
 > `<engage><skyra>` relay valve). Specced in
 > [two-stroke-cycle.md](two-stroke-cycle.md); Stage B's selector sits at that
 > spec's join.
+>
+> **Build against [dispatch-model.md](dispatch-model.md)** — the transition tables
+> (affordance × parse-condition → slice/cell state), the per-cell slice-state
+> structs, the `Route` envelope, and the per-node lock granularity. That is the
+> structure the fan-out is built on; the two-stroke spec is the dynamics over it.
 
 ## Stage B — closure: the first setpoint `[after A]`
 
