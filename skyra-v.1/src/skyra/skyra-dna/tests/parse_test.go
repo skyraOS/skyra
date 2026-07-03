@@ -41,15 +41,16 @@ func TestParseMotorEmissionEngage(t *testing.T) {
 }
 
 func TestParseMotorEmissionPerceive(t *testing.T) {
+	// perceive carries no payload — inner text (even if the model emits some) is dropped.
 	got, ok := dna.ParseMotorEmission(`<perceive>"nothing important yet"</perceive>`)
-	if !ok || got.Primitive != "perceive" || got.Target != "" || got.Payload != "nothing important yet" {
+	if !ok || got.Primitive != "perceive" || got.Target != "" || got.Payload != "" {
 		t.Fatalf("ParseMotorEmission perceive = (%+v, %v)", got, ok)
 	}
 }
 
 func TestParseMotorEmissionToleratesPercieveTypo(t *testing.T) {
 	got, ok := dna.ParseMotorEmission(`<percieve>"nothing important yet"</percieve>`)
-	if !ok || got.Primitive != "perceive" || got.Payload != "nothing important yet" {
+	if !ok || got.Primitive != "perceive" || got.Payload != "" {
 		t.Fatalf("ParseMotorEmission percieve = (%+v, %v)", got, ok)
 	}
 }

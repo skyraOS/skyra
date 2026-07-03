@@ -31,6 +31,7 @@ func TestOtherPredictsAndAppends(t *testing.T) {
 
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "can you help me with the skyra project",
 	})
 	imp := skyra.Impulse{Source: &skyra.ImpulseSource{SpaceID: "michael"}, Payload: "now"}

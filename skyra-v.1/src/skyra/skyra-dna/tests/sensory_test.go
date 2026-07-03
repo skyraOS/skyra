@@ -21,6 +21,7 @@ func TestSensoryWritesEntityIndex(t *testing.T) {
 
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", PointID: "3,4", Coord: skyra.Coord{X: 3, Y: 4}},
+		Primitive: "engage",
 		Payload: "hello skyra",
 	})
 
@@ -76,6 +77,7 @@ func TestSensoryWarmsNewEntityInSameTraversal(t *testing.T) {
 	// traversed = sensory directly → one synchronous wave on sensory's slice.
 	kernel.Realize(nil, sensory, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 3, Y: 4}},
+		Primitive: "engage",
 		Payload: "hello skyra",
 	})
 
@@ -181,12 +183,14 @@ func TestSensoryObserveUpdatesEntityTimestamp(t *testing.T) {
 	sensory.Slice().SetCount(1)
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "first",
 	})
 
 	sensory.Slice().SetCount(2)
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 2, Y: 3}},
+		Primitive: "engage",
 		Payload: "second",
 	})
 
@@ -227,6 +231,7 @@ func TestSensoryFiresMidLevelOnExpress(t *testing.T) {
 
 	imp := skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "hello skyra",
 	}
 	sensory.Express(nil, imp)

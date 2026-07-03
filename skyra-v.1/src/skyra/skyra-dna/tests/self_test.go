@@ -22,7 +22,7 @@ func TestSelfPredictsRelyingOnOther(t *testing.T) {
   <prediction p="0.70">ask how the runtime is structured</prediction>
   <prediction p="0.30">ask about the kernel</prediction>
 </predictions>`, nil
-		case strings.Contains(system, "predict your own next move"):
+		case strings.Contains(system, "You are Skyra's inner voice"):
 			gotSelfPresent = present
 			return "<prediction>walk michael through the kernel</prediction>", nil
 		default:
@@ -38,6 +38,7 @@ func TestSelfPredictsRelyingOnOther(t *testing.T) {
 	// Run the predict chain directly (no spawn): MidLevel → other → self.
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "can you help me with the skyra project",
 	})
 	imp := skyra.Impulse{Source: &skyra.ImpulseSource{SpaceID: "michael"}, Payload: "now"}
@@ -96,7 +97,7 @@ func TestSelfHandsMoveToMotor(t *testing.T) {
   <prediction p="0.70">ask how the runtime is structured</prediction>
   <prediction p="0.30">ask about the kernel</prediction>
 </predictions>`, nil
-		case strings.Contains(system, "predict your own next move"):
+		case strings.Contains(system, "You are Skyra's inner voice"):
 			return "<prediction>walk michael through the kernel</prediction>", nil
 		case strings.Contains(system, "Skyra's motor"):
 			return "<engage><michael>explain the kernel traversal</michael></engage>", nil
@@ -113,6 +114,7 @@ func TestSelfHandsMoveToMotor(t *testing.T) {
 	// Run the predict chain directly (Observe uses infer, not the kernel).
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "can you help me with the skyra project",
 	})
 	imp := skyra.Impulse{Source: &skyra.ImpulseSource{SpaceID: "michael"}, Payload: "now"}
@@ -142,8 +144,10 @@ func TestSelfHandsMoveToMotor(t *testing.T) {
 	// inference, and appends that action to the proposal.
 	motor := m.Motor()
 	motor.Observe(nil, skyra.Impulse{Primitive: "act"})
-	if motor.LastAction() != "<engage><michael>explain the kernel traversal</michael></engage>" {
-		t.Fatalf("motor.LastAction = %q, want concrete motor action", motor.LastAction())
+	// LastAction is the compact display form (payload elided); the full payload is
+	// verified on the action record below.
+	if motor.LastAction() != "<engage><michael/></engage>" {
+		t.Fatalf("motor.LastAction = %q, want compact engage display", motor.LastAction())
 	}
 
 	found := false

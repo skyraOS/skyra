@@ -22,11 +22,13 @@ func TestMidLevelAssemblesTimestampOrderedFrame(t *testing.T) {
 	sensory.Slice().SetCount(1)
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "first",
 	})
 	sensory.Slice().SetCount(2)
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 2, Y: 2}},
+		Primitive: "engage",
 		Payload: "second",
 	})
 
@@ -85,6 +87,7 @@ func TestMidLevelColdStartPredictsLabel(t *testing.T) {
 	sensory.Slice().SetCount(1)
 	sensory.Observe(nil, skyra.Impulse{
 		Source:  &skyra.ImpulseSource{SpaceID: "michael", Coord: skyra.Coord{X: 1, Y: 1}},
+		Primitive: "engage",
 		Payload: "can you help me with the skyra project",
 	})
 
