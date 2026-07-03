@@ -82,6 +82,13 @@ the "grade half is later" TODO in `other_cell.go` / `self_cell.go` coming due.
 - [x] relevance gate (MVP form): external-engage code gate for other; realized-only gate for self — no inference spent deciding relevance
 - [x] `incoming → prediction` audit trail — the `Evidence` field stamped on every graded prediction (which evidence tested which bet)
 
+> **Pipeline topology (between A and B):** self/other go **concurrent** under
+> mutual lagged reliance — the two-stroke cycle (evidence stroke / reafference
+> stroke, action as the join; motor grounded by the distribution; the
+> `<engage><skyra>` relay valve). Specced in
+> [two-stroke-cycle.md](two-stroke-cycle.md); Stage B's selector sits at that
+> spec's join.
+
 ## Stage B — closure: the first setpoint `[after A]`
 
 A setpoint is a prediction that came true (setpoint.md). Completion fires when **both

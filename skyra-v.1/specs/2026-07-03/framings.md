@@ -105,6 +105,11 @@ a framing has no observable of its own). Instead:
 - **Re-frame pressure is derived:** bad grades under a framing → its alignment
   drops, stress rises → the next match/rewrite call sees a cooling framing. The
   frame-lock-in seam (ancestor map #3) gets its first mechanism for free.
+- **The fast path — grade-triggered re-framing** (two-stroke-cycle.md): a
+  DRAMATIC failure (total miss / hard execution failure) doesn't wait for the
+  slow competition — the grading agent spawns MidLevel's framing pass directly,
+  failure in the present, one reframe per impulse. Slow path = attribution and
+  decay; fast path = ascent. Same pressure, two timescales.
 
 ## Crystallization — the framing's real grade, at closure
 
