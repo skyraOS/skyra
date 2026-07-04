@@ -104,28 +104,50 @@ accumulated experience.
 
 | Thing | Count | Job |
 |---|---|---|
-| **the DNA** | one | durable graph (indexes) + competences (namespaced genes) |
-| **active-state traversal slices** | four (`midlevel, other, self, motor`) | the working memory each competence traverses — the kernel builds trees here |
+| **the DNA / nucleus** | one | the **master graph** (all indexes) + competences (namespaced genes). Held *on the membrane* — the membrane is the nucleus. |
 | **the coordination board** | one | impulse-node rows (the join + trace) |
-| **the orchestrator / membrane** | one | reads workflow def + board → transcribes roots → spawns |
+| **the orchestrator / membrane** | one | holds the nucleus; reads workflow def + board → **transcribes workers, handing each its working-set references** → spawns |
+| **ephemeral workers (transcripts)** | many, transient | each carries a **working set** (handed references into the master graph) + per-wave state; runs one gene; discarded |
 
-### The active-state slices — read live, never snapshotted
+### The nucleus model — indexes on the membrane, workers get handed a working set
 
-`midlevel, other, self, motor` each get their **own traversal slice** (for now). The key
-precision: **a traversal slice *is* active state.** A competence reads *what is active
-now*, not "what was active when this impulse entered the system." So:
+(Resolved 2026-07-03.) **The indexes ARE the graph, and the graph lives on the
+membrane — the nucleus.** There is *not* a set of per-namespace slices held elsewhere.
+Instead:
 
-- **No per-impulse snapshot, no double-buffer-for-consistency.** Read the live lit set.
-- This is *more correct* for a live being — if state moved since the impulse entered, you
-  **want** the newer value; a frozen view would be the bug. The being's present is always
-  the current active state.
-- It **is** the lagged-reliance model already committed to: "self reads other's *latest*
-  distribution" = "read whatever's active now." Lagged reliance *is* read-active-state.
-  (Also the standing "active state is the last observation" invariant.)
-- What remains on these slices is only **data-race safety** (the substrate's RWMutex +
-  per-record locks) — *not* semantic snapshotting. We prevent panics; we do **not**
-  prevent "reading a newer value than when I started," because that newer value is the
-  point.
+- **The membrane (nucleus) holds the one master graph** (entity index, grouping spine,
+  action index; later the crystallized layer).
+- **Transcription hands the worker references** to the specific nodes it needs — its
+  **working set** ("its own special index it does work on"). The worker operates on those
+  handed references; **writes flow back through to the master graph** (shared by
+  reference). This is the mRNA discipline: the transcript doesn't reach back into the
+  nucleus, it **carries out what it needs.**
+- **The entity index rides on *every* worker** (it's traversed every wave). Other indexes
+  are handed per-step (e.g. `midlevel:frame` just produced the grouping → the fan-out's
+  predict workers are handed that grouping).
+- So "the worker's active-state slice" = its handed working set. It is still **read live,
+  never snapshotted** — a competence reads *what is active now*, not "what was active when
+  the impulse entered." (If state moved since, you *want* the newer value; a frozen view
+  would be the bug. This *is* the lagged-reliance model — "self reads other's *latest*
+  distribution" = read-active-state — and the "active state is the last observation"
+  invariant.) What remains is only **data-race safety** (RWMutex + per-record locks on the
+  master graph), *not* semantic snapshotting.
+
+**Working memory vs. durable, on the nucleus.** The master graph holds both the
+**working memory** (active groupings, predictions, current entities — churns, and is
+almost everything at cold-start) and the **durable crystallized layer** (setpoints,
+understandings, stamped entities — empty at cold-start, grows with accumulation). The
+"all durable state on the DNA" invariant means the *crystallized* layer; the protection
+it buys is against **code churn** (swap competences freely), not against working memory
+churning — that churn *is* cognition.
+
+### The impulse has two faces (impulse stays pure)
+
+1. **In-flight** (riding a wave): a **pure external signal + correlation ID** (the
+   impulseID). It does *not* carry routing state — that's on the transcript.
+2. **As a node** (on the coordination board): the durable **transaction record** — its
+   declared grouping set, its self/other completion, its append-only trace, linked to its
+   causal chain. Same impulseID threads the two faces.
 
 ### The impulse has two faces (impulse stays pure)
 
@@ -243,6 +265,12 @@ predict}` pair of competences (grade before framing, predict in the fan-out):
 | **join** | `done ⊇ expects` | motor |
 | motor | emitted | done → flush |
 
+- **The gist is the traversal seed** (2026-07-03). `midlevel:frame` produces a gist; the
+  predict genes (`other:predict`, `self:predict`) **traverse from the gist's entities**
+  through their handed entity index — the warm graph *pulls toward* related nodes
+  (associative recall). Cold-start it's trivial (empty graph, nothing to pull); it enriches
+  as experience accumulates. This *is* the thing the accumulation experiment tests — wire
+  it and watch ("we'll see").
 - **Two symmetric grade lanes** = stroke 1 (evidence) vs stroke 2 (reafference):
   external→`other:grade` (did the *other's* move come true), reafference→`self:grade`
   (did *my* action execute). **Motor emitting is what creates the reafference impulse**
@@ -347,28 +375,46 @@ A **big shift**, not an in-place refactor. Decisions (2026-07-03):
   steps/conditions); build it concrete, let generality emerge only if a second being
   needs different wiring.
 
-## Migration (increment order)
+## Migration
 
-1. **Ephemeral root + per-wave state off cell fields** — `reframed`/`plannedThisWave`/
-   verdict move onto the per-wave root. Un-skip `TestConcurrentEngagesRapidFire`
-   (scenario 4) — green with no locks. *(This is substrate 3/3.)*
-2. **Competence map on the DNA** — the namespaced genes (`sensory:intake`, `other:grade`,
-   `self:predict`, …); the ephemeral root selects one and delegates. Behavior unchanged
-   (port the existing method bodies as competences, re-signatured).
-3. **The coordination slice (job board)** — impulse node per impulseID with
-   `expects`/`done` + the append-only history column; impulseID propagates as the
-   correlation ID (impulse stays pure). No behavior change yet — just the board exists
-   and steps write to it.
-4. **Membrane becomes the orchestrator** — its Observe builds the ephemeral worker for
-   the next step and hands it down; its Express reads the board (`condition + workflow
-   def`) and dispatches. Fold the existing routing into the workflow definition one edge
-   at a time (sensory→midlevel→…), verifying `cmd/validate` is unchanged after each.
-5. **The join** — MidLevel declares the expected grouping set; agents mark completion;
-   membrane fires motor per impulse when the join is satisfied. Replaces the hardcoded
-   `self→motor` edge with the board read.
-6. **Delete the successor pointers** — once the orchestrator + board drive everything,
-   the struct fields (`o.self`, `s.motor`, …) and per-cell branch logic are dead; remove
-   them. The transition rules now live only in the workflow definition.
+### The structural shell — DONE (in `src/skyra/skyra-dna-v2/`, tested w/ stubs, -race clean)
+
+- **Transcript core** (`d4834b0`) — `DNA` (competences + the nucleus's indexes),
+  `EphemeralRoot` (mRNA), `Competence`. 64 concurrent transcripts isolate per-wave state
+  by construction (substrate 3/3 at the mechanism level).
+- **The board** (`0bf0edc`) — rows by impulseID, atomic join (motor fires once under the
+  fan-out race), one-reframe rail, append-only trace, causal chain.
+- **The orchestrator + workflow** (`264b9dd`) — membrane as the workflow engine; per-wave
+  `membraneRoot` transcribes the worker as its child (model A within), re-invokes itself
+  between steps (model B between); the static workflow DAG drives it. Stub competences
+  prove the full pipeline routes, motor fires once, the reframe rail holds.
+
+### Porting the competences — the remaining work (two phases)
+
+**Phase 1 — cold-start turn 1 (real inference, real action, no grading).** On turn 1
+there is no prior bet, so grading is trivial. Port each gene's cold path:
+- `sensory:intake` — resolve the sender → entity index (the handed working set, on the
+  nucleus); classify external/reafference/internal → turn 1 = `external`.
+- `other:grade` — no prior distribution → `no-prior` (**no inference**).
+- `midlevel:frame` — assemble the frame from the entity index → **infer the gist** →
+  create the grouping + seed its tokens → `framed`.
+- `other:predict` — **traverse from the gist** (handed entity index) → **infer the
+  distribution** → append to the grouping → `predicted`.
+- `self:predict` — read other's distribution → **infer the plan** → append → `predicted`.
+- `motor:collapse` — read self's plan → **infer the concrete primitive** (with retry) →
+  emit → `emitted`.
+
+Checkpoint: `cmd/validate-v2` turn 1 ≈ v1 turn 1 (gist + distribution + action, ~4 real
+calls). This de-risks the whole skeleton against real Codex with the simplest cognition.
+
+**Phase 2 — grading + reframe (turn 2+).** Port the real bodies (already validated in v1):
+`other:grade` (the adversarial judge → `held`/`all-preds<0`), `self:grade` (reafference
+execution), the reframe conditions. The orchestrator *already* routes reframe/join — these
+just report the real conditions. Checkpoint: full 3-turn `cmd/validate-v2` ≈ v1 (reframe
+on the pivot, verdict on the match).
+
+**Then:** wire `cmd/validate-v2`; keep v1 as the acceptance oracle; flip the default and
+retire v1 only once v2 matches the live trace.
 
 ## Open
 
