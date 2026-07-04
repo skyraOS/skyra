@@ -6,5 +6,8 @@ func WireGenes(d *DNA) {
 	d.RegisterObserve(string(StepSensoryIntake), sensoryIntake)
 	d.RegisterObserve(string(StepOtherGrade), otherGrade)
 	d.RegisterObserve(string(StepMidlevelFrame), midlevelFrame)
-	// other:predict, self:predict, motor:collapse — porting next.
+	d.RegisterObserve(string(StepOtherPredict), otherPredict)
+	d.RegisterObserve(string(StepSelfPredict), selfPredict)
+	d.RegisterObserve(string(StepMotorCollapse), motorCollapse)
+	// Phase 1 (cold-start turn 1) complete. Phase 2: the real grades + reframe.
 }

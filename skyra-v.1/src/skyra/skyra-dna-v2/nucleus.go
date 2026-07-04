@@ -90,3 +90,17 @@ func (gi *GroupingIndex) AddChild(grouping *dna.MemoryCell, edgeKey string, chil
 	defer gi.mu.Unlock()
 	grouping.AddChild(edgeKey, child)
 }
+
+// Snapshot returns a grouping's direct children under the index lock — the safe
+// read path when other:predict and self:predict fan out concurrently (other writes
+// the distribution, self reads it). Prediction root nodes are immutable once added,
+// so their own children are lock-free to read.
+func (gi *GroupingIndex) Snapshot(grouping *dna.MemoryCell) []skyra.Space {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	out := make([]skyra.Space, 0, len(grouping.Children()))
+	for _, c := range grouping.Children() {
+		out = append(out, c)
+	}
+	return out
+}

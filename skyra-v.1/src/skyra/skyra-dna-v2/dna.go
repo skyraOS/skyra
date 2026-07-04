@@ -1,6 +1,10 @@
 package dnav2
 
-import "sync"
+import (
+	"sync"
+
+	"skyra-v1/src/skyra"
+)
 
 // DNA — the one canonical base cell (the genome). Holds ALL durable indexes (the
 // long-term graph) AND all competences (namespaced genes, keyed "namespace:gene"
@@ -24,9 +28,13 @@ type DNA struct {
 	// infer is the injected LLM seam (system, present) → text. Genes that think
 	// call it; nil → those genes skip (tests without inference).
 	infer InferFunc
+	// emit delivers motor's concrete action to the world (injected after the world
+	// exists). nil → motor collapses but does not emit.
+	emit func(skyra.Impulse)
 
-	mu    sync.Mutex
-	clock int // monotonic proper-time counter for node timestamps
+	mu         sync.Mutex
+	clock      int    // monotonic proper-time counter for node timestamps
+	lastAction string // latest emitted action, for CLI/validate display
 }
 
 // InferFunc is the LLM seam: a system prompt + the present (frame) → the model's
@@ -55,6 +63,21 @@ func (d *DNA) Tick() int {
 	defer d.mu.Unlock()
 	d.clock++
 	return d.clock
+}
+
+func (d *DNA) Emit() func(skyra.Impulse)    { return d.emit }
+func (d *DNA) SetEmit(fn func(skyra.Impulse)) { d.emit = fn }
+
+func (d *DNA) SetLastAction(s string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastAction = s
+}
+
+func (d *DNA) LastAction() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.lastAction
 }
 
 // RegisterObserve / RegisterExpress wire a gene at boot. Keyed "namespace:gene".
