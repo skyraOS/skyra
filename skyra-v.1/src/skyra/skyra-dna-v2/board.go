@@ -144,4 +144,8 @@ func (r *Row) Done() []Span {
 	return out
 }
 
-func (r *Row) Status() string { return r.status }
+func (r *Row) Status() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.status
+}
