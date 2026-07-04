@@ -47,53 +47,93 @@ cell's work (runs first on Observe = context primes, last on Express = audit aft
 vote — the onion shape), and it **nests** (a cell throws its own competence to its
 members — fractal). Dispatch is just competence that says *where to go next*.
 
-### The ephemeral root — the bookend carrier
+### One DNA — competences as namespaced genes (NOT per-agent cells)
 
-A per-wave **ephemeral root**: a `Space` that is a thin decorator over a base DNA cell,
-created at wave start, **discarded when the wave completes**.
+There is **one canonical base cell: the DNA.** The v1 dispatcher cells
+(`sensory`, `midlevel`, `other`, `self`, `motor`) **collapse into it** — they are **not
+separate objects**, they are **competence namespaces** (keys) on the one DNA's competence
+map:
 
-- `Slice()` / `Children()` / `NewActivation()` → **delegate to the base cell** (the
-  real topology + durable substrate stay put; the root is transparent for descent).
-- `Observe()` → look up the **selected** `observeFN` from the base cell's map, run it.
-- `Express()` → look up the **selected** `expressFN`, run it (the bookend + the routing
-  decision).
+```
+DNA.competences = {
+  sensory:intake,
+  other:grade,   other:predict,
+  self:grade,    self:predict,
+  midlevel:frame,
+  motor:collapse,
+}
+```
 
-The base cell holds the **menu** — `observeFN map[key]method`, `expressFN
-map[key]method` (the affordances/competences, shared read-only during a wave). The
-ephemeral root holds the **choice** for this wave + any per-wave state. **Kernel: zero
-changes** — it already treats `traversed` as the bookend and already discards its
-per-wave `Node` frame; this just makes the root cell ephemeral too.
+`other:grade` and `self:predict` are just genes. The DNA holds **all the durable indexes**
+(the entity index, the grouping spine, the action index — the long-term graph) **and all
+the competences.** One genome. The "cells" were never separate organisms — they are
+*expression contexts* of the one DNA, and the signal (impulse + workflow step) selects
+which gene expresses. `other` vs `self` = the genome expressing an other-model gene vs a
+self-model gene.
 
-**This is substrate 3/3.** Per-wave mutable state (`reframed`, verdict, the routing
-decision) lives on the ephemeral root — unique per wave, thrown away — not on the shared
-base cell. The scenario-4 race dissolves **by construction**, no locks: two concurrent
-waves have two ephemeral roots. The base cell exposes only immutable maps (concurrent
-reads, safe) + its slice (already locked).
+### The ephemeral root — the transcript (mRNA)
 
-### The three state homes (the whole architecture)
+A per-wave **ephemeral root**: a `Space` that is a thin transcript over the DNA, created
+at wave start, **discarded when the wave completes** (mRNA: a transcript of *one selected
+gene*, not a copy of the genome — reference + select, never copy).
 
-Pulling apart what used to be jammed into "the slice":
+- `Observe()` / `Express()` → run the **selected competence** (`root.competence`); the
+  bookends.
+- `Children()` / `NewActivation()` → delegate to the DNA (transparent for descent).
+- `Slice()` → the relevant **namespace's active-state slice** (below), *not* a per-wave
+  slice and *not* the DNA — the kernel builds its tree there.
+- **per-wave mutable state lives HERE** (the routing decision, `reframed`, the verdict,
+  the parse-condition, the impulseID it carries). **The impulse stays pure** — a clean
+  external signal + correlation ID; it does **not** carry routing state. Cross-actor
+  handoff (e.g. a verdict to the next step) is **stamped on the next root at creation**,
+  or lives on the coordination board — never on the impulse.
 
-| Home | Job | Scope | Concurrency |
-|---|---|---|---|
-| **Private per-actor slice** | the kernel builds its tree + the records/EMAs | per cell, durable | the substrate (built) — untouched, separate from dispatch |
-| **The impulse, in-flight** | **competence** — where this wave goes next | per-wave | safe by construction (each wave owns its impulse) |
-| **The shared coordination slice** | **the join** — impulse nodes + their completion state | one board, cross-wave | the "noSQL board" — locked writes, the emergencies/surprises/join home |
+**Kernel: zero changes** — it already treats `traversed` as the bookend and discards its
+per-wave `Node` frame; this just makes the root ephemeral too.
 
-**The dividing line:** the impulse carries what **one wave** does next; the
-coordination slice carries what **multiple waves** join on. Forward routing rides the
-impulse (single-wave); the fan-out join lives on the board (multi-wave) — because **no
-single impulse can express "wait for two waves."**
+**This is substrate 3/3.** Per-wave state on the transcript — unique per wave, thrown
+away — not on a shared object. Scenario 4 dissolves **by construction** (two concurrent
+waves = two transcripts), the way cells do parallelism: keep the DNA read-only, spin off
+disposable mRNA. **The invariant that makes this hold: competences are stateless
+transforms; ALL durable state lives on the DNA. The moment a competence stashes durable
+state on itself, the protection leaks** — this is what lets behavior churn freely (swap
+competences, reorder the pipeline, ditch the orchestrator) without ever endangering the
+accumulated experience.
 
-### The impulse has two faces
+### The four things (the whole architecture)
 
-1. **In-flight** (riding a wave): carries **competence** — the `(observeFN, expressFN)`
-   selection and where to go next. Per-wave forward routing. Replaces the hardcoded
-   chain. The ephemeral root reads this to run its bookend and to decide `Express`'s
-   spawn.
-2. **As a node** (on the coordination slice): the durable **transaction record** — its
-   declared grouping set, its self/other completion, linked to its causal chain. Same
-   impulseID threads the two faces.
+| Thing | Count | Job |
+|---|---|---|
+| **the DNA** | one | durable graph (indexes) + competences (namespaced genes) |
+| **active-state traversal slices** | four (`midlevel, other, self, motor`) | the working memory each competence traverses — the kernel builds trees here |
+| **the coordination board** | one | impulse-node rows (the join + trace) |
+| **the orchestrator / membrane** | one | reads workflow def + board → transcribes roots → spawns |
+
+### The active-state slices — read live, never snapshotted
+
+`midlevel, other, self, motor` each get their **own traversal slice** (for now). The key
+precision: **a traversal slice *is* active state.** A competence reads *what is active
+now*, not "what was active when this impulse entered the system." So:
+
+- **No per-impulse snapshot, no double-buffer-for-consistency.** Read the live lit set.
+- This is *more correct* for a live being — if state moved since the impulse entered, you
+  **want** the newer value; a frozen view would be the bug. The being's present is always
+  the current active state.
+- It **is** the lagged-reliance model already committed to: "self reads other's *latest*
+  distribution" = "read whatever's active now." Lagged reliance *is* read-active-state.
+  (Also the standing "active state is the last observation" invariant.)
+- What remains on these slices is only **data-race safety** (the substrate's RWMutex +
+  per-record locks) — *not* semantic snapshotting. We prevent panics; we do **not**
+  prevent "reading a newer value than when I started," because that newer value is the
+  point.
+
+### The impulse has two faces (impulse stays pure)
+
+1. **In-flight** (riding a wave): a **pure external signal + correlation ID** (the
+   impulseID). It does *not* carry routing state — that's on the transcript.
+2. **As a node** (on the coordination board): the durable **transaction record** — its
+   declared grouping set, its self/other completion, its append-only trace, linked to its
+   causal chain. Same impulseID threads the two faces.
 
 ### The join — impulse-keyed, not grouping-keyed
 
@@ -148,7 +188,7 @@ durable workflow state and firing the next activity.
 |---|---|
 | the engine / dispatcher | **membrane** |
 | workflow state (per run) | the **impulse node** on the coordination slice (job board), keyed by impulseID |
-| an activity / task | an **ephemeral cell** (one step of work) |
+| an activity / task | an **ephemeral root** (transcript — one step of work) |
 | the workflow definition | the **transition rules** — live on the orchestrator, not scattered per-cell |
 | run id | the **impulseID** (= processID; the impulse stays pure) |
 
@@ -171,6 +211,75 @@ Membrane is the **always-fires bookend** the transition helper needed: every ste
 `membrane(build) → worker(do) → membrane(route)`. The transition rule is a helper the
 orchestrator calls on Express — `(reported condition, workflow def) → next`.
 
+### Two tables (different kinds — don't conflate)
+
+- **The workflow definition — STATIC.** The routing DAG `(step, condition) → next`.
+  Fixed, small, defines the process shape. A **Go map on the orchestrator** — config, the
+  schema. **Not in the slice** (static routing rules in runtime data is a smell). (Far
+  future: a being rewriting its own definition — the "programmable brain wiring" seed;
+  not now.)
+- **The job board — DYNAMIC.** One row per in-flight impulse, keyed by impulseID. The
+  noSQL-esk table **in the coordination slice** — the runtime state.
+
+### The workflow definition (the corrected DAG)
+
+**Grade fronts the stroke** — the grade is the *intake*, and its outcome routes. Sensory
+forks **three ways** on what the impulse *is*; each of `other`/`self` is a `{grade,
+predict}` pair of competences (grade before framing, predict in the fan-out):
+
+| step | condition | → next |
+|---|---|---|
+| sensory | **external** (another agent) | other:grade |
+| sensory | **reafference** (world reply to my action) | self:grade |
+| sensory | **internal** (reframe) | midlevel |
+| other:grade | all preds < 0 (total miss) | midlevel (reframe) |
+| other:grade | held / no-prior (cold start) | midlevel (frame) |
+| self:grade | exec = no (hard fail) | midlevel (reframe) |
+| self:grade | exec ok / partial | midlevel (frame) |
+| midlevel | framed | **fan-out** {other:predict, self:predict} + declare `expects` |
+| midlevel | empty | done |
+| other:predict | done | mark `other` done |
+| self:predict | done | mark `self` done |
+| **join** | `done ⊇ expects` | motor |
+| motor | emitted | done → flush |
+
+- **Two symmetric grade lanes** = stroke 1 (evidence) vs stroke 2 (reafference):
+  external→`other:grade` (did the *other's* move come true), reafference→`self:grade`
+  (did *my* action execute). **Motor emitting is what creates the reafference impulse**
+  that fronts `self:grade` — closing the loop. Perceive-returns are reafference too.
+- **The reafference loop is the self-driven navigation loop** (move→perceive→move…),
+  bounded by `midlevel:empty` (nothing left to act on). The workflow *predicts* the maze
+  behavior we already observed — good sign.
+- "all preds < 0" is the **graded** total-miss (every branch's alignment negative), a
+  threshold on the distribution — richer than the current binary `<match>none</match>`;
+  a small behavior refinement, noted.
+
+**The condition vocabulary** — the finite alphabet the orchestrator routes on (what a
+competence reports): `external · reafference · internal · all-preds<0 · held · no-prior ·
+exec=no · exec-ok · framed · empty · predicted · emitted`.
+
+### The job board row (schema)
+
+```
+impulseID   string
+status      pending | done
+expects     set{(grouping, agent)}   // midlevel declares; MVP = {(G,self),(G,other)}
+done        set{(grouping, agent)}   // agents mark
+reframed    bool                     // the one-reframe rail
+motorFired  bool                     // the atomic join guard (below)
+history     []span  (append-only)    // the trace — flush on done, lock-free reads
+prev        impulseID                // causal link (reafference chain)
+```
+
+- **MVP collapses the grouping nesting:** cold-start = one grouping/impulse, so `expects
+  = {(G,self),(G,other)}` and the join is "both agents done." The set-shaped schema
+  already supports warm N-grouping; we only populate one for now.
+- **The join fire must be atomic.** Both agents complete concurrently, both return to the
+  orchestrator, both see `done ⊇ expects`. So "fire motor" is a **check-and-set under the
+  row lock**: whoever sees `satisfied AND !motorFired` sets `motorFired` and spawns motor;
+  the other sees it set and does nothing. Same row lock as the append — no new machinery.
+  Without it, motor fires twice.
+
 ### Why it's not a bottleneck
 
 Membrane's work is a **board read + a spawn — no inference**. The 30s cost stays in the
@@ -180,7 +289,7 @@ extra hop (`worker → membrane → next`) is the price, and it's cheap.
 
 ### Source of truth
 
-Step/process state may be *mirrored* on the ephemeral cell (its working context) but the
+Step/process state may be *mirrored* on the ephemeral root (its working context) but the
 **board row (keyed by impulseID) is the source of truth**. If they diverge, the board
 wins — one clock.
 
@@ -208,29 +317,44 @@ engine out from the boundary is the natural seam.
   impulse node's completion row) instead of being smuggled into a hardcoded `self→motor`
   edge. Cross-wave coordination finally has a place that isn't a cell field.
 - **Affordances as the vocabulary** ([memory-as-world.md](../../design-docs/cognition/memory-as-world.md)):
-  the being's "what can fire" is the base cell's competence maps; routing selects among
+  the being's "what can fire" is the DNA's competence map (namespaced genes); routing selects among
   them. The inner-world primitives (match/edit/new) and the pipeline routing become the
   same dispatch shape.
 - **Path 2 alignment (free).** impulseID-as-correlation-ID + linked impulse-node chains
   is exactly a distributed trace; the join works the same whether a wave's action stayed
   local or crossed to another machine.
 
-## Scope / risk
+## Scope / risk / build approach
 
-A **real refactor**, not additive — it introduces the ephemeral root + competence maps,
-the coordination slice, and rewrites construction/routing. Do it *after* the current
-working model is preserved (committed + pushed — done). Spread-before-collapse:
-the transition table + competence set is small (5 cells, a handful of conditions/
-methods); build it concrete for these cells, let generality emerge if a second being
-ever needs different wiring.
+A **big shift**, not an in-place refactor. Decisions (2026-07-03):
+
+- **Fresh package `src/skyra/skyra-dna-v2/`.** The v1 dir stays as reference (patterns,
+  method bodies) and as the **acceptance oracle** — v2 is not "done" until it produces
+  the same `cmd/validate` live trace (reframe on the pivot, verdict on the match, one
+  action per impulse). Keep v1 wired to `cmd/tui`/`cmd/validate`; v2 gets `cmd/validate-v2`.
+- **Port, don't rewrite** — the rewrite graveyard is real ("rebuild for months, never
+  match the old behavior"). *Rebuilt in v2:* the structural shell (DNA, ephemeral root,
+  orchestrator, board, workflow def). *Ported near-verbatim as competence bodies:* the
+  grading judge prompts, the reframe rail, motor's retry-with-correction, the self/other
+  predict logic — validated live, re-signatured to `(root, origin, impulse)`. *Imported
+  unchanged:* `MemoryCell`, `parse.go`, the inference seam, the world, `Route`/`Prediction`.
+- **The guard through all of it:** competences are **stateless transforms; all durable
+  state on the DNA.** This is the whole point — it lets behavior churn (which we *will*
+  do, even after the first accumulation run) without endangering the accumulated
+  experience. That protection is *why* this refactor is worth doing before the long
+  experiment, not scaffolding-for-later.
+- Spread-before-collapse: the workflow def + competence set is small (a handful of
+  steps/conditions); build it concrete, let generality emerge only if a second being
+  needs different wiring.
 
 ## Migration (increment order)
 
 1. **Ephemeral root + per-wave state off cell fields** — `reframed`/`plannedThisWave`/
    verdict move onto the per-wave root. Un-skip `TestConcurrentEngagesRapidFire`
    (scenario 4) — green with no locks. *(This is substrate 3/3.)*
-2. **Competence maps on the base cell** — `observeFN`/`expressFN` maps; the ephemeral
-   root selects and delegates. Behavior unchanged (one entry per map to start).
+2. **Competence map on the DNA** — the namespaced genes (`sensory:intake`, `other:grade`,
+   `self:predict`, …); the ephemeral root selects one and delegates. Behavior unchanged
+   (port the existing method bodies as competences, re-signatured).
 3. **The coordination slice (job board)** — impulse node per impulseID with
    `expects`/`done` + the append-only history column; impulseID propagates as the
    correlation ID (impulse stays pure). No behavior change yet — just the board exists
