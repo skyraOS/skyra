@@ -9,6 +9,54 @@ import (
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
+// self:grade — closes the prior self proposal against the reafference (the world's
+// reply to skyra's own action) via the execution judge. exec grade > 0 → "exec-ok".
+// A hard execution failure (judge said `no`, score 0 — the intent could not be
+// realized, e.g. a blocked move) → "exec=no", which reframes: an unrealizable intent
+// is a framing problem, not just a bad action. Ported from v1 SelfCell.gradePrior.
+//
+// No realized proposal / failed call / parse leaves it ungraded and reports
+// "exec-ok" (carry on unchanged — the reafference lane still frames).
+func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
+	root.Condition = "exec-ok"
+	gi := root.DNA().Groupings()
+	proposal, pred, action, ok := gi.LatestUngradedRealizedSelf()
+	if !ok || root.DNA().Infer() == nil {
+		return
+	}
+	result := "(no result reported)"
+	if imp, ok := asImpulse(impulse); ok {
+		if r, ok := imp.Payload.(string); ok && r != "" {
+			result = r
+		}
+	}
+	present := fmt.Sprintf("Instruction:\n%s\n\nAction taken:\n%s %s %v\n\nEnvironment result:\n%s",
+		pred.Text, action.Primitive, action.EntityID, action.Content, result)
+	resp, err := root.DNA().Infer()(execGraderSystem, present)
+	if err != nil {
+		return
+	}
+	score, parsed := dna.ParseExecGrade(resp)
+	if !parsed {
+		return
+	}
+	gi.StampSelfGrade(proposal, score, result)
+	if score == 0 {
+		root.Condition = "exec=no" // hard failure → reframe
+	}
+}
+
+// execGraderSystem — the execution judge. Adversarial-neutral, same posture as the
+// other-side grader: never told whose instruction it is, only compares instruction
+// to what was actually done. Verbatim from v1.
+const execGraderSystem = "You are a strict, impartial judge of execution. You are given an " +
+	"instruction that was issued, the action that was actually taken, and any result " +
+	"reported by the environment.\n\n" +
+	"Decide whether the action faithfully executed the instruction. Be skeptical: doing " +
+	"something related but different is NOT faithful execution; a blocked or failed result " +
+	"means the instruction was not accomplished (at best partial).\n\n" +
+	"Reply with only one tag: <grade>yes</grade>, <grade>partial</grade>, or <grade>no</grade>."
+
 // self:predict — decide skyra's own next move under the framing, conditioned on
 // what the OTHER is expected to do ("self relies on other" — read live/lagged off
 // the grouping). Ported from v1 self.Observe (predict half). Reports "predicted".

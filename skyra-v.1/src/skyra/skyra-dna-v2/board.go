@@ -152,6 +152,13 @@ func (r *Row) Status() string {
 	return r.status
 }
 
+// Reframed reports whether the one-reframe rail has been tripped on this impulse.
+func (r *Row) Reframed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reframed
+}
+
 // SetGrouping / Grouping thread the active grouping (midlevel:frame produces it;
 // the fan-out's predict workers receive it). Stored as `any` to keep the board
 // free of the dna types.

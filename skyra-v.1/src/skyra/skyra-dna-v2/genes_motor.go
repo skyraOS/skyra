@@ -15,21 +15,23 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if root.Grouping == nil || root.DNA().Infer() == nil {
 		return
 	}
-	plan := readSelfPlan(root.DNA().Groupings(), root.Grouping)
-	if plan == "" {
+	plan, proposal := readSelfProposal(root.DNA().Groupings(), root.Grouping)
+	if plan == "" || proposal == nil {
 		return
 	}
 	emission, ok := inferMotor(root.DNA().Infer(), plan)
 	if !ok {
 		return
 	}
+	// the action hangs off the PROPOSAL (proposal→action) — the realization edge
+	// self:grade closes against the reafference, not off the grouping.
 	action := dna.NewMemoryCell(
-		fmt.Sprintf("%s→action:%d", root.Grouping.ID(), root.DNA().Tick()),
+		fmt.Sprintf("%s→action:%d", proposal.ID(), root.DNA().Tick()),
 		dna.KindAction,
-		dna.ActionRecord{Primitive: emission.Primitive, EntityID: emission.Target, Content: emission.Payload},
+		dna.ActionRecord{Primitive: emission.Primitive, EntityID: emission.Target, Content: emission.Payload, Timestamp: root.DNA().Tick()},
 		nil,
 	)
-	root.DNA().Groupings().AddChild(root.Grouping, action.ID(), action)
+	root.DNA().Groupings().AddChild(proposal, action.ID(), action)
 	root.DNA().SetLastAction(displayAction(emission))
 	if emit := root.DNA().Emit(); emit != nil {
 		emit(skyra.Impulse{
@@ -41,9 +43,11 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 }
 
-// readSelfPlan reads the latest self proposal off the grouping spine.
-func readSelfPlan(gi *GroupingIndex, grouping *dna.MemoryCell) string {
+// readSelfProposal reads the latest self proposal off the grouping spine — the plan
+// text plus the proposal cell (motor hangs the action off it: the realization edge).
+func readSelfProposal(gi *GroupingIndex, grouping *dna.MemoryCell) (string, *dna.MemoryCell) {
 	best := ""
+	var bestCell *dna.MemoryCell
 	bestTS := -1
 	for _, c := range gi.Snapshot(grouping) {
 		mc, ok := c.(*dna.MemoryCell)
@@ -51,10 +55,10 @@ func readSelfPlan(gi *GroupingIndex, grouping *dna.MemoryCell) string {
 			continue
 		}
 		if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
-			bestTS, best = p.Timestamp, p.Text
+			bestTS, best, bestCell = p.Timestamp, p.Text, mc
 		}
 	}
-	return best
+	return best, bestCell
 }
 
 const motorMaxRetries = 2

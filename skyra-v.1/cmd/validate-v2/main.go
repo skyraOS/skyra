@@ -1,11 +1,16 @@
-// Command validate-v2 drives one external impulse through the dnav2 pipeline on
-// REAL inference (Codex CLI) — the phase-1 de-risk checkpoint: does a transcribed
-// worker actually produce a real inference result and flow an action through the
-// orchestrator? Prints the gist (midlevel:frame), other's top prediction, self's
-// plan, and the emitted action.
+// Command validate-v2 drives a scripted multi-turn conversation through the dnav2
+// pipeline on REAL inference (Codex CLI) — the phase-2 de-risk checkpoint. Phase 1
+// proved a single cold-start turn flows an action through the orchestrator; phase 2
+// proves the ported grading + reframe fire on real inference:
+//
+//   - turn 1 (cold start): frame → predict → emit; establishes an other-distribution
+//   - turn 2 (on-track):    the reply realizes a predicted branch → other:grade "held"
+//   - turn 3 (pivot):       an unrelated turn → total miss → "all-preds<0" → REFRAME
+//
+// Prints, per turn: the grade condition, whether it reframed, the gist, and the
+// emitted action — the live analogue of v1's 3-turn trace.
 //
 //	go run ./cmd/validate-v2
-//	go run ./cmd/validate-v2 "what's the architecture of this thing"
 package main
 
 import (
@@ -21,10 +26,15 @@ import (
 	"skyra-v1/src/skyra/world"
 )
 
+type turn struct {
+	id, prev, utterance, note string
+}
+
 func main() {
-	utterance := "can you help me with the skyra project"
-	if len(os.Args) > 1 {
-		utterance = os.Args[1]
+	script := []turn{
+		{"X1", "", "can you help me with the skyra project", "cold start — no prior bet"},
+		{"X2", "X1", "how does the kernel actually work?", "on-track — should hold a prediction"},
+		{"X3", "X2", "forget that — what's the weather like where you are?", "hard pivot — should miss + reframe"},
 	}
 
 	d := dnav2.NewDNA("skyra")
@@ -43,32 +53,46 @@ func main() {
 	}
 	orch := dnav2.NewOrchestrator(d, board, kernel, world.NewSlice("skyra:membrane", "skyra"), slices)
 
-	done := make(chan string, 1)
-	orch.SetFlush(func(id string, trace []dnav2.Span) { done <- id })
+	for _, tn := range script {
+		gotEmit = false
+		done := make(chan []dnav2.Span, 1)
+		orch.SetFlush(func(_ string, trace []dnav2.Span) { done <- trace })
 
-	fmt.Printf("→ michael: %q\n\n", utterance)
-	orch.Fire("X", "", skyra.Impulse{
-		Primitive: "engage",
-		Source:    &skyra.ImpulseSource{SpaceID: "michael"},
-		Payload:   utterance,
-	})
+		fmt.Printf("\n─── %s ─── (%s)\n→ michael: %q\n", tn.id, tn.note, tn.utterance)
+		orch.Fire(tn.id, tn.prev, skyra.Impulse{
+			Primitive: "engage",
+			Source:    &skyra.ImpulseSource{SpaceID: "michael"},
+			Payload:   tn.utterance,
+		})
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Minute):
-		fmt.Println("✗ timed out")
-		os.Exit(1)
-	}
+		var trace []dnav2.Span
+		select {
+		case trace = <-done:
+		case <-time.After(5 * time.Minute):
+			fmt.Println("✗ timed out")
+			os.Exit(1)
+		}
 
-	fmt.Println("framing (gist):     ", gist(d))
-	fmt.Println("other predicts:     ", topOther(d))
-	fmt.Println("self proposes:      ", selfPlan(d))
-	if gotEmit {
-		fmt.Printf("→ motor emitted:     %s %s %v\n", emitted.Primitive, emitted.TargetID, emitted.Payload)
-	} else {
-		fmt.Println("→ motor emitted:      (nothing)")
+		fmt.Printf("  other:grade:  %s\n", condOf(trace, dnav2.StepOtherGrade))
+		fmt.Printf("  reframed:     %v\n", board.Row(tn.id, "").Reframed())
+		fmt.Printf("  framing:      %s\n", gist(d))
+		fmt.Printf("  self plan:    %s\n", selfPlan(d))
+		if gotEmit {
+			fmt.Printf("  → emitted:    %s %s %v\n", emitted.Primitive, emitted.TargetID, emitted.Payload)
+		} else {
+			fmt.Println("  → emitted:    (nothing)")
+		}
 	}
 	fmt.Println("\n═══ done ═══")
+}
+
+func condOf(trace []dnav2.Span, step dnav2.Step) string {
+	for _, s := range trace {
+		if s.Step == string(step) {
+			return s.Condition
+		}
+	}
+	return "(step did not run)"
 }
 
 func gist(d *dnav2.DNA) string {
@@ -80,34 +104,6 @@ func gist(d *dnav2.DNA) string {
 		return gg.Text
 	}
 	return "(none)"
-}
-
-func topOther(d *dnav2.DNA) string {
-	g := d.Groupings().Latest()
-	if g == nil {
-		return "(none)"
-	}
-	var best dna.Prediction
-	for _, c := range g.Children() {
-		root, ok := c.(*dna.MemoryCell)
-		if !ok {
-			continue
-		}
-		if p, ok := root.Content().(dna.Prediction); !ok || p.Role != "other" {
-			continue
-		}
-		for _, gc := range root.Children() {
-			if pp, ok := gc.(*dna.MemoryCell); ok {
-				if pr, ok := pp.Content().(dna.Prediction); ok && pr.Probability > best.Probability {
-					best = pr
-				}
-			}
-		}
-	}
-	if best.Text == "" {
-		return "(none)"
-	}
-	return fmt.Sprintf("p=%.2f %s", best.Probability, best.Text)
 }
 
 func selfPlan(d *dnav2.DNA) string {

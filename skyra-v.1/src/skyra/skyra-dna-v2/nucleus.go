@@ -2,6 +2,7 @@ package dnav2
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"skyra-v1/src/skyra"
@@ -101,6 +102,137 @@ func (gi *GroupingIndex) Snapshot(grouping *dna.MemoryCell) []skyra.Space {
 	out := make([]skyra.Space, 0, len(grouping.Children()))
 	for _, c := range grouping.Children() {
 		out = append(out, c)
+	}
+	return out
+}
+
+// LatestUngradedOther finds the newest ungraded other-pred distribution across all
+// groupings — the prior bet other:grade closes against fresh evidence. Returns the
+// distribution root and its branch children (sorted by edge key for stable prompt
+// numbering). nil if there is no open bet. Ported from v1 latestUngradedDistribution.
+func (gi *GroupingIndex) LatestUngradedOther() (*dna.MemoryCell, []*dna.MemoryCell) {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	var best *dna.MemoryCell
+	bestTS := -1
+	for _, g := range gi.byID {
+		for _, child := range g.Children() {
+			cc, ok := child.(*dna.MemoryCell)
+			if !ok {
+				continue
+			}
+			p, ok := cc.Content().(dna.Prediction)
+			if !ok || p.Role != "other" || p.Graded || len(cc.Children()) == 0 {
+				continue
+			}
+			if p.Timestamp > bestTS {
+				bestTS, best = p.Timestamp, cc
+			}
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(best.Children()))
+	for k := range best.Children() {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	kids := make([]*dna.MemoryCell, 0, len(keys))
+	for _, k := range keys {
+		kids = append(kids, best.Children()[k].(*dna.MemoryCell))
+	}
+	return best, kids
+}
+
+// StampOtherGrade records the judge's verdict on a distribution under the index
+// lock: the root carries the probability mass on the realized branch (the proper
+// score, 0 on a total miss); each branch child carries 1 (realized) / 0. matchedIdx
+// is 1-based; 0 marks a total miss. Ported from v1 gradePrior's write-back.
+func (gi *GroupingIndex) StampOtherGrade(root *dna.MemoryCell, kids []*dna.MemoryCell, matchedIdx int, score float64, evidence string) {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	if p, ok := root.Content().(dna.Prediction); ok {
+		p.Graded, p.Grade, p.Evidence = true, score, evidence
+		root.SetContent(p)
+	}
+	for i, kid := range kids {
+		p, ok := kid.Content().(dna.Prediction)
+		if !ok {
+			continue
+		}
+		p.Graded, p.Evidence = true, evidence
+		if i == matchedIdx-1 {
+			p.Grade = 1
+		}
+		kid.SetContent(p)
+	}
+}
+
+// LatestUngradedRealizedSelf finds the newest ungraded self proposal that has been
+// REALIZED (carries an action child — the intent was actually emitted). Returns the
+// proposal root, its prediction content, and the latest action on it. self:grade
+// closes it against the reafference. Ported from v1 latestUngradedRealized.
+func (gi *GroupingIndex) LatestUngradedRealizedSelf() (*dna.MemoryCell, dna.Prediction, dna.ActionRecord, bool) {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	var best *dna.MemoryCell
+	var bestPred dna.Prediction
+	bestTS := -1
+	for _, g := range gi.byID {
+		for _, child := range g.Children() {
+			cc, ok := child.(*dna.MemoryCell)
+			if !ok {
+				continue
+			}
+			p, ok := cc.Content().(dna.Prediction)
+			if !ok || p.Role != "self" || p.Graded || len(cc.Children()) == 0 {
+				continue
+			}
+			if p.Timestamp > bestTS {
+				bestTS, best, bestPred = p.Timestamp, cc, p
+			}
+		}
+	}
+	if best == nil {
+		return nil, dna.Prediction{}, dna.ActionRecord{}, false
+	}
+	var action dna.ActionRecord
+	actionTS := -1
+	for _, child := range best.Children() {
+		cc, ok := child.(*dna.MemoryCell)
+		if !ok || cc.Kind() != dna.KindAction {
+			continue
+		}
+		if rec, ok := cc.Content().(dna.ActionRecord); ok && rec.Timestamp > actionTS {
+			actionTS, action = rec.Timestamp, rec
+		}
+	}
+	if actionTS < 0 {
+		return nil, dna.Prediction{}, dna.ActionRecord{}, false
+	}
+	return best, bestPred, action, true
+}
+
+// StampSelfGrade records the execution judge's verdict on a realized proposal under
+// the index lock (score 1 / 0.5 / 0; evidence = the world result). Ported from v1
+// gradePrior's write-back.
+func (gi *GroupingIndex) StampSelfGrade(proposal *dna.MemoryCell, score float64, evidence string) {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	if p, ok := proposal.Content().(dna.Prediction); ok {
+		p.Graded, p.Grade, p.Evidence = true, score, evidence
+		proposal.SetContent(p)
+	}
+}
+
+// All returns every grouping under the index lock (inspection / trace assembly).
+func (gi *GroupingIndex) All() []*dna.MemoryCell {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	out := make([]*dna.MemoryCell, 0, len(gi.byID))
+	for _, g := range gi.byID {
+		out = append(out, g)
 	}
 	return out
 }
