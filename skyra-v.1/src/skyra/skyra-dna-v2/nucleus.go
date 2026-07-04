@@ -104,3 +104,18 @@ func (gi *GroupingIndex) Snapshot(grouping *dna.MemoryCell) []skyra.Space {
 	}
 	return out
 }
+
+// Latest returns the most-recently-created grouping (by gist timestamp), for
+// inspection/display. nil if none.
+func (gi *GroupingIndex) Latest() *dna.MemoryCell {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	var best *dna.MemoryCell
+	bestTS := -1
+	for _, g := range gi.byID {
+		if gist, ok := g.Content().(dna.Gist); ok && gist.Timestamp > bestTS {
+			bestTS, best = gist.Timestamp, g
+		}
+	}
+	return best
+}
