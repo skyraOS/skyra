@@ -23,6 +23,12 @@ type EphemeralRoot struct {
 	ImpulseID string // the correlation ID this wave carries
 	Condition string // the parse-condition this competence reports; the orchestrator routes on it
 	Handoff   any    // stamped by the creator at transcription (e.g. a verdict to this step)
+
+	// working set — references into the nucleus's master graph, handed by the
+	// membrane at transcription (the mRNA carries what it needs). The entity index
+	// rides every worker; step-specific handles (the active grouping) are set for
+	// the steps that need them.
+	Entities *EntityIndex
 }
 
 // Transcribe expresses one gene for one wave: select the observe/express genes,

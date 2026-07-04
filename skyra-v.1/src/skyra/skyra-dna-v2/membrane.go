@@ -75,6 +75,10 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	slice := m.orch.slices[ns]
 	key := string(m.step)
 	m.worker = m.orch.dna.Transcribe(key, key, key, slice, m.impulseID, nil)
+	// hand the working set — the entity index rides EVERY worker (the mRNA carries
+	// what it needs; step-specific handles like the active grouping are added by
+	// the gene ports that need them).
+	m.worker.Entities = m.orch.dna.Entities()
 }
 
 // Express — the worker has run and set its condition; read it, record the span, and

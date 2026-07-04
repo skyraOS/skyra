@@ -17,22 +17,27 @@ type DNA struct {
 	observe map[string]ObserveCompetence // "namespace:gene" → gene
 	express map[string]ExpressCompetence
 
-	// mu guards the durable indexes only (not the competence maps, which are
-	// frozen after boot). Indexes are stubbed until competences are ported.
+	// The master graph (the nucleus's durable working memory). The entity index is
+	// the first ported; the grouping spine + action index follow.
+	entities *EntityIndex
+
+	// mu guards misc scratch (stress, etc.); the entity index has its own lock.
 	mu      sync.Mutex
 	indexes map[string]any
 }
 
 func NewDNA(beingID string) *DNA {
 	return &DNA{
-		beingID: beingID,
-		observe: map[string]ObserveCompetence{},
-		express: map[string]ExpressCompetence{},
-		indexes: map[string]any{},
+		beingID:  beingID,
+		observe:  map[string]ObserveCompetence{},
+		express:  map[string]ExpressCompetence{},
+		entities: NewEntityIndex(nil), // nil nucleus slice until activation lands
+		indexes:  map[string]any{},
 	}
 }
 
-func (d *DNA) BeingID() string { return d.beingID }
+func (d *DNA) BeingID() string        { return d.beingID }
+func (d *DNA) Entities() *EntityIndex { return d.entities }
 
 // RegisterObserve / RegisterExpress wire a gene at boot. Keyed "namespace:gene".
 func (d *DNA) RegisterObserve(key string, fn ObserveCompetence) { d.observe[key] = fn }
