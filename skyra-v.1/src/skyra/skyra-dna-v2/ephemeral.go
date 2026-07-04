@@ -1,6 +1,9 @@
 package dnav2
 
-import "skyra-v1/src/skyra"
+import (
+	"skyra-v1/src/skyra"
+	dna "skyra-v1/src/skyra/skyra-dna"
+)
 
 // EphemeralRoot — the transcript (mRNA). A per-wave skyra.Space over the DNA:
 // created at wave start (the transcription event), discarded when the wave
@@ -29,6 +32,7 @@ type EphemeralRoot struct {
 	// rides every worker; step-specific handles (the active grouping) are set for
 	// the steps that need them.
 	Entities *EntityIndex
+	Grouping *dna.MemoryCell // the active grouping — set by midlevel:frame (out), handed to predicts (in)
 }
 
 // Transcribe expresses one gene for one wave: select the observe/express genes,

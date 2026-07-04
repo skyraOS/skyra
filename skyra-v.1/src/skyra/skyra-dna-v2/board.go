@@ -31,6 +31,8 @@ type Row struct {
 	motorFired bool            // the atomic join guard
 	status     string          // "pending" | "done"
 	history    []Span          // append-only trace (immutable spans; flush on done)
+
+	grouping any // the impulse's active grouping (working set threaded midlevel→predicts)
 }
 
 // Span is one step's trace entry (append-only, immutable once written).
@@ -148,4 +150,19 @@ func (r *Row) Status() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.status
+}
+
+// SetGrouping / Grouping thread the active grouping (midlevel:frame produces it;
+// the fan-out's predict workers receive it). Stored as `any` to keep the board
+// free of the dna types.
+func (r *Row) SetGrouping(g any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.grouping = g
+}
+
+func (r *Row) Grouping() any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.grouping
 }

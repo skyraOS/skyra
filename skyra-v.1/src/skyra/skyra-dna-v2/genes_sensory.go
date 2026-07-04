@@ -27,6 +27,7 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		To:        root.DNA().BeingID(),
 		Utterance: utterance,
 		Payload:   imp.Payload,
+		Timestamp: root.DNA().Tick(),
 	})
 }
 

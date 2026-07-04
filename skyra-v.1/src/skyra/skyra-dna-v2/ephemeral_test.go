@@ -13,12 +13,10 @@ import (
 // DNA for durable state, and its per-wave state (Condition) is its own.
 func TestTranscriptRunsSelectedGene(t *testing.T) {
 	d := NewDNA("skyra")
-	// a gene that records durable state on the DNA and a per-wave condition on the
-	// transcript (the correct split: durable → DNA, per-wave → root)
+	// a gene that writes durable state on the DNA (the clock) and a per-wave
+	// condition on the transcript (the correct split: durable → DNA, per-wave → root)
 	d.RegisterObserve("test:work", func(root *EphemeralRoot, origin skyra.Space, impulse any) {
-		root.DNA().mu.Lock()
-		root.DNA().indexes["ran"] = true
-		root.DNA().mu.Unlock()
+		root.DNA().Tick()
 		root.Condition = "did-work"
 	})
 	d.RegisterExpress("test:work", func(root *EphemeralRoot, origin skyra.Space, impulse any) any {
@@ -31,8 +29,8 @@ func TestTranscriptRunsSelectedGene(t *testing.T) {
 	kernel := relation.NewRelation()
 	kernel.Realize(root, root, skyra.Impulse{})
 
-	if v, _ := d.indexes["ran"].(bool); !v {
-		t.Fatal("gene did not run / did not reach the DNA")
+	if d.Tick() != 2 { // gene ticked to 1; this Tick reads 2
+		t.Fatal("gene did not run / did not reach the DNA clock")
 	}
 	if root.Condition != "did-work" {
 		t.Fatalf("per-wave condition = %q, want did-work", root.Condition)
@@ -46,10 +44,7 @@ func TestConcurrentTranscriptsIsolated(t *testing.T) {
 	d := NewDNA("skyra")
 	d.RegisterObserve("test:count", func(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = root.ImpulseID // per-wave: each root records its own impulse
-		root.DNA().mu.Lock()
-		n, _ := root.DNA().indexes["n"].(int)
-		root.DNA().indexes["n"] = n + 1 // durable: guarded shared write
-		root.DNA().mu.Unlock()
+		root.DNA().Tick()               // durable: guarded shared write
 	})
 
 	kernel := relation.NewRelation()
@@ -70,7 +65,7 @@ func TestConcurrentTranscriptsIsolated(t *testing.T) {
 	}
 	wg.Wait()
 
-	if n, _ := d.indexes["n"].(int); n != waves {
-		t.Fatalf("durable count = %d, want %d (guarded shared write lost increments)", n, waves)
+	if got := d.Tick() - 1; got != waves { // -1 for this read's own tick
+		t.Fatalf("durable count = %d, want %d (guarded shared write lost increments)", got, waves)
 	}
 }

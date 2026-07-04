@@ -1,6 +1,9 @@
 package dnav2
 
-import "skyra-v1/src/skyra"
+import (
+	"skyra-v1/src/skyra"
+	dna "skyra-v1/src/skyra/skyra-dna"
+)
 
 // Orchestrator — membrane as the workflow engine. Holds the durable references
 // (DNA, board, kernel, the per-namespace active-state slices, its own throwaway
@@ -76,9 +79,14 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	key := string(m.step)
 	m.worker = m.orch.dna.Transcribe(key, key, key, slice, m.impulseID, nil)
 	// hand the working set — the entity index rides EVERY worker (the mRNA carries
-	// what it needs; step-specific handles like the active grouping are added by
-	// the gene ports that need them).
+	// what it needs). Step-specific: the predict genes get the impulse's active
+	// grouping (produced by midlevel:frame, stashed on the row).
 	m.worker.Entities = m.orch.dna.Entities()
+	if m.step == StepOtherPredict || m.step == StepSelfPredict {
+		if g, ok := m.orch.board.Row(m.impulseID, "").Grouping().(*dna.MemoryCell); ok {
+			m.worker.Grouping = g
+		}
+	}
 }
 
 // Express — the worker has run and set its condition; read it, record the span, and
@@ -90,6 +98,12 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 	}
 	row := m.orch.board.Row(m.impulseID, "")
 	row.Append(Span{Step: string(m.step), Condition: cond})
+
+	// midlevel:frame produced the active grouping — stash it on the row so the
+	// fan-out's predict workers receive it as their working set.
+	if m.step == StepMidlevelFrame && m.worker != nil && m.worker.Grouping != nil {
+		row.SetGrouping(m.worker.Grouping)
+	}
 
 	route, ok := routeFor(m.step, cond)
 	if !ok {

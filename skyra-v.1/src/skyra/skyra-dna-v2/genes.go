@@ -4,5 +4,7 @@ package dnav2
 // here as they are ported (phase 1: cold-start turn 1; phase 2: grading + reframe).
 func WireGenes(d *DNA) {
 	d.RegisterObserve(string(StepSensoryIntake), sensoryIntake)
-	// midlevel:frame, other:predict, self:predict, motor:collapse — porting next.
+	d.RegisterObserve(string(StepOtherGrade), otherGrade)
+	d.RegisterObserve(string(StepMidlevelFrame), midlevelFrame)
+	// other:predict, self:predict, motor:collapse — porting next.
 }

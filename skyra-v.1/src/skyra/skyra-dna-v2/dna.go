@@ -17,27 +17,45 @@ type DNA struct {
 	observe map[string]ObserveCompetence // "namespace:gene" → gene
 	express map[string]ExpressCompetence
 
-	// The master graph (the nucleus's durable working memory). The entity index is
-	// the first ported; the grouping spine + action index follow.
-	entities *EntityIndex
+	// The master graph (the nucleus's durable working memory).
+	entities  *EntityIndex
+	groupings *GroupingIndex
 
-	// mu guards misc scratch (stress, etc.); the entity index has its own lock.
-	mu      sync.Mutex
-	indexes map[string]any
+	// infer is the injected LLM seam (system, present) → text. Genes that think
+	// call it; nil → those genes skip (tests without inference).
+	infer InferFunc
+
+	mu    sync.Mutex
+	clock int // monotonic proper-time counter for node timestamps
 }
+
+// InferFunc is the LLM seam: a system prompt + the present (frame) → the model's
+// text. Injected so dnav2 stays free of the inference package.
+type InferFunc func(system, present string) (string, error)
 
 func NewDNA(beingID string) *DNA {
 	return &DNA{
-		beingID:  beingID,
-		observe:  map[string]ObserveCompetence{},
-		express:  map[string]ExpressCompetence{},
-		entities: NewEntityIndex(nil), // nil nucleus slice until activation lands
-		indexes:  map[string]any{},
+		beingID:   beingID,
+		observe:   map[string]ObserveCompetence{},
+		express:   map[string]ExpressCompetence{},
+		entities:  NewEntityIndex(nil), // nil nucleus slice until activation lands
+		groupings: NewGroupingIndex(nil),
 	}
 }
 
-func (d *DNA) BeingID() string        { return d.beingID }
-func (d *DNA) Entities() *EntityIndex { return d.entities }
+func (d *DNA) BeingID() string           { return d.beingID }
+func (d *DNA) Entities() *EntityIndex    { return d.entities }
+func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
+func (d *DNA) Infer() InferFunc          { return d.infer }
+func (d *DNA) SetInfer(fn InferFunc)     { d.infer = fn }
+
+// Tick advances the being's proper-time clock (node timestamps / ordering).
+func (d *DNA) Tick() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.clock++
+	return d.clock
+}
 
 // RegisterObserve / RegisterExpress wire a gene at boot. Keyed "namespace:gene".
 func (d *DNA) RegisterObserve(key string, fn ObserveCompetence) { d.observe[key] = fn }
