@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
@@ -38,6 +39,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
 	root.Grouping = root.DNA().Groupings().Create(groupID, label, ts)
 	root.Condition = "framed"
+	debug.Being("skyra", "midlevel", fmt.Sprintf("framed %s gist=%q", groupID, label))
 }
 
 // renderExchange turns the entity index's interaction records into a timestamp-

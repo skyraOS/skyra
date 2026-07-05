@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"skyra-v1/src/debug"
 	dna "skyra-v1/src/skyra/skyra-dna"
 	"skyra-v1/src/skyra/traverse"
 )
@@ -149,7 +150,8 @@ func FramePresentCrossing(grouping *dna.MemoryCell, budget float64, store *Activ
 	if store != nil {
 		store.CrossFrame(res.Edges(), tick)
 	}
-	s, _ := renderFrame(res)
+	s, n := renderFrame(res)
+	debug.Being("skyra", "frame", fmt.Sprintf("assembled budget=%.0f lit=%d edges=%d", budget, n, len(res.Edges())))
 	return s
 }
 

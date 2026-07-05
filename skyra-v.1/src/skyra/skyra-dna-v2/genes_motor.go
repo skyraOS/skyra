@@ -3,6 +3,7 @@ package dnav2
 import (
 	"fmt"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
@@ -34,6 +35,7 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.DNA().Groupings().AddChild(proposal, action.ID(), action)
 	root.DNA().CrossBirth(action.ID()) // node birth: the proposal→action edge was just active
 	root.DNA().SetLastAction(displayAction(emission))
+	debug.Being("skyra", "motor", fmt.Sprintf("emit %s %s %v", emission.Primitive, emission.Target, emission.Payload))
 	if emit := root.DNA().Emit(); emit != nil {
 		emit(skyra.Impulse{
 			Primitive: emission.Primitive,

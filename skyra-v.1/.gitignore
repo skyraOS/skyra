@@ -7,3 +7,7 @@ skyra-v05
 /tui
 /skyra-v1
 *.log
+
+# runtime debug logs
+skyra-v.1/logs/
+logs/

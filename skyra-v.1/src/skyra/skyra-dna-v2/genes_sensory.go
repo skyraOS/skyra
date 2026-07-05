@@ -1,6 +1,9 @@
 package dnav2
 
 import (
+	"fmt"
+
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
@@ -17,6 +20,7 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	root.Condition = classify(imp, root.DNA().BeingID())
 	if root.Condition != "external" {
+		debug.Being("skyra", "sensory", fmt.Sprintf("classify=%s (no record)", root.Condition))
 		return // reafference/internal record nothing on this lane yet (phase 2)
 	}
 	sender := resolveEntity(imp.Source.SpaceID)
@@ -29,6 +33,7 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		Payload:   imp.Payload,
 		Timestamp: root.DNA().Tick(),
 	})
+	debug.Being("skyra", "sensory", fmt.Sprintf("classify=external sender=%s utterance=%q", sender, utterance))
 }
 
 // classify forks the sensory lane (the three-way fork of the workflow):

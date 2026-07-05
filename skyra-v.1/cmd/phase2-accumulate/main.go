@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/inference"
 	"skyra-v1/src/skyra"
 	"skyra-v1/src/skyra/relation"
@@ -28,6 +30,12 @@ func main() {
 		{"X3", "X2", "forget that — what's the weather where you are?"},
 	}
 
+	if err := debug.Init("logs"); err != nil {
+		fmt.Println("debug init:", err)
+		os.Exit(1)
+	}
+	defer debug.Close()
+
 	d := dnav2.NewDNA("skyra")
 	dnav2.WireGenes(d)
 	d.SetInfer(inference.CallCodex)
@@ -40,8 +48,8 @@ func main() {
 		slices[ns] = world.NewSlice("skyra:"+ns, "skyra")
 	}
 	orch := dnav2.NewOrchestrator(d, board, kernel, world.NewSlice("skyra:membrane", "skyra"), slices)
-	done := make(chan string, 1)
-	orch.SetFlush(func(id string, _ []dnav2.Span) { done <- id })
+	done := make(chan []dnav2.Span, 1)
+	orch.SetFlush(func(_ string, trace []dnav2.Span) { done <- trace })
 
 	for _, t := range script {
 		fmt.Printf("\n═══ %s → michael: %q ═══\n", t.id, t.say)
@@ -50,15 +58,26 @@ func main() {
 			Source:    &skyra.ImpulseSource{SpaceID: "michael"},
 			Payload:   t.say,
 		})
+		var trace []dnav2.Span
 		select {
-		case <-done:
+		case trace = <-done:
 		case <-time.After(5 * time.Minute):
 			fmt.Println("✗ timed out")
 			os.Exit(1)
 		}
+		fmt.Printf("   flow: %s\n", spanFlow(trace))
 		printAlignments(d)
 	}
 	fmt.Println("\n═══ done — watch A move across turns (grades flow credit back over the frame) ═══")
+}
+
+// spanFlow renders the Board trace as the pipeline step-flow for the turn.
+func spanFlow(trace []dnav2.Span) string {
+	parts := make([]string, len(trace))
+	for i, s := range trace {
+		parts[i] = s.Step + "(" + s.Condition + ")"
+	}
+	return strings.Join(parts, " → ")
 }
 
 func printAlignments(d *dnav2.DNA) {

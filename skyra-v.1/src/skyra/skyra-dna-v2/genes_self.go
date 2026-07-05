@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
@@ -44,6 +45,7 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if score == 0 {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
+	debug.Being("skyra", "self", fmt.Sprintf("exec grade=%.1f → %s", score, root.Condition))
 	distributeClosure(root, score > 0) // Phase 2e: credit the frame on the reafference outcome
 }
 
@@ -74,6 +76,7 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// (entity interactions) is still hand-rendered until entities join the traversal.
 	frame := FramePresentCrossing(root.Grouping, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
 	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Entities))
+	debug.Being("skyra", "frame", fmt.Sprintf("self present (traversal-assembled):\n%s", present))
 	resp, err := root.DNA().Infer()(selfSystem, present)
 	if err != nil {
 		return
@@ -82,6 +85,7 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
+	debug.Being("skyra", "self", fmt.Sprintf("plan=%q", text))
 	born := appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text)
 	root.DNA().CrossBirth(born) // node birth: the new edge was just active
 }

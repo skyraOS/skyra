@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
@@ -66,6 +67,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	} else {
 		root.Condition = "all-preds<0" // total miss → reframe
 	}
+	debug.Being("skyra", "other", fmt.Sprintf("grade → %s score=%.2f evidence=%q", root.Condition, score, evidence))
 	distributeClosure(root, matched) // Phase 2e: credit the frame that produced the bet
 }
 
@@ -94,6 +96,7 @@ func distributeClosure(root *EphemeralRoot, good bool) {
 		signedG = -1.0
 	}
 	store.DistributeCredit(edges, signedG, 1)
+	debug.Being("skyra", "credit", fmt.Sprintf("closure g=%+.0f over %d edges (grouping %s)", signedG, len(edges), g.ID()))
 }
 
 // graderSystem — the adversarial-neutral judge. Never told the predictions are its
@@ -124,6 +127,13 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
+	top := 0.0
+	for _, p := range preds {
+		if p.Probability > top {
+			top = p.Probability
+		}
+	}
+	debug.Being("skyra", "other", fmt.Sprintf("predicted %d branches, top p=%.2f", len(preds), top))
 	born := appendOtherDistribution(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), preds)
 	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
