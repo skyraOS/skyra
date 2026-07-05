@@ -48,3 +48,31 @@ func TestTightBudgetPrunesTheFrame(t *testing.T) {
 		t.Fatalf("tight budget should light fewer nodes: tight=%d full=%d", litTight, litFull)
 	}
 }
+
+// Learning reweights the frame: b1 has the higher static Probability (0.7 vs 0.3), but
+// after grading b1's edge DOWN and b2's edge UP, the learned weights INVERT — the frame
+// now favors b2. This is relevance = alignment overriding the cold prior.
+func TestLearnedStrengthReweightsFrame(t *testing.T) {
+	g := buildGrouping()
+	root := g.Children()["g1→other-pred:1"].(*dna.MemoryCell)
+	b1Key, b2Key := "g1→other-pred:1-0", "g1→other-pred:1-1"
+
+	// Phase-1 (no store): static Probability favors b1 (0.7 > 0.3).
+	cold := (&frameNode{cell: root}).Frontier(nil, nil)
+	if cold[b1Key].Weight <= cold[b2Key].Weight {
+		t.Fatalf("cold prior should favor b1: b1=%.3f b2=%.3f", cold[b1Key].Weight, cold[b2Key].Weight)
+	}
+
+	// Grade b1 down, b2 up (both crossed at birth first).
+	store := NewActivationStore()
+	store.Cross(b1Key, 0)
+	store.Grade(b1Key, -1, 1)
+	store.Cross(b2Key, 0)
+	store.Grade(b2Key, 1, 1)
+
+	warm := (&frameNode{cell: root, store: store}).Frontier(nil, nil)
+	if warm[b2Key].Weight <= warm[b1Key].Weight {
+		t.Fatalf("learning should invert the order — b2 up, b1 down: b1=%.3f b2=%.3f",
+			warm[b1Key].Weight, warm[b2Key].Weight)
+	}
+}

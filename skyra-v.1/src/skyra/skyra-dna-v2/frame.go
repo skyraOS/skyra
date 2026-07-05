@@ -26,13 +26,34 @@ func tokenCount(s string) int {
 }
 
 // frameNode adapts a dna.MemoryCell as a traverse.Node. Cost = tokens of its rendered
-// line; Frontier = its children weighted by weightOf and **normalized to sum to 1** —
-// cognition conserves the budget, so the frame stays within it (a bounded present).
-type frameNode struct{ cell *dna.MemoryCell }
+// line; Frontier = its children weighted and **normalized to sum to 1** — cognition
+// conserves the budget, so the frame stays within it (a bounded present). The edge
+// weight is the learned Strength off the store (relevance = alignment); an edge with no
+// record yet falls back to the Phase-1 static Probability, so the two phases layer.
+type frameNode struct {
+	cell  *dna.MemoryCell
+	store *ActivationStore // nil → Phase-1 Probability weights
+	tick  int
+}
 
 func (n *frameNode) ID() string                         { return n.cell.ID() }
 func (n *frameNode) Cost() int                          { return tokenCount(renderCellText(n.cell)) }
 func (n *frameNode) Express(_ traverse.Node, _ any) any { return n.cell.Content() }
+
+func (n *frameNode) child(mc *dna.MemoryCell) *frameNode {
+	return &frameNode{cell: mc, store: n.store, tick: n.tick}
+}
+
+// weight is the learned edge Strength (relevance = alignment); falls back to the static
+// Probability while an edge has no record yet.
+func (n *frameNode) weight(edgeKey string, mc *dna.MemoryCell) float64 {
+	if n.store != nil {
+		if s, ok := n.store.Strength(edgeKey, n.tick); ok {
+			return s
+		}
+	}
+	return weightOf(mc)
+}
 
 func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 	type kid struct {
@@ -47,7 +68,7 @@ func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 		if !ok {
 			continue
 		}
-		w := weightOf(mc)
+		w := n.weight(key, mc)
 		kids = append(kids, kid{key, mc, w})
 		sum += w
 	}
@@ -56,7 +77,7 @@ func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 	}
 	out := make(map[string]traverse.Alloc, len(kids))
 	for _, k := range kids {
-		out[k.key] = traverse.Alloc{Target: &frameNode{cell: k.mc}, Weight: k.w / sum} // normalized → conserve
+		out[k.key] = traverse.Alloc{Target: n.child(k.mc), Weight: k.w / sum} // normalized → conserve
 	}
 	return out
 }
@@ -96,15 +117,26 @@ func renderCellText(cell *dna.MemoryCell) string {
 	return ""
 }
 
-// AssembleFramePresent walks the grouping under a token budget and renders the lit
-// subgraph into a present string — the traversal-built present. Returns the present and
-// the count of lit nodes.
+// AssembleFramePresent walks the grouping under a token budget with Phase-1 static
+// weights (no learning). Returns the present and the count of lit nodes.
 func AssembleFramePresent(grouping *dna.MemoryCell, budget float64) (string, int) {
 	if grouping == nil {
 		return "", 0
 	}
-	res := traverse.Assemble(&frameNode{cell: grouping}, budget, nil)
-	lit := res.Flatten()
+	return renderFrame(&frameNode{cell: grouping}, budget)
+}
+
+// AssembleWithStore is the Phase-2 assembler: the same walk, but edge weights come from
+// the learned activation store (relevance = alignment), so grading reshapes the frame.
+func AssembleWithStore(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) (string, int) {
+	if grouping == nil {
+		return "", 0
+	}
+	return renderFrame(&frameNode{cell: grouping, store: store, tick: tick}, budget)
+}
+
+func renderFrame(root *frameNode, budget float64) (string, int) {
+	lit := traverse.Assemble(root, budget, nil).Flatten()
 	var lines []string
 	for _, node := range lit {
 		if fn, ok := node.(*frameNode); ok {
