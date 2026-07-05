@@ -234,8 +234,11 @@ and graded, and *earns* its A/S/F. Relevance is the exploration floor.
 2. **Confidence `conf(N)` — the explore/exploit dial.** Penalty (trust proven edges) vs. a
    low-`N` *bonus* (UCB-style — explore uncertain edges). *Default a mild exploration bonus* —
    the accumulation experiment needs exploration.
-3. **`rect(A)`.** Hard `max(0, A)` (failed edges go silent) vs. soft `(A+1)/2` (stay barely
-   alive, recoverable). *Default soft.*
+3. **`rect(A)`.** Hard `max(0, A)` (failed edges go silent) vs. soft, **floored**
+   `max(softFloor, (A+1)/2)` — even a fully-failed edge (A=−1) keeps a sliver so it stays
+   recoverable instead of one catastrophic grade zeroing it forever. *Default soft+floor
+   (softFloor ≈ 0.05).* (Plain `(A+1)/2` hits 0 at A=−1, which is *not* recoverable — the
+   floor is what makes "soft" true.)
 
 Ship defaults: `α_floor ≈ 0.1`, `λ ≈ 0.98`/tick, `S` immutable, `conf` = mild explore bonus,
 `rect = (A+1)/2`.
