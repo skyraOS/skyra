@@ -112,6 +112,18 @@ func (s *ActivationStore) Strength(edge string, tick int) (float64, bool) {
 	return a.Strength(tick), true
 }
 
+// All returns a copy of every record keyed by edge — for inspection/observing the
+// alignments move across turns (the accumulation experiment).
+func (s *ActivationStore) All() map[string]Activation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]Activation, len(s.m))
+	for k, a := range s.m {
+		out[k] = *a
+	}
+	return out
+}
+
 // Cross bumps an edge's frequency (get-or-create).
 func (s *ActivationStore) Cross(edge string, tick int) {
 	s.mu.Lock()

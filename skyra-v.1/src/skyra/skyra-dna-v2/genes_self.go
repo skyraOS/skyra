@@ -44,7 +44,10 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if score == 0 {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
+	distributeClosure(root, score > 0) // Phase 2e: credit the frame on the reafference outcome
 }
+
+const selfFrameBudget = 2000 // generous — don't prune self's conditioning in normal operation
 
 // execGraderSystem — the execution judge. Adversarial-neutral, same posture as the
 // other-side grader: never told whose instruction it is, only compares instruction
@@ -65,10 +68,12 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if root.Grouping == nil || root.DNA().Infer() == nil {
 		return
 	}
-	present := fmt.Sprintf("Framing: %s\n\nOther's predicted next moves (probability distribution):\n%s\n\nRecent exchange:\n%s",
-		gistOf(root.Grouping),
-		renderOtherDistribution(root.DNA().Groupings(), root.Grouping),
-		renderExchange(root.Entities))
+	// Phase 2e: the framing + other-distribution present is now TRAVERSAL-assembled off
+	// the grouping (relevance = alignment, budget-bounded) and the traversed edges are
+	// crossed — instead of the hand-built renderOtherDistribution. The recent exchange
+	// (entity interactions) is still hand-rendered until entities join the traversal.
+	frame := FramePresentCrossing(root.Grouping, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
+	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Entities))
 	resp, err := root.DNA().Infer()(selfSystem, present)
 	if err != nil {
 		return

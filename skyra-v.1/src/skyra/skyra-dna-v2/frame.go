@@ -138,6 +138,21 @@ func AssembleWithStore(grouping *dna.MemoryCell, budget float64, store *Activati
 	return renderFrame(FrameOf(grouping, budget, store, tick))
 }
 
+// FramePresentCrossing is the live-loop assembler: it walks the grouping under the
+// learned store, CROSSES the traversed edges (traversal = crossing → F-bump), and
+// returns the rendered present. Use this where a gene feeds the frame to inference.
+func FramePresentCrossing(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) string {
+	res := FrameOf(grouping, budget, store, tick)
+	if res == nil {
+		return ""
+	}
+	if store != nil {
+		store.CrossFrame(res.Edges(), tick)
+	}
+	s, _ := renderFrame(res)
+	return s
+}
+
 func renderFrame(res *traverse.Result) (string, int) {
 	if res == nil {
 		return "", 0
