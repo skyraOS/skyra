@@ -25,6 +25,10 @@ type DNA struct {
 	entities  *EntityIndex
 	groupings *GroupingIndex
 
+	// activation holds edge-owned learning (A/S/F/N) keyed by edge identity — the
+	// economy the traversal reads and the bump maintains.
+	activation *ActivationStore
+
 	// infer is the injected LLM seam (system, present) → text. Genes that think
 	// call it; nil → those genes skip (tests without inference).
 	infer InferFunc
@@ -46,8 +50,9 @@ func NewDNA(beingID string) *DNA {
 		beingID:   beingID,
 		observe:   map[string]ObserveCompetence{},
 		express:   map[string]ExpressCompetence{},
-		entities:  NewEntityIndex(nil), // nil nucleus slice until activation lands
-		groupings: NewGroupingIndex(nil),
+		entities:   NewEntityIndex(nil), // nil nucleus slice until activation lands
+		groupings:  NewGroupingIndex(nil),
+		activation: NewActivationStore(),
 	}
 }
 
@@ -56,6 +61,19 @@ func (d *DNA) Entities() *EntityIndex    { return d.entities }
 func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
 func (d *DNA) Infer() InferFunc          { return d.infer }
 func (d *DNA) SetInfer(fn InferFunc)     { d.infer = fn }
+func (d *DNA) Activation() *ActivationStore { return d.activation }
+
+// CrossBirth crosses freshly-created edges (node birth) so the new nodes are immediately
+// selectable — a born edge was just active, so F must start > 0 or the edge deadlocks at
+// strength 0 and can never be re-selected to earn its alignment.
+func (d *DNA) CrossBirth(keys ...string) {
+	d.mu.Lock()
+	tick := d.clock
+	d.mu.Unlock()
+	for _, k := range keys {
+		d.activation.Cross(k, tick)
+	}
+}
 
 // Tick advances the being's proper-time clock (node timestamps / ordering).
 func (d *DNA) Tick() int {

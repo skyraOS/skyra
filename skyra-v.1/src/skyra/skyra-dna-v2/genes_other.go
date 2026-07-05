@@ -96,23 +96,28 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
-	appendOtherDistribution(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), preds)
+	born := appendOtherDistribution(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), preds)
+	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
 
 // appendOtherDistribution writes the distribution onto the grouping: a root node
 // (grouping→other-pred:ts) carrying one child per prediction. Built fully, then
-// added under the index lock (self:predict reads it via the same lock).
-func appendOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, preds []dna.ParsedPrediction) {
+// added under the index lock (self:predict reads it via the same lock). Returns the
+// edge keys it created (grouping→root + root→each branch) so the caller crosses them.
+func appendOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, preds []dna.ParsedPrediction) []string {
 	rootKey := fmt.Sprintf("%s→other-pred:%d", grouping.ID(), ts)
 	rootCell := dna.NewMemoryCell(rootKey, dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: ts}, nil)
+	born := []string{rootKey}
 	for i, p := range preds {
 		childKey := fmt.Sprintf("%s→other-pred:%d-%d", grouping.ID(), ts, i)
 		child := dna.NewMemoryCell(childKey, dna.KindPrediction, dna.Prediction{
 			Text: p.Text, Role: "other", Probability: p.Probability, Timestamp: ts,
 		}, nil)
 		rootCell.AddChild(childKey, child)
+		born = append(born, childKey)
 	}
 	gi.AddChild(grouping, rootKey, rootCell)
+	return born
 }
 
 // gistOf extracts a grouping's framing text.

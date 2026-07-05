@@ -32,6 +32,7 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		nil,
 	)
 	root.DNA().Groupings().AddChild(proposal, action.ID(), action)
+	root.DNA().CrossBirth(action.ID()) // node birth: the proposal→action edge was just active
 	root.DNA().SetLastAction(displayAction(emission))
 	if emit := root.DNA().Emit(); emit != nil {
 		emit(skyra.Impulse{

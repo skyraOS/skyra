@@ -77,7 +77,8 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
-	appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text)
+	born := appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text)
+	root.DNA().CrossBirth(born) // node birth: the new edge was just active
 }
 
 // renderOtherDistribution reads the latest other-pred root off the grouping (under
@@ -122,11 +123,12 @@ func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string
 }
 
 // appendSelfPrediction stamps skyra's proposed move onto the grouping (per-cycle
-// key). motor reads the latest self proposal off the spine.
-func appendSelfPrediction(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, text string) {
+// key). motor reads the latest self proposal off the spine. Returns the birth edge key.
+func appendSelfPrediction(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, text string) string {
 	key := fmt.Sprintf("%s→self-pred:%d", grouping.ID(), ts)
 	pred := dna.NewMemoryCell(key, dna.KindPrediction, dna.Prediction{Text: text, Role: "self", Timestamp: ts}, nil)
 	gi.AddChild(grouping, key, pred)
+	return key
 }
 
 const selfSystem = "You are Skyra's inner voice. Given the current framing and what the other person is likely to do next, decide what action Skyra should take.\n\n" +
