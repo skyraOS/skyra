@@ -280,14 +280,19 @@ set later by grading. Keep "the edge exists" (structural) distinct from "the edg
 
 ### Credit = the frame's activation profile
 
-On a closure grade `g ∈ [−1,1]`, distribute it to the frame's edges **weighted by activation**:
+On a closure grade `g ∈ [−1,1]`, distribute it to the frame's edges **weighted by activation**.
+Activation scales the *eligibility* (how strongly the edge's `A` moves), **not** the target, so
+an edge still converges to `g` over repeated active-on-`g` outcomes while an incidental edge
+barely moves:
 
 ```
-credit_i = activation_i · g        // each active edge gets its share, scaled by the outcome
+A_i ← A_i + α · activation_i · (g − A_i)     // α = max(1/N, α_floor); activation_i ∈ [0,1]
 ```
 
 Free — the frame already computed each node's `activation` (its traversal weight). It's an
-eligibility trace: the standard principled approximation to credit assignment, not a hack.
+eligibility trace: the standard principled approximation to credit assignment, not a hack. The
+*crossing* half of the bump (F) fires when the frame is assembled (being in the frame is being
+crossed); this credit half fires on the closure.
 
 ### The graph is the eligibility trace
 

@@ -117,26 +117,32 @@ func renderCellText(cell *dna.MemoryCell) string {
 	return ""
 }
 
-// AssembleFramePresent walks the grouping under a token budget with Phase-1 static
-// weights (no learning). Returns the present and the count of lit nodes.
+// FrameOf walks the grouping under a token budget and returns the traversal Result — the
+// lit subgraph — for both rendering (Flatten) and credit distribution (Edges). store=nil
+// uses Phase-1 static weights; a store uses learned strength.
+func FrameOf(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) *traverse.Result {
+	if grouping == nil {
+		return nil
+	}
+	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick}, budget, nil)
+}
+
+// AssembleFramePresent walks the grouping with Phase-1 static weights (no learning).
 func AssembleFramePresent(grouping *dna.MemoryCell, budget float64) (string, int) {
-	if grouping == nil {
-		return "", 0
-	}
-	return renderFrame(&frameNode{cell: grouping}, budget)
+	return renderFrame(FrameOf(grouping, budget, nil, 0))
 }
 
-// AssembleWithStore is the Phase-2 assembler: the same walk, but edge weights come from
-// the learned activation store (relevance = alignment), so grading reshapes the frame.
+// AssembleWithStore is the Phase-2 assembler: edge weights come from the learned
+// activation store (relevance = alignment), so grading reshapes the frame.
 func AssembleWithStore(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) (string, int) {
-	if grouping == nil {
-		return "", 0
-	}
-	return renderFrame(&frameNode{cell: grouping, store: store, tick: tick}, budget)
+	return renderFrame(FrameOf(grouping, budget, store, tick))
 }
 
-func renderFrame(root *frameNode, budget float64) (string, int) {
-	lit := traverse.Assemble(root, budget, nil).Flatten()
+func renderFrame(res *traverse.Result) (string, int) {
+	if res == nil {
+		return "", 0
+	}
+	lit := res.Flatten()
 	var lines []string
 	for _, node := range lit {
 		if fn, ok := node.(*frameNode); ok {

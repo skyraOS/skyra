@@ -52,14 +52,22 @@ func (a *Activation) Cross(tick int) {
 	a.Flast = tick
 }
 
-// Grade bumps A/S/N on a closure outcome g ∈ [−1,1] at the being's current stress.
-func (a *Activation) Grade(g, stress float64) {
+// Grade bumps A/S/N on a closure outcome g ∈ [−1,1] at the being's current stress —
+// full eligibility (the directly-graded edge, e.g. the prediction itself).
+func (a *Activation) Grade(g, stress float64) { a.GradeEligible(g, stress, 1) }
+
+// GradeEligible is the credit-write-back bump: `eligibility` ∈ [0,1] (the edge's
+// activation in the frame) scales how strongly this outcome moves A — the
+// activation-weighted eligibility trace. An incidental (low-activation) edge barely
+// learns; a load-bearing one learns fast. Eligibility scales the UPDATE, not the target,
+// so A still converges to g for edges consistently active on g-outcomes.
+func (a *Activation) GradeEligible(g, stress, eligibility float64) {
 	a.N++
 	alpha := 1.0 / float64(a.N)
 	if alpha < alphaFloor {
 		alpha = alphaFloor
 	}
-	a.A += alpha * (g - a.A)
+	a.A += alpha * eligibility * (g - a.A)
 	if !a.sSet { // salience immutable at birth (knob 1 default)
 		a.S, a.sSet = stress, true
 	}
@@ -111,9 +119,32 @@ func (s *ActivationStore) Cross(edge string, tick int) {
 	s.ensure(edge).Cross(tick)
 }
 
-// Grade bumps an edge's alignment/salience/count (get-or-create) — the credit write-back.
+// Grade bumps an edge's alignment/salience/count (get-or-create) at full eligibility.
 func (s *ActivationStore) Grade(edge string, g, stress float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensure(edge).Grade(g, stress)
+}
+
+// CrossFrame bumps F for every edge the frame traversed — the crossing half of the bump,
+// fired at frame-assembly time (being in the frame IS being crossed). Without this a
+// credited-but-uncrossed edge has F=0 and reads as strength 0.
+func (s *ActivationStore) CrossFrame(edges map[string]float64, tick int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for edge := range edges {
+		s.ensure(edge).Cross(tick)
+	}
+}
+
+// DistributeCredit writes a closure grade back across every edge in the frame, scaled by
+// the edge's activation (the eligibility trace): each lit edge learns from the outcome in
+// proportion to how load-bearing it was. `edges` maps edge identity → its frame
+// activation (from Result.Edges()).
+func (s *ActivationStore) DistributeCredit(edges map[string]float64, g, stress float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for edge, activation := range edges {
+		s.ensure(edge).GradeEligible(g, stress, activation)
+	}
 }

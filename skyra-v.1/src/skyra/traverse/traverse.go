@@ -38,11 +38,15 @@ type Alloc struct {
 	Weight float64
 }
 
-// Result is one node in the lit subgraph — the node, its post-order Express, and its
-// descended children. The tree IS the frame.
+// Result is one node in the lit subgraph — the node, its post-order Express, the edge
+// that reached it (EdgeKey/Weight — the activation it had in the frame), and its
+// descended children. The tree IS the frame; its edges are the eligibility set for
+// credit distribution.
 type Result struct {
 	Node     Node
 	Express  any
+	EdgeKey  string  // the edge (parent→this) that was traversed; "" for the root
+	Weight   float64 // that edge's weight (its activation in the frame); 0 for the root
 	Children []*Result
 }
 
@@ -73,12 +77,34 @@ func walk(origin, node Node, budget float64, impulse any, visited map[string]boo
 		}
 		childBudget := remainder * a.Weight
 		if childBudget >= float64(a.Target.Cost()) { // affordability
-			r.Children = append(r.Children, walk(origin, a.Target, childBudget, impulse, visited))
+			child := walk(origin, a.Target, childBudget, impulse, visited)
+			child.EdgeKey, child.Weight = k, a.Weight
+			r.Children = append(r.Children, child)
 		}
 	}
 
 	r.Express = node.Express(origin, impulse) // post-order fold — after descent
 	return r
+}
+
+// Edges returns every lit edge in the frame, keyed by edge identity → the weight
+// (activation) it carried — the eligibility set for credit distribution.
+func (r *Result) Edges() map[string]float64 {
+	out := map[string]float64{}
+	r.collectEdges(out)
+	return out
+}
+
+func (r *Result) collectEdges(out map[string]float64) {
+	if r == nil {
+		return
+	}
+	for _, c := range r.Children {
+		if c.EdgeKey != "" {
+			out[c.EdgeKey] = c.Weight
+		}
+		c.collectEdges(out)
+	}
 }
 
 // Flatten returns every node in the lit subgraph in pre-order (root first) — the
