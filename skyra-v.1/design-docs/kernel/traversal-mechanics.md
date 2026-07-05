@@ -118,10 +118,15 @@ type Space interface {
     Agents() map[string]Space
     Children() map[string]Space   // structure (see below) — no longer walked by the kernel
     Content() any
+    // Cost is the node's weight against the budget, in the budget's units. STAMPED
+    // at birth and on mutation (not recomputed per wave). Memory: token count of its
+    // content. World: 1 (a Chebyshev step). The kernel subtracts it and checks
+    // affordability; it never computes it.
+    Cost() int
 }
 
 // Alloc is one entry in the onward distribution: a child and its RELATIVE weight
-// (a share, not an absolute token count — the cell need not know its own budget).
+// (a share, not an absolute budget — the cell need not know its own budget).
 type Alloc struct {
     Target Space
     Weight float64
@@ -129,8 +134,8 @@ type Alloc struct {
 ```
 
 `ActivationRecord.Activate` is **removed**. The kernel's job on the return is the barest
-arithmetic: given the budget `B` it carries into a node, subtract the node's own `cost`, and
-scale each `Alloc` — `child_budget_i = (B − cost) × weight_i`. **No normalization** — whether
+arithmetic: given the budget `B` it carries into a node, subtract the node's own `Cost()`, and
+scale each `Alloc` — `child_budget_i = (B − Cost) × weight_i`. **No normalization** — whether
 the children's budgets sum back to the parent's (conservation) is decided by the cell's
 weights, not the kernel (see "Budget is world-defined"). No constants. `Agents()` and
 `Content()` untouched.
@@ -180,7 +185,7 @@ The old tangled `score` splits into four orthogonal things:
 |---|---|---|
 | **candidacy** | which cells are in the running (impulse-relevant) | `Observe` |
 | **distribution** | the relative share each branch gets — the `Alloc` weights | `Observe` (reads strength + impulse) |
-| **cost** | tokens a cell pays for itself — `tokens(Content())` | the cell's content |
+| **cost** | the node's `Cost()`, stamped at birth/mutation — tokens for memory, 1 for world | the Space |
 | **budget** | the amount flowing down, capped at the root | the wave (kernel carries it) |
 
 The first two are the cell's; the kernel only does the arithmetic on the last two.
@@ -262,10 +267,11 @@ override that papers over the topology.
 The kernel treats the budget as an abstract scalar. It does not know what it *measures* or
 whether it's *conserved* — both are set by the world the wave runs in, never by the kernel.
 
-- **Units** are set by the **cost function**. Cognition: `cost = tokens(Content())`, budget =
-  tokens. The spatial world: `cost = 1 per hop` (a Chebyshev step), budget = *radius*. The
-  primitive defaults already are this — `observePerceive` sets `impulse.Amplitude =
-  DefaultPerceiveRadius` (20). The world has always denominated amplitude in reach.
+- **Units** are set by each Space's stamped **`Cost()`**. Cognition: `Cost()` = the token
+  count of the content (stamped at birth/write), budget = tokens. The spatial world: `Cost()`
+  = 1 (a Chebyshev step), budget = *radius*. The primitive defaults already are this —
+  `observePerceive` sets `impulse.Amplitude = DefaultPerceiveRadius` (20). The world has
+  always denominated amplitude in reach.
 - **Conservation** is set by the **cell's weights**. Cognition returns weights summing to 1 →
   children's budgets sum back to the parent → bounded frame (right: one context window). The
   spatial world returns weights of 1 each → every neighbor inherits the *full* `budget − cost`
@@ -275,10 +281,10 @@ whether it's *conserved* — both are set by the world the wave runs in, never b
 | | cognition | spatial world |
 |---|---|---|
 | amplitude = | token budget | radius (the primitive default) |
-| cost = | `tokens(Content())` | 1 per hop |
+| `Cost()` = | token count of content (stamped) | 1 (a hop) |
 | weights = | sum to 1 (conserve → bounded frame) | all 1 (broadcast → flood to radius) |
 
-One kernel, agnostic to both. `child_budget = (parent_budget − cost) × weight` covers both:
+One kernel, agnostic to both. `child_budget = (parent_budget − Cost) × weight` covers both:
 normalized weights conserve; unit weights broadcast.
 
 ## World impact
@@ -299,7 +305,7 @@ What the world **must absorb** (or it breaks):
 
 What it **gains:**
 - **Drop the flat-perceive workaround.** With no amplitude-collapse, a real grid spread
-  returns: `Point.Observe` returns neighbor `Alloc`s (weight 1), `cost = 1/hop`, and the
+  returns: `Point.Observe` returns neighbor `Alloc`s (weight 1), `Point.Cost()` = 1, and the
   **visited-once rail** makes it a bounded **flood-fill to radius = budget**. The radius falls
   out of budget-depletion; no enumeration hack, no decay constant.
 - **Honest distance falloff** if wanted: weight neighbors by proximity/direction instead of a
@@ -334,8 +340,8 @@ computes `child_budget = (parent_budget − parent_cost) × weight_i`. No normal
 conservation is the cell's weights, not the kernel's. `amplitudeDecay` (`:12`, `:204`) is
 **deleted**. The candidate set is the `Alloc` map, not `Children()`.
 
-**2. Threshold → affordability.** A child is descended iff `child_budget ≥ tokens(content)`
-— pure arithmetic, replacing `score > threshold` (`:207`) and its constant. The DFS stack
+**2. Threshold → affordability.** A child is descended iff `child_budget ≥ child.Cost()` —
+pure arithmetic, replacing `score > threshold` (`:207`) and its constant. The DFS stack
 (`:96`,`:98`) and descent are the same shape.
 
 **3. `Activate(visited, count)` → gone; strength reads move into `Observe`.** The two kernel
@@ -411,25 +417,24 @@ row is currently empty bracket.
 6. **Should `Observe` receive the remaining budget?** Weight-only keeps the cell budget-blind
    and the kernel purest; but budget-aware breadth policies (adapt spread to how much is left)
    would need it. Start weight-only.
-7. **Where `cost` lives.** Cognition's cost is the child's own size (`tokens(Content())`); the
-   world's is a flat 1 per hop. Either the node reports it (a `Cost()` method / derived from
-   `Content()`) or it rides on the `Alloc`. Detail for the build.
-
 *Settled this pass:* the kernel carries **no cognition** — and doesn't know the budget's
 **units** or whether it **conserves**. Split rule, decay factor, threshold, units, and
 conservation all leave the kernel; `amplitudeDecay` is **deleted** (cost is the decay).
 `Observe` returns a weighted onward distribution (`map[string]Alloc`); the kernel does the
-barest arithmetic — `child_budget = (budget − cost) × weight`, **no normalization**.
-Units come from the world's *cost function* (tokens vs. distance), conservation from the
-cell's *weights* (sum-to-1 vs. all-1). Drill/gather are cell policies; true flat-global
-best-first is flat retrieval and is **out**. DFS + single-phase fold survive. The world
-already fights the old bias (flat-perceive workaround) — the change frees it to flood-fill.
+barest arithmetic — `child_budget = (budget − Cost) × weight`, **no normalization**.
+Units come from each Space's stamped **`Cost()`** (token count for memory, 1 for world),
+conservation from the cell's *weights* (sum-to-1 vs. all-1). **Cost lives on the Space,
+stamped at birth/mutation** (resolves former #7). Drill/gather are cell policies; true
+flat-global best-first is flat retrieval and is **out**. DFS + single-phase fold survive.
+The world already fights the old bias (flat-perceive workaround) — the change frees it to
+flood-fill.
 
 ## Migration / blast radius — the real cost
 
-This changes **`skyra.Space`, THE interface** — `Observe` gains a return on every implementer
-(`MemoryCell`, `EphemeralRoot`, `membraneRoot`, the world `Point`/grid, archive stubs), even
-leaves (`return nil`). `NewActivation`/`Activate` change on record types. Repo-wide diff.
+This changes **`skyra.Space`, THE interface** — `Observe` gains a return and a new `Cost()`
+method lands on every implementer (`MemoryCell`, `EphemeralRoot`, `membraneRoot`, the world
+`Point`/grid, archive stubs), even leaves (`Observe` returns `nil`; `Cost()` returns the
+stamped size or 1). `NewActivation`/`Activate` change on record types. Repo-wide diff.
 
 Staging (decide before touching `space.go`):
 
