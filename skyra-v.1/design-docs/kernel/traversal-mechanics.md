@@ -148,12 +148,11 @@ back — is durable and lives **on the slice's edge records**, keyed by edge ide
 as `writeAlignment` already does (`sl.Records()[edgeKey]`). Where that state lives is
 unchanged.
 
-What changes is *who reads it*. The cell's `Observe` reads the strengths and folds them with
-impulse relevance into the weights it returns. So the weight of an edge is the cell's
-composition of:
-
-- **impulse relevance** (fresh — the cell sees the impulse and its content), and
-- **stored strength** (durable — read off the edge record), typically their `product`.
+What changes is *who reads it*. The cell's `Observe` reads the edge strengths and returns them
+as the weights. There is **no separate fresh relevance term** — relevance *is* the edge's
+stored alignment (see "Credit assignment & node birth"), and the impulse-dependence is
+*structural*: the same node is reached via different edges from different roots, each edge
+carrying its own alignment. So `Observe` just reads what's already on the edges it traverses.
 
 Because `Observe` runs **lockless** and now *reads* the strength records, the records must be
 **lock-free readable** — store strength as an atomic and accept slight staleness (which is
@@ -163,6 +162,146 @@ the record-type open decision.)
 
 Same discipline as the dnav2 refactor: durable state on the graph, the traversal a stateless
 transform over it, read-live-never-snapshot.
+
+## Activation & the bump
+
+The section above says strength lives on the edge record, read lock-free. This one says
+*what* strength is and *how the bump maintains it*. Factors are stored **separately**
+(multiply at read — cheap, inspectable, reweightable), grounded in the design already in
+`memory_cell.go` (`Intrinsic.Value() = ClosureGrade × StressAtBirth` — alignment × salience).
+
+### The record — four factors
+
+| field | is | updated on |
+|---|---|---|
+| **A** — alignment | signed running value of the outcome (did it close?) — the existing `ClosureGrade` | outcome |
+| **S** — salience | arousal when reinforced — the existing `StressAtBirth` | outcome |
+| **F** — frequency/recency | EMA of "was I traversed" (recency via decay) | crossing |
+| **N** — count | gradings seen — drives the learning rate *and* confidence | outcome |
+
+**This resolves former open #1.** "Crossing vs. outcome" was a false choice created by treating
+strength as one scalar. With factors separate, they update on separate events: **crossing → F**,
+**outcome → A, S, N**.
+
+### Read-time weight
+
+```
+strength = rect(A) · S · read_F(t) · conf(N)      // durable, edge-owned — this IS the weight
+```
+
+`rect(A)` maps the signed value to a non-negative weight — a failure-leading edge gets
+near-zero weight, never negative budget. There is **no separate `relevance` multiplier**:
+relevance *is* `A` (see "Credit assignment & node birth"), and the same node lights differently
+per impulse because different roots reach it via different edges, each with its own `A` — the
+impulse-dependence is structural, not a fresh computation.
+
+### Update rules
+
+**F — on crossing, at tick `t`** (lazy timestamped EMA — touch only crossed edges, never the
+whole graph):
+
+```
+decayed = F · λ^(t − last)
+F       = decayed + α_F · (1 − decayed)
+last    = t
+```
+
+Read (non-mutating): `F · λ^(t − last)`. Recency falls out of the decay — no separate field.
+
+**A, S, N — on outcome** (closure grade `g ∈ [−1,1]` from the comparator, being's current
+stress `s`):
+
+```
+N = N + 1
+α = max(1/N, α_floor)        // running-mean while N is small → EMA once floored
+A = A + α · (g − A)
+S = <knob 1>
+```
+
+`α = max(1/N, α_floor)` makes `N` do double duty: fast averaging early, sustained adaptivity
+later, and it *is* the confidence signal at read.
+
+### Bootstrap
+
+A new edge (`N=0` → `conf≈0` → `strength≈0`) would never light and so never learn. The escape
+is the **fresh `relevance`** term: a new but impulse-relevant edge still lights, gets crossed
+and graded, and *earns* its A/S/F. Relevance is the exploration floor.
+
+### Knobs (defaults flagged)
+
+1. **Salience `S`.** Immutable `StressAtBirth` (default — matches the code) vs. a running
+   `max`/EMA of arousal across reinforcements.
+2. **Confidence `conf(N)` — the explore/exploit dial.** Penalty (trust proven edges) vs. a
+   low-`N` *bonus* (UCB-style — explore uncertain edges). *Default a mild exploration bonus* —
+   the accumulation experiment needs exploration.
+3. **`rect(A)`.** Hard `max(0, A)` (failed edges go silent) vs. soft `(A+1)/2` (stay barely
+   alive, recoverable). *Default soft.*
+
+Ship defaults: `α_floor ≈ 0.1`, `λ ≈ 0.98`/tick, `S` immutable, `conf` = mild explore bonus,
+`rect = (A+1)/2`.
+
+### Concurrency
+
+The **F-bump is a write on crossing**, inside the lockless traversal — so `F`/`last` need a
+lock-free/atomic write (or a batched deferral), the same discipline as the lock-free strength
+*reads* already required. `A`/`S`/`N` update on the grade write-back, which is already locked
+(`writeAlignment`).
+
+## Credit assignment & node birth
+
+"Activation & the bump" left one thing open: when a cycle grades, *which* edges get the
+alignment, and how much? It falls out of two facts about how nodes are born.
+
+### Relevance is alignment
+
+There is no separate "relevance" signal to invent. **Relevance is the edge-owned alignment.**
+An edge is relevant to the current context if arriving through it has *closed goals* before —
+which is exactly what `A` measures. The impulse-dependence is **structural**: the same node
+carries edges from every root that has reached it, each with its own `A`; a new root reads the
+`A` on the edge it arrives by. This finishes the location-based-memory bet — attention is "what
+has proven useful arriving here," never flat semantic similarity. It requires only that **every
+cycle's closure grade is written back to all edges in that cycle's frame**, not just the graded
+prediction (grade-fronts-the-stroke already produces the grade; this distributes it).
+
+### Node birth wires the causal graph
+
+When inference produces a new node (a prediction, a framing, an action), it is born already
+wired:
+- **its children = the active frame** — the lit nodes that fed the inference. The output points
+  at its causes.
+- **it is a child of the root** that initiated the cycle.
+
+The edges are *created* here — structure, causal certainty, born ≈ 1. Their *value* alignment is
+set later by grading. Keep "the edge exists" (structural) distinct from "the edge is useful"
+(`A`, graded): relevance rides on the value.
+
+### Credit = the frame's activation profile
+
+On a closure grade `g ∈ [−1,1]`, distribute it to the frame's edges **weighted by activation**:
+
+```
+credit_i = activation_i · g        // each active edge gets its share, scaled by the outcome
+```
+
+Free — the frame already computed each node's `activation` (its traversal weight). It's an
+eligibility trace: the standard principled approximation to credit assignment, not a hack.
+
+### The graph is the eligibility trace
+
+Credit is *late* — Skyra acts one cycle, the reply grades it the next, after the producing frame
+is gone. Normally that needs separate bookkeeping. Here it's free: because **a node's children
+are its birth-frame**, grading the node later flows credit straight to what produced it. The
+wiring laid down at birth *is* the trace. Thinking builds the causal record; grading walks it
+backward.
+
+### Caveat: incidental credit
+
+Activation-weighting credits nodes that were active but *incidental* — an always-lit node (high
+`F`) collects credit on every closure, contributing or not. The **signed grade** corrects it:
+incidental nodes get debited on bad closures too, so anything present on both good and bad
+outcomes washes its `A` toward neutral; only nodes *correlated* with closure accumulate positive
+`A`. Correlation does the causal filtering — over many samples, so early graphs are noisy. Fine
+for a learning system; just not instant.
 
 ## Amplitude is a token budget
 
@@ -387,7 +526,7 @@ it folds). Provisional — **next working session, not decided:**
 
 | Kind | `Observe` lights (with weights) | `Express` folds to |
 |---|---|---|
-| `Entity` | relevant/recent interaction children, weighted by recency + impulse relevance | the entity's current state/summary |
+| `Entity` | interaction children, weighted by their edge alignment (`A`, contextual) | the entity's current state/summary |
 | `Grouping` | the active episode: relevant predictions + the gist | the grouping's current understanding |
 | `Prediction` (dist. root) | its branch children | the bet's current grade / status |
 | `Prediction` (branch) | leaf (nil) | the branch's text + grade |
@@ -399,14 +538,13 @@ row is currently empty bracket.
 
 ## Open decisions
 
-1. **Where the bump lives (the live one).** Strengthening moves to (a) the crossing
-   (`relation.go:114`) or (b) the grade write-back (`writeAlignment`). *Leaning (b)* —
-   strength should track *outcome* (did this edge lead somewhere that closed?), not raw
-   crossing, and that path already exists.
-2. **The record type / lock-free strength.** Strength must be lock-free readable (atomic) for
-   `Observe` to read it lockless. Does the node still mint the record (`NewActivation`
-   survives) or does creation move to `writeAlignment` / the nucleus? Concrete data holder or
-   reduced interface?
+1. **The bump knobs** (rule is settled — see "Activation & the bump"). Three tunable defaults
+   remain: salience immutable vs. running; confidence as penalty vs. exploration bonus;
+   `rect(A)` hard vs. soft. Ship the flagged defaults, tune from experiment. (Former "where the
+   bump lives" is resolved: crossing → F, outcome → A/S/N.)
+2. **The record type / lock-free.** The record's *fields* are decided (A, S, F+`last`, N). Open:
+   the exact lock-free/atomic mechanism for the F-bump write and the strength reads, and who
+   mints the record (`NewActivation` survives vs. creation moves to `writeAlignment`/nucleus).
 3. **`Express` as fold.** Ratify: `Express` returns a *fold over children's expressions +
    content*, still `any` (not a map). Proposed.
 4. **`Alloc` weight = raw product or product-per-token?** Density (`product/tokens`) packs
@@ -427,7 +565,12 @@ conservation from the cell's *weights* (sum-to-1 vs. all-1). **Cost lives on the
 stamped at birth/mutation** (resolves former #7). Drill/gather are cell policies; true
 flat-global best-first is flat retrieval and is **out**. DFS + single-phase fold survive.
 The world already fights the old bias (flat-perceive workaround) — the change frees it to
-flood-fill.
+flood-fill. **Activation is four factors stored separately** (A/S/F/N), maintained by the
+bump — crossing updates F, outcome updates A/S/N (resolves former #1); `strength = rect(A) ·
+S · F · conf(N)`, which **is** the weight. **Relevance = alignment** — no separate fresh term;
+impulse-dependence is structural (which edge you arrive by). **Credit assignment falls out of
+node birth:** a node's children = its birth-frame, and the closure grade distributes to the
+frame's edges as `credit = activation · g` — the graph is the eligibility trace.
 
 ## Migration / blast radius — the real cost
 
