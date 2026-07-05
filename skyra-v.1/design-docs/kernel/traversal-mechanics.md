@@ -67,6 +67,10 @@ currently decides:
   leak.
 - the **threshold** — a relevance-floor constant.
 - **breadth / order** (drill vs. gather) — cognitive.
+- the **units** the budget is denominated in (tokens? distance?) — set by the world's
+  *cost function*, not the kernel.
+- **conservation** — whether a branch's budget is split among children (bounded) or
+  broadcast full to each (unbounded reach) — set by the cell's *weights*, not the kernel.
 
 **Universal — stays in the kernel:**
 - **deliver a budget along an edge + recurse** — transport.
@@ -75,7 +79,8 @@ currently decides:
 - the **fold** (`Express` post-order) — structural.
 - **bookkeeping** — the proper-time tick, the double-buffer.
 
-After the move the kernel holds **zero cognitive constants**. All of it is in the cells.
+After the move the kernel holds **zero cognitive constants** — and doesn't even know what
+the budget *measures* or whether it's *conserved*. All of it is in the cells.
 
 ## The interface change
 
@@ -123,10 +128,11 @@ type Alloc struct {
 }
 ```
 
-`ActivationRecord.Activate` is **removed**. The kernel's job on the return is pure
-arithmetic: given the budget `B` it carries into a node, subtract the node's own
-`tokens(Content())`, and split the remainder across the `Alloc`s in proportion to their
-weights — `child_budget_i = (B − cost) × weight_i / Σ weight`. No constants. `Agents()` and
+`ActivationRecord.Activate` is **removed**. The kernel's job on the return is the barest
+arithmetic: given the budget `B` it carries into a node, subtract the node's own `cost`, and
+scale each `Alloc` — `child_budget_i = (B − cost) × weight_i`. **No normalization** — whether
+the children's budgets sum back to the parent's (conservation) is decided by the cell's
+weights, not the kernel (see "Budget is world-defined"). No constants. `Agents()` and
 `Content()` untouched.
 
 ## Kill the method, keep the state
@@ -163,6 +169,8 @@ stops. The frame is therefore bounded to the context window *by construction* �
 working-memory assembly falls out of the walk instead of being a separate compaction pass.
 (This is the coherence-managed-context idea, phase-06, as a mechanism; it makes the ~100k
 recall ceiling a number you set.) There is no separate decay: **token cost is the decay.**
+(Tokens are the *cognition* denomination; "Budget is world-defined" below generalizes the
+units and conservation to any world.)
 
 ### The four-part model
 
@@ -193,10 +201,12 @@ C gets the fattest slice and carries the most into its subtree; B the leanest. (
 *carry-to-kids* is delivered − cost, so a cheap cell keeps more of its share for its
 descendants — B nearly matches A despite a smaller slice.)
 
-**The global cap holds by conservation.** Weights normalize to 1 and each cost comes out
-before splitting, so total frame tokens can never exceed the root budget — the "global max
-knob" is just the root's initial budget. The kernel drops a child when its delivered budget
-< its own cost (**affordability** — arithmetic, not a cognitive threshold).
+**The global cap holds by conservation — which the cognition cell chooses.** Its `Observe`
+returns weights that normalize to 1 (the shares above), so the children's budgets sum back to
+the parent's remainder and total frame tokens can never exceed the root budget — the "global
+max knob" is just the root's initial budget. (A *spatial* cell returns un-normalized weights
+and does **not** conserve — see "Budget is world-defined.") The kernel drops a child when its
+delivered budget < its own cost (**affordability** — arithmetic, not a cognitive threshold).
 
 ### The frame is a connected region
 
@@ -247,6 +257,60 @@ is cell-local. A gem the spread can't reach isn't a kernel failure — it's a si
 **edge to it is under-learned**, and the fix is the bump (strengthen the edge), not a global
 override that papers over the topology.
 
+## Budget is world-defined (units and conservation)
+
+The kernel treats the budget as an abstract scalar. It does not know what it *measures* or
+whether it's *conserved* — both are set by the world the wave runs in, never by the kernel.
+
+- **Units** are set by the **cost function**. Cognition: `cost = tokens(Content())`, budget =
+  tokens. The spatial world: `cost = 1 per hop` (a Chebyshev step), budget = *radius*. The
+  primitive defaults already are this — `observePerceive` sets `impulse.Amplitude =
+  DefaultPerceiveRadius` (20). The world has always denominated amplitude in reach.
+- **Conservation** is set by the **cell's weights**. Cognition returns weights summing to 1 →
+  children's budgets sum back to the parent → bounded frame (right: one context window). The
+  spatial world returns weights of 1 each → every neighbor inherits the *full* `budget − cost`
+  → reach one direction doesn't cost reach in another (right: space isn't conserved across
+  directions).
+
+| | cognition | spatial world |
+|---|---|---|
+| amplitude = | token budget | radius (the primitive default) |
+| cost = | `tokens(Content())` | 1 per hop |
+| weights = | sum to 1 (conserve → bounded frame) | all 1 (broadcast → flood to radius) |
+
+One kernel, agnostic to both. `child_budget = (parent_budget − cost) × weight` covers both:
+normalized weights conserve; unit weights broadcast.
+
+## World impact
+
+The redesign lands well on the world because **the world is already fighting the bias we're
+deleting.** `PerceiveCell.Children()` flat-enumerates every point in radius in *one hop*, and
+the comment says why (`world/space.go:547`): *"no recursive BFS — the kernel's
+branching-amplitude division kills BFS depth past ~5 hops."* The `/len` split collapsed
+amplitude so fast a real grid walk died in ~5 steps, so perception was flattened to dodge it.
+And `spaceActivation.Activate` already returns a flat constant — the world never used kernel
+activation for falloff. It worked *around* the leak with radius-enumeration + a tuned
+`amplitude`/`threshold` so the flat fan clears the floor.
+
+What the world **must absorb** (or it breaks):
+- **`Activate` → `Alloc` weights** — the flat baseline becomes weights in `PerceiveCell`/
+  `Point` `Observe`.
+- **threshold → affordability** — the fragile `amplitude`/`threshold` tuning dissolves.
+
+What it **gains:**
+- **Drop the flat-perceive workaround.** With no amplitude-collapse, a real grid spread
+  returns: `Point.Observe` returns neighbor `Alloc`s (weight 1), `cost = 1/hop`, and the
+  **visited-once rail** makes it a bounded **flood-fill to radius = budget**. The radius falls
+  out of budget-depletion; no enumeration hack, no decay constant.
+- **Honest distance falloff** if wanted: weight neighbors by proximity/direction instead of a
+  flat 1, and perception thins with distance natively.
+
+Blast radius: every world `Space` — `World`, `Point`, `PerceiveCell`, `EngageCell`, `MoveCell`
+— gets the new `Observe`. Most are boundary/control cells returning `nil` or their enumerated
+children as `Alloc`s; only `PerceiveCell`/`Point` carry real weight policy. Argues for
+migration option (b): prove it in the dnav2 cognition path first; the world rework is its own
+project.
+
 ## Division of labor — the line that must stay clean
 
 - **The cell owns all cognition** (`Observe`): which edges light up, their weights, how broad
@@ -266,9 +330,9 @@ The kernel gets **simpler**, not more complex — it sheds policy. The DFS and t
 
 **1. `scoreChildren` dissolves into arithmetic transport.** It no longer activates,
 attenuates, or thresholds. It reads the `Alloc` map `Observe` returned, and for each child
-computes `child_budget = (parent_budget − parent_cost) × weight_i / Σ weight`. That's it.
-`amplitudeDecay` (`:12`, `:204`) is **deleted**. The candidate set is the `Alloc` map, not
-`Children()`.
+computes `child_budget = (parent_budget − parent_cost) × weight_i`. No normalization —
+conservation is the cell's weights, not the kernel's. `amplitudeDecay` (`:12`, `:204`) is
+**deleted**. The candidate set is the `Alloc` map, not `Children()`.
 
 **2. Threshold → affordability.** A child is descended iff `child_budget ≥ tokens(content)`
 — pure arithmetic, replacing `score > threshold` (`:207`) and its constant. The DFS stack
@@ -347,13 +411,19 @@ row is currently empty bracket.
 6. **Should `Observe` receive the remaining budget?** Weight-only keeps the cell budget-blind
    and the kernel purest; but budget-aware breadth policies (adapt spread to how much is left)
    would need it. Start weight-only.
+7. **Where `cost` lives.** Cognition's cost is the child's own size (`tokens(Content())`); the
+   world's is a flat 1 per hop. Either the node reports it (a `Cost()` method / derived from
+   `Content()`) or it rides on the `Alloc`. Detail for the build.
 
-*Settled this pass:* the kernel carries **no cognition** — split rule, decay factor, and
-threshold all move to `Observe`; `amplitudeDecay` is **deleted** (token cost is the decay).
-`Observe` returns a weighted onward distribution (`map[string]Alloc`); the kernel does pure
-arithmetic transport (scale by budget, subtract cost, affordability, recurse). Drill and
-gather are **cell distribution policies** (narrow vs. broad), one universal kernel; true
-flat-global best-first is flat retrieval and is **out**. DFS + single-phase fold survive.
+*Settled this pass:* the kernel carries **no cognition** — and doesn't know the budget's
+**units** or whether it **conserves**. Split rule, decay factor, threshold, units, and
+conservation all leave the kernel; `amplitudeDecay` is **deleted** (cost is the decay).
+`Observe` returns a weighted onward distribution (`map[string]Alloc`); the kernel does the
+barest arithmetic — `child_budget = (budget − cost) × weight`, **no normalization**.
+Units come from the world's *cost function* (tokens vs. distance), conservation from the
+cell's *weights* (sum-to-1 vs. all-1). Drill/gather are cell policies; true flat-global
+best-first is flat retrieval and is **out**. DFS + single-phase fold survive. The world
+already fights the old bias (flat-perceive workaround) — the change frees it to flood-fill.
 
 ## Migration / blast radius — the real cost
 
