@@ -1,9 +1,10 @@
 // Command phase2-accumulate is the Phase-2e demonstration
 // (traversal-implementation-plan.md): run a scripted multi-turn conversation on live
 // Codex with the full economy wired — the frame feeds self:predict, its edges are
-// crossed, and each other:grade / self:grade distributes the closure back across the
-// frame. After every turn it prints the edge-alignments so you can watch them MOVE:
-// the accumulation loop, live, for the first time.
+// crossed, and the midlevel coherence-settle grades each episode's nodes against its
+// fixed gist, writing alignment (A) onto the edges (closure→A is unwired). After every
+// turn it prints the edge-alignments so you can watch them MOVE — the accumulation loop,
+// and whether an edited episode's edges climb N across turns.
 //
 //	go run ./cmd/phase2-accumulate
 package main
@@ -38,7 +39,8 @@ func main() {
 
 	d := dnav2.NewDNA("skyra")
 	dnav2.WireGenes(d)
-	d.SetInfer(inference.CallCodex)
+	il := dnav2.NewInferLogger("skyra", inference.CallCodex) // times + logs every inference call
+	d.SetInfer(il.Infer)
 	d.SetEmit(func(skyra.Impulse) {})
 
 	board := dnav2.NewBoard()
@@ -68,7 +70,8 @@ func main() {
 		fmt.Printf("   flow: %s\n", spanFlow(trace))
 		printAlignments(d)
 	}
-	fmt.Println("\n═══ done — watch A move across turns (grades flow credit back over the frame) ═══")
+	fmt.Println("\n═══ done — watch A move across turns (the coherence-settle writes alignment) ═══")
+	fmt.Println("   " + il.Summary())
 }
 
 // spanFlow renders the Board trace as the pipeline step-flow for the turn.
