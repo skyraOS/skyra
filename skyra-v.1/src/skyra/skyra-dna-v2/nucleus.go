@@ -50,6 +50,38 @@ func (ei *EntityIndex) AppendInteraction(entity *dna.MemoryCell, rec dna.Interac
 	entity.AddChild(entity.ID()+"→"+id, cell)
 }
 
+// Latest returns the newest interaction node (KindResponse) across all entities, with
+// its owning entity — the interaction that just arrived, for midlevel to consolidate
+// onto the active episode.
+func (ei *EntityIndex) Latest() (node, entity *dna.MemoryCell, ok bool) {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	bestTS := -1
+	for _, e := range ei.byID {
+		for _, child := range e.Children() {
+			mc, isCell := child.(*dna.MemoryCell)
+			if !isCell {
+				continue
+			}
+			if rec, isRec := mc.Content().(dna.InteractionRecord); isRec && rec.Timestamp > bestTS {
+				bestTS, node, entity = rec.Timestamp, mc, e
+			}
+		}
+	}
+	return node, entity, node != nil
+}
+
+// LinkGrouping wires entity → grouping (the episodes a participant is in), idempotent on
+// the grouping id — cool entities point to episodes, not raw interactions.
+func (ei *EntityIndex) LinkGrouping(entity, grouping *dna.MemoryCell) {
+	if entity == nil || grouping == nil {
+		return
+	}
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	entity.AddChild(grouping.ID(), grouping)
+}
+
 // Snapshot returns the current entity nodes under the lock (for frame assembly —
 // read live, the active state).
 func (ei *EntityIndex) Snapshot() []*dna.MemoryCell {

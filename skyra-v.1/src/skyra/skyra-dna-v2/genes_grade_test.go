@@ -178,6 +178,41 @@ func TestMidlevelEditContinuesEpisode(t *testing.T) {
 	}
 }
 
+// After framing, the just-arrived interaction is consolidated onto the episode (so it
+// lives on the grouping the frame walks) and the entity points to the episode.
+func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
+	d := NewDNA("skyra")
+	WireGenes(d)
+	d.SetInfer(gradeMock("<match>none</match>"))
+	d.SetEmit(func(skyra.Impulse) {})
+	o, _ := newOrch(d)
+
+	fireTurn(t, o, "X1", "", "help with the skyra project")
+
+	g := d.Groupings().Active()
+	if g == nil {
+		t.Fatal("no active grouping")
+	}
+	hasInteraction := false
+	for _, c := range g.Children() {
+		if mc, ok := c.(*dna.MemoryCell); ok {
+			if _, ok := mc.Content().(dna.InteractionRecord); ok {
+				hasInteraction = true
+			}
+		}
+	}
+	if !hasInteraction {
+		t.Fatal("episode should have the interaction consolidated as a child")
+	}
+	for _, e := range d.Entities().Snapshot() {
+		if e.ID() == "michael" {
+			if _, ok := e.Children()[g.ID()]; !ok {
+				t.Fatal("entity should point to the episode (entity→grouping edge)")
+			}
+		}
+	}
+}
+
 // execMock is the cold-start mock plus a parametrized execution judge, so a
 // reafference turn can drive self:grade down either fork (exec-ok / exec=no).
 func execMock(execJudge string) InferFunc {

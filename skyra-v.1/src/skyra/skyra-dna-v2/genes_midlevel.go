@@ -45,18 +45,33 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 			g.SetContent(dna.Gist{Text: gist, Timestamp: ts})
 			gi.SetActive(g)
 			root.Grouping = g
-			root.Condition = "framed"
 			debug.Being("skyra", "midlevel", fmt.Sprintf("edit %s gist=%q", id, gist))
-			return
 		}
-		// unknown id → treat as new
+	}
+	// NEW (or an edit against an unknown id): open a fresh episode.
+	if root.Grouping == nil {
+		groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
+		root.Grouping = gi.Create(groupID, gist, ts) // Create sets it active
+		debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
 	}
 
-	// NEW (or an edit against an unknown id): open a fresh episode.
-	groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
-	root.Grouping = gi.Create(groupID, gist, ts) // Create sets it active
+	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
 	root.Condition = "framed"
-	debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
+}
+
+// consolidateInteraction attaches the just-arrived interaction to the framed episode and
+// wires the entity → episode edge — so the exchange lives on the grouping the frame walks
+// (into the frame + economy), not only in the entity index.
+func consolidateInteraction(root *EphemeralRoot) {
+	if root.Grouping == nil {
+		return
+	}
+	node, entity, ok := root.Entities.Latest()
+	if !ok {
+		return
+	}
+	root.DNA().Groupings().AddChild(root.Grouping, root.Grouping.ID()+"→"+node.ID(), node)
+	root.Entities.LinkGrouping(entity, root.Grouping)
 }
 
 // framePresent renders the framing-op present: the exchange + the open episodes the op

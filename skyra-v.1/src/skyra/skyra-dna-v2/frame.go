@@ -114,6 +114,8 @@ func renderCellText(cell *dna.MemoryCell) string {
 		}
 	case dna.ActionRecord:
 		return fmt.Sprintf("action: %s %s %v", c.Primitive, c.EntityID, c.Content)
+	case dna.InteractionRecord:
+		return c.From + ": " + c.Utterance
 	}
 	return ""
 }
