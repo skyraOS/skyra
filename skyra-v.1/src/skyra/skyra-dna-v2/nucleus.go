@@ -66,23 +66,39 @@ func (ei *EntityIndex) Snapshot() []*dna.MemoryCell {
 // MemoryCells carrying a Gist; predictions hang off them as children. Handed to
 // the predict workers as their working set (the active grouping for the impulse).
 type GroupingIndex struct {
-	mu    sync.Mutex
-	slice skyra.Slice
-	byID  map[string]*dna.MemoryCell
+	mu     sync.Mutex
+	slice  skyra.Slice
+	byID   map[string]*dna.MemoryCell
+	active *dna.MemoryCell // the current episode (active-grouping.md); sensory attaches here
 }
 
 func NewGroupingIndex(slice skyra.Slice) *GroupingIndex {
 	return &GroupingIndex{slice: slice, byID: map[string]*dna.MemoryCell{}}
 }
 
-// Create mints a grouping carrying a gist and registers it (cold-start "create";
-// warm match/edit later).
+// Create mints a grouping carrying a gist, registers it, and makes it the ACTIVE
+// episode. (Cold-start "create"; warm match/edit sharpens the active gist instead.)
 func (gi *GroupingIndex) Create(groupID, gist string, ts int) *dna.MemoryCell {
 	gi.mu.Lock()
 	defer gi.mu.Unlock()
 	g := dna.NewMemoryCell(groupID, dna.KindGrouping, dna.Gist{Text: gist, Timestamp: ts}, gi.slice)
 	gi.byID[groupID] = g
+	gi.active = g
 	return g
+}
+
+// Active returns the current episode (nil before the first grouping exists).
+func (gi *GroupingIndex) Active() *dna.MemoryCell {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	return gi.active
+}
+
+// SetActive makes g the current episode.
+func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	gi.active = g
 }
 
 // AddChild appends a node (a prediction) to a grouping under the index lock.
