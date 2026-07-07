@@ -76,8 +76,12 @@ const creditFrameBudget = 2000 // generous — credit should reach the whole gro
 // distributeClosure writes a closure back across the graded grouping's frame (the
 // eligibility trace, Phase 2e): held → +1 (the framing + distribution proved useful),
 // total miss → −1. Credit reaches ALL frame edges, activation-weighted — not just the
-// prediction — and the traversed edges are crossed (F-bump). This is what makes
-// edge-alignments move across turns: the accumulation loop.
+// prediction — and the traversed edges are crossed (F-bump).
+//
+// PARKED (2026-07-06): this feeds CLOSURE into A, but A is ALIGNMENT/edge-strength
+// (coherence), a separate axis (see active-grouping.md). Placeholder until closure is
+// designed; the midlevel coherence-settle is the real writer of A. Kept wired so the loop
+// closes end-to-end, but conceptually mis-assigned — do not build on closure→A.
 func distributeClosure(root *EphemeralRoot, good bool) {
 	g := root.DNA().Groupings().Latest()
 	if g == nil {

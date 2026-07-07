@@ -165,6 +165,17 @@ transform over it, read-live-never-snapshot.
 
 ## Activation & the bump
 
+> **Correction (2026-07-06) — alignment ≠ closure; closure is PARKED.** This section (and
+> "Credit assignment" below) describe `A` as an *outcome/closure* value and write it via
+> `distributeClosure` (held/miss → `A`). That **conflates two separate axes.** Per
+> `../cognition/active-grouping.md`: `A` = **edge strength / alignment** = the *coherence of
+> a node to its framing*, written by the midlevel **coherence-settle** (a batch
+> coherence-grade → prune-to-plateau). **Closure** (did the prediction hold / the action
+> work) is a *separate, not-yet-designed axis* — it likely factors into edge strength
+> somehow, but it is **not** `A`. The `distributeClosure → A` wiring in the code is a
+> **placeholder, parked** until closure is designed; the settle is the real writer of `A`.
+> Read the "outcome/closure" language below as that parked stub.
+
 The section above says strength lives on the edge record, read lock-free. This one says
 *what* strength is and *how the bump maintains it*. Factors are stored **separately**
 (multiply at read — cheap, inspectable, reweightable), grounded in the design already in

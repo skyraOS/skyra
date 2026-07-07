@@ -20,8 +20,14 @@ const (
 )
 
 // Activation is one edge's record (A→B distinct from C→B).
+//
+// NOTE (2026-07-06): A is ALIGNMENT / EDGE STRENGTH = coherence of the node to its framing,
+// whose real writer is the midlevel coherence-settle (design-docs/cognition/active-grouping.md).
+// CLOSURE (did the prediction hold / the action work) is a SEPARATE, not-yet-designed axis —
+// it probably factors into edge strength somehow, but it is NOT A. The Grade/DistributeCredit
+// (closure → A) path is a PLACEHOLDER, parked until closure is designed; the settle replaces it.
 type Activation struct {
-	A     float64 // alignment — signed running outcome value (birth 0 = neutral)
+	A     float64 // alignment / edge-strength: coherence of node→framing (settle-written). NOT closure.
 	S     float64 // salience — arousal at reinforcement; immutable once stamped (birth 1)
 	F     float64 // frequency/recency — lazy timestamped EMA (birth 0; Cross-at-birth lifts it)
 	Flast int     // tick of the last F update
@@ -153,6 +159,11 @@ func (s *ActivationStore) CrossFrame(edges map[string]float64, tick int) {
 // the edge's activation (the eligibility trace): each lit edge learns from the outcome in
 // proportion to how load-bearing it was. `edges` maps edge identity → its frame
 // activation (from Result.Edges()).
+//
+// PARKED (2026-07-06): this writes CLOSURE into A, but A is ALIGNMENT/edge-strength
+// (coherence), a separate axis (see the Activation doc + active-grouping.md). This is a
+// placeholder until the closure axis is designed; the coherence-settle is the real writer
+// of A. Left wired so the loop closes end-to-end, but conceptually mis-assigned.
 func (s *ActivationStore) DistributeCredit(edges map[string]float64, g, stress float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
