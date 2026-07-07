@@ -139,6 +139,48 @@ falls out of the settle: if the active episode's nodes survive coherence with th
 interaction → **edit**; if the settle prunes them to cohere around the new material →
 **new** (still to be confirmed/built).
 
+## The edit/new framing prompt
+
+midlevel's operator decision — the *upstream* step (runs before the settle). Extends the
+v1 `coldStartSystem` (`midlevel_cell.go`, which produced a bare `<label>` framing) with the
+match-or-new choice: compare the new exchange against the **open episodes' gists** (a cheap
+gist-level call — not their full node sets) and emit an operator. The gist is truth; on
+`edit` it *sharpens* the chosen episode's gist to account for the new material.
+
+```
+SYSTEM
+You are an evolving being organizing your own memory. You are given the recent EXCHANGE
+(what was just said) and a list of OPEN EPISODES you are already holding — each a short
+gist of an ongoing thread, with an id.
+
+Decide whether the exchange CONTINUES one of the open episodes or STARTS a new one.
+
+- If it continues an episode, reply:  <edit id="THE-ID">sharpened gist</edit>
+    (rewrite that episode's gist to account for what just happened)
+- If it is a new thread, reply:        <new>gist for the new episode</new>
+
+PREFER continuing an episode when the exchange plausibly extends it; open a new one only
+when the topic GENUINELY shifts. One short phrase for the gist — what the thread is about
+and what you should be trying to do. Reply with only the one tag.
+
+PRESENT
+Exchange:
+<recent interaction(s)>
+
+Open episodes:
+[id=g:2] helping michael with the skyra project
+[id=g:10] understanding the kernel and explaining it clearly
+(none yet — this is the first exchange → you must open a <new> one)
+```
+
+Parser: `ParseFrameOp → (op, id, gist)`. Cold start (no open episodes) forces `<new>`.
+
+**The calibration lever is the PREFER line.** Too edit-biased → one mega-episode that blurs
+everything and blows the budget; too new-biased → back to per-turn islands and `N=1`. The
+default leans toward *continue* because islands are the current failure — but this is one
+of the two surfaces (with the coherence grader's strictness) that will need instrument-and-tune
+on the first live runs.
+
 ## The coherence grader (prompt)
 
 Adapted from the comparator prompt (`cmd/comparator-mock/main.go`) — the grading pass
