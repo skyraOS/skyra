@@ -1,6 +1,10 @@
 package dna
 
-import "skyra-v1/src/skyra"
+import (
+	"sync"
+
+	"skyra-v1/src/skyra"
+)
 
 // MemoryCell — the one passive node of the memory graph.
 //
@@ -19,8 +23,15 @@ import "skyra-v1/src/skyra"
 // See specs/2026-06-16/skyra-dna/setpoint.md + entity.md and
 // design-docs/cognition/{entities-and-surroundings,groupings-and-understandings}.md.
 type MemoryCell struct {
-	id       string
-	kind     Kind
+	id string
+	kind Kind
+
+	// mu guards content + children. The master graph is read and written by
+	// CONCURRENT waves (the fan-out: other:predict appends the distribution while
+	// self:predict's frame traversal iterates the same grouping) — the "RWMutex on
+	// the master graph" data-race safety the dispatch spec calls for. Children()
+	// returns a copy under the read lock; AddChild/SetContent take the write lock.
+	mu       sync.RWMutex
 	content  any                    // understanding (gist) | entity descriptor | ...
 	children map[string]skyra.Space // edge-keyed; meaning depends on Kind
 	slice    skyra.Slice
@@ -73,11 +84,28 @@ func NewMemoryCell(id string, kind Kind, content any, slice skyra.Slice) *Memory
 	}
 }
 
-func (m *MemoryCell) ID() string                            { return m.id }
-func (m *MemoryCell) Kind() Kind                            { return m.kind }
-func (m *MemoryCell) Slice() skyra.Slice                    { return m.slice }
-func (m *MemoryCell) Content() any                          { return m.content }
-func (m *MemoryCell) Children() map[string]skyra.Space      { return m.children }
+func (m *MemoryCell) ID() string         { return m.id }
+func (m *MemoryCell) Kind() Kind         { return m.kind }
+func (m *MemoryCell) Slice() skyra.Slice { return m.slice }
+
+func (m *MemoryCell) Content() any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.content
+}
+
+// Children returns a COPY of the edge map under the read lock, so callers can
+// iterate it while concurrent waves append (no torn map iteration).
+func (m *MemoryCell) Children() map[string]skyra.Space {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]skyra.Space, len(m.children))
+	for k, c := range m.children {
+		out[k] = c
+	}
+	return out
+}
+
 func (m *MemoryCell) Agents() map[string]skyra.Space        { return nil }
 func (m *MemoryCell) NewActivation() skyra.ActivationRecord { return newMemoryActivation() }
 
@@ -98,13 +126,15 @@ func (m *MemoryCell) Observe(origin skyra.Space, impulse any) {}
 
 // Express — traversal output (passive): contributes its content to the wave.
 // origin is the wave owner.
-func (m *MemoryCell) Express(origin skyra.Space, impulse any) any { return m.content }
+func (m *MemoryCell) Express(origin skyra.Space, impulse any) any { return m.Content() }
 
 // AddChild adds an edge to a neighbor, keyed by edge identity (the map key) so
 // activation is edge-owned. This is how a setpoint stamps its closure snapshot,
 // and how an entity is stamped with a setpoint at completion
 // (entity.children += setpoint — the reverse-index write-time invariant).
 func (m *MemoryCell) AddChild(edgeKey string, cell skyra.Space) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.children[edgeKey] = cell
 }
 
@@ -126,11 +156,12 @@ type ParsedNode struct {
 // lifted out (for chronological ordering). GroupID is empty until the node is
 // grouped.
 func (m *MemoryCell) Parse() ParsedNode {
+	content := m.Content()
 	return ParsedNode{
 		ID:        m.id,
 		Kind:      m.kind,
-		Content:   m.content,
-		Timestamp: contentTimestamp(m.content),
+		Content:   content,
+		Timestamp: contentTimestamp(content),
 		GroupID:   "",
 	}
 }
@@ -204,5 +235,9 @@ func (a *memoryActivation) Value() float64 { return a.Identity + a.Familiarity }
 
 // SetContent replaces the node's content — used by the grade half to stamp a
 // Prediction's grade in place (the grade lives ON the prediction node,
-// cell-parsed). Callers hold the owning slice's lock.
-func (m *MemoryCell) SetContent(content any) { m.content = content }
+// cell-parsed). Guarded by the cell's own lock (concurrent frame reads).
+func (m *MemoryCell) SetContent(content any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.content = content
+}
