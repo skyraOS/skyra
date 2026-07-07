@@ -101,6 +101,29 @@ func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
 	gi.active = g
 }
 
+// Get returns a grouping by id (nil if none) — the target of an <edit id="..."> op.
+func (gi *GroupingIndex) Get(id string) *dna.MemoryCell {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	return gi.byID[id]
+}
+
+// OpenEpisodes returns every grouping's id + gist — the candidates the framing op
+// decides edit-or-new against (a cheap gist-level view, not the full node sets).
+func (gi *GroupingIndex) OpenEpisodes() []struct{ ID, Gist string } {
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	out := make([]struct{ ID, Gist string }, 0, len(gi.byID))
+	for id, g := range gi.byID {
+		gist := ""
+		if gg, ok := g.Content().(dna.Gist); ok {
+			gist = gg.Text
+		}
+		out = append(out, struct{ ID, Gist string }{id, gist})
+	}
+	return out
+}
+
 // AddChild appends a node (a prediction) to a grouping under the index lock.
 func (gi *GroupingIndex) AddChild(grouping *dna.MemoryCell, edgeKey string, child skyra.Space) {
 	gi.mu.Lock()

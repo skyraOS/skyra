@@ -77,3 +77,17 @@ func renderExchange(ei *EntityIndex) string {
 const coldStartSystem = "You are an evolving being reading a live exchange. In one short " +
 	"phrase, predict what this exchange is about and what you should be trying to do. " +
 	"Respond with only the tag: <label>your framing</label>"
+
+// frameOpSystem — the edit/new framing operator (active-grouping.md). Decides whether the
+// exchange CONTINUES an open episode (edit + sharpened gist) or STARTS a new one, leaning
+// toward continue (islands are the failure to avoid). The gist is truth.
+const frameOpSystem = "You are an evolving being organizing your own memory. You are given " +
+	"the recent EXCHANGE (what was just said) and a list of OPEN EPISODES you are already " +
+	"holding — each a short gist of an ongoing thread, with an id.\n\n" +
+	"Decide whether the exchange CONTINUES one of the open episodes or STARTS a new one.\n\n" +
+	"- If it continues an episode, reply:  <edit id=\"THE-ID\">sharpened gist</edit>\n" +
+	"    (rewrite that episode's gist to account for what just happened)\n" +
+	"- If it is a new thread, reply:        <new>gist for the new episode</new>\n\n" +
+	"PREFER continuing an episode when the exchange plausibly extends it; open a new one only " +
+	"when the topic GENUINELY shifts. One short phrase for the gist — what the thread is about " +
+	"and what you should be trying to do. Reply with only the one tag."
