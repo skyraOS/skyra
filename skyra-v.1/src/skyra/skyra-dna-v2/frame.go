@@ -32,9 +32,10 @@ func tokenCount(s string) int {
 // weight is the learned Strength off the store (relevance = alignment); an edge with no
 // record yet falls back to the Phase-1 static Probability, so the two phases layer.
 type frameNode struct {
-	cell  *dna.MemoryCell
-	store *ActivationStore // nil → Phase-1 Probability weights
-	tick  int
+	cell    *dna.MemoryCell
+	store   *ActivationStore // nil → Phase-1 Probability weights
+	tick    int
+	exclude map[string]bool // node IDs the settle pruned this pass (nil → none); skipped in Frontier
 }
 
 func (n *frameNode) ID() string                         { return n.cell.ID() }
@@ -42,7 +43,7 @@ func (n *frameNode) Cost() int                          { return tokenCount(rend
 func (n *frameNode) Express(_ traverse.Node, _ any) any { return n.cell.Content() }
 
 func (n *frameNode) child(mc *dna.MemoryCell) *frameNode {
-	return &frameNode{cell: mc, store: n.store, tick: n.tick}
+	return &frameNode{cell: mc, store: n.store, tick: n.tick, exclude: n.exclude}
 }
 
 // weight is the learned edge Strength (relevance = alignment); falls back to the static
@@ -67,6 +68,9 @@ func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 	for key, child := range n.cell.Children() {
 		mc, ok := child.(*dna.MemoryCell)
 		if !ok {
+			continue
+		}
+		if n.exclude[mc.ID()] { // settle pruned this node this pass (nil map → always false)
 			continue
 		}
 		w := n.weight(key, mc)
@@ -128,6 +132,15 @@ func FrameOf(grouping *dna.MemoryCell, budget float64, store *ActivationStore, t
 		return nil
 	}
 	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick}, budget, nil)
+}
+
+// frameOfExcluding is FrameOf with a settle-pruned node set: excluded node IDs are skipped
+// in Frontier, so a re-traversal after pruning frees their budget for coherent-far nodes.
+func frameOfExcluding(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int, exclude map[string]bool) *traverse.Result {
+	if grouping == nil {
+		return nil
+	}
+	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick, exclude: exclude}, budget, nil)
 }
 
 // AssembleFramePresent walks the grouping with Phase-1 static weights (no learning).

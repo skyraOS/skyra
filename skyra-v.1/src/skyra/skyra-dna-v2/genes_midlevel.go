@@ -56,6 +56,13 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 
 	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
+
+	// The coherence-settle: with the gist now FIXED, grade the episode's nodes against it and
+	// write alignment (A) onto their edges, pruning misfits until it plateaus. midlevel
+	// withholds its frame until here — the settle is the sole writer of A (active-grouping.md).
+	passes := coherenceSettle(root.Grouping, root.DNA().Activation(), ts, infer)
+	debug.Being("skyra", "midlevel", fmt.Sprintf("settled %s in %d passes", root.Grouping.ID(), passes))
+
 	root.Condition = "framed"
 }
 

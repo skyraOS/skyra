@@ -46,7 +46,9 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
 	debug.Being("skyra", "self", fmt.Sprintf("exec grade=%.1f → %s", score, root.Condition))
-	distributeClosure(root, score > 0) // Phase 2e: credit the frame on the reafference outcome
+	// Closure → A is UNWIRED (2026-07-06): the coherence-settle is the sole writer of A. The
+	// execution outcome is still recorded on the proposal (StampSelfGrade above); it no longer
+	// bumps edge alignment. Closure is a separate, parked axis — see active-grouping.md.
 }
 
 const selfFrameBudget = 2000 // generous — don't prune self's conditioning in normal operation

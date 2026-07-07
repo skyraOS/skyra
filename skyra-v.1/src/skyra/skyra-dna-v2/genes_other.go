@@ -68,39 +68,10 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "all-preds<0" // total miss → reframe
 	}
 	debug.Being("skyra", "other", fmt.Sprintf("grade → %s score=%.2f evidence=%q", root.Condition, score, evidence))
-	distributeClosure(root, matched) // Phase 2e: credit the frame that produced the bet
-}
-
-const creditFrameBudget = 2000 // generous — credit should reach the whole grouping frame
-
-// distributeClosure writes a closure back across the graded grouping's frame (the
-// eligibility trace, Phase 2e): held → +1 (the framing + distribution proved useful),
-// total miss → −1. Credit reaches ALL frame edges, activation-weighted — not just the
-// prediction — and the traversed edges are crossed (F-bump).
-//
-// PARKED (2026-07-06): this feeds CLOSURE into A, but A is ALIGNMENT/edge-strength
-// (coherence), a separate axis (see active-grouping.md). Placeholder until closure is
-// designed; the midlevel coherence-settle is the real writer of A. Kept wired so the loop
-// closes end-to-end, but conceptually mis-assigned — do not build on closure→A.
-func distributeClosure(root *EphemeralRoot, good bool) {
-	g := root.DNA().Groupings().Latest()
-	if g == nil {
-		return
-	}
-	store := root.DNA().Activation()
-	tick := root.DNA().Tick()
-	res := FrameOf(g, creditFrameBudget, store, tick)
-	if res == nil {
-		return
-	}
-	edges := res.Edges()
-	store.CrossFrame(edges, tick)
-	signedG := 1.0
-	if !good {
-		signedG = -1.0
-	}
-	store.DistributeCredit(edges, signedG, 1)
-	debug.Being("skyra", "credit", fmt.Sprintf("closure g=%+.0f over %d edges (grouping %s)", signedG, len(edges), g.ID()))
+	// Closure → A is UNWIRED (2026-07-06): the midlevel coherence-settle is the sole writer of
+	// A now. Closure (did the bet hold) is a separate, parked axis — StampOtherGrade above still
+	// records it on the prediction; it just no longer bumps edge alignment. See active-grouping.md
+	// and ActivationStore.DistributeCredit (kept, parked, for when the closure axis is designed).
 }
 
 // graderSystem — the adversarial-neutral judge. Never told the predictions are its
