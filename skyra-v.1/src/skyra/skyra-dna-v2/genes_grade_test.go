@@ -18,7 +18,7 @@ func gradeMock(judge string) InferFunc {
 		case strings.Contains(system, "strict, impartial judge"):
 			return judge, nil
 		case strings.Contains(system, "evolving being"):
-			return "<label>assist with the skyra project</label>", nil
+			return "<new>assist with the skyra project</new>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
 		case strings.Contains(system, "You are Skyra's motor system"):
@@ -123,6 +123,58 @@ func TestGradeTotalMissReframes(t *testing.T) {
 	defer mu.Unlock()
 	if len(emitted) != 2 {
 		t.Fatalf("emitted %d actions across two turns, want 2 (reframe still acts)", len(emitted))
+	}
+}
+
+// editMock returns <edit id="..."> against whatever open episode the present lists (else
+// <new>), so a two-turn run drives midlevel down the EDIT branch.
+func editMock() InferFunc {
+	return func(system, present string) (string, error) {
+		switch {
+		case strings.Contains(system, "evolving being"): // frameOpSystem
+			if i := strings.Index(present, "[id="); i >= 0 {
+				rest := present[i+len("[id="):]
+				id := rest[:strings.Index(rest, "]")]
+				return "<edit id=\"" + id + "\">continuing the skyra project</edit>", nil
+			}
+			return "<new>assist with the skyra project</new>", nil
+		case strings.Contains(system, "strict, impartial judge"):
+			return "<match>none</match>", nil
+		case strings.Contains(system, "External Perspective"):
+			return `<predictions><prediction p="0.6">asks more</prediction></predictions>`, nil
+		case strings.Contains(system, "You are Skyra's motor system"):
+			return "<engage><michael>ok</michael></engage>", nil
+		case strings.Contains(system, "You are Skyra's inner voice"):
+			return "<prediction>ask michael what next</prediction>", nil
+		}
+		return "", nil
+	}
+}
+
+// EDIT continues the active episode: turn 2 sharpens the existing grouping's gist instead
+// of minting a new one — the compounding path (one growing episode, not two islands).
+func TestMidlevelEditContinuesEpisode(t *testing.T) {
+	d := NewDNA("skyra")
+	WireGenes(d)
+	d.SetInfer(editMock())
+	d.SetEmit(func(skyra.Impulse) {})
+	o, _ := newOrch(d)
+
+	fireTurn(t, o, "X1", "", "help with the skyra project") // cold start → new
+	n1 := len(d.Groupings().All())
+	fireTurn(t, o, "X2", "X1", "more on the skyra project") // open episode exists → edit
+	n2 := len(d.Groupings().All())
+
+	if n1 != 1 {
+		t.Fatalf("turn 1 (cold start) should create exactly 1 grouping, got %d", n1)
+	}
+	if n2 != n1 {
+		t.Fatalf("edit must NOT create a new grouping: turn1=%d turn2=%d", n1, n2)
+	}
+	if g := d.Groupings().Active(); g == nil {
+		t.Fatal("no active grouping")
+	} else if gist, ok := g.Content().(dna.Gist); !ok || gist.Text != "continuing the skyra project" {
+		t.Fatalf("edit should sharpen the active gist, got %+v", g.Content())
 	}
 }
 

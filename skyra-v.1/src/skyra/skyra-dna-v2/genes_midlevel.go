@@ -15,8 +15,8 @@ import (
 // (cold-start create path). Sets root.Grouping so the membrane threads it to the
 // fan-out's predict workers. Reports "framed" / "empty".
 func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
-	present := renderExchange(root.Entities)
-	if present == "" {
+	exchange := renderExchange(root.Entities)
+	if exchange == "" {
 		root.Condition = "empty"
 		return
 	}
@@ -25,21 +25,55 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "empty"
 		return
 	}
-	resp, err := infer(coldStartSystem, present)
+	gi := root.DNA().Groupings()
+	resp, err := infer(frameOpSystem, framePresent(exchange, gi.OpenEpisodes()))
 	if err != nil {
 		root.Condition = "empty" // a failed call frames nothing this cycle
 		return
 	}
-	label, ok := dna.ParseLabel(resp)
+	op, id, gist, ok := ParseFrameOp(resp)
 	if !ok {
 		root.Condition = "empty"
 		return
 	}
 	ts := root.DNA().Tick()
+
+	// EDIT: sharpen an existing episode's gist and keep it active (the episode continues,
+	// so its edges persist and re-grade — the compounding fix).
+	if op == "edit" {
+		if g := gi.Get(id); g != nil {
+			g.SetContent(dna.Gist{Text: gist, Timestamp: ts})
+			gi.SetActive(g)
+			root.Grouping = g
+			root.Condition = "framed"
+			debug.Being("skyra", "midlevel", fmt.Sprintf("edit %s gist=%q", id, gist))
+			return
+		}
+		// unknown id → treat as new
+	}
+
+	// NEW (or an edit against an unknown id): open a fresh episode.
 	groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
-	root.Grouping = root.DNA().Groupings().Create(groupID, label, ts)
+	root.Grouping = gi.Create(groupID, gist, ts) // Create sets it active
 	root.Condition = "framed"
-	debug.Being("skyra", "midlevel", fmt.Sprintf("framed %s gist=%q", groupID, label))
+	debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
+}
+
+// framePresent renders the framing-op present: the exchange + the open episodes the op
+// decides edit-or-new against.
+func framePresent(exchange string, episodes []struct{ ID, Gist string }) string {
+	var b strings.Builder
+	b.WriteString("Exchange:\n")
+	b.WriteString(exchange)
+	b.WriteString("\n\nOpen episodes:\n")
+	if len(episodes) == 0 {
+		b.WriteString("(none yet — this is the first exchange → open a <new> one)")
+	} else {
+		for _, e := range episodes {
+			b.WriteString(fmt.Sprintf("[id=%s] %s\n", e.ID, e.Gist))
+		}
+	}
+	return b.String()
 }
 
 // renderExchange turns the entity index's interaction records into a timestamp-

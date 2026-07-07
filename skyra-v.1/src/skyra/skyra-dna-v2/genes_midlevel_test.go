@@ -21,7 +21,7 @@ func TestColdStartFramesAndGroups(t *testing.T) {
 	d.SetInfer(func(system, present string) (string, error) {
 		if strings.Contains(system, "evolving being") {
 			framePresent = present
-			return "<label>assist with the skyra project</label>", nil
+			return "<new>assist with the skyra project</new>", nil
 		}
 		return "", nil
 	})
