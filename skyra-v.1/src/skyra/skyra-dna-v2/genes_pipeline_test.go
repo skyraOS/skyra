@@ -13,7 +13,7 @@ import (
 // mock inference and produces an emitted action — sensory → other:grade(no-prior)
 // → midlevel:frame → fan-out{other:predict, self:predict} → join → motor:collapse.
 func TestColdStartFullPipelineEmitsAction(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(func(system, present string) (string, error) {
 		switch {

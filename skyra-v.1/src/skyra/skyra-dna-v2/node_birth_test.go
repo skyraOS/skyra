@@ -10,7 +10,7 @@ import (
 // edge reads strength 0 (F=0), is never selected, and can never earn its alignment — the
 // bootstrap deadlock.
 func TestNodeBirthCrossesEdges(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	g := d.Groupings().Create("g1", "framing", d.Tick())
 
 	born := appendOtherDistribution(d.Groupings(), g, d.Tick(), []dna.ParsedPrediction{

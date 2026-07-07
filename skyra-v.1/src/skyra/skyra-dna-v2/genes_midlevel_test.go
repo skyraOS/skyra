@@ -15,7 +15,7 @@ import (
 // threads it onto the board for the fan-out. Stops after framing (predicts not yet
 // ported) by having predict genes report a terminal-ish condition.
 func TestColdStartFramesAndGroups(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	var framePresent string
 	d.SetInfer(func(system, present string) (string, error) {

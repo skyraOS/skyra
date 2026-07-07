@@ -37,7 +37,7 @@ func main() {
 	}
 	defer debug.Close()
 
-	d := dnav2.NewDNA("skyra")
+	d := dnav2.NewDNA("skyra", world.NewSlice("skyra:nucleus", "skyra"))
 	dnav2.WireGenes(d)
 	il := dnav2.NewInferLogger("skyra", inference.CallCodex) // times + logs every inference call
 	d.SetInfer(il.Infer)

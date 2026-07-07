@@ -21,6 +21,11 @@ type DNA struct {
 	observe map[string]ObserveCompetence // "namespace:gene" → gene
 	express map[string]ExpressCompetence
 
+	// nucleus is the being's one slice — the substrate the index nodes live on and
+	// the home of the active state (activeGroupingID/activeGistID via Slice.Maps()).
+	// It carries no kernel waves; it is index substrate only.
+	nucleus skyra.Slice
+
 	// The master graph (the nucleus's durable working memory).
 	entities  *EntityIndex
 	groupings *GroupingIndex
@@ -45,18 +50,20 @@ type DNA struct {
 // text. Injected so dnav2 stays free of the inference package.
 type InferFunc func(system, present string) (string, error)
 
-func NewDNA(beingID string) *DNA {
+func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
 	return &DNA{
-		beingID:   beingID,
-		observe:   map[string]ObserveCompetence{},
-		express:   map[string]ExpressCompetence{},
-		entities:   NewEntityIndex(nil), // nil nucleus slice until activation lands
-		groupings:  NewGroupingIndex(nil),
+		beingID:    beingID,
+		observe:    map[string]ObserveCompetence{},
+		express:    map[string]ExpressCompetence{},
+		nucleus:    nucleus,
+		entities:   NewEntityIndex(nucleus),
+		groupings:  NewGroupingIndex(nucleus),
 		activation: NewActivationStore(),
 	}
 }
 
 func (d *DNA) BeingID() string           { return d.beingID }
+func (d *DNA) Nucleus() skyra.Slice      { return d.nucleus }
 func (d *DNA) Entities() *EntityIndex    { return d.entities }
 func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
 func (d *DNA) Infer() InferFunc          { return d.infer }

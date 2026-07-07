@@ -62,7 +62,7 @@ func condOf(trace []Span, step Step) string {
 // Turn 1 establishes an other-distribution; turn 2's evidence realizes one branch,
 // so other:grade closes it as "held" and the prior bet is stamped graded.
 func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(gradeMock("<match>1</match>"))
 	var mu sync.Mutex
@@ -96,7 +96,7 @@ func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
 // "all-preds<0", which the orchestrator routes as a reframe (one-reframe rail), and
 // the turn still frames and emits.
 func TestGradeTotalMissReframes(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(gradeMock("<match>none</match>"))
 	var mu sync.Mutex
@@ -154,7 +154,7 @@ func editMock() InferFunc {
 // EDIT continues the active episode: turn 2 sharpens the existing grouping's gist instead
 // of minting a new one — the compounding path (one growing episode, not two islands).
 func TestMidlevelEditContinuesEpisode(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(editMock())
 	d.SetEmit(func(skyra.Impulse) {})
@@ -181,7 +181,7 @@ func TestMidlevelEditContinuesEpisode(t *testing.T) {
 // After framing, the just-arrived interaction is consolidated onto the episode (so it
 // lives on the grouping the frame walks) and the entity points to the episode.
 func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(gradeMock("<match>none</match>"))
 	d.SetEmit(func(skyra.Impulse) {})
@@ -247,7 +247,7 @@ func fireReafference(t *testing.T, o *Orchestrator, id, prev, result string) []S
 // After turn 1 emits an action, the world's reply faithfully executes it — self:grade
 // closes the proposal "exec-ok" and stamps the proposal graded with a positive score.
 func TestSelfGradeExecOk(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(execMock("<grade>yes</grade>"))
 	d.SetEmit(func(skyra.Impulse) {})
@@ -271,7 +271,7 @@ func TestSelfGradeExecOk(t *testing.T) {
 // The world reports a hard failure (the intent could not be realized) — self:grade
 // reports "exec=no", which trips the reframe rail.
 func TestSelfGradeExecFailReframes(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(execMock("<grade>no</grade>"))
 	d.SetEmit(func(skyra.Impulse) {})

@@ -14,7 +14,7 @@ import (
 // exercise the ORCHESTRATION (routing + fan-out + join) with no inference. Each
 // gene records that it ran on a shared, locked tally.
 func stubDNA(t *testing.T, tally *sync.Map) *DNA {
-	d := NewDNA("skyra")
+	d := testDNA()
 	report := func(step Step, cond string) {
 		d.RegisterObserve(string(step), func(root *EphemeralRoot, origin skyra.Space, impulse any) {
 			tally.Store(string(step), true)

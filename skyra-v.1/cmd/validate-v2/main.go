@@ -37,7 +37,7 @@ func main() {
 		{"X3", "X2", "forget that — what's the weather like where you are?", "hard pivot — should miss + reframe"},
 	}
 
-	d := dnav2.NewDNA("skyra")
+	d := dnav2.NewDNA("skyra", world.NewSlice("skyra:nucleus", "skyra"))
 	dnav2.WireGenes(d)
 	d.SetInfer(inference.CallCodex)
 

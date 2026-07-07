@@ -1,12 +1,16 @@
 package dnav2
 
-import "testing"
+import (
+	"testing"
+
+	"skyra-v1/src/skyra/world"
+)
 
 // The active-grouping reference (active-grouping.md): Create makes a grouping active,
 // newer Creates take over, and SetActive can switch back — the "current episode" the
-// sensory lane will attach interactions to.
+// sensory lane will attach interactions to. The active ID lives on the slice.
 func TestActiveTracksCurrentEpisode(t *testing.T) {
-	gi := NewGroupingIndex(nil)
+	gi := NewGroupingIndex(world.NewSlice("skyra:nucleus", "skyra"))
 	if gi.Active() != nil {
 		t.Fatal("no active episode before the first grouping")
 	}

@@ -98,10 +98,12 @@ func (ei *EntityIndex) Snapshot() []*dna.MemoryCell {
 // MemoryCells carrying a Gist; predictions hang off them as children. Handed to
 // the predict workers as their working set (the active grouping for the impulse).
 type GroupingIndex struct {
-	mu     sync.Mutex
-	slice  skyra.Slice
-	byID   map[string]*dna.MemoryCell
-	active *dna.MemoryCell // the current episode (active-grouping.md); sensory attaches here
+	mu    sync.Mutex
+	slice skyra.Slice
+	byID  map[string]*dna.MemoryCell
+	// the current episode (active-grouping.md) lives ON THE SLICE as an ID
+	// (mapActiveGroupingID) — active state's canonical home; resolved to the node
+	// through byID on read. No pointer field: the slice is the single source.
 }
 
 func NewGroupingIndex(slice skyra.Slice) *GroupingIndex {
@@ -112,25 +114,32 @@ func NewGroupingIndex(slice skyra.Slice) *GroupingIndex {
 // episode. (Cold-start "create"; warm match/edit sharpens the active gist instead.)
 func (gi *GroupingIndex) Create(groupID, gist string, ts int) *dna.MemoryCell {
 	gi.mu.Lock()
-	defer gi.mu.Unlock()
 	g := dna.NewMemoryCell(groupID, dna.KindGrouping, dna.Gist{Text: gist, Timestamp: ts}, gi.slice)
 	gi.byID[groupID] = g
-	gi.active = g
+	gi.mu.Unlock()
+	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
 	return g
 }
 
-// Active returns the current episode (nil before the first grouping exists).
+// Active returns the current episode (nil before the first grouping exists) —
+// the slice's activeGroupingID resolved through the index.
 func (gi *GroupingIndex) Active() *dna.MemoryCell {
+	id := sliceGetID(gi.slice, mapActiveGroupingID)
+	if id == "" {
+		return nil
+	}
 	gi.mu.Lock()
 	defer gi.mu.Unlock()
-	return gi.active
+	return gi.byID[id]
 }
 
-// SetActive makes g the current episode.
+// SetActive makes g the current episode (writes its ID to the slice; nil clears).
 func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	gi.active = g
+	id := ""
+	if g != nil {
+		id = g.ID()
+	}
+	sliceSetID(gi.slice, mapActiveGroupingID, id)
 }
 
 // Get returns a grouping by id (nil if none) — the target of an <edit id="..."> op.

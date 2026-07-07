@@ -12,7 +12,7 @@ import (
 // sensory:intake resolves the sender into the entity index (on the nucleus, via
 // the handed working set), records the utterance, and reports "external".
 func TestSensoryIntakePortRecordsEntity(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	WireGenes(d)
 
 	// transcribe a sensory:intake worker with the entity index handed (as membrane

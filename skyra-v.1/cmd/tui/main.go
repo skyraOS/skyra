@@ -732,7 +732,7 @@ func main() {
 	// The being is the slice-based-dispatch (dnav2) pipeline: one DNA nucleus + the
 	// orchestrator running on its OWN kernel. dnav2Being is the thin world bridge —
 	// its Observe fires orch, and DNA.Emit (wired below) sends motor output back out.
-	d := dnav2.NewDNA("skyra")
+	d := dnav2.NewDNA("skyra", world.NewSlice("skyra:nucleus", "skyra"))
 	dnav2.WireGenes(d)
 	il := dnav2.NewInferLogger("skyra", inference.CallCodex) // times + logs every inference call
 	d.SetInfer(il.Infer)

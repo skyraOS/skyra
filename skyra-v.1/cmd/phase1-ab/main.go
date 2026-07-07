@@ -26,7 +26,7 @@ func main() {
 		utterance = os.Args[1]
 	}
 
-	d := dnav2.NewDNA("skyra")
+	d := dnav2.NewDNA("skyra", world.NewSlice("skyra:nucleus", "skyra"))
 	dnav2.WireGenes(d)
 	d.SetInfer(inference.CallCodex)
 	d.SetEmit(func(skyra.Impulse) {})

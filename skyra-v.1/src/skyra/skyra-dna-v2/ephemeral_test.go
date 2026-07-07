@@ -12,7 +12,7 @@ import (
 // A transcribed root runs its selected gene as the kernel's bookends, reaches the
 // DNA for durable state, and its per-wave state (Condition) is its own.
 func TestTranscriptRunsSelectedGene(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	// a gene that writes durable state on the DNA (the clock) and a per-wave
 	// condition on the transcript (the correct split: durable → DNA, per-wave → root)
 	d.RegisterObserve("test:work", func(root *EphemeralRoot, origin skyra.Space, impulse any) {
@@ -41,7 +41,7 @@ func TestTranscriptRunsSelectedGene(t *testing.T) {
 // gene never clobber each other's per-wave state — each has its own root. Durable
 // writes to the shared DNA are guarded. Run with -race.
 func TestConcurrentTranscriptsIsolated(t *testing.T) {
-	d := NewDNA("skyra")
+	d := testDNA()
 	d.RegisterObserve("test:count", func(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = root.ImpulseID // per-wave: each root records its own impulse
 		root.DNA().Tick()               // durable: guarded shared write
