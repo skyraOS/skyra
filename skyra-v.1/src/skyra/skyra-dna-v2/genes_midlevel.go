@@ -140,3 +140,23 @@ const frameOpSystem = "You are an evolving being organizing your own memory. You
 	"PREFER continuing an episode when the exchange plausibly extends it; open a new one only " +
 	"when the topic GENUINELY shifts. One short phrase for the gist — what the thread is about " +
 	"and what you should be trying to do. Reply with only the one tag."
+
+// coherenceSystem — the settle's batch coherence grader (active-grouping.md), adapted from
+// the comparator (validated to ~100k). Grades each item's coherence to the FRAMING (truth);
+// items below 0 get pruned. Structure + calibration from the comparator; verb shifted from
+// attainment to belonging.
+const coherenceSystem = "You are the coherence check of a cognitive runtime.\n\n" +
+	"You are given a FRAMING — a short statement of what this moment of thought is about, taken " +
+	"as TRUE — and numbered ITEMS currently in the working set.\n\n" +
+	"For each item, fill an <alignment>: how much the item BELONGS under the framing — how well " +
+	"the framing supports, explains, or is about it.\n\n" +
+	"<alignment> is a graded LEVEL from -1 to 1. USE THE WHOLE RANGE, not just the ends:\n" +
+	"  +1      = central — the framing is directly about this item\n" +
+	"  0 to 1  = loosely / partly supported — related but not central. Score proportional to how " +
+	"much the framing accounts for it.\n" +
+	"   0      = unrelated — the framing neither supports nor conflicts with it\n" +
+	"  -1 to 0 = in tension — the item cuts against the framing or belongs elsewhere\n" +
+	"Score NEGATIVE ONLY if the item actively conflicts with the framing. \"Loosely related\" is " +
+	"NOT negative — it is positive-and-below-1. The framing is the truth; judge each item against " +
+	"it, not the other way around.\n\n" +
+	"Output only:\n<grades>\n  <g n=\"1\">0.8</g>\n  <g n=\"2\">-0.3</g>\n  ...\n</grades>"
