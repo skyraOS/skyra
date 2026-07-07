@@ -36,6 +36,7 @@ func coherenceSettle(grouping *dna.MemoryCell, store *ActivationStore, tick int,
 		return 0
 	}
 	excluded := map[string]bool{} // node IDs pruned this settle (exclude-this-settle, not deletion)
+	crossed := map[string]bool{}  // edges Crossed this settle — F-bump once, so Grade's new record isn't deadened
 	prevAvg := 0.0
 	for pass := 1; pass <= settleMaxPasses; pass++ {
 		items := collectSettleItems(frameOfExcluding(grouping, settleFrameBudget, store, tick, excluded))
@@ -53,6 +54,16 @@ func coherenceSettle(grouping *dna.MemoryCell, store *ActivationStore, tick int,
 			score, ok := grades[i+1] // items are 1-numbered in the prompt + parser
 			if !ok {
 				continue
+			}
+			// Cross before Grade: Grade mints a record at F=0, and Strength is a PRODUCT
+			// (rectSoft(A)·S·F·conf), so an ungraded-then-graded edge would read weight 0 —
+			// AND, now that a record exists, bypass the static fallback → deadened, unable to
+			// recover (weight 0 → never traversed → never crossed). The settle traversed this
+			// edge to build the frame, so the cross is legitimate; once per settle avoids
+			// inflating F across passes. Pruned edges get it too → softFloor-low but alive.
+			if !crossed[it.edgeKey] {
+				store.Cross(it.edgeKey, tick)
+				crossed[it.edgeKey] = true
 			}
 			store.Grade(it.edgeKey, score, settleStress) // write A (full eligibility — the direct measure)
 			sum += score
