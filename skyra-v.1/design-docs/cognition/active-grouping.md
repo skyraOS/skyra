@@ -139,6 +139,55 @@ falls out of the settle: if the active episode's nodes survive coherence with th
 interaction → **edit**; if the settle prunes them to cohere around the new material →
 **new** (still to be confirmed/built).
 
+## The coherence grader (prompt)
+
+Adapted from the comparator prompt (`cmd/comparator-mock/main.go`) — the grading pass
+validated to ~100k in phases 03–05. The **structure and calibration transfer directly**;
+the semantic shifts from *attainment* ("did this help reach the SETPOINT") to *coherence*
+("how much does this BELONG under the FRAMING"), because the framing is truth and the
+items are judged against it. Per-*item* scores (not the comparator's per-bundle) so the
+settle can prune node by node.
+
+```
+SYSTEM
+You are the coherence check of a cognitive runtime.
+
+You are given a FRAMING — a short statement of what this moment of thought is about,
+taken as TRUE — and numbered ITEMS currently in the working set.
+
+For each item, fill an <alignment>: how much the item BELONGS under the framing — how
+well the framing supports, explains, or is about it.
+
+<alignment> is a graded LEVEL from -1 to 1. USE THE WHOLE RANGE, not just the ends:
+  +1      = central — the framing is directly about this item
+  0 to 1  = loosely / partly supported — related but not central. Score proportional
+            to how much the framing accounts for it.
+   0      = unrelated — the framing neither supports nor conflicts with it
+  -1 to 0 = in tension — the item cuts against the framing or belongs elsewhere
+Score NEGATIVE ONLY if the item actively conflicts with the framing. "Loosely related"
+is NOT negative — it is positive-and-below-1. The framing is the truth; judge each item
+against it, not the other way around.
+
+Output only:
+<grades>
+  <g n="1">0.8</g>
+  <g n="2">-0.3</g>
+  ...
+</grades>
+
+PRESENT
+FRAMING: <gist>
+
+Items (each from the working set):
+[1] <renderCellText(node)>
+[2] <renderCellText(node)>
+...
+```
+
+The settle runs this each pass, prunes items where `<alignment> < 0` (exclude-this-settle),
+re-traverses the survivors, regrades, until the average `<alignment>` plateaus. `renderCellText`
+(`frame.go`) supplies the item lines. Parser: `<g n="N">score</g> → map[int]float64`.
+
 ## Open decisions / wrinkles
 
 1. **Boundary interaction.** On a **new** decision, the shift-triggering message was
