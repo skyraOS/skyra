@@ -10,6 +10,7 @@ type Step string
 
 const (
 	StepSensoryIntake Step = "sensory:intake"
+	StepSensoryIngest Step = "sensory:ingest" // deposit a perceive-return's surroundings on the spine
 	StepOtherGrade    Step = "other:grade"
 	StepSelfGrade     Step = "self:grade"
 	StepMidlevelFrame Step = "midlevel:frame"
@@ -30,9 +31,17 @@ type Route struct {
 // transition is the DAG: (step, condition) → Route. A missing entry is inert.
 var transition = map[Step]map[string]Route{
 	StepSensoryIntake: {
-		"external":    {Next: []Step{StepOtherGrade}},
-		"reafference": {Next: []Step{StepSelfGrade}},
-		"internal":    {Next: []Step{StepMidlevelFrame}},
+		"external": {Next: []Step{StepOtherGrade}},
+		// the reafference lane forks by primitive: an action-return grades my
+		// execution; a perceive-return deposits what came back (a reafference too —
+		// NOT internal; internal is interrupts). perceive-build-uncertainties.md §1.
+		"reafference":     {Next: []Step{StepSelfGrade}},
+		"perceive-return": {Next: []Step{StepSensoryIngest}},
+		"internal":        {Next: []Step{StepMidlevelFrame}},
+	},
+	StepSensoryIngest: {
+		// continue into framing for now (decision 1b — revisit with motor independence)
+		"deposited": {Next: []Step{StepMidlevelFrame}},
 	},
 	StepOtherGrade: {
 		"all-preds<0": {Reframe: true},

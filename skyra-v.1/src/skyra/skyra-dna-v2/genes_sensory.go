@@ -36,12 +36,22 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	debug.Being("skyra", "sensory", fmt.Sprintf("classify=external sender=%s utterance=%q", sender, utterance))
 }
 
-// classify forks the sensory lane (the three-way fork of the workflow):
-//   - reafference: the world's reply to my own action (Return)
-//   - external:    another agent's engage
-//   - internal:    a reframe re-run / self-initiated trigger
+// classify forks the sensory lane (the workflow's intake fork). A perceive-return
+// is a REAFFERENCE (the world answering my own act), NOT an internal event —
+// internal is reserved for interrupts (e.g. motor engaging the self). What
+// distinguishes it from an action-reafference is only where the record lands:
+// perceive-return routes to the sensory ingest (deposit surroundings on the
+// spine); move/engage-return routes to self:grade (grade my action's execution).
+// See perceive-build-uncertainties.md §1.
+//   - perceive-return: the world's reply to my own perceive (Return + perceive)
+//   - reafference:     the world's reply to my own action (Return)
+//   - external:        another agent's engage
+//   - internal:        an interrupt / reframe re-run
 func classify(imp skyra.Impulse, ownerID string) string {
 	if imp.Return {
+		if imp.Primitive == "perceive" {
+			return "perceive-return"
+		}
 		return "reafference"
 	}
 	if imp.Primitive == "engage" && imp.Source != nil &&

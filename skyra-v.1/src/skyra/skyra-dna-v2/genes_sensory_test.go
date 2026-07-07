@@ -49,7 +49,9 @@ func TestSensoryIntakePortRecordsEntity(t *testing.T) {
 	}
 }
 
-// The three-way fork: external / reafference / internal.
+// The intake fork: external / reafference (split by primitive) / internal. A
+// perceive-return is a reafference whose record lands via the ingest, NOT an
+// internal event (internal = interrupts, e.g. motor engaging the self).
 func TestSensoryIntakeClassifies(t *testing.T) {
 	cases := []struct {
 		name string
@@ -58,6 +60,8 @@ func TestSensoryIntakeClassifies(t *testing.T) {
 	}{
 		{"external", skyra.Impulse{Primitive: "engage", Source: &skyra.ImpulseSource{SpaceID: "michael"}}, "external"},
 		{"reafference", skyra.Impulse{Primitive: "move", Return: true, Source: &skyra.ImpulseSource{SpaceID: "world"}}, "reafference"},
+		{"engage-return", skyra.Impulse{Primitive: "engage", Return: true, Source: &skyra.ImpulseSource{SpaceID: "world"}}, "reafference"},
+		{"perceive-return", skyra.Impulse{Primitive: "perceive", Return: true, Source: &skyra.ImpulseSource{SpaceID: "world"}}, "perceive-return"},
 		{"internal", skyra.Impulse{Primitive: "reframe", Source: &skyra.ImpulseSource{SpaceID: "skyra"}}, "internal"},
 		{"self-engage", skyra.Impulse{Primitive: "engage", Source: &skyra.ImpulseSource{SpaceID: "skyra"}}, "internal"},
 	}
@@ -65,5 +69,33 @@ func TestSensoryIntakeClassifies(t *testing.T) {
 		if got := classify(tc.imp, "skyra"); got != tc.want {
 			t.Errorf("%s: classify = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// A perceive-return routes intake → ingest → midlevel:frame (decision 1b: the
+// deposit continues into framing; with no exchange yet midlevel reports empty).
+func TestPerceiveReturnRoutesThroughIngest(t *testing.T) {
+	d := testDNA()
+	WireGenes(d)
+	d.SetInfer(func(system, present string) (string, error) { return "", nil })
+	o, _ := newOrch(d)
+
+	done := make(chan []Span, 1)
+	o.SetFlush(func(_ string, trace []Span) { done <- trace })
+	o.Fire("P1", "", skyra.Impulse{
+		Primitive: "perceive",
+		Return:    true,
+		Source:    &skyra.ImpulseSource{SpaceID: "world"},
+	})
+	trace := <-done
+
+	if got := condOf(trace, StepSensoryIntake); got != "perceive-return" {
+		t.Fatalf("intake condition = %q, want perceive-return", got)
+	}
+	if got := condOf(trace, StepSensoryIngest); got != "deposited" {
+		t.Fatalf("ingest condition = %q, want deposited", got)
+	}
+	if got := condOf(trace, StepMidlevelFrame); got == "" {
+		t.Fatal("perceive-return should continue into midlevel:frame")
 	}
 }
