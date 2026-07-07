@@ -14,7 +14,7 @@ import (
 	"skyra-v1/src/inference"
 	"skyra-v1/src/skyra"
 	"skyra-v1/src/skyra/relation"
-	dna "skyra-v1/src/skyra/skyra-dna"
+	dnav2 "skyra-v1/src/skyra/skyra-dna-v2"
 	userdna "skyra-v1/src/skyra/user-dna"
 	"skyra-v1/src/skyra/world"
 )
@@ -99,7 +99,7 @@ type model struct {
 	// runtime
 	realm     *world.World
 	user      *userdna.UserCell
-	being     *dna.MembraneCell
+	being     *dnav2Being
 	kernel    *relation.Relation
 	inboundCh chan skyra.Impulse
 
@@ -133,7 +133,7 @@ type model struct {
 	lines []string
 }
 
-func newModel(realm *world.World, user *userdna.UserCell, being *dna.MembraneCell, kernel *relation.Relation, inboundCh chan skyra.Impulse) model {
+func newModel(realm *world.World, user *userdna.UserCell, being *dnav2Being, kernel *relation.Relation, inboundCh chan skyra.Impulse) model {
 	ti := textarea.New()
 	ti.Placeholder = "write something..."
 	ti.Focus()
@@ -717,64 +717,6 @@ func sortedEntityIDs(entities map[string]skyra.Space) []string {
 	return ids
 }
 
-func predictions(mid *dna.MidLevelCell) (self, other string) {
-	sl := mid.Slice()
-	sl.Lock()
-	defer sl.Unlock()
-
-	bestTS := -1
-	var best skyra.Space
-	for _, gr := range mid.Groupings() {
-		mc, ok := gr.(*dna.MemoryCell)
-		if !ok {
-			continue
-		}
-		if g, ok := mc.Content().(dna.Gist); ok && g.Timestamp > bestTS {
-			bestTS, best = g.Timestamp, gr
-		}
-	}
-	mc, ok := best.(*dna.MemoryCell)
-	if !ok {
-		return "", ""
-	}
-	// Per-cycle keys mean prediction history persists — show the LATEST of each.
-	selfTS, otherTS := -1, -1
-	for _, child := range mc.Children() {
-		cm, ok := child.(*dna.MemoryCell)
-		if !ok {
-			continue
-		}
-		p, ok := cm.Content().(dna.Prediction)
-		if !ok {
-			continue
-		}
-		switch p.Role {
-		case "self":
-			if p.Timestamp > selfTS {
-				selfTS, self = p.Timestamp, p.Text
-			}
-		case "other":
-			// other stores a root node (no text) with one child per prediction;
-			// pick the latest root, then its highest-probability child.
-			if p.Timestamp <= otherTS || len(cm.Children()) == 0 {
-				continue
-			}
-			var best dna.Prediction
-			for _, grandchild := range cm.Children() {
-				if gp, ok := grandchild.(*dna.MemoryCell); ok {
-					if pred, ok := gp.Content().(dna.Prediction); ok && pred.Probability > best.Probability {
-						best = pred
-					}
-				}
-			}
-			if best.Text != "" {
-				otherTS, other = p.Timestamp, best.Text
-			}
-		}
-	}
-	return
-}
-
 // ── main ──────────────────────────────────────────────────────────────────────
 
 func main() {
@@ -786,12 +728,24 @@ func main() {
 
 	kernel := relation.NewRelation()
 	realm := world.New(kernel)
-	being := dna.NewMembraneCell("be helpful", dna.BuildContext{
-		BeingID:  "skyra",
-		NewSlice: func(id string) skyra.Slice { return world.NewSlice(id, "skyra") },
-		Kernel:   kernel,
-		Infer:    inference.CallCodex,
-	})
+
+	// The being is the slice-based-dispatch (dnav2) pipeline: one DNA nucleus + the
+	// orchestrator running on its OWN kernel. dnav2Being is the thin world bridge —
+	// its Observe fires orch, and DNA.Emit (wired below) sends motor output back out.
+	d := dnav2.NewDNA("skyra")
+	dnav2.WireGenes(d)
+	il := dnav2.NewInferLogger("skyra", inference.CallCodex) // times + logs every inference call
+	d.SetInfer(il.Infer)
+
+	board := dnav2.NewBoard()
+	beingKernel := relation.NewRelation()
+	nsSlices := map[string]skyra.Slice{}
+	for _, ns := range []string{"sensory", "other", "self", "midlevel", "motor"} {
+		nsSlices[ns] = world.NewSlice("skyra:"+ns, "skyra")
+	}
+	orch := dnav2.NewOrchestrator(d, board, beingKernel, world.NewSlice("skyra:membrane", "skyra"), nsSlices)
+	being := newDnav2Being("skyra", world.NewSlice("skyra:being", "skyra"), orch)
+
 	user := userdna.NewUserCell("michael", func(id string) skyra.Slice {
 		return world.NewSlice(id, "michael")
 	})
@@ -806,9 +760,9 @@ func main() {
 	user.Seed(exit)
 	user.Seed(being)
 
-	// Wire motor → world: motor's concrete action is delivered to the world so the
-	// target entity (e.g. michael) actually receives skyra's response.
-	being.Motor().SetEmit(func(imp skyra.Impulse) {
+	// Wire motor → world: dnav2's motor:collapse emits skyra's concrete action through
+	// DNA.Emit; deliver it to the world so the target (michael) actually receives it.
+	d.SetEmit(func(imp skyra.Impulse) {
 		realm.Observe(being, imp)
 	})
 
