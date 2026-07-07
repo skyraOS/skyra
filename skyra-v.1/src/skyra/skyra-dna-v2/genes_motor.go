@@ -46,17 +46,14 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 }
 
-// readSelfProposal reads the latest self proposal off the grouping spine — the plan
-// text plus the proposal cell (motor hangs the action off it: the realization edge).
+// readSelfProposal reads the latest self proposal off the grouping's gists (the
+// gist-owned spine) — the plan text plus the proposal cell (motor hangs the action
+// off it: the realization edge).
 func readSelfProposal(gi *GroupingIndex, grouping *dna.MemoryCell) (string, *dna.MemoryCell) {
 	best := ""
 	var bestCell *dna.MemoryCell
 	bestTS := -1
-	for _, c := range gi.Snapshot(grouping) {
-		mc, ok := c.(*dna.MemoryCell)
-		if !ok {
-			continue
-		}
+	for _, mc := range predictionsOf(grouping) {
 		if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
 			bestTS, best, bestCell = p.Timestamp, p.Text, mc
 		}

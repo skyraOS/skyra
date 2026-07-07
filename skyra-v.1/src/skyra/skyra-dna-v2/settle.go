@@ -35,11 +35,15 @@ func coherenceSettle(grouping *dna.MemoryCell, store *ActivationStore, tick int,
 	if gist == "" {
 		return 0
 	}
+	activeGistID := ""
+	if gist := latestGist(grouping); gist != nil {
+		activeGistID = gist.ID()
+	}
 	excluded := map[string]bool{} // node IDs pruned this settle (exclude-this-settle, not deletion)
 	crossed := map[string]bool{}  // edges Crossed this settle — F-bump once, so Grade's new record isn't deadened
 	prevAvg := 0.0
 	for pass := 1; pass <= settleMaxPasses; pass++ {
-		items := collectSettleItems(frameOfExcluding(grouping, settleFrameBudget, store, tick, excluded))
+		items := collectSettleItems(frameOfExcluding(grouping, settleFrameBudget, store, tick, excluded), activeGistID)
 		if len(items) == 0 {
 			return pass - 1
 		}
@@ -98,10 +102,12 @@ type settleItem struct {
 	line    string
 }
 
-// collectSettleItems walks the lit subgraph and returns every non-root node that renders a
-// line — the items graded against the framing. The root is the gist itself (the framing),
-// so it is skipped: an item is not graded against itself.
-func collectSettleItems(res *traverse.Result) []settleItem {
+// collectSettleItems walks the lit subgraph and returns every node that renders a
+// line — the items graded against the framing — EXCEPT the active gist (the
+// framing is the truth; it is never graded against itself). Prior gists ARE items:
+// a superseded framing is graded like anything else — in tension → prunes/decays,
+// still coherent → survives as history (the "before I thought x" trajectory).
+func collectSettleItems(res *traverse.Result, activeGistID string) []settleItem {
 	var items []settleItem
 	var walk func(r *traverse.Result)
 	walk = func(r *traverse.Result) {
@@ -109,8 +115,8 @@ func collectSettleItems(res *traverse.Result) []settleItem {
 			return
 		}
 		if r.EdgeKey != "" { // non-root: has an edge whose A the grade writes
-			if fn, ok := r.Node.(*frameNode); ok {
-				if line := renderCellText(fn.cell); line != "" {
+			if fn, ok := r.Node.(*frameNode); ok && fn.cell.ID() != activeGistID {
+				if line := renderCellText(fn.cell, fn.rootGist); line != "" {
 					items = append(items, settleItem{edgeKey: r.EdgeKey, nodeID: r.Node.ID(), line: line})
 				}
 			}

@@ -50,7 +50,7 @@ func TestColdStartFramesAndGroups(t *testing.T) {
 	if !ok || g == nil {
 		t.Fatal("no active grouping threaded onto the board")
 	}
-	if gist, ok := g.Content().(dna.Gist); !ok || gist.Text != "assist with the skyra project" {
-		t.Fatalf("grouping gist = %v, want the framed label", g.Content())
+	if got := gistOf(g); got != "assist with the skyra project" {
+		t.Fatalf("grouping gist = %q, want the framed label", got)
 	}
 }

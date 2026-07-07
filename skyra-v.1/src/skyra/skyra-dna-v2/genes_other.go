@@ -113,35 +113,29 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
 
-// appendOtherDistribution writes the distribution onto the grouping: a root node
-// (grouping→other-pred:ts) carrying one child per prediction. Built fully, then
+// appendOtherDistribution writes the distribution onto the grouping's CURRENT gist
+// (the gist-owned spine — a bet belongs to the framing it was made under): a root
+// node (gist→other-pred:ts) carrying one child per prediction. Built fully, then
 // added under the index lock (self:predict reads it via the same lock). Returns the
-// edge keys it created (grouping→root + root→each branch) so the caller crosses them.
+// edge keys it created (gist→root + root→each branch) so the caller crosses them.
 func appendOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, preds []dna.ParsedPrediction) []string {
-	rootKey := fmt.Sprintf("%s→other-pred:%d", grouping.ID(), ts)
+	gist := latestGist(grouping)
+	if gist == nil {
+		return nil
+	}
+	rootKey := fmt.Sprintf("%s→other-pred:%d", gist.ID(), ts)
 	rootCell := dna.NewMemoryCell(rootKey, dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: ts}, nil)
 	born := []string{rootKey}
 	for i, p := range preds {
-		childKey := fmt.Sprintf("%s→other-pred:%d-%d", grouping.ID(), ts, i)
+		childKey := fmt.Sprintf("%s→other-pred:%d-%d", gist.ID(), ts, i)
 		child := dna.NewMemoryCell(childKey, dna.KindPrediction, dna.Prediction{
 			Text: p.Text, Role: "other", Probability: p.Probability, Timestamp: ts,
 		}, nil)
 		rootCell.AddChild(childKey, child)
 		born = append(born, childKey)
 	}
-	gi.AddChild(grouping, rootKey, rootCell)
+	gi.AddChild(gist, rootKey, rootCell)
 	return born
-}
-
-// gistOf extracts a grouping's framing text.
-func gistOf(g *dna.MemoryCell) string {
-	if g == nil {
-		return ""
-	}
-	if gist, ok := g.Content().(dna.Gist); ok {
-		return gist.Text
-	}
-	return ""
 }
 
 const otherSystem = `You are operating in the cognitive frame External Perspective.

@@ -36,14 +36,19 @@ type frameNode struct {
 	store   *ActivationStore // nil → Phase-1 Probability weights
 	tick    int
 	exclude map[string]bool // node IDs the settle pruned this pass (nil → none); skipped in Frontier
+	// rootGist is the ROOT grouping's current gist ID: exactly one gist renders as
+	// "Framing:" per frame; every other gist (the root's priors, and any gist the
+	// wave bled into through the entity mesh) renders as an earlier framing —
+	// visible history ("before I thought x"), gradeable by the settle.
+	rootGist string
 }
 
 func (n *frameNode) ID() string                         { return n.cell.ID() }
-func (n *frameNode) Cost() int                          { return tokenCount(renderCellText(n.cell)) }
+func (n *frameNode) Cost() int                          { return tokenCount(renderCellText(n.cell, n.rootGist)) }
 func (n *frameNode) Express(_ traverse.Node, _ any) any { return n.cell.Content() }
 
 func (n *frameNode) child(mc *dna.MemoryCell) *frameNode {
-	return &frameNode{cell: mc, store: n.store, tick: n.tick, exclude: n.exclude}
+	return &frameNode{cell: mc, store: n.store, tick: n.tick, exclude: n.exclude, rootGist: n.rootGist}
 }
 
 // weight is the learned edge Strength (relevance = alignment); falls back to the static
@@ -101,11 +106,15 @@ func weightOf(cell *dna.MemoryCell) float64 {
 }
 
 // renderCellText renders one cell's content to a present line ("" = contributes no line,
-// e.g. a distribution root, though its branches still descend).
-func renderCellText(cell *dna.MemoryCell) string {
+// e.g. a grouping shell or a distribution root, though their children still descend).
+// rootGist marks the one gist that renders as the current framing.
+func renderCellText(cell *dna.MemoryCell, rootGist string) string {
 	switch c := cell.Content().(type) {
 	case dna.Gist:
-		return "Framing: " + c.Text
+		if cell.ID() == rootGist {
+			return "Framing: " + c.Text
+		}
+		return "earlier framing: " + c.Text
 	case dna.Prediction:
 		switch c.Role {
 		case "other":
@@ -128,10 +137,7 @@ func renderCellText(cell *dna.MemoryCell) string {
 // lit subgraph — for both rendering (Flatten) and credit distribution (Edges). store=nil
 // uses Phase-1 static weights; a store uses learned strength.
 func FrameOf(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) *traverse.Result {
-	if grouping == nil {
-		return nil
-	}
-	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick}, budget, nil)
+	return frameOfExcluding(grouping, budget, store, tick, nil)
 }
 
 // frameOfExcluding is FrameOf with a settle-pruned node set: excluded node IDs are skipped
@@ -140,7 +146,11 @@ func frameOfExcluding(grouping *dna.MemoryCell, budget float64, store *Activatio
 	if grouping == nil {
 		return nil
 	}
-	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick, exclude: exclude}, budget, nil)
+	rootGist := ""
+	if gist := latestGist(grouping); gist != nil {
+		rootGist = gist.ID()
+	}
+	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick, exclude: exclude, rootGist: rootGist}, budget, nil)
 }
 
 // AssembleFramePresent walks the grouping with Phase-1 static weights (no learning).
@@ -178,7 +188,7 @@ func renderFrame(res *traverse.Result) (string, int) {
 	var lines []string
 	for _, node := range lit {
 		if fn, ok := node.(*frameNode); ok {
-			if line := renderCellText(fn.cell); line != "" {
+			if line := renderCellText(fn.cell, fn.rootGist); line != "" {
 				lines = append(lines, line)
 			}
 		}

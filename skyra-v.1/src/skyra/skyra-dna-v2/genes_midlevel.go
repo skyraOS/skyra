@@ -38,12 +38,11 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	ts := root.DNA().Tick()
 
-	// EDIT: sharpen an existing episode's gist and keep it active (the episode continues,
-	// so its edges persist and re-grade — the compounding fix).
+	// EDIT: mint a NEW gist on the existing episode (the sequence — the prior gist
+	// stays and decays as "before I thought x"; the episode continues, so its edges
+	// persist and re-grade — the compounding fix).
 	if op == "edit" {
-		if g := gi.Get(id); g != nil {
-			g.SetContent(dna.Gist{Text: gist, Timestamp: ts})
-			gi.SetActive(g)
+		if g := gi.Edit(id, gist, ts); g != nil {
 			root.Grouping = g
 			debug.Being("skyra", "midlevel", fmt.Sprintf("edit %s gist=%q", id, gist))
 		}
@@ -66,18 +65,23 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "framed"
 }
 
-// consolidateInteraction attaches the just-arrived interaction to the framed episode and
-// wires the entity → episode edge — so the exchange lives on the grouping the frame walks
-// (into the frame + economy), not only in the entity index.
+// consolidateInteraction attaches the just-arrived interaction to the framed
+// episode's CURRENT gist (records belong to the framing they arrived under) and
+// wires the entity → episode edge — so the exchange lives on the spine the frame
+// walks (into the frame + economy), not only in the entity index.
 func consolidateInteraction(root *EphemeralRoot) {
 	if root.Grouping == nil {
+		return
+	}
+	gist := latestGist(root.Grouping)
+	if gist == nil {
 		return
 	}
 	node, entity, ok := root.Entities.Latest()
 	if !ok {
 		return
 	}
-	root.DNA().Groupings().AddChild(root.Grouping, root.Grouping.ID()+"→"+node.ID(), node)
+	root.DNA().Groupings().AddChild(gist, gist.ID()+"→"+node.ID(), node)
 	root.Entities.LinkGrouping(entity, root.Grouping)
 }
 

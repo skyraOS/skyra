@@ -171,10 +171,22 @@ func TestMidlevelEditContinuesEpisode(t *testing.T) {
 	if n2 != n1 {
 		t.Fatalf("edit must NOT create a new grouping: turn1=%d turn2=%d", n1, n2)
 	}
-	if g := d.Groupings().Active(); g == nil {
+	g := d.Groupings().Active()
+	if g == nil {
 		t.Fatal("no active grouping")
-	} else if gist, ok := g.Content().(dna.Gist); !ok || gist.Text != "continuing the skyra project" {
-		t.Fatalf("edit should sharpen the active gist, got %+v", g.Content())
+	}
+	if got := gistOf(g); got != "continuing the skyra project" {
+		t.Fatalf("edit should mint a fresh current gist, got %q", got)
+	}
+	// the sequence: the prior gist is RETAINED (decaying), not overwritten.
+	gists := 0
+	for _, c := range g.Children() {
+		if mc, ok := c.(*dna.MemoryCell); ok && mc.Kind() == dna.KindGist {
+			gists++
+		}
+	}
+	if gists != 2 {
+		t.Fatalf("edit should append to the gist sequence: %d gists, want 2", gists)
 	}
 }
 
@@ -193,8 +205,12 @@ func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 	if g == nil {
 		t.Fatal("no active grouping")
 	}
+	gist := latestGist(g)
+	if gist == nil {
+		t.Fatal("active grouping has no gist")
+	}
 	hasInteraction := false
-	for _, c := range g.Children() {
+	for _, c := range gist.Children() {
 		if mc, ok := c.(*dna.MemoryCell); ok {
 			if _, ok := mc.Content().(dna.InteractionRecord); ok {
 				hasInteraction = true
@@ -202,7 +218,7 @@ func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 		}
 	}
 	if !hasInteraction {
-		t.Fatal("episode should have the interaction consolidated as a child")
+		t.Fatal("the gist should own the consolidated interaction (gist-owned spine)")
 	}
 	for _, e := range d.Entities().Snapshot() {
 		if e.ID() == "michael" {
@@ -297,11 +313,7 @@ func TestSelfGradeExecFailReframes(t *testing.T) {
 func gradedSelfProposal(t *testing.T, d *DNA) dna.Prediction {
 	t.Helper()
 	for _, g := range d.Groupings().All() {
-		for _, c := range g.Children() {
-			mc, ok := c.(*dna.MemoryCell)
-			if !ok {
-				continue
-			}
+		for _, mc := range predictionsOf(g) {
 			if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Graded {
 				return p
 			}
@@ -317,11 +329,7 @@ func priorOtherRoot(t *testing.T, d *DNA) *dna.MemoryCell {
 	var oldest *dna.MemoryCell
 	oldestTS := 1 << 30
 	for _, g := range d.Groupings().All() {
-		for _, c := range g.Children() {
-			mc, ok := c.(*dna.MemoryCell)
-			if !ok {
-				continue
-			}
+		for _, mc := range predictionsOf(g) {
 			if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "other" && len(mc.Children()) > 0 {
 				if p.Timestamp < oldestTS {
 					oldestTS, oldest = p.Timestamp, mc

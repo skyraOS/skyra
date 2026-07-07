@@ -94,31 +94,63 @@ func (ei *EntityIndex) Snapshot() []*dna.MemoryCell {
 	return out
 }
 
-// GroupingIndex — the grouping spine, on the nucleus. Groupings are KindGrouping
-// MemoryCells carrying a Gist; predictions hang off them as children. Handed to
-// the predict workers as their working set (the active grouping for the impulse).
+// GroupingIndex — the grouping spine, on the nucleus. A grouping is an episode
+// SHELL (KindGrouping, content Grouping); its framing lives in KindGist CHILDREN —
+// a sequence (edit appends a new gist, priors retained and decaying) — and the
+// gist owns the records/predictions made under it (the gist-owned spine,
+// perceive-internalization.md §3). Handed to the predict workers as their working
+// set (the active grouping for the impulse).
 type GroupingIndex struct {
-	mu    sync.Mutex
-	slice skyra.Slice
-	byID  map[string]*dna.MemoryCell
-	// the current episode (active-grouping.md) lives ON THE SLICE as an ID
-	// (mapActiveGroupingID) — active state's canonical home; resolved to the node
-	// through byID on read. No pointer field: the slice is the single source.
+	mu       sync.Mutex
+	slice    skyra.Slice
+	byID     map[string]*dna.MemoryCell
+	gistByID map[string]*dna.MemoryCell
+	// the current episode + its current gist (active-grouping.md) live ON THE
+	// SLICE as IDs (mapActiveGroupingID/mapActiveGistID) — active state's
+	// canonical home; resolved to nodes through these maps on read.
 }
 
 func NewGroupingIndex(slice skyra.Slice) *GroupingIndex {
-	return &GroupingIndex{slice: slice, byID: map[string]*dna.MemoryCell{}}
+	return &GroupingIndex{slice: slice, byID: map[string]*dna.MemoryCell{}, gistByID: map[string]*dna.MemoryCell{}}
 }
 
-// Create mints a grouping carrying a gist, registers it, and makes it the ACTIVE
-// episode. (Cold-start "create"; warm match/edit sharpens the active gist instead.)
+// Create mints a grouping with its first gist child, registers both, and makes
+// them the ACTIVE episode/gist. (Cold-start "create"; warm edit appends instead.)
 func (gi *GroupingIndex) Create(groupID, gist string, ts int) *dna.MemoryCell {
 	gi.mu.Lock()
-	g := dna.NewMemoryCell(groupID, dna.KindGrouping, dna.Gist{Text: gist, Timestamp: ts}, gi.slice)
+	g := dna.NewMemoryCell(groupID, dna.KindGrouping, dna.Grouping{Created: ts}, gi.slice)
 	gi.byID[groupID] = g
+	gistCell := gi.mintGistLocked(g, gist, ts)
 	gi.mu.Unlock()
 	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
+	sliceSetID(gi.slice, mapActiveGistID, gistCell.ID())
 	return g
+}
+
+// Edit appends a NEW gist to an existing grouping (the prior gist stays and
+// decays — the sequence) and makes the grouping + fresh gist active. Returns the
+// grouping, nil if the id is unknown (caller falls through to Create).
+func (gi *GroupingIndex) Edit(groupID, gist string, ts int) *dna.MemoryCell {
+	gi.mu.Lock()
+	g := gi.byID[groupID]
+	if g == nil {
+		gi.mu.Unlock()
+		return nil
+	}
+	gistCell := gi.mintGistLocked(g, gist, ts)
+	gi.mu.Unlock()
+	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
+	sliceSetID(gi.slice, mapActiveGistID, gistCell.ID())
+	return g
+}
+
+// mintGistLocked appends a gist child to g (caller holds gi.mu).
+func (gi *GroupingIndex) mintGistLocked(g *dna.MemoryCell, gist string, ts int) *dna.MemoryCell {
+	id := fmt.Sprintf("%s:gist:%d", g.ID(), ts)
+	cell := dna.NewMemoryCell(id, dna.KindGist, dna.Gist{Text: gist, Timestamp: ts}, gi.slice)
+	gi.gistByID[id] = cell
+	g.AddChild(g.ID()+"→"+id, cell)
+	return cell
 }
 
 // Active returns the current episode (nil before the first grouping exists) —
@@ -133,13 +165,30 @@ func (gi *GroupingIndex) Active() *dna.MemoryCell {
 	return gi.byID[id]
 }
 
-// SetActive makes g the current episode (writes its ID to the slice; nil clears).
-func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
-	id := ""
-	if g != nil {
-		id = g.ID()
+// ActiveGist returns the current gist — where deposits (records, predictions)
+// attach. nil before the first grouping exists.
+func (gi *GroupingIndex) ActiveGist() *dna.MemoryCell {
+	id := sliceGetID(gi.slice, mapActiveGistID)
+	if id == "" {
+		return nil
 	}
-	sliceSetID(gi.slice, mapActiveGroupingID, id)
+	gi.mu.Lock()
+	defer gi.mu.Unlock()
+	return gi.gistByID[id]
+}
+
+// SetActive makes g the current episode (writes its ID + its latest gist's ID to
+// the slice; nil clears both).
+func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
+	groupID, gistID := "", ""
+	if g != nil {
+		groupID = g.ID()
+		if gist := latestGist(g); gist != nil {
+			gistID = gist.ID()
+		}
+	}
+	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
+	sliceSetID(gi.slice, mapActiveGistID, gistID)
 }
 
 // Get returns a grouping by id (nil if none) — the target of an <edit id="..."> op.
@@ -149,18 +198,48 @@ func (gi *GroupingIndex) Get(id string) *dna.MemoryCell {
 	return gi.byID[id]
 }
 
-// OpenEpisodes returns every grouping's id + gist — the candidates the framing op
-// decides edit-or-new against (a cheap gist-level view, not the full node sets).
+// latestGist returns g's current framing — the max-timestamp KindGist child (the
+// sequence's newest entry; ticks are monotonic so newest == current). nil if none.
+func latestGist(g *dna.MemoryCell) *dna.MemoryCell {
+	if g == nil {
+		return nil
+	}
+	var best *dna.MemoryCell
+	bestTS := -1
+	for _, c := range g.Children() {
+		mc, ok := c.(*dna.MemoryCell)
+		if !ok || mc.Kind() != dna.KindGist {
+			continue
+		}
+		if gg, ok := mc.Content().(dna.Gist); ok && gg.Timestamp > bestTS {
+			bestTS, best = gg.Timestamp, mc
+		}
+	}
+	return best
+}
+
+// gistOf extracts a grouping's CURRENT framing text (its latest gist child).
+func gistOf(g *dna.MemoryCell) string {
+	if gist := latestGist(g); gist != nil {
+		if gg, ok := gist.Content().(dna.Gist); ok {
+			return gg.Text
+		}
+	}
+	return ""
+}
+
+// OpenEpisodes returns every grouping's id + current gist — the candidates the
+// framing op decides edit-or-new against (a cheap gist-level view).
 func (gi *GroupingIndex) OpenEpisodes() []struct{ ID, Gist string } {
 	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	out := make([]struct{ ID, Gist string }, 0, len(gi.byID))
-	for id, g := range gi.byID {
-		gist := ""
-		if gg, ok := g.Content().(dna.Gist); ok {
-			gist = gg.Text
-		}
-		out = append(out, struct{ ID, Gist string }{id, gist})
+	groupings := make([]*dna.MemoryCell, 0, len(gi.byID))
+	for _, g := range gi.byID {
+		groupings = append(groupings, g)
+	}
+	gi.mu.Unlock()
+	out := make([]struct{ ID, Gist string }, 0, len(groupings))
+	for _, g := range groupings {
+		out = append(out, struct{ ID, Gist string }{g.ID(), gistOf(g)})
 	}
 	return out
 }
@@ -186,6 +265,26 @@ func (gi *GroupingIndex) Snapshot(grouping *dna.MemoryCell) []skyra.Space {
 	return out
 }
 
+// predictionsOf walks a grouping's gist children and yields every prediction node
+// hanging under them — the gist-owned spine's one-level-deeper read (predictions
+// attach to the gist they were made under; a bet made under a PRIOR gist is still
+// gradeable — evidence can close a bet conditioned on the old framing).
+func predictionsOf(g *dna.MemoryCell) []*dna.MemoryCell {
+	var out []*dna.MemoryCell
+	for _, c := range g.Children() {
+		gist, ok := c.(*dna.MemoryCell)
+		if !ok || gist.Kind() != dna.KindGist {
+			continue
+		}
+		for _, gc := range gist.Children() {
+			if mc, ok := gc.(*dna.MemoryCell); ok && mc.Kind() == dna.KindPrediction {
+				out = append(out, mc)
+			}
+		}
+	}
+	return out
+}
+
 // LatestUngradedOther finds the newest ungraded other-pred distribution across all
 // groupings — the prior bet other:grade closes against fresh evidence. Returns the
 // distribution root and its branch children (sorted by edge key for stable prompt
@@ -196,11 +295,7 @@ func (gi *GroupingIndex) LatestUngradedOther() (*dna.MemoryCell, []*dna.MemoryCe
 	var best *dna.MemoryCell
 	bestTS := -1
 	for _, g := range gi.byID {
-		for _, child := range g.Children() {
-			cc, ok := child.(*dna.MemoryCell)
-			if !ok {
-				continue
-			}
+		for _, cc := range predictionsOf(g) {
 			p, ok := cc.Content().(dna.Prediction)
 			if !ok || p.Role != "other" || p.Graded || len(cc.Children()) == 0 {
 				continue
@@ -260,11 +355,7 @@ func (gi *GroupingIndex) LatestUngradedRealizedSelf() (*dna.MemoryCell, dna.Pred
 	var bestPred dna.Prediction
 	bestTS := -1
 	for _, g := range gi.byID {
-		for _, child := range g.Children() {
-			cc, ok := child.(*dna.MemoryCell)
-			if !ok {
-				continue
-			}
+		for _, cc := range predictionsOf(g) {
 			p, ok := cc.Content().(dna.Prediction)
 			if !ok || p.Role != "self" || p.Graded || len(cc.Children()) == 0 {
 				continue
@@ -317,16 +408,22 @@ func (gi *GroupingIndex) All() []*dna.MemoryCell {
 	return out
 }
 
-// Latest returns the most-recently-created grouping (by gist timestamp), for
-// inspection/display. nil if none.
+// Latest returns the most-recently-framed grouping (by its current gist's
+// timestamp), for inspection/display. nil if none.
 func (gi *GroupingIndex) Latest() *dna.MemoryCell {
 	gi.mu.Lock()
-	defer gi.mu.Unlock()
+	groupings := make([]*dna.MemoryCell, 0, len(gi.byID))
+	for _, g := range gi.byID {
+		groupings = append(groupings, g)
+	}
+	gi.mu.Unlock()
 	var best *dna.MemoryCell
 	bestTS := -1
-	for _, g := range gi.byID {
-		if gist, ok := g.Content().(dna.Gist); ok && gist.Timestamp > bestTS {
-			bestTS, best = gist.Timestamp, g
+	for _, g := range groupings {
+		if gist := latestGist(g); gist != nil {
+			if gg, ok := gist.Content().(dna.Gist); ok && gg.Timestamp > bestTS {
+				bestTS, best = gg.Timestamp, g
+			}
 		}
 	}
 	return best

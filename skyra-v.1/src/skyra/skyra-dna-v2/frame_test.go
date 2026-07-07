@@ -7,18 +7,21 @@ import (
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// buildGrouping mints a grouping with a gist and a two-branch other-distribution — the
-// same shape appendOtherDistribution produces.
+// buildGrouping mints a grouping on the gist-owned spine — shell → gist →
+// two-branch other-distribution, the same shape Create + appendOtherDistribution
+// produce.
 func buildGrouping() *dna.MemoryCell {
-	g := dna.NewMemoryCell("g1", dna.KindGrouping, dna.Gist{Text: "help with the kernel", Timestamp: 1}, nil)
-	root := dna.NewMemoryCell("g1→other-pred:1", dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: 1}, nil)
-	b1 := dna.NewMemoryCell("g1→other-pred:1-0", dna.KindPrediction,
+	g := dna.NewMemoryCell("g1", dna.KindGrouping, dna.Grouping{Created: 1}, nil)
+	gist := dna.NewMemoryCell("g1:gist:1", dna.KindGist, dna.Gist{Text: "help with the kernel", Timestamp: 1}, nil)
+	g.AddChild("g1→g1:gist:1", gist)
+	root := dna.NewMemoryCell("g1:gist:1→other-pred:1", dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: 1}, nil)
+	b1 := dna.NewMemoryCell("g1:gist:1→other-pred:1-0", dna.KindPrediction,
 		dna.Prediction{Text: "asks about the kernel", Role: "other", Probability: 0.7, Timestamp: 1}, nil)
-	b2 := dna.NewMemoryCell("g1→other-pred:1-1", dna.KindPrediction,
+	b2 := dna.NewMemoryCell("g1:gist:1→other-pred:1-1", dna.KindPrediction,
 		dna.Prediction{Text: "asks about setup", Role: "other", Probability: 0.3, Timestamp: 1}, nil)
-	root.AddChild("g1→other-pred:1-0", b1)
-	root.AddChild("g1→other-pred:1-1", b2)
-	g.AddChild("g1→other-pred:1", root)
+	root.AddChild("g1:gist:1→other-pred:1-0", b1)
+	root.AddChild("g1:gist:1→other-pred:1-1", b2)
+	gist.AddChild("g1:gist:1→other-pred:1", root)
 	return g
 }
 
@@ -33,8 +36,8 @@ func TestAssembleFrameLightsGistAndBranches(t *testing.T) {
 	if !strings.Contains(present, "asks about the kernel") || !strings.Contains(present, "asks about setup") {
 		t.Fatalf("frame missing branches:\n%s", present)
 	}
-	if lit < 4 { // grouping + root + 2 branches
-		t.Fatalf("expected ≥4 lit nodes, got %d:\n%s", lit, present)
+	if lit < 5 { // grouping + gist + root + 2 branches
+		t.Fatalf("expected ≥5 lit nodes, got %d:\n%s", lit, present)
 	}
 }
 
@@ -54,8 +57,9 @@ func TestTightBudgetPrunesTheFrame(t *testing.T) {
 // now favors b2. This is relevance = alignment overriding the cold prior.
 func TestLearnedStrengthReweightsFrame(t *testing.T) {
 	g := buildGrouping()
-	root := g.Children()["g1→other-pred:1"].(*dna.MemoryCell)
-	b1Key, b2Key := "g1→other-pred:1-0", "g1→other-pred:1-1"
+	gist := g.Children()["g1→g1:gist:1"].(*dna.MemoryCell)
+	root := gist.Children()["g1:gist:1→other-pred:1"].(*dna.MemoryCell)
+	b1Key, b2Key := "g1:gist:1→other-pred:1-0", "g1:gist:1→other-pred:1-1"
 
 	// Phase-1 (no store): static Probability favors b1 (0.7 > 0.3).
 	cold := (&frameNode{cell: root}).Frontier(nil, nil)

@@ -7,14 +7,17 @@ import (
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// buildEpisode mints a grouping with one consolidated interaction child — the minimal shape
-// the settle grades (a fresh episode after consolidateInteraction).
+// buildEpisode mints a grouping (gist-owned spine) with one consolidated interaction
+// under its gist — the minimal shape the settle grades (a fresh episode after
+// consolidateInteraction). The active gist itself is never a settle item.
 func buildEpisode() (g *dna.MemoryCell, edgeKey string) {
-	g = dna.NewMemoryCell("g1", dna.KindGrouping, dna.Gist{Text: "help with the skyra project", Timestamp: 1}, nil)
-	edgeKey = "g1→michael:int"
+	g = dna.NewMemoryCell("g1", dna.KindGrouping, dna.Grouping{Created: 1}, nil)
+	gist := dna.NewMemoryCell("g1:gist:1", dna.KindGist, dna.Gist{Text: "help with the skyra project", Timestamp: 1}, nil)
+	g.AddChild("g1→g1:gist:1", gist)
+	edgeKey = "g1:gist:1→michael:int"
 	inter := dna.NewMemoryCell("michael:int", dna.KindResponse,
 		dna.InteractionRecord{From: "michael", Utterance: "can you help with the skyra project", Timestamp: 1}, nil)
-	g.AddChild(edgeKey, inter)
+	gist.AddChild(edgeKey, inter)
 	return g, edgeKey
 }
 

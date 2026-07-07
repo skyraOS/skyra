@@ -70,9 +70,18 @@ const (
 	KindPresence      Kind = "presence"      // an entity's presence/location at a time (EntityState)
 	KindResponse      Kind = "response"      // an incoming move — the other's utterance/action (InteractionRecord)
 	KindAction        Kind = "action"        // an outgoing move — the being's own action (motor)
-	KindGrouping   Kind = "grouping"   // a higher-order setpoint over the active field; content = Gist
+	KindGrouping   Kind = "grouping"   // a higher-order setpoint over the active field; content = Grouping (gists are CHILDREN)
+	KindGist       Kind = "gist"       // one framing of a grouping — a SEQUENCE (edit appends, priors decay); content = Gist
 	KindPrediction Kind = "prediction" // an open bet — a predicted next move (self/other); content = Prediction
 )
+
+// Grouping is a grouping node's content — the episode shell. The framing lives in
+// its KindGist CHILDREN (a sequence: each edit mints a new gist, priors retained
+// and decaying), and the gist owns the records/predictions made under it. See
+// design-docs/cognition/perceive-internalization.md §3.
+type Grouping struct {
+	Created int // tick the episode opened
+}
 
 func NewMemoryCell(id string, kind Kind, content any, slice skyra.Slice) *MemoryCell {
 	return &MemoryCell{

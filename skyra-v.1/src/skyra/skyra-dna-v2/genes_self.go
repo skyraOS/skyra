@@ -88,21 +88,18 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return
 	}
 	debug.Being("skyra", "self", fmt.Sprintf("plan=%q", text))
-	born := appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text)
-	root.DNA().CrossBirth(born) // node birth: the new edge was just active
+	if born := appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text); born != "" {
+		root.DNA().CrossBirth(born) // node birth: the new edge was just active
+	}
 }
 
-// renderOtherDistribution reads the latest other-pred root off the grouping (under
-// the index lock) and lists its branches by probability. "(no prediction)" if none
-// (cold-start, or other hasn't landed yet — the lagged read).
+// renderOtherDistribution reads the latest other-pred root off the grouping's
+// gists (the gist-owned spine) and lists its branches by probability. "(no
+// prediction)" if none (cold-start, or other hasn't landed yet — the lagged read).
 func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string {
 	var latest *dna.MemoryCell
 	latestTS := -1
-	for _, child := range gi.Snapshot(grouping) {
-		rootCell, ok := child.(*dna.MemoryCell)
-		if !ok {
-			continue
-		}
+	for _, rootCell := range predictionsOf(grouping) {
 		p, ok := rootCell.Content().(dna.Prediction)
 		if !ok || p.Role != "other" || len(rootCell.Children()) == 0 {
 			continue
@@ -133,12 +130,18 @@ func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string
 	return strings.Join(lines, "\n")
 }
 
-// appendSelfPrediction stamps skyra's proposed move onto the grouping (per-cycle
-// key). motor reads the latest self proposal off the spine. Returns the birth edge key.
+// appendSelfPrediction stamps skyra's proposed move onto the grouping's CURRENT
+// gist (per-cycle key; a proposal belongs to the framing it was made under). motor
+// reads the latest self proposal off the spine. Returns the birth edge key ("" if
+// the grouping has no gist yet).
 func appendSelfPrediction(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, text string) string {
-	key := fmt.Sprintf("%s→self-pred:%d", grouping.ID(), ts)
+	gist := latestGist(grouping)
+	if gist == nil {
+		return ""
+	}
+	key := fmt.Sprintf("%s→self-pred:%d", gist.ID(), ts)
 	pred := dna.NewMemoryCell(key, dna.KindPrediction, dna.Prediction{Text: text, Role: "self", Timestamp: ts}, nil)
-	gi.AddChild(grouping, key, pred)
+	gi.AddChild(gist, key, pred)
 	return key
 }
 
