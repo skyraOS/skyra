@@ -184,6 +184,8 @@ func contentTimestamp(content any) int {
 		return c.Timestamp
 	case InteractionRecord:
 		return c.Timestamp
+	case PerceiveRecord:
+		return c.Timestamp
 	default:
 		return 0
 	}
