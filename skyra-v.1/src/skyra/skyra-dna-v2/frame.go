@@ -220,7 +220,7 @@ func FramePresentCrossing(grouping *dna.MemoryCell, budget float64, store *Activ
 		store.CrossFrame(res.Edges(), tick)
 	}
 	s, n := renderFrame(res)
-	debug.Being("skyra", "frame", fmt.Sprintf("assembled budget=%.0f lit=%d edges=%d", budget, n, len(res.Edges())))
+	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("assembled budget=%.0f lit=%d edges=%d", budget, n, len(res.Edges())))
 	return s
 }
 
