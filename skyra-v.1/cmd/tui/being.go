@@ -38,20 +38,63 @@ func (b *dnav2Being) Agents() map[string]skyra.Space             { return nil }
 func (b *dnav2Being) Children() map[string]skyra.Space           { return nil }
 func (b *dnav2Being) Express(origin skyra.Space, impulse any) any { return nil }
 
-// Observe is the inbound bridge: the world delivered an impulse to the being. An external
-// engage starts a pipeline turn (threaded by prev-id). Return waves and non-engage primitives
-// are ignored — the pipeline's own reafference is not driven from here.
+// Observe is the inbound bridge: the world delivered an impulse to the being. An
+// external engage starts a pipeline turn; a PERCEIVE RETURN is translated
+// (world.PerceptionResult → dnav2.Surroundings — the sensory transduction, so the
+// DNA stays world-agnostic) and enters the pipeline as a reafference. Both are
+// threaded by prev-id. Other return waves (move/engage reafference) are still
+// dropped here — that lane is out of scope for the perceive build.
 func (b *dnav2Being) Observe(origin skyra.Space, impulse any) {
 	imp, ok := impulse.(skyra.Impulse)
-	if !ok || imp.Return || imp.Primitive != world.PrimitiveEngage {
+	if !ok {
 		return
 	}
+	switch {
+	case !imp.Return && imp.Primitive == world.PrimitiveEngage:
+		b.fire(imp)
+	case imp.Return && imp.Primitive == world.PrimitivePerceive:
+		res, ok := imp.Payload.(world.PerceptionResult)
+		if !ok {
+			return
+		}
+		b.fire(skyra.Impulse{
+			Primitive: world.PrimitivePerceive,
+			Return:    true,
+			Payload:   translateSurroundings(res, b.id),
+			Source:    imp.Source,
+		})
+	}
+}
+
+// fire threads a pipeline turn: each impulse's id points at the previous (the
+// causal prev chain — the heuristic linkage, perceive-build-uncertainties.md §5).
+func (b *dnav2Being) fire(imp skyra.Impulse) {
 	b.mu.Lock()
 	b.seq++
 	id, prev := fmt.Sprintf("in:%d", b.seq), b.prevID
 	b.prevID = id
 	b.mu.Unlock()
 	b.orch.Fire(id, prev, imp)
+}
+
+// translateSurroundings unwraps the world's perception result into the DNA-native
+// payload: self = the origin's coord (given, not swept); each swept agent's coord
+// is the coord of the point it was found standing on. The perceiving being itself
+// is excluded from the swept set (self arrives via Self, the wave's origin).
+func translateSurroundings(res world.PerceptionResult, selfID string) dnav2.Surroundings {
+	s := dnav2.Surroundings{Self: res.SelfCoord, Agents: map[string]skyra.Coord{}}
+	for _, p := range res.Points {
+		if p.Source == nil {
+			continue
+		}
+		for id := range p.Agents {
+			if id == selfID {
+				continue
+			}
+			s.Agents[id] = p.Source.Coord
+		}
+	}
+	return s
 }
 
 // beingActivation is a constant activation record — the being is a delivery entry node, not
