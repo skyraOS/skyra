@@ -1,5 +1,16 @@
 # Token Web and Entity Resolution
 
+> **⚠️ Edge direction superseded (2026-07-07).** This doc's `entity → interaction → token`
+> (entity owns its interactions) is **flipped**: interactions are **gist-owned** —
+> `grouping → gist → record → entity`, and the record points to tokens (`record → token`). The
+> entity no longer owns interactions; it keeps only its *content* children (`entity → location`,
+> `entity → understanding`). "Interaction record" is now an **`EngageRecord`** (a Kind of
+> `AffordanceRecord`). Everything below the edge direction — the resolution pipeline, aliases as
+> **grouping/gist children**, confidence/TMS, the three phases — **still stands**. Unbuilt in
+> dnav2 (lives only in archived old dna) → **port fresh in the new direction.** See
+> [perceive-internalization.md](perceive-internalization.md) §3/§6 and
+> [affordance-record.md](../being/affordance-record.md).
+
 **Date:** 2026-07-01
 
 ## The idea
