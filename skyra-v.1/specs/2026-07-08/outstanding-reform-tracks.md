@@ -147,30 +147,60 @@ proposal/process grade:
 ## 4. DAG / Kernel Boundary
 
 Existing spec: [dag-kernel-responsibility-boundary.md](./dag-kernel-responsibility-boundary.md)
+Related spec: [space-kernel-interface-reform.md](./space-kernel-interface-reform.md)
 
 Current dnav2 genes mostly do the work inside `Observe`, and the orchestrator
 reads `root.Condition` afterward.
 
-Target:
+Updated target:
 
 ```text
-DAG:
-  creates/mounts ephemeral worker
+Time kernel:
+  Realize(st Spacetime)
+  one wave records on one slice
 
-Observe:
-  query / activation / intake strategy
+Spacetime:
+  origin
+  traversed space
+  impulse
+  initial amplitude/budget
 
-kernel:
-  traverses the worker's exposed graph surface
+Space:
+  Observe returns edge-keyed traversal surface
+  Cost reports node/read cost
+  Express commits or returns next Spacetime value(s)
 
-Express:
-  performs or commits the affordance work
-  writes invocation/result records
-  reports condition
+Scheduler:
+  owns orchestration / next-wave decisions
+
+Board:
+  owns work item state
 ```
 
-This is not urgent for the first data-model migration, but it should be fixed
-before the DAG semantics harden.
+This is now upstream of the implementation plan because the existing
+`src/skyra/traverse` mini-kernel needs to collapse into the real `Time` kernel
+before the data model hardens around the wrong traversal substrate.
+
+Settled direction:
+
+```text
+- add Spacetime,
+- move amplitude off Impulse and onto Spacetime,
+- add Cost to Space,
+- make Observe return map[edgeKey]Space,
+- keep MemoryCell.Children as durable graph API,
+- keep one wave / one slice,
+- move orchestration to Scheduler/Board,
+- add bounded ActiveStateHistory to Slice.
+```
+
+Open:
+
+```text
+- exact active-state snapshot API,
+- exact scheduler API,
+- exact settle/coherence worker model.
+```
 
 ---
 
@@ -186,7 +216,6 @@ type Impulse struct {
     Payload   any
 
     Source    *ImpulseSource
-    Amplitude float64
     Return    bool
 }
 ```
@@ -212,17 +241,21 @@ new impulses should set Source.SpaceID and TargetID
 `Route` is workflow/control state. It should live on the board/work item, not on
 the domain/event impulse.
 
-Current `Impulse.Route` is a temporary courier for parsed routing consequences,
-such as verdicts and reframe requests. It is not the raw LLM output.
+Current code may use `Impulse.Route` as a courier for parsed routing
+consequences, such as verdicts and reframe requests. It is not the raw LLM
+output. The target removes it from `Impulse`.
 
 Target:
 
 ```text
 Impulse:
-  primitive/source/target/payload/return/amplitude
+  primitive/source/target/payload/return
 
 Board/work item:
   route/verdict/reframe/handoff/grouping/status
+
+Spacetime:
+  origin/traversed/impulse/amplitude
 
 Durable MemoryCell result:
   content/evidence that workers intentionally record
@@ -231,17 +264,18 @@ Durable MemoryCell result:
 Migration:
 
 ```text
-keep Impulse.Route as compatibility bridge
-write new route state to board/work item
-remove Impulse.Route after worker handoff no longer needs it
+remove Route from Impulse
+remove Amplitude from Impulse
+write route state to board/work item
+start waves with Spacetime
 ```
 
 ---
 
 ## 6. Traversal Amplitude Split
 
-**Status:** Settled conceptually; implementation tabled until the data-model and
-kernel-interface changes are ready.
+**Status:** Settled conceptually; implementation tabled until the Space/Time
+kernel reform is ready.
 
 Existing spec: [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
 
@@ -259,11 +293,64 @@ should split by normalized positive edge product.
 
 ---
 
-## 7. First Implementation Plan
+## 7. Active State / Settle / First Implementation Plan
 
-The first code slice should be small and compatible.
+The mini-kernel collapse changes the first implementation order.
 
-Proposed order:
+Active state direction:
+
+```text
+Slice owns bounded ActiveStateHistory.
+Each ActiveStateSnapshot contains:
+  tree
+  traversal trace
+  traversal totals
+```
+
+This lets the kernel record traversal facts without knowing grading semantics:
+
+```text
+kernel records:
+  this wave traversed edge X
+  with amplitude/score Y
+  to node Z
+
+settle/grading reads:
+  current snapshot trace/eligible edges
+```
+
+Open settle direction:
+
+```text
+Settle is not generic kernel behavior.
+Settle should become a scheduled cognitive worker/process.
+Board tracks whether a gist/process needs settle, is settling, or is settled.
+Gist owns the durable framing being settled.
+Settle worker reads ActiveStateSnapshot.Trace.Edges and writes coherence results.
+```
+
+Revised proposed order:
+
+```text
+1. Introduce Spacetime and update Time.Realize shape.
+2. Move Amplitude off Impulse and onto Spacetime.
+3. Add Cost to Space.
+4. Make Observe return edge-keyed traversal surface.
+5. Add bounded ActiveStateHistory to Slice.
+6. Collapse frame traversal off src/skyra/traverse and onto Time kernel.
+7. Introduce Scheduler/Board next-wave helper.
+8. Add universal landing-spine helper.
+9. Make external engage use the landing spine.
+10. Add MemoryCell affordance invocation/result writing helpers.
+11. Make motor write outbound engage/perceive/move invocation records.
+12. Keep legacy KindAction until self:grade is migrated.
+13. Make sensory/reafference attach result records.
+14. Update recent exchange rendering to read invocation/result chains.
+15. Migrate self:grade away from KindAction.
+16. Remove KindAction/ActionRecord special path.
+```
+
+Old compatibility-first order, now superseded:
 
 ```text
 1. Add universal landing-spine helper.

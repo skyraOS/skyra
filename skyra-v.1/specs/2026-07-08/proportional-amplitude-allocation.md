@@ -5,9 +5,13 @@
 [activation-and-traversal.md](../../design-docs/kernel/activation-and-traversal.md),
 [traversal-mechanics.md](../../design-docs/kernel/traversal-mechanics.md)
 
-This spec records a traversal correction: child amplitude should be allocated
-proportionally to each child's edge product, not split equally across candidate
-children.
+This spec records a traversal correction: child amplitude should not be split
+equally across candidate children. The traversal should allocate amplitude
+proportionally across the open edge-keyed children exposed by `Observe`.
+
+The kernel owns generic transport math. `Observe` owns policy: which children are
+exposed, what edge state exists, and what cognition-specific concepts such as
+alignment, probability, relevance, or decay mean.
 
 ---
 
@@ -51,7 +55,8 @@ This preserves equal energy distribution even though B is the strongest edge.
 
 ## Target Rule
 
-Amplitude should split according to normalized edge products:
+Amplitude should split according to normalized positive transport products for
+the open children:
 
 ```text
 available = parentAmplitude * amplitudeDecay
@@ -78,14 +83,20 @@ The stronger edge receives more of the remaining traversal energy.
 
 ## Semantics
 
-The edge product is the child's claim on the parent's remaining wave energy.
+The edge product is the child's transport claim on the parent's remaining wave
+energy.
 
 ```text
-edgeProduct = activation/strength/alignment product for that parent->child edge
+edgeProduct = generic active edge product for that parent->child edge
 ```
 
-The kernel should not treat fanout as equal unless all candidate edge products are
-equal.
+The kernel should not treat fanout as equal unless all open candidate edge
+products are equal.
+
+The kernel should not know the cognitive meaning of the product. It only sees the
+edge-keyed traversal surface and the active edge values available on the slice.
+The DNA/space layer decides which children are exposed and what the edge product
+means.
 
 This preserves the conservation intuition:
 

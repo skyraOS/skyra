@@ -122,14 +122,15 @@ Ephemeral worker
     set/report condition
 ```
 
-The orchestrator may still route by `(step, condition)`, but the condition should
-be the worker's expressed result, not a side effect of doing all work in Observe.
+The scheduler/board should route by expressed worker results. Routing should not
+be a side effect of doing all work in Observe.
 
 ---
 
 ## Membrane / Worker Lifecycle
 
-The membrane is the impulse/work tracker and scheduling boundary.
+The membrane is the impulse ingress and work-registration boundary. The scheduler
+owns next-wave decisions.
 
 Target lifecycle:
 
@@ -141,19 +142,21 @@ Target lifecycle:
    if impulse is not tracked:
      append work item / mark impulse in-flight
 
-3. DAG/scheduler:
+3. scheduler:
    read board/slice
    decide next step
-   create ephemeral worker node
+   create/select ephemeral worker node
 
-4. membrane exposes the ephemeral worker to the kernel
+4. membrane Express:
+   return Spacetime for the selected worker, or nil
 
-5. worker Observe:
+5. Time kernel:
+   Realize(st Spacetime)
+   one wave records on the worker's slice
+
+6. worker Observe:
    read the active graph roots it needs
-   prepare the worker's traversal surface
-
-6. worker Children:
-   expose the prepared durable graph roots to the kernel
+   return edge-keyed traversal surface
 
 7. kernel:
    traverses the exposed graph roots
@@ -161,27 +164,23 @@ Target lifecycle:
 8. worker Express:
    perform/commit the work
    append affordance invocation/result records
-   update/report condition
+   update board / report result
+   return next Spacetime value(s) or nil
 
-9. membrane Express:
-   inspect the board
-   if the impulse is complete:
-     finish/flush
-   otherwise:
-     leave the work item in-flight for the next scheduling opportunity
+9. scheduler/board:
+   continue, wait, fan out, or finish/flush the impulse
 ```
 
 The world/external caller already starts the membrane wave. The membrane does not
 need to recursively spawn a wave on itself just to continue the same impulse. It
-can finish the current wave after updating the board; the next scheduling
-opportunity can be driven by the next membrane entry or an explicit scheduler
-tick.
+can finish the current wave by returning a `Spacetime` value for the next worker,
+or nil if no work is ready.
 
 ---
 
-## Ephemeral Children Are Not Durable Graph Edges
+## Ephemeral Workers And Slices
 
-The membrane may expose the ephemeral worker as a child for the current kernel
+Current code may expose an ephemeral worker as a child for the current kernel
 wave:
 
 ```text
@@ -195,28 +194,33 @@ It is a per-wave traversal surface, stored on the ephemeral membrane transcript.
 That keeps the kernel graph-native without writing worker nodes into the durable
 `MemoryCell` graph.
 
-Current code already does this shape:
+However, this is only a transitional cheat. The cleaner target is one wave / one
+slice:
 
 ```text
-membrane Observe:
-  create worker
+membrane wave:
+  records on membrane slice
+  Express returns Spacetime{Traversed: worker}
 
-membrane Children:
-  return worker
+worker wave:
+  records on worker namespace slice
+  Observe returns active graph roots
+  Express commits work and returns next Spacetime/nil
 ```
 
-That part is an acceptable cheat. The important boundary is:
+The important boundary remains:
 
 ```text
-ephemeral worker child edge = per-wave traversal surface
-MemoryCell children         = durable graph state
+ephemeral worker relation = scheduling / per-wave state
+MemoryCell children       = durable graph state
 ```
 
-Do not store ephemeral workers as durable `MemoryCell` children.
+Do not store ephemeral workers as durable `MemoryCell` children. Prefer returning
+`Spacetime` for the worker over descending into the worker from the membrane wave.
 
 ---
 
-## Observe / Children / Express Contract
+## Observe / Express Contract
 
 Current kernel interface:
 
@@ -234,20 +238,26 @@ Children returns the traversal surface prepared by Observe
 Express commits results after traversal
 ```
 
+Target kernel interface:
+
+```go
+Cost(origin, impulse) int
+Observe(origin, impulse) map[string]Space
+Express(origin, impulse) any
+```
+
 For ephemeral workers, the target contract is:
 
 ```text
 worker Observe:
   read the corresponding active graph roots
-  cache them on the worker transcript
-
-worker Children:
-  expose those roots to the kernel
+  return edge-keyed spaces to the kernel
 
 worker Express:
   perform/commit the affordance work
   append invocation/result records
-  report condition
+  update board
+  return next Spacetime value(s) or nil
 ```
 
 Worker root examples:
@@ -269,9 +279,8 @@ motor:
   other proposal/process
 ```
 
-This is the main migration away from the current implementation, where
-`EphemeralRoot.Children()` is nil and most genes do all substantive work directly
-inside `Observe`.
+This is the main migration away from the current implementation, where `Observe`
+does all substantive work and `EphemeralRoot.Children()` is nil.
 
 ---
 

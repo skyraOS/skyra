@@ -403,10 +403,7 @@ type Impulse struct {
     Payload   any
 
     Source    *ImpulseSource
-    Amplitude float64
     Return    bool
-
-    Route any
 }
 
 type ImpulseSource struct {
@@ -480,9 +477,10 @@ affordance paths.
 
 `Route any` is workflow/control state, not world/content state.
 
-It should migrate off `Impulse` and onto the board/work item.
+It should live on the board/work item, not on `Impulse`.
 
-Current `Impulse.Route` acts as a courier for structured routing consequences:
+Current code may use `Impulse.Route` as a courier for structured routing
+consequences:
 
 ```text
 LLM output:
@@ -512,11 +510,29 @@ MemoryCell result records:
 Compatibility rule:
 
 ```text
-Impulse.Route may remain temporarily as a compatibility bridge.
-New route semantics should be written to the board/work item instead.
+Remove Route from Impulse.
+New route semantics should be written to the board/work item.
 Only write route data into durable memory when a worker intentionally records it
 as result/evidence content.
 ```
+
+### Amplitude Belongs On Spacetime
+
+Amplitude is kernel wave-start metadata, not domain/event content.
+
+Target:
+
+```go
+type Spacetime struct {
+    Origin    Space
+    Traversed Space
+    Impulse   Impulse
+    Amplitude float64
+}
+```
+
+`Impulse` says what event/content is moving. `Spacetime` says how the time kernel
+realizes that event through a traversed space.
 
 ---
 
