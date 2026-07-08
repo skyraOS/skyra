@@ -51,6 +51,9 @@ func (b *dnav2Being) Observe(origin skyra.Space, impulse any) {
 	}
 	switch {
 	case !imp.Return && imp.Primitive == world.PrimitiveEngage:
+		if isOwnEcho(imp, b.id) {
+			return
+		}
 		b.fire(imp)
 	case imp.Return && imp.Primitive == world.PrimitivePerceive:
 		res, ok := imp.Payload.(world.PerceptionResult)
@@ -64,6 +67,16 @@ func (b *dnav2Being) Observe(origin skyra.Space, impulse any) {
 			Source:    imp.Source,
 		})
 	}
+}
+
+// isOwnEcho reports whether an engage is the world's echo of the being's OWN
+// outward engage (the delivery set includes the sender — same filter michael's
+// OnInbound applies). Without it the echo re-enters as an "internal" turn and
+// self-stimulates an unbounded engage loop (live run 2026-07-08). A deliberate
+// self-engage interrupt (motor <engage><skyra> → TargetID == the being) is NOT
+// an echo and passes through.
+func isOwnEcho(imp skyra.Impulse, beingID string) bool {
+	return imp.Source != nil && imp.Source.SpaceID == beingID && imp.TargetID != beingID
 }
 
 // fire threads a pipeline turn: each impulse's id points at the previous (the

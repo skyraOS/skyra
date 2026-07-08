@@ -7,6 +7,29 @@ import (
 	"skyra-v1/src/skyra/world"
 )
 
+// The bridge drops the world's echo of the being's own outward engage (the
+// delivery set includes the sender) — without this the echo re-enters as an
+// "internal" turn and self-stimulates an unbounded engage loop. A deliberate
+// self-engage (TargetID == the being) is NOT an echo and passes through.
+func TestBridgeSkipsOwnEngageEcho(t *testing.T) {
+	echo := skyra.Impulse{
+		Primitive: world.PrimitiveEngage,
+		TargetID:  "michael",
+		Source:    &skyra.ImpulseSource{SpaceID: "skyra"},
+	}
+	selfEngage := skyra.Impulse{
+		Primitive: world.PrimitiveEngage,
+		TargetID:  "skyra",
+		Source:    &skyra.ImpulseSource{SpaceID: "skyra"},
+	}
+	if !isOwnEcho(echo, "skyra") {
+		t.Fatal("an outward engage echoed back must be dropped")
+	}
+	if isOwnEcho(selfEngage, "skyra") {
+		t.Fatal("a deliberate self-engage (interrupt) must pass through")
+	}
+}
+
 // The bridge translation: self comes from SelfCoord (the origin — given, not
 // swept), each swept agent gets the coord of the point it stood on, and the
 // perceiving being is excluded from the swept set.
