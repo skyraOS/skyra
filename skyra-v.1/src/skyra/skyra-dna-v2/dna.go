@@ -90,6 +90,13 @@ func (d *DNA) Tick() int {
 	return d.clock
 }
 
+// Clock reads the proper-time clock without advancing it (decay-read time).
+func (d *DNA) Clock() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.clock
+}
+
 func (d *DNA) Emit() func(skyra.Impulse)    { return d.emit }
 func (d *DNA) SetEmit(fn func(skyra.Impulse)) { d.emit = fn }
 

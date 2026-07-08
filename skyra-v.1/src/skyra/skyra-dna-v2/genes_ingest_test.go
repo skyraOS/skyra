@@ -1,6 +1,7 @@
 package dnav2
 
 import (
+	"strings"
 	"testing"
 
 	"skyra-v1/src/skyra"
@@ -142,5 +143,66 @@ func TestIngestAppendsFreshRecordsPerSweep(t *testing.T) {
 	}
 	if got := freshest(perEntity["michael"]).Coord; got != (skyra.Coord{X: 2, Y: 2}) {
 		t.Fatalf("freshest michael coord = %v, want {2 2}", got)
+	}
+}
+
+// The normalization pass: the frame displays ONE location line per entity — the
+// freshest — pinned at the top, stale coords normalized away (display-only; the
+// stale records stay on the graph, decision 4).
+func TestFrameNormalizesLocationsToFreshest(t *testing.T) {
+	d := testDNA()
+	WireGenes(d)
+	d.SetInfer(func(system, present string) (string, error) { return "", nil })
+	o, _ := newOrch(d)
+
+	firePerceiveReturn(t, o, "P1", "", Surroundings{
+		Self: skyra.Coord{X: 5, Y: 3}, Agents: map[string]skyra.Coord{"michael": {X: 2, Y: 1}}})
+	firePerceiveReturn(t, o, "P2", "P1", Surroundings{
+		Self: skyra.Coord{X: 6, Y: 3}, Agents: map[string]skyra.Coord{"michael": {X: 2, Y: 2}}})
+
+	present, _ := AssembleWithStore(d.Groupings().Active(), 10000, d.Activation(), d.Clock())
+	lines := strings.Split(present, "\n")
+	if len(lines) < 2 || lines[0] != "location: michael at 2,2" || lines[1] != "location: skyra at 6,3" {
+		t.Fatalf("frame should open with the freshest location per entity:\n%s", present)
+	}
+	if strings.Contains(present, "2,1") || strings.Contains(present, "5,3") {
+		t.Fatalf("stale coords should be normalized out of the display:\n%s", present)
+	}
+}
+
+// The §5b lifecycle: a perceive-only turn (no exchange at all) still frames — the
+// surroundings render into the framing present, the op sharpens the default
+// grouping (edit → real gist), and the sequence retains the empty seed gist.
+func TestPerceiveOnlyTurnSharpensDefaultGrouping(t *testing.T) {
+	d := testDNA()
+	WireGenes(d)
+	d.SetInfer(func(system, present string) (string, error) {
+		if strings.Contains(system, "evolving being") { // frameOpSystem
+			if !strings.Contains(present, "location: michael at 2,1") {
+				t.Errorf("framing present missing the surroundings:\n%s", present)
+			}
+			if i := strings.Index(present, "[id="); i >= 0 {
+				rest := present[i+len("[id="):]
+				id := rest[:strings.Index(rest, "]")]
+				return "<edit id=\"" + id + "\">exploring the space with michael</edit>", nil
+			}
+			t.Error("framing present listed no open episodes (the default grouping should be one)")
+		}
+		return "", nil
+	})
+	o, _ := newOrch(d)
+
+	trace := firePerceiveReturn(t, o, "P1", "", Surroundings{
+		Self: skyra.Coord{X: 5, Y: 3}, Agents: map[string]skyra.Coord{"michael": {X: 2, Y: 1}}})
+
+	if got := condOf(trace, StepMidlevelFrame); got != "framed" {
+		t.Fatalf("midlevel condition = %q, want framed (spatial framing)", got)
+	}
+	g := d.Groupings().Active()
+	if g == nil || g.ID() != "skyra:g:default" {
+		t.Fatalf("active grouping = %v, want the sharpened default", g)
+	}
+	if got := gistOf(g); got != "exploring the space with michael" {
+		t.Fatalf("default grouping gist = %q, want the sharpened framing", got)
 	}
 }

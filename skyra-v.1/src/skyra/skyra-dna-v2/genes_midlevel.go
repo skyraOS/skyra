@@ -15,8 +15,19 @@ import (
 // (cold-start create path). Sets root.Grouping so the membrane threads it to the
 // fan-out's predict workers. Reports "framed" / "empty".
 func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
+	gi := root.DNA().Groupings()
 	exchange := renderExchange(root.Entities)
-	if exchange == "" {
+	// the current surroundings — the active episode's traversed perceive records,
+	// normalized (freshest per entity). Lets midlevel frame purely SPATIAL episodes
+	// (the maze; sharpening the default grouping from sense data alone) — decision
+	// 4, perceive-build-uncertainties.md. Read-only assembly: no crossing here (the
+	// settle crosses what it grades; self's assembly crosses what it feeds).
+	locations := ""
+	if g := gi.Active(); g != nil {
+		locations = strings.Join(
+			renderLocations(FrameOf(g, settleFrameBudget, root.DNA().Activation(), root.DNA().Clock())), "\n")
+	}
+	if exchange == "" && locations == "" {
 		root.Condition = "empty"
 		return
 	}
@@ -25,8 +36,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "empty"
 		return
 	}
-	gi := root.DNA().Groupings()
-	resp, err := infer(frameOpSystem, framePresent(exchange, gi.OpenEpisodes()))
+	resp, err := infer(frameOpSystem, framePresent(exchange, locations, gi.OpenEpisodes()))
 	if err != nil {
 		root.Condition = "empty" // a failed call frames nothing this cycle
 		return
@@ -85,12 +95,22 @@ func consolidateInteraction(root *EphemeralRoot) {
 	root.Entities.LinkGrouping(entity, root.Grouping)
 }
 
-// framePresent renders the framing-op present: the exchange + the open episodes the op
-// decides edit-or-new against.
-func framePresent(exchange string, episodes []struct{ ID, Gist string }) string {
+// framePresent renders the framing-op present: the exchange + the current
+// surroundings (normalized perceived locations, when present) + the open episodes
+// the op decides edit-or-new against.
+func framePresent(exchange, locations string, episodes []struct{ ID, Gist string }) string {
 	var b strings.Builder
+	if locations != "" {
+		b.WriteString("Surroundings:\n")
+		b.WriteString(locations)
+		b.WriteString("\n\n")
+	}
 	b.WriteString("Exchange:\n")
-	b.WriteString(exchange)
+	if exchange == "" {
+		b.WriteString("(none — a sense-only moment)\n")
+	} else {
+		b.WriteString(exchange)
+	}
 	b.WriteString("\n\nOpen episodes:\n")
 	if len(episodes) == 0 {
 		b.WriteString("(none yet — this is the first exchange → open a <new> one)")
@@ -142,8 +162,9 @@ const coldStartSystem = "You are an evolving being reading a live exchange. In o
 // exchange CONTINUES an open episode (edit + sharpened gist) or STARTS a new one, leaning
 // toward continue (islands are the failure to avoid). The gist is truth.
 const frameOpSystem = "You are an evolving being organizing your own memory. You are given " +
-	"the recent EXCHANGE (what was just said) and a list of OPEN EPISODES you are already " +
-	"holding — each a short gist of an ongoing thread, with an id.\n\n" +
+	"the recent EXCHANGE (what was just said), your current SURROUNDINGS (perceived locations, " +
+	"when present), and a list of OPEN EPISODES you are already holding — each a short gist of " +
+	"an ongoing thread, with an id.\n\n" +
 	"Decide whether the exchange CONTINUES one of the open episodes or STARTS a new one.\n\n" +
 	"- If it continues an episode, reply:  <edit id=\"THE-ID\">sharpened gist</edit>\n" +
 	"    (rewrite that episode's gist to account for what just happened)\n" +

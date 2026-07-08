@@ -2,6 +2,7 @@ package dnav2
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"skyra-v1/src/debug"
@@ -129,8 +130,51 @@ func renderCellText(cell *dna.MemoryCell, rootGist string) string {
 		return fmt.Sprintf("action: %s %s %v", c.Primitive, c.EntityID, c.Content)
 	case dna.InteractionRecord:
 		return c.From + ": " + c.Utterance
+	case dna.PerceiveRecord:
+		// no body line — perceive records are NORMALIZED into the frame-top
+		// location block (renderLocations); also keeps them out of the settle's
+		// items (a location is display structure, not a coherence claim).
+		return ""
 	}
 	return ""
+}
+
+// renderLocations dedups the TRAVERSED perceive records to the freshest coord per
+// entity and renders the location block pinned at the top of the frame. Display-
+// only: it writes nothing — no A, no F, no economy effect. The traversal delivers
+// the nodes; normalization only decides what to DISPLAY out of them — a deliberate
+// cheat for frame structure, not a graph query and not grading
+// (perceive-build-uncertainties.md §4; the §2 shortcut — drops away when the
+// per-kind decay λ lands in activation.go).
+func renderLocations(res *traverse.Result) []string {
+	if res == nil {
+		return nil
+	}
+	freshest := map[string]dna.PerceiveRecord{}
+	for _, node := range res.Flatten() {
+		fn, ok := node.(*frameNode)
+		if !ok {
+			continue
+		}
+		pr, ok := fn.cell.Content().(dna.PerceiveRecord)
+		if !ok {
+			continue
+		}
+		if cur, seen := freshest[pr.EntityID]; !seen || pr.Timestamp > cur.Timestamp {
+			freshest[pr.EntityID] = pr
+		}
+	}
+	ids := make([]string, 0, len(freshest))
+	for id := range freshest {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	lines := make([]string, 0, len(ids))
+	for _, id := range ids {
+		pr := freshest[id]
+		lines = append(lines, fmt.Sprintf("location: %s at %d,%d", id, pr.Coord.X, pr.Coord.Y))
+	}
+	return lines
 }
 
 // FrameOf walks the grouping under a token budget and returns the traversal Result — the
@@ -185,7 +229,7 @@ func renderFrame(res *traverse.Result) (string, int) {
 		return "", 0
 	}
 	lit := res.Flatten()
-	var lines []string
+	lines := renderLocations(res) // the normalized location block, pinned at the top
 	for _, node := range lit {
 		if fn, ok := node.(*frameNode); ok {
 			if line := renderCellText(fn.cell, fn.rootGist); line != "" {
