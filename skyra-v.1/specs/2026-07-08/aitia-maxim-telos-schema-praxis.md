@@ -118,8 +118,8 @@ First-pass birth chain:
 
 ```text
 schema births aitia
-aitia births maxim
-aitia births telos
+aitia contains telos as final cause
+aitia births/activates maxim
 aitia failure may revise schema
 ```
 
@@ -143,7 +143,7 @@ schema:
   strength is derived from the explanatory success of its aitia set
 
 aitia:
-  exists because schema needs explanatory why branches
+  exists because schema needs structured causal explanation
   is supported by 1:* evidence
   strength = sum(evidence.weight)
 
@@ -153,9 +153,9 @@ maxim:
   strength = evidence support for this principle under those aitia
 
 telos:
-  exists because an aitia crossed a threshold
-  is supported by 1:* aitia and 1:* evidence
-  strength = evidence support for this satisfaction target under those aitia
+  exists as the final-cause component inside aitia
+  may also be exposed operationally beside maxim for schema/praxis
+  strength = evidence support for this final cause / telos
 ```
 
 Evidence weights should be bounded:
@@ -183,12 +183,38 @@ Provisional graph:
 ```text
 schema
   -> aitia
+      -> materialCause
+      -> formalCause
+      -> efficientCause
+      -> telos/finalCause
       -> evidence
       -> maxim
           -> evidence
-      -> telos
-          -> evidence
 ```
+
+Current held key-path shape:
+
+```text
+entities are keys to aitia records
+aitia records are keys to maxims
+maxims are keys to evidence
+evidence are keys to entities
+```
+
+Expanded:
+
+```text
+entity
+  -> aitiaRecord
+      -> maxim
+          -> evidence
+              -> entity
+```
+
+This is the currently held shape for organization and recall. It keeps the graph
+grounded: entities open relevant aitia; aitia open applicable maxims; maxims open
+their evidence; evidence points back to the entities/world facts that can grade
+or retrieve the structure.
 
 Feedback loop:
 
@@ -203,7 +229,7 @@ maxim defeated:
 
 telos defeated:
   aitia may still hold
-  reroll telos
+  revise final cause
 
 schema defeated:
   reframe
@@ -214,8 +240,8 @@ Short version:
 
 ```text
 Schema births Aitia.
-Aitia births Maxim and Telos.
-Evidence strengthens/weakens all three.
+Aitia contains Telos and births/activates Maxim.
+Evidence strengthens/weakens all structures.
 Aitia failure can revise Schema.
 Schema strength is derived from the explanatory success of its Aitia set.
 ```
@@ -321,60 +347,145 @@ gist/grouping.
 
 ---
 
-## Coupled Maxim / Aitia Tree
+## Aitia / Maxim Coupling
 
-Maxim and aitia should surround the gist together.
+Maxim and aitia remain coupled, but the coupling is no longer modeled as a loose
+outcome tree.
 
-One possible shape:
+Current held shape:
 
 ```text
-gist
-  -> aitiaOutcome z p=.60
-      -> maxim z1
-      -> maxim z2
-      -> maxim z3
-
-  -> aitiaOutcome a p=.30
-      -> maxim a1
-      -> maxim a2
-
-  -> aitiaOutcome b p=.10
-      -> maxim b1
+entity
+  -> aitiaRecord
+      -> maxim
+          -> evidence
+              -> entity
 ```
 
-Another possible shape:
+Aitia records are structured by the four causes:
 
 ```text
-gist
-  -> aitiaOutcomeField
-      -> aitiaOutcome z p=.60
-          -> maximField
-              -> maxim z1
-              -> maxim z2
-              -> maxim z3
+aitiaRecord
+  -> materialCause
+  -> formalCause
+  -> efficientCause
+  -> telos/finalCause
 ```
 
-This is effectively a coupled decision tree:
+Maxim derives action principles from active aitia records:
 
 ```text
-aitia predicts probable outcome field
-maxim derives candidate maxims conditioned on those outcomes
-praxis collapses/executes concrete affordance invocations
+aitiaRecord{active, strength >= threshold}
+  -> maxim
+      -> evidence
+          -> entity
 ```
 
 The central tuning idea:
 
 ```text
-schema/coherence grading turns the gist
-maxim/aitia prediction grading turns the skill/maxim field
+schema/coherence grading turns the active frame
+aitia grading turns explanatory fit
+maxim grading turns action-guiding principles
+praxis grading turns execution obedience
 ```
 
-If prediction grades keep holding, autonomous praxis workers can continue turning
-locally. If surprise appears, that becomes an interrupt: wake higher cognition,
-rerun schema/maxim/aitia, and reframe or retune.
+If grades keep holding, praxis can continue locally from schema-bound aitia and
+maxim. If surprise appears, that becomes an interrupt: rerun the layer whose
+edge alignment failed.
 
 This is why maxim is preferable to command. A maxim biases the model weights
 toward action without over-constraining the action.
+
+---
+
+## Maxim Decomposition
+
+Maxim should not remain an opaque slogan. Its working decomposition follows
+Kant's maxim structure:
+
+```text
+circumstance:
+  when or under what conditions will the agent act?
+
+action:
+  what exactly will the agent do or constrain itself to do?
+
+end / purpose:
+  why is the agent doing it; what subjective goal is being served?
+```
+
+Example:
+
+```text
+aitia:
+  material: user has low battery and route options
+  formal: safety / resource depletion problem
+  efficient: user risks running out of fuel or charge
+  telos/finalCause: user reaches safe stopping/refueling option
+
+maxim:
+  circumstance: user faces resource depletion risk
+  action: prioritize safe stopping/refueling over convenience
+  end: help the user avoid becoming stranded
+```
+
+This gives maxim its own internal grading surfaces:
+
+```text
+circumstance grade:
+  did the maxim apply in this situation?
+
+action grade:
+  did praxis follow the action constraint?
+
+end grade:
+  did the maxim's purpose remain appropriate?
+```
+
+Promising but not final bridge:
+
+```text
+aitia.telos/finalCause --alignment--> maxim.end
+```
+
+The bridge is alignment, not identity.
+
+Aristotle's final cause is treated here as the objective end of the
+situation/activity. Kant's end in a maxim is treated as the agent's subjective
+purpose in acting.
+
+Therefore:
+
+```text
+aitia.telos/finalCause:
+  objective final cause of the situation/activity
+
+maxim.end:
+  subjective purpose of Skyra's action
+```
+
+The maxim end should usually serve the aitia telos, but it does not need to copy
+it verbatim.
+
+Alignment grades:
+
+```text
+aligned:
+  maxim.end serves aitia.telos
+
+divergent:
+  maxim.end points away from aitia.telos
+
+underspecified:
+  maxim.end is too vague to evaluate
+
+overreaching:
+  maxim.end adds a purpose not supported by aitia evidence
+```
+
+This edge is useful because it catches narrative drift. A maxim can sound good
+while quietly introducing a purpose the active aitia does not support.
 
 ---
 
@@ -418,31 +529,31 @@ Target maxim worker:
 
 ```text
 Observe:
-  read active gist/process context
-  expose relevant proposal/result graph
+  read active aitia/schema context
+  expose relevant maxim/evidence graph
 
 Express:
   create or update maximProcess
-  optionally create intended next affordance invocation
+  create or update maxims under active aitia
   update board/scheduler state
 ```
 
-Maxim should be able to represent a long-running process:
+Maxim should be able to represent long-running principles that constrain multiple
+praxis events:
 
 ```text
-maximProcess
-  -> perceive invocation
-      -> perceive result
-  -> move invocation
-      -> move result
-  -> engage invocation
-      -> engage result
+aitiaRecord
+  -> maxim
+      -> evidence
+      -> praxis invocation
+          -> praxis result
 ```
 
 This allows:
 
 ```text
 step-level execution grading
+principle-level usefulness grading
 process-level intent grading
 ```
 
@@ -461,13 +572,14 @@ Target aitia worker:
 
 ```text
 Observe:
-  read active gist/process context
-  expose recent external results and prior aitia processes
+  read schema context and relevant entities
+  retrieve existing aitia by material/formal/efficient/telos keys
+  expose evidence linked to candidate aitia
 
 Express:
-  create or update aitiaProcess
-  attach observed external affordance invocation/result records
-  optionally predict next external/user/world affordance(s)
+  create or update aitiaProcess only through schema policy
+  attach observed external affordance invocation/result records as evidence
+  update four-cause fields when grading permits refinement
   update board/scheduler state
 ```
 
@@ -487,92 +599,229 @@ Then `aitia` can refine that process:
 
 ```text
 aitiaProcess{implicit}
-  -> aitiaProcess update / explicit prediction / candidate next affordances
+  -> evidence-linked four-cause refinement
+  -> active aitia candidate / revised aitia record
 ```
 
-Open question: whether refinement edits the same process node, appends a new
-process version, or creates child prediction branches.
+Open question: whether refinement edits the same aitia node, appends a new
+version, or creates child candidate branches after schema insufficiency.
 
 ---
 
-## Aitia Why Field
+## Aitia Four-Cause Field
 
 Aitia should not only predict the next utterance or next action.
 
-A better first layer is to infer possible **why** explanations:
+Aitia is a structured causal explanation. Its concrete definition is organized
+around four causes:
+
+```text
+material cause:
+  concrete facts, constraints, resources, and circumstances
+
+formal cause:
+  organizing pattern, structure, or kind of problem
+
+efficient cause:
+  process, beliefs, events, or actions that produced the present state
+
+final cause / telos:
+  desired end, purpose, or successful outcome
+```
+
+These four fields are also recall/query keys. They let schema retrieve and
+organize existing aitia by:
+
+```text
+material:
+  what concrete situation does this resemble?
+
+formal:
+  what kind of problem/pattern is this?
+
+efficient:
+  what produced this state?
+
+telos:
+  what end-state is this moving toward?
+```
+
+Example compressed aitia:
+
+```text
+aitia:
+  material: overwhelmed by equally urgent tasks today
+  formal: prioritization problem from perceived equal urgency
+  efficient: avoided important email fearing wrong wording
+  telos: communicate clearly and move things forward
+```
+
+Another example:
 
 ```text
 visible task/action:
   paint the room blue
 
-possible whys:
-  make the room feel calmer
-  prepare the house for sale
-  follow a designer plan
-  delight a child whose favorite color is blue
-  match a brand/color scheme
+aitiaCandidate:
+  material: room is being painted blue
+  formal: affective design problem
+  efficient: user selected calming color
+  telos: room feels calm and relaxing
 ```
 
-The task is the visible action. The why is the underlying reason or desired
-outcome that makes the action meaningful.
-
-Aitia should emit a field of why hypotheses, not one brittle answer:
+Competing aitia should be represented as competing four-cause records, not loose
+why strings:
 
 ```text
-aitiaWhyField:
-  why: make the room feel calm and relaxing
-  confidence: 0.45
-  evidence: "blue is often chosen for calm spaces"
-  riskIfWrong: "may over-optimize mood when the user only wanted a literal color"
+aitiaCandidate:
+  material: room is being painted blue
+  formal: home staging problem
+  efficient: user preparing room for sale
+  telos: room reads clean and buyer-ready
 
-  why: prepare the house for sale
-  confidence: 0.25
-  evidence: "painting rooms is common before sale/staging"
-  riskIfWrong: "may optimize for resale neutrality when the user wanted personality"
-
-  why: delight a child who likes blue
-  confidence: 0.15
-  evidence: "blue may reflect personal preference"
-  riskIfWrong: "may add playful/personal touches that are inappropriate"
+aitiaCandidate:
+  material: room is being painted blue
+  formal: child preference problem
+  efficient: child likes blue
+  telos: room feels personally delightful
 ```
 
-Low-confidence whys may remain as background context. Higher-confidence whys can
-condition maxims and future questions.
+Low-strength aitia may remain as background candidates. Higher-strength aitia can
+condition maxims and schema retrieval.
+
+The four-cause definition is concrete. The policy for when new aitia may be
+created is less settled and is captured in the next section.
 
 ---
 
-## Composable Why Stack
+## Aitia Creation Policy
 
-The why model should be composable, not flat.
+Status: **provisional**.
 
-Once a why hypothesis reaches a high enough confidence threshold, `aitia` may dig
-one layer deeper and create child why hypotheses under it:
+The model must not be allowed to create aitia unconstrained. If every plausible
+interpretation becomes a new branch, the graph will flood with narrative
+candidates.
+
+Default schema behavior:
 
 ```text
-why[0]:
-  visible task/action:
-    paint the room blue
+schema retrieves existing aitia
+schema organizes existing aitia by material/formal/efficient/telos keys
+schema binds the best existing structures to the present frame
+```
 
-why[1]:
-  user wants the room to feel calmer
+Schema should not create a new aitia branch merely because one can be imagined.
+New aitia creation should require graded insufficiency.
 
-why[2]:
-  user wants the house to feel emotionally safe
+Provisional hard gate:
 
-why[3]:
-  user is preparing for a stressful transition
+```text
+Aitia creation requires a schema insufficiency record.
+```
+
+Possible insufficiency triggers:
+
+```text
+noCoverage:
+  no existing aitia reaches activation threshold for the evidence
+
+contradiction:
+  active aitia is defeated by incoming evidence
+
+repeatedDerivedFailure:
+  maxims/telos repeatedly fail under an otherwise active aitia,
+  suggesting the aitia may be underspecified or structurally wrong
+```
+
+Insufficiency record shape:
+
+```text
+schema
+  -> insufficiencyRecord
+      -> failedAitiaIDs
+      -> failedMaximIDs
+      -> failedTelosIDs
+      -> triggeringEvidenceIDs
+      -> reason: noCoverage | contradiction | repeatedDerivedFailure
+  -> newAitiaCandidate
+```
+
+Policy:
+
+```text
+schema default:
+  retrieve and organize existing structures
+
+schema creation path:
+  record insufficiency
+  create new aitia candidate
+  bind candidate to the triggering evidence
+  require later grading before it becomes active/stable
+```
+
+Failure routing nuance:
+
+```text
+aitia defeated:
+  existing explanation failed
+  -> schema may retrieve alternate aitia or create candidate after insufficiency
+
+maxim defeated:
+  aitia may still hold
+  -> reroll maxim first, do not create aitia yet
+
+telos defeated:
+  aitia may still hold
+  -> revise final-cause field first, do not create aitia yet
+
+all candidate aitia below threshold:
+  schema may create new aitia candidate with insufficiency record
+```
+
+This keeps aitia creation auditable. The system can explain not only what new
+explanation was created, but why existing structures were insufficient.
+
+---
+
+## Composable Aitia Stack
+
+The aitia model should be composable, not flat.
+
+Once an aitia record reaches a high enough confidence threshold, `aitia` may dig
+one layer deeper by creating or retrieving child aitia candidates under it. Each
+layer is still a four-cause record.
+
+Example stack:
+
+```text
+aitia[0]:
+  material: room is being painted blue
+  formal: color-change task
+  efficient: user requested blue paint
+  telos: room becomes blue
+
+aitia[1]:
+  material: room is being painted blue
+  formal: affective design problem
+  efficient: user wants calmer space
+  telos: room feels calm and relaxing
+
+aitia[2]:
+  material: home environment feels unsettled
+  formal: emotional safety problem
+  efficient: user is changing room atmosphere
+  telos: house feels emotionally safe
 ```
 
 This creates a reversible belief stack/tree:
 
 ```text
 aitiaProcess
-  -> whyHypothesis{level:0, active}
-      -> whyHypothesis{level:1, active}
-          -> whyHypothesis{level:2, candidate}
-          -> whyHypothesis{level:2, candidate}
-      -> whyHypothesis{level:1, candidate}
-      -> whyHypothesis{level:1, candidate}
+  -> aitiaRecord{level:0, active}
+      -> aitiaRecord{level:1, active}
+          -> aitiaRecord{level:2, candidate}
+          -> aitiaRecord{level:2, candidate}
+      -> aitiaRecord{level:1, candidate}
 ```
 
 The system should not need to throw away the entire belief model when a deep
@@ -580,9 +829,8 @@ layer fails. A contradiction can defeat the deepest active layer and slide
 control back up to the nearest still-supported parent:
 
 ```text
-why[3] defeated -> return to why[2]
-why[2] defeated -> return to why[1]
-why[1] defeated -> return to why[0]
+aitia[2] defeated -> return to aitia[1]
+aitia[1] defeated -> return to aitia[0]
 ```
 
 This gives `aitia` a stack discipline:
@@ -598,15 +846,15 @@ confidence contradicted:
   defeat current layer and return to parent
 ```
 
-The stack can also branch. More than one why can stay alive as a soft candidate,
-but only sufficiently confident layers should become strong constraints for
-`maxim` and `praxis`.
+The stack can also branch. More than one aitia can stay alive as a soft
+candidate, but only sufficiently confident layers should become strong
+constraints for `maxim` and `praxis`.
 
 ---
 
 ## Evidence Records
 
-Why confidence should be influenced by evidence from the observable world.
+Aitia strength should be influenced by evidence from the observable world.
 
 Evidence is not only what the user says. It includes:
 
@@ -617,33 +865,33 @@ user actions:
 world results:
   perceive results, tool results, environment changes, external state
 
-praxis actions:
+praxis interventions:
   what Skyra actually did, asked, omitted, delayed, or emphasized
 ```
 
-Skyra's own praxis actions matter because they create evidence. If Skyra asks a
-clarifying question, the user response is evidence. If Skyra chooses a cautious
-action and the user accepts it, that supports a safety-oriented why. If the user
-rejects it, that may defeat or weaken the layer.
+Praxis outputs are intervention records. They are not direct evidence that an
+aitia is true. Responses to praxis interventions can become evidence for or
+against aitia. Praxis output itself can grade praxis/maxim obedience.
 
 Target graph shape:
 
 ```text
-aitiaProcess
-  -> whyHypothesis
-      -> evidenceRecord{source:user}
-      -> evidenceRecord{source:world}
-      -> evidenceRecord{source:praxis}
-      -> telosState
+aitiaRecord
+  -> materialCause
+  -> formalCause
+  -> efficientCause
+  -> telos/finalCause
+  -> evidenceRecord
 ```
 
-Or, when preserving the affordance invocation/result grammar:
+Held recall shape:
 
 ```text
-whyHypothesis
-  -> evidenceRecord
-      -> affordance result
-          -> entities/spaces
+entity
+  -> aitiaRecord
+      -> maxim
+          -> evidenceRecord
+              -> entity
 ```
 
 Evidence metadata should include at least:
@@ -654,16 +902,17 @@ polarity: supports | weakens | defeats | clarifies
 weight
 observedAt
 linked affordance/result ids
+linked entity ids
 note
 ```
 
-The why confidence should be computed from its evidence, not stored as an
+Aitia confidence should be computed from its evidence, not stored as an
 unexplained magic number.
 
 First-pass rule:
 
 ```text
-why.confidence = sum(evidence.weight)
+aitia.confidence = sum(evidence.weight)
 ```
 
 Where evidence weights may be positive or negative:
@@ -679,65 +928,71 @@ defeats:
   strong negative weight or direct defeat marker
 
 clarifies:
-  may move weight from one why layer/branch to another
+  may move weight from one aitia branch to another
 ```
 
 The exact normalization can be designed later. The important invariant is:
 
 ```text
-given a why,
-the attached evidence must account for the why's confidence
+given an aitia,
+the attached evidence must account for the aitia's confidence
 ```
 
 That makes confidence inspectable. A grader or debugger can ask why a belief is
 active and walk the evidence records that sum into it.
 
 This makes belief maintenance observable. The system can explain not only which
-why is active, but what observable evidence pushed it up, weakened it, or caused
-it to be defeated.
+aitia is active, but what observable evidence pushed it up, weakened it, or
+caused it to be defeated.
 
 ---
 
-## Why-Triggered Maxim Pass
+## Aitia-Triggered Maxim Pass
 
 Maxim should not run only because a wave reached it. A sufficiently confident
-why should be able to activate a maxim pass.
+aitia should be able to activate a maxim pass.
 
 Activation rule:
 
 ```text
-if why.confidence >= maximActivationThreshold:
-  schedule maxim pass for that why
+if aitia.confidence >= maximActivationThreshold:
+  schedule maxim pass for that aitia
 ```
 
-The maxim pass receives the why and the evidence that supports it:
+The maxim pass receives the aitia and the evidence that supports it:
 
 ```text
 maximInput:
   gistID
-  whyHypothesis
+  aitiaRecord
+  materialCause
+  formalCause
+  efficientCause
+  telos/finalCause
   evidenceRecords
   confidence
-  telos candidates
 ```
 
 This is the key separation:
 
 ```text
 aitia:
-  infer the why and maintain its evidence/confidence
+  maintain structured causal explanation and evidence/confidence
 
 maxim:
-  given that why and evidence, emit maxims for Skyra
+  given that aitia and evidence, emit maxims for Skyra
 ```
 
-Maxim should not re-infer the user's why. It may challenge, qualify, or request
-more evidence, but its primary job is to turn the active belief into maxim-side
-constraints:
+Maxim should not re-infer the user's cause/explanation. It may challenge,
+qualify, or request more evidence, but its primary job is to turn the active
+aitia into maxim-side constraints:
 
 ```text
-why:
-  user is trying to avoid being stranded
+aitia:
+  material: user has low battery and route options
+  formal: safety / resource depletion problem
+  efficient: user risks running out of fuel or charge
+  telos: user reaches safe stopping/refueling option
 
 evidence:
   user mentions low battery
@@ -751,15 +1006,15 @@ maxims:
   ask only clarifying questions that affect safety
 ```
 
-Maxims are scoped to the aitia/why that produced them. If the why later drops
-below the threshold or is defeated, the maxims derived from it should be marked
-stale or retired. They should not automatically carry over to another aitia.
+Maxims are scoped to the aitia that produced them. If the aitia later drops below
+the threshold or is defeated, the maxims derived from it should be marked stale
+or retired. They should not automatically carry over to another aitia.
 
 ---
 
 ## Telos
 
-`Telos` is the purpose/end-state implied by an active aitia.
+`Telos` is the final-cause component of an active aitia.
 
 Definitions:
 
@@ -770,7 +1025,7 @@ aitia:
 maxim:
   what principle should constrain action
 
-telos:
+telos / final cause:
   what state would satisfy the why
 ```
 
@@ -787,17 +1042,31 @@ telos:
   user reaches a safe stopping/refueling option before running out of fuel
 ```
 
-Telos is not the cause. It is the satisfaction target that follows from the
-cause. Maxim says how Skyra should act; telos says what state Skyra should move
-toward.
+Telos is not the whole cause. It is the final-cause / telos field
+inside aitia. Maxim says how Skyra should act; telos says what state Skyra
+should move toward.
 
 Graph shape:
 
 ```text
 aitia
-  -> evidence
+  -> materialCause
+  -> formalCause
+  -> efficientCause
+  -> telos/finalCause
   -> maxim
-  -> telos
+```
+
+Structurally, aitia owns telos. Operationally, schema and praxis may use telos
+beside maxim:
+
+```text
+structural:
+  aitia contains telos
+
+operational:
+  schema binds aitia + maxim + telos into the present frame
+  praxis acts under maxim toward telos
 ```
 
 Stable stack:
@@ -848,11 +1117,11 @@ Telos creates another grading surface:
 
 ```text
 telos grade:
-  did the system move closer to the satisfaction target?
+  did the system move closer to the final cause/telos?
 
 telos defeat:
   the aitia may still hold, and the maxim may still be good,
-  but the selected satisfaction target was wrong or incomplete
+  but the selected final cause/telos was wrong or incomplete
 ```
 
 Failure routing:
@@ -867,11 +1136,11 @@ maxim defeated, telos holds:
 
 telos defeated, maxim holds:
   same principle, wrong target
-  -> reroll telos
+  -> revise final cause
 
 schema defeated:
   present frame/gist does not bind the triangle correctly
-  -> reroll/reselect gist/frame
+  -> revise/reselect schema/frame
 ```
 
 ---
@@ -888,7 +1157,7 @@ Plain-language translation:
 
 ```text
 cause / why
-  -> action-guiding principle + satisfaction target
+  -> action-guiding principle + final cause/telos
       -> present situation / praxis frame
           -> future action
 ```
@@ -908,7 +1177,7 @@ maxim:
   enough principle-selection to constrain behavior
 
 telos:
-  enough satisfaction-target selection to know what state is being pursued
+  enough final-cause selection to know what state is being pursued
 
 schema:
   enough present-state assembly to know what is actionable now
@@ -920,7 +1189,7 @@ praxis:
 This balanced condition is the target "flow" state:
 
 ```text
-stable why
+stable aitia
   -> active maxims + active telos
       -> clear present frame
           -> smooth praxis execution
@@ -939,7 +1208,7 @@ maxim:
   use already-active or strongly reinforced maxims
 
 telos:
-  use already-active or strongly reinforced satisfaction targets
+  use already-active or strongly reinforced final causes/teloi
 
 schema:
   high priority; assemble immediate state
@@ -952,13 +1221,13 @@ Low-stress behavior:
 
 ```text
 aitia:
-  more room to deepen why stacks and compare explanations
+  more room to deepen aitia stacks and compare explanations
 
 maxim:
   more room to retrieve, revise, and reinforce principles
 
 telos:
-  more room to refine satisfaction targets
+  more room to refine final causes/teloi
 
 schema:
   lower urgency
@@ -997,7 +1266,7 @@ a mood label. It becomes a scheduler policy that changes how much traversal
 amplitude and worker priority each layer receives.
 
 This also guards against narrative overreach. Under stress, aitia should not
-wander into deep speculative why stacks. It should carry the minimum belief
+wander into deep speculative aitia stacks. It should carry the minimum belief
 needed for safe action, let maxim use reinforced principles, and let schema and
 praxis dominate.
 
@@ -1016,85 +1285,57 @@ active-state snapshot:
 
 ---
 
-## Telos Field
+## Final Cause / Telos Field
 
-The second layer is to turn sufficiently plausible whys into present, testable
-telos states.
+Telos is no longer modeled as a separate telos record by default. It is
+the final-cause field inside an aitia record.
 
 Pipeline:
 
 ```text
 visible task/action
-  -> why hypotheses
-      -> telos candidates
+  -> aitia candidates
+      -> finalCause/telos field
           -> maxims / praxis policy / grading signals
 ```
 
-This avoids the flatness of asking for present-tense/falsifiable states too early.
-The why layer creates semantic richness; the telos layer grounds it.
-
-Example:
+Examples:
 
 ```text
-whyHypothesis:
-  "The user wants the room to feel calmer."
-  confidence: 0.45
-
-telosState:
-  present: "The room feels calm and relaxing to the user."
-  falsifiableBy:
-    - user says it feels relaxing
-    - user accepts the shade/finish
-    - user does not complain that it feels too harsh or wrong
-  exitCondition:
-    user confirms the feeling or accepts the finished room
+aitiaCandidate:
+  material: room is being painted blue
+  formal: affective design problem
+  efficient: user selected calming color
+  telos: room feels calm and relaxing
 ```
-
-Another:
 
 ```text
-whyHypothesis:
-  "The user is preparing the house for sale."
-  confidence: 0.25
-
-telosState:
-  present: "The room reads clean, neutral, and buyer-ready."
-  falsifiableBy:
-    - finish is even
-    - shade is broadly appealing
-    - user confirms resale/staging intent
-  exitCondition:
-    user accepts the room as sale-ready
+aitiaCandidate:
+  material: room is being painted blue
+  formal: home staging problem
+  efficient: user preparing room for sale
+  telos: room reads clean and buyer-ready
 ```
-
-And:
 
 ```text
-whyHypothesis:
-  "The user is painting the room blue because a child loves blue."
-  confidence: 0.15
-
-telosState:
-  present: "The room delights the child while satisfying the requested blue paint."
-  falsifiableBy:
-    - child/user expresses delight
-    - user confirms the child-centered intent
-    - playful additions are accepted rather than rejected
-  exitCondition:
-    user/child accepts the room as personally meaningful
+aitiaCandidate:
+  material: room is being painted blue
+  formal: child preference problem
+  efficient: child likes blue
+  telos: room feels personally delightful
 ```
 
-Only whys above a confidence threshold should strongly shape action. The threshold
-is open, but the rule is:
+Only sufficiently supported aitia should strongly shape action. The threshold is
+open, but the rule is:
 
 ```text
-carry many whys softly
-act strongly only on whys with enough confidence or confirmation
-ask clarifying questions when the wrong why would materially change the action
+carry many aitia softly
+act strongly only on aitia with enough confidence or confirmation
+ask clarifying questions when the wrong aitia would materially change the action
 ```
 
-This makes `aitia` a model of hidden intention and satisfaction conditions, not
-just a next-message predictor.
+This makes `aitia` a model of structured causal explanation and final-cause
+conditions, not just a next-message predictor.
 
 ---
 
@@ -1113,23 +1354,23 @@ The stack includes:
 
 ```text
 aitia:
-  active why/belief branch is still supported enough to use
+  active aitia branch is still supported enough to use
 
 maxim:
   active maxims derived from that belief are still valid enough to constrain action
 
 telos:
-  active satisfaction targets derived from that belief are still valid enough to pursue
+  active final causes/teloi derived from that belief are still valid enough to pursue
 
 schema:
-  active gist/frame still fits the present situation
+  active schema/frame still fits the present situation
 ```
 
 If a grade fails, the scheduler should route the reroll to the layer that broke:
 
 ```text
 aitia failure:
-  the why/belief branch no longer explains evidence
+  the aitia branch no longer explains evidence
   -> reroll/slide aitia
   -> retire or stale maxims/teloi derived from the defeated aitia
   -> possibly trigger schema if defeat suggests frame failure
@@ -1140,13 +1381,13 @@ maxim failure:
   -> do not discard aitia just because its maxims failed
 
 telos failure:
-  the aitia still holds, but the satisfaction target failed
-  -> reroll telos from the still-active aitia and evidence
+  the aitia still holds, but the final cause/telos failed
+  -> revise final cause from the still-active aitia and evidence
   -> do not discard aitia just because its telos failed
 
 schema failure:
-  the selected gist/frame no longer fits the situation
-  -> reroll/reselect gist
+  the selected schema/frame no longer fits the situation
+  -> revise/reselect schema
   -> then rebuild or reattach aitia/maxim/telos under the new frame
 
 praxis execution failure:
@@ -1216,7 +1457,7 @@ Schema then decides:
 ```text
 keep gist, let aitia slide/reselect
 keep gist, reroll maxim
-keep gist, reroll telos
+keep gist, revise final cause
 keep gist, ask clarification
 split gist
 replace gist
@@ -1250,7 +1491,7 @@ aitia -> maxim
 aitia -> telos
 maxim -> praxis action
 telos -> praxis action
-schema -> gist/frame
+schema -> active frame
 ```
 
 The incoming impulse is the primary evidence event. In general, Skyra's own praxis
@@ -1365,7 +1606,7 @@ This preserves the boundary:
 ```text
 aitia interprets why
 maxim derives action principles
-telos derives satisfaction targets
+telos exposes final cause/telos
 schema frames the present
 praxis executes
 ```
@@ -1389,6 +1630,18 @@ aitia step grade:
 maxim step grade:
   did the active maxim remain useful under incoming evidence?
 
+maxim circumstance grade:
+  did the maxim apply under the current conditions?
+
+maxim action grade:
+  did praxis follow the maxim's action constraint?
+
+maxim end grade:
+  did the maxim's subjective purpose remain appropriate?
+
+aitia/maxim end alignment grade:
+  did maxim.end serve aitia.telos/finalCause?
+
 telos step grade:
   did the active telos remain correct under incoming evidence?
 
@@ -1401,8 +1654,8 @@ process grade:
 coherence/settle grade:
   does the active gist explain the active state?
 
-why stack grade:
-  did the latest evidence support, weaken, defeat, or deepen the active why?
+aitia stack grade:
+  did the latest evidence support, weaken, defeat, or deepen the active aitia?
 
 praxis gate grade:
   is the active aitia/maxim/telos/schema stack stable enough for praxis to fire?
@@ -1415,24 +1668,26 @@ not an ad hoc flag scattered across `Prediction`, `ActionRecord`, and route stat
 
 ## Open Questions
 
-1. What exact `AffordanceKind` names do maxim/aitia process records use?
-2. Does a maxim/aitia process record use `KindPrediction`, a new `proposal` kind,
-   or raw role-specific kinds like `maxim:process` and `aitia:process`?
-3. How does an implicit aitia process become explicit?
-4. Do prediction distributions remain as children of an aitia process, or do they
-   become candidate affordance invocation records?
-5. Does praxis create invocation records directly under `maximProcess`, or under a
-   child "praxis collapse" record?
-6. What replaces `KindAction` in `maxim:grade`?
-7. What fields define process completion, contradiction, abandonment, and
+1. What exact `AffordanceKind` names do schema, aitia, maxim, and praxis records
+   use?
+2. Are `materialCause`, `formalCause`, `efficientCause`, and `telos/finalCause`
+   child records, typed content fields, or both?
+3. How does an implicit aitia process become an active structured aitia record?
+4. How does final-cause revision differ from new aitia branch creation?
+5. Are `maxim.circumstance`, `maxim.action`, and `maxim.end` child records,
+   typed content fields, or both?
+6. Is the `aitia.telos/finalCause -> maxim.end` alignment bridge durable edge
+   metadata, a grading record, or both?
+7. Does praxis create invocation records directly under `maximProcess`, or under a
+   child `praxis collapse` record?
+8. What replaces `KindAction` in `maxim:grade`?
+9. What fields define process completion, contradiction, abandonment, and
    continuation?
-8. Are `evidenceRecord` and `telosState` separate affordance kinds, or
-   typed content on generic result/proposal records?
-9. What confidence threshold deepens a why layer, and what threshold defeats it?
-10. Is `maximActivationThreshold` the same as the why deepening threshold, or a
+10. How should evidence weights be normalized when multiple aitia branches share or
+   compete for the same evidence?
+11. What confidence threshold deepens an aitia layer, and what threshold defeats it?
+12. Is `maximActivationThreshold` the same as the aitia deepening threshold, or a
     separate threshold?
-11. How should evidence weights be normalized when multiple branches share or
-    compete for the same evidence?
-12. What exact grade states count as stable enough for praxis fire?
-13. What reorganization affordances may praxis emit while aitia/maxim/schema are
+13. What exact grade states count as stable enough for praxis fire?
+14. What reorganization affordances may praxis emit while aitia/maxim/schema are
     rerolling?
