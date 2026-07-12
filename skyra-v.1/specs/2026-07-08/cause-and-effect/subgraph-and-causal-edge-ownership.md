@@ -68,6 +68,62 @@ When B later activates (re-anchoring), B is the material/formal cause and the
 roles around it reassign through B's own maps. Cause names are read off the
 active node's edges, never written into a node's kind.
 
+## The Evidence Collapse (decided 2026-07-12)
+
+"Skyra said x" is a cause. Evidence is not a third contract — **an evidence
+node is a CausalNode at a lower level of abstraction.** When an event is
+observed, it is decomposed into a knowledge subgraph and born as an
+observation-level CausalNode whose maps the ingest path STAMPS at birth:
+
+```text
+material[]   -> the decomposed observation's nodes   (knowledge subgraph, V)
+formal[]     -> the decomposed observation's edges   (knowledge subgraph, E)
+efficient[]  -> everything alive in the praxis frame when it was emitted
+final[]      -> the action that was emitted
+```
+
+The final form, said for sure:
+
+```text
+knowledge graph -> semantic entity + semantic edge
+causal graph    -> causal node    + causal edge
+```
+
+Two graphs, each one node type + one edge type — four structural types in the
+entire cognition.
+
+**The provenance stamp is mandatory content, never type.** Causal nodes carry
+observed-vs-COMPOSED (mirroring observed-vs-ASSERTED on semantic entities).
+Same behavior, same node type, distinguished by stamp. Without it grading
+goes circular: a belief graded against another belief must be visible as
+belief-on-belief; a belief graded against an observation-born node is what
+"evidence" MEANS. Evidence is a perspective — a CausalNode is evidence with
+respect to the edge it grades — the same relational move as invariant 20.
+(The two stamps might be subtly different across the graphs; that parallel is
+grounds to revisit the asserted side of the knowledge graph later — ledger
+item 10.)
+
+**Two fill mechanisms, one structure.** Observation-born nodes get their maps
+stamped at birth by the ingest path — recorded, not inferred. Composed nodes
+get theirs via probe → compose+grade. Workers are never sent to re-derive
+what ingest already stamped.
+
+**The identity this closes:** observation-born CausalNodes become PARENTS of
+midlevel's present — "michael said 'can you help'" (observation-level) is
+material for "michael wants help with the skyra project" (interpretation-
+level). So the inherited edge to an observation-born parent IS the evidence
+relationship: grading-against-evidence and grading-the-inherited-edges are
+one mechanism. The reverse index pays double — one causalNodes[] lookup
+serves "what have I seen" and "what have I concluded."
+
+**Final-cause stamping is decided only for the self.** The final cause of
+skyra's own action is *the final cause of everything that is efficient within
+the frame* — the action inherits its purpose from what was live in the frame
+that produced it (safe: we design from skyra's perspective). Stamping final
+on an observation as a direct result of skyra's emission is dangerous and
+stays OPEN (ledger item 11), as does decomposition timing/depth for incoming
+nodes (ledger item 12).
+
 ## Two Relationship Layers
 
 One Aitia set contains two different relationship layers.
@@ -617,3 +673,13 @@ which relationships a given observe strategy follows.
     perspectives read from the ACTIVE CausalNode's edges, never properties
     written into a node's kind. Re-anchoring reassigns roles by changing
     which node is active.
+21. Evidence is a CausalNode at a lower level of abstraction — observed
+    events are decomposed into knowledge subgraphs and born as
+    observation-level CausalNodes. "Evidence" is a perspective: a CausalNode
+    is evidence with respect to the edge it grades. The provenance stamp
+    (observed vs composed) is mandatory content, never type.
+22. Two fill mechanisms, one structure: observation-born maps are stamped at
+    birth by ingest (recorded, not inferred); composed maps come from
+    probe → compose+grade. The final cause of skyra's own action is the
+    final cause of everything efficient within the frame; final-stamping on
+    incoming/other-agent events is open (ledger 11).

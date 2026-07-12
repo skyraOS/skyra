@@ -106,6 +106,18 @@ supersede the accepted four-node Schema model.
   edges are never graded — grade relationships, never internals. Full
   vocabulary table in subgraph-and-causal-edge-ownership.md. ("Compound" in
   older docs = CausalNode; code renamed 2026-07-12.)
+- **The Evidence collapse — two graphs, four types.** Evidence is not a third
+  contract: an evidence node is a CausalNode at a lower level of abstraction
+  (observed events decompose into knowledge subgraphs and are born as
+  observation-level CausalNodes with maps STAMPED at birth: material/formal =
+  the decomposition, efficient = what was alive in the frame, final = the
+  emitted action). Final form: knowledge graph = semantic entity + semantic
+  edge; causal graph = causal node + causal edge. Provenance stamps are
+  mandatory content, never type (observed/composed ∥ observed/asserted).
+  The inherited edge to an observation-born parent IS the evidence
+  relationship. Self-action final = the final of everything efficient in the
+  frame; other-agent final stamping + decomposition timing open (ledger
+  10–12).
 - **One worker mechanism: probe → compose+grade.** Step 1: emit a probe
   subgraph → reverse-index lookup → candidates with hit counts → traversal
   amplitude distributed proportionally → traverse candidates' evidence.

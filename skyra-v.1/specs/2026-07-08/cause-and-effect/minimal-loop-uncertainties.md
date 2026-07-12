@@ -195,6 +195,55 @@ with their ids; says nothing about preferring them.
 
 ---
 
+## 10. The asserted side of the knowledge graph (revisit note — don't lose it)
+
+**Blocks:** nothing now.
+
+The provenance stamps run in parallel across both graphs — observed vs
+ASSERTED on semantic entities, observed vs COMPOSED on causal nodes — and the
+same-shaped event exists at both levels. They might be subtly different, and
+that parallel is grounds to open up the asserted behavior of the
+knowledge-graph side (Terms) and take a closer look. Later, not now; recorded
+so the thread isn't lost (2026-07-12).
+
+**Decision:** _deferred (revisit after the evidence collapse beds in)_
+
+---
+
+## 11. Final-cause stamping on observed events
+
+**Blocks:** the observation-born CausalNode's `final[]` fill rule (Phase 2's
+ingest stamping).
+
+Stamping a final cause on an observation *as a direct result of skyra's own
+emission* is dangerous — it asserts causal closure between skyra's action and
+the world's response, and needs careful planning. Left OPEN for incoming /
+other-agent events.
+
+**Decided half (2026-07-12):** skyra's OWN actions — designing from skyra's
+perspective, the call is safe: the final cause of skyra's own action is **the
+final cause of everything that is efficient within the frame** (the action
+inherits its purpose from what was live in the frame that produced it).
+
+**Decision:** _self half decided; other/incoming half open_
+
+---
+
+## 12. Causal distinction on incoming nodes — decomposition timing and depth
+
+**Blocks:** observation-born CausalNode minting for utterances (Phase 2's
+ingest path).
+
+Perceive returns decompose into knowledge subgraphs by code (already
+structured). Utterances need a parse — own small inference, or deferred until
+the node is first probed? And how much causal structure an incoming node gets
+stamped at birth ties back to items 10 and 11: there's a through line within
+the causal abstraction stack somewhere, and we shouldn't be hasty to draw it.
+
+**Decision:** _open_
+
+---
+
 ## Not ledger items
 
 - **Truncation-vs-abstraction under budget reduction** — empirical, already in
