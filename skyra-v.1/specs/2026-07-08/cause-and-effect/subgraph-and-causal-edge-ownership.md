@@ -206,6 +206,7 @@ grades relationship occurrences:
 
 ```text
 Evidence --grades--> StructuralEdge
+Evidence --grades--> InheritedEdge
 Evidence --grades--> EfficientCauseEdge
 Evidence --grades--> FinalCauseEdge
 ```
@@ -220,15 +221,51 @@ Praxis may resolve the active set to display:
 - supporting, opposing, and unresolved Evidence per edge;
 - signed Identity/Familiarity state per contextual edge.
 
+## One Worker Mechanism
+
+Every compound worker runs the same two-step loop; the only parameter is
+which edge receives the grades.
+
+**Step 1 — probe.** The worker emits a probe subgraph. The probe drives a
+reverse-index lookup over the relevant maps (midlevel: material/formal
+summaries; efficient/final workers: the inherited nodes' causal maps).
+Candidates come back with hit counts, and traversal amplitude distributes
+over them proportionally — a summary with more occurrences gets more of the
+wave (invariant 9's first half; the walk still verifies exact directed
+structure before a candidate's evidence counts — the second half). Under that
+amplitude the worker traverses the candidates' evidence.
+
+**Step 2 — compose + grade.** With the retrieved summaries and their evidence
+in its present, the worker composes the new summary — citing candidates by
+stable-id, which lands them in `inherited` — and grades: a base grade for each
+evidence relationship, seeded on the RECEIVING edge so a born edge never
+deadlocks at zero (the CrossBirth pattern).
+
+The receiving edge is the parameter:
+
+```text
+midlevel (present querier)
+  -> grades land on the inherited edges
+     (new-summary ↔ inherited parents)
+
+efficient worker / final worker
+  -> grades land on the causal edges
+     (cause-summary ↔ present-summary)
+```
+
+Candidate sourcing is GRAPH-owned: the reverse index over inherited and
+causal maps supersedes the earlier "lineage history on the Slice" candidate
+source. The graph owns candidacy; the Slice keeps only the active set.
+
 ## Query And Activation
 
 ```text
 present worker
-  -> emit and persist G_present
+  -> probe, compose, persist G_present + inherited edges
 
 efficient worker ─┐
-                  ├-> emit G_prior/G_future and fresh causal edges
-final worker ─────┘
+                  ├-> probe over inherited causal maps,
+final worker ─────┘   compose G_prior/G_future + fresh causal edges
 
 all three valid
   -> atomically persist and activate AitiaSet
@@ -303,16 +340,29 @@ PresentSummary
 
 **Formal** contains the compound's own contextual structural edge cells.
 
-**Inherited** contains the compounds this compound was COMPOSED FROM.
-Birth-fixed, immutable, intrinsic: when a new cause is built from two prior
-causes, that provenance is part of what the new compound IS, not part of any
-explanatory context — a different relationship than Efficient or Final. It is
-the durable home of composition (invariant 14). No new parser syntax is
-needed: at Persist time, any resolved member that is a prior summary
-(compound-typed) lands in the inherited port automatically — composition is
-already expressed through stable-id referents; the port makes it traversable
-as its own relationship instead of burying it in undifferentiated membership.
-Storing it cannot leak because it never changes after birth.
+**Inherited** contains the compounds this compound was COMPOSED FROM. The
+inherited relationship is an EDGE occurrence (new-summary → parent-summary),
+fresh at composition, and it is where midlevel's evidence sits: graded with
+respect to the NEW summary. Evidence is not a cause node and never lives on
+a cause node — it lives on the relationship between the new base node and its
+inherited parents. The edge-cell split applies: **topology is birth-fixed**
+(these endpoints never change — this summary was composed from that one,
+forever), **grades are live** (evidence against the new summary accrues over
+time). When a new cause is built from two prior causes, that provenance is
+part of what the new compound IS, not part of any explanatory context — a
+different relationship than Efficient or Final, and the durable home of
+composition (invariant 14). No new parser syntax is needed: at Persist time,
+any resolved member that is a prior summary (compound-typed) gets a fresh
+inherited edge automatically — composition is already expressed through
+stable-id referents.
+
+Composition also inherits the parents' CAUSAL NODES: the efficient and final
+cause summaries reachable from the inherited parents seed the new node's
+candidate maps. **Node-only inheritance** — the nodes carry over as
+candidates; the parents' edge occurrences never do. A regrade against the new
+summary mints a NEW efficient/final edge owned by the new context, with its
+own evidence and signed-store history. Edge occurrences are never shared
+across contexts (invariant 6 through composition).
 
 **Efficient / Final** accumulate contextual causal edge occurrences — stored
 children, keyed by edge ID, each stamped with its owning Aitia set. They are
@@ -484,12 +534,19 @@ which relationships a given observe strategy follows.
 11. Traversable references are exposed through typed child ports.
 12. Edge endpoint fields and endpoint child references must agree.
 13. Untyped flattened children are not authoritative when direction matters.
-14. The `inherited` port is birth-fixed composition provenance — populated at
-    Persist from compound-typed members, immutable after, and a different
-    relationship than Efficient or Final.
+14. The `inherited` port holds composition-provenance EDGE occurrences —
+    minted at Persist from compound-typed members, a different relationship
+    than Efficient or Final. Topology is birth-fixed; grades are live:
+    midlevel's evidence sits here, graded with respect to the new summary.
 15. Efficient/Final ports accumulate edge occurrences (keyed by ID, stamped
     with their owning set); they never collapse into a singular cause of the
     compound. Context filtering is an observe-strategy choice, not storage.
 16. Typed ports are substrate reform (`MemoryCell`), not kernel reform: Observe
     is the strategy selector, and the kernel traverses whatever surface it
     returns. Port names never cross the kernel boundary.
+17. Causal inheritance is NODE-only: the parents' efficient/final cause nodes
+    seed the new compound's candidate maps; a regrade mints a NEW edge owned
+    by the new context. Edge occurrences are never shared across contexts.
+18. Every compound worker runs probe → compose+grade. Candidate sourcing is
+    graph-owned (reverse index over inherited/causal maps); the Slice keeps
+    only the active set.

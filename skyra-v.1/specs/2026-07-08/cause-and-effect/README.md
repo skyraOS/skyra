@@ -55,10 +55,11 @@ supersede the accepted four-node Schema model.
   previous compounds are legal referents in new sentences (`[k=compound:id]`) —
   present compounds compose from present compounds, efficient from prior
   efficients, same for final; role lives on the edge/position, never the node,
-  so the old same-CauseKind composition constraint dissolves. V0 reuse
-  candidates come from the **lineage history on the Slice** (bounded
-  active-state history), not open-graph recall. (Offer-only vs instructed
-  reuse: ledger item 9.)
+  so the old same-CauseKind composition constraint dissolves. ~~V0 reuse
+  candidates come from the lineage history on the Slice~~ REVISED 2026-07-12:
+  reuse candidates are **graph-owned** — the probe's reverse-index over
+  inherited/causal maps (see the worker-mechanism bullet below); the Slice
+  keeps only the active set. (Offer-only vs instructed reuse: ledger item 9.)
 - **One edge mechanism, two grading rules (invariant).** Efficient and Final
   are ONE belief-edge mechanism read in opposite temporal directions from the
   anchor; the difference lives ONLY in grading semantics — efficient edges
@@ -79,15 +80,33 @@ supersede the accepted four-node Schema model.
   reform — Observe is the strategy selector; port names never cross the kernel
   boundary.
 - **Three causal ports on a summary, three lifecycles.** `inherited` =
-  birth-fixed composition provenance: the compounds this compound was built
-  FROM, auto-populated at Persist from compound-typed members — a different
-  relationship than Efficient or Final, and the durable home of composition.
-  `efficient`/`final` = accumulating contextual edge occurrences, each stamped
-  with its owning Aitia set. **The port accumulates occurrences; it never
-  collapses them into a singular cause.** Unfiltered, the port reads as every
-  explanation the compound has participated in — the retrieval surface for
-  retrospective citation and re-anchoring. Active-context filtering is an
-  observe-strategy choice, not storage.
+  composition-provenance EDGES: the compounds this compound was built FROM,
+  minted at Persist from compound-typed members — a different relationship
+  than Efficient or Final, and the durable home of composition. Topology
+  birth-fixed, grades live: midlevel's evidence sits on the inherited edges,
+  graded with respect to the NEW summary (evidence is not a cause node and
+  never lives on a cause node). `efficient`/`final` = accumulating contextual
+  edge occurrences, each stamped with its owning Aitia set. **The port
+  accumulates occurrences; it never collapses them into a singular cause.**
+  Unfiltered, the port reads as every explanation the compound has
+  participated in — the retrieval surface for retrospective citation and
+  re-anchoring. Active-context filtering is an observe-strategy choice, not
+  storage.
+- **Node-only causal inheritance.** Composition seeds the new compound's
+  candidate maps with the parents' efficient/final cause NODES; the parents'
+  edge occurrences never carry over. A regrade against the new summary mints
+  a NEW edge owned by the new context, with its own evidence and signed-store
+  history — edge occurrences are never shared across contexts.
+- **One worker mechanism: probe → compose+grade.** Step 1: emit a probe
+  subgraph → reverse-index lookup → candidates with hit counts → traversal
+  amplitude distributed proportionally → traverse candidates' evidence.
+  Step 2: compose the new summary (citing candidates lands them in
+  `inherited`) + seed a base grade per evidence relationship on the RECEIVING
+  edge (the CrossBirth pattern). The receiving edge is the only parameter:
+  midlevel grades the inherited edges; efficient/final workers grade the
+  causal edges. Candidate sourcing is GRAPH-owned — the reverse index over
+  inherited/causal maps supersedes the earlier "lineage history on the Slice"
+  source; the Slice keeps only the active set.
 
 ## Central Shape
 
