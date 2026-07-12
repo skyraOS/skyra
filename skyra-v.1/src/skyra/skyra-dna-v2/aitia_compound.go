@@ -59,16 +59,29 @@ type Compound struct {
 	Edges   []CausalEdge
 }
 
-// CompoundIndex — compounds + the term registry + edge records, on the nucleus.
-// Term reuse is normalized-label exact match (the token-web discipline);
-// stable-id references resolve to existing compounds first (composition:
-// summary nodes are legal referents — invariant 14).
+// AitiaSet is the active explanatory set (minimal-aitia-set.md): one present
+// compound + one Efficient and one Final causal edge (both "" until Phase 4 —
+// item 5's summary-node-only lean licenses the absent-causal shape). Immutable
+// after birth; the ACTIVE set reference lives on the Slice, never here.
+type AitiaSet struct {
+	ID              string
+	PresentID       string // present compound's summary-node ID
+	EfficientEdgeID string // "" until the fan-out lands (Phase 4)
+	FinalEdgeID     string // ""
+	Timestamp       int
+}
+
+// CompoundIndex — compounds + the term registry + edge records + Aitia sets, on
+// the nucleus. Term reuse is normalized-label exact match (the token-web
+// discipline); stable-id references resolve to existing compounds first
+// (composition: summary nodes are legal referents — invariant 14).
 type CompoundIndex struct {
 	mu    sync.Mutex
 	slice skyra.Slice
 	byID  map[string]*dna.MemoryCell // compound summary nodes
 	terms map[string]*dna.MemoryCell // normalized label → term node
 	edges map[string][]CausalEdge    // compoundID → its edge records
+	sets  map[string]AitiaSet
 	seq   int
 }
 
@@ -78,7 +91,31 @@ func NewCompoundIndex(slice skyra.Slice) *CompoundIndex {
 		byID:  map[string]*dna.MemoryCell{},
 		terms: map[string]*dna.MemoryCell{},
 		edges: map[string][]CausalEdge{},
+		sets:  map[string]AitiaSet{},
 	}
+}
+
+// MintSet births an immutable AitiaSet around a present compound. The caller
+// owns activation (writes the set ID to the Slice).
+func (ci *CompoundIndex) MintSet(presentID string, ts int) AitiaSet {
+	ci.mu.Lock()
+	defer ci.mu.Unlock()
+	ci.seq++
+	set := AitiaSet{
+		ID:        fmt.Sprintf("aitia:%d:%d", ts, ci.seq),
+		PresentID: presentID,
+		Timestamp: ts,
+	}
+	ci.sets[set.ID] = set
+	return set
+}
+
+// Set returns an AitiaSet by ID.
+func (ci *CompoundIndex) Set(id string) (AitiaSet, bool) {
+	ci.mu.Lock()
+	defer ci.mu.Unlock()
+	s, ok := ci.sets[id]
+	return s, ok
 }
 
 // Persist mints the immutable compound for one parsed emission: a fresh summary

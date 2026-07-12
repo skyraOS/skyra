@@ -36,7 +36,8 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "empty"
 		return
 	}
-	resp, err := infer(frameOpSystem, framePresent(exchange, locations, gi.OpenEpisodes()))
+	present := framePresent(exchange, locations, gi.OpenEpisodes())
+	resp, err := infer(frameOpSystem, present)
 	if err != nil {
 		root.Condition = "empty" // a failed call frames nothing this cycle
 		return
@@ -46,7 +47,36 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "empty"
 		return
 	}
+
+	// The querier contract (Phase 1): the gist is an ANNOTATED sentence; the
+	// compound is parsed from it (the parser is the validator). Malformed
+	// annotation gets bounded retry-with-correction — a format error, not an
+	// epistemic error (no AIMD tax; the budget controller lands in Phase 3).
+	parsed, perr := ParseAnnotated(gist)
+	for attempt := 1; perr != nil && attempt <= parseMaxRetries; attempt++ {
+		resp, err = infer(frameOpSystem, present+"\n\n---\n"+CorrectionMessage(gist, perr))
+		if err != nil {
+			break
+		}
+		op2, id2, gist2, ok2 := ParseFrameOp(resp)
+		if !ok2 {
+			continue
+		}
+		op, id, gist = op2, id2, gist2
+		parsed, perr = ParseAnnotated(gist)
+	}
 	ts := root.DNA().Tick()
+
+	// On a parsed emission the gist text is the CLEAN sentence (renderers and
+	// the settle keep working unchanged); on persistent failure fall back to the
+	// raw text as a plain gist — the loop must not die on a format failure.
+	var comp *Compound
+	if perr == nil {
+		comp = root.DNA().Compounds().Persist(parsed, ts)
+		gist = parsed.Sentence
+	} else {
+		debug.Being("skyra", "querier", fmt.Sprintf("annotation failed after retries (%v) — plain-gist fallback", perr))
+	}
 
 	// EDIT: mint a NEW gist on the existing episode (the sequence — the prior gist
 	// stays and decays as "before I thought x"; the episode continues, so its edges
@@ -62,6 +92,19 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
 		root.Grouping = gi.Create(groupID, gist, ts) // Create sets it active
 		debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
+	}
+
+	// Commit the minimal-Aitia side: mint the set around the compound, activate
+	// it on the Slice (atomic replacement — retain-or-requery's requery half),
+	// and cross-link the spine gist to its canonical compound.
+	if comp != nil {
+		set := root.DNA().Compounds().MintSet(comp.Summary.ID(), ts)
+		root.DNA().ActivateSet(set.ID)
+		if g := latestGist(root.Grouping); g != nil {
+			g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CompoundID: comp.Summary.ID()})
+		}
+		debug.Being("skyra", "querier", fmt.Sprintf("compound %s: %q V=%d E=%d → set %s active",
+			comp.Summary.ID(), gist, len(comp.Members), len(parsed.Edges), set.ID))
 	}
 
 	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
@@ -166,12 +209,21 @@ const frameOpSystem = "You are an evolving being organizing your own memory. You
 	"when present), and a list of OPEN EPISODES you are already holding — each a short gist of " +
 	"an ongoing thread, with an id.\n\n" +
 	"Decide whether the exchange CONTINUES one of the open episodes or STARTS a new one.\n\n" +
-	"- If it continues an episode, reply:  <edit id=\"THE-ID\">sharpened gist</edit>\n" +
-	"    (rewrite that episode's gist to account for what just happened)\n" +
-	"- If it is a new thread, reply:        <new>gist for the new episode</new>\n\n" +
+	"- If it continues an episode, reply:  <edit id=\"THE-ID\">annotated sentence</edit>\n" +
+	"    (restate that episode's gist to account for what just happened)\n" +
+	"- If it is a new thread, reply:        <new>annotated sentence</new>\n\n" +
 	"PREFER continuing an episode when the exchange plausibly extends it; open a new one only " +
-	"when the topic GENUINELY shifts. One short phrase for the gist — what the thread is about " +
-	"and what you should be trying to do. Reply with only the one tag."
+	"when the topic GENUINELY shifts.\n\n" +
+	"The gist is ONE COMPLETE ANNOTATED SENTENCE — your claim about what this moment is and " +
+	"what you should be doing, with its structure marked inline:\n" +
+	"- mark each referent with an ordinal:  michael[1]  or  {the skyra project}[2]\n" +
+	"- mark each relationship on its verb/word:  asked[1→2]\n" +
+	"- reuse an ordinal to re-reference the same thing:  michael[1] ... he[1]\n" +
+	"Every referent gets a node annotation; every asserted relationship gets an edge " +
+	"annotation; plain connecting words stay unannotated.\n\n" +
+	"Example: <new>michael[1] wants[1→2] help[2] with[2→3] {the skyra project}[3], and " +
+	"skyra[4] should assist[4→3]</new>\n\n" +
+	"Reply with only the one tag."
 
 // coherenceSystem — the settle's batch coherence grader (active-grouping.md), adapted from
 // the comparator (validated to ~100k). Grades each item's coherence to the FRAMING (truth);

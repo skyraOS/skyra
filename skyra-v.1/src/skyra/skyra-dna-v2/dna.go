@@ -34,6 +34,12 @@ type DNA struct {
 	// economy the traversal reads and the bump maintains.
 	activation *ActivationStore
 
+	// The minimal-Aitia loop's stores (cause-and-effect, Phase 0/1): immutable
+	// compounds + Aitia sets, and the signed edge EMAs. Beside the legacy
+	// grouping/activation machinery, not a mutation of it.
+	compounds *CompoundIndex
+	signed    *SignedStore
+
 	// infer is the injected LLM seam (system, present) → text. Genes that think
 	// call it; nil → those genes skip (tests without inference).
 	infer InferFunc
@@ -59,6 +65,8 @@ func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
 		entities:   NewEntityIndex(nucleus),
 		groupings:  NewGroupingIndex(nucleus),
 		activation: NewActivationStore(),
+		compounds:  NewCompoundIndex(nucleus),
+		signed:     NewSignedStore(),
 	}
 }
 
@@ -69,6 +77,24 @@ func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
 func (d *DNA) Infer() InferFunc          { return d.infer }
 func (d *DNA) SetInfer(fn InferFunc)     { d.infer = fn }
 func (d *DNA) Activation() *ActivationStore { return d.activation }
+func (d *DNA) Compounds() *CompoundIndex    { return d.compounds }
+func (d *DNA) Signed() *SignedStore         { return d.signed }
+
+// ActiveSet returns the being's active AitiaSet (ok=false before the first
+// query commits). V0 anchors on the being's own ID (ledger item 7).
+func (d *DNA) ActiveSet() (AitiaSet, bool) {
+	id := activeSetGet(d.nucleus, d.beingID)
+	if id == "" {
+		return AitiaSet{}, false
+	}
+	return d.compounds.Set(id)
+}
+
+// ActivateSet commits a set as the being's active situation — atomic
+// replacement, never mutation of the prior set.
+func (d *DNA) ActivateSet(setID string) {
+	activeSetSet(d.nucleus, d.beingID, setID)
+}
 
 // CrossBirth crosses freshly-created edges (node birth) so the new nodes are immediately
 // selectable — a born edge was just active, so F must start > 0 or the edge deadlocks at

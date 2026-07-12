@@ -155,7 +155,10 @@ map shape can stay (keyed by the anchor entity), plurality arrives when
 multi-episode attention does; the grading router is the same "which set does
 this evidence bear on" question the relevance gate already answers.
 
-**Decision:** _open_
+**Decision (2026-07-12): one situation-anchored set.** The map shape stays
+(`ActiveAitiaSetByEntity`); v0 anchors on the **being's own ID** — the being has
+one active situation, so `["skyra"] = setID`. Plurality (N concurrent sets, N×3
+lineages, evidence routing) arrives with multi-episode attention, not before.
 
 ---
 
