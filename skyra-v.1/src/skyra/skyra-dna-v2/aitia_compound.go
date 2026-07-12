@@ -2,6 +2,7 @@ package dnav2
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"skyra-v1/src/skyra"
@@ -72,17 +73,22 @@ type AitiaSet struct {
 }
 
 // CompoundIndex — compounds + the term registry + edge records + Aitia sets, on
-// the nucleus. Term reuse is normalized-label exact match (the token-web
-// discipline); stable-id references resolve to existing compounds first
-// (composition: summary nodes are legal referents — invariant 14).
+// the nucleus. Resolution is exact-match (the token-web discipline; fuzzy/alias
+// parked in the ledger) and UNIFIED with the entity graph: entities are born
+// from OBSERVATION (sensory/ingest), terms from a query's ASSERTION, and a
+// claimed referent whose label matches an observed entity resolves to that
+// entity node — one michael, whether perceived or mentioned. Stable-id
+// references resolve to existing compounds first (composition: summary nodes
+// are legal referents — invariant 14).
 type CompoundIndex struct {
-	mu    sync.Mutex
-	slice skyra.Slice
-	byID  map[string]*dna.MemoryCell // compound summary nodes
-	terms map[string]*dna.MemoryCell // normalized label → term node
-	edges map[string][]CausalEdge    // compoundID → its edge records
-	sets  map[string]AitiaSet
-	seq   int
+	mu       sync.Mutex
+	slice    skyra.Slice
+	entities *EntityIndex               // the observed graph (nil-tolerant for tests)
+	byID     map[string]*dna.MemoryCell // compound summary nodes
+	terms    map[string]*dna.MemoryCell // normalized label → term node
+	edges    map[string][]CausalEdge    // compoundID → its edge records
+	sets     map[string]AitiaSet
+	seq      int
 }
 
 func NewCompoundIndex(slice skyra.Slice) *CompoundIndex {
@@ -94,6 +100,10 @@ func NewCompoundIndex(slice skyra.Slice) *CompoundIndex {
 		sets:  map[string]AitiaSet{},
 	}
 }
+
+// WireEntities connects the observed entity graph for resolution (set once at
+// DNA construction).
+func (ci *CompoundIndex) WireEntities(ei *EntityIndex) { ci.entities = ei }
 
 // MintSet births an immutable AitiaSet around a present compound. The caller
 // owns activation (writes the set ID to the Slice).
@@ -165,13 +175,25 @@ func (ci *CompoundIndex) Persist(p ParsedCompound, ts int) *Compound {
 }
 
 // resolveLocked resolves one parsed node to its immutable cell (caller holds
-// ci.mu). Resolution order: explicit stable id → existing compound (composition)
-// → term registry by id → create with the stable id; no stable id → term
-// registry by normalized label → create.
+// ci.mu) — create-if-absent, reuse-if-present, unified with the observed graph.
+//
+// Stable id:  compound (composition) → entity (accepting an "entity:" prefix)
+//             → term by id → create a term carrying that id.
+// Label:      observed entity by exact label → term registry → create a term.
+//
+// A mentioned-but-never-observed referent stays a TERM; entities are only ever
+// born from observation. (Merging a term into a later-observed entity is the
+// deferred merge op — token-web doc.)
 func (ci *CompoundIndex) resolveLocked(n ParsedNode) *dna.MemoryCell {
 	if n.StableID != "" {
 		if c, ok := ci.byID[n.StableID]; ok {
 			return c // a previous compound as referent — composition, free
+		}
+		if ci.entities != nil {
+			id := strings.TrimPrefix(n.StableID, "entity:")
+			if e := ci.entities.Get(id); e != nil {
+				return e
+			}
 		}
 		if t, ok := ci.terms[n.StableID]; ok {
 			return t
@@ -179,6 +201,11 @@ func (ci *CompoundIndex) resolveLocked(n ParsedNode) *dna.MemoryCell {
 		cell := dna.NewMemoryCell(n.StableID, KindTerm, TermContent{Label: n.Label}, ci.slice)
 		ci.terms[n.StableID] = cell
 		return cell
+	}
+	if ci.entities != nil {
+		if e := ci.entities.Get(n.Label); e != nil {
+			return e // the observed michael IS the mentioned michael
+		}
 	}
 	if t, ok := ci.terms[n.Label]; ok {
 		return t

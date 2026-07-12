@@ -70,7 +70,16 @@ var annotRe = regexp.MustCompile(`(?:\{([^{}]*)\}|([^\s\[\]{}]+))\[([^\[\]]*)\]`
 var (
 	edgeBodyRe = regexp.MustCompile(`^(\d+)\s*(?:→|->)\s*(\d+)$`)
 	nodeBodyRe = regexp.MustCompile(`^(\d+)(?:=(\S+))?$`)
+	wordRe     = regexp.MustCompile(`[\pL\pN_'-]+`)
 )
+
+// Unannotated text may only join annotated graph elements. Keeping this list
+// deliberately small makes omitted material/formal structure a parse error
+// instead of silently treating semantic content as glue.
+var glueWords = map[string]bool{
+	"a": true, "an": true, "the": true,
+	"to": true, "and": true, "or": true, "but": true,
+}
 
 // ParseAnnotated parses one annotated sentence into its compound. It returns a
 // *ParseErrors listing every problem when the emission is malformed.
@@ -127,6 +136,16 @@ func ParseAnnotated(raw string) (ParsedCompound, error) {
 		pe.Problems = append(pe.Problems, fmt.Sprintf("unparseable annotation [%s] on %q", body, label))
 	}
 
+	// Inspect only text OUTSIDE annotations. Any non-glue word there is semantic
+	// content with no node/edge representation, violating sentence↔subgraph
+	// correspondence. Report all omissions in one correction pass.
+	cursor := 0
+	for _, loc := range annotRe.FindAllStringIndex(raw, -1) {
+		collectUnannotated(raw[cursor:loc[0]], &pe)
+		cursor = loc[1]
+	}
+	collectUnannotated(raw[cursor:], &pe)
+
 	// every edge endpoint must be a declared node ordinal (whole-sentence scan
 	// already done, so forward references are fine).
 	for _, e := range out.Edges {
@@ -150,6 +169,15 @@ func ParseAnnotated(raw string) (ParsedCompound, error) {
 	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].Ordinal < out.Nodes[j].Ordinal })
 	out.Sentence = cleanSentence(raw)
 	return out, nil
+}
+
+func collectUnannotated(gap string, pe *ParseErrors) {
+	for _, word := range wordRe.FindAllString(gap, -1) {
+		if normalized := strings.ToLower(word); !glueWords[normalized] {
+			pe.Problems = append(pe.Problems,
+				fmt.Sprintf("unannotated semantic token %q — mark it as a node or relationship", word))
+		}
+	}
 }
 
 // cleanSentence strips the annotations: {phrase}[body] → phrase, word[body] → word.

@@ -24,6 +24,15 @@ func NewEntityIndex(slice skyra.Slice) *EntityIndex {
 	return &EntityIndex{slice: slice, byID: map[string]*dna.MemoryCell{}}
 }
 
+// Get returns the entity node for an id WITHOUT creating (nil if unknown) —
+// the non-creating half of resolution: entities are born from OBSERVATION
+// (sensory/ingest), never from a query's assertion.
+func (ei *EntityIndex) Get(id string) *dna.MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	return ei.byID[id]
+}
+
 // Ensure get-or-creates the entity node for a resolved id. (Entity resolution is
 // exact-match for now — the identity-registry discipline; fuzzy later.)
 func (ei *EntityIndex) Ensure(id string) *dna.MemoryCell {

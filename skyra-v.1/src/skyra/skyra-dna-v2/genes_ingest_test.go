@@ -184,7 +184,7 @@ func TestPerceiveOnlyTurnSharpensDefaultGrouping(t *testing.T) {
 			if i := strings.Index(present, "[id="); i >= 0 {
 				rest := present[i+len("[id="):]
 				id := rest[:strings.Index(rest, "]")]
-				return "<edit id=\"" + id + "\">exploring the space with michael</edit>", nil
+				return "<edit id=\"" + id + "\">exploring[1] the space[2] with[1→3] michael[3]</edit>", nil
 			}
 			t.Error("framing present listed no open episodes (the default grouping should be one)")
 		}

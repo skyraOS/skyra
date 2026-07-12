@@ -67,16 +67,16 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	ts := root.DNA().Tick()
 
-	// On a parsed emission the gist text is the CLEAN sentence (renderers and
-	// the settle keep working unchanged); on persistent failure fall back to the
-	// raw text as a plain gist — the loop must not die on a format failure.
-	var comp *Compound
-	if perr == nil {
-		comp = root.DNA().Compounds().Persist(parsed, ts)
-		gist = parsed.Sentence
-	} else {
-		debug.Being("skyra", "querier", fmt.Sprintf("annotation failed after retries (%v) — plain-gist fallback", perr))
+	// Sentence + subgraph commit transactionally. A format failure is returned to
+	// the LLM at the same epistemic budget; after bounded retries, commit neither
+	// the legacy gist nor the Aitia set. The previous active state remains valid.
+	if perr != nil {
+		debug.Being("skyra", "querier", fmt.Sprintf("annotation failed after retries (%v) — retaining active state", perr))
+		root.Condition = "query-format-error"
+		return
 	}
+	comp := root.DNA().Compounds().Persist(parsed, ts)
+	gist = parsed.Sentence
 
 	// EDIT: mint a NEW gist on the existing episode (the sequence — the prior gist
 	// stays and decays as "before I thought x"; the episode continues, so its edges
@@ -97,15 +97,13 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// Commit the minimal-Aitia side: mint the set around the compound, activate
 	// it on the Slice (atomic replacement — retain-or-requery's requery half),
 	// and cross-link the spine gist to its canonical compound.
-	if comp != nil {
-		set := root.DNA().Compounds().MintSet(comp.Summary.ID(), ts)
-		root.DNA().ActivateSet(set.ID)
-		if g := latestGist(root.Grouping); g != nil {
-			g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CompoundID: comp.Summary.ID()})
-		}
-		debug.Being("skyra", "querier", fmt.Sprintf("compound %s: %q V=%d E=%d → set %s active",
-			comp.Summary.ID(), gist, len(comp.Members), len(parsed.Edges), set.ID))
+	set := root.DNA().Compounds().MintSet(comp.Summary.ID(), ts)
+	root.DNA().ActivateSet(set.ID)
+	if g := latestGist(root.Grouping); g != nil {
+		g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CompoundID: comp.Summary.ID()})
 	}
+	debug.Being("skyra", "querier", fmt.Sprintf("compound %s: %q V=%d E=%d → set %s active",
+		comp.Summary.ID(), gist, len(comp.Members), len(parsed.Edges), set.ID))
 
 	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
 

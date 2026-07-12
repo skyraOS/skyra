@@ -18,7 +18,7 @@ func TestColdStartFullPipelineEmitsAction(t *testing.T) {
 	d.SetInfer(func(system, present string) (string, error) {
 		switch {
 		case strings.Contains(system, "evolving being"):
-			return "<new>assist with the skyra project</new>", nil
+			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
 		// NOTE: the prompts cross-reference (motor mentions "inner voice", self

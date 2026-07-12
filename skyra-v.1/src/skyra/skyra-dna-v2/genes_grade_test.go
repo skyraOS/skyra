@@ -18,7 +18,7 @@ func gradeMock(judge string) InferFunc {
 		case strings.Contains(system, "strict, impartial judge"):
 			return judge, nil
 		case strings.Contains(system, "evolving being"):
-			return "<new>assist with the skyra project</new>", nil
+			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
 		case strings.Contains(system, "You are Skyra's motor system"):
@@ -135,9 +135,9 @@ func editMock() InferFunc {
 			if i := strings.Index(present, "[id="); i >= 0 {
 				rest := present[i+len("[id="):]
 				id := rest[:strings.Index(rest, "]")]
-				return "<edit id=\"" + id + "\">continuing the skyra project</edit>", nil
+				return "<edit id=\"" + id + "\">continuing[1] the {skyra project}[2]</edit>", nil
 			}
-			return "<new>assist with the skyra project</new>", nil
+			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
 		case strings.Contains(system, "strict, impartial judge"):
 			return "<match>none</match>", nil
 		case strings.Contains(system, "External Perspective"):

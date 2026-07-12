@@ -49,9 +49,10 @@ func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	if !ok || cc.Sentence != "michael wants help with the skyra project" {
 		t.Fatalf("compound sentence = %+v", summary.Content())
 	}
-	// the subgraph landed: shared term nodes + fresh edges
-	if d.Compounds().Term("michael") == nil || d.Compounds().Term("the skyra project") == nil {
-		t.Fatal("member terms missing from the registry")
+	// the subgraph landed: observed michael resolves to the Entity; asserted-only
+	// material remains a shared Term. No shadow michael term is created.
+	if d.Compounds().Term("michael") != nil || d.Compounds().Term("the skyra project") == nil {
+		t.Fatal("observed/asserted referent resolution is wrong")
 	}
 	structural := 0
 	for _, e := range d.Compounds().EdgesOf(set.PresentID) {
@@ -104,31 +105,37 @@ func TestQuerierRetriesBadAnnotationThenSucceeds(t *testing.T) {
 	}
 }
 
-// Persistent annotation failure falls back to a plain gist — the loop must not
-// die on a format failure. No compound, no active set, but the turn frames.
-func TestQuerierFallsBackToPlainGist(t *testing.T) {
+// Persistent annotation failure commits nothing and retains prior active state.
+func TestQuerierFormatFailureRetainsActiveState(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
+	var valid atomic.Bool
 	d.SetInfer(querierMock(func(string) string {
-		return "<new>just plain words with no annotations</new>"
+		if valid.Load() {
+			return "<new>just plain words with no annotations</new>"
+		}
+		return "<new>michael[1] greets[1→2] skyra[2]</new>"
 	}))
 	d.SetEmit(func(skyra.Impulse) {})
 	o, _ := newOrch(d)
 
-	trace := fireTurn(t, o, "X1", "", "hello")
+	fireTurn(t, o, "X1", "", "hello")
+	before, ok := d.ActiveSet()
+	if !ok {
+		t.Fatal("valid first turn must activate a set")
+	}
+	beforeGrouping := d.Groupings().Active()
 
-	if got := condOf(trace, StepMidlevelFrame); got != "framed" {
-		t.Fatalf("midlevel condition = %q, want framed (fallback still frames)", got)
+	valid.Store(true)
+	trace := fireTurn(t, o, "X2", "X1", "this response will not parse")
+	if got := condOf(trace, StepMidlevelFrame); got != "query-format-error" {
+		t.Fatalf("midlevel condition = %q, want query-format-error", got)
 	}
-	if _, ok := d.ActiveSet(); ok {
-		t.Fatal("a fallback plain gist must not activate a set")
+	after, ok := d.ActiveSet()
+	if !ok || after.ID != before.ID {
+		t.Fatal("format failure must retain the previous active Aitia set")
 	}
-	g := d.Groupings().Active()
-	if gistOf(g) != "just plain words with no annotations" {
-		t.Fatalf("fallback gist = %q", gistOf(g))
-	}
-	gc, _ := latestGist(g).Content().(dna.Gist)
-	if gc.CompoundID != "" {
-		t.Fatal("fallback gist must not claim a compound")
+	if d.Groupings().Active() != beforeGrouping {
+		t.Fatal("format failure must not replace the active grouping")
 	}
 }

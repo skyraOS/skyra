@@ -52,7 +52,7 @@ func TestParseAnnotatedPhrasesAndArrow(t *testing.T) {
 // Coreference: a repeated ordinal re-references the node; the first occurrence
 // names it; a stable id from any occurrence binds it.
 func TestParseAnnotatedCoreference(t *testing.T) {
-	p, err := ParseAnnotated("michael[1] said he[1=entity:michael] wants[1→2] coffee[2]")
+	p, err := ParseAnnotated("michael[1], he[1=entity:michael] wants[1→2] coffee[2]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +61,27 @@ func TestParseAnnotatedCoreference(t *testing.T) {
 	}
 	if p.Nodes[0].Label != "michael" || p.Nodes[0].StableID != "entity:michael" {
 		t.Fatalf("node 1 = %+v", p.Nodes[0])
+	}
+}
+
+// Semantic content outside annotations is not glue: sentence and subgraph must
+// commit as one complete claim.
+func TestParseAnnotatedRejectsUnrepresentedSemantics(t *testing.T) {
+	_, err := ParseAnnotated("michael[1] asked[1→2] skyra[2] to investigate the outage")
+	if err == nil {
+		t.Fatal("unannotated semantic content must fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `"investigate"`) || !strings.Contains(msg, `"outage"`) {
+		t.Fatalf("missing omitted-token errors: %s", msg)
+	}
+
+	p, err := ParseAnnotated("michael[1] asked[1→2] skyra[2]. skyra[2] investigates[2→3] the outage[3]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Nodes) != 3 || len(p.Edges) != 2 {
+		t.Fatalf("V=%d E=%d, want 3/2", len(p.Nodes), len(p.Edges))
 	}
 }
 
@@ -127,6 +148,37 @@ func TestPersistReusesNodesFreshEdges(t *testing.T) {
 	}
 	if memberEdges != 2 {
 		t.Fatalf("member edges = %d, want 2", memberEdges)
+	}
+}
+
+// Resolution is unified with the observed graph: a mentioned referent whose
+// label matches an OBSERVED entity resolves to that entity node — one michael.
+// A mentioned-but-never-observed referent stays a term (entities are born from
+// observation, never from assertion).
+func TestResolveUnifiesWithObservedEntities(t *testing.T) {
+	ei := NewEntityIndex(nil)
+	observed := ei.Ensure("michael") // born from observation (sensory/ingest)
+	ci := NewCompoundIndex(nil)
+	ci.WireEntities(ei)
+
+	p, _ := ParseAnnotated("michael[1] mentioned[1→2] sarah[2]")
+	c := ci.Persist(p, 1)
+
+	if c.Members[0] != observed {
+		t.Fatal("mentioned michael must resolve to the OBSERVED entity node")
+	}
+	if ci.Term("michael") != nil {
+		t.Fatal("no shadow term when an observed entity matches")
+	}
+	if c.Members[1].Kind() != KindTerm {
+		t.Fatal("never-observed sarah stays a term (assertion, not observation)")
+	}
+
+	// the explicit escape hatch reaches the entity too, prefix accepted
+	p2, _ := ParseAnnotated("he[1=entity:michael] left[1→2] the maze[2]")
+	c2 := ci.Persist(p2, 2)
+	if c2.Members[0] != observed {
+		t.Fatal("[k=entity:id] must resolve to the observed entity node")
 	}
 }
 

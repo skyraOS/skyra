@@ -57,7 +57,7 @@ type DNA struct {
 type InferFunc func(system, present string) (string, error)
 
 func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
-	return &DNA{
+	d := &DNA{
 		beingID:    beingID,
 		observe:    map[string]ObserveCompetence{},
 		express:    map[string]ExpressCompetence{},
@@ -68,6 +68,8 @@ func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
 		compounds:  NewCompoundIndex(nucleus),
 		signed:     NewSignedStore(),
 	}
+	d.compounds.WireEntities(d.entities) // mentioned michael resolves to observed michael
+	return d
 }
 
 func (d *DNA) BeingID() string           { return d.beingID }
