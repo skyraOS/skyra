@@ -1,9 +1,23 @@
 # Outstanding Reform Tracks
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** PARTIALLY SUPERSEDED / MIGRATION BACKLOG
 **Parents:** [directed-affordance-invocation.md](./directed-affordance-invocation.md),
 [dag-kernel-responsibility-boundary.md](./dag-kernel-responsibility-boundary.md),
 [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
+
+> **Resolution notice (2026-07-10):** This document is retained as migration
+> backlog, not canonical architecture. The evidence-side cognitive model is now
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md); signed
+> magnitude transport is
+> [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md);
+> worker/cascade ownership is
+> [dag-kernel-responsibility-boundary.md](./dag-kernel-responsibility-boundary.md);
+> and context-budget/active-Schema placement is
+> [space-kernel-interface-reform.md](./space-kernel-interface-reform.md).
+>
+> The `self`/`other` prediction terminology below is legacy. Canonical
+> evidence-side workers are Schema, Aitia, Maxim, and Entity; Praxis remains
+> deferred. Keep `KindAction` references only as explicit migration debt.
 
 This spec collects the remaining reform tracks after settling the universal
 affordance record model and cold-start landing spine.
@@ -106,8 +120,10 @@ gist{needs-framing}
               -> skyra
 ```
 
-Later `other:predict` can refine or replace the implicit process with an explicit
-proposal/distribution. The exact relationship is still open:
+Legacy `other:predict` may refine or replace the implicit process during
+migration. This is not an open canonical-model choice; `otherProposal` is a
+compatibility shape superseded by Schema/Aitia/Maxim. If maintained temporarily,
+choose one migration strategy explicitly in the implementation change:
 
 ```text
 - edit the implicit otherProposal,
@@ -274,7 +290,7 @@ start waves with Spacetime
 
 ## 6. Traversal Amplitude Split
 
-**Status:** Settled conceptually; implementation tabled until the Space/Time
+**Status:** Settled and revised; implementation tabled until the Space/Time
 kernel reform is ready.
 
 Existing spec: [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
@@ -284,12 +300,14 @@ First implementation target:
 ```text
 strict visited-once
 proportional split over open children
+allocate by absolute edge magnitude; carry polarity separately
 redistribute amplitude that would have gone to already-visited children
 record blocked convergence metadata
 ```
 
 Current code splits amplitude equally across candidate children. Target code
-should split by normalized positive edge product.
+splits by normalized absolute edge magnitude. Strong tension and strong
+resonance are both traversable; zero magnitude has no ordinary claim.
 
 ---
 

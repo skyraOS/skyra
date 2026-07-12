@@ -1,9 +1,14 @@
 # Proportional Amplitude Allocation
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** ACCEPTED WITH SIGNED-MAGNITUDE REVISION
 **Parents:** [kernel.md](../2026-06-16/kernel.md),
 [activation-and-traversal.md](../../design-docs/kernel/activation-and-traversal.md),
 [traversal-mechanics.md](../../design-docs/kernel/traversal-mechanics.md)
+
+> **Revision notice (2026-07-10):** The original positive-only transport model
+> has been replaced. Canonical traversal allocates by absolute edge magnitude and
+> carries polarity separately, as defined here and in
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md#signed-edge-strength).
 
 This spec records a traversal correction: child amplitude should not be split
 equally across candidate children. The traversal should allocate amplitude
@@ -55,22 +60,25 @@ This preserves equal energy distribution even though B is the strongest edge.
 
 ## Target Rule
 
-Amplitude should split according to normalized positive transport products for
-the open children:
+Amplitude splits according to normalized absolute transport magnitude for open
+children. Signed edge polarity is preserved as relationship meaning but does not
+make a strong negative relationship invisible to traversal.
 
 ```text
 available = parentAmplitude * amplitudeDecay
-sum       = Σ childEdgeProduct
+claim_i   = abs(childEdgeStrength_i)
+sum       = Σ claim_i
 
-childAmplitude = available * (childEdgeProduct / sum)
-childScore     = childAmplitude
+childAmplitude_i = available * (claim_i / sum)
+childPolarity_i  = sign(childEdgeStrength_i)
+childScore_i     = childAmplitude_i
 ```
 
 Using the same example:
 
 ```text
 available = 100 * 0.9 = 90
-sum       = 0.44 + 0.73 + 0.22 = 1.39
+sum       = |0.44| + |0.73| + |0.22| = 1.39
 
 A amplitude = 90 * (0.44 / 1.39) = 28.49
 B amplitude = 90 * (0.73 / 1.39) = 47.27
@@ -83,18 +91,21 @@ The stronger edge receives more of the remaining traversal energy.
 
 ## Semantics
 
-The edge product is the child's transport claim on the parent's remaining wave
-energy.
+Absolute edge strength is the child's transport claim on the parent's remaining
+wave energy.
 
 ```text
-edgeProduct = generic active edge product for that parent->child edge
+edgePolarity  = sign(edgeStrength)
+edgeMagnitude = abs(edgeStrength)
+transportClaim = edgeMagnitude
 ```
 
 The kernel should not treat fanout as equal unless all open candidate edge
 products are equal.
 
-The kernel should not know the cognitive meaning of the product. It only sees the
-edge-keyed traversal surface and the active edge values available on the slice.
+The kernel should not know the cognitive meaning of polarity. It only sees the
+edge-keyed traversal surface, nonnegative transport magnitude, and active edge
+values available on the Slice.
 The DNA/space layer decides which children are exposed and what the edge product
 means.
 
@@ -111,22 +122,22 @@ normalization.
 
 ## Zero And Negative Products
 
-Open design details:
-
-1. If all child edge products are `<= 0`, no child receives amplitude.
-2. Negative products should probably not participate in the positive amplitude
-   allocation pool.
-3. A negative edge may still need to be recorded as inhibitory evidence, but it
-   should not receive positive traversal energy from this pass.
-
-Initial conservative rule:
+Negative polarity is informative and receives traversal allocation according to
+absolute magnitude. Positive and negative poles are both high-attention states:
 
 ```text
-positiveCandidates = children where edgeProduct > 0
-sum = Σ positive edgeProduct
++1 = absolute resonance, magnitude 1
+-1 = absolute tension, magnitude 1
+ 0 = no net charge, magnitude 0
 ```
 
-Only positive candidates participate in proportional allocation.
+Only zero magnitude has no ordinary traversal claim. If all open child
+magnitudes are zero, the parent has no ordinary child traversal for that wave.
+
+A zero edge is not revived by an exploration floor. Its immutable target node
+may be reached through another live CDG path, which creates a fresh edge in that
+new context. Fresh worker-created edges receive their first traversal from the
+current grading episode's original or residual amplitude.
 
 ---
 
@@ -338,7 +349,7 @@ Target behavior:
 measure all candidate edge products
 drop already-visited children from the allocation pool
 record dropped children as blocked convergence
-normalize positive products across still-open children
+normalize absolute edge magnitudes across still-open children
 allocate child amplitude proportionally
 use allocated child amplitude as child score/survival value
 descend with that allocated child amplitude

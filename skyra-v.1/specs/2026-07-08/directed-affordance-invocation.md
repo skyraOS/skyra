@@ -5,6 +5,13 @@
 [perceive-build-uncertainties.md](../2026-07-07/perceive-build-uncertainties.md),
 [slice-based-dispatch.md](../2026-07-03/slice-based-dispatch.md)
 
+> **Canonical coupling (2026-07-10):** The immutable cognitive node model and
+> Evidence ownership are defined by
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
+> continues to own affordance invocation/result topology. Where the older
+> `MemoryCell`-as-mutable-record language conflicts with immutable nodes plus
+> separate edge records, the canonical cognitive model wins.
+
 This spec pins the common data model for world affordances (`perceive`, `move`,
 `engage`) and cognitive/DAG affordances (`midlevel:frame`, `other:predict`,
 `self:predict`, `motor:collapse`). The abstraction is not "world action." The
@@ -128,6 +135,26 @@ This distinction keeps intended targets separate from confirmed world content.
 Traversal should care primarily about the content/result graph, not about routing
 metadata on the attempted invocation.
 
+### Observation Versus Intervention
+
+Affordance direction determines evidence eligibility, not a categorical Evidence
+label:
+
+```text
+world -> Skyra impulse:
+  observation; eligible to become Maxim-owned Evidence
+
+Skyra -> world impulse:
+  intervention; never Evidence by itself
+
+world -> Skyra return/result:
+  observed consequence; eligible to become Maxim-owned Evidence
+```
+
+An emitted invocation must not confirm the process that emitted it. Its returned
+world result may later be observed. Praxis/Telos progress and reward/utility are
+separate deferred mechanics.
+
 Examples:
 
 ```text
@@ -221,10 +248,11 @@ sharedNode
   mergedAmplitude: f(pathA, pathB)
 ```
 
-The exact merge function is not specified here. It may be sum, bounded sum,
-max-plus, noisy-or, or a recency-weighted accumulator. The important requirement is
-that convergence becomes first-class graph evidence instead of an accident of DFS
-order.
+Full same-wave convergence is deferred. The first implementation uses strict
+path-local visited-once traversal, redistributes allocation across still-open
+edges, and records blocked-convergence provenance. Do not choose a merge function
+ad hoc during implementation. See
+[proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md#merge-interaction).
 
 ---
 
@@ -234,13 +262,18 @@ The runtime should reuse the existing `MemoryCell` struct as the single durable
 graph node type. Do not introduce separate graph-node structs for
 `EngageRecord`, `PerceiveRecord`, `MoveRecord`, `EngageResultRecord`, etc.
 
+`MemoryCell` is an implementation carrier for the canonical immutable `Node`.
+Node identity, kind, and content are immutable after birth. Relationships are
+separate edge records; adding topology must not mutate a node-owned child map in
+the target model.
+
 The differences between those records should be expressed by:
 
 ```text
 MemoryCell.ID
 MemoryCell.AffordanceKind / Kind
 MemoryCell.Content
-MemoryCell.Children
+external Edge records
 topological position
 ```
 
@@ -248,10 +281,14 @@ The current code calls this role tag `Kind`:
 
 ```go
 type MemoryCell struct {
-    id       string
-    kind     Kind
-    content  any
-    children map[string]skyra.Space
+    id      string
+    kind    Kind
+    content any
+}
+
+type EdgeRecord struct {
+    id, fromID, toID string
+    kind             EdgeKind
 }
 ```
 
@@ -289,11 +326,11 @@ The `MemoryCell` is the affordance invocation record or result record.
 ```text
 AffordanceKind / Kind = affordance name or result kind
 Content = typed payload/result for that affordance
-Metadata:
+Immutable invocation metadata/content:
   from
   to
-Children:
-  result:<id> -> affordanceResultRecord
+External edge:
+  invocation -> affordanceResultRecord
 ```
 
 Examples of `Kind`:
@@ -775,7 +812,10 @@ into one record.
 
 ---
 
-## Open Questions
+## Deferred Affordance-Migration Questions
+
+These do not change the canonical evidence-side graph. They are migration or
+future Praxis/participant-role decisions.
 
 1. What is the canonical `to` endpoint for `perceive`: `world`, current place,
    mounted space, or perception boundary cell?
@@ -790,7 +830,8 @@ into one record.
    when one endpoint is a process role such as `motor`?
 6. What fields distinguish an unknown/implicit `otherProposalRecord` from an
    explicit prediction made by `other:predict`?
-7. What is the traversal merge function for convergent paths: sum, bounded sum,
-   max, noisy-or, or something else?
-8. Does the merge live in the kernel traversal tree, the activation record, or a
-   separate path-provenance structure carried beside the tree?
+
+Same-wave convergence is not an open first-implementation choice: use strict
+path-local visited-once traversal, redistribute over still-open edges, and record
+blocked convergence in traversal provenance. A richer merge model is deferred
+and must receive its own specification before implementation.

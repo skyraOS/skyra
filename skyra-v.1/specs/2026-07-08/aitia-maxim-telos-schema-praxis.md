@@ -1,9 +1,25 @@
 # Aitia Maxim Telos Schema Praxis
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** PARTIALLY SUPERSEDED
 **Parents:** [directed-affordance-invocation.md](./directed-affordance-invocation.md),
 [space-kernel-interface-reform.md](./space-kernel-interface-reform.md),
 [outstanding-reform-tracks.md](./outstanding-reform-tracks.md)
+
+> **Canonical-model notice (2026-07-10):** The Schema/Aitia/Maxim/Evidence data
+> model, evidence ownership, grading equations, traversal polarity, active-state
+> ownership, and cascade mechanics in this document are superseded by
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). In
+> particular, do **not** implement this document's earlier claims that an Aitia
+> is a four-cause whole, that Schema contains `1:*` whole Aitia records, that
+> Evidence attaches directly to Aitia, or that Aitia confidence is the raw sum
+> of evidence weights. Canonically: Schema is the immutable four-cause whole;
+> each cause is one immutable Aitia node; Evidence is Maxim-owned; contextual
+> edge EMAs carry signed tension/resonance; only residual error propagates.
+>
+> The separation thesis, philosophical motivation, and deferred Praxis questions
+> remain useful design context. Praxis selection, reward/utility, interventions,
+> and Telos-progress mechanics are intentionally unresolved and require a later
+> dedicated specification.
 
 This spec is the working area for the Aitia/Maxim/Telos/Schema/Praxis reform.
 
@@ -26,7 +42,7 @@ Praxis workers are coherent.
 
 ---
 
-## Current Problem
+## Current Problem — HISTORICAL
 
 The current dnav2 perspective split is functional but still shaped around the
 old prediction/action machinery:
@@ -70,7 +86,7 @@ one-off prediction mechanisms with unrelated record shapes.
 
 ---
 
-## Target Intuition
+## Target Intuition — SUPERSEDED DATA SHAPE
 
 `maxim` and `aitia` are both perspective/process workers.
 
@@ -106,7 +122,7 @@ Not in incompatible graph shapes.
 
 ---
 
-## Provisional Ownership Frame
+## Provisional Ownership Frame — SUPERSEDED
 
 Status: **not final**.
 
@@ -321,7 +337,7 @@ reasoning with explicit interrupt conditions.
 
 ---
 
-## Maxim Hypothesis
+## Maxim Hypothesis — PRAXIS CONTEXT RETAINED
 
 Maxim should not only emit one hard next-action prediction.
 
@@ -347,7 +363,7 @@ gist/grouping.
 
 ---
 
-## Aitia / Maxim Coupling
+## Aitia / Maxim Coupling — SUPERSEDED
 
 Maxim and aitia remain coupled, but the coupling is no longer modeled as a loose
 outcome tree.
@@ -399,7 +415,7 @@ toward action without over-constraining the action.
 
 ---
 
-## Maxim Decomposition
+## Maxim Decomposition — PRAXIS CONTEXT RETAINED
 
 Maxim should not remain an opaque slogan. Its working decomposition follows
 Kant's maxim structure:
@@ -489,7 +505,7 @@ while quietly introducing a purpose the active aitia does not support.
 
 ---
 
-## Process Records
+## Process Records — SUPERSEDED EVIDENCE-SIDE SHAPE
 
 Maxim and aitia proposals should be durable process records under the active gist:
 
@@ -515,7 +531,7 @@ or a typed payload carried by `MemoryCell.Content`.
 
 ---
 
-## Maxim Worker
+## Maxim Worker — SUPERSEDED EVIDENCE-SIDE SHAPE
 
 Current maxim worker:
 
@@ -559,7 +575,7 @@ process-level intent grading
 
 ---
 
-## Aitia Worker
+## Aitia Worker — SUPERSEDED
 
 Current aitia worker:
 
@@ -608,7 +624,7 @@ version, or creates child candidate branches after schema insufficiency.
 
 ---
 
-## Aitia Four-Cause Field
+## Aitia Four-Cause Field — SUPERSEDED
 
 Aitia should not only predict the next utterance or next action.
 
@@ -694,7 +710,7 @@ created is less settled and is captured in the next section.
 
 ---
 
-## Aitia Creation Policy
+## Aitia Creation Policy — SUPERSEDED
 
 Status: **provisional**.
 
@@ -783,7 +799,7 @@ explanation was created, but why existing structures were insufficient.
 
 ---
 
-## Composable Aitia Stack
+## Composable Aitia Stack — SUPERSEDED
 
 The aitia model should be composable, not flat.
 
@@ -852,7 +868,7 @@ constraints for `maxim` and `praxis`.
 
 ---
 
-## Evidence Records
+## Evidence Records — SUPERSEDED
 
 Aitia strength should be influenced by evidence from the observable world.
 
@@ -947,7 +963,7 @@ caused it to be defeated.
 
 ---
 
-## Aitia-Triggered Maxim Pass
+## Aitia-Triggered Maxim Pass — SUPERSEDED
 
 Maxim should not run only because a wave reached it. A sufficiently confident
 aitia should be able to activate a maxim pass.
@@ -1012,7 +1028,7 @@ or retired. They should not automatically carry over to another aitia.
 
 ---
 
-## Telos
+## Telos — EVIDENCE MECHANICS SUPERSEDED; PRAXIS CONTEXT RETAINED
 
 `Telos` is the final-cause component of an active aitia.
 
@@ -1145,7 +1161,7 @@ schema defeated:
 
 ---
 
-## Stress / Flow Allocation
+## Stress / Flow Allocation — SUPERSEDED
 
 The broader cognitive axis is:
 
@@ -1285,7 +1301,7 @@ active-state snapshot:
 
 ---
 
-## Final Cause / Telos Field
+## Final Cause / Telos Field — PRAXIS CONTEXT ONLY
 
 Telos is no longer modeled as a separate telos record by default. It is
 the final-cause field inside an aitia record.
@@ -1339,7 +1355,7 @@ conditions, not just a next-message predictor.
 
 ---
 
-## Graded-Stable Praxis Gate
+## Graded-Stable Praxis Gate — DEFERRED
 
 Praxis should only fire after the current stack has passed the relevant grading
 passes.
@@ -1477,7 +1493,7 @@ marked as reorganization affordances rather than ordinary task execution.
 
 ---
 
-## Grading Ownership
+## Grading Ownership — EVIDENCE SIDE SUPERSEDED
 
 Grading owns edge alignment updates.
 
@@ -1569,7 +1585,7 @@ maxim refinement:
 
 ---
 
-## Relation To Praxis
+## Relation To Praxis — DEFERRED
 
 Praxis should not create a special `KindAction` as the final model.
 
@@ -1616,7 +1632,7 @@ During migration, `KindAction` may remain only as compatibility for
 
 ---
 
-## Relation To Grading
+## Relation To Grading — EVIDENCE SIDE SUPERSEDED
 
 Do not design grading as a standalone system until maxim/aitia process records are
 settled.
@@ -1666,28 +1682,22 @@ not an ad hoc flag scattered across `Prediction`, `ActionRecord`, and route stat
 
 ---
 
-## Open Questions
+## Deferred Praxis Questions
 
-1. What exact `AffordanceKind` names do schema, aitia, maxim, and praxis records
-   use?
-2. Are `materialCause`, `formalCause`, `efficientCause`, and `telos/finalCause`
-   child records, typed content fields, or both?
-3. How does an implicit aitia process become an active structured aitia record?
-4. How does final-cause revision differ from new aitia branch creation?
-5. Are `maxim.circumstance`, `maxim.action`, and `maxim.end` child records,
+> **Scope correction:** Questions about Schema/Aitia structure, Evidence
+> ownership, edge grading, and cascade behavior are resolved by the canonical
+> evidence-side spec. Only Praxis/action-side questions remain open here.
+
+1. How does Praxis select among Maxims proposed from the active Schema?
+2. Are `maxim.circumstance`, `maxim.action`, and `maxim.end` child records,
    typed content fields, or both?
-6. Is the `aitia.telos/finalCause -> maxim.end` alignment bridge durable edge
+3. Is the `FinalCause/Telos -> maxim.end` alignment bridge durable edge
    metadata, a grading record, or both?
-7. Does praxis create invocation records directly under `maximProcess`, or under a
+4. Does Praxis create invocation records directly under a Maxim, or under a
    child `praxis collapse` record?
-8. What replaces `KindAction` in `maxim:grade`?
-9. What fields define process completion, contradiction, abandonment, and
+5. What replaces legacy `KindAction` on the Praxis/action side?
+6. What fields define process completion, contradiction, abandonment, and
    continuation?
-10. How should evidence weights be normalized when multiple aitia branches share or
-   compete for the same evidence?
-11. What confidence threshold deepens an aitia layer, and what threshold defeats it?
-12. Is `maximActivationThreshold` the same as the aitia deepening threshold, or a
-    separate threshold?
-13. What exact grade states count as stable enough for praxis fire?
-14. What reorganization affordances may praxis emit while aitia/maxim/schema are
-    rerolling?
+7. What exact settled evidence-side state is sufficient for Praxis to fire?
+8. What reorganization affordances may Praxis emit while evidence-side workers are
+   rerolling?

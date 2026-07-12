@@ -5,6 +5,11 @@
 [directed-affordance-invocation.md](./directed-affordance-invocation.md),
 [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
 
+> **Canonical coupling (2026-07-10):** Agent-context amplitude, node cost,
+> signed edge transport, and active Schema state must follow
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
+> owns the kernel/interface placement of those decisions.
+
 This spec records a target cleanup to the `skyra.Space` contract and kernel
 traversal lifecycle.
 
@@ -151,6 +156,10 @@ This keeps durable topology and ephemeral scheduling concerns separate.
 
 Each wave starts with an amplitude/budget.
 
+For agent cognition, amplitude has one concrete unit: usable context tokens. It
+is a runtime knob set to the model/provider's context-window sweet spot, below
+the hard limit so instructions, transient framing, and output still fit.
+
 That starting amount is a kernel concern because it defines the traversal's
 transport envelope:
 
@@ -196,6 +205,8 @@ The principle is:
 
 ```text
 one wave starts with one traversal budget/amplitude
+
+agent wave amplitude = usable context token budget
 ```
 
 Token/read cost belongs on the node, not the edge:
@@ -211,17 +222,39 @@ edge = route/allocation from parent to child
 node = content that costs tokens/read budget to include
 ```
 
-So a rendered memory node can charge token cost, while a world point can charge
-hop cost, and an ephemeral worker can charge zero or a small fixed cost.
+For agent graph traversal, `Cost` is the token size of the node's rendered
+content under the active tokenizer. Immutable content lets this cost be cached
+per rendering/tokenizer policy. A world point may still use a domain-specific
+hop cost, and an ephemeral worker may charge zero or a small fixed cost.
 
 Affordability remains a generic kernel check:
 
 ```text
 if incoming budget/amplitude can pay target.Cost:
   traverse target
+  remaining = incoming budget/amplitude - target.Cost
 else:
   skip target
 ```
+
+The kernel allocates parent amplitude across open edges by absolute edge
+magnitude before affordability:
+
+```text
+claim_i = abs(edgeStrength_i)
+allocation_i = available * claim_i / sum(open claims)
+
+if allocation_i >= target_i.Cost:
+  traverse target_i with allocation_i - target_i.Cost
+```
+
+Polarity is carried separately as relationship meaning. Both strong tension and
+strong resonance are traversable; a zero-magnitude edge receives no ordinary
+allocation. See
+[proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md).
+
+There is no fixed inherited-Aitia depth. Magnitude, token affordability, and
+path-local cycle protection determine how much ancestry fits in a wave.
 
 But the policy that decides which children are returned, which edges are exposed,
 and what cognitive decay/weighting means belongs in `Observe`, not in the kernel.
@@ -693,8 +726,8 @@ type SliceSnapshot struct {
 Read() SliceSnapshot
 ```
 
-Exact API is open, but the direction is settled: result tree access belongs on
-the slice, because one wave records on one slice.
+Exact method naming is an implementation detail. The ownership is settled:
+result-tree access belongs on the Slice because one wave records on one Slice.
 
 ### 3a. Active State History
 
@@ -721,6 +754,9 @@ type ActiveStateSnapshot struct {
     Tree   []*Node
     Trace  TraversalTrace
     Totals TraversalTotals
+
+    // Mutable runtime selection; Schema nodes themselves remain immutable.
+    ActiveSchemaByEntity map[string]string
 }
 
 type TraversalTrace struct {
@@ -764,6 +800,16 @@ type Slice interface {
     ...
     ActiveState() *ActiveStateHistory
 }
+```
+
+Each Entity's active Schema reference belongs on the Slice/active-state snapshot,
+never on immutable Entity or Schema nodes. Schema traversal commits the mapping;
+Maxim reads its traversal root from it:
+
+```text
+Entity roots -> Schema worker
+  -> ActiveSchemaByEntity[entityID] = schemaID
+  -> Maxim starts at schemaID
 ```
 
 Core operations:

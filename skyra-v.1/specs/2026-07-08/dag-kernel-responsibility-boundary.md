@@ -4,6 +4,11 @@
 **Parents:** [slice-based-dispatch.md](../2026-07-03/slice-based-dispatch.md),
 [directed-affordance-invocation.md](./directed-affordance-invocation.md)
 
+> **Canonical coupling (2026-07-10):** Evidence-side worker order, local repair,
+> and cascade ownership are settled by
+> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
+> owns how Scheduler/Board and kernel waves realize that model.
+
 This spec records a structural mismatch in the current dnav2 DAG implementation.
 It is not blocking the immediate affordance-record unification, but it should be
 fixed before the workflow model hardens.
@@ -309,6 +314,79 @@ The affordance that expresses the result records the invocation.
 
 ---
 
+## Grading Episodes And Cascades
+
+One logical grading episode may contain many kernel traversals. It is not one
+recursive worker call and not one giant cross-slice wave.
+
+```text
+GradingEpisode
+  -> grade Maxim
+  -> mount local Maxim repair when required
+  -> regrade against the same Evidence snapshot
+  -> compute residual error
+  -> stop or mount Aitia grading/repair
+  -> stop or mount Entity/Schema grading/repair
+```
+
+Canonical worker order is sequential:
+
+```text
+Maxim -> Aitia -> Entity
+```
+
+Each stage reads committed results from the prior stage. A stage cannot consume
+its own partial writes. Every traversal remains one wave recording on one Slice.
+
+The Board owns episode state:
+
+```go
+type GradingEpisodeState struct {
+    EpisodeID         string
+    EvidenceSnapshot  []string
+    OriginalAmplitude float64
+    ResidualMagnitude float64
+    CurrentStage      string
+    AttemptsByStage   map[string]int
+    TriedStructureIDs map[string]bool
+}
+```
+
+Exact field types may change, but ownership does not. Workers receive only local
+structure, the stable Evidence snapshot, incoming magnitude/error, and allowed
+local operations.
+
+```text
+worker:
+  perform local grade or reorganization
+  Express committed result
+
+Scheduler/Board:
+  measure improvement
+  compute residual error
+  mount retry, next stage, or finish
+```
+
+The LLM is never told that a cascade is occurring and never chooses a higher
+layer. The substrate applies the canonical principle:
+
+> Each layer gets one or more chances to absorb prediction error locally. Only
+> residual error propagates upward, and the substrate—not the LLM—decides whether
+> that becomes a cascade.
+
+Termination requirements:
+
+```text
+one stable Evidence snapshot per episode
+accept reorganization only when fit improves
+cap attempts at every stage
+stop below residual threshold
+escalate when local repair cannot absorb enough error
+workers never recursively schedule themselves
+```
+
+---
+
 ## Migration Direction
 
 Do not fix this as part of the first data-model pass unless it becomes necessary.
@@ -330,13 +408,20 @@ Later pass:
 
 ---
 
-## Open Questions
+## Settled Worker Details
 
-1. Does every cognitive affordance need children/traversal, or can some remain
-   leaf workers whose `Express` commits immediately?
-2. Should `Condition` remain a mutable field on `EphemeralRoot`, or become the
-   returned value of `Express`?
-3. Should the orchestrator append trace spans from `Express` results rather than
-   reading `root.Condition` directly?
-4. How much of the current gene code should move from Observe to Express during
-   the affordance-record migration?
+```text
+a cognitive affordance may be a leaf worker
+leaf Observe returns no traversal surface
+leaf Express commits/reports its result
+
+Condition is Board/work-item state or an Express result
+Condition is not a mutable routing side channel on EphemeralRoot
+
+trace spans are appended from expressed/committed worker results
+the orchestrator does not infer completion by peeking at root mutation
+```
+
+Moving existing gene code from `Observe` to `Express` is an incremental migration
+task, not an architectural decision. New code follows the target contract;
+legacy code may move one worker at a time while tests preserve behavior.
