@@ -1,6 +1,6 @@
 # Cause And Effect Research
 
-**Status:** CANDIDATE REVISION · 2026-07-12 · four decisions folded in (below)
+**Status:** CANDIDATE REVISION · 2026-07-12 · decisions folded in (below)
 
 This directory develops the query-by-subgraph cause-and-effect model. The
 minimal Aitia-set loop is the current implementation candidate. It does not yet
@@ -21,6 +21,10 @@ supersede the accepted four-node Schema model.
 5. [Implementation Phases](./implementation-phases.md) — the build plan: six
    phases, each landing live before the next; ledger items resolved
    just-in-time per phase; built on dnav2, kernel reform kept a separate track.
+6. [Subgraph And Causal Edge Ownership](./subgraph-and-causal-edge-ownership.md)
+   (DECIDED) — internal Formal edges, contextual Efficient/Final edges, the
+   inherited/efficient/final summary ports, reverse retrieval, Evidence
+   attachment, and typed child traversal as substrate reform.
 
 ## Decided 2026-07-12
 
@@ -67,6 +71,23 @@ supersede the accepted four-node Schema model.
   as a present, explains itself through this compound. Purpose graded by
   retrospective explanatory participation, not occurrence. See
   query-by-subgraph.md verification semantics.
+- **Typed child traversal.** Durable edge fields preserve identity, kind, and
+  `FromID → ToID`; typed child ports expose Formal, Inherited, Efficient,
+  Final, endpoint, Evidence, and reverse-summary adjacency to observe
+  strategies. A flattened `Children()` view is compatibility-only when
+  direction matters. This is SUBSTRATE reform (`MemoryCell`), not kernel
+  reform — Observe is the strategy selector; port names never cross the kernel
+  boundary.
+- **Three causal ports on a summary, three lifecycles.** `inherited` =
+  birth-fixed composition provenance: the compounds this compound was built
+  FROM, auto-populated at Persist from compound-typed members — a different
+  relationship than Efficient or Final, and the durable home of composition.
+  `efficient`/`final` = accumulating contextual edge occurrences, each stamped
+  with its owning Aitia set. **The port accumulates occurrences; it never
+  collapses them into a singular cause.** Unfiltered, the port reads as every
+  explanation the compound has participated in — the retrieval surface for
+  retrospective citation and re-anchoring. Active-context filtering is an
+  observe-strategy choice, not storage.
 
 ## Central Shape
 
