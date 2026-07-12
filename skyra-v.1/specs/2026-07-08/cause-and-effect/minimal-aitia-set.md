@@ -1,6 +1,15 @@
 # Minimal Aitia Set
 
-**Status:** MINIMAL CANDIDATE · implementation target
+**Status:** PARTIALLY SUPERSEDED MINIMAL DRAFT · 2026-07-12
+
+> **Current owner:**
+> [Subgraph And Causal Edge Ownership](./subgraph-and-causal-edge-ownership.md).
+> The query/activate/grade/retain-or-requery loop remains useful. Superseded
+> here: Evidence as a separate immutable node class, grading semantic/structural
+> edges, and any implication that Efficient/Final targets have distinct node
+> types. Evidence is now an observation-born `CausalNode` acting relationally;
+> semantic birth-frame edges are unweighted; inherited/Efficient/Final causal
+> edges carry grades and strength.
 
 ## Purpose
 
@@ -259,4 +268,3 @@ the minimal cognitive loop.
 Moved to the open ledger —
 [minimal-loop-uncertainties.md](./minimal-loop-uncertainties.md) — resolved one
 at a time, each decision recorded in place (the perceive-build method).
-

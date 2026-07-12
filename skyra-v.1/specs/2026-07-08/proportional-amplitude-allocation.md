@@ -7,8 +7,10 @@
 
 > **Revision notice (2026-07-10):** The original positive-only transport model
 > has been replaced. Canonical traversal allocates by absolute edge magnitude and
-> carries polarity separately, as defined here and in
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md#signed-edge-strength).
+> carries polarity separately. Under the 2026-07-12 layered model, this applies
+> to weighted inherited/Efficient/Final causal edges, not unweighted semantic
+> birth-frame edges. See
+> [Subgraph And Causal Edge Ownership](./cause-and-effect/subgraph-and-causal-edge-ownership.md).
 
 This spec records a traversal correction: child amplitude should not be split
 equally across candidate children. The traversal should allocate amplitude

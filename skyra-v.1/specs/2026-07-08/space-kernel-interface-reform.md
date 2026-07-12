@@ -1,14 +1,18 @@
 # Space / Kernel Interface Reform
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** ACTIVE INTERFACE DRAFT / PARTIALLY SUPERSEDED
 **Parents:** [dag-kernel-responsibility-boundary.md](./dag-kernel-responsibility-boundary.md),
 [directed-affordance-invocation.md](./directed-affordance-invocation.md),
 [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
 
-> **Canonical coupling (2026-07-10):** Agent-context amplitude, node cost,
-> signed edge transport, and active Schema state must follow
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
-> owns the kernel/interface placement of those decisions.
+> **Supersession notice (2026-07-12):** Context amplitude, node cost,
+> affordability, and Observe-selected traversal surfaces remain relevant.
+> `ActiveSchemaByEntity`, inherited-Aitia traversal, and flat cognitive
+> `Children()` assumptions are superseded by active `AitiaSet` state and typed
+> substrate child ports in the
+> [layered graph](./cause-and-effect/subgraph-and-causal-edge-ownership.md).
+> Port selection belongs to `MemoryCell.Observe`; port names do not cross into
+> the generic kernel.
 
 This spec records a target cleanup to the `skyra.Space` contract and kernel
 traversal lifecycle.

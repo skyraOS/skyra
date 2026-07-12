@@ -1,10 +1,11 @@
 # Cause And Effect Research
 
-**Status:** CANDIDATE REVISION · 2026-07-12 · decisions folded in (below)
+**Status:** CURRENT MODEL INDEX · 2026-07-12 · decisions folded in below
 
-This directory develops the query-by-subgraph cause-and-effect model. The
-minimal Aitia-set loop is the current implementation candidate. It does not yet
-supersede the accepted four-node Schema model.
+This directory owns the current query-by-subgraph layered cognitive model. It
+supersedes the fixed four-node Schema/Aitia/Maxim/Evidence model. The minimal
+Aitia-set loop is the current implementation direction; later decisions in the
+ownership document override conflicting earlier drafts in this directory.
 
 ## Documents
 

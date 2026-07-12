@@ -1,6 +1,6 @@
 # Minimal Loop — Implementation Phases
 
-**Date:** 2026-07-12 · **Status:** PLAN — each phase lands live (TUI + real
+**Date:** 2026-07-12 · **Status:** PARTIALLY SUPERSEDED BUILD PLAN — each phase lands live (TUI + real
 inference), committed green, before the next begins (the perceive-build
 discipline). Ledger items resolve **just-in-time**: each phase names the
 decisions it needs; nothing else blocks.
@@ -9,6 +9,13 @@ decisions it needs; nothing else blocks.
 pipeline (the substrate this builds ON, per the isomorphism: midlevel→querier,
 gist→summary node, edit/new→retain-requery, activeGistID→ActiveAitiaSetByEntity,
 settle+other:grade→evidence grading, ingest→evidence persistence).
+
+> Phase 0/1 history remains accurate. Replan Phase 2 onward against the decided
+> layered graph before implementation. In particular, Evidence no longer lands
+> as a separate node contract; observation-born `CausalNode`s are stamped by
+> ingest, semantic edges are never graded, and grades land on weighted
+> inherited/Efficient/Final causal edges. Typed child ports and graph-owned
+> reverse retrieval are also now required substrate work.
 
 > **Confirmed 2026-07-12:** both structural calls below (build inside dnav2;
 > kernel reform as a separate, non-prerequisite track) are accepted.

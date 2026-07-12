@@ -309,8 +309,9 @@ walk means.
 
 ## Evidence Ownership
 
-Evidence remains immutable and external to the compound and Aitia set. It
-grades relationship occurrences:
+An Evidence-bearing object is an immutable observation-born `CausalNode`, not a
+third node type. It remains external to the target node's semantic birth frame
+and grades weighted causal relationship occurrences:
 
 ```text
 Evidence --grades--> InheritedEdge
@@ -326,8 +327,9 @@ at that node, and retain-or-requery answers it by composing a successor —
 never by reaching inside the immutable original, which stays intact as "what
 I believed then."
 
-Evidence provenance may be traversed from an edge for inspection, but Evidence
-does not become a Material member merely because it grades the compound.
+Evidence provenance may be traversed from an edge for inspection, but the
+observation-born `CausalNode` does not become a Material member of the target's
+birth subgraph merely because it grades that target's relationship.
 
 Praxis may resolve the active set to display:
 
@@ -458,9 +460,10 @@ PresentSummary
 **Inherited** contains the compounds this compound was COMPOSED FROM. The
 inherited relationship is an EDGE occurrence (new-summary → parent-summary),
 fresh at composition, and it is where midlevel's evidence sits: graded with
-respect to the NEW summary. Evidence is not a cause node and never lives on
-a cause node — it lives on the relationship between the new base node and its
-inherited parents. The edge-cell split applies: **topology is birth-fixed**
+respect to the NEW summary. Evidence is not a separate node type and never lives
+inside the target CausalNode — an observation-born `CausalNode` acts as Evidence
+through the relationship between the new base node and its inherited parents.
+The edge-cell split applies: **topology is birth-fixed**
 (these endpoints never change — this summary was composed from that one,
 forever), **grades are live** (evidence against the new summary accrues over
 time). When a new cause is built from two prior causes, that provenance is
@@ -513,7 +516,7 @@ EdgeCell
     to:
       └── ToCell
     evidence:
-      └── zero or more Evidence cells
+      └── zero or more observation-born CausalNode cells
 ```
 
 `FromID` and `ToID` are authoritative durable roles. The corresponding child
@@ -548,10 +551,11 @@ still occur after candidate retrieval.
 
 ### Evidence traversal
 
-Evidence attaches through the edge's Evidence port:
+Observation-born `CausalNode`s acting as Evidence attach through the edge's
+Evidence port:
 
 ```text
-StructuralEdge
+InheritedEdge
   evidence:
     ├── evidence-12
     └── evidence-19
@@ -641,7 +645,8 @@ which relationships a given observe strategy follows.
 4. Efficient and Final edge endpoints are summary nodes.
 5. Efficient and Final edge occurrences belong to an Aitia set.
 6. Reusing a compound never reuses contextual causal edges or learned strength.
-7. Evidence grades edges and is not automatically Material content.
+7. An observation-born `CausalNode` acts as Evidence by grading weighted causal
+   edges and is not automatically Material content of the target birth frame.
 8. Reverse indexes are derived retrieval aids, not the source of graph meaning.
 9. Candidate overlap may allocate amplitude; exact directed structure decides
    fit.

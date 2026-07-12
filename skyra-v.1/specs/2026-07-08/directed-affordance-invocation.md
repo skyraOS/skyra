@@ -1,16 +1,17 @@
 # Directed Affordance Invocation
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** ACTIVE RUNTIME DRAFT / PARTIALLY SUPERSEDED
 **Parents:** [affordance-record.md](../../design-docs/being/affordance-record.md),
 [perceive-build-uncertainties.md](../2026-07-07/perceive-build-uncertainties.md),
 [slice-based-dispatch.md](../2026-07-03/slice-based-dispatch.md)
 
-> **Canonical coupling (2026-07-10):** The immutable cognitive node model and
-> Evidence ownership are defined by
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
-> continues to own affordance invocation/result topology. Where the older
-> `MemoryCell`-as-mutable-record language conflicts with immutable nodes plus
-> separate edge records, the canonical cognitive model wins.
+> **Supersession notice (2026-07-12):** This document still owns affordance
+> invocation/result topology and the observation/intervention distinction.
+> Maxim-owned Evidence, separate Evidence-node ownership, and coupling to the
+> old Schema model are superseded. Observed events now become observation-born
+> `CausalNode`s and act as Evidence through weighted causal relationships, as
+> defined by the
+> [layered graph](./cause-and-effect/subgraph-and-causal-edge-ownership.md).
 
 This spec pins the common data model for world affordances (`perceive`, `move`,
 `engage`) and cognitive/DAG affordances (`midlevel:frame`, `other:predict`,
@@ -142,13 +143,13 @@ label:
 
 ```text
 world -> Skyra impulse:
-  observation; eligible to become Maxim-owned Evidence
+  observation; eligible to birth an observed CausalNode
 
 Skyra -> world impulse:
   intervention; never Evidence by itself
 
 world -> Skyra return/result:
-  observed consequence; eligible to become Maxim-owned Evidence
+  observed consequence; eligible to birth an observed CausalNode
 ```
 
 An emitted invocation must not confirm the process that emitted it. Its returned
@@ -814,7 +815,7 @@ into one record.
 
 ## Deferred Affordance-Migration Questions
 
-These do not change the canonical evidence-side graph. They are migration or
+These do not change the canonical layered cognitive graph. They are migration or
 future Praxis/participant-role decisions.
 
 1. What is the canonical `to` endpoint for `perceive`: `world`, current place,

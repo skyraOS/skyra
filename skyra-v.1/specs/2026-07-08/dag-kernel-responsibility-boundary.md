@@ -1,13 +1,15 @@
 # DAG / Kernel Responsibility Boundary
 
-**Date:** 2026-07-08 · **Status:** DRAFT
+**Date:** 2026-07-08 · **Status:** PARTIALLY SUPERSEDED RUNTIME DRAFT
 **Parents:** [slice-based-dispatch.md](../2026-07-03/slice-based-dispatch.md),
 [directed-affordance-invocation.md](./directed-affordance-invocation.md)
 
-> **Canonical coupling (2026-07-10):** Evidence-side worker order, local repair,
-> and cascade ownership are settled by
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). This document
-> owns how Scheduler/Board and kernel waves realize that model.
+> **Supersession notice (2026-07-12):** The DAG-versus-kernel boundary,
+> ephemeral-worker lifecycle, Board routing, and substrate-owned cascades remain
+> relevant. The Maxim → Aitia → Entity grading order and all coupling to
+> `schema-aitia-maxim-evidence.md` are superseded by the
+> [layered graph](./cause-and-effect/subgraph-and-causal-edge-ownership.md) and
+> its probe → compose+grade worker mechanism.
 
 This spec records a structural mismatch in the current dnav2 DAG implementation.
 It is not blocking the immediate affordance-record unification, but it should be

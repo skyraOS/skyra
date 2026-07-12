@@ -5,9 +5,9 @@
 [dag-kernel-responsibility-boundary.md](./dag-kernel-responsibility-boundary.md),
 [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md)
 
-> **Resolution notice (2026-07-10):** This document is retained as migration
-> backlog, not canonical architecture. The evidence-side cognitive model is now
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md); signed
+> **Updated resolution notice (2026-07-12):** This document is retained as
+> migration backlog, not canonical architecture. The cognitive model is now the
+> [layered cause-and-effect graph](./cause-and-effect/subgraph-and-causal-edge-ownership.md); signed
 > magnitude transport is
 > [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md);
 > worker/cascade ownership is
@@ -15,8 +15,9 @@
 > and context-budget/active-Schema placement is
 > [space-kernel-interface-reform.md](./space-kernel-interface-reform.md).
 >
-> The `self`/`other` prediction terminology below is legacy. Canonical
-> evidence-side workers are Schema, Aitia, Maxim, and Entity; Praxis remains
+> The `self`/`other` prediction terminology and the later
+> Schema/Aitia/Maxim/Entity worker replacement are both legacy. Current workers
+> use probe → compose+grade over one-type `CausalNode`s; Maxim and Praxis remain
 > deferred. Keep `KindAction` references only as explicit migration debt.
 
 This spec collects the remaining reform tracks after settling the universal

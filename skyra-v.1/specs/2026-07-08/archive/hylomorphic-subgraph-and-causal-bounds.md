@@ -1,11 +1,19 @@
 # Hylomorphic Subgraph And Causal Bounds
 
-**Date:** 2026-07-11 · **Status:** RESEARCH DRAFT / CANDIDATE MODEL REVISION
-**Related:** [Schema / Aitia / Maxim / Evidence](./schema-aitia-maxim-evidence.md),
-[Aitia Maxim Telos Schema Praxis](./aitia-maxim-telos-schema-praxis.md)
+**Archive:** adopted philosophical precursor; standalone data draft superseded.
 
-This document develops a candidate revision to the four-cause representation.
-It does not yet supersede the accepted evidence-side model. Its central claim is
+**Date:** 2026-07-11 · **Status:** ADOPTED THESIS / SUPERSEDED DATA DRAFT
+**Canonical owner:**
+[Subgraph And Causal Edge Ownership](../cause-and-effect/subgraph-and-causal-edge-ownership.md)
+
+> The hylomorphic collapse and perspectival Efficient/Final roles were adopted.
+> This document's exploratory frame/pointer structures and statements that the
+> model is merely a candidate are superseded by the decided layered graph.
+> Retain this document as philosophical rationale, especially its standpoint,
+> zoom, pan, and firmest-specific-rung analysis.
+
+This document developed a candidate revision to the four-cause representation.
+Its central claim was adopted and superseded the prior evidence-side model. It is
 that Material Cause and Formal Cause should not be represented as two coequal
 objects. Together they are one present-tense compound: a bounded subgraph whose
 nodes are its matter and whose edges are its form.
@@ -629,12 +637,14 @@ Effect remains a falsifiable prediction, not Final Cause or Maxim.
 7. What exact edge records occupancy of a perspective slot?
 8. How is a simulated pan represented and prevented from masquerading as actual
    occupancy?
-9. Does Cause Evidence grade the present compound, temporal pointers, or both?
-10. Does this model replace the accepted four-Aitia Schema immediately, or only
-    after an implementation comparison?
+9. Historical question: does Cause Evidence grade the present compound,
+   temporal pointers, or both? The layered model answers that semantic edges
+   are unweighted and observed `CausalNode`s grade weighted causal edges.
+10. Resolved: this model's hylomorphic thesis replaced the four-Aitia Schema and
+    was refined into the layered graph.
 
-Until these questions are settled, this document is research context and must
-not silently change the accepted evidence-side implementation contract.
+This document is retained as research context. The layered graph is the current
+implementation contract.
 
 ## Origin Example: Note To Grandma
 

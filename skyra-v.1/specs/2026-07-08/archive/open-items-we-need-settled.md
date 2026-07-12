@@ -1,6 +1,14 @@
 # Open Items We Need Settled
 
-**Date:** 2026-07-10 · **Status:** OPEN EVIDENCE-SIDE ITEMS / RESOLUTION INDEX
+**Archive:** superseded decision ledger; retained for design provenance only.
+
+**Date:** 2026-07-10 · **Status:** SUPERSEDED LEDGER · 2026-07-12
+
+> This ledger belongs to the superseded four-node Schema/Aitia/Maxim/Evidence
+> model. Do not resolve or implement its remaining questions as current
+> architecture. The active ledger is
+> [Minimal Loop Uncertainties](../cause-and-effect/minimal-loop-uncertainties.md),
+> owned by the [layered graph](../cause-and-effect/subgraph-and-causal-edge-ownership.md).
 
 Most evidence-side open items discussed on 2026-07-10 are settled and dispersed
 into their canonical owning specifications. This file remains the resolution
@@ -17,14 +25,14 @@ owners. It does not define independent architecture.
 | Node reuse versus birth by residual magnitude | [Schema Composition](./schema-aitia-maxim-evidence.md#schema-composition) |
 | Active Schema references on Slice | [Active Schema State](./schema-aitia-maxim-evidence.md#active-schema-state) |
 | Maxim proposal and Evidence ownership | [Maxim And Evidence](./schema-aitia-maxim-evidence.md#maxim-and-evidence) |
-| Observation versus intervention | [Directed Affordance Invocation](./directed-affordance-invocation.md#observation-versus-intervention) |
+| Observation versus intervention | [Directed Affordance Invocation](../directed-affordance-invocation.md#observation-versus-intervention) |
 | Tension/resonance and zero-edge defeat | [Signed Edge Strength](./schema-aitia-maxim-evidence.md#signed-edge-strength) |
 | Identity/Familiarity EMA behavior | [Ungraded Traversal](./schema-aitia-maxim-evidence.md#ungraded-traversal) |
 | Evidence-mass distribution and backward magnitude | [Evidence-Mass Distribution](./schema-aitia-maxim-evidence.md#evidence-mass-distribution) |
-| Absolute-magnitude traversal allocation | [Proportional Amplitude Allocation](./proportional-amplitude-allocation.md) |
-| Amplitude as context budget and node token cost | [Space / Kernel Interface Reform](./space-kernel-interface-reform.md#cost-budget-and-amplitude) |
+| Absolute-magnitude traversal allocation | [Proportional Amplitude Allocation](../proportional-amplitude-allocation.md) |
+| Amplitude as context budget and node token cost | [Space / Kernel Interface Reform](../space-kernel-interface-reform.md#cost-budget-and-amplitude) |
 | Sequential grading and local error absorption | [Prediction Error And Local Repair](./schema-aitia-maxim-evidence.md#prediction-error-and-local-repair) |
-| Multi-wave grading episodes and cascade ownership | [DAG / Kernel Responsibility Boundary](./dag-kernel-responsibility-boundary.md#grading-episodes-and-cascades) |
+| Multi-wave grading episodes and cascade ownership | [DAG / Kernel Responsibility Boundary](../dag-kernel-responsibility-boundary.md#grading-episodes-and-cascades) |
 | Telos parity on evidence side | [Schema](./schema-aitia-maxim-evidence.md#schema) |
 
 ## Open Evidence-Side Items

@@ -1,11 +1,25 @@
 # Schema / Aitia / Maxim / Evidence
 
-**Date:** 2026-07-10 · **Status:** ACCEPTED FOR EVIDENCE-SIDE IMPLEMENTATION
-**Supersedes:** the evidence-side data model and grading proposals in
-[aitia-maxim-telos-schema-praxis.md](./aitia-maxim-telos-schema-praxis.md) and
-[open-items-we-need-settled.md](./open-items-we-need-settled.md)
+**Archive:** historical model; retained for design provenance only.
 
-This is the canonical specification for the evidence-side cognitive graph.
+**Date:** 2026-07-10 · **Status:** SUPERSEDED 2026-07-12
+**Superseded by:**
+[Subgraph And Causal Edge Ownership](../cause-and-effect/subgraph-and-causal-edge-ownership.md)
+and the [Cause And Effect index](../cause-and-effect/README.md)
+
+> **Do not implement this data model.** The fixed four-Aitia Schema,
+> Maxim-owned Evidence, and
+> `Entity → Schema → Aitia → Maxim → Evidence → Entity` topology have been
+> replaced by one layered heterogeneous graph: immutable semantic birth
+> subgraphs are reified as perspectival `CausalNode`s; only inherited,
+> Efficient, and Final causal edges are weighted; observation-born
+> `CausalNode`s act as Evidence relationally. Maxim is deferred to Praxis.
+>
+> Retained historical mechanics such as immutable topology, fresh contextual
+> edge identity, signed Identity/Familiarity activation, zero-edge defeat, and
+> residual/local-repair ideas must be read through the new layered owner.
+
+This was the canonical specification for the evidence-side cognitive graph.
 Praxis, reward, utility, action obedience, and progress toward Telos are outside
 this scope and remain deferred.
 

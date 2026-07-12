@@ -1,6 +1,13 @@
 # Query By Subgraph
 
-**Status:** RESEARCH DRAFT · candidate replacement for four separate causes
+**Status:** ADOPTED FOUNDATION / PARTIALLY SUPERSEDED · 2026-07-12
+
+> The query-by-subgraph contract and Material/Formal collapse are adopted.
+> Later sections treating Evidence as a separate type, Effect as part of the
+> minimal loop, or causal-node roles as intrinsic are superseded by
+> [Subgraph And Causal Edge Ownership](./subgraph-and-causal-edge-ownership.md).
+> Efficient and Final remain perspectival weighted edges between one-type
+> `CausalNode`s.
 
 ## Decision Under Study
 
@@ -151,4 +158,3 @@ prediction or turning observation into belief.
 - What grading signal measures Material/Formal fit without grading verbosity?
 - When does a requery reuse a prior immutable subgraph rather than create one?
 - Does a lower token budget produce abstraction consistently across models?
-

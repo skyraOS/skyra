@@ -1,20 +1,19 @@
 # Aitia Maxim Telos Schema Praxis
 
-**Date:** 2026-07-08 · **Status:** PARTIALLY SUPERSEDED
-**Parents:** [directed-affordance-invocation.md](./directed-affordance-invocation.md),
-[space-kernel-interface-reform.md](./space-kernel-interface-reform.md),
-[outstanding-reform-tracks.md](./outstanding-reform-tracks.md)
+**Archive:** superseded evidence model with deferred Praxis notes.
 
-> **Canonical-model notice (2026-07-10):** The Schema/Aitia/Maxim/Evidence data
-> model, evidence ownership, grading equations, traversal polarity, active-state
-> ownership, and cascade mechanics in this document are superseded by
-> [schema-aitia-maxim-evidence.md](./schema-aitia-maxim-evidence.md). In
-> particular, do **not** implement this document's earlier claims that an Aitia
-> is a four-cause whole, that Schema contains `1:*` whole Aitia records, that
-> Evidence attaches directly to Aitia, or that Aitia confidence is the raw sum
-> of evidence weights. Canonically: Schema is the immutable four-cause whole;
-> each cause is one immutable Aitia node; Evidence is Maxim-owned; contextual
-> edge EMAs carry signed tension/resonance; only residual error propagates.
+**Date:** 2026-07-08 · **Status:** SUPERSEDED EVIDENCE MODEL / DEFERRED PRAXIS NOTES
+**Parents:** [directed-affordance-invocation.md](../directed-affordance-invocation.md),
+[space-kernel-interface-reform.md](../space-kernel-interface-reform.md),
+[outstanding-reform-tracks.md](../outstanding-reform-tracks.md)
+
+> **Canonical-model notice (2026-07-12):** Both this document's evidence-side
+> model and the later fixed Schema/Aitia/Maxim/Evidence replacement are now
+> superseded by the
+> [layered cause-and-effect graph](../cause-and-effect/subgraph-and-causal-edge-ownership.md).
+> Do not implement any Evidence, Schema, Aitia, Maxim, or grading shape from
+> this file. Retain only its philosophical separation thesis and deferred
+> Maxim/Praxis action-design notes for later review.
 >
 > The separation thesis, philosophical motivation, and deferred Praxis questions
 > remain useful design context. Praxis selection, reward/utility, interventions,
