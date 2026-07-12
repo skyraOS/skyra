@@ -77,7 +77,7 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// crossed — instead of the hand-built renderOtherDistribution. The recent exchange
 	// (entity interactions) is still hand-rendered until entities join the traversal.
 	frame := FramePresentCrossing(root.Grouping, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
-	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Entities))
+	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Nodes))
 	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("self present (traversal-assembled):\n%s", present))
 	resp, err := root.DNA().Infer()(selfSystem, present)
 	if err != nil {

@@ -56,13 +56,13 @@ func sensoryIngest(root *EphemeralRoot, origin skyra.Space, impulse any) {
 
 	kind := dna.Kind(imp.Primitive) // the affordance stamps the Kind
 	deposit := func(entityID string, coord skyra.Coord) {
-		entity := root.Entities.Ensure(entityID)
+		entity := root.Nodes.EnsureEntity(entityID)
 		recID := fmt.Sprintf("%s:%s:%d", entityID, imp.Primitive, ts)
 		rec := dna.NewMemoryCell(recID, kind,
 			dna.PerceiveRecord{EntityID: entityID, Coord: coord, Timestamp: ts}, nil)
 		rec.AddChild(recID+"→"+entityID, entity)
 		gi.AddChild(gist, gist.ID()+"→"+recID, rec)
-		root.Entities.LinkGrouping(entity, grouping)
+		root.Nodes.LinkGrouping(entity, grouping)
 		d.CrossBirth(gist.ID()+"→"+recID, recID+"→"+entityID)
 	}
 

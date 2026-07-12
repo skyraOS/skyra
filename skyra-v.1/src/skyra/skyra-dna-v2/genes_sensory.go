@@ -24,9 +24,9 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return // reafference/internal record nothing on this lane yet (phase 2)
 	}
 	sender := resolveEntity(imp.Source.SpaceID)
-	entity := root.Entities.Ensure(sender)
+	entity := root.Nodes.EnsureEntity(sender)
 	utterance, _ := imp.Payload.(string)
-	root.Entities.AppendInteraction(entity, dna.InteractionRecord{
+	root.Nodes.AppendInteraction(entity, dna.InteractionRecord{
 		From:      sender,
 		To:        root.DNA().BeingID(),
 		Utterance: utterance,

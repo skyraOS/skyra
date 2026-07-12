@@ -16,7 +16,7 @@ import (
 // fan-out's predict workers. Reports "framed" / "empty".
 func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	gi := root.DNA().Groupings()
-	exchange := renderExchange(root.Entities)
+	exchange := renderExchange(root.Nodes)
 	// the current surroundings — the active episode's traversed perceive records,
 	// normalized (freshest per entity). Lets midlevel frame purely SPATIAL episodes
 	// (the maze; sharpening the default grouping from sense data alone) — decision
@@ -49,7 +49,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 
 	// The querier contract (Phase 1): the gist is an ANNOTATED sentence; the
-	// compound is parsed from it (the parser is the validator). Malformed
+	// subgraph is parsed from it (the parser is the validator). Malformed
 	// annotation gets bounded retry-with-correction — a format error, not an
 	// epistemic error (no AIMD tax; the budget controller lands in Phase 3).
 	parsed, perr := ParseAnnotated(gist)
@@ -75,7 +75,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "query-format-error"
 		return
 	}
-	comp := root.DNA().Compounds().Persist(parsed, ts)
+	comp := root.DNA().CausalNodes().Persist(parsed, ts)
 	gist = parsed.Sentence
 
 	// EDIT: mint a NEW gist on the existing episode (the sequence — the prior gist
@@ -94,16 +94,16 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
 	}
 
-	// Commit the minimal-Aitia side: mint the set around the compound, activate
+	// Commit the minimal-Aitia side: mint the set around the CausalNode, activate
 	// it on the Slice (atomic replacement — retain-or-requery's requery half),
-	// and cross-link the spine gist to its canonical compound.
-	set := root.DNA().Compounds().MintSet(comp.Summary.ID(), ts)
+	// and cross-link the spine gist to its canonical CausalNode.
+	set := root.DNA().CausalNodes().MintSet(comp.Cell.ID(), ts)
 	root.DNA().ActivateSet(set.ID)
 	if g := latestGist(root.Grouping); g != nil {
-		g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CompoundID: comp.Summary.ID()})
+		g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CausalNodeID: comp.Cell.ID()})
 	}
-	debug.Being("skyra", "querier", fmt.Sprintf("compound %s: %q V=%d E=%d → set %s active",
-		comp.Summary.ID(), gist, len(comp.Members), len(parsed.Edges), set.ID))
+	debug.Being("skyra", "querier", fmt.Sprintf("causal-node %s: %q V=%d E=%d → set %s active",
+		comp.Cell.ID(), gist, len(comp.Parents), len(parsed.Edges), set.ID))
 
 	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
 
@@ -128,12 +128,12 @@ func consolidateInteraction(root *EphemeralRoot) {
 	if gist == nil {
 		return
 	}
-	node, entity, ok := root.Entities.Latest()
+	node, entity, ok := root.Nodes.Latest()
 	if !ok {
 		return
 	}
 	root.DNA().Groupings().AddChild(gist, gist.ID()+"→"+node.ID(), node)
-	root.Entities.LinkGrouping(entity, root.Grouping)
+	root.Nodes.LinkGrouping(entity, root.Grouping)
 }
 
 // framePresent renders the framing-op present: the exchange + the current
@@ -165,7 +165,7 @@ func framePresent(exchange, locations string, episodes []struct{ ID, Gist string
 
 // renderExchange turns the entity index's interaction records into a timestamp-
 // ordered transcript (who said what) — the present the framing pass reads.
-func renderExchange(ei *EntityIndex) string {
+func renderExchange(ei *NodeRegistry) string {
 	if ei == nil {
 		return ""
 	}

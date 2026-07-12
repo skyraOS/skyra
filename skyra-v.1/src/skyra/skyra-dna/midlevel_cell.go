@@ -176,12 +176,12 @@ func (g *MidLevelCell) observeExternal(reframeReason string) {
 type Gist struct {
 	Text      string
 	Timestamp int
-	// CompoundID links this spine-compatibility gist to its canonical compound
+	// CausalNodeID links this spine-compatibility gist to its canonical compound
 	// (the summary node in the CompoundIndex) once midlevel emits annotated
 	// sentences — the minimal-Aitia querier (Phase 1). "" = plain gist (no
 	// compound: pre-querier history, the default grouping's empty seed, or an
 	// annotation-parse fallback).
-	CompoundID string
+	CausalNodeID string
 }
 
 // startGrouping creates a fresh grouping anchor carrying the gist and publishes it

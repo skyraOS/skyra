@@ -19,7 +19,7 @@ func TestSensoryIntakePortRecordsEntity(t *testing.T) {
 	// does), drive it through the kernel with an external engage.
 	root := d.Transcribe(string(StepSensoryIntake), string(StepSensoryIntake), "",
 		world.NewSlice("skyra:sensory", "skyra"), "X", nil)
-	root.Entities = d.Entities()
+	root.Nodes = d.Nodes()
 
 	kernel := relation.NewRelation()
 	kernel.Realize(root, root, skyra.Impulse{
@@ -31,7 +31,7 @@ func TestSensoryIntakePortRecordsEntity(t *testing.T) {
 	if root.Condition != "external" {
 		t.Fatalf("condition = %q, want external", root.Condition)
 	}
-	ents := d.Entities().Snapshot()
+	ents := d.Nodes().Snapshot()
 	if len(ents) != 1 || ents[0].ID() != "michael" {
 		t.Fatalf("entity index = %v, want [michael]", ents)
 	}

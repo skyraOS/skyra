@@ -19,7 +19,7 @@ import (
 //	nodes:  word[k]            — per-emission ordinal k
 //	        {a phrase}[k]      — multi-word referent
 //	        word[k=stable:id]  — explicit reuse (the composition hook:
-//	                             {the outage}[1=compound:g42])
+//	                             {the outage}[1=causal:g42])
 //	edges:  verb[a→b]          — the annotated word/phrase is the edge label;
 //	                             ASCII -> accepted; multi-arc = multiple edges
 //	coreference: repeating an ordinal re-references the node
@@ -44,9 +44,9 @@ type ParsedEdge struct {
 	To    int
 }
 
-// ParsedCompound is one hylomorphic query result: G = (V, E) plus the clean
+// ParsedSubgraph is one hylomorphic query result: G = (V, E) plus the clean
 // sentence (annotations stripped) that becomes the summary node's content.
-type ParsedCompound struct {
+type ParsedSubgraph struct {
 	Sentence string
 	Nodes    []ParsedNode // sorted by ordinal
 	Edges    []ParsedEdge // in emission order
@@ -81,11 +81,11 @@ var glueWords = map[string]bool{
 	"to": true, "and": true, "or": true, "but": true,
 }
 
-// ParseAnnotated parses one annotated sentence into its compound. It returns a
+// ParseAnnotated parses one annotated sentence into its subgraph. It returns a
 // *ParseErrors listing every problem when the emission is malformed.
-func ParseAnnotated(raw string) (ParsedCompound, error) {
+func ParseAnnotated(raw string) (ParsedSubgraph, error) {
 	var pe ParseErrors
-	out := ParsedCompound{}
+	out := ParsedSubgraph{}
 
 	matches := annotRe.FindAllStringSubmatch(raw, -1)
 	byOrdinal := map[int]*ParsedNode{}
@@ -160,7 +160,7 @@ func ParseAnnotated(raw string) (ParsedCompound, error) {
 		pe.Problems = append(pe.Problems, "no annotated nodes — an empty claim")
 	}
 	if len(pe.Problems) > 0 {
-		return ParsedCompound{}, &pe
+		return ParsedSubgraph{}, &pe
 	}
 
 	for _, n := range byOrdinal {

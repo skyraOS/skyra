@@ -9,33 +9,42 @@ import (
 	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// EntityIndex — the master entity graph, held on the nucleus (the DNA). Entities
-// are v1 MemoryCells (KindEntity) with interaction/state records as children. This
-// is durable working memory: it rides EVERY worker's working set (handed by
-// reference at transcription) and is traversed every wave. Writes go through the
-// handed reference straight back to this master index (shared by reference).
-type EntityIndex struct {
+// NodeRegistry — the master registry of MATERIAL NODES, held on the nucleus
+// (the DNA). It owns both provenance kinds and the label lookup between them:
+// Entities (born from OBSERVATION — sensory/ingest) and Terms (born from a
+// query's ASSERTION). Entities are v1 MemoryCells (KindEntity) with
+// interaction/state records as children. This is durable working memory: it
+// rides EVERY worker's working set (handed by reference at transcription) and
+// is traversed every wave. Writes go through the handed reference straight
+// back to this master registry (shared by reference).
+type NodeRegistry struct {
 	mu    sync.Mutex
 	slice skyra.Slice // nucleus slice for the nodes (nil-tolerant until activation lands)
 	byID  map[string]*dna.MemoryCell
+	terms map[string]*dna.MemoryCell // lookup key → term node ("has this label a node yet")
 }
 
-func NewEntityIndex(slice skyra.Slice) *EntityIndex {
-	return &EntityIndex{slice: slice, byID: map[string]*dna.MemoryCell{}}
+func NewNodeRegistry(slice skyra.Slice) *NodeRegistry {
+	return &NodeRegistry{
+		slice: slice,
+		byID:  map[string]*dna.MemoryCell{},
+		terms: map[string]*dna.MemoryCell{},
+	}
 }
 
 // Get returns the entity node for an id WITHOUT creating (nil if unknown) —
 // the non-creating half of resolution: entities are born from OBSERVATION
 // (sensory/ingest), never from a query's assertion.
-func (ei *EntityIndex) Get(id string) *dna.MemoryCell {
+func (ei *NodeRegistry) Get(id string) *dna.MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	return ei.byID[id]
 }
 
-// Ensure get-or-creates the entity node for a resolved id. (Entity resolution is
-// exact-match for now — the identity-registry discipline; fuzzy later.)
-func (ei *EntityIndex) Ensure(id string) *dna.MemoryCell {
+// EnsureEntity get-or-creates the entity node for a resolved id. (Entity
+// resolution is exact-match for now — the identity-registry discipline; fuzzy
+// later.)
+func (ei *NodeRegistry) EnsureEntity(id string) *dna.MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	if e, ok := ei.byID[id]; ok {
@@ -46,9 +55,30 @@ func (ei *EntityIndex) Ensure(id string) *dna.MemoryCell {
 	return e
 }
 
+// Term returns the term node for a lookup key WITHOUT creating (nil if none).
+func (ei *NodeRegistry) Term(key string) *dna.MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	return ei.terms[key]
+}
+
+// EnsureTerm get-or-creates a term node — a material node born from ASSERTION
+// (a mentioned-but-never-observed referent). Exact-match on the lookup key;
+// merging a term into a later-observed entity is the deferred merge op.
+func (ei *NodeRegistry) EnsureTerm(key, cellID, label string) *dna.MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	if t, ok := ei.terms[key]; ok {
+		return t
+	}
+	t := dna.NewMemoryCell(cellID, KindTerm, TermContent{Label: label}, ei.slice)
+	ei.terms[key] = t
+	return t
+}
+
 // AppendInteraction records an utterance/action on an entity as a KindResponse
 // child (the write-time discipline; the reverse index depends on it).
-func (ei *EntityIndex) AppendInteraction(entity *dna.MemoryCell, rec dna.InteractionRecord) {
+func (ei *NodeRegistry) AppendInteraction(entity *dna.MemoryCell, rec dna.InteractionRecord) {
 	if entity == nil {
 		return
 	}
@@ -62,7 +92,7 @@ func (ei *EntityIndex) AppendInteraction(entity *dna.MemoryCell, rec dna.Interac
 // Latest returns the newest interaction node (KindResponse) across all entities, with
 // its owning entity — the interaction that just arrived, for midlevel to consolidate
 // onto the active episode.
-func (ei *EntityIndex) Latest() (node, entity *dna.MemoryCell, ok bool) {
+func (ei *NodeRegistry) Latest() (node, entity *dna.MemoryCell, ok bool) {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	bestTS := -1
@@ -82,7 +112,7 @@ func (ei *EntityIndex) Latest() (node, entity *dna.MemoryCell, ok bool) {
 
 // LinkGrouping wires entity → grouping (the episodes a participant is in), idempotent on
 // the grouping id — cool entities point to episodes, not raw interactions.
-func (ei *EntityIndex) LinkGrouping(entity, grouping *dna.MemoryCell) {
+func (ei *NodeRegistry) LinkGrouping(entity, grouping *dna.MemoryCell) {
 	if entity == nil || grouping == nil {
 		return
 	}
@@ -93,7 +123,7 @@ func (ei *EntityIndex) LinkGrouping(entity, grouping *dna.MemoryCell) {
 
 // Snapshot returns the current entity nodes under the lock (for frame assembly —
 // read live, the active state).
-func (ei *EntityIndex) Snapshot() []*dna.MemoryCell {
+func (ei *NodeRegistry) Snapshot() []*dna.MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	out := make([]*dna.MemoryCell, 0, len(ei.byID))

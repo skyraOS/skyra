@@ -93,7 +93,7 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return
 	}
 	present := fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s",
-		gistOf(root.Grouping), renderExchange(root.Entities))
+		gistOf(root.Grouping), renderExchange(root.Nodes))
 	resp, err := root.DNA().Infer()(otherSystem, present)
 	if err != nil {
 		return

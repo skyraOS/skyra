@@ -7,7 +7,7 @@ import (
 
 // The signed edge store — the minimal loop's learned state
 // (minimal-aitia-set.md "Edge Learning And Defeat"). One record per contextual
-// edge (keyed by CausalEdge.ID). Signed grades in [-1,1] sample two EMAs;
+// edge (keyed by EdgeRecord.ID). Signed grades in [-1,1] sample two EMAs;
 // strength is their mean and stays SIGNED: polarity is meaning (resonance /
 // tension), absolute magnitude is the transport claim. Distinct from the
 // existing ActivationStore (A/S/F/N) by design — new model beside old, not a

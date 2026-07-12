@@ -31,7 +31,7 @@ type EphemeralRoot struct {
 	// membrane at transcription (the mRNA carries what it needs). The entity index
 	// rides every worker; step-specific handles (the active grouping) are set for
 	// the steps that need them.
-	Entities *EntityIndex
+	Nodes *NodeRegistry
 	Grouping *dna.MemoryCell // the active grouping — set by midlevel:frame (out), handed to predicts (in)
 }
 

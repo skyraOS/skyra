@@ -220,7 +220,7 @@ func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 	if !hasInteraction {
 		t.Fatal("the gist should own the consolidated interaction (gist-owned spine)")
 	}
-	for _, e := range d.Entities().Snapshot() {
+	for _, e := range d.Nodes().Snapshot() {
 		if e.ID() == "michael" {
 			if _, ok := e.Children()[g.ID()]; !ok {
 				t.Fatal("entity should point to the episode (entity→grouping edge)")

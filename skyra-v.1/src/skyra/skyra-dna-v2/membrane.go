@@ -81,7 +81,7 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	// hand the working set — the entity index rides EVERY worker (the mRNA carries
 	// what it needs). Step-specific: the predict genes get the impulse's active
 	// grouping (produced by midlevel:frame, stashed on the row).
-	m.worker.Entities = m.orch.dna.Entities()
+	m.worker.Nodes = m.orch.dna.Nodes()
 	switch m.step {
 	case StepOtherPredict, StepSelfPredict, StepMotorCollapse:
 		if g, ok := m.orch.board.Row(m.impulseID, "").Grouping().(*dna.MemoryCell); ok {

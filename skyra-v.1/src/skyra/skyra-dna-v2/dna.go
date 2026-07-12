@@ -26,8 +26,8 @@ type DNA struct {
 	// It carries no kernel waves; it is index substrate only.
 	nucleus skyra.Slice
 
-	// The master graph (the nucleus's durable working memory).
-	entities  *EntityIndex
+	// The knowledge graph's material nodes (the nucleus's durable working memory).
+	nodes     *NodeRegistry
 	groupings *GroupingIndex
 
 	// activation holds edge-owned learning (A/S/F/N) keyed by edge identity — the
@@ -35,10 +35,10 @@ type DNA struct {
 	activation *ActivationStore
 
 	// The minimal-Aitia loop's stores (cause-and-effect, Phase 0/1): immutable
-	// compounds + Aitia sets, and the signed edge EMAs. Beside the legacy
+	// CausalNodes + Aitia sets, and the signed edge EMAs. Beside the legacy
 	// grouping/activation machinery, not a mutation of it.
-	compounds *CompoundIndex
-	signed    *SignedStore
+	causal *CausalNodes
+	signed *SignedStore
 
 	// infer is the injected LLM seam (system, present) → text. Genes that think
 	// call it; nil → those genes skip (tests without inference).
@@ -57,29 +57,28 @@ type DNA struct {
 type InferFunc func(system, present string) (string, error)
 
 func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
-	d := &DNA{
+	nodes := NewNodeRegistry(nucleus)
+	return &DNA{
 		beingID:    beingID,
 		observe:    map[string]ObserveCompetence{},
 		express:    map[string]ExpressCompetence{},
 		nucleus:    nucleus,
-		entities:   NewEntityIndex(nucleus),
+		nodes:      nodes,
 		groupings:  NewGroupingIndex(nucleus),
 		activation: NewActivationStore(),
-		compounds:  NewCompoundIndex(nucleus),
+		causal:     NewCausalNodes(nucleus, nodes), // mentioned michael resolves to observed michael
 		signed:     NewSignedStore(),
 	}
-	d.compounds.WireEntities(d.entities) // mentioned michael resolves to observed michael
-	return d
 }
 
 func (d *DNA) BeingID() string           { return d.beingID }
 func (d *DNA) Nucleus() skyra.Slice      { return d.nucleus }
-func (d *DNA) Entities() *EntityIndex    { return d.entities }
+func (d *DNA) Nodes() *NodeRegistry       { return d.nodes }
 func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
 func (d *DNA) Infer() InferFunc          { return d.infer }
 func (d *DNA) SetInfer(fn InferFunc)     { d.infer = fn }
 func (d *DNA) Activation() *ActivationStore { return d.activation }
-func (d *DNA) Compounds() *CompoundIndex    { return d.compounds }
+func (d *DNA) CausalNodes() *CausalNodes    { return d.causal }
 func (d *DNA) Signed() *SignedStore         { return d.signed }
 
 // ActiveSet returns the being's active AitiaSet (ok=false before the first
@@ -89,7 +88,7 @@ func (d *DNA) ActiveSet() (AitiaSet, bool) {
 	if id == "" {
 		return AitiaSet{}, false
 	}
-	return d.compounds.Set(id)
+	return d.causal.Set(id)
 }
 
 // ActivateSet commits a set as the being's active situation — atomic

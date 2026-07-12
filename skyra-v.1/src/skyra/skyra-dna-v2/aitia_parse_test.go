@@ -111,21 +111,22 @@ func TestParseAnnotatedEmptyClaim(t *testing.T) {
 // Persist: fresh summary + fresh contextual edges; term nodes REUSED across
 // compounds by normalized label (nodes reused, edges never).
 func TestPersistReusesNodesFreshEdges(t *testing.T) {
-	ci := NewCompoundIndex(nil)
+	nr := NewNodeRegistry(nil)
+	ci := NewCausalNodes(nil, nr)
 	p1, _ := ParseAnnotated("michael[1] asked[1→2] skyra[2]")
 	p2, _ := ParseAnnotated("skyra[1] answered[1→2] michael[2]")
 
 	c1 := ci.Persist(p1, 1)
 	c2 := ci.Persist(p2, 2)
 
-	if c1.Summary.ID() == c2.Summary.ID() {
+	if c1.Cell.ID() == c2.Cell.ID() {
 		t.Fatal("summaries must be fresh")
 	}
 	// same term nodes, both compounds
-	if ci.Term("michael") == nil || ci.Term("skyra") == nil {
+	if nr.Term("michael") == nil || nr.Term("skyra") == nil {
 		t.Fatal("term registry missing shared nodes")
 	}
-	if c1.Members[0] != c2.Members[1] { // michael
+	if c1.Parents[0] != c2.Parents[1] { // michael
 		t.Fatal("michael must be ONE reused node")
 	}
 	// edges are contextual: no shared edge IDs
@@ -141,7 +142,7 @@ func TestPersistReusesNodesFreshEdges(t *testing.T) {
 	for _, e := range c1.Edges {
 		if e.Kind == EdgeMember {
 			memberEdges++
-			if e.ToID != c1.Summary.ID() {
+			if e.ToID != c1.Cell.ID() {
 				t.Fatalf("member edge points at %s, want the summary", e.ToID)
 			}
 		}
@@ -156,28 +157,27 @@ func TestPersistReusesNodesFreshEdges(t *testing.T) {
 // A mentioned-but-never-observed referent stays a term (entities are born from
 // observation, never from assertion).
 func TestResolveUnifiesWithObservedEntities(t *testing.T) {
-	ei := NewEntityIndex(nil)
-	observed := ei.Ensure("michael") // born from observation (sensory/ingest)
-	ci := NewCompoundIndex(nil)
-	ci.WireEntities(ei)
+	nr := NewNodeRegistry(nil)
+	observed := nr.EnsureEntity("michael") // born from observation (sensory/ingest)
+	ci := NewCausalNodes(nil, nr)
 
 	p, _ := ParseAnnotated("michael[1] mentioned[1→2] sarah[2]")
 	c := ci.Persist(p, 1)
 
-	if c.Members[0] != observed {
+	if c.Parents[0] != observed {
 		t.Fatal("mentioned michael must resolve to the OBSERVED entity node")
 	}
-	if ci.Term("michael") != nil {
+	if nr.Term("michael") != nil {
 		t.Fatal("no shadow term when an observed entity matches")
 	}
-	if c.Members[1].Kind() != KindTerm {
+	if c.Parents[1].Kind() != KindTerm {
 		t.Fatal("never-observed sarah stays a term (assertion, not observation)")
 	}
 
 	// the explicit escape hatch reaches the entity too, prefix accepted
 	p2, _ := ParseAnnotated("he[1=entity:michael] left[1→2] the maze[2]")
 	c2 := ci.Persist(p2, 2)
-	if c2.Members[0] != observed {
+	if c2.Parents[0] != observed {
 		t.Fatal("[k=entity:id] must resolve to the observed entity node")
 	}
 }
@@ -185,14 +185,14 @@ func TestResolveUnifiesWithObservedEntities(t *testing.T) {
 // Composition: a stable compound id as referent resolves to the existing
 // summary node — previous compounds are legal material.
 func TestPersistComposesPreviousCompound(t *testing.T) {
-	ci := NewCompoundIndex(nil)
+	ci := NewCausalNodes(nil, NewNodeRegistry(nil))
 	p1, _ := ParseAnnotated("{the outage}[1] hit[1→2] the api[2]")
 	c1 := ci.Persist(p1, 1)
 
-	p2, _ := ParseAnnotated("{the outage}[1=" + c1.Summary.ID() + "] caused[1→2] delays[2]")
+	p2, _ := ParseAnnotated("{the outage}[1=" + c1.Cell.ID() + "] caused[1→2] delays[2]")
 	c2 := ci.Persist(p2, 2)
 
-	if c2.Members[0] != c1.Summary {
+	if c2.Parents[0] != c1.Cell {
 		t.Fatal("the compound summary node should be the reused referent")
 	}
 }

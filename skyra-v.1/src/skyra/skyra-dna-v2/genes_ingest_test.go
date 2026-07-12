@@ -77,7 +77,7 @@ func TestIngestDepositsSurroundingsOnTheSpine(t *testing.T) {
 
 	// entity → grouping route, for self and swept alike
 	for _, id := range []string{"skyra", "michael"} {
-		entity := d.Entities().Ensure(id)
+		entity := d.Nodes().EnsureEntity(id)
 		if _, ok := entity.Children()[g.ID()]; !ok {
 			t.Fatalf("entity %s should route back to the grouping", id)
 		}

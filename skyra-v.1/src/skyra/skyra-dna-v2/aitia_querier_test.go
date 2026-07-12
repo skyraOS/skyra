@@ -41,21 +41,21 @@ func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	if set.EfficientEdgeID != "" || set.FinalEdgeID != "" {
 		t.Fatal("v0.1 sets carry only the present reference (causal edges are Phase 4)")
 	}
-	summary := d.Compounds().Get(set.PresentID)
+	summary := d.CausalNodes().Get(set.PresentID)
 	if summary == nil {
 		t.Fatal("active set's present compound not persisted")
 	}
-	cc, ok := summary.Content().(CompoundContent)
+	cc, ok := summary.Content().(CausalNodeContent)
 	if !ok || cc.Sentence != "michael wants help with the skyra project" {
 		t.Fatalf("compound sentence = %+v", summary.Content())
 	}
 	// the subgraph landed: observed michael resolves to the Entity; asserted-only
 	// material remains a shared Term. No shadow michael term is created.
-	if d.Compounds().Term("michael") != nil || d.Compounds().Term("the skyra project") == nil {
+	if d.Nodes().Term("michael") != nil || d.Nodes().Term("the skyra project") == nil {
 		t.Fatal("observed/asserted referent resolution is wrong")
 	}
 	structural := 0
-	for _, e := range d.Compounds().EdgesOf(set.PresentID) {
+	for _, e := range d.CausalNodes().EdgesOf(set.PresentID) {
 		if e.Kind == EdgeStructural {
 			structural++
 		}
@@ -69,8 +69,8 @@ func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	if gc.Text != "michael wants help with the skyra project" {
 		t.Fatalf("gist text = %q, want the clean sentence", gc.Text)
 	}
-	if gc.CompoundID != set.PresentID {
-		t.Fatalf("gist.CompoundID = %q, want %s", gc.CompoundID, set.PresentID)
+	if gc.CausalNodeID != set.PresentID {
+		t.Fatalf("gist.CausalNodeID = %q, want %s", gc.CausalNodeID, set.PresentID)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestQuerierRetriesBadAnnotationThenSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatal("retry should still land an active set")
 	}
-	cc, _ := d.Compounds().Get(set.PresentID).Content().(CompoundContent)
+	cc, _ := d.CausalNodes().Get(set.PresentID).Content().(CausalNodeContent)
 	if cc.Sentence != "michael wants help" {
 		t.Fatalf("sentence = %q", cc.Sentence)
 	}
