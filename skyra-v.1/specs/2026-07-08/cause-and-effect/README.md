@@ -97,6 +97,15 @@ supersede the accepted four-node Schema model.
   edge occurrences never carry over. A regrade against the new summary mints
   a NEW edge owned by the new context, with its own evidence and signed-store
   history — edge occurrences are never shared across contexts.
+- **Two node contracts, agreed vocabulary.** Knowledge graph (semantic,
+  probe-time): Entities + Terms, semantic edges, the label lookup, and the
+  reverse maps. CausalNode (weighted, traversal-time): the three process maps
+  (inherited/efficient/final) + the parent pointer to its birth subgraph —
+  the only bridge. CausalNodes have ONE type: material/formal, efficient,
+  final are perspectives from the ACTIVE node, never node kinds. Semantic
+  edges are never graded — grade relationships, never internals. Full
+  vocabulary table in subgraph-and-causal-edge-ownership.md. ("Compound" in
+  older docs = CausalNode; code renamed 2026-07-12.)
 - **One worker mechanism: probe → compose+grade.** Step 1: emit a probe
   subgraph → reverse-index lookup → candidates with hit counts → traversal
   amplitude distributed proportionally → traverse candidates' evidence.

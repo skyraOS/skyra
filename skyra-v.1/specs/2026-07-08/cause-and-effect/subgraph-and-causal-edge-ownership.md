@@ -16,6 +16,58 @@ Where do Material/Formal structure, Efficient Cause, Final Cause, and Evidence
 live without collapsing distinct explanatory contexts or making the graph
 untraversable?
 
+## Vocabulary (agreed 2026-07-12)
+
+Older docs say "compound"; the agreed name is CausalNode. One concept — the
+CausalNode and "causal space" are the same thing; the store is just its
+plural, not a second design object.
+
+| name | what it is |
+|---|---|
+| **CausalNode** | the base node minted per emission; owns the three process maps + the parent pointer to its birth subgraph |
+| **birth frame** | the parent nodes alive at spawn + the edge records minted at spawn fixing how they were arranged |
+| **material node** | a parent node in V — Entity or Term |
+| **Entity** | material node born from OBSERVATION (sensory/ingest) |
+| **Term** | material node born from ASSERTION (mentioned, never observed) |
+| **semantic edge** | immutable directed claim in the birth frame (formal, member); probe-time: index keys + verification; never graded, never weighted |
+| **weighted edge** | historic relationship occurrence (inherited, efficient, final) + its live graded state; traversal-time: amplitude + belief |
+| **node registry** | the knowledge graph's home for Entities + Terms and the label lookup |
+| **AitiaSet** | unchanged |
+
+## Two Node Contracts
+
+There are two fundamental node contracts, and every structure in this doc
+belongs to exactly one:
+
+```text
+knowledge graph (semantic, probe-time)
+  material nodes: Entities + Terms
+  semantic edges: formal + member records
+  maps: term/label lookup,
+        causalNodes[nodeID]        (reverse: node → CausalNodes containing it)
+        byPair / byTriple           (reverse: directed semantic edge keys)
+
+CausalNode (weighted, traversal-time)
+  three process maps: inherited, efficient, final   (weighted edges)
+  parent pointer: back to the knowledge subgraph minted at its formation
+```
+
+The birth subgraph is knowledge-graph CONTENT that the CausalNode references
+— the parent pointer is the only bridge between the two contracts. Terms live
+on the knowledge graph, never on the CausalNode. The reverse maps live on the
+knowledge graph because they are built from semantic content; the process
+maps live on the CausalNode because they are graded history.
+
+**Within the contracts:** knowledge-graph nodes come in two element types —
+semantic entities and semantic edges. CausalNodes come in ONE type. What a
+CausalNode "is" — material/formal, efficient, final — is not a property of
+the node; it is a PERSPECTIVE from whichever CausalNode is active. If A is
+active, A is the material/formal cause (the present). If A holds B in its
+efficient map, then B is "the efficient cause" only with respect to active A.
+When B later activates (re-anchoring), B is the material/formal cause and the
+roles around it reassign through B's own maps. Cause names are read off the
+active node's edges, never written into a node's kind.
+
 ## Two Relationship Layers
 
 One Aitia set contains two different relationship layers.
@@ -205,11 +257,18 @@ Evidence remains immutable and external to the compound and Aitia set. It
 grades relationship occurrences:
 
 ```text
-Evidence --grades--> StructuralEdge
 Evidence --grades--> InheritedEdge
 Evidence --grades--> EfficientCauseEdge
 Evidence --grades--> FinalCauseEdge
 ```
+
+Semantic edges are NEVER graded (corrected 2026-07-12 — an earlier draft
+graded StructuralEdge). You never grade a CausalNode's internals; you grade
+its RELATIONSHIPS — the weighted edges. If a claim inside a CausalNode turns
+out wrong, that arrives as negative evidence on the weighted edges pointing
+at that node, and retain-or-requery answers it by composing a successor —
+never by reaching inside the immutable original, which stays intact as "what
+I believed then."
 
 Evidence provenance may be traversed from an edge for inspection, but Evidence
 does not become a Material member merely because it grades the compound.
@@ -550,3 +609,11 @@ which relationships a given observe strategy follows.
 18. Every compound worker runs probe → compose+grade. Candidate sourcing is
     graph-owned (reverse index over inherited/causal maps); the Slice keeps
     only the active set.
+19. Two node contracts, one bridge: the knowledge graph owns material nodes,
+    semantic edges, and the reverse maps; the CausalNode owns the three
+    process maps and the parent pointer to its birth subgraph. Semantic
+    edges are never graded — grade relationships, never internals.
+20. CausalNodes have ONE type. Material/formal, efficient, and final are
+    perspectives read from the ACTIVE CausalNode's edges, never properties
+    written into a node's kind. Re-anchoring reassigns roles by changing
+    which node is active.
