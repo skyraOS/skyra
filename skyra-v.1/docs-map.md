@@ -24,6 +24,7 @@ The causal graph is the center of the system. Canonical, built, tested.
 | [aimd-abstraction-controller](specs/2026-07-08/cause-and-effect/aimd-abstraction-controller.md) | Lineage-keyed token budgets: correctness earns specificity, error forces abstraction |
 | [implementation-phases](specs/2026-07-08/cause-and-effect/implementation-phases.md) | The build record — all 8 phases landed 2026-07-12, with dated landed-notes |
 | [minimal-loop-uncertainties](specs/2026-07-08/cause-and-effect/minimal-loop-uncertainties.md) | The decision ledger. Open: item 10 (parked), item 11's other-agent half |
+| [praxis-ground](specs/2026-07-08/cause-and-effect/praxis-ground.md) | Decision record ahead of the Praxis spec: a completed action is an ordinary Material/Formal base CausalNode |
 
 **State:** code-complete in `src/skyra/skyra-dna-v2/`, validated against mock
 inference only. The next grade comes from a live session (ctrl+p opens the
@@ -93,7 +94,8 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
 1. **The Praxis spec** — actions as CausalNodes with birth-stamped Final
    causes. Absorbs reform §3 (self/other proposal chains) and the candidate
    collapse *predictions are Final beliefs*. Blocked-by-choice on live traces
-   and the Final-closure experiment.
+   and the Final-closure experiment. Decisions already made ahead of it live
+   in [praxis-ground.md](specs/2026-07-08/cause-and-effect/praxis-ground.md).
 2. **Kernel reform implementation** — steps 1–7 of outstanding-reform-tracks;
    sequenced after the first live validation run.
 3. **Live validation findings** — parse hit-rate, turn latency, grade quality,
