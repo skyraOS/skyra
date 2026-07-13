@@ -25,6 +25,12 @@ The goal is not to treat devices as generic remote tools. The goal is to treat t
 - the local network connects device-places into one traversable environment
 - when an agent enters a place, it perceives and acts through that place's local interface
 
+World affordance execution follows the durable-substrate / ephemeral-worker
+pattern described in [Ephemeral World Workers](./ephemeral-world-workers.md).
+Places retain authoritative state; a situated `perceive`, `engage`, `move`, or
+device affordance is instantiated as bounded temporary computation with an
+explicit outcome.
+
 This means a device-place is not one flat API surface. It is an environment made
 of multiple internal spaces that may expose different affordances and
 boundaries.
