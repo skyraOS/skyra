@@ -88,6 +88,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		frame := parsed.Sentence
 		set, err := buildFullCausalSet(root.DNA(), root.Trace, comp.Cell.ID(), ts)
 		if err != nil {
+			root.Trace.Note("frame-op", fmt.Sprintf("expansion failed — %s persisted but orphaned (no set)", comp.Cell.ID()))
 			debug.Being("skyra", "causal", fmt.Sprintf("expansion failed: %v — retaining prior active state", err))
 			root.Condition = "causal-format-error"
 			return
@@ -117,6 +118,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// write alignment (A) onto their edges, pruning misfits until it plateaus. midlevel
 	// withholds its frame until here — the settle is the sole writer of A (active-grouping.md).
 	passes := coherenceSettle(root.Episode, root.DNA().Activation(), ts, root.Infer("settle"))
+	root.Trace.Note("settle", fmt.Sprintf("settled %s in %d passes", root.Episode.ID(), passes))
 	debug.Being("skyra", "midlevel", fmt.Sprintf("settled %s in %d passes", root.Episode.ID(), passes))
 
 	root.Condition = "framed"

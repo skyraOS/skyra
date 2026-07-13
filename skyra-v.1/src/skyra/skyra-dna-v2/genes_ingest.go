@@ -71,6 +71,8 @@ func sensoryIngest(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	for id, coord := range sur.Agents {
 		deposit(id, coord)
 	}
+	root.Trace.Note("ingest", fmt.Sprintf("deposited self=%d,%d + %d agents under %s",
+		sur.Self.X, sur.Self.Y, len(sur.Agents), frame.ID()))
 	debug.Being("skyra", "ingest", fmt.Sprintf("deposited self=%d,%d + %d agents under %s",
 		sur.Self.X, sur.Self.Y, len(sur.Agents), frame.ID()))
 }

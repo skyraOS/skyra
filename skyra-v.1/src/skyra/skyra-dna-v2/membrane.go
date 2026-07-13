@@ -131,7 +131,10 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 	case route.Reframe:
 		// the one-reframe rail: only the first reframe per impulse is allowed
 		if row.TryReframe() {
+			row.Trace().Note("membrane", "reframe allowed — re-running midlevel:frame")
 			o.run(StepMidlevelFrame, m.impulseID, m.impulse)
+		} else {
+			row.Trace().Note("membrane", "reframe suppressed — rail already used")
 		}
 
 	case route.Done:

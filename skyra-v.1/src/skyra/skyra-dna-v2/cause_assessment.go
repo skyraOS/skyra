@@ -85,8 +85,12 @@ func (d *DNA) AssessActiveCauses(observationID string, tr *RunTrace) []CauseAsse
 			if gradeResult.hasGrade {
 				d.Signed().Grade(target.edgeID, gradeResult.grade, d.Clock())
 				_, _ = d.QueryBudgets().ApplyGrade(target.role, target.edgeID, gradeResult.grade)
+				strength, _ := d.Signed().Strength(target.edgeID, d.Clock())
+				budget, _ := d.QueryBudgets().Current(target.role)
+				tr.Note(stage, fmt.Sprintf("grade=%.2f edge=%s → strength=%.3f budget=%.1f", gradeResult.grade, target.edgeID, strength, budget))
 			} else {
 				_, _ = d.QueryBudgets().NoGrade(target.role, target.edgeID)
+				tr.Note(stage, "no-grade edge="+target.edgeID+" — EMA and budget held")
 			}
 			_ = d.CausalNodes().AttachEvidence(target.edgeID, observationID)
 			results <- assessment

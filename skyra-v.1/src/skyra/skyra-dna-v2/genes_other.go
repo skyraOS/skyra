@@ -65,6 +65,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	} else {
 		root.Condition = "all-preds<0" // total miss → reframe
 	}
+	root.Trace.Note("other:grade", fmt.Sprintf("%s score=%.2f matched=%d evidence=%q", root.Condition, score, idx, evidence))
 	debug.Being("skyra", "other", fmt.Sprintf("grade → %s score=%.2f evidence=%q", root.Condition, score, evidence))
 	// Closure → A is UNWIRED (2026-07-06): the midlevel coherence-settle is the sole writer of
 	// A now. Closure (did the bet hold) is a separate, parked axis — StampOtherGrade above still
@@ -108,6 +109,7 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	debug.Being("skyra", "other", fmt.Sprintf("predicted %d branches, top p=%.2f", len(preds), top))
 	born := appendOtherDistribution(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), preds)
+	root.Trace.Note("other:predict", fmt.Sprintf("deposited %d branches, top p=%.2f", len(preds), top))
 	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
 

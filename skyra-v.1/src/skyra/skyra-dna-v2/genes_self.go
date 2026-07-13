@@ -44,6 +44,7 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if score == 0 {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
+	root.Trace.Note("self:grade", fmt.Sprintf("exec=%.1f → %s proposal=%s", score, root.Condition, proposal.ID()))
 	debug.Being("skyra", "self", fmt.Sprintf("exec grade=%.1f → %s", score, root.Condition))
 	// Closure → A is UNWIRED (2026-07-06): the coherence-settle is the sole writer of A. The
 	// execution outcome is still recorded on the proposal (StampSelfGrade above); it no longer
@@ -86,6 +87,7 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
+	root.Trace.Note("self:predict", "plan="+text)
 	debug.Being("skyra", "self", fmt.Sprintf("plan=%q", text))
 	if born := appendSelfPrediction(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), text); born != "" {
 		root.DNA().CrossBirth(born) // node birth: the new edge was just active
