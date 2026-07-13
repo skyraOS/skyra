@@ -14,6 +14,14 @@ center. Skyra treats the human as a world-shaping participant. Teaching,
 correction, trust, conflict, memory, and relationship all become part of the
 universe the beings inhabit.
 
+## Reading the docs
+
+Start with **[docs-map.md](docs-map.md)** — the curated working set of
+load-bearing docs, kept current as part of landing work. The tree beneath it
+splits three ways: `design-docs/` (timeless topics), `specs/` (dated build
+sessions — the method's artifact trail), and `archive/` (superseded history,
+with READMEs explaining why).
+
 ## North Star
 
 The user should feel the universe changing after every conversation.

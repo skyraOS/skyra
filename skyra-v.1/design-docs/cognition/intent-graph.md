@@ -1,5 +1,12 @@
 # Intent Graph
 
+> **Reconciliation (2026-07-12).** The mechanism here — an XML intent graph
+> emitted on every provider call — is the v.05 operator-era model and is not
+> how dnav2 works. The *concept* (the being predicting what it needs to do
+> next, steering its own traversal) survives: it is the Final-cause half of
+> the [Aitia set](../../specs/2026-07-08/cause-and-effect/minimal-aitia-set.md)
+> and will be the Praxis spec's ground. Read this for the idea, not the shape.
+
 ## What It Is
 
 The intent graph is the being's prediction of what it needs to do next. Expressed as XML, emitted on every thought (every provider call). The being can change it whenever it wants. It's the being orienting its own substrate — steering its traversal from inside.

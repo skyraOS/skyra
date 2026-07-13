@@ -1,5 +1,14 @@
 # Self and Other — Perspective as the Descent/Ascent Method
 
+> **Reconciliation (2026-07-12).** The strict other→self sequencing was
+> superseded at prediction time by
+> [two-stroke-cycle.md](../../specs/2026-07-03/two-stroke-cycle.md), and the
+> prediction/grade record shapes are migration debt
+> ([outstanding-reform-tracks.md](../../specs/2026-07-08/outstanding-reform-tracks.md) §3).
+> The perspectival core — self and other as roles over one mechanism — holds
+> and is expected to re-derive through the causal graph in the Praxis spec
+> (a self-prediction is plausibly a Final belief).
+
 ## Status
 
 **Planning — discuss before implementing.** The Theory-of-Mind layer.
