@@ -22,6 +22,9 @@ type Orchestrator struct {
 	// flush is the trace-export hook, called when an impulse completes (deferred to
 	// an external store; nil = no-op).
 	flush func(impulseID string, trace []Span)
+
+	// traces mints one content-level RunTrace per board run (nil = untraced).
+	traces *TraceStore
 }
 
 func NewOrchestrator(genome *DNA, board *Board, kernel skyra.Time, membraneSlice skyra.Slice, slices map[string]skyra.Slice) *Orchestrator {
@@ -30,10 +33,16 @@ func NewOrchestrator(genome *DNA, board *Board, kernel skyra.Time, membraneSlice
 
 func (o *Orchestrator) SetFlush(fn func(string, []Span)) { o.flush = fn }
 
-// Fire enters the pipeline for an external impulse: registers its board row and
-// starts the first membrane wave at sensory:intake.
+// SetTraces enables per-board-run content traces (one JSONL file per impulse).
+func (o *Orchestrator) SetTraces(s *TraceStore) { o.traces = s }
+
+// Fire enters the pipeline for an external impulse: registers its board row,
+// opens its run trace, and starts the first membrane wave at sensory:intake.
 func (o *Orchestrator) Fire(impulseID, prev string, impulse any) {
-	o.board.Row(impulseID, prev)
+	row := o.board.Row(impulseID, prev)
+	if o.traces != nil && row.Trace() == nil {
+		row.SetTrace(o.traces.Open(impulseID))
+	}
 	o.run(StepSensoryIntake, impulseID, impulse)
 }
 
@@ -80,11 +89,13 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	// hand the working set — the entity index rides EVERY worker (the mRNA carries
 	// what it needs). Step-specific: the predict genes get the impulse's active
 	// episode (produced by midlevel:frame, stashed on the row).
+	row := m.orch.board.Row(m.impulseID, "")
 	m.worker.Nodes = m.orch.genome.Nodes()
-	m.worker.ObservationID = m.orch.board.Row(m.impulseID, "").ObservationID()
+	m.worker.ObservationID = row.ObservationID()
+	m.worker.Trace = row.Trace()
 	switch m.step {
 	case StepOtherPredict, StepSelfPredict, StepMotorCollapse:
-		if g, ok := m.orch.board.Row(m.impulseID, "").Episode().(*MemoryCell); ok {
+		if g, ok := row.Episode().(*MemoryCell); ok {
 			m.worker.Episode = g
 		}
 	}
@@ -102,6 +113,7 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 		row.SetObservationID(m.worker.ObservationID)
 	}
 	row.Append(Span{Step: string(m.step), Condition: cond})
+	row.Trace().Span(string(m.step), cond)
 
 	// midlevel:frame produced the active episode — stash it on the row so the
 	// fan-out's predict workers receive it as their working set.
@@ -156,6 +168,7 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 // finish flips the impulse row to done and flushes its trace.
 func (o *Orchestrator) finish(row *Row, impulseID string) {
 	trace := row.Done()
+	row.Trace().Close()
 	if o.flush != nil {
 		o.flush(impulseID, trace)
 	}

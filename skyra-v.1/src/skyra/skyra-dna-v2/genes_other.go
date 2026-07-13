@@ -40,7 +40,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	present := fmt.Sprintf("Candidate predictions:\n%s\n\nThe message that actually arrived:\n%s",
 		strings.Join(lines, "\n"), evidence)
-	resp, err := root.DNA().Infer()(graderSystem, present)
+	resp, err := root.Infer("other:grade")(graderSystem, present)
 	if err != nil {
 		return // bet stays ungraded; carry on unchanged (no-prior)
 	}
@@ -92,7 +92,7 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	present := fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s",
 		frameText(root.Episode), renderExchange(root.Nodes))
-	resp, err := root.DNA().Infer()(otherSystem, present)
+	resp, err := root.Infer("other:predict")(otherSystem, present)
 	if err != nil {
 		return
 	}

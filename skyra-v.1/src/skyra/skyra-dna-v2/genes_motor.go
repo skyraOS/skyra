@@ -19,7 +19,7 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if plan == "" || proposal == nil {
 		return
 	}
-	emission, ok := inferMotor(root.DNA().Infer(), plan)
+	emission, ok := inferMotor(root.Infer("motor"), plan)
 	if !ok {
 		return
 	}

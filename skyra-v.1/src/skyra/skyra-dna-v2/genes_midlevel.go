@@ -42,18 +42,23 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	offered := structuralCandidateIDs(root.DNA().CausalNodes(), activeID, root.ObservationID)
 	present := structuralPresent(root.DNA(), exchange, locations, activeID, root.ObservationID, offered)
-	resp, err := infer(frameOpSystem, present)
+	frameInfer := root.Infer("frame-op")
+	resp, err := frameInfer(frameOpSystem, present)
 	if err != nil {
 		root.Condition = "empty" // a failed call frames nothing this cycle
 		return
 	}
 	op, parsed, perr := validateStructuralOp(root.DNA().CausalNodes(), resp, hasActive, offered)
 	for attempt := 1; perr != nil && attempt <= parseMaxRetries; attempt++ {
-		resp, err = infer(frameOpSystem, present+"\n\n---\n"+StructuralCorrectionMessage(resp, perr))
+		root.Trace.Reject("frame-op", resp, perr)
+		resp, err = frameInfer(frameOpSystem, present+"\n\n---\n"+StructuralCorrectionMessage(resp, perr))
 		if err != nil {
 			break
 		}
 		op, parsed, perr = validateStructuralOp(root.DNA().CausalNodes(), resp, hasActive, offered)
+	}
+	if perr != nil {
+		root.Trace.Reject("frame-op", resp, perr)
 	}
 	ts := root.DNA().Tick()
 
@@ -68,7 +73,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if op == StructuralRetain {
 		root.Episode = episodes.Active()
 		if activeSet.EfficientEdgeID == "" || activeSet.FinalEdgeID == "" {
-			set, err := buildFullCausalSet(root.DNA(), activeID, ts)
+			set, err := buildFullCausalSet(root.DNA(), root.Trace, activeID, ts)
 			if err != nil {
 				debug.Being("skyra", "causal", fmt.Sprintf("expansion failed: %v — retaining prior active state", err))
 				root.Condition = "causal-format-error"
@@ -76,11 +81,12 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 			}
 			root.DNA().ActivateSet(set.ID)
 		}
+		root.Trace.Note("frame-op", "retain "+activeID)
 		debug.Being("skyra", "querier", fmt.Sprintf("retain causal-node %s", activeID))
 	} else {
 		comp := root.DNA().CausalNodes().Persist(parsed, ts)
 		frame := parsed.Sentence
-		set, err := buildFullCausalSet(root.DNA(), comp.Cell.ID(), ts)
+		set, err := buildFullCausalSet(root.DNA(), root.Trace, comp.Cell.ID(), ts)
 		if err != nil {
 			debug.Being("skyra", "causal", fmt.Sprintf("expansion failed: %v — retaining prior active state", err))
 			root.Condition = "causal-format-error"
@@ -100,6 +106,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		if g := latestFrame(root.Episode); g != nil {
 			g.SetContent(Frame{Text: frame, Timestamp: ts})
 		}
+		root.Trace.Note("frame-op", fmt.Sprintf("%s → causal-node %s %q, set %s active", op, comp.Cell.ID(), frame, set.ID))
 		debug.Being("skyra", "querier", fmt.Sprintf("%s causal-node %s: %q V=%d E=%d → set %s active",
 			op, comp.Cell.ID(), frame, len(comp.Parents), len(parsed.Edges), set.ID))
 	}
@@ -109,14 +116,14 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// The coherence-settle: with the frame now FIXED, grade the episode's nodes against it and
 	// write alignment (A) onto their edges, pruning misfits until it plateaus. midlevel
 	// withholds its frame until here — the settle is the sole writer of A (active-grouping.md).
-	passes := coherenceSettle(root.Episode, root.DNA().Activation(), ts, infer)
+	passes := coherenceSettle(root.Episode, root.DNA().Activation(), ts, root.Infer("settle"))
 	debug.Being("skyra", "midlevel", fmt.Sprintf("settled %s in %d passes", root.Episode.ID(), passes))
 
 	root.Condition = "framed"
 }
 
-func buildFullCausalSet(d *DNA, presentID string, ts int) (AitiaSet, error) {
-	efficientParsed, finalParsed, err := expandCausalBeliefs(d, presentID)
+func buildFullCausalSet(d *DNA, tr *RunTrace, presentID string, ts int) (AitiaSet, error) {
+	efficientParsed, finalParsed, err := expandCausalBeliefs(d, tr, presentID)
 	if err != nil {
 		return AitiaSet{}, err
 	}

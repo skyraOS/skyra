@@ -772,6 +772,7 @@ func main() {
 		nsSlices[ns] = world.NewSlice("skyra:"+ns, "skyra")
 	}
 	orch := dnav2.NewOrchestrator(d, board, beingKernel, world.NewSlice("skyra:membrane", "skyra"), nsSlices)
+	orch.SetTraces(dnav2.NewTraceStore("logs/traces")) // content-level trace per board run
 	being := newDnav2Being("skyra", world.NewSlice("skyra:being", "skyra"), orch, d)
 
 	user := userdna.NewUserCell("michael", func(id string) skyra.Slice {

@@ -34,9 +34,10 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		Payload:   imp.Payload,
 		Timestamp: ts,
 	})
-	if observation := decomposeUtterance(root.DNA(), sender, root.DNA().BeingID(), utterance, ts); observation != nil {
+	if observation := decomposeUtterance(root.DNA(), root.Trace, sender, root.DNA().BeingID(), utterance, ts); observation != nil {
 		root.ObservationID = observation.Cell.ID()
-		root.DNA().AssessActiveCauses(root.ObservationID)
+		root.Trace.Note("observation", "persisted "+root.ObservationID)
+		root.DNA().AssessActiveCauses(root.ObservationID, root.Trace)
 	}
 	debug.Being("skyra", "sensory", fmt.Sprintf("classify=external sender=%s utterance=%q", sender, utterance))
 }
@@ -45,8 +46,8 @@ func sensoryIntake(root *EphemeralRoot, origin skyra.Space, impulse any) {
 // boundary. A valid annotated graph commits atomically as an observation-born
 // CausalNode; malformed output is returned to the model for bounded correction
 // and never falls back to transport-only metadata.
-func decomposeUtterance(d *DNA, sender, receiver, utterance string, ts int) *CausalNode {
-	infer := d.Infer()
+func decomposeUtterance(d *DNA, tr *RunTrace, sender, receiver, utterance string, ts int) *CausalNode {
+	infer := tr.Wrap(d.Infer(), "decompose")
 	if infer == nil || strings.TrimSpace(utterance) == "" {
 		return nil
 	}
@@ -57,6 +58,7 @@ func decomposeUtterance(d *DNA, sender, receiver, utterance string, ts int) *Cau
 	}
 	parsed, perr := ParseAnnotated(raw)
 	for attempt := 1; perr != nil && attempt <= parseMaxRetries; attempt++ {
+		tr.Reject("decompose", raw, perr)
 		raw, err = infer(observationDecompositionSystem, present+"\n\n---\n"+CorrectionMessage(raw, perr))
 		if err != nil {
 			return nil
@@ -64,6 +66,7 @@ func decomposeUtterance(d *DNA, sender, receiver, utterance string, ts int) *Cau
 		parsed, perr = ParseAnnotated(raw)
 	}
 	if perr != nil {
+		tr.Reject("decompose", raw, perr)
 		debug.Being("skyra", "observation", fmt.Sprintf("decomposition failed after retries: %v", perr))
 		return nil
 	}

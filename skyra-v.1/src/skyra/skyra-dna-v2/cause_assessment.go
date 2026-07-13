@@ -43,8 +43,9 @@ var causeNoGradeRE = regexp.MustCompile(`(?is)^\s*<no-grade\s*/>\s*$`)
 
 // AssessActiveCauses snapshots the active Aitia set from the Slice, then grades
 // every populated cause position independently. Calls share immutable inputs
-// and run in parallel; malformed or failed calls produce no assessment.
-func (d *DNA) AssessActiveCauses(observationID string) []CauseAssessment {
+// and run in parallel; malformed or failed calls produce no assessment. tr is
+// the board run's content trace (nil = untraced).
+func (d *DNA) AssessActiveCauses(observationID string, tr *RunTrace) []CauseAssessment {
 	infer := d.Infer()
 	observation := d.CausalNodes().Get(observationID)
 	set, active := d.ActiveSet()
@@ -71,8 +72,9 @@ func (d *DNA) AssessActiveCauses(observationID string) []CauseAssessment {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			stage := "assess:" + target.role
 			present := fmt.Sprintf("ACTIVE CAUSE (%s):\n%s\n\nOBSERVATION:\n%s", target.role, causalSentence(cause), observationText)
-			gradeResult := inferCauseGradeResult(infer, present)
+			gradeResult := inferCauseGradeResult(tr.Wrap(infer, stage), tr, stage, present)
 			if !gradeResult.valid {
 				return
 			}
@@ -102,23 +104,27 @@ func (d *DNA) AssessActiveCauses(observationID string) []CauseAssessment {
 }
 
 func inferCauseGrade(infer InferFunc, present string) (float64, bool) {
-	result := inferCauseGradeResult(infer, present)
+	result := inferCauseGradeResult(infer, nil, "assess", present)
 	return result.grade, result.valid && result.hasGrade
 }
 
-func inferCauseGradeResult(infer InferFunc, present string) causeGradeResult {
+func inferCauseGradeResult(infer InferFunc, tr *RunTrace, stage, present string) causeGradeResult {
 	raw, err := infer(causeAssessmentSystem, present)
 	if err != nil {
 		return causeGradeResult{}
 	}
 	grade, hasGrade, valid := parseCauseGrade(raw)
 	for attempt := 1; !valid && attempt <= parseMaxRetries; attempt++ {
+		tr.Reject(stage, raw, fmt.Errorf("not <grade>N</grade> or <no-grade/>"))
 		correction := fmt.Sprintf("%s\n\nYour previous response %q was invalid. Return only <grade>N</grade> with N between -1 and 1, or <no-grade/> when the observation cannot resolve the belief.", present, raw)
 		raw, err = infer(causeAssessmentSystem, correction)
 		if err != nil {
 			return causeGradeResult{}
 		}
 		grade, hasGrade, valid = parseCauseGrade(raw)
+	}
+	if !valid {
+		tr.Reject(stage, raw, fmt.Errorf("exhausted correction retries"))
 	}
 	return causeGradeResult{grade: grade, hasGrade: hasGrade, valid: valid}
 }

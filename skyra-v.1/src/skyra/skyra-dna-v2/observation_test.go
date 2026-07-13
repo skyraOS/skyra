@@ -18,7 +18,7 @@ func TestUtteranceDecompositionPersistsObservedSubgraph(t *testing.T) {
 		return "michael[1] reports[1→2] {the api outage}[2]", nil
 	})
 
-	observation := decomposeUtterance(d, "michael", "skyra", "the api is down", 1)
+	observation := decomposeUtterance(d, nil, "michael", "skyra", "the api is down", 1)
 	if observation == nil {
 		t.Fatal("valid decomposition did not persist")
 	}
@@ -54,7 +54,7 @@ func TestUtteranceDecompositionRetriesTransactionally(t *testing.T) {
 		return "michael[1] reports[1→9] outage[2]", nil
 	})
 
-	observation := decomposeUtterance(d, "michael", "skyra", "outage", 1)
+	observation := decomposeUtterance(d, nil, "michael", "skyra", "outage", 1)
 	if observation == nil || calls.Load() != 2 {
 		t.Fatalf("observation=%v calls=%d, want corrected commit after two calls", observation, calls.Load())
 	}

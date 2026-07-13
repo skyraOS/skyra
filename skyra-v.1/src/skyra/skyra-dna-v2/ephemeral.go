@@ -33,6 +33,7 @@ type EphemeralRoot struct {
 	Nodes         *NodeRegistry
 	Episode       *MemoryCell // active episode — midlevel out, predicts in
 	ObservationID string      // impulse-local observed CausalNode, threaded by Board row
+	Trace         *RunTrace   // this board run's content trace, threaded by Board row (nil = untraced)
 }
 
 // Transcribe expresses one gene for one wave: select the observe/express genes,
@@ -52,6 +53,13 @@ func (d *DNA) Transcribe(id, observeKey, expressKey string, slice skyra.Slice, i
 
 // DNA is how a competence reaches durable state (the one place it may).
 func (e *EphemeralRoot) DNA() *DNA { return e.genome }
+
+// Infer is the DNA's inference seam wrapped with this wave's run trace, tagged
+// by stage. Nil-safe end to end: with no trace it is exactly DNA.Infer(), so
+// genes' infer-is-nil guards keep working.
+func (e *EphemeralRoot) Infer(stage string) InferFunc {
+	return e.Trace.Wrap(e.genome.Infer(), stage)
+}
 
 // ── skyra.Space ──────────────────────────────────────────────────────────────
 

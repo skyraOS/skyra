@@ -37,7 +37,7 @@ func TestCausalExpansionWorkersStartInParallel(t *testing.T) {
 	})
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := expandCausalBeliefs(d, present.Cell.ID())
+		_, _, err := expandCausalBeliefs(d, nil, present.Cell.ID())
 		done <- err
 	}()
 	roles := map[string]bool{<-started: true, <-started: true}
@@ -100,7 +100,7 @@ func TestActiveCausalGradesUpdateExactEdgesAndNoGradeDoesNotSampleEMA(t *testing
 		return "<no-grade/>", nil
 	})
 
-	assessments := d.AssessActiveCauses(observation.Cell.ID())
+	assessments := d.AssessActiveCauses(observation.Cell.ID(), nil)
 	if len(assessments) != 2 {
 		t.Fatalf("assessments=%+v", assessments)
 	}
@@ -182,7 +182,7 @@ func TestExpansionReadsLineageBudgetAndVerifiesEmissionSize(t *testing.T) {
 		return "", nil
 	})
 
-	efficient, _, err := expandCausalBeliefs(d, present.Cell.ID())
+	efficient, _, err := expandCausalBeliefs(d, nil, present.Cell.ID())
 	if err != nil {
 		t.Fatal(err)
 	}

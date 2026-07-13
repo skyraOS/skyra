@@ -51,6 +51,7 @@ func main() {
 		slices[ns] = world.NewSlice("skyra:"+ns, "skyra")
 	}
 	orch := dnav2.NewOrchestrator(d, board, kernel, world.NewSlice("skyra:membrane", "skyra"), slices)
+	orch.SetTraces(dnav2.NewTraceStore("logs/traces")) // content-level trace per board run
 
 	for _, tn := range script {
 		gotEmit = false

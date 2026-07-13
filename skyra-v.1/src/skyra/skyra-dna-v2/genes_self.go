@@ -32,7 +32,7 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	present := fmt.Sprintf("Instruction:\n%s\n\nAction taken:\n%s %s %v\n\nEnvironment result:\n%s",
 		pred.Text, action.Primitive, action.EntityID, action.Content, result)
-	resp, err := root.DNA().Infer()(execGraderSystem, present)
+	resp, err := root.Infer("self:grade")(execGraderSystem, present)
 	if err != nil {
 		return
 	}
@@ -78,7 +78,7 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	frame := FramePresentCrossing(root.Episode, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
 	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Nodes))
 	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("self present (traversal-assembled):\n%s", present))
-	resp, err := root.DNA().Infer()(selfSystem, present)
+	resp, err := root.Infer("self:predict")(selfSystem, present)
 	if err != nil {
 		return
 	}

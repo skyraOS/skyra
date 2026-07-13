@@ -32,8 +32,9 @@ type Row struct {
 	status     string          // "pending" | "done"
 	history    []Span          // append-only trace (immutable spans; flush on done)
 
-	episode       any    // the impulse's active episode (working set threaded midlevel→predicts)
-	observationID string // observation-born CausalNode for this impulse
+	episode       any       // the impulse's active episode (working set threaded midlevel→predicts)
+	observationID string    // observation-born CausalNode for this impulse
+	trace         *RunTrace // content-level trace for this board run (nil = untraced)
 }
 
 // Span is one step's trace entry (append-only, immutable once written).
@@ -185,4 +186,18 @@ func (r *Row) ObservationID() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.observationID
+}
+
+// SetTrace / Trace thread the run's content-level trace. Set once at Fire;
+// read by every membrane wave for this impulse.
+func (r *Row) SetTrace(t *RunTrace) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.trace = t
+}
+
+func (r *Row) Trace() *RunTrace {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.trace
 }

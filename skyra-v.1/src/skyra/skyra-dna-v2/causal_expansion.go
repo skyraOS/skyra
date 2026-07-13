@@ -14,8 +14,9 @@ type causalExpansionResult struct {
 }
 
 // expandCausalBeliefs runs Efficient and Final from the same immutable present
-// snapshot. Neither result is persisted unless both validate.
-func expandCausalBeliefs(d *DNA, presentID string) (efficient, final ParsedSubgraph, err error) {
+// snapshot. Neither result is persisted unless both validate. tr is the board
+// run's content trace (nil = untraced).
+func expandCausalBeliefs(d *DNA, tr *RunTrace, presentID string) (efficient, final ParsedSubgraph, err error) {
 	infer := d.Infer()
 	if infer == nil {
 		return ParsedSubgraph{}, ParsedSubgraph{}, fmt.Errorf("causal expansion requires inference")
@@ -28,7 +29,7 @@ func expandCausalBeliefs(d *DNA, presentID string) (efficient, final ParsedSubgr
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			parsed, err := queryCausalBelief(d, infer, role, presentID, offered)
+			parsed, err := queryCausalBelief(d, tr, infer, role, presentID, offered)
 			results <- causalExpansionResult{role: role, parsed: parsed, err: err}
 		}()
 	}
@@ -48,23 +49,29 @@ func expandCausalBeliefs(d *DNA, presentID string) (efficient, final ParsedSubgr
 	return efficient, final, err
 }
 
-func queryCausalBelief(d *DNA, infer InferFunc, role, presentID string, offered map[string]float64) (ParsedSubgraph, error) {
+func queryCausalBelief(d *DNA, tr *RunTrace, infer InferFunc, role, presentID string, offered map[string]float64) (ParsedSubgraph, error) {
+	stage := "expand:" + role
+	traced := tr.Wrap(infer, stage)
 	// The lineage's CURRENT earned budget: the voice's specificity allowance,
 	// carried across sets (edges die with their contexts; the lineage doesn't).
 	budget, _ := d.QueryBudgets().Current(role)
 	system := causalBeliefSystem(role, budget)
 	present := causalBeliefPresent(d, role, presentID, offered)
-	raw, err := infer(system, present)
+	raw, err := traced(system, present)
 	if err != nil {
 		return ParsedSubgraph{}, err
 	}
 	parsed, perr := validateCausalBelief(d.CausalNodes(), raw, offered, budget)
 	for attempt := 1; perr != nil && attempt <= parseMaxRetries; attempt++ {
-		raw, err = infer(system, present+"\n\n---\n"+CausalBeliefCorrection(raw, perr))
+		tr.Reject(stage, raw, perr)
+		raw, err = traced(system, present+"\n\n---\n"+CausalBeliefCorrection(raw, perr))
 		if err != nil {
 			return ParsedSubgraph{}, err
 		}
 		parsed, perr = validateCausalBelief(d.CausalNodes(), raw, offered, budget)
+	}
+	if perr != nil {
+		tr.Reject(stage, raw, perr)
 	}
 	return parsed, perr
 }
