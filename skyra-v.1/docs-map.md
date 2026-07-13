@@ -1,6 +1,6 @@
 # The Working Set
 
-**Updated:** 2026-07-12 (post cause-and-effect V0, phases 0–7 complete)
+**Updated:** 2026-07-13 (V0 validated live; working-memory-loop design recorded)
 
 The curated list of load-bearing docs — what you need to work on the system
 *today*. Everything else in the tree is either design source (kept live because
@@ -89,17 +89,28 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
 | Frontend | [design-docs/frontend/](design-docs/frontend/) — paused with Dante, not superseded |
 | Safety | [design-docs/immune-system/](design-docs/immune-system/) |
 
-## 7. Not yet written — the known gaps
+## 7. The next designs and remaining gaps
 
-1. **The Praxis spec** — actions as CausalNodes with birth-stamped Final
-   causes. Absorbs reform §3 (self/other proposal chains) and the candidate
-   collapse *predictions are Final beliefs*. Blocked-by-choice on live traces
-   and the Final-closure experiment. Decisions already made ahead of it live
-   in [praxis-ground.md](specs/2026-07-08/cause-and-effect/praxis-ground.md).
-2. **Kernel reform implementation** — steps 1–7 of outstanding-reform-tracks;
-   sequenced after the first live validation run.
-3. **Live validation findings** — parse hit-rate, turn latency, grade quality,
-   closure-rule verdict. The first real session produces this.
+1. **The working-memory loop** —
+   [specs/2026-07-13/working-memory-loop/](specs/2026-07-13/working-memory-loop/README.md)
+   (design recorded 2026-07-13, ledger all-open): WM-as-buffer, impulse shells
+   with guessed causes, the surprise monitor (one signal: recruits midlevel,
+   informs motor), motor as sovereign subscriber with the surprise flag and
+   self-engage deferral. Dissolves the fixed pipeline; **is the reason kernel
+   reform steps 1–7 happen next**.
+2. **The Praxis spec** — actions as CausalNodes with birth-stamped Final
+   causes. Absorbs reform §3 and the candidate collapse *predictions are
+   Final beliefs* (which the WM loop also arrives at — walk them together;
+   ledger item 8 there). Ground decisions:
+   [praxis-ground.md](specs/2026-07-08/cause-and-effect/praxis-ground.md).
+3. **Kernel reform implementation** — steps 1–7 of outstanding-reform-tracks;
+   now demanded by the WM loop (polarity stream, Observe surfaces,
+   ActiveStateHistory-as-motor-surface).
+4. ~~Live validation findings~~ — **done 2026-07-13**: first live session
+   validated V0 end to end (all three structural ops, first grades, budget
+   arithmetic exact, behavior change from a defeated Final belief). Evidence:
+   the six run traces; format fixes and the verb-group particle rule came out
+   of them. Closure-rule verdict still pending (needs longer sessions).
 
 ## 8. History and everything else
 
