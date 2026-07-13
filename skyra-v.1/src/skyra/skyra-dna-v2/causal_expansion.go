@@ -104,7 +104,7 @@ func validateCausalBelief(ci *CausalNodes, raw string, offered map[string]float6
 
 func causalBeliefPresent(d *DNA, role, presentID string, offered map[string]float64) string {
 	var b strings.Builder
-	b.WriteString("ACTIVE MATERIAL/FORMAL:\n")
+	b.WriteString("ACTIVE MATERIAL/FORMAL (the present situation):\n")
 	b.WriteString(renderCausalStructure(d.CausalNodes(), presentID))
 	b.WriteString("\nROLE TO EMIT: ")
 	b.WriteString(role)
@@ -115,23 +115,54 @@ func causalBeliefPresent(d *DNA, role, presentID string, offered map[string]floa
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		b.WriteString(fmt.Sprintf("[candidate=%s amplitude=%.4f] %s\n", id, offered[id], causalSentence(d.CausalNodes().Get(id))))
+		b.WriteString(fmt.Sprintf("[candidate=%s %s amplitude=%.4f] %s\n",
+			id, offerLabel(d, id, presentID), offered[id], causalSentence(d.CausalNodes().Get(id))))
 	}
 	return b.String()
 }
+
+// offerLabel distinguishes offers the model would otherwise see as identical
+// sentences: the incoming observation vs its own composed interpretation vs
+// the active present itself. Provenance is already node content; this only
+// surfaces it.
+func offerLabel(d *DNA, id, presentID string) string {
+	if id == presentID {
+		return "composed — the active present"
+	}
+	content, _ := d.CausalNodes().Get(id).Content().(CausalNodeContent)
+	if content.Provenance != "" {
+		return string(content.Provenance)
+	}
+	return "composed"
+}
+
+// causalBeliefFormat is the annotation wire-format spec, shared by the system
+// prompt and the correction message. The first live run (2026-07-13) proved
+// "annotated sentence" is not self-explanatory: without this block the workers
+// invented five different syntaxes in six attempts and never hit the format.
+const causalBeliefFormat = "Annotated sentence format:\n" +
+	"- mark each referent with an ordinal:  michael[1]  or  {the well-being}[2]\n" +
+	"- mark each relationship on its verb/word:  asked[1→2]\n" +
+	"- reuse an ordinal to re-reference the same thing:  michael[1] ... he[1]\n" +
+	"- cite an OFFERED CausalNode by binding its id to an ordinal:  {that exchange}[1=causal:3:7]\n" +
+	"Every referent gets a node annotation; every asserted relationship gets an edge " +
+	"annotation; plain connecting words stay unannotated.\n" +
+	"Example citing an offered node: {michael's greeting}[1=causal:3:7] prompted[1→2] {skyra's reply}[2]"
 
 func causalBeliefSystem(role string, budget float64) string {
 	direction := "the inferred prior situation that brought the active present into being"
 	if role == CauseFinal {
 		direction = "the intended or oriented future situation toward which the active present points"
 	}
-	return "You emit the " + role + " causal belief for an active Material/Formal subgraph: " + direction + ". " +
-		"Emit exactly one concise COMPLETE annotated sentence and nothing else. The sentence must parse into a nonempty " +
-		"semantic subgraph; summary-only output is forbidden. Stand on the most specific ground firmly warranted. Offered " +
-		"CausalNode IDs may be referenced, but reuse is optional and must reflect meaning rather than compression. " +
+	return "You emit the " + role + " causal belief for an active Material/Formal subgraph " +
+		"(the present situation as currently represented): " + direction + ". " +
+		"Emit exactly one concise COMPLETE annotated sentence and nothing else — no role prefix, no commentary. " +
+		"The sentence must parse into a nonempty semantic subgraph; summary-only output is forbidden. " +
+		"Stand on the most specific ground firmly warranted. Offered CausalNode IDs may be cited, but reuse is " +
+		"optional and must reflect meaning rather than compression.\n\n" + causalBeliefFormat + "\n\n" +
 		fmt.Sprintf("Your query token budget is %.0f words. A complete claim on coarser ground always beats a truncated specific one.", budget)
 }
 
 func CausalBeliefCorrection(raw string, err error) string {
-	return fmt.Sprintf("Your previous causal belief was:\n%s\n\nIt was invalid: %v. Re-emit the same belief as exactly one complete annotated sentence. Every referent and relationship must be represented; use only offered CausalNode IDs.", raw, err)
+	return fmt.Sprintf("Your previous causal belief was:\n%s\n\nIt was invalid: %v. Re-emit the same belief as exactly one complete annotated sentence in the required format.\n\n%s", raw, err, causalBeliefFormat)
 }
