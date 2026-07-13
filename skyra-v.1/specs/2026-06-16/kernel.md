@@ -12,7 +12,7 @@
 
 - [owned-specialist-crossing.md](../../design-docs/kernel/owned-specialist-crossing.md) — "Pending revision — Space owns firing", §7
 - [world-kernel-coupling.md](../../design-docs/kernel/world-kernel-coupling.md)
-- [kernel-change-plan.md](../../design-docs/kernel/kernel-change-plan.md)
+- [kernel-change-plan.md](../../archive/improving-v.1/completed-specs/kernel-change-plan.md)
 - [self-and-other-modeling.md](../../design-docs/cognition/self-and-other-modeling.md) — the Content/Executables split surfaced here
 
 ## Changes
@@ -35,7 +35,7 @@ if inner, ok := top.Cell.Content().(skyra.Space); ok && !isReturnImpulse(impulse
 - [ ] update the `traverse` doc-comment (lines ~42–44, "A cell whose Content is a Space is another actor…") → "pure transport, no crossing"
 - [ ] **remove the crossing test** in `relation_test.go` (~lines 300–365, "A Content Space is another actor: the crossing spawns an independent wave") — it exercises the spawn that no longer exists, so it won't compile/pass
 
-**Consequence:** with the crossing gone, the kernel can't get a wave into *any* actor (no peer-being, no fan-out) until `world.observe` exists ([world.md](world.md), `[after]`). That's fine for the MVP — **boot roots the wave directly at the being** (`kernel.Realize(being, being, signal)`) and traverses its binding realities in-plane. No crossing needed.
+**Consequence:** with the crossing gone, the kernel can't get a wave into *any* actor (no peer-being, no fan-out) until `world.observe` exists ([world.md](archive/world.md), `[after]`). That's fine for the MVP — **boot roots the wave directly at the being** (`kernel.Realize(being, being, signal)`) and traverses its binding realities in-plane. No crossing needed.
 
 ### 1b. `origin` = the wave owner, both faces  `[DONE]`
 
@@ -111,7 +111,7 @@ A potential (path-value) that grades above the keep-threshold (the same `0.1` th
 ## Dependencies
 
 - **#1 has no dependencies — it's a deletion.**
-- #2 blocks on [world.md](world.md) (the environment ref to fire through) and the environment-layer pin (below).
+- #2 blocks on [world.md](archive/world.md) (the environment ref to fire through) and the environment-layer pin (below).
 
 ## Open
 

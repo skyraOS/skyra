@@ -5,7 +5,7 @@ revises the current motor-emit mechanism in
 [slice-based-dispatch.md](../../specs/2026-07-03/dispatch-model.md) and is the concrete
 realization of [world-kernel-coupling.md](world-kernel-coupling.md)'s "the world is a
 passive Reality, traversable like anything else" and
-[operator-runtime-and-interrupts.md](../architecture/operator-runtime-and-interrupts.md)'s
+[operator-runtime-and-interrupts.md](../../archive/design-docs/operator-runtime-and-interrupts.md)'s
 "shared substrate — one law across memory, devices, places, world."
 
 ## The claim
@@ -69,7 +69,7 @@ is another actor), never a side-channel `Emit`.
 
 ## Why it composes with the motor changes
 
-[prediction-motor-and-closure.md](../architecture/prediction-motor-and-closure.md) has
+[prediction-motor-and-closure.md](../../archive/design-docs/prediction-motor-and-closure.md) has
 motor operating **inside a bound** — continuing locally over a coherent slice of the
 world rather than re-running the full brain per act. If the motor's children *are* world
 cells, the **bound is literally the world-cell neighborhood the unit is licensed to

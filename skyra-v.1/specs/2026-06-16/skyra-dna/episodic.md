@@ -50,7 +50,7 @@ This reality is the **durable** distributed field (long-term, weighted by activa
 - [ ] generates a distributed self-model with confidence/alignment → votes
 
 ## Design sources
-- [self-and-other-modeling.md](../../../design-docs/cognition/self-and-other-modeling.md), [setpoints.md](../../../design-docs/cognition/setpoints.md), [cell-types.md](../../../design-docs/being/cell-types.md) — Episodic
+- [self-and-other-modeling.md](../../../design-docs/cognition/self-and-other-modeling.md), [setpoints.md](../../../design-docs/cognition/setpoints.md), [cell-types.md](../../../archive/design-docs/cell-types.md) — Episodic
 
 ## Open
 - decay rate / field dynamics

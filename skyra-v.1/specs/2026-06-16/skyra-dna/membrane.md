@@ -66,7 +66,7 @@ This is "the sensory part receives signals and puts them in the right place in a
 
 ## Design sources
 - [world-kernel-coupling.md](../../../design-docs/kernel/world-kernel-coupling.md#attention-is-one-field-read-twice) — Attention is one field, read twice
-- [cell-types.md](../../../design-docs/being/cell-types.md) — Membrane (the pure-routing line is superseded here)
+- [cell-types.md](../../../archive/design-docs/cell-types.md) — Membrane (the pure-routing line is superseded here)
 - [comparator.md](../../../design-docs/cognition/comparator.md) — basal-ganglia coincidence; Coherence tie-break
 
 ## Open

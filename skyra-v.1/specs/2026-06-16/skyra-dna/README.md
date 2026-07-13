@@ -44,12 +44,12 @@ Membrane (sensorimotor boundary — attention gate / motor; Content = root drive
 | [midlevel.md](midlevel.md) | MidLevel — vote tally / tie-break; agents `self` + `other`; Hopfield vote; reverse read = wave | `[MVP]` (minimal) |
 | [midlevel-observe-gather.md](midlevel-observe-gather.md) | MidLevel's Observe **read-half** (2026-06-25) — gather candidate setpoints entity-outward from sensory's warm surroundings, score by overlap × recency (cell-written IndexScore), build `Children()`; inference call is the continuation | `[MVP]` |
 | [midlevel-active-grouping.md](midlevel-active-grouping.md) | MidLevel's grouping pass, the **improvement** (2026-06-25) — active LLM-driven probe loop + drift-diffusion stop controller; passive single-call MVP ships first | `[improvement / post-MVP]` |
-| [agent.md](agent.md) | the self/other agent (2026-06-26) — **one `AgentCell{role}`**; grade-then-predict loop (pop Prior → grade last bet → read activeGroupings → per-grouping traverse → grade-against-framing + predict → append); collapses the `SelfCell`/`OtherCell` stubs | `[MVP]` |
+| [agent.md](../archive/agent.md) | the self/other agent (2026-06-26) — **one `AgentCell{role}`**; grade-then-predict loop (pop Prior → grade last bet → read activeGroupings → per-grouping traverse → grade-against-framing + predict → append); collapses the `SelfCell`/`OtherCell` stubs | `[MVP]` |
 | [setpoint.md](setpoint.md) | confirmed predictions — content = understanding; children = entities + responses/actions/stresses | `[MVP]` (one) |
 | [entity.md](entity.md) | person/place/thing — children = setpoints stamped at completion; the reverse-index hub | `[next]` |
 | [episodic.md](episodic.md) | *(superseded — the binding-reality framing folded into the self/other agents)* | — |
 | [temporal.md](temporal.md) | *(superseded — two-hemisphere model folded into the self/other agents)* | — |
-| [action.md](action.md) | the action store — justification index | `[after]` |
+| [action.md](../archive/action.md) | the action store — justification index | `[after]` |
 
 > `membrane.md` **boundary model** — superseded by `sensorimotor.md` (2026-06-25): the membrane is a thin trampoline (Observe no-op, no children, fires a wave to sensory on Express); sensory/motor are separate sub-actors on their own slices; the surroundings write lives on **sensory**; the wave reaches cognition by a **forward spawn**, not as a child. The cognitive layer is unchanged.
 > `coherence.md` — superseded by `midlevel.md` (2026-06-17).

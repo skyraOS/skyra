@@ -10,7 +10,7 @@
 > world assertions** graded by overlap with the observed graph. Full model:
 > [world-assertions-and-policy.md](world-assertions-and-policy.md); the rule predictions must obey:
 > [prediction-falsifiability-invariant.md](../laws/invariants/prediction-falsifiability-invariant.md).
-> (The concrete build of the predict half is [agent.md](../../specs/2026-06-16/skyra-dna/agent.md).)
+> (The concrete build of the predict half is [agent.md](../../specs/2026-06-16/archive/agent.md).)
 
 > **Reconciliation (2026-06-23).** This doc has been through two framings of *where*
 > self/other live: (1) "ego/alter as two binding realities," then (2) "self/other as

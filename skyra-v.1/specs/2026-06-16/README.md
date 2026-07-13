@@ -7,10 +7,10 @@ These translate the design docs (`../../design-docs/`) into concrete `.go` chang
 | Spec | Code area | Files |
 |---|---|---|
 | [kernel.md](kernel.md) | the wave engine + the interface | `src/skyra/space.go`, `src/skyra/relation/relation.go` |
-| [world.md](world.md) | the environment / facilitator | `src/skyra/world/*.go` |
+| [world.md](archive/world.md) | the environment / facilitator | `src/skyra/world/*.go` |
 | [skyra-dna/](skyra-dna/README.md) | the being — **one spec per cell type** | `src/skyra/skyra-dna/**` |
-| [inference.md](inference.md) | the generate+align call | `src/inference/*.go` |
-| [boot.md](boot.md) | boot, genome, the run loop | `main.go`, `genome.skyra` |
+| [inference.md](archive/inference.md) | the generate+align call | `src/inference/*.go` |
+| [boot.md](archive/boot.md) | boot, genome, the run loop | `main.go`, `genome.skyra` |
 
 ## Build order
 

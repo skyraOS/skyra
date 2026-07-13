@@ -28,7 +28,7 @@ Identity + purpose were founding prompts for five prior runtimes. They were pull
 
 > **Superseded — Motivation dissolved.** The "Motivation" owner/home references in this section and in *DNA Placement* below predate the dissolution: the root drive now lives in the **membrane's `Content`**, and Motivation is no longer a binding reality (it became the setpoint's *descent method*). See **Motivation Dissolves** below. Kept for history.
 
-**Keying-on is reachability, not ownership** ([cell-types.md](../being/cell-types.md): "ownership is separate from reachability"). Coherence *reads* the setpoint to compare against it; it does not own it. The owners split by level:
+**Keying-on is reachability, not ownership** ([cell-types.md](../../archive/design-docs/cell-types.md): "ownership is separate from reachability"). Coherence *reads* the setpoint to compare against it; it does not own it. The owners split by level:
 
 | Object | What it is | Owner | Where it lives |
 |---|---|---|---|
@@ -46,7 +46,7 @@ The genome today has no setpoint field:
 being ~type llm ~bind episodic,action,goal,motivation,emotion,working_memory ...
 ```
 
-The root drive is a **new, user-authored genome attribute** (e.g. `~drive "..."` / `~serves michael`), installed into Motivation at boot. The bind list is unchanged. Derived setpoints stay out of the genome entirely — they emerge ([cell-types.md](../being/cell-types.md): "goal formation = goal convergence, no author").
+The root drive is a **new, user-authored genome attribute** (e.g. `~drive "..."` / `~serves michael`), installed into Motivation at boot. The bind list is unchanged. Derived setpoints stay out of the genome entirely — they emerge ([cell-types.md](../../archive/design-docs/cell-types.md): "goal formation = goal convergence, no author").
 
 **~~Open fork~~ → resolved:** the root drive lives in the **membrane's `Content`** — Motivation dissolved as a binding reality (see **Motivation Dissolves** below), so there is no "Motivation" to hold it. (Originally a fork between Motivation-holds-it vs. membrane-Content; the dissolution settled it on Content.)
 

@@ -12,5 +12,5 @@ Canonical runtime docs referenced by the Codex context remain in their domain fo
 - [Active State Invariant](../laws/invariants/active-state-invariant.md)
 - [Plane Slice Invariant](../laws/invariants/plane-slice-invariant.md)
 - [World Observe Split](../laws/rules/world-observe-split.md)
-- [Stateless Kernel / Slice Ownership Refactor](../kernel/stateless-kernel-slice-refactor.md)
-- [A3 World Observe / Slice Result Stub](../kernel/a3-world-observe-and-result-stub.md)
+- [Stateless Kernel / Slice Ownership Refactor](../../archive/improving-v.1/completed-specs/stateless-kernel-slice-refactor.md)
+- [A3 World Observe / Slice Result Stub](../../archive/design-docs/a3-world-observe-and-result-stub.md)

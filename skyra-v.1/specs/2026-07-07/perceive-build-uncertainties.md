@@ -5,7 +5,7 @@ threads deliberately tabled for the motor-independence work (1b's continue-vs-lo
 revisit, 5's correlation id). Items are ordered by how much they blocked.
 **Parents:** [perceive-internalization.md](../../design-docs/cognition/perceive-internalization.md)
 (the build this de-risks), [affordance-record.md](../../design-docs/being/affordance-record.md),
-[prediction-motor-and-closure.md](../../design-docs/architecture/prediction-motor-and-closure.md),
+[prediction-motor-and-closure.md](../../archive/design-docs/prediction-motor-and-closure.md),
 [slice-based-dispatch.md](../2026-07-03/slice-based-dispatch.md) (the workflow DAG these
 decisions land in).
 

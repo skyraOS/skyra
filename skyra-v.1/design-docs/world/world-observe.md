@@ -25,7 +25,7 @@ What this does **not** re-derive (already canon — referenced, not repeated):
 
 The world is an organism, and it has exactly one cell type: the **Point**. Every point runs the same methods — `Observe` builds fabric, `Express` executes the primitive, `NewActivation` makes it conduct, `Children` resolves neighbors. That shared code is the world's **DNA**. A materialized point is a **cell** expressing it.
 
-This is the being/world parallel, exact (see [dna.md](../being/dna.md)):
+This is the being/world parallel, exact (see [dna.md](../../archive/design-docs/dna.md)):
 
 | | DNA (shared, durable code) | Differentiation (placement) |
 |---|---|---|

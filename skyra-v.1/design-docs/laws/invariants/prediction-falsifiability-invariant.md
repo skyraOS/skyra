@@ -45,7 +45,7 @@ self-congratulation (the failure that lets a system "act without consequence and
 
 ## Where It Bites
 
-- **The agents' predict step** ([../../../specs/2026-06-16/skyra-dna/agent.md](../../../specs/2026-06-16/skyra-dna/agent.md))
+- **The agents' predict step** ([../../../specs/2026-06-16/archive/agent.md](../../../specs/2026-06-16/archive/agent.md))
   — the `<prediction>` an agent emits must reduce to a checkable claim about the next
   observation, or next cycle's grade step has nothing to close.
 - **A setpoint's satisfied-when** ([setpoints.md](../../cognition/setpoints.md)) — the closure

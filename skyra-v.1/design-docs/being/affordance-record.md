@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-07 · **Status:** Direction (a call, not yet built). Standardizes the
 *content* layer of `MemoryCell` the way `MemoryCell` already standardized the *node* layer.
-**Related:** [cell-types.md](cell-types.md) (`MemoryCell` = one node, Kind is a role),
+**Related:** [cell-types.md](../../archive/design-docs/cell-types.md) (`MemoryCell` = one node, Kind is a role),
 [perceive-internalization.md](../cognition/perceive-internalization.md) (PerceiveRecord/
 EngageRecord — now Kinds of this), [token-web-and-entity-resolution.md](../cognition/token-web-and-entity-resolution.md)
 (KindToken/KindAlias — also just Kinds), [emit-as-traversal.md](../kernel/emit-as-traversal.md)

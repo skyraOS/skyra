@@ -111,5 +111,5 @@ An impulse is raw text; the observed graph is structured assertions. Between the
   as the hinge.
 - [self-and-other-modeling.md](self-and-other-modeling.md) — self/other; here **other = goal**,
   **self = policy**.
-- [../../specs/2026-06-16/skyra-dna/agent.md](../../specs/2026-06-16/skyra-dna/agent.md) — the
+- [../../specs/2026-06-16/archive/agent.md](../../specs/2026-06-16/archive/agent.md) — the
   agents' predict step (where the expected assertions are emitted).

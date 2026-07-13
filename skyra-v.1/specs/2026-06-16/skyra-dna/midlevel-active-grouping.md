@@ -146,7 +146,7 @@ build now):
 - **Collapse the structural cell types into one.** Today membrane / global / self / other are
   distinct types. The end state is **one polymorphic cell that reads the slice and assumes its
   role from state** — the same move `MemoryCell` already made (entity/setpoint/understanding
-  are `Kind` *roles* of one type; [../../../design-docs/being/dna.md](../../../design-docs/being/dna.md),
+  are `Kind` *roles* of one type; [../../../design-docs/being/dna.md](../../../archive/design-docs/dna.md),
   "one type, topology differentiates"), extended to the structural cells.
 - **Indexes live on the slice** (not per cell); cells become uniform readers/interpreters over
   it. The named pattern is the **blackboard architecture** (Hearsay-II): a shared store +

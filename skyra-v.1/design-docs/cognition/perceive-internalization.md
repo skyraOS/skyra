@@ -4,9 +4,9 @@
 **Revises:** [entities-and-surroundings.md](entities-and-surroundings.md) (the single global
 surroundings map dissolves), [working-memory.md](working-memory.md) (the traversal-chain
 direction flips — see §6). **Composes with:**
-[prediction-motor-and-closure.md](../architecture/prediction-motor-and-closure.md) (the bound),
+[prediction-motor-and-closure.md](../../archive/design-docs/prediction-motor-and-closure.md) (the bound),
 [emit-as-traversal.md](../kernel/emit-as-traversal.md) (the world-cell neighborhood),
-[operator-runtime-and-interrupts.md](../architecture/operator-runtime-and-interrupts.md) (the
+[operator-runtime-and-interrupts.md](../../archive/design-docs/operator-runtime-and-interrupts.md) (the
 local world slice).
 
 ## The problem
