@@ -3,21 +3,19 @@ package dnav2
 import (
 	"math"
 	"testing"
-
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// buildEpisode mints a grouping (gist-owned spine) with one consolidated interaction
-// under its gist — the minimal shape the settle grades (a fresh episode after
-// consolidateInteraction). The active gist itself is never a settle item.
-func buildEpisode() (g *dna.MemoryCell, edgeKey string) {
-	g = dna.NewMemoryCell("g1", dna.KindGrouping, dna.Grouping{Created: 1}, nil)
-	gist := dna.NewMemoryCell("g1:gist:1", dna.KindGist, dna.Gist{Text: "help with the skyra project", Timestamp: 1}, nil)
-	g.AddChild("g1→g1:gist:1", gist)
-	edgeKey = "g1:gist:1→michael:int"
-	inter := dna.NewMemoryCell("michael:int", dna.KindResponse,
-		dna.InteractionRecord{From: "michael", Utterance: "can you help with the skyra project", Timestamp: 1}, nil)
-	gist.AddChild(edgeKey, inter)
+// buildEpisode mints an episode (frame-owned spine) with one consolidated interaction
+// under its frame — the minimal shape the settle grades (a fresh episode after
+// consolidateInteraction). The active frame itself is never a settle item.
+func buildEpisode() (g *MemoryCell, edgeKey string) {
+	g = NewMemoryCell("g1", KindEpisode, Episode{Created: 1}, nil)
+	frame := NewMemoryCell("g1:frame:1", KindFrame, Frame{Text: "help with the skyra project", Timestamp: 1}, nil)
+	g.AddChild("g1→g1:frame:1", frame)
+	edgeKey = "g1:frame:1→michael:int"
+	inter := NewMemoryCell("michael:int", KindResponse,
+		InteractionRecord{From: "michael", Utterance: "can you help with the skyra project", Timestamp: 1}, nil)
+	frame.AddChild(edgeKey, inter)
 	return g, edgeKey
 }
 

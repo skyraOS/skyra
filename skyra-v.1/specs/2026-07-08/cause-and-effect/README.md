@@ -19,9 +19,10 @@ ownership document override conflicting earlier drafts in this directory.
    specificity.
 4. [Minimal Loop Uncertainties](./minimal-loop-uncertainties.md) — the open
    ledger: remaining decisions, resolved one at a time, each recorded in place.
-5. [Implementation Phases](./implementation-phases.md) — the build plan: six
-   phases, each landing live before the next; ledger items resolved
-   just-in-time per phase; built on dnav2, kernel reform kept a separate track.
+5. [Implementation Phases](./implementation-phases.md) — the current eight-phase
+   build plan: Phases 0–7 are complete through atomic Efficient/Final expansion,
+   continuous grading, AIMD, zero-strength amplitude semantics, and read-only
+   Praxis/history inspection.
 6. [Subgraph And Causal Edge Ownership](./subgraph-and-causal-edge-ownership.md)
    (DECIDED) — internal Formal edges, contextual Efficient/Final edges, the
    inherited/efficient/final summary ports, reverse retrieval, Evidence
@@ -48,10 +49,10 @@ ownership document override conflicting earlier drafts in this directory.
   fan-out in parallel, join via the board's declare/mark/atomic-fire machinery,
   commit the AitiaSet atomically. (A lagged efficient→final read can be added
   later — how self reads other's latest — without re-architecting.)
-- **Three workers, three budgets — not one big frame.** AIMD lineage per
-  compound so budget attribution stays local: a contradicted efficient story
-  taxes the efficient lineage, not the present compound's specificity. Grading
-  and provenance stay local for free.
+- **Local graded-belief budgets — not one big frame.** Efficient and Final each
+  own an AIMD lineage so a negative Efficient grade changes only its budget.
+  Material/Formal is structural and ungraded, so it has no grade-driven AIMD
+  lineage. Grading and provenance stay local.
 - **Composition is role-uniform and free.** A summary node is a node, so
   previous compounds are legal referents in new sentences (`[k=compound:id]`) —
   present compounds compose from present compounds, efficient from prior
@@ -81,12 +82,10 @@ ownership document override conflicting earlier drafts in this directory.
   reform — Observe is the strategy selector; port names never cross the kernel
   boundary.
 - **Three causal ports on a summary, three lifecycles.** `inherited` =
-  composition-provenance EDGES: the compounds this compound was built FROM,
-  minted at Persist from compound-typed members — a different relationship
-  than Efficient or Final, and the durable home of composition. Topology
-  birth-fixed, grades live: midlevel's evidence sits on the inherited edges,
-  graded with respect to the NEW summary (evidence is not a cause node and
-  never lives on a cause node). `efficient`/`final` = accumulating contextual
+  immutable composition-provenance EDGES: the compounds this compound was
+  built FROM, minted at Persist from compound-typed members. Inherited edges
+  record ancestry only; they have no signed grade, EMA, or ordinary evidence
+  attachment. `efficient`/`final` = accumulating contextual
   edge occurrences, each stamped with its owning Aitia set. **The port
   accumulates occurrences; it never collapses them into a singular cause.**
   Unfiltered, the port reads as every explanation the compound has
@@ -119,16 +118,14 @@ ownership document override conflicting earlier drafts in this directory.
   relationship. Self-action final = the final of everything efficient in the
   frame; other-agent final stamping + decomposition timing open (ledger
   10–12).
-- **One worker mechanism: probe → compose+grade.** Step 1: emit a probe
-  subgraph → reverse-index lookup → candidates with hit counts → traversal
-  amplitude distributed proportionally → traverse candidates' evidence.
-  Step 2: compose the new summary (citing candidates lands them in
-  `inherited`) + seed a base grade per evidence relationship on the RECEIVING
-  edge (the CrossBirth pattern). The receiving edge is the only parameter:
-  midlevel grades the inherited edges; efficient/final workers grade the
-  causal edges. Candidate sourcing is GRAPH-owned — the reverse index over
-  inherited/causal maps supersedes the earlier "lineage history on the Slice"
-  source; the Slice keeps only the active set.
+- **One retrieval mechanism, two worker outcomes.** Every worker may probe by
+  subgraph, use the reverse index, normalize candidate hit mass into traversal
+  amplitude, and verify exact directed structure. The present worker then
+  chooses `retain`, `compose`, or `requery`; any inherited edges created by
+  composition are ungraded ancestry. Efficient and Final workers each emit a
+  complete prior/future subgraph and receive a fresh contextual belief edge.
+  Only those two edges accept continuous grades or explicit no-grade results.
+  Candidate sourcing is GRAPH-owned; the Slice keeps only the active set.
 
 ## Central Shape
 
@@ -157,4 +154,6 @@ are not required by the minimal loop.
 - `QueryTokenBudget` bounds the detail of one generated query.
 - Edge strength records belief support and tension.
 - A budget reduction requests a coarser description; it does not mutate nodes.
-- An unresolved claim is pending or unknown, not defeated.
+- An unresolved claim produces no grade; no-grade is not zero and is not defeat.
+- Praxis inspection follows typed ports deterministically, including zero-
+  strength history; ordinary cognitive traversal remains magnitude-weighted.

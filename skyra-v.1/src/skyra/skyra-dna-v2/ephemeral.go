@@ -2,7 +2,6 @@ package dnav2
 
 import (
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // EphemeralRoot — the transcript (mRNA). A per-wave skyra.Space over the DNA:
@@ -17,7 +16,7 @@ import (
 // cells do parallelism: keep the DNA read-only, spin off disposable mRNA.
 type EphemeralRoot struct {
 	id      string
-	dna     *DNA
+	genome  *DNA
 	slice   skyra.Slice       // the namespace's active-state slice (the tree builds here)
 	observe ObserveCompetence // the selected gene (nil → no-op bookend)
 	express ExpressCompetence
@@ -29,10 +28,11 @@ type EphemeralRoot struct {
 
 	// working set — references into the nucleus's master graph, handed by the
 	// membrane at transcription (the mRNA carries what it needs). The entity index
-	// rides every worker; step-specific handles (the active grouping) are set for
+	// rides every worker; step-specific handles (the active episode) are set for
 	// the steps that need them.
-	Nodes *NodeRegistry
-	Grouping *dna.MemoryCell // the active grouping — set by midlevel:frame (out), handed to predicts (in)
+	Nodes         *NodeRegistry
+	Episode       *MemoryCell // active episode — midlevel out, predicts in
+	ObservationID string      // impulse-local observed CausalNode, threaded by Board row
 }
 
 // Transcribe expresses one gene for one wave: select the observe/express genes,
@@ -41,7 +41,7 @@ type EphemeralRoot struct {
 func (d *DNA) Transcribe(id, observeKey, expressKey string, slice skyra.Slice, impulseID string, handoff any) *EphemeralRoot {
 	return &EphemeralRoot{
 		id:        id,
-		dna:       d,
+		genome:    d,
 		slice:     slice,
 		observe:   d.observeGene(observeKey),
 		express:   d.expressGene(expressKey),
@@ -51,7 +51,7 @@ func (d *DNA) Transcribe(id, observeKey, expressKey string, slice skyra.Slice, i
 }
 
 // DNA is how a competence reaches durable state (the one place it may).
-func (e *EphemeralRoot) DNA() *DNA { return e.dna }
+func (e *EphemeralRoot) DNA() *DNA { return e.genome }
 
 // ── skyra.Space ──────────────────────────────────────────────────────────────
 

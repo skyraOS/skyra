@@ -9,7 +9,7 @@ import (
 // bump"): the edge-owned activation record. Four factors stored SEPARATELY, maintained
 // by the bump. Strength (the read) is their product; Cross updates F (a traversal),
 // Grade updates A/S/N (an outcome). This is isolated dnav2 code — the shared
-// dna.memoryActivation stays untouched until the Phase-3 collapse reconciles them.
+// This store is the genome's durable edge-learning substrate.
 
 // Ship defaults (the three knobs from the spec, with defaults flagged there).
 const (

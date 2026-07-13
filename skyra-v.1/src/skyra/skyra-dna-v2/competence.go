@@ -1,7 +1,5 @@
-// Package dnav2 is the slice-based-dispatch rebuild of the dispatcher layer.
-//
-// The v1 dispatcher cells (sensory/midlevel/other/self/motor) collapse into ONE
-// canonical base cell — the DNA (the genome) — holding all durable indexes and all
+// Package dnav2 implements Skyra's genome and cognitive dispatch substrate.
+// Genes execute as namespaces on one canonical base cell — the DNA — holding all durable indexes and all
 // competences (namespaced genes). Per-wave work runs on disposable transcripts
 // (ephemeral roots / mRNA). Routing is centralized in the orchestrator (membrane),
 // which reads a static workflow definition + the dynamic job board and dispatches.

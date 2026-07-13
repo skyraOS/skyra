@@ -7,21 +7,20 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // self:grade — closes the prior self proposal against the reafference (the world's
 // reply to skyra's own action) via the execution judge. exec grade > 0 → "exec-ok".
 // A hard execution failure (judge said `no`, score 0 — the intent could not be
 // realized, e.g. a blocked move) → "exec=no", which reframes: an unrealizable intent
-// is a framing problem, not just a bad action. Ported from v1 SelfCell.gradePrior.
+// is a framing problem, not just a bad action.gradePrior.
 //
 // No realized proposal / failed call / parse leaves it ungraded and reports
 // "exec-ok" (carry on unchanged — the reafference lane still frames).
 func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "exec-ok"
-	gi := root.DNA().Groupings()
-	proposal, pred, action, ok := gi.LatestUngradedRealizedSelf()
+	episodes := root.DNA().Episodes()
+	proposal, pred, action, ok := episodes.LatestUngradedRealizedSelf()
 	if !ok || root.DNA().Infer() == nil {
 		return
 	}
@@ -37,11 +36,11 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if err != nil {
 		return
 	}
-	score, parsed := dna.ParseExecGrade(resp)
+	score, parsed := ParseExecGrade(resp)
 	if !parsed {
 		return
 	}
-	gi.StampSelfGrade(proposal, score, result)
+	episodes.StampSelfGrade(proposal, score, result)
 	if score == 0 {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
@@ -55,7 +54,7 @@ const selfFrameBudget = 2000 // generous — don't prune self's conditioning in 
 
 // execGraderSystem — the execution judge. Adversarial-neutral, same posture as the
 // other-side grader: never told whose instruction it is, only compares instruction
-// to what was actually done. Verbatim from v1.
+// to what was actually done.
 const execGraderSystem = "You are a strict, impartial judge of execution. You are given an " +
 	"instruction that was issued, the action that was actually taken, and any result " +
 	"reported by the environment.\n\n" +
@@ -66,41 +65,41 @@ const execGraderSystem = "You are a strict, impartial judge of execution. You ar
 
 // self:predict — decide skyra's own next move under the framing, conditioned on
 // what the OTHER is expected to do ("self relies on other" — read live/lagged off
-// the grouping). Ported from v1 self.Observe (predict half). Reports "predicted".
+// the episode).Observe (predict half). Reports "predicted".
 func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "predicted"
-	if root.Grouping == nil || root.DNA().Infer() == nil {
+	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
 	// Phase 2e: the framing + other-distribution present is now TRAVERSAL-assembled off
-	// the grouping (relevance = alignment, budget-bounded) and the traversed edges are
+	// the episode (relevance = alignment, budget-bounded) and the traversed edges are
 	// crossed — instead of the hand-built renderOtherDistribution. The recent exchange
 	// (entity interactions) is still hand-rendered until entities join the traversal.
-	frame := FramePresentCrossing(root.Grouping, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
+	frame := FramePresentCrossing(root.Episode, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
 	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Nodes))
 	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("self present (traversal-assembled):\n%s", present))
 	resp, err := root.DNA().Infer()(selfSystem, present)
 	if err != nil {
 		return
 	}
-	text, ok := dna.ParsePrediction(resp)
+	text, ok := ParsePrediction(resp)
 	if !ok {
 		return
 	}
 	debug.Being("skyra", "self", fmt.Sprintf("plan=%q", text))
-	if born := appendSelfPrediction(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), text); born != "" {
+	if born := appendSelfPrediction(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), text); born != "" {
 		root.DNA().CrossBirth(born) // node birth: the new edge was just active
 	}
 }
 
-// renderOtherDistribution reads the latest other-pred root off the grouping's
-// gists (the gist-owned spine) and lists its branches by probability. "(no
+// renderOtherDistribution reads the latest other-pred root off the episode's
+// frames (the frame-owned spine) and lists its branches by probability. "(no
 // prediction)" if none (cold-start, or other hasn't landed yet — the lagged read).
-func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string {
-	var latest *dna.MemoryCell
+func renderOtherDistribution(episodes *EpisodeStore, episode *MemoryCell) string {
+	var latest *MemoryCell
 	latestTS := -1
-	for _, rootCell := range predictionsOf(grouping) {
-		p, ok := rootCell.Content().(dna.Prediction)
+	for _, rootCell := range predictionsOf(episode) {
+		p, ok := rootCell.Content().(Prediction)
 		if !ok || p.Role != "other" || len(rootCell.Children()) == 0 {
 			continue
 		}
@@ -111,10 +110,10 @@ func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string
 	if latest == nil {
 		return "(no prediction)"
 	}
-	var preds []dna.Prediction
+	var preds []Prediction
 	for _, gc := range latest.Children() { // immutable once added — lock-free
-		if pp, ok := gc.(*dna.MemoryCell); ok {
-			if pred, ok := pp.Content().(dna.Prediction); ok {
+		if pp, ok := gc.(*MemoryCell); ok {
+			if pred, ok := pp.Content().(Prediction); ok {
 				preds = append(preds, pred)
 			}
 		}
@@ -130,18 +129,18 @@ func renderOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell) string
 	return strings.Join(lines, "\n")
 }
 
-// appendSelfPrediction stamps skyra's proposed move onto the grouping's CURRENT
-// gist (per-cycle key; a proposal belongs to the framing it was made under). motor
+// appendSelfPrediction stamps skyra's proposed move onto the episode's CURRENT
+// frame (per-cycle key; a proposal belongs to the framing it was made under). motor
 // reads the latest self proposal off the spine. Returns the birth edge key ("" if
-// the grouping has no gist yet).
-func appendSelfPrediction(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, text string) string {
-	gist := latestGist(grouping)
-	if gist == nil {
+// the episode has no frame yet).
+func appendSelfPrediction(episodes *EpisodeStore, episode *MemoryCell, ts int, text string) string {
+	frame := latestFrame(episode)
+	if frame == nil {
 		return ""
 	}
-	key := fmt.Sprintf("%s→self-pred:%d", gist.ID(), ts)
-	pred := dna.NewMemoryCell(key, dna.KindPrediction, dna.Prediction{Text: text, Role: "self", Timestamp: ts}, nil)
-	gi.AddChild(gist, key, pred)
+	key := fmt.Sprintf("%s→self-pred:%d", frame.ID(), ts)
+	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "self", Timestamp: ts}, nil)
+	episodes.AddChild(frame, key, pred)
 	return key
 }
 

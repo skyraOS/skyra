@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // The cold-start pipeline through framing: an external engage flows sensory →
-// other:grade(no-prior) → midlevel:frame (mock infer → gist → grouping). Verifies
-// the frame gene renders the exchange, creates the grouping, and the orchestrator
+// other:grade(no-prior) → midlevel:frame (mock infer → frame → episode). Verifies
+// the frame gene renders the exchange, creates the episode, and the orchestrator
 // threads it onto the board for the fan-out. Stops after framing (predicts not yet
 // ported) by having predict genes report a terminal-ish condition.
 func TestColdStartFramesAndGroups(t *testing.T) {
@@ -19,9 +18,12 @@ func TestColdStartFramesAndGroups(t *testing.T) {
 	WireGenes(d)
 	var framePresent string
 	d.SetInfer(func(system, present string) (string, error) {
+		if response, ok := causalTestResponse(system); ok {
+			return response, nil
+		}
 		if strings.Contains(system, "evolving being") {
 			framePresent = present
-			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
+			return "<requery>assist[1] with[1→2] the {skyra project}[2]</requery>", nil
 		}
 		return "", nil
 	})
@@ -45,12 +47,12 @@ func TestColdStartFramesAndGroups(t *testing.T) {
 	if !strings.Contains(framePresent, "can you help with the skyra project") {
 		t.Fatalf("frame present missing the exchange: %q", framePresent)
 	}
-	// a grouping was created and threaded onto the board (the predict workers got it)
-	g, ok := board.Row("X", "").Grouping().(*dna.MemoryCell)
+	// an episode was created and threaded onto the board (the predict workers got it)
+	g, ok := board.Row("X", "").Episode().(*MemoryCell)
 	if !ok || g == nil {
-		t.Fatal("no active grouping threaded onto the board")
+		t.Fatal("no active episode threaded onto the board")
 	}
-	if got := gistOf(g); got != "assist with the skyra project" {
-		t.Fatalf("grouping gist = %q, want the framed label", got)
+	if got := frameText(g); got != "assist with the skyra project" {
+		t.Fatalf("episode frame = %q, want the framed label", got)
 	}
 }

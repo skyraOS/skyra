@@ -86,10 +86,12 @@ The new sentence and subgraph are new immutable nodes. Previous nodes remain in
 history. Reuse means reusing an immutable node through a new edge, never
 mutating or reusing the old edge.
 
-Efficient and Final belief targets survive a Material/Formal requery. Their
-edges continue to carry their own grades and EMAs until evidence drives their
-support toward zero. Requerying the present compound does not silently defeat
-its causal bounds.
+Efficient and Final belief target nodes may be offered for reuse after a
+Material/Formal requery. Their contextual edges do not survive: every new Aitia
+set mints fresh Efficient/Final edges with fresh signed state. The prior set
+remains immutable history. The lineage-keyed `QueryTokenBudget` is the one
+quantity that crosses the boundary: the emitting voice keeps its earned
+specificity even though its edges do not.
 
 > **Tension to reconcile (ledger item 6):** the paragraph above lets
 > Efficient/Final edges *keep* their EMAs across a present-compound requery, but
@@ -101,15 +103,15 @@ its causal bounds.
 
 ## Verification Semantics
 
-Resolution has at least three states:
+Resolution has no categorical grade states:
 
 ```text
-supported    observed information agrees with the claim
-contradicted observed information disagrees with the claim
-unknown      records are absent, ambiguous, or the future has not resolved
+-1 <= grade <= 1     when the claim is resolvable
+no grade             when records are absent, ambiguous, or unresolved
 ```
 
-`unknown` holds the controller and must not be converted to contradiction.
+No grade holds the controller and must not be converted to grade `0` or a
+negative grade. Zero is a real graded value: cancellation/no charge.
 Efficient claims can be checked against records only when those records are
 sufficient. A predicted Effect can be checked after its horizon. Final Cause is
 purpose or orientation and is not automatically falsified merely because a
@@ -155,6 +157,7 @@ prediction or turning observation into belief.
 - What canonical graph serialization makes sentence/subgraph correspondence
   mechanically checkable?
 - Is the budget scoped per query lineage, relation, worker, or some combination?
-- What grading signal measures Material/Formal fit without grading verbosity?
+- What structural response contract selects retain, compose, or requery for
+  Material/Formal without introducing a signed grade or EMA?
 - When does a requery reuse a prior immutable subgraph rather than create one?
 - Does a lower token budget produce abstraction consistently across models?

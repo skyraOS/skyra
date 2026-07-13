@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"skyra-v1/src/debug"
-	dna "skyra-v1/src/skyra/skyra-dna"
 	"skyra-v1/src/skyra/traverse"
 )
 
 // Phase 1 (traversal-implementation-plan.md): assemble the "present" for inference by
-// TRAVERSING the grouping subgraph under a token budget — the analogue of the
+// TRAVERSING the episode subgraph under a token budget — the analogue of the
 // hand-built renderers (renderOtherDistribution / renderExchange) that we A/B against.
 // Weights come from the predictions' existing fields (Probability); there is NO learning
 // yet. The point is to test whether a traversed frame holds up, not the economy.
@@ -27,34 +26,34 @@ func tokenCount(s string) int {
 	return 1
 }
 
-// frameNode adapts a dna.MemoryCell as a traverse.Node. Cost = tokens of its rendered
+// frameNode adapts a MemoryCell as a traverse.Node. Cost = tokens of its rendered
 // line; Frontier = its children weighted and **normalized to sum to 1** — cognition
 // conserves the budget, so the frame stays within it (a bounded present). The edge
 // weight is the learned Strength off the store (relevance = alignment); an edge with no
 // record yet falls back to the Phase-1 static Probability, so the two phases layer.
 type frameNode struct {
-	cell    *dna.MemoryCell
+	cell    *MemoryCell
 	store   *ActivationStore // nil → Phase-1 Probability weights
 	tick    int
 	exclude map[string]bool // node IDs the settle pruned this pass (nil → none); skipped in Frontier
-	// rootGist is the ROOT grouping's current gist ID: exactly one gist renders as
-	// "Framing:" per frame; every other gist (the root's priors, and any gist the
+	// rootFrame is the ROOT episode's current frame ID: exactly one frame renders as
+	// "Framing:" per frame; every other frame (the root's priors, and any frame the
 	// wave bled into through the entity mesh) renders as an earlier framing —
 	// visible history ("before I thought x"), gradeable by the settle.
-	rootGist string
+	rootFrame string
 }
 
 func (n *frameNode) ID() string                         { return n.cell.ID() }
-func (n *frameNode) Cost() int                          { return tokenCount(renderCellText(n.cell, n.rootGist)) }
+func (n *frameNode) Cost() int                          { return tokenCount(renderCellText(n.cell, n.rootFrame)) }
 func (n *frameNode) Express(_ traverse.Node, _ any) any { return n.cell.Content() }
 
-func (n *frameNode) child(mc *dna.MemoryCell) *frameNode {
-	return &frameNode{cell: mc, store: n.store, tick: n.tick, exclude: n.exclude, rootGist: n.rootGist}
+func (n *frameNode) child(mc *MemoryCell) *frameNode {
+	return &frameNode{cell: mc, store: n.store, tick: n.tick, exclude: n.exclude, rootFrame: n.rootFrame}
 }
 
 // weight is the learned edge Strength (relevance = alignment); falls back to the static
 // Probability while an edge has no record yet.
-func (n *frameNode) weight(edgeKey string, mc *dna.MemoryCell) float64 {
+func (n *frameNode) weight(edgeKey string, mc *MemoryCell) float64 {
 	if n.store != nil {
 		if s, ok := n.store.Strength(edgeKey, n.tick); ok {
 			return s
@@ -66,13 +65,13 @@ func (n *frameNode) weight(edgeKey string, mc *dna.MemoryCell) float64 {
 func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 	type kid struct {
 		key string
-		mc  *dna.MemoryCell
+		mc  *MemoryCell
 		w   float64
 	}
 	var kids []kid
 	var sum float64
 	for key, child := range n.cell.Children() {
-		mc, ok := child.(*dna.MemoryCell)
+		mc, ok := child.(*MemoryCell)
 		if !ok {
 			continue
 		}
@@ -96,8 +95,8 @@ func (n *frameNode) Frontier(_ traverse.Node, _ any) map[string]traverse.Alloc {
 // weightOf is the Phase-1 stand-in for edge alignment: a prediction's calibrated
 // Probability (branches), floored so distribution roots / proposals still get budget;
 // 1 otherwise. In Phase 2 this becomes the learned strength read off the edge record.
-func weightOf(cell *dna.MemoryCell) float64 {
-	if p, ok := cell.Content().(dna.Prediction); ok {
+func weightOf(cell *MemoryCell) float64 {
+	if p, ok := cell.Content().(Prediction); ok {
 		if p.Probability > 0 {
 			return p.Probability
 		}
@@ -107,16 +106,16 @@ func weightOf(cell *dna.MemoryCell) float64 {
 }
 
 // renderCellText renders one cell's content to a present line ("" = contributes no line,
-// e.g. a grouping shell or a distribution root, though their children still descend).
-// rootGist marks the one gist that renders as the current framing.
-func renderCellText(cell *dna.MemoryCell, rootGist string) string {
+// e.g. a episode shell or a distribution root, though their children still descend).
+// rootFrame marks the one frame that renders as the current framing.
+func renderCellText(cell *MemoryCell, rootFrame string) string {
 	switch c := cell.Content().(type) {
-	case dna.Gist:
-		if cell.ID() == rootGist {
+	case Frame:
+		if cell.ID() == rootFrame {
 			return "Framing: " + c.Text
 		}
 		return "earlier framing: " + c.Text
-	case dna.Prediction:
+	case Prediction:
 		switch c.Role {
 		case "other":
 			if c.Probability > 0 {
@@ -126,11 +125,11 @@ func renderCellText(cell *dna.MemoryCell, rootGist string) string {
 		case "self":
 			return "self proposes: " + c.Text
 		}
-	case dna.ActionRecord:
+	case ActionRecord:
 		return fmt.Sprintf("action: %s %s %v", c.Primitive, c.EntityID, c.Content)
-	case dna.InteractionRecord:
+	case InteractionRecord:
 		return c.From + ": " + c.Utterance
-	case dna.PerceiveRecord:
+	case PerceiveRecord:
 		// no body line — perceive records are NORMALIZED into the frame-top
 		// location block (renderLocations); also keeps them out of the settle's
 		// items (a location is display structure, not a coherence claim).
@@ -150,13 +149,13 @@ func renderLocations(res *traverse.Result) []string {
 	if res == nil {
 		return nil
 	}
-	freshest := map[string]dna.PerceiveRecord{}
+	freshest := map[string]PerceiveRecord{}
 	for _, node := range res.Flatten() {
 		fn, ok := node.(*frameNode)
 		if !ok {
 			continue
 		}
-		pr, ok := fn.cell.Content().(dna.PerceiveRecord)
+		pr, ok := fn.cell.Content().(PerceiveRecord)
 		if !ok {
 			continue
 		}
@@ -177,42 +176,42 @@ func renderLocations(res *traverse.Result) []string {
 	return lines
 }
 
-// FrameOf walks the grouping under a token budget and returns the traversal Result — the
+// FrameOf walks the episode under a token budget and returns the traversal Result — the
 // lit subgraph — for both rendering (Flatten) and credit distribution (Edges). store=nil
 // uses Phase-1 static weights; a store uses learned strength.
-func FrameOf(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) *traverse.Result {
-	return frameOfExcluding(grouping, budget, store, tick, nil)
+func FrameOf(episode *MemoryCell, budget float64, store *ActivationStore, tick int) *traverse.Result {
+	return frameOfExcluding(episode, budget, store, tick, nil)
 }
 
 // frameOfExcluding is FrameOf with a settle-pruned node set: excluded node IDs are skipped
 // in Frontier, so a re-traversal after pruning frees their budget for coherent-far nodes.
-func frameOfExcluding(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int, exclude map[string]bool) *traverse.Result {
-	if grouping == nil {
+func frameOfExcluding(episode *MemoryCell, budget float64, store *ActivationStore, tick int, exclude map[string]bool) *traverse.Result {
+	if episode == nil {
 		return nil
 	}
-	rootGist := ""
-	if gist := latestGist(grouping); gist != nil {
-		rootGist = gist.ID()
+	rootFrame := ""
+	if frame := latestFrame(episode); frame != nil {
+		rootFrame = frame.ID()
 	}
-	return traverse.Assemble(&frameNode{cell: grouping, store: store, tick: tick, exclude: exclude, rootGist: rootGist}, budget, nil)
+	return traverse.Assemble(&frameNode{cell: episode, store: store, tick: tick, exclude: exclude, rootFrame: rootFrame}, budget, nil)
 }
 
-// AssembleFramePresent walks the grouping with Phase-1 static weights (no learning).
-func AssembleFramePresent(grouping *dna.MemoryCell, budget float64) (string, int) {
-	return renderFrame(FrameOf(grouping, budget, nil, 0))
+// AssembleFramePresent walks the episode with Phase-1 static weights (no learning).
+func AssembleFramePresent(episode *MemoryCell, budget float64) (string, int) {
+	return renderFrame(FrameOf(episode, budget, nil, 0))
 }
 
 // AssembleWithStore is the Phase-2 assembler: edge weights come from the learned
 // activation store (relevance = alignment), so grading reshapes the frame.
-func AssembleWithStore(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) (string, int) {
-	return renderFrame(FrameOf(grouping, budget, store, tick))
+func AssembleWithStore(episode *MemoryCell, budget float64, store *ActivationStore, tick int) (string, int) {
+	return renderFrame(FrameOf(episode, budget, store, tick))
 }
 
-// FramePresentCrossing is the live-loop assembler: it walks the grouping under the
+// FramePresentCrossing is the live-loop assembler: it walks the episode under the
 // learned store, CROSSES the traversed edges (traversal = crossing → F-bump), and
 // returns the rendered present. Use this where a gene feeds the frame to inference.
-func FramePresentCrossing(grouping *dna.MemoryCell, budget float64, store *ActivationStore, tick int) string {
-	res := FrameOf(grouping, budget, store, tick)
+func FramePresentCrossing(episode *MemoryCell, budget float64, store *ActivationStore, tick int) string {
+	res := FrameOf(episode, budget, store, tick)
 	if res == nil {
 		return ""
 	}
@@ -232,7 +231,7 @@ func renderFrame(res *traverse.Result) (string, int) {
 	lines := renderLocations(res) // the normalized location block, pinned at the top
 	for _, node := range lit {
 		if fn, ok := node.(*frameNode); ok {
-			if line := renderCellText(fn.cell, fn.rootGist); line != "" {
+			if line := renderCellText(fn.cell, fn.rootFrame); line != "" {
 				lines = append(lines, line)
 			}
 		}
@@ -240,15 +239,15 @@ func renderFrame(res *traverse.Result) (string, int) {
 	return strings.Join(lines, "\n"), len(lit)
 }
 
-// ComparePresents renders the latest grouping two ways for the Phase-1 A/B — the
+// ComparePresents renders the latest episode two ways for the Phase-1 A/B — the
 // hand-built renderOtherDistribution and the traversal-built AssembleFramePresent.
 // Exported so cmd/ can drive it after a real cognitive cycle.
 func ComparePresents(d *DNA, budget float64) (hand, traversal string, litNodes int) {
-	g := d.Groupings().Latest()
+	g := d.Episodes().Latest()
 	if g == nil {
 		return "", "", 0
 	}
-	hand = renderOtherDistribution(d.Groupings(), g)
+	hand = renderOtherDistribution(d.Episodes(), g)
 	traversal, litNodes = AssembleFramePresent(g, budget)
 	return hand, traversal, litNodes
 }

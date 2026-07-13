@@ -16,9 +16,12 @@ func TestColdStartFullPipelineEmitsAction(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(func(system, present string) (string, error) {
+		if response, ok := causalTestResponse(system); ok {
+			return response, nil
+		}
 		switch {
 		case strings.Contains(system, "evolving being"):
-			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
+			return "<requery>assist[1] with[1→2] the {skyra project}[2]</requery>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
 		// NOTE: the prompts cross-reference (motor mentions "inner voice", self

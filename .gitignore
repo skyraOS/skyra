@@ -14,3 +14,9 @@ dist/
 # Skyra v.1 — compiled experiment binaries (cmd/ is the source)
 skyra-v.1/phase1-ab
 skyra-v.1/phase2-accumulate
+
+# git worktree checkouts
+worktrees/
+
+# compiled validate binary
+skyra-v.1/validate-v2

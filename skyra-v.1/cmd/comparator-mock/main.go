@@ -34,7 +34,7 @@ Your job has two parts.
 2) Context management. Group the context cells into bundles. For each bundle:
    <context-management>
      <cells>which numbered cells</cells>
-     <observation>what this grouping means</observation>
+     <observation>what this episode means</observation>
      <alignment>+1 to -1 — did these cells help or hurt the setpoint. Use the whole
        range: strongly supportive near +1, mildly supportive around +0.3, neutral 0,
        negative only if the cells point AWAY from reaching the setpoint</alignment>

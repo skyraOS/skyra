@@ -25,14 +25,15 @@ type Row struct {
 	ImpulseID string
 	Prev      string // causal link — the impulse whose action provoked this one (reafference chain)
 
-	expects    map[string]bool // set of "grouping:agent" the join waits on
-	done       map[string]bool // completed "grouping:agent"
+	expects    map[string]bool // set of "episode:agent" the join waits on
+	done       map[string]bool // completed "episode:agent"
 	reframed   bool            // the one-reframe rail
 	motorFired bool            // the atomic join guard
 	status     string          // "pending" | "done"
 	history    []Span          // append-only trace (immutable spans; flush on done)
 
-	grouping any // the impulse's active grouping (working set threaded midlevel→predicts)
+	episode       any    // the impulse's active episode (working set threaded midlevel→predicts)
+	observationID string // observation-born CausalNode for this impulse
 }
 
 // Span is one step's trace entry (append-only, immutable once written).
@@ -77,24 +78,24 @@ func (b *Board) Pending() []string {
 	return out
 }
 
-// key joins a grouping + agent into the set key.
-func key(grouping, agent string) string { return grouping + ":" + agent }
+// key joins an episode + agent into the set key.
+func key(episode, agent string) string { return episode + ":" + agent }
 
 // Declare registers what the join waits on (midlevel declares the expected set).
-// Additive — a warm impulse can declare several groupings.
-func (r *Row) Declare(grouping string, agents ...string) {
+// Additive — a warm impulse can declare several episodes.
+func (r *Row) Declare(episode string, agents ...string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, a := range agents {
-		r.expects[key(grouping, a)] = true
+		r.expects[key(episode, a)] = true
 	}
 }
 
-// Mark records a completed (grouping, agent). Idempotent.
-func (r *Row) Mark(grouping, agent string) {
+// Mark records a completed (episode, agent). Idempotent.
+func (r *Row) Mark(episode, agent string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.done[key(grouping, agent)] = true
+	r.done[key(episode, agent)] = true
 }
 
 // TryFireMotor is the atomic join: returns true to EXACTLY ONE caller when the join
@@ -159,17 +160,29 @@ func (r *Row) Reframed() bool {
 	return r.reframed
 }
 
-// SetGrouping / Grouping thread the active grouping (midlevel:frame produces it;
+// SetEpisode / Episode thread the active episode (midlevel:frame produces it;
 // the fan-out's predict workers receive it). Stored as `any` to keep the board
 // free of the dna types.
-func (r *Row) SetGrouping(g any) {
+func (r *Row) SetEpisode(g any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.grouping = g
+	r.episode = g
 }
 
-func (r *Row) Grouping() any {
+func (r *Row) Episode() any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.grouping
+	return r.episode
+}
+
+func (r *Row) SetObservationID(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.observationID = id
+}
+
+func (r *Row) ObservationID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.observationID
 }

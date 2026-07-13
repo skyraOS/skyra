@@ -5,7 +5,6 @@ import (
 
 	"skyra-v1/src/skyra"
 	"skyra-v1/src/skyra/relation"
-	dna "skyra-v1/src/skyra/skyra-dna"
 	"skyra-v1/src/skyra/world"
 )
 
@@ -38,8 +37,8 @@ func TestSensoryIntakePortRecordsEntity(t *testing.T) {
 	// the utterance landed as a KindResponse child
 	var said string
 	for _, c := range ents[0].Children() {
-		if mc, ok := c.(*dna.MemoryCell); ok {
-			if rec, ok := mc.Content().(dna.InteractionRecord); ok {
+		if mc, ok := c.(*MemoryCell); ok {
+			if rec, ok := mc.Content().(InteractionRecord); ok {
 				said = rec.Utterance
 			}
 		}

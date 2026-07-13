@@ -108,8 +108,8 @@ func TestParseAnnotatedEmptyClaim(t *testing.T) {
 	}
 }
 
-// Persist: fresh summary + fresh contextual edges; term nodes REUSED across
-// compounds by normalized label (nodes reused, edges never).
+// Persist: fresh summary + fresh contextual semantic edges; term nodes REUSED
+// across CausalNodes by normalized label (nodes reused, edges never).
 func TestPersistReusesNodesFreshEdges(t *testing.T) {
 	nr := NewNodeRegistry(nil)
 	ci := NewCausalNodes(nil, nr)
@@ -137,18 +137,18 @@ func TestPersistReusesNodesFreshEdges(t *testing.T) {
 		}
 		seen[e.ID] = true
 	}
-	// member edges point AT the summary (the subgraph points to it)
-	memberEdges := 0
-	for _, e := range c1.Edges {
-		if e.Kind == EdgeMember {
-			memberEdges++
-			if e.ToID != c1.Cell.ID() {
-				t.Fatalf("member edge points at %s, want the summary", e.ToID)
-			}
-		}
+	// Material membership and reverse summary retrieval are typed projections,
+	// not fake semantic member edges.
+	if got := len(c1.Cell.ChildrenIn(PortMaterial)); got != 2 {
+		t.Fatalf("material children = %d, want 2", got)
 	}
-	if memberEdges != 2 {
-		t.Fatalf("member edges = %d, want 2", memberEdges)
+	if got := c1.Parents[0].ChildrenIn(PortSummaries)[c1.Cell.ID()]; got != c1.Cell {
+		t.Fatal("material node must reverse-index the containing summary")
+	}
+	for _, e := range c1.Edges {
+		if e.Kind != EdgeStructural {
+			t.Fatalf("unexpected edge kind in non-composed birth graph: %s", e.Kind)
+		}
 	}
 }
 
@@ -194,6 +194,120 @@ func TestPersistComposesPreviousCompound(t *testing.T) {
 
 	if c2.Parents[0] != c1.Cell {
 		t.Fatal("the compound summary node should be the reused referent")
+	}
+	inherited := c2.Cell.ChildrenIn(PortInherited)
+	if len(inherited) != 1 {
+		t.Fatalf("inherited edges = %d, want 1", len(inherited))
+	}
+	for _, child := range inherited {
+		edge, ok := child.(*EdgeCell)
+		if !ok {
+			t.Fatalf("inherited child type = %T, want *EdgeCell", child)
+		}
+		if edge.Record.FromID != c1.Cell.ID() || edge.Record.ToID != c2.Cell.ID() {
+			t.Fatalf("inherited topology = %s -> %s", edge.Record.FromID, edge.Record.ToID)
+		}
+		if edge.ChildrenIn(PortFrom)[c1.Cell.ID()] != c1.Cell || edge.ChildrenIn(PortTo)[c2.Cell.ID()] != c2.Cell {
+			t.Fatal("inherited edge endpoint fields and ports disagree")
+		}
+	}
+}
+
+func TestPersistPublishesTraversableDirectedSemanticEdges(t *testing.T) {
+	ci := NewCausalNodes(nil, NewNodeRegistry(nil))
+	p, _ := ParseAnnotated("michael[1] asked[1→2] skyra[2]")
+	c := ci.Persist(p, 1)
+
+	formal := c.Cell.ChildrenIn(PortFormal)
+	if len(formal) != 1 {
+		t.Fatalf("formal children = %d, want 1", len(formal))
+	}
+	for id, child := range formal {
+		edge, ok := child.(*EdgeCell)
+		if !ok {
+			t.Fatalf("formal child type = %T, want *EdgeCell", child)
+		}
+		if edge.Kind() != KindSemanticEdge || edge.Record.Kind != EdgeStructural {
+			t.Fatalf("edge kinds = %q/%q", edge.Kind(), edge.Record.Kind)
+		}
+		if edge.Record.ID != id || edge.Record.Label != "asked" {
+			t.Fatalf("edge identity = %+v, map key %q", edge.Record, id)
+		}
+		if edge.ChildrenIn(PortFrom)[c.Parents[0].ID()] != c.Parents[0] {
+			t.Fatal("from port does not expose michael")
+		}
+		if edge.ChildrenIn(PortTo)[c.Parents[1].ID()] != c.Parents[1] {
+			t.Fatal("to port does not expose skyra")
+		}
+		if _, ok := edge.Strength(0); ok {
+			t.Fatal("semantic edges must never carry learned strength")
+		}
+	}
+}
+
+func TestQueryBySubgraphPreservesDirection(t *testing.T) {
+	nr := NewNodeRegistry(nil)
+	ci := NewCausalNodes(nil, nr)
+	forward, _ := ParseAnnotated("michael[1] asked[1→2] skyra[2]")
+	reverse, _ := ParseAnnotated("skyra[1] asked[1→2] michael[2]")
+	f := ci.Persist(forward, 1)
+	r := ci.Persist(reverse, 2)
+	michael, skyra := nr.Term("michael"), nr.Term("skyra")
+
+	candidates := ci.Candidates(SubgraphQuery{
+		NodeIDs: []string{michael.ID(), skyra.ID()},
+		Edges:   []SemanticTriple{{FromID: michael.ID(), Label: "asked", ToID: skyra.ID()}},
+	})
+	if len(candidates) != 2 {
+		t.Fatalf("candidates = %d, want both node-overlap candidates", len(candidates))
+	}
+	exact := map[string]bool{}
+	for _, candidate := range candidates {
+		exact[candidate.CausalNodeID] = candidate.Exact
+		if candidate.Occurrences < 2 {
+			t.Fatalf("candidate %s occurrence score = %d", candidate.CausalNodeID, candidate.Occurrences)
+		}
+	}
+	if !exact[f.Cell.ID()] || exact[r.Cell.ID()] {
+		t.Fatalf("directional verification forward=%v reverse=%v", exact[f.Cell.ID()], exact[r.Cell.ID()])
+	}
+}
+
+func TestMintCausalEdgeUsesTypedPerspectivePortAndFreshActivation(t *testing.T) {
+	signed := NewSignedStore()
+	ci := NewCausalNodes(nil, NewNodeRegistry(nil), signed)
+	priorParsed, _ := ParseAnnotated("rain[1] fell[1→2] yesterday[2]")
+	presentParsed, _ := ParseAnnotated("streets[1] are[1→2] wet[2]")
+	prior := ci.Persist(priorParsed, 1)
+	present := ci.Persist(presentParsed, 2)
+
+	edge, err := ci.MintCausalEdge(EdgeEfficient, "set:1", prior.Cell.ID(), present.Cell.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if present.Cell.ChildrenIn(PortEfficient)[edge.ID()] != edge {
+		t.Fatal("present node must expose efficient relationship")
+	}
+	if edge.ChildrenIn(PortFrom)[prior.Cell.ID()] != prior.Cell || edge.ChildrenIn(PortTo)[present.Cell.ID()] != present.Cell {
+		t.Fatal("causal edge endpoint projection disagrees with topology")
+	}
+	if _, ok := edge.Strength(0); ok {
+		t.Fatal("fresh causal edge is untested, not zero-strength")
+	}
+	signed.Grade(edge.ID(), -1, 3)
+	if strength, ok := edge.Strength(3); !ok || strength >= 0 {
+		t.Fatalf("edge strength = %v, ok=%v; want learned tension", strength, ok)
+	}
+
+	edge2, err := ci.MintCausalEdge(EdgeEfficient, "set:2", prior.Cell.ID(), present.Cell.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edge2.ID() == edge.ID() {
+		t.Fatal("same nodes in a new context must mint a fresh edge")
+	}
+	if _, ok := edge2.Strength(3); ok {
+		t.Fatal("fresh contextual edge must not inherit learned strength")
 	}
 }
 

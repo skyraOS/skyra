@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"sort"
-	"strings"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"os"
+	"sort"
+	"strings"
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/inference"
@@ -22,11 +22,11 @@ import (
 // ── styles ────────────────────────────────────────────────────────────────────
 
 var (
-	subtle   = lipgloss.Color("8")
-	accent   = lipgloss.Color("12")
-	brand    = lipgloss.Color("5")
-	warn     = lipgloss.Color("11")
-	success  = lipgloss.Color("10")
+	subtle    = lipgloss.Color("8")
+	accent    = lipgloss.Color("12")
+	brand     = lipgloss.Color("5")
+	warn      = lipgloss.Color("11")
+	success   = lipgloss.Color("10")
 	moveColor = lipgloss.Color("14") // cyan for move mode
 
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(brand)
@@ -59,13 +59,13 @@ var (
 			BorderForeground(warn).
 			Padding(0, 1)
 
-	itemStyle     = lipgloss.NewStyle().Foreground(subtle)
-	itemSelStyle  = lipgloss.NewStyle().Foreground(warn).Bold(true)
-	labelStyle    = lipgloss.NewStyle().Foreground(warn)
-	dimStyle      = lipgloss.NewStyle().Foreground(subtle)
-	senderUser    = lipgloss.NewStyle().Bold(true).Foreground(accent)
-	senderSkyra   = lipgloss.NewStyle().Bold(true).Foreground(brand)
-	hintStyle     = lipgloss.NewStyle().Foreground(subtle).Italic(true)
+	itemStyle    = lipgloss.NewStyle().Foreground(subtle)
+	itemSelStyle = lipgloss.NewStyle().Foreground(warn).Bold(true)
+	labelStyle   = lipgloss.NewStyle().Foreground(warn)
+	dimStyle     = lipgloss.NewStyle().Foreground(subtle)
+	senderUser   = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	senderSkyra  = lipgloss.NewStyle().Bold(true).Foreground(brand)
+	hintStyle    = lipgloss.NewStyle().Foreground(subtle).Italic(true)
 )
 
 // ── state machine ─────────────────────────────────────────────────────────────
@@ -77,6 +77,7 @@ const (
 	stateEntityPicker                // engage entity selection overlay
 	stateWaiting                     // impulse fired, waiting for motor
 	stateMove                        // arrow-key navigation mode
+	statePraxis                      // read-only causal substrate inspection
 )
 
 // ── messages ──────────────────────────────────────────────────────────────────
@@ -294,6 +295,16 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "ctrl+p" {
+		if m.state == statePraxis {
+			m.state = stateInput
+			m.input.Focus()
+			return m, textarea.Blink
+		}
+		m.state = statePraxis
+		m.input.Blur()
+		return m, nil
+	}
 	switch m.state {
 
 	case stateInput:
@@ -398,6 +409,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m.fire(text)
 		}
+
+	case statePraxis:
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			return m, tea.Quit
+		case tea.KeyEsc:
+			m.state = stateInput
+			m.input.Focus()
+			return m, textarea.Blink
+		}
 	}
 
 	return m, nil
@@ -483,7 +504,14 @@ func (m model) View() string {
 	// title + status bar
 	sections = append(sections, m.renderTitleBar())
 
-	if m.state == stateMove {
+	if m.state == statePraxis {
+		report := "Praxis inspection unavailable"
+		if m.being != nil && m.being.dna != nil {
+			report = dnav2.RenderPraxis(m.being.dna.InspectPraxis(""))
+		}
+		sections = append(sections, outputStyle.Width(m.outputWidth()).Height(m.outputHeight()+4).Render(report))
+		sections = append(sections, hintStyle.Render("  ctrl+p/esc: back to chat  ctrl+c: quit"))
+	} else if m.state == stateMove {
 		// move mode: show map panel + directional hint
 		sections = append(sections, m.renderMapPanel())
 		sections = append(sections, hintStyle.Render("  ↑↓←→: move  esc: back to chat  ctrl+c: quit"))
@@ -507,7 +535,7 @@ func (m model) View() string {
 			inputStyle.Width(m.inputWidth()).Render(m.input.View()),
 		)
 
-		sections = append(sections, hintStyle.Render("  tab: perceive/engage  enter: send  esc: move mode  ctrl+c: quit"))
+		sections = append(sections, hintStyle.Render("  tab: perceive/engage  enter: send  esc: move mode  ctrl+p: praxis  ctrl+c: quit"))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -744,7 +772,7 @@ func main() {
 		nsSlices[ns] = world.NewSlice("skyra:"+ns, "skyra")
 	}
 	orch := dnav2.NewOrchestrator(d, board, beingKernel, world.NewSlice("skyra:membrane", "skyra"), nsSlices)
-	being := newDnav2Being("skyra", world.NewSlice("skyra:being", "skyra"), orch)
+	being := newDnav2Being("skyra", world.NewSlice("skyra:being", "skyra"), orch, d)
 
 	user := userdna.NewUserCell("michael", func(id string) skyra.Slice {
 		return world.NewSlice(id, "michael")

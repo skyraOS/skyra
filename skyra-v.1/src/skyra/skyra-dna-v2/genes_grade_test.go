@@ -7,18 +7,20 @@ import (
 	"time"
 
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // gradeMock is the turn-1 cold-start mock plus a parametrized adversarial judge, so
 // a phase-2 two-turn run can drive other:grade down either fork (held / total miss).
 func gradeMock(judge string) InferFunc {
 	return func(system, present string) (string, error) {
+		if response, ok := causalTestResponse(system); ok {
+			return response, nil
+		}
 		switch {
 		case strings.Contains(system, "strict, impartial judge"):
 			return judge, nil
 		case strings.Contains(system, "evolving being"):
-			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
+			return "<requery>assist[1] with[1→2] the {skyra project}[2]</requery>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
 		case strings.Contains(system, "You are Skyra's motor system"):
@@ -81,7 +83,7 @@ func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
 	}
 	// the turn-1 distribution root must now be graded with the realized branch's mass.
 	root := priorOtherRoot(t, d)
-	p, _ := root.Content().(dna.Prediction)
+	p, _ := root.Content().(Prediction)
 	if !p.Graded || p.Grade != 0.7 {
 		t.Fatalf("prior root = {graded:%v grade:%.2f}, want {true 0.70}", p.Graded, p.Grade)
 	}
@@ -115,7 +117,7 @@ func TestGradeTotalMissReframes(t *testing.T) {
 	}
 	// the prior bet is stamped graded with zero mass (nothing realized).
 	root := priorOtherRoot(t, d)
-	p, _ := root.Content().(dna.Prediction)
+	p, _ := root.Content().(Prediction)
 	if !p.Graded || p.Grade != 0 {
 		t.Fatalf("prior root = {graded:%v grade:%.2f}, want {true 0.00}", p.Graded, p.Grade)
 	}
@@ -126,18 +128,18 @@ func TestGradeTotalMissReframes(t *testing.T) {
 	}
 }
 
-// editMock returns <edit id="..."> against whatever open episode the present lists (else
-// <new>), so a two-turn run drives midlevel down the EDIT branch.
+// editMock requeries the same situation, so the episode retains its frame sequence.
 func editMock() InferFunc {
 	return func(system, present string) (string, error) {
+		if response, ok := causalTestResponse(system); ok {
+			return response, nil
+		}
 		switch {
 		case strings.Contains(system, "evolving being"): // frameOpSystem
-			if i := strings.Index(present, "[id="); i >= 0 {
-				rest := present[i+len("[id="):]
-				id := rest[:strings.Index(rest, "]")]
-				return "<edit id=\"" + id + "\">continuing[1] the {skyra project}[2]</edit>", nil
+			if strings.Contains(present, "ACTIVE MATERIAL/FORMAL:\n(none") {
+				return "<requery>assist[1] with[1→2] the {skyra project}[2]</requery>", nil
 			}
-			return "<new>assist[1] with[1→2] the {skyra project}[2]</new>", nil
+			return "<requery>continuing[1] the {skyra project}[2]</requery>", nil
 		case strings.Contains(system, "strict, impartial judge"):
 			return "<match>none</match>", nil
 		case strings.Contains(system, "External Perspective"):
@@ -151,7 +153,7 @@ func editMock() InferFunc {
 	}
 }
 
-// EDIT continues the active episode: turn 2 sharpens the existing grouping's gist instead
+// EDIT continues the active episode: turn 2 sharpens the existing episode's frame instead
 // of minting a new one — the compounding path (one growing episode, not two islands).
 func TestMidlevelEditContinuesEpisode(t *testing.T) {
 	d := testDNA()
@@ -161,37 +163,37 @@ func TestMidlevelEditContinuesEpisode(t *testing.T) {
 	o, _ := newOrch(d)
 
 	fireTurn(t, o, "X1", "", "help with the skyra project") // cold start → new
-	n1 := len(d.Groupings().All())
+	n1 := len(d.Episodes().All())
 	fireTurn(t, o, "X2", "X1", "more on the skyra project") // open episode exists → edit
-	n2 := len(d.Groupings().All())
+	n2 := len(d.Episodes().All())
 
 	if n1 != 1 {
-		t.Fatalf("turn 1 (cold start) should create exactly 1 grouping, got %d", n1)
+		t.Fatalf("turn 1 (cold start) should create exactly 1 episode, got %d", n1)
 	}
 	if n2 != n1 {
-		t.Fatalf("edit must NOT create a new grouping: turn1=%d turn2=%d", n1, n2)
+		t.Fatalf("edit must NOT create a new episode: turn1=%d turn2=%d", n1, n2)
 	}
-	g := d.Groupings().Active()
+	g := d.Episodes().Active()
 	if g == nil {
-		t.Fatal("no active grouping")
+		t.Fatal("no active episode")
 	}
-	if got := gistOf(g); got != "continuing the skyra project" {
-		t.Fatalf("edit should mint a fresh current gist, got %q", got)
+	if got := frameText(g); got != "continuing the skyra project" {
+		t.Fatalf("edit should mint a fresh current frame, got %q", got)
 	}
-	// the sequence: the prior gist is RETAINED (decaying), not overwritten.
-	gists := 0
+	// the sequence: the prior frame is RETAINED (decaying), not overwritten.
+	frames := 0
 	for _, c := range g.Children() {
-		if mc, ok := c.(*dna.MemoryCell); ok && mc.Kind() == dna.KindGist {
-			gists++
+		if mc, ok := c.(*MemoryCell); ok && mc.Kind() == KindFrame {
+			frames++
 		}
 	}
-	if gists != 2 {
-		t.Fatalf("edit should append to the gist sequence: %d gists, want 2", gists)
+	if frames != 2 {
+		t.Fatalf("edit should append to the frame sequence: %d frames, want 2", frames)
 	}
 }
 
 // After framing, the just-arrived interaction is consolidated onto the episode (so it
-// lives on the grouping the frame walks) and the entity points to the episode.
+// lives on the episode the frame walks) and the entity points to the episode.
 func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
@@ -201,29 +203,29 @@ func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 
 	fireTurn(t, o, "X1", "", "help with the skyra project")
 
-	g := d.Groupings().Active()
+	g := d.Episodes().Active()
 	if g == nil {
-		t.Fatal("no active grouping")
+		t.Fatal("no active episode")
 	}
-	gist := latestGist(g)
-	if gist == nil {
-		t.Fatal("active grouping has no gist")
+	frame := latestFrame(g)
+	if frame == nil {
+		t.Fatal("active episode has no frame")
 	}
 	hasInteraction := false
-	for _, c := range gist.Children() {
-		if mc, ok := c.(*dna.MemoryCell); ok {
-			if _, ok := mc.Content().(dna.InteractionRecord); ok {
+	for _, c := range frame.Children() {
+		if mc, ok := c.(*MemoryCell); ok {
+			if _, ok := mc.Content().(InteractionRecord); ok {
 				hasInteraction = true
 			}
 		}
 	}
 	if !hasInteraction {
-		t.Fatal("the gist should own the consolidated interaction (gist-owned spine)")
+		t.Fatal("the frame should own the consolidated interaction (frame-owned spine)")
 	}
 	for _, e := range d.Nodes().Snapshot() {
 		if e.ID() == "michael" {
 			if _, ok := e.Children()[g.ID()]; !ok {
-				t.Fatal("entity should point to the episode (entity→grouping edge)")
+				t.Fatal("entity should point to the episode (entity→episode edge)")
 			}
 		}
 	}
@@ -310,27 +312,27 @@ func TestSelfGradeExecFailReframes(t *testing.T) {
 
 // gradedSelfProposal returns the graded self proposal — the realized one self:grade
 // closed (the reafference cycle mints a fresh ungraded proposal, so "latest" won't do).
-func gradedSelfProposal(t *testing.T, d *DNA) dna.Prediction {
+func gradedSelfProposal(t *testing.T, d *DNA) Prediction {
 	t.Helper()
-	for _, g := range d.Groupings().All() {
+	for _, g := range d.Episodes().All() {
 		for _, mc := range predictionsOf(g) {
-			if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Graded {
+			if p, ok := mc.Content().(Prediction); ok && p.Role == "self" && p.Graded {
 				return p
 			}
 		}
 	}
 	t.Fatal("no graded self proposal found")
-	return dna.Prediction{}
+	return Prediction{}
 }
 
 // priorOtherRoot returns the turn-1 other-distribution root (the oldest one).
-func priorOtherRoot(t *testing.T, d *DNA) *dna.MemoryCell {
+func priorOtherRoot(t *testing.T, d *DNA) *MemoryCell {
 	t.Helper()
-	var oldest *dna.MemoryCell
+	var oldest *MemoryCell
 	oldestTS := 1 << 30
-	for _, g := range d.Groupings().All() {
+	for _, g := range d.Episodes().All() {
 		for _, mc := range predictionsOf(g) {
-			if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "other" && len(mc.Children()) > 0 {
+			if p, ok := mc.Content().(Prediction); ok && p.Role == "other" && len(mc.Children()) > 0 {
 				if p.Timestamp < oldestTS {
 					oldestTS, oldest = p.Timestamp, mc
 				}

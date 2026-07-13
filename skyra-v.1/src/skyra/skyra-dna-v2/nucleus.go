@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // NodeRegistry — the master registry of MATERIAL NODES, held on the nucleus
@@ -18,24 +17,126 @@ import (
 // is traversed every wave. Writes go through the handed reference straight
 // back to this master registry (shared by reference).
 type NodeRegistry struct {
-	mu    sync.Mutex
-	slice skyra.Slice // nucleus slice for the nodes (nil-tolerant until activation lands)
-	byID  map[string]*dna.MemoryCell
-	terms map[string]*dna.MemoryCell // lookup key → term node ("has this label a node yet")
+	mu             sync.Mutex
+	slice          skyra.Slice // nucleus slice for the nodes (nil-tolerant until activation lands)
+	byID           map[string]*MemoryCell
+	terms          map[string]*MemoryCell // lookup key → term node ("has this label a node yet")
+	causalByNode   map[string]map[string]*MemoryCell
+	causalByPair   map[SemanticPair]map[string]*MemoryCell
+	causalByTriple map[SemanticTriple]map[string]*MemoryCell
 }
 
 func NewNodeRegistry(slice skyra.Slice) *NodeRegistry {
 	return &NodeRegistry{
-		slice: slice,
-		byID:  map[string]*dna.MemoryCell{},
-		terms: map[string]*dna.MemoryCell{},
+		slice:          slice,
+		byID:           map[string]*MemoryCell{},
+		terms:          map[string]*MemoryCell{},
+		causalByNode:   map[string]map[string]*MemoryCell{},
+		causalByPair:   map[SemanticPair]map[string]*MemoryCell{},
+		causalByTriple: map[SemanticTriple]map[string]*MemoryCell{},
 	}
+}
+
+// SemanticPair is the direction-preserving endpoint portion of a semantic
+// edge signature. It is a retrieval key, not a stored causal relationship.
+type SemanticPair struct {
+	FromID string
+	ToID   string
+}
+
+// SemanticTriple is the complete directed semantic edge signature used for
+// exact candidate verification.
+type SemanticTriple struct {
+	FromID string
+	Label  string
+	ToID   string
+}
+
+func addSummary[K comparable](index map[K]map[string]*MemoryCell, key K, summary *MemoryCell) {
+	if index[key] == nil {
+		index[key] = map[string]*MemoryCell{}
+	}
+	index[key][summary.ID()] = summary
+}
+
+// IndexCausalNode publishes the reverse retrieval projections for one
+// immutable birth subgraph. The semantic node/edge content remains the source
+// of meaning; these maps only find candidate summaries efficiently.
+func (ei *NodeRegistry) IndexCausalNode(summary *MemoryCell, nodes []*MemoryCell, edges []EdgeRecord) {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	for _, node := range nodes {
+		addSummary(ei.causalByNode, node.ID(), summary)
+		node.AddChildTo(PortSummaries, summary.ID(), summary)
+	}
+	for _, edge := range edges {
+		if edge.Kind != EdgeStructural {
+			continue
+		}
+		addSummary(ei.causalByPair, SemanticPair{FromID: edge.FromID, ToID: edge.ToID}, summary)
+		addSummary(ei.causalByTriple, SemanticTriple{FromID: edge.FromID, Label: edge.Label, ToID: edge.ToID}, summary)
+	}
+}
+
+// SummariesForNode returns the reverse-index candidates containing nodeID.
+func (ei *NodeRegistry) SummariesForNode(nodeID string) []*MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	return summarySet(ei.causalByNode[nodeID])
+}
+
+// SummariesForPair returns candidates containing the ordered endpoints.
+func (ei *NodeRegistry) SummariesForPair(fromID, toID string) []*MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	return summarySet(ei.causalByPair[SemanticPair{FromID: fromID, ToID: toID}])
+}
+
+// SummariesForTriple returns candidates containing the complete directed edge.
+func (ei *NodeRegistry) SummariesForTriple(fromID, label, toID string) []*MemoryCell {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	return summarySet(ei.causalByTriple[SemanticTriple{FromID: fromID, Label: label, ToID: toID}])
+}
+
+// CandidateOccurrences counts how many query features index each summary.
+// The count is suitable for initial amplitude allocation only; callers must
+// still verify the complete directed subgraph before treating a candidate as a
+// semantic match.
+func (ei *NodeRegistry) CandidateOccurrences(nodeIDs []string, triples []SemanticTriple) map[string]int {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+	out := map[string]int{}
+	for _, nodeID := range nodeIDs {
+		for summaryID := range ei.causalByNode[nodeID] {
+			out[summaryID]++
+		}
+	}
+	for _, triple := range triples {
+		for summaryID := range ei.causalByTriple[triple] {
+			out[summaryID]++
+		}
+	}
+	return out
+}
+
+func summarySet(in map[string]*MemoryCell) []*MemoryCell {
+	ids := make([]string, 0, len(in))
+	for id := range in {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]*MemoryCell, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, in[id])
+	}
+	return out
 }
 
 // Get returns the entity node for an id WITHOUT creating (nil if unknown) —
 // the non-creating half of resolution: entities are born from OBSERVATION
 // (sensory/ingest), never from a query's assertion.
-func (ei *NodeRegistry) Get(id string) *dna.MemoryCell {
+func (ei *NodeRegistry) Get(id string) *MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	return ei.byID[id]
@@ -44,19 +145,19 @@ func (ei *NodeRegistry) Get(id string) *dna.MemoryCell {
 // EnsureEntity get-or-creates the entity node for a resolved id. (Entity
 // resolution is exact-match for now — the identity-registry discipline; fuzzy
 // later.)
-func (ei *NodeRegistry) EnsureEntity(id string) *dna.MemoryCell {
+func (ei *NodeRegistry) EnsureEntity(id string) *MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	if e, ok := ei.byID[id]; ok {
 		return e
 	}
-	e := dna.NewMemoryCell(id, dna.KindEntity, dna.Entity{ID: id}, ei.slice)
+	e := NewMemoryCell(id, KindEntity, Entity{ID: id, Provenance: ProvenanceObserved}, ei.slice)
 	ei.byID[id] = e
 	return e
 }
 
 // Term returns the term node for a lookup key WITHOUT creating (nil if none).
-func (ei *NodeRegistry) Term(key string) *dna.MemoryCell {
+func (ei *NodeRegistry) Term(key string) *MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	return ei.terms[key]
@@ -65,44 +166,44 @@ func (ei *NodeRegistry) Term(key string) *dna.MemoryCell {
 // EnsureTerm get-or-creates a term node — a material node born from ASSERTION
 // (a mentioned-but-never-observed referent). Exact-match on the lookup key;
 // merging a term into a later-observed entity is the deferred merge op.
-func (ei *NodeRegistry) EnsureTerm(key, cellID, label string) *dna.MemoryCell {
+func (ei *NodeRegistry) EnsureTerm(key, cellID, label string) *MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	if t, ok := ei.terms[key]; ok {
 		return t
 	}
-	t := dna.NewMemoryCell(cellID, KindTerm, TermContent{Label: label}, ei.slice)
+	t := NewMemoryCell(cellID, KindTerm, TermContent{Label: label, Provenance: ProvenanceAsserted}, ei.slice)
 	ei.terms[key] = t
 	return t
 }
 
 // AppendInteraction records an utterance/action on an entity as a KindResponse
 // child (the write-time discipline; the reverse index depends on it).
-func (ei *NodeRegistry) AppendInteraction(entity *dna.MemoryCell, rec dna.InteractionRecord) {
+func (ei *NodeRegistry) AppendInteraction(entity *MemoryCell, rec InteractionRecord) {
 	if entity == nil {
 		return
 	}
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	id := fmt.Sprintf("%s:interaction:%d:%d", entity.ID(), rec.Timestamp, len(entity.Children()))
-	cell := dna.NewMemoryCell(id, dna.KindResponse, rec, ei.slice)
+	cell := NewMemoryCell(id, KindResponse, rec, ei.slice)
 	entity.AddChild(entity.ID()+"→"+id, cell)
 }
 
 // Latest returns the newest interaction node (KindResponse) across all entities, with
 // its owning entity — the interaction that just arrived, for midlevel to consolidate
 // onto the active episode.
-func (ei *NodeRegistry) Latest() (node, entity *dna.MemoryCell, ok bool) {
+func (ei *NodeRegistry) Latest() (node, entity *MemoryCell, ok bool) {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 	bestTS := -1
 	for _, e := range ei.byID {
 		for _, child := range e.Children() {
-			mc, isCell := child.(*dna.MemoryCell)
+			mc, isCell := child.(*MemoryCell)
 			if !isCell {
 				continue
 			}
-			if rec, isRec := mc.Content().(dna.InteractionRecord); isRec && rec.Timestamp > bestTS {
+			if rec, isRec := mc.Content().(InteractionRecord); isRec && rec.Timestamp > bestTS {
 				bestTS, node, entity = rec.Timestamp, mc, e
 			}
 		}
@@ -110,213 +211,216 @@ func (ei *NodeRegistry) Latest() (node, entity *dna.MemoryCell, ok bool) {
 	return node, entity, node != nil
 }
 
-// LinkGrouping wires entity → grouping (the episodes a participant is in), idempotent on
-// the grouping id — cool entities point to episodes, not raw interactions.
-func (ei *NodeRegistry) LinkGrouping(entity, grouping *dna.MemoryCell) {
-	if entity == nil || grouping == nil {
+// LinkEpisode wires entity → episode (the episodes a participant is in), idempotent on
+// the episode id — cool entities point to episodes, not raw interactions.
+func (ei *NodeRegistry) LinkEpisode(entity, episode *MemoryCell) {
+	if entity == nil || episode == nil {
 		return
 	}
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
-	entity.AddChild(grouping.ID(), grouping)
+	entity.AddChild(episode.ID(), episode)
 }
 
 // Snapshot returns the current entity nodes under the lock (for frame assembly —
 // read live, the active state).
-func (ei *NodeRegistry) Snapshot() []*dna.MemoryCell {
+func (ei *NodeRegistry) Snapshot() []*MemoryCell {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
-	out := make([]*dna.MemoryCell, 0, len(ei.byID))
+	out := make([]*MemoryCell, 0, len(ei.byID))
 	for _, e := range ei.byID {
 		out = append(out, e)
 	}
 	return out
 }
 
-// GroupingIndex — the grouping spine, on the nucleus. A grouping is an episode
-// SHELL (KindGrouping, content Grouping); its framing lives in KindGist CHILDREN —
-// a sequence (edit appends a new gist, priors retained and decaying) — and the
-// gist owns the records/predictions made under it (the gist-owned spine,
+// EpisodeStore — the episode spine, on the nucleus. An episode is an episode
+// SHELL (KindEpisode, content Episode); its framing lives in KindFrame CHILDREN —
+// a sequence (edit appends a new frame, priors retained and decaying) — and the
+// frame owns the records/predictions made under it (the frame-owned spine,
 // perceive-internalization.md §3). Handed to the predict workers as their working
-// set (the active grouping for the impulse).
-type GroupingIndex struct {
-	mu       sync.Mutex
-	slice    skyra.Slice
-	byID     map[string]*dna.MemoryCell
-	gistByID map[string]*dna.MemoryCell
-	// the current episode + its current gist (active-grouping.md) live ON THE
-	// SLICE as IDs (mapActiveGroupingID/mapActiveGistID) — active state's
+// set (the active episode for the impulse).
+type EpisodeStore struct {
+	mu        sync.Mutex
+	slice     skyra.Slice
+	byID      map[string]*MemoryCell
+	frameByID map[string]*MemoryCell
+	// the current episode + its current frame (active-grouping.md) live ON THE
+	// SLICE as IDs (mapActiveEpisodeID/mapActiveFrameID) — active state's
 	// canonical home; resolved to nodes through these maps on read.
 }
 
-func NewGroupingIndex(slice skyra.Slice) *GroupingIndex {
-	return &GroupingIndex{slice: slice, byID: map[string]*dna.MemoryCell{}, gistByID: map[string]*dna.MemoryCell{}}
+func NewEpisodeStore(slice skyra.Slice) *EpisodeStore {
+	return &EpisodeStore{slice: slice, byID: map[string]*MemoryCell{}, frameByID: map[string]*MemoryCell{}}
 }
 
-// Create mints a grouping with its first gist child, registers both, and makes
-// them the ACTIVE episode/gist. (Cold-start "create"; warm edit appends instead.)
-func (gi *GroupingIndex) Create(groupID, gist string, ts int) *dna.MemoryCell {
-	gi.mu.Lock()
-	g := dna.NewMemoryCell(groupID, dna.KindGrouping, dna.Grouping{Created: ts}, gi.slice)
-	gi.byID[groupID] = g
-	gistCell := gi.mintGistLocked(g, gist, ts)
-	gi.mu.Unlock()
-	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
-	sliceSetID(gi.slice, mapActiveGistID, gistCell.ID())
+// Create mints an episode with its first frame child, registers both, and makes
+// them the ACTIVE episode/frame. (Cold-start "create"; warm edit appends instead.)
+func (store *EpisodeStore) Create(episodeID, frame string, ts int) *MemoryCell {
+	store.mu.Lock()
+	g := NewMemoryCell(episodeID, KindEpisode, Episode{Created: ts}, store.slice)
+	store.byID[episodeID] = g
+	frameCell := store.mintFrameLocked(g, frame, ts)
+	store.mu.Unlock()
+	sliceSetID(store.slice, mapActiveEpisodeID, episodeID)
+	sliceSetID(store.slice, mapActiveFrameID, frameCell.ID())
 	return g
 }
 
-// Edit appends a NEW gist to an existing grouping (the prior gist stays and
-// decays — the sequence) and makes the grouping + fresh gist active. Returns the
-// grouping, nil if the id is unknown (caller falls through to Create).
-func (gi *GroupingIndex) Edit(groupID, gist string, ts int) *dna.MemoryCell {
-	gi.mu.Lock()
-	g := gi.byID[groupID]
+// Edit appends a NEW frame to an existing episode (the prior frame stays and
+// decays — the sequence) and makes the episode + fresh frame active. Returns the
+// episode, nil if the id is unknown (caller falls through to Create).
+func (store *EpisodeStore) Edit(episodeID, frame string, ts int) *MemoryCell {
+	store.mu.Lock()
+	g := store.byID[episodeID]
 	if g == nil {
-		gi.mu.Unlock()
+		store.mu.Unlock()
 		return nil
 	}
-	gistCell := gi.mintGistLocked(g, gist, ts)
-	gi.mu.Unlock()
-	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
-	sliceSetID(gi.slice, mapActiveGistID, gistCell.ID())
+	frameCell := store.mintFrameLocked(g, frame, ts)
+	store.mu.Unlock()
+	sliceSetID(store.slice, mapActiveEpisodeID, episodeID)
+	sliceSetID(store.slice, mapActiveFrameID, frameCell.ID())
 	return g
 }
 
-// mintGistLocked appends a gist child to g (caller holds gi.mu).
-func (gi *GroupingIndex) mintGistLocked(g *dna.MemoryCell, gist string, ts int) *dna.MemoryCell {
-	id := fmt.Sprintf("%s:gist:%d", g.ID(), ts)
-	cell := dna.NewMemoryCell(id, dna.KindGist, dna.Gist{Text: gist, Timestamp: ts}, gi.slice)
-	gi.gistByID[id] = cell
+// mintFrameLocked appends a frame child to g (caller holds store.mu).
+func (store *EpisodeStore) mintFrameLocked(g *MemoryCell, frame string, ts int) *MemoryCell {
+	id := fmt.Sprintf("%s:frame:%d", g.ID(), ts)
+	cell := NewMemoryCell(id, KindFrame, Frame{Text: frame, Timestamp: ts}, store.slice)
+	store.frameByID[id] = cell
 	g.AddChild(g.ID()+"→"+id, cell)
 	return cell
 }
 
-// Active returns the current episode (nil before the first grouping exists) —
-// the slice's activeGroupingID resolved through the index.
-func (gi *GroupingIndex) Active() *dna.MemoryCell {
-	id := sliceGetID(gi.slice, mapActiveGroupingID)
+// Active returns the current episode (nil before the first episode exists) —
+// the slice's activeEpisodeID resolved through the index.
+func (store *EpisodeStore) Active() *MemoryCell {
+	id := sliceGetID(store.slice, mapActiveEpisodeID)
 	if id == "" {
 		return nil
 	}
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	return gi.byID[id]
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.byID[id]
 }
 
-// ActiveGist returns the current gist — where deposits (records, predictions)
-// attach. nil before the first grouping exists.
-func (gi *GroupingIndex) ActiveGist() *dna.MemoryCell {
-	id := sliceGetID(gi.slice, mapActiveGistID)
+// ActiveFrame returns the current frame — where deposits (records, predictions)
+// attach. nil before the first episode exists.
+func (store *EpisodeStore) ActiveFrame() *MemoryCell {
+	id := sliceGetID(store.slice, mapActiveFrameID)
 	if id == "" {
 		return nil
 	}
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	return gi.gistByID[id]
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.frameByID[id]
 }
 
-// SetActive makes g the current episode (writes its ID + its latest gist's ID to
+// SetActive makes g the current episode (writes its ID + its latest frame's ID to
 // the slice; nil clears both).
-func (gi *GroupingIndex) SetActive(g *dna.MemoryCell) {
-	groupID, gistID := "", ""
+func (store *EpisodeStore) SetActive(g *MemoryCell) {
+	episodeID, frameID := "", ""
 	if g != nil {
-		groupID = g.ID()
-		if gist := latestGist(g); gist != nil {
-			gistID = gist.ID()
+		episodeID = g.ID()
+		if frame := latestFrame(g); frame != nil {
+			frameID = frame.ID()
 		}
 	}
-	sliceSetID(gi.slice, mapActiveGroupingID, groupID)
-	sliceSetID(gi.slice, mapActiveGistID, gistID)
+	sliceSetID(store.slice, mapActiveEpisodeID, episodeID)
+	sliceSetID(store.slice, mapActiveFrameID, frameID)
 }
 
-// Get returns a grouping by id (nil if none) — the target of an <edit id="..."> op.
-func (gi *GroupingIndex) Get(id string) *dna.MemoryCell {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	return gi.byID[id]
+// Get returns an episode by id (nil if none) — the target of an <edit id="..."> op.
+func (store *EpisodeStore) Get(id string) *MemoryCell {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.byID[id]
 }
 
-// latestGist returns g's current framing — the max-timestamp KindGist child (the
+// latestFrame returns g's current framing — the max-timestamp KindFrame child (the
 // sequence's newest entry; ticks are monotonic so newest == current). nil if none.
-func latestGist(g *dna.MemoryCell) *dna.MemoryCell {
+func latestFrame(g *MemoryCell) *MemoryCell {
 	if g == nil {
 		return nil
 	}
-	var best *dna.MemoryCell
+	var best *MemoryCell
 	bestTS := -1
 	for _, c := range g.Children() {
-		mc, ok := c.(*dna.MemoryCell)
-		if !ok || mc.Kind() != dna.KindGist {
+		mc, ok := c.(*MemoryCell)
+		if !ok || mc.Kind() != KindFrame {
 			continue
 		}
-		if gg, ok := mc.Content().(dna.Gist); ok && gg.Timestamp > bestTS {
+		if gg, ok := mc.Content().(Frame); ok && gg.Timestamp > bestTS {
 			bestTS, best = gg.Timestamp, mc
 		}
 	}
 	return best
 }
 
-// gistOf extracts a grouping's CURRENT framing text (its latest gist child).
-func gistOf(g *dna.MemoryCell) string {
-	if gist := latestGist(g); gist != nil {
-		if gg, ok := gist.Content().(dna.Gist); ok {
+// frameText extracts an episode's CURRENT framing text (its latest frame child).
+func frameText(g *MemoryCell) string {
+	if frame := latestFrame(g); frame != nil {
+		if gg, ok := frame.Content().(Frame); ok {
 			return gg.Text
 		}
 	}
 	return ""
 }
 
-// OpenEpisodes returns every grouping's id + current gist — the candidates the
-// framing op decides edit-or-new against (a cheap gist-level view).
-func (gi *GroupingIndex) OpenEpisodes() []struct{ ID, Gist string } {
-	gi.mu.Lock()
-	groupings := make([]*dna.MemoryCell, 0, len(gi.byID))
-	for _, g := range gi.byID {
-		groupings = append(groupings, g)
+// FrameText exposes the latest framing text for runtime adapters and diagnostics.
+func FrameText(g *MemoryCell) string { return frameText(g) }
+
+// OpenEpisodes returns every episode's id + current frame — the candidates the
+// framing op decides edit-or-new against (a cheap frame-level view).
+func (store *EpisodeStore) OpenEpisodes() []struct{ ID, Frame string } {
+	store.mu.Lock()
+	episodes := make([]*MemoryCell, 0, len(store.byID))
+	for _, g := range store.byID {
+		episodes = append(episodes, g)
 	}
-	gi.mu.Unlock()
-	out := make([]struct{ ID, Gist string }, 0, len(groupings))
-	for _, g := range groupings {
-		out = append(out, struct{ ID, Gist string }{g.ID(), gistOf(g)})
+	store.mu.Unlock()
+	out := make([]struct{ ID, Frame string }, 0, len(episodes))
+	for _, g := range episodes {
+		out = append(out, struct{ ID, Frame string }{g.ID(), frameText(g)})
 	}
 	return out
 }
 
-// AddChild appends a node (a prediction) to a grouping under the index lock.
-func (gi *GroupingIndex) AddChild(grouping *dna.MemoryCell, edgeKey string, child skyra.Space) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	grouping.AddChild(edgeKey, child)
+// AddChild appends a node (a prediction) to an episode under the index lock.
+func (store *EpisodeStore) AddChild(episode *MemoryCell, edgeKey string, child skyra.Space) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	episode.AddChild(edgeKey, child)
 }
 
-// Snapshot returns a grouping's direct children under the index lock — the safe
+// Snapshot returns an episode's direct children under the index lock — the safe
 // read path when other:predict and self:predict fan out concurrently (other writes
 // the distribution, self reads it). Prediction root nodes are immutable once added,
 // so their own children are lock-free to read.
-func (gi *GroupingIndex) Snapshot(grouping *dna.MemoryCell) []skyra.Space {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	out := make([]skyra.Space, 0, len(grouping.Children()))
-	for _, c := range grouping.Children() {
+func (store *EpisodeStore) Snapshot(episode *MemoryCell) []skyra.Space {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	out := make([]skyra.Space, 0, len(episode.Children()))
+	for _, c := range episode.Children() {
 		out = append(out, c)
 	}
 	return out
 }
 
-// predictionsOf walks a grouping's gist children and yields every prediction node
-// hanging under them — the gist-owned spine's one-level-deeper read (predictions
-// attach to the gist they were made under; a bet made under a PRIOR gist is still
+// predictionsOf walks an episode's frame children and yields every prediction node
+// hanging under them — the frame-owned spine's one-level-deeper read (predictions
+// attach to the frame they were made under; a bet made under a PRIOR frame is still
 // gradeable — evidence can close a bet conditioned on the old framing).
-func predictionsOf(g *dna.MemoryCell) []*dna.MemoryCell {
-	var out []*dna.MemoryCell
+func predictionsOf(g *MemoryCell) []*MemoryCell {
+	var out []*MemoryCell
 	for _, c := range g.Children() {
-		gist, ok := c.(*dna.MemoryCell)
-		if !ok || gist.Kind() != dna.KindGist {
+		frame, ok := c.(*MemoryCell)
+		if !ok || frame.Kind() != KindFrame {
 			continue
 		}
-		for _, gc := range gist.Children() {
-			if mc, ok := gc.(*dna.MemoryCell); ok && mc.Kind() == dna.KindPrediction {
+		for _, gc := range frame.Children() {
+			if mc, ok := gc.(*MemoryCell); ok && mc.Kind() == KindPrediction {
 				out = append(out, mc)
 			}
 		}
@@ -325,17 +429,17 @@ func predictionsOf(g *dna.MemoryCell) []*dna.MemoryCell {
 }
 
 // LatestUngradedOther finds the newest ungraded other-pred distribution across all
-// groupings — the prior bet other:grade closes against fresh evidence. Returns the
+// episodes — the prior bet other:grade closes against fresh evidence. Returns the
 // distribution root and its branch children (sorted by edge key for stable prompt
-// numbering). nil if there is no open bet. Ported from v1 latestUngradedDistribution.
-func (gi *GroupingIndex) LatestUngradedOther() (*dna.MemoryCell, []*dna.MemoryCell) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	var best *dna.MemoryCell
+// numbering). nil if there is no open bet.
+func (store *EpisodeStore) LatestUngradedOther() (*MemoryCell, []*MemoryCell) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var best *MemoryCell
 	bestTS := -1
-	for _, g := range gi.byID {
+	for _, g := range store.byID {
 		for _, cc := range predictionsOf(g) {
-			p, ok := cc.Content().(dna.Prediction)
+			p, ok := cc.Content().(Prediction)
 			if !ok || p.Role != "other" || p.Graded || len(cc.Children()) == 0 {
 				continue
 			}
@@ -352,9 +456,9 @@ func (gi *GroupingIndex) LatestUngradedOther() (*dna.MemoryCell, []*dna.MemoryCe
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	kids := make([]*dna.MemoryCell, 0, len(keys))
+	kids := make([]*MemoryCell, 0, len(keys))
 	for _, k := range keys {
-		kids = append(kids, best.Children()[k].(*dna.MemoryCell))
+		kids = append(kids, best.Children()[k].(*MemoryCell))
 	}
 	return best, kids
 }
@@ -362,16 +466,16 @@ func (gi *GroupingIndex) LatestUngradedOther() (*dna.MemoryCell, []*dna.MemoryCe
 // StampOtherGrade records the judge's verdict on a distribution under the index
 // lock: the root carries the probability mass on the realized branch (the proper
 // score, 0 on a total miss); each branch child carries 1 (realized) / 0. matchedIdx
-// is 1-based; 0 marks a total miss. Ported from v1 gradePrior's write-back.
-func (gi *GroupingIndex) StampOtherGrade(root *dna.MemoryCell, kids []*dna.MemoryCell, matchedIdx int, score float64, evidence string) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	if p, ok := root.Content().(dna.Prediction); ok {
+// is 1-based; 0 marks a total miss.
+func (store *EpisodeStore) StampOtherGrade(root *MemoryCell, kids []*MemoryCell, matchedIdx int, score float64, evidence string) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if p, ok := root.Content().(Prediction); ok {
 		p.Graded, p.Grade, p.Evidence = true, score, evidence
 		root.SetContent(p)
 	}
 	for i, kid := range kids {
-		p, ok := kid.Content().(dna.Prediction)
+		p, ok := kid.Content().(Prediction)
 		if !ok {
 			continue
 		}
@@ -386,16 +490,16 @@ func (gi *GroupingIndex) StampOtherGrade(root *dna.MemoryCell, kids []*dna.Memor
 // LatestUngradedRealizedSelf finds the newest ungraded self proposal that has been
 // REALIZED (carries an action child — the intent was actually emitted). Returns the
 // proposal root, its prediction content, and the latest action on it. self:grade
-// closes it against the reafference. Ported from v1 latestUngradedRealized.
-func (gi *GroupingIndex) LatestUngradedRealizedSelf() (*dna.MemoryCell, dna.Prediction, dna.ActionRecord, bool) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	var best *dna.MemoryCell
-	var bestPred dna.Prediction
+// closes it against the reafference.
+func (store *EpisodeStore) LatestUngradedRealizedSelf() (*MemoryCell, Prediction, ActionRecord, bool) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var best *MemoryCell
+	var bestPred Prediction
 	bestTS := -1
-	for _, g := range gi.byID {
+	for _, g := range store.byID {
 		for _, cc := range predictionsOf(g) {
-			p, ok := cc.Content().(dna.Prediction)
+			p, ok := cc.Content().(Prediction)
 			if !ok || p.Role != "self" || p.Graded || len(cc.Children()) == 0 {
 				continue
 			}
@@ -405,62 +509,61 @@ func (gi *GroupingIndex) LatestUngradedRealizedSelf() (*dna.MemoryCell, dna.Pred
 		}
 	}
 	if best == nil {
-		return nil, dna.Prediction{}, dna.ActionRecord{}, false
+		return nil, Prediction{}, ActionRecord{}, false
 	}
-	var action dna.ActionRecord
+	var action ActionRecord
 	actionTS := -1
 	for _, child := range best.Children() {
-		cc, ok := child.(*dna.MemoryCell)
-		if !ok || cc.Kind() != dna.KindAction {
+		cc, ok := child.(*MemoryCell)
+		if !ok || cc.Kind() != KindAction {
 			continue
 		}
-		if rec, ok := cc.Content().(dna.ActionRecord); ok && rec.Timestamp > actionTS {
+		if rec, ok := cc.Content().(ActionRecord); ok && rec.Timestamp > actionTS {
 			actionTS, action = rec.Timestamp, rec
 		}
 	}
 	if actionTS < 0 {
-		return nil, dna.Prediction{}, dna.ActionRecord{}, false
+		return nil, Prediction{}, ActionRecord{}, false
 	}
 	return best, bestPred, action, true
 }
 
 // StampSelfGrade records the execution judge's verdict on a realized proposal under
-// the index lock (score 1 / 0.5 / 0; evidence = the world result). Ported from v1
-// gradePrior's write-back.
-func (gi *GroupingIndex) StampSelfGrade(proposal *dna.MemoryCell, score float64, evidence string) {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	if p, ok := proposal.Content().(dna.Prediction); ok {
+// the index lock (score 1 / 0.5 / 0; evidence = the world result).// gradePrior's write-back.
+func (store *EpisodeStore) StampSelfGrade(proposal *MemoryCell, score float64, evidence string) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if p, ok := proposal.Content().(Prediction); ok {
 		p.Graded, p.Grade, p.Evidence = true, score, evidence
 		proposal.SetContent(p)
 	}
 }
 
-// All returns every grouping under the index lock (inspection / trace assembly).
-func (gi *GroupingIndex) All() []*dna.MemoryCell {
-	gi.mu.Lock()
-	defer gi.mu.Unlock()
-	out := make([]*dna.MemoryCell, 0, len(gi.byID))
-	for _, g := range gi.byID {
+// All returns every episode under the index lock (inspection / trace assembly).
+func (store *EpisodeStore) All() []*MemoryCell {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	out := make([]*MemoryCell, 0, len(store.byID))
+	for _, g := range store.byID {
 		out = append(out, g)
 	}
 	return out
 }
 
-// Latest returns the most-recently-framed grouping (by its current gist's
+// Latest returns the most-recently-framed episode (by its current frame's
 // timestamp), for inspection/display. nil if none.
-func (gi *GroupingIndex) Latest() *dna.MemoryCell {
-	gi.mu.Lock()
-	groupings := make([]*dna.MemoryCell, 0, len(gi.byID))
-	for _, g := range gi.byID {
-		groupings = append(groupings, g)
+func (store *EpisodeStore) Latest() *MemoryCell {
+	store.mu.Lock()
+	episodes := make([]*MemoryCell, 0, len(store.byID))
+	for _, g := range store.byID {
+		episodes = append(episodes, g)
 	}
-	gi.mu.Unlock()
-	var best *dna.MemoryCell
+	store.mu.Unlock()
+	var best *MemoryCell
 	bestTS := -1
-	for _, g := range groupings {
-		if gist := latestGist(g); gist != nil {
-			if gg, ok := gist.Content().(dna.Gist); ok && gg.Timestamp > bestTS {
+	for _, g := range episodes {
+		if frame := latestFrame(g); frame != nil {
+			if gg, ok := frame.Content().(Frame); ok && gg.Timestamp > bestTS {
 				bestTS, best = gg.Timestamp, g
 			}
 		}

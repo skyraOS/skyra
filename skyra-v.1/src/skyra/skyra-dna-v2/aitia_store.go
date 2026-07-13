@@ -104,6 +104,31 @@ func Polarity(strength float64) float64 {
 
 func Magnitude(strength float64) float64 { return math.Abs(strength) }
 
+// AllocateAmplitude distributes only by nonzero absolute signed strength.
+// Polarity remains edge meaning; magnitude is excitation. Zero and absent
+// alignments receive nothing. If total magnitude is zero, amplitude remains
+// undistributed rather than inventing an exploration floor.
+func AllocateAmplitude(remaining float64, strengths map[string]float64) map[string]float64 {
+	out := map[string]float64{}
+	if remaining <= 0 {
+		return out
+	}
+	total := 0.0
+	for _, strength := range strengths {
+		total += Magnitude(strength)
+	}
+	if total == 0 {
+		return out
+	}
+	for edgeID, strength := range strengths {
+		magnitude := Magnitude(strength)
+		if magnitude > 0 {
+			out[edgeID] = remaining * magnitude / total
+		}
+	}
+	return out
+}
+
 // GradeCount reads an edge's grade count (0 when ungraded) — the zero-
 // interpretation input (untested vs defeated vs contested).
 func (s *SignedStore) GradeCount(edgeID string) int {

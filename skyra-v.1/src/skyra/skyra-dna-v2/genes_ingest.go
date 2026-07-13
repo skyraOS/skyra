@@ -5,7 +5,6 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // Surroundings is the DNA-native translation of a world perception result — the
@@ -23,9 +22,9 @@ type Surroundings struct {
 
 // sensory:ingest — deposit a perceive-return's surroundings on the spine. The
 // perceive-return is a reafference whose whole distinction is WHERE the record
-// lands: one record per entity under the ACTIVE gist (default grouping if none),
+// lands: one record per entity under the ACTIVE frame (default episode if none),
 // each pointing at its entity with the coord riding in the payload —
-// gist → record{coord} → entity — plus the entity → grouping route and CrossBirth
+// frame → record{coord} → entity — plus the entity → episode route and CrossBirth
 // on the new edges so they participate in activation immediately
 // (perceive-internalization.md §5). The record's Kind is stamped FROM the
 // affordance (imp.Primitive → "perceive" — affordance-record.md; decision 8a),
@@ -42,28 +41,28 @@ func sensoryIngest(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return
 	}
 	d := root.DNA()
-	gi := d.Groupings()
+	episodes := d.Episodes()
 	ts := d.Tick()
 
-	grouping := gi.Active()
-	if grouping == nil {
-		grouping = ensureDefaultGrouping(d, ts)
+	episode := episodes.Active()
+	if episode == nil {
+		episode = ensureDefaultEpisode(d, ts)
 	}
-	gist := gi.ActiveGist()
-	if gist == nil {
+	frame := episodes.ActiveFrame()
+	if frame == nil {
 		return
 	}
 
-	kind := dna.Kind(imp.Primitive) // the affordance stamps the Kind
+	kind := Kind(imp.Primitive) // the affordance stamps the Kind
 	deposit := func(entityID string, coord skyra.Coord) {
 		entity := root.Nodes.EnsureEntity(entityID)
 		recID := fmt.Sprintf("%s:%s:%d", entityID, imp.Primitive, ts)
-		rec := dna.NewMemoryCell(recID, kind,
-			dna.PerceiveRecord{EntityID: entityID, Coord: coord, Timestamp: ts}, nil)
+		rec := NewMemoryCell(recID, kind,
+			PerceiveRecord{EntityID: entityID, Coord: coord, Timestamp: ts}, nil)
 		rec.AddChild(recID+"→"+entityID, entity)
-		gi.AddChild(gist, gist.ID()+"→"+recID, rec)
-		root.Nodes.LinkGrouping(entity, grouping)
-		d.CrossBirth(gist.ID()+"→"+recID, recID+"→"+entityID)
+		episodes.AddChild(frame, frame.ID()+"→"+recID, rec)
+		root.Nodes.LinkEpisode(entity, episode)
+		d.CrossBirth(frame.ID()+"→"+recID, recID+"→"+entityID)
 	}
 
 	// self first — the wave's ORIGIN, written onto the self-entity by the identical
@@ -73,20 +72,20 @@ func sensoryIngest(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		deposit(id, coord)
 	}
 	debug.Being("skyra", "ingest", fmt.Sprintf("deposited self=%d,%d + %d agents under %s",
-		sur.Self.X, sur.Self.Y, len(sur.Agents), gist.ID()))
+		sur.Self.X, sur.Self.Y, len(sur.Agents), frame.ID()))
 }
 
-// ensureDefaultGrouping returns the per-being singleton catch-all grouping —
-// created with one empty-text gist when no episode is active, so deposits have a
+// ensureDefaultEpisode returns the per-being singleton catch-all episode —
+// created with one empty-text frame when no episode is active, so deposits have a
 // spine to land on before midlevel has framed anything. Midlevel's first edit
 // fills the framing (sharpens it) or splits a new episode off it
 // (perceive-internalization.md §5b; singleton so its edges accumulate).
-func ensureDefaultGrouping(d *DNA, ts int) *dna.MemoryCell {
-	gi := d.Groupings()
-	defaultID := d.BeingID() + ":g:default"
-	if g := gi.Get(defaultID); g != nil {
-		gi.SetActive(g)
+func ensureDefaultEpisode(d *DNA, ts int) *MemoryCell {
+	episodes := d.Episodes()
+	defaultID := d.BeingID() + ":episode:default"
+	if g := episodes.Get(defaultID); g != nil {
+		episodes.SetActive(g)
 		return g
 	}
-	return gi.Create(defaultID, "" /* no framing yet */, ts)
+	return episodes.Create(defaultID, "" /* no framing yet */, ts)
 }

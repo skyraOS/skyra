@@ -10,7 +10,7 @@ import (
 )
 
 // dnav2Being is the world-facing Space for the slice-based-dispatch being. The being's
-// cognition lives on the DNA nucleus (entity/grouping indexes) and runs through the
+// cognition lives on the DNA nucleus (entity/episode indexes) and runs through the
 // orchestrator's OWN kernel — not world traversal — so this adapter's graph is inert. It
 // exists only to (a) be placed in the world so michael can engage it and the map can locate
 // it, and (b) turn an inbound engage into an orch.Fire. Motor output flows back out through
@@ -20,22 +20,23 @@ type dnav2Being struct {
 	id    string
 	slice skyra.Slice
 	orch  *dnav2.Orchestrator
+	dna   *dnav2.DNA
 
 	mu     sync.Mutex
 	seq    int
 	prevID string // threads turns: each engage's id points at the previous
 }
 
-func newDnav2Being(id string, slice skyra.Slice, orch *dnav2.Orchestrator) *dnav2Being {
-	return &dnav2Being{id: id, slice: slice, orch: orch}
+func newDnav2Being(id string, slice skyra.Slice, orch *dnav2.Orchestrator, genome *dnav2.DNA) *dnav2Being {
+	return &dnav2Being{id: id, slice: slice, orch: orch, dna: genome}
 }
 
-func (b *dnav2Being) ID() string                                 { return b.id }
-func (b *dnav2Being) Slice() skyra.Slice                         { return b.slice }
-func (b *dnav2Being) NewActivation() skyra.ActivationRecord      { return beingActivation{} }
-func (b *dnav2Being) Content() any                               { return nil }
-func (b *dnav2Being) Agents() map[string]skyra.Space             { return nil }
-func (b *dnav2Being) Children() map[string]skyra.Space           { return nil }
+func (b *dnav2Being) ID() string                                  { return b.id }
+func (b *dnav2Being) Slice() skyra.Slice                          { return b.slice }
+func (b *dnav2Being) NewActivation() skyra.ActivationRecord       { return beingActivation{} }
+func (b *dnav2Being) Content() any                                { return nil }
+func (b *dnav2Being) Agents() map[string]skyra.Space              { return nil }
+func (b *dnav2Being) Children() map[string]skyra.Space            { return nil }
 func (b *dnav2Being) Express(origin skyra.Space, impulse any) any { return nil }
 
 // Observe is the inbound bridge: the world delivered an impulse to the being. An

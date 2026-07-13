@@ -80,14 +80,14 @@ reused. Edges and their learned strength are never inherited into a new context.
 ## Query Contract
 
 > **Decided 2026-07-12 — three workers, not one big frame.** The present,
-> Efficient, and Final compounds are emitted by **three separate workers with
-> three AIMD lineages**, not one call. midlevel is the present-compound querier;
+> Efficient, and Final compounds are emitted by **three separate workers**, not
+> one call. midlevel is the present-compound structural querier;
 > the efficient/final workers **fan out in parallel** (both read only G_present
 > + the evidence snapshot; neither consumes the other's output — the same
 > data-dependency rule that sequenced other→self) and **join at the atomic
-> set-commit** via the board's declare/mark/atomic-fire machinery. Budget
-> attribution stays local: a contradicted efficient story taxes the efficient
-> lineage only. This is also the **universal querier contract**: every cognitive
+> set-commit** via the board's declare/mark/atomic-fire machinery. Efficient and
+> Final own separate continuous-grade AIMD lineages; Material/Formal is
+> ungraded. This is also the **universal querier contract**: every cognitive
 > worker emits (sentence, subgraph) in the same format.
 
 Each query worker receives its available input and its lineage's
@@ -123,25 +123,28 @@ history may retain prior active-set selections.
 
 ## Incoming Impulse And Evidence
 
-Each incoming world impulse is preserved as immutable Evidence with nonnegative
-mass. Evidence contains no `support`, `oppose`, or `defeat` category.
+Each incoming world impulse is decomposed and preserved as an immutable,
+observation-stamped `CausalNode` with nonnegative evidence mass. Evidence
+contains no intrinsic `support`, `oppose`, or `defeat` category.
 
 The grading episode relates that Evidence to the active set's claims:
 
 ```text
-Evidence
-  -> grade relevant structural edges inside G_present
-  -> grade the Efficient Cause edge when relevant
-  -> grade the Final Cause edge when relevant
+observation-born CausalNode
+  -> retain | compose | requery active Material/Formal subgraph
+  -> grade active Efficient cause from Slice when present
+  -> grade active Final cause from Slice when present
+  -> one signed grade per populated causal-belief position
 ```
 
-Irrelevant or unresolved relationships receive no grade. No grade is not a
-grade of zero.
+Semantic/structural edges inside a birth subgraph are never graded. Irrelevant
+or unresolved causes receive no grade. No grade is not a grade of zero.
 
-Evidence is not stored inside the immutable Aitia set. Provenance records link
-the Evidence and each relationship it graded. The Praxis screen may traverse
-those records to display supporting, opposing, and unresolved Evidence for the
-active set without owning or changing it.
+Evidence is not stored inside the immutable Aitia set. Material/Formal has no
+grade edge or EMA; it changes only by retaining, composing, or replacing its
+whole immutable subgraph. Provenance links observations to Efficient/Final
+grading edges when those beliefs are active. The Praxis screen may traverse the
+resulting records without owning or changing the set.
 
 ## Edge Learning And Defeat
 
@@ -165,20 +168,19 @@ contextual edge rather than resurrecting the defeated edge.
 
 ## Retain Or Requery
 
-After grading, the substrate computes fit for the active Aitia set:
+Material/Formal uses retain/compose/requery and never enters this controller.
+For each graded Efficient or Final belief edge, the continuous grade updates its
+own query budget directly:
 
 ```text
-supported:
-  retain the active set
-  QueryTokenBudget = min(B_max, B + alpha)
+if grade > 0:
+  QueryTokenBudget = min(B_max, B + alpha * grade)
 
-contradicted:
-  QueryTokenBudget = max(B_min, beta * B)
+if grade < 0:
+  QueryTokenBudget = max(B_min, B * beta^(-grade))
   query the same available evidence at the smaller budget
-  atomically install the replacement Aitia set if valid
 
-unknown or irrelevant:
-  retain the active set
+if grade = 0 or there is no grade:
   leave QueryTokenBudget unchanged
 ```
 
@@ -208,10 +210,11 @@ bootstrap or receive Entity/Situation
   -> activate set on Slice
 
 for each incoming impulse
-  -> persist immutable Evidence
-  -> grade relevant active-set relationships
-  -> update edge EMAs
-  -> classify active-set fit
+  -> decompose and persist observation-born CausalNode
+  -> retain, compose, or requery active Material/Formal
+  -> grade active Efficient/Final beliefs when present
+  -> update their edge EMAs
+  -> preserve each continuous grade or explicit no-grade
   -> update QueryTokenBudget
   -> retain or requery
 ```
@@ -250,7 +253,8 @@ the minimal cognitive loop.
 2. Version zero activates exactly one Efficient and one Final Cause relationship.
 3. Every durable node and Aitia set is immutable.
 4. Reuse preserves nodes but always creates fresh contextual edges.
-5. Evidence is immutable, nonnegative-mass, polarity-free, and external to the set.
+5. Evidence is an immutable observation-born CausalNode: nonnegative-mass,
+   polarity-free, and external to the set; active causes are the grading targets.
 6. No grade is distinct from grade zero.
 7. Defeat belongs to edges and does not delete reachable content.
 8. Only verified correctness earns query tokens.

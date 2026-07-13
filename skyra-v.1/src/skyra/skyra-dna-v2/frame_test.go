@@ -3,40 +3,38 @@ package dnav2
 import (
 	"strings"
 	"testing"
-
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// buildGrouping mints a grouping on the gist-owned spine — shell → gist →
+// buildEpisode mints an episode on the frame-owned spine — shell → frame →
 // two-branch other-distribution, the same shape Create + appendOtherDistribution
 // produce.
-func buildGrouping() *dna.MemoryCell {
-	g := dna.NewMemoryCell("g1", dna.KindGrouping, dna.Grouping{Created: 1}, nil)
-	gist := dna.NewMemoryCell("g1:gist:1", dna.KindGist, dna.Gist{Text: "help with the kernel", Timestamp: 1}, nil)
-	g.AddChild("g1→g1:gist:1", gist)
-	root := dna.NewMemoryCell("g1:gist:1→other-pred:1", dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: 1}, nil)
-	b1 := dna.NewMemoryCell("g1:gist:1→other-pred:1-0", dna.KindPrediction,
-		dna.Prediction{Text: "asks about the kernel", Role: "other", Probability: 0.7, Timestamp: 1}, nil)
-	b2 := dna.NewMemoryCell("g1:gist:1→other-pred:1-1", dna.KindPrediction,
-		dna.Prediction{Text: "asks about setup", Role: "other", Probability: 0.3, Timestamp: 1}, nil)
-	root.AddChild("g1:gist:1→other-pred:1-0", b1)
-	root.AddChild("g1:gist:1→other-pred:1-1", b2)
-	gist.AddChild("g1:gist:1→other-pred:1", root)
+func buildFrameEpisode() *MemoryCell {
+	g := NewMemoryCell("g1", KindEpisode, Episode{Created: 1}, nil)
+	frame := NewMemoryCell("g1:frame:1", KindFrame, Frame{Text: "help with the kernel", Timestamp: 1}, nil)
+	g.AddChild("g1→g1:frame:1", frame)
+	root := NewMemoryCell("g1:frame:1→other-pred:1", KindPrediction, Prediction{Role: "other", Timestamp: 1}, nil)
+	b1 := NewMemoryCell("g1:frame:1→other-pred:1-0", KindPrediction,
+		Prediction{Text: "asks about the kernel", Role: "other", Probability: 0.7, Timestamp: 1}, nil)
+	b2 := NewMemoryCell("g1:frame:1→other-pred:1-1", KindPrediction,
+		Prediction{Text: "asks about setup", Role: "other", Probability: 0.3, Timestamp: 1}, nil)
+	root.AddChild("g1:frame:1→other-pred:1-0", b1)
+	root.AddChild("g1:frame:1→other-pred:1-1", b2)
+	frame.AddChild("g1:frame:1→other-pred:1", root)
 	return g
 }
 
-// A generous budget lights the gist and both branches — the traversal reconstructs what
+// A generous budget lights the frame and both branches — the traversal reconstructs what
 // renderOtherDistribution hand-builds.
-func TestAssembleFrameLightsGistAndBranches(t *testing.T) {
-	present, lit := AssembleFramePresent(buildGrouping(), 10000)
+func TestAssembleFrameLightsFrameAndBranches(t *testing.T) {
+	present, lit := AssembleFramePresent(buildFrameEpisode(), 10000)
 
 	if !strings.Contains(present, "Framing: help with the kernel") {
-		t.Fatalf("frame missing gist:\n%s", present)
+		t.Fatalf("frame missing frame:\n%s", present)
 	}
 	if !strings.Contains(present, "asks about the kernel") || !strings.Contains(present, "asks about setup") {
 		t.Fatalf("frame missing branches:\n%s", present)
 	}
-	if lit < 5 { // grouping + gist + root + 2 branches
+	if lit < 5 { // episode + frame + root + 2 branches
 		t.Fatalf("expected ≥5 lit nodes, got %d:\n%s", lit, present)
 	}
 }
@@ -44,8 +42,8 @@ func TestAssembleFrameLightsGistAndBranches(t *testing.T) {
 // A tight budget prunes the frame — the whole point of the token budget as a
 // context-size knob. Fewer nodes light than under a generous budget.
 func TestTightBudgetPrunesTheFrame(t *testing.T) {
-	_, litFull := AssembleFramePresent(buildGrouping(), 10000)
-	_, litTight := AssembleFramePresent(buildGrouping(), 12) // ~grouping + root, branches don't fit
+	_, litFull := AssembleFramePresent(buildFrameEpisode(), 10000)
+	_, litTight := AssembleFramePresent(buildFrameEpisode(), 12) // ~episode + root, branches don't fit
 
 	if litTight >= litFull {
 		t.Fatalf("tight budget should light fewer nodes: tight=%d full=%d", litTight, litFull)
@@ -56,10 +54,10 @@ func TestTightBudgetPrunesTheFrame(t *testing.T) {
 // after grading b1's edge DOWN and b2's edge UP, the learned weights INVERT — the frame
 // now favors b2. This is relevance = alignment overriding the cold prior.
 func TestLearnedStrengthReweightsFrame(t *testing.T) {
-	g := buildGrouping()
-	gist := g.Children()["g1→g1:gist:1"].(*dna.MemoryCell)
-	root := gist.Children()["g1:gist:1→other-pred:1"].(*dna.MemoryCell)
-	b1Key, b2Key := "g1:gist:1→other-pred:1-0", "g1:gist:1→other-pred:1-1"
+	g := buildFrameEpisode()
+	frame := g.Children()["g1→g1:frame:1"].(*MemoryCell)
+	root := frame.Children()["g1:frame:1→other-pred:1"].(*MemoryCell)
+	b1Key, b2Key := "g1:frame:1→other-pred:1-0", "g1:frame:1→other-pred:1-1"
 
 	// Phase-1 (no store): static Probability favors b1 (0.7 > 0.3).
 	cold := (&frameNode{cell: root}).Frontier(nil, nil)

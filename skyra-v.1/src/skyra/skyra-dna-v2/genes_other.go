@@ -6,22 +6,20 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // other:grade — closes the prior other-distribution against the incoming external
 // evidence via the adversarial-neutral judge. No open bet → "no-prior". A branch
 // matched → "held". A total miss (the distribution put zero mass on what happened)
-// → "all-preds<0", the trigger for grade-driven reframing. Ported from v1
-// OtherCell.gradePrior; the orchestrator routes the three conditions.
+// → "all-preds<0", the trigger for grade-driven reframing.// OtherCell.gradePrior; the orchestrator routes the three conditions.
 //
 // A failed call / parse leaves the bet ungraded — it persists and the next evidence
 // wave retries (slight evidence drift, accepted for the MVP), routing as "no-prior"
 // so the turn still frames.
 func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "no-prior"
-	gi := root.DNA().Groupings()
-	distRoot, kids := gi.LatestUngradedOther()
+	episodes := root.DNA().Episodes()
+	distRoot, kids := episodes.LatestUngradedOther()
 	if distRoot == nil || len(kids) == 0 || root.DNA().Infer() == nil {
 		return
 	}
@@ -36,7 +34,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 
 	lines := make([]string, 0, len(kids))
 	for i, kid := range kids {
-		if p, ok := kid.Content().(dna.Prediction); ok {
+		if p, ok := kid.Content().(Prediction); ok {
 			lines = append(lines, fmt.Sprintf("[%d] %s", i+1, p.Text))
 		}
 	}
@@ -46,7 +44,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if err != nil {
 		return // bet stays ungraded; carry on unchanged (no-prior)
 	}
-	idx, matched, ok := dna.ParseMatch(resp)
+	idx, matched, ok := ParseMatch(resp)
 	if !ok {
 		return
 	}
@@ -54,13 +52,13 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// Score in CODE from the stored probability — the judge never sees a number.
 	score := 0.0
 	if matched && idx >= 1 && idx <= len(kids) {
-		if p, ok := kids[idx-1].Content().(dna.Prediction); ok {
+		if p, ok := kids[idx-1].Content().(Prediction); ok {
 			score = p.Probability
 		}
 	} else {
 		matched, idx = false, 0
 	}
-	gi.StampOtherGrade(distRoot, kids, idx, score, evidence)
+	episodes.StampOtherGrade(distRoot, kids, idx, score, evidence)
 
 	if matched {
 		root.Condition = "held"
@@ -76,7 +74,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 
 // graderSystem — the adversarial-neutral judge. Never told the predictions are its
 // own and shown no probabilities (no anchoring); it only identifies the realized
-// branch. Skeptical by instruction: near-misses are not matches. Verbatim from v1.
+// branch. Skeptical by instruction: near-misses are not matches.
 const graderSystem = "You are a strict, impartial judge. You are given numbered candidate " +
 	"predictions of what a message would say, and the message that actually arrived.\n\n" +
 	"Identify which single candidate the message realized, if any. A candidate matches " +
@@ -85,20 +83,20 @@ const graderSystem = "You are a strict, impartial judge. You are given numbered 
 	"Reply with only one tag: <match>N</match> (the matching candidate's number) or <match>none</match>."
 
 // other:predict — predict the other party's next move under the framing. Ported
-// from v1 other.Observe (predict half): read the handed grouping, infer the
-// calibrated distribution, append it to the grouping spine. Reports "predicted".
+// from v1 other.Observe (predict half): read the handed episode, infer the
+// calibrated distribution, append it to the episode spine. Reports "predicted".
 func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "predicted" // the worker completes the join regardless
-	if root.Grouping == nil || root.DNA().Infer() == nil {
+	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
 	present := fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s",
-		gistOf(root.Grouping), renderExchange(root.Nodes))
+		frameText(root.Episode), renderExchange(root.Nodes))
 	resp, err := root.DNA().Infer()(otherSystem, present)
 	if err != nil {
 		return
 	}
-	preds, ok := dna.ParsePredictions(resp)
+	preds, ok := ParsePredictions(resp)
 	if !ok {
 		return
 	}
@@ -109,32 +107,32 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		}
 	}
 	debug.Being("skyra", "other", fmt.Sprintf("predicted %d branches, top p=%.2f", len(preds), top))
-	born := appendOtherDistribution(root.DNA().Groupings(), root.Grouping, root.DNA().Tick(), preds)
+	born := appendOtherDistribution(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), preds)
 	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
 
-// appendOtherDistribution writes the distribution onto the grouping's CURRENT gist
-// (the gist-owned spine — a bet belongs to the framing it was made under): a root
-// node (gist→other-pred:ts) carrying one child per prediction. Built fully, then
+// appendOtherDistribution writes the distribution onto the episode's CURRENT frame
+// (the frame-owned spine — a bet belongs to the framing it was made under): a root
+// node (frame→other-pred:ts) carrying one child per prediction. Built fully, then
 // added under the index lock (self:predict reads it via the same lock). Returns the
-// edge keys it created (gist→root + root→each branch) so the caller crosses them.
-func appendOtherDistribution(gi *GroupingIndex, grouping *dna.MemoryCell, ts int, preds []dna.ParsedPrediction) []string {
-	gist := latestGist(grouping)
-	if gist == nil {
+// edge keys it created (frame→root + root→each branch) so the caller crosses them.
+func appendOtherDistribution(episodes *EpisodeStore, episode *MemoryCell, ts int, preds []ParsedPrediction) []string {
+	frame := latestFrame(episode)
+	if frame == nil {
 		return nil
 	}
-	rootKey := fmt.Sprintf("%s→other-pred:%d", gist.ID(), ts)
-	rootCell := dna.NewMemoryCell(rootKey, dna.KindPrediction, dna.Prediction{Role: "other", Timestamp: ts}, nil)
+	rootKey := fmt.Sprintf("%s→other-pred:%d", frame.ID(), ts)
+	rootCell := NewMemoryCell(rootKey, KindPrediction, Prediction{Role: "other", Timestamp: ts}, nil)
 	born := []string{rootKey}
 	for i, p := range preds {
-		childKey := fmt.Sprintf("%s→other-pred:%d-%d", gist.ID(), ts, i)
-		child := dna.NewMemoryCell(childKey, dna.KindPrediction, dna.Prediction{
+		childKey := fmt.Sprintf("%s→other-pred:%d-%d", frame.ID(), ts, i)
+		child := NewMemoryCell(childKey, KindPrediction, Prediction{
 			Text: p.Text, Role: "other", Probability: p.Probability, Timestamp: ts,
 		}, nil)
 		rootCell.AddChild(childKey, child)
 		born = append(born, childKey)
 	}
-	gi.AddChild(gist, rootKey, rootCell)
+	episodes.AddChild(frame, rootKey, rootCell)
 	return born
 }
 

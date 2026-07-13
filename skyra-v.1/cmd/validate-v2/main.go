@@ -7,7 +7,7 @@
 //   - turn 2 (on-track):    the reply realizes a predicted branch → other:grade "held"
 //   - turn 3 (pivot):       an unrelated turn → total miss → "all-preds<0" → REFRAME
 //
-// Prints, per turn: the grade condition, whether it reframed, the gist, and the
+// Prints, per turn: the grade condition, whether it reframed, the frame, and the
 // emitted action — the live analogue of v1's 3-turn trace.
 //
 //	go run ./cmd/validate-v2
@@ -22,7 +22,6 @@ import (
 	"skyra-v1/src/skyra"
 	"skyra-v1/src/skyra/relation"
 	dnav2 "skyra-v1/src/skyra/skyra-dna-v2"
-	dna "skyra-v1/src/skyra/skyra-dna"
 	"skyra-v1/src/skyra/world"
 )
 
@@ -75,7 +74,7 @@ func main() {
 
 		fmt.Printf("  other:grade:  %s\n", condOf(trace, dnav2.StepOtherGrade))
 		fmt.Printf("  reframed:     %v\n", board.Row(tn.id, "").Reframed())
-		fmt.Printf("  framing:      %s\n", gist(d))
+		fmt.Printf("  framing:      %s\n", frame(d))
 		fmt.Printf("  self plan:    %s\n", selfPlan(d))
 		if gotEmit {
 			fmt.Printf("  → emitted:    %s %s %v\n", emitted.Primitive, emitted.TargetID, emitted.Payload)
@@ -95,27 +94,24 @@ func condOf(trace []dnav2.Span, step dnav2.Step) string {
 	return "(step did not run)"
 }
 
-func gist(d *dnav2.DNA) string {
-	g := d.Groupings().Latest()
-	if g == nil {
+func frame(d *dnav2.DNA) string {
+	episode := d.Episodes().Latest()
+	if episode == nil {
 		return "(none)"
 	}
-	if gg, ok := g.Content().(dna.Gist); ok {
-		return gg.Text
-	}
-	return "(none)"
+	return dnav2.FrameText(episode)
 }
 
 func selfPlan(d *dnav2.DNA) string {
-	g := d.Groupings().Latest()
+	g := d.Episodes().Latest()
 	if g == nil {
 		return "(none)"
 	}
 	best := ""
 	bestTS := -1
 	for _, c := range g.Children() {
-		if mc, ok := c.(*dna.MemoryCell); ok {
-			if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
+		if mc, ok := c.(*dnav2.MemoryCell); ok {
+			if p, ok := mc.Content().(dnav2.Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
 				bestTS, best = p.Timestamp, p.Text
 			}
 		}

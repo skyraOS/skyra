@@ -53,9 +53,10 @@ var transition = map[Step]map[string]Route{
 		"exec-ok": {Next: []Step{StepMidlevelFrame}},
 	},
 	StepMidlevelFrame: {
-		"framed":             {Next: []Step{StepOtherPredict, StepSelfPredict}}, // fan-out + declare expects
-		"empty":              {Done: true},
-		"query-format-error": {Done: true}, // correction exhausted; active state retained
+		"framed":              {Next: []Step{StepOtherPredict, StepSelfPredict}}, // fan-out + declare expects
+		"empty":               {Done: true},
+		"query-format-error":  {Done: true}, // correction exhausted; active state retained
+		"causal-format-error": {Done: true}, // either causal worker failed; active state retained
 	},
 	StepOtherPredict: {
 		"predicted": {Wait: true}, // marks other done; the join fires motor

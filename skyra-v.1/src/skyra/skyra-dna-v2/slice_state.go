@@ -3,13 +3,13 @@ package dnav2
 import "skyra-v1/src/skyra"
 
 // Active-state keys on the being's slice (perceive-build-uncertainties.md §3a).
-// activeGroupingID / activeGistID are ACTIVE STATE, and the slice is the canonical
+// activeEpisodeID / activeFrameID are ACTIVE STATE, and the slice is the canonical
 // home for active state (same as the surroundings map and stress). Stored as IDs,
 // never pointers — the slice is kernel-side; readers resolve ID → node through the
 // index. The kernel stays oblivious: these are entries in the existing Slice.Maps().
 const (
-	mapActiveGroupingID = "cognition:activeGroupingID"
-	mapActiveGistID     = "cognition:activeGistID"
+	mapActiveEpisodeID = "cognition:activeEpisodeID"
+	mapActiveFrameID   = "cognition:activeFrameID"
 	// mapActiveAitiaSet holds map[string]string — anchor entity ID → active
 	// AitiaSet ID (minimal-aitia-set.md "Active State"; ledger item 7: v0 is one
 	// situation-anchored set, anchored on the being's own ID).

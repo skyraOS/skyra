@@ -30,7 +30,7 @@ plural, not a second design object.
 | **Entity** | material node born from OBSERVATION (sensory/ingest) |
 | **Term** | material node born from ASSERTION (mentioned, never observed) |
 | **semantic edge** | immutable directed claim in the birth frame (formal, member); probe-time: index keys + verification; never graded, never weighted |
-| **weighted edge** | historic relationship occurrence (inherited, efficient, final) + its live graded state; traversal-time: amplitude + belief |
+| **causal edge** | historic relationship occurrence: inherited edges preserve immutable, ungraded ancestry; Efficient/Final edges additionally own live signed state and traversal amplitude |
 | **node registry** | the knowledge graph's home for Entities + Terms and the label lookup |
 | **AitiaSet** | unchanged |
 
@@ -47,8 +47,9 @@ knowledge graph (semantic, probe-time)
         causalNodes[nodeID]        (reverse: node → CausalNodes containing it)
         byPair / byTriple           (reverse: directed semantic edge keys)
 
-CausalNode (weighted, traversal-time)
-  three process maps: inherited, efficient, final   (weighted edges)
+CausalNode (causal, traversal-time)
+  three process maps: inherited, efficient, final
+  live signed state: efficient and final edges only
   parent pointer: back to the knowledge subgraph minted at its formation
 ```
 
@@ -105,8 +106,9 @@ item 10.)
 
 **Two fill mechanisms, one structure.** Observation-born nodes get their maps
 stamped at birth by the ingest path — recorded, not inferred. Composed nodes
-get theirs via probe → compose+grade. Workers are never sent to re-derive
-what ingest already stamped.
+are created through structural retain/compose/requery or causal expansion;
+only Efficient/Final belief edges are subsequently graded. Workers are never
+sent to re-derive what ingest already stamped.
 
 **The identity this closes:** observation-born CausalNodes become PARENTS of
 midlevel's present — "michael said 'can you help'" (observation-level) is
@@ -310,26 +312,88 @@ walk means.
 ## Evidence Ownership
 
 An Evidence-bearing object is an immutable observation-born `CausalNode`, not a
-third node type. It remains external to the target node's semantic birth frame
-and grades weighted causal relationship occurrences:
+third node type. It remains external to the target node's semantic birth frame.
+The observation is the shared input. The graded targets are the two unbounded
+causal beliefs resolved from the active Aitia set on the Slice:
 
 ```text
-Evidence --grades--> InheritedEdge
-Evidence --grades--> EfficientCauseEdge
-Evidence --grades--> FinalCauseEdge
+observation-born CausalNode
+  -> structurally updates active Material/Formal
+  -> grades active Efficient cause from Slice
+  -> grades active Final cause from Slice
 ```
 
-Semantic edges are NEVER graded (corrected 2026-07-12 — an earlier draft
-graded StructuralEdge). You never grade a CausalNode's internals; you grade
-its RELATIONSHIPS — the weighted edges. If a claim inside a CausalNode turns
-out wrong, that arrives as negative evidence on the weighted edges pointing
-at that node, and retain-or-requery answers it by composing a successor —
-never by reaching inside the immutable original, which stays intact as "what
-I believed then."
+Each populated Efficient/Final position receives one independent grade, written
+to its one contextual edge. Ordinary impulse grading does **not** search through
+composition ancestry or attribute one grade across inherited edges.
+
+```text
+resolvable belief:  <grade>N</grade>   where -1 <= N <= 1
+unresolved belief:  <no-grade/>
+```
+
+No-grade is absence and creates no EMA sample. `<grade>0</grade>` is a real
+cancellation/no-charge sample; the two must never be collapsed.
+
+Material/Formal is deliberately different. It is the active immutable
+representation of the present situation, not an unbounded causal belief. It has
+no signed grade, no edge-owned EMA, and no `PresentEdgeID`. A new observation
+drives a structural operation: retain when the representation still fits,
+compose when the situation extends, or requery/replace when it no longer fits.
+
+Semantic edges are NEVER graded. Material/Formal fit is answered only through
+the structural retain/compose/requery operation. The original remains intact as
+"what I represented then."
 
 Evidence provenance may be traversed from an edge for inspection, but the
 observation-born `CausalNode` does not become a Material member of the target's
 birth subgraph merely because it grades that target's relationship.
+
+### Ordinary grading is not composition
+
+Two operations must remain separate:
+
+```text
+ordinary incoming impulse
+  -> structurally update active Material/Formal
+     retain | compose | requery
+  -> grade the two active causal beliefs from the Slice
+     Efficient: one grade
+     Final:     one grade
+
+composition / requery
+  -> combine current Material/Formal structure with one or more prior causes
+  -> mint a new immutable CausalNode
+  -> mint fresh inherited/contextual edges
+```
+
+Multiple inherited edges can exist only because a freshly minted representation
+was composed from multiple prior causes. Those edges record composition
+ancestry. They are not graded active cause positions.
+
+### Observation decomposition and grading schedule
+
+An incoming utterance receives one light LLM decomposition pass. The worker
+must emit the universal annotated sentence/subgraph contract and prioritize
+the observed causal structure; reducing the observation to speaker/text
+metadata is not an acceptable shortcut. Parser failures use bounded
+retry-with-correction and commit nothing when exhausted.
+
+After the valid observation subgraph is persisted, the Material/Formal
+structural worker and populated causal-belief graders may fan out from it:
+
+```text
+1. decompose utterance into observation subgraph
+2. in parallel:
+   - choose retain | compose | requery for active Material/Formal
+   - grade active Efficient cause
+   - grade active Final cause
+```
+
+The decomposition must finish before grading begins. The graders share only the
+persisted observation and active Slice snapshot. If a belief position is not
+active yet, its grader does not run. Material/Formal is never routed through the
+signed grading path.
 
 Praxis may resolve the active set to display:
 
@@ -338,10 +402,10 @@ Praxis may resolve the active set to display:
 - supporting, opposing, and unresolved Evidence per edge;
 - signed Identity/Familiarity state per contextual edge.
 
-## One Worker Mechanism
+## Shared Retrieval, Distinct Worker Outcomes
 
-Every compound worker runs the same two-step loop; the only parameter is
-which edge receives the grades.
+Every compound worker may use the same retrieval step, but the present worker
+and causal-belief workers do not share a grading contract.
 
 **Step 1 — probe.** The worker emits a probe subgraph. The probe drives a
 reverse-index lookup over the relevant maps (midlevel: material/formal
@@ -352,23 +416,22 @@ wave (invariant 9's first half; the walk still verifies exact directed
 structure before a candidate's evidence counts — the second half). Under that
 amplitude the worker traverses the candidates' evidence.
 
-**Step 2 — compose + grade.** With the retrieved summaries and their evidence
-in its present, the worker composes the new summary — citing candidates by
-stable-id, which lands them in `inherited` — and grades: a base grade for each
-evidence relationship, seeded on the RECEIVING edge so a born edge never
-deadlocks at zero (the CrossBirth pattern).
-
-The receiving edge is the parameter:
+**Step 2 — produce the role-specific result.** With retrieved summaries and
+their evidence in context, the worker emits one of two outcomes:
 
 ```text
 midlevel (present querier)
-  -> grades land on the inherited edges
-     (new-summary ↔ inherited parents)
+  -> retain | compose | requery
+  -> inherited edges record composition ancestry only; never grades
 
 efficient worker / final worker
-  -> grades land on the causal edges
-     (cause-summary ↔ present-summary)
+  -> emit a complete prior/future subgraph
+  -> receive a fresh contextual causal edge
+  -> later grades land only on that edge
 ```
+
+New belief edges begin with no inherited grade history. Their first signed
+sample comes from observation grading; `<no-grade/>` records no EMA sample.
 
 Candidate sourcing is GRAPH-owned: the reverse index over inherited and
 causal maps supersedes the earlier "lineage history on the Slice" candidate
@@ -656,8 +719,8 @@ which relationships a given observe strategy follows.
 13. Untyped flattened children are not authoritative when direction matters.
 14. The `inherited` port holds composition-provenance EDGE occurrences —
     minted at Persist from compound-typed members, a different relationship
-    than Efficient or Final. Topology is birth-fixed; grades are live:
-    midlevel's evidence sits here, graded with respect to the new summary.
+    than Efficient or Final. Topology is birth-fixed and ungraded; these edges
+    preserve ancestry rather than signed belief state.
 15. Efficient/Final ports accumulate edge occurrences (keyed by ID, stamped
     with their owning set); they never collapse into a singular cause of the
     compound. Context filtering is an observe-strategy choice, not storage.
@@ -667,9 +730,10 @@ which relationships a given observe strategy follows.
 17. Causal inheritance is NODE-only: the parents' efficient/final cause nodes
     seed the new compound's candidate maps; a regrade mints a NEW edge owned
     by the new context. Edge occurrences are never shared across contexts.
-18. Every compound worker runs probe → compose+grade. Candidate sourcing is
-    graph-owned (reverse index over inherited/causal maps); the Slice keeps
-    only the active set.
+18. Every compound worker may share graph-owned probe/retrieval. The present
+    worker emits retain/compose/requery without grading ancestry; Efficient and
+    Final workers emit complete subgraphs whose fresh contextual edges are the
+    only graded targets. The Slice keeps only the active set.
 19. Two node contracts, one bridge: the knowledge graph owns material nodes,
     semantic edges, and the reverse maps; the CausalNode owns the three
     process maps and the parent pointer to its birth subgraph. Semantic
@@ -684,7 +748,8 @@ which relationships a given observe strategy follows.
     is evidence with respect to the edge it grades. The provenance stamp
     (observed vs composed) is mandatory content, never type.
 22. Two fill mechanisms, one structure: observation-born maps are stamped at
-    birth by ingest (recorded, not inferred); composed maps come from
-    probe → compose+grade. The final cause of skyra's own action is the
-    final cause of everything efficient within the frame; final-stamping on
-    incoming/other-agent events is open (ledger 11).
+    birth by ingest (recorded, not inferred); composed maps come from structural
+    revision or causal expansion, and only Efficient/Final edges are graded.
+    The final cause of skyra's own action is the final cause of everything
+    efficient within the frame; final-stamping on incoming/other-agent events
+    is open (ledger 11).

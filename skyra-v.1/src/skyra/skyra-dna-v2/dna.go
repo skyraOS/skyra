@@ -8,9 +8,8 @@ import (
 
 // DNA — the one canonical base cell (the genome). Holds ALL durable indexes (the
 // long-term graph) AND all competences (namespaced genes, keyed "namespace:gene"
-// e.g. "other:grade"). The v1 dispatcher cells collapse into this: sensory /
-// midlevel / other / self / motor are competence NAMESPACES, not separate objects
-// — expression contexts of the one genome.
+// e.g. "other:grade"). Sensory, midlevel, other, self, and motor are competence
+// namespaces: expression contexts of the one genome, not separate objects.
 //
 // Competences are registered once at boot (read-only during a wave → concurrent
 // transcription is safe). Durable indexes are guarded by the DNA's own fine-grained
@@ -22,23 +21,23 @@ type DNA struct {
 	express map[string]ExpressCompetence
 
 	// nucleus is the being's one slice — the substrate the index nodes live on and
-	// the home of the active state (activeGroupingID/activeGistID via Slice.Maps()).
+	// the home of the active state (activeEpisodeID/activeFrameID via Slice.Maps()).
 	// It carries no kernel waves; it is index substrate only.
 	nucleus skyra.Slice
 
 	// The knowledge graph's material nodes (the nucleus's durable working memory).
-	nodes     *NodeRegistry
-	groupings *GroupingIndex
+	nodes    *NodeRegistry
+	episodes *EpisodeStore
 
 	// activation holds edge-owned learning (A/S/F/N) keyed by edge identity — the
 	// economy the traversal reads and the bump maintains.
 	activation *ActivationStore
 
-	// The minimal-Aitia loop's stores (cause-and-effect, Phase 0/1): immutable
-	// CausalNodes + Aitia sets, and the signed edge EMAs. Beside the legacy
-	// grouping/activation machinery, not a mutation of it.
-	causal *CausalNodes
-	signed *SignedStore
+	// The cause-and-effect stores: immutable CausalNodes and Aitia sets, signed
+	// edge EMAs, and the query-budget controllers that regulate abstraction.
+	causal  *CausalNodes
+	signed  *SignedStore
+	budgets *QueryBudgetStore
 
 	// infer is the injected LLM seam (system, present) → text. Genes that think
 	// call it; nil → those genes skip (tests without inference).
@@ -58,28 +57,31 @@ type InferFunc func(system, present string) (string, error)
 
 func NewDNA(beingID string, nucleus skyra.Slice) *DNA {
 	nodes := NewNodeRegistry(nucleus)
+	signed := NewSignedStore()
 	return &DNA{
 		beingID:    beingID,
 		observe:    map[string]ObserveCompetence{},
 		express:    map[string]ExpressCompetence{},
 		nucleus:    nucleus,
 		nodes:      nodes,
-		groupings:  NewGroupingIndex(nucleus),
+		episodes:   NewEpisodeStore(nucleus),
 		activation: NewActivationStore(),
-		causal:     NewCausalNodes(nucleus, nodes), // mentioned michael resolves to observed michael
-		signed:     NewSignedStore(),
+		causal:     NewCausalNodes(nucleus, nodes, signed), // mentioned michael resolves to observed michael
+		signed:     signed,
+		budgets:    MustNewQueryBudgetStore(DefaultQueryBudgetConfig()),
 	}
 }
 
-func (d *DNA) BeingID() string           { return d.beingID }
-func (d *DNA) Nucleus() skyra.Slice      { return d.nucleus }
-func (d *DNA) Nodes() *NodeRegistry       { return d.nodes }
-func (d *DNA) Groupings() *GroupingIndex { return d.groupings }
-func (d *DNA) Infer() InferFunc          { return d.infer }
-func (d *DNA) SetInfer(fn InferFunc)     { d.infer = fn }
-func (d *DNA) Activation() *ActivationStore { return d.activation }
-func (d *DNA) CausalNodes() *CausalNodes    { return d.causal }
-func (d *DNA) Signed() *SignedStore         { return d.signed }
+func (d *DNA) BeingID() string                 { return d.beingID }
+func (d *DNA) Nucleus() skyra.Slice            { return d.nucleus }
+func (d *DNA) Nodes() *NodeRegistry            { return d.nodes }
+func (d *DNA) Episodes() *EpisodeStore         { return d.episodes }
+func (d *DNA) Infer() InferFunc                { return d.infer }
+func (d *DNA) SetInfer(fn InferFunc)           { d.infer = fn }
+func (d *DNA) Activation() *ActivationStore    { return d.activation }
+func (d *DNA) CausalNodes() *CausalNodes       { return d.causal }
+func (d *DNA) Signed() *SignedStore            { return d.signed }
+func (d *DNA) QueryBudgets() *QueryBudgetStore { return d.budgets }
 
 // ActiveSet returns the being's active AitiaSet (ok=false before the first
 // query commits). V0 anchors on the being's own ID (ledger item 7).
@@ -124,7 +126,7 @@ func (d *DNA) Clock() int {
 	return d.clock
 }
 
-func (d *DNA) Emit() func(skyra.Impulse)    { return d.emit }
+func (d *DNA) Emit() func(skyra.Impulse)      { return d.emit }
 func (d *DNA) SetEmit(fn func(skyra.Impulse)) { d.emit = fn }
 
 func (d *DNA) SetLastAction(s string) {

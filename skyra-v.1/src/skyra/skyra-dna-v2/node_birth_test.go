@@ -2,8 +2,6 @@ package dnav2
 
 import (
 	"testing"
-
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // Node birth crosses the new edges, so they start selectable (F>0). Without this a fresh
@@ -11,9 +9,9 @@ import (
 // bootstrap deadlock.
 func TestNodeBirthCrossesEdges(t *testing.T) {
 	d := testDNA()
-	g := d.Groupings().Create("g1", "framing", d.Tick())
+	g := d.Episodes().Create("g1", "framing", d.Tick())
 
-	born := appendOtherDistribution(d.Groupings(), g, d.Tick(), []dna.ParsedPrediction{
+	born := appendOtherDistribution(d.Episodes(), g, d.Tick(), []ParsedPrediction{
 		{Text: "a", Probability: 0.6}, {Text: "b", Probability: 0.4},
 	})
 	if len(born) != 3 { // root + 2 branches

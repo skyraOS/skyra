@@ -5,18 +5,17 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// motor:collapse — read self's proposal off the grouping, collapse it into one
+// motor:collapse — read self's proposal off the episode, collapse it into one
 // concrete world primitive (with retry-on-parse-fail), emit it, and record it.
-// Ported from v1 motor.Observe/Express + inferAction. Reports "emitted".
+// Observe/Express + inferAction. Reports "emitted".
 func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "emitted"
-	if root.Grouping == nil || root.DNA().Infer() == nil {
+	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
-	plan, proposal := readSelfProposal(root.DNA().Groupings(), root.Grouping)
+	plan, proposal := readSelfProposal(root.DNA().Episodes(), root.Episode)
 	if plan == "" || proposal == nil {
 		return
 	}
@@ -25,14 +24,14 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return
 	}
 	// the action hangs off the PROPOSAL (proposal→action) — the realization edge
-	// self:grade closes against the reafference, not off the grouping.
-	action := dna.NewMemoryCell(
+	// self:grade closes against the reafference, not off the episode.
+	action := NewMemoryCell(
 		fmt.Sprintf("%s→action:%d", proposal.ID(), root.DNA().Tick()),
-		dna.KindAction,
-		dna.ActionRecord{Primitive: emission.Primitive, EntityID: emission.Target, Content: emission.Payload, Timestamp: root.DNA().Tick()},
+		KindAction,
+		ActionRecord{Primitive: emission.Primitive, EntityID: emission.Target, Content: emission.Payload, Timestamp: root.DNA().Tick()},
 		nil,
 	)
-	root.DNA().Groupings().AddChild(proposal, action.ID(), action)
+	root.DNA().Episodes().AddChild(proposal, action.ID(), action)
 	root.DNA().CrossBirth(action.ID()) // node birth: the proposal→action edge was just active
 	root.DNA().SetLastAction(displayAction(emission))
 	debug.Being("skyra", "motor", fmt.Sprintf("emit %s %s %v", emission.Primitive, emission.Target, emission.Payload))
@@ -46,15 +45,15 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 }
 
-// readSelfProposal reads the latest self proposal off the grouping's gists (the
-// gist-owned spine) — the plan text plus the proposal cell (motor hangs the action
+// readSelfProposal reads the latest self proposal off the episode's frames (the
+// frame-owned spine) — the plan text plus the proposal cell (motor hangs the action
 // off it: the realization edge).
-func readSelfProposal(gi *GroupingIndex, grouping *dna.MemoryCell) (string, *dna.MemoryCell) {
+func readSelfProposal(episodes *EpisodeStore, episode *MemoryCell) (string, *MemoryCell) {
 	best := ""
-	var bestCell *dna.MemoryCell
+	var bestCell *MemoryCell
 	bestTS := -1
-	for _, mc := range predictionsOf(grouping) {
-		if p, ok := mc.Content().(dna.Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
+	for _, mc := range predictionsOf(episode) {
+		if p, ok := mc.Content().(Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
 			bestTS, best, bestCell = p.Timestamp, p.Text, mc
 		}
 	}
@@ -65,22 +64,22 @@ const motorMaxRetries = 2
 
 // inferMotor collapses the plan to one primitive, retrying with a correction if
 // the reply won't parse (v1's proven retry-with-correction).
-func inferMotor(infer InferFunc, plan string) (dna.PrimitiveEmission, bool) {
+func inferMotor(infer InferFunc, plan string) (PrimitiveEmission, bool) {
 	present := fmt.Sprintf("Inner thought:\n%s", plan)
 	for attempt := 1; attempt <= motorMaxRetries; attempt++ {
 		resp, err := infer(motorSystem, present)
 		if err != nil {
-			return dna.PrimitiveEmission{}, false
+			return PrimitiveEmission{}, false
 		}
-		if e, ok := dna.ParseMotorEmission(resp); ok {
+		if e, ok := ParseMotorEmission(resp); ok {
 			return e, true
 		}
 		present = fmt.Sprintf("%s\n\n---\nYour previous response was:\n%s\n\nThat could not be parsed. You MUST reply with exactly one of these forms and nothing else:\n<engage><michael>words to say</michael></engage>\n<move><michael></michael></move>\n<perceive></perceive>", present, resp)
 	}
-	return dna.PrimitiveEmission{}, false
+	return PrimitiveEmission{}, false
 }
 
-func displayAction(e dna.PrimitiveEmission) string {
+func displayAction(e PrimitiveEmission) string {
 	switch e.Primitive {
 	case "engage":
 		return fmt.Sprintf("<engage><%s>%s</%s></engage>", e.Target, e.Payload, e.Target)

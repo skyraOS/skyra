@@ -30,7 +30,7 @@ Your job has two parts.
    Ignore the noise entirely — do not group it. For each relevant bundle:
    <context-management>
      <cells>which numbered cells</cells>
-     <observation>what this grouping means</observation>
+     <observation>what this episode means</observation>
      <alignment>+1 to -1 — did these cells help or hurt the setpoint</alignment>
    </context-management>
    Only cite cells from the Context list.

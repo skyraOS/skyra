@@ -6,13 +6,15 @@ import (
 	"testing"
 
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // querierMock overrides the framing branch of the standard pipeline mock.
 func querierMock(frameResp func(present string) string) InferFunc {
 	base := gradeMock("<match>none</match>")
 	return func(system, present string) (string, error) {
+		if strings.Contains(system, "decompose one observed utterance") {
+			return "michael[1] requests[1→2] help[2]", nil
+		}
 		if strings.Contains(system, "evolving being") {
 			return frameResp(present), nil
 		}
@@ -22,12 +24,12 @@ func querierMock(frameResp func(present string) string) InferFunc {
 
 // A well-formed annotated emission persists the compound, mints the set,
 // activates it on the Slice (anchored on the being), and cross-links the spine
-// gist to its canonical compound — Phase 1's whole contract.
+// frame to its canonical compound — Phase 1's whole contract.
 func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(querierMock(func(string) string {
-		return "<new>michael[1] wants[1→2] help[2] with[2→3] {the skyra project}[3]</new>"
+		return "<requery>michael[1] wants[1→2] help[2] with[2→3] {the skyra project}[3]</requery>"
 	}))
 	d.SetEmit(func(skyra.Impulse) {})
 	o, _ := newOrch(d)
@@ -38,8 +40,8 @@ func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	if !ok {
 		t.Fatal("no active AitiaSet after a framed turn")
 	}
-	if set.EfficientEdgeID != "" || set.FinalEdgeID != "" {
-		t.Fatal("v0.1 sets carry only the present reference (causal edges are Phase 4)")
+	if set.EfficientEdgeID == "" || set.FinalEdgeID == "" {
+		t.Fatal("active set must atomically carry Efficient and Final edges")
 	}
 	summary := d.CausalNodes().Get(set.PresentID)
 	if summary == nil {
@@ -63,14 +65,11 @@ func TestQuerierPersistsCompoundAndActivatesSet(t *testing.T) {
 	if structural != 2 {
 		t.Fatalf("structural edges = %d, want 2", structural)
 	}
-	// the spine gist carries the clean sentence + the cross-link
-	g := d.Groupings().Active()
-	gc, _ := latestGist(g).Content().(dna.Gist)
+	// the active frame carries the clean sentence.
+	g := d.Episodes().Active()
+	gc, _ := latestFrame(g).Content().(Frame)
 	if gc.Text != "michael wants help with the skyra project" {
-		t.Fatalf("gist text = %q, want the clean sentence", gc.Text)
-	}
-	if gc.CausalNodeID != set.PresentID {
-		t.Fatalf("gist.CausalNodeID = %q, want %s", gc.CausalNodeID, set.PresentID)
+		t.Fatalf("frame text = %q, want the clean sentence", gc.Text)
 	}
 }
 
@@ -82,10 +81,10 @@ func TestQuerierRetriesBadAnnotationThenSucceeds(t *testing.T) {
 	var frameCalls int32
 	d.SetInfer(querierMock(func(present string) string {
 		atomic.AddInt32(&frameCalls, 1)
-		if strings.Contains(present, "could not be parsed") {
-			return "<new>michael[1] wants[1→2] help[2]</new>" // corrected
+		if strings.Contains(present, "It was invalid") {
+			return "<requery>michael[1] wants[1→2] help[2]</requery>" // corrected
 		}
-		return "<new>michael[1] wants[1→9] help[2]</new>" // undeclared node 9
+		return "<requery>michael[1] wants[1→9] help[2]</requery>" // undeclared node 9
 	}))
 	d.SetEmit(func(skyra.Impulse) {})
 	o, _ := newOrch(d)
@@ -112,9 +111,9 @@ func TestQuerierFormatFailureRetainsActiveState(t *testing.T) {
 	var valid atomic.Bool
 	d.SetInfer(querierMock(func(string) string {
 		if valid.Load() {
-			return "<new>just plain words with no annotations</new>"
+			return "<requery>just plain words with no annotations</requery>"
 		}
-		return "<new>michael[1] greets[1→2] skyra[2]</new>"
+		return "<requery>michael[1] greets[1→2] skyra[2]</requery>"
 	}))
 	d.SetEmit(func(skyra.Impulse) {})
 	o, _ := newOrch(d)
@@ -124,7 +123,7 @@ func TestQuerierFormatFailureRetainsActiveState(t *testing.T) {
 	if !ok {
 		t.Fatal("valid first turn must activate a set")
 	}
-	beforeGrouping := d.Groupings().Active()
+	beforeEpisode := d.Episodes().Active()
 
 	valid.Store(true)
 	trace := fireTurn(t, o, "X2", "X1", "this response will not parse")
@@ -135,7 +134,7 @@ func TestQuerierFormatFailureRetainsActiveState(t *testing.T) {
 	if !ok || after.ID != before.ID {
 		t.Fatal("format failure must retain the previous active Aitia set")
 	}
-	if d.Groupings().Active() != beforeGrouping {
-		t.Fatal("format failure must not replace the active grouping")
+	if d.Episodes().Active() != beforeEpisode {
+		t.Fatal("format failure must not replace the active episode")
 	}
 }

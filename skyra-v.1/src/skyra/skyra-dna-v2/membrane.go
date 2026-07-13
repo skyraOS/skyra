@@ -2,7 +2,6 @@ package dnav2
 
 import (
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
 // Orchestrator — membrane as the workflow engine. Holds the durable references
@@ -13,7 +12,7 @@ import (
 //
 // See specs/2026-07-03/slice-based-dispatch.md ("The orchestrator").
 type Orchestrator struct {
-	dna    *DNA
+	genome *DNA
 	board  *Board
 	kernel skyra.Time
 
@@ -25,8 +24,8 @@ type Orchestrator struct {
 	flush func(impulseID string, trace []Span)
 }
 
-func NewOrchestrator(dna *DNA, board *Board, kernel skyra.Time, membraneSlice skyra.Slice, slices map[string]skyra.Slice) *Orchestrator {
-	return &Orchestrator{dna: dna, board: board, kernel: kernel, membraneSlice: membraneSlice, slices: slices}
+func NewOrchestrator(genome *DNA, board *Board, kernel skyra.Time, membraneSlice skyra.Slice, slices map[string]skyra.Slice) *Orchestrator {
+	return &Orchestrator{genome: genome, board: board, kernel: kernel, membraneSlice: membraneSlice, slices: slices}
 }
 
 func (o *Orchestrator) SetFlush(fn func(string, []Span)) { o.flush = fn }
@@ -77,15 +76,16 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	ns := namespaceOf(m.step)
 	slice := m.orch.slices[ns]
 	key := string(m.step)
-	m.worker = m.orch.dna.Transcribe(key, key, key, slice, m.impulseID, nil)
+	m.worker = m.orch.genome.Transcribe(key, key, key, slice, m.impulseID, nil)
 	// hand the working set — the entity index rides EVERY worker (the mRNA carries
 	// what it needs). Step-specific: the predict genes get the impulse's active
-	// grouping (produced by midlevel:frame, stashed on the row).
-	m.worker.Nodes = m.orch.dna.Nodes()
+	// episode (produced by midlevel:frame, stashed on the row).
+	m.worker.Nodes = m.orch.genome.Nodes()
+	m.worker.ObservationID = m.orch.board.Row(m.impulseID, "").ObservationID()
 	switch m.step {
 	case StepOtherPredict, StepSelfPredict, StepMotorCollapse:
-		if g, ok := m.orch.board.Row(m.impulseID, "").Grouping().(*dna.MemoryCell); ok {
-			m.worker.Grouping = g
+		if g, ok := m.orch.board.Row(m.impulseID, "").Episode().(*MemoryCell); ok {
+			m.worker.Episode = g
 		}
 	}
 }
@@ -98,12 +98,15 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 		cond = m.worker.Condition
 	}
 	row := m.orch.board.Row(m.impulseID, "")
+	if m.worker != nil && m.worker.ObservationID != "" {
+		row.SetObservationID(m.worker.ObservationID)
+	}
 	row.Append(Span{Step: string(m.step), Condition: cond})
 
-	// midlevel:frame produced the active grouping — stash it on the row so the
+	// midlevel:frame produced the active episode — stash it on the row so the
 	// fan-out's predict workers receive it as their working set.
-	if m.step == StepMidlevelFrame && m.worker != nil && m.worker.Grouping != nil {
-		row.SetGrouping(m.worker.Grouping)
+	if m.step == StepMidlevelFrame && m.worker != nil && m.worker.Episode != nil {
+		row.SetEpisode(m.worker.Episode)
 	}
 
 	route, ok := routeFor(m.step, cond)
@@ -125,7 +128,7 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 	case route.Wait:
 		// a predict branch completed — mark the join and try to fire motor
 		if agent := agentOf(m.step); agent != "" {
-			row.Mark("G", agent) // MVP: one grouping "G"
+			row.Mark("episode", agent) // MVP: one active episode
 		}
 		if row.TryFireMotor() {
 			o.run(StepMotorCollapse, m.impulseID, m.impulse)
@@ -142,7 +145,7 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 				agents = append(agents, a)
 			}
 		}
-		row.Declare("G", agents...) // MVP: one grouping "G"
+		row.Declare("episode", agents...) // MVP: one active episode
 		for _, s := range route.Next {
 			o.run(s, m.impulseID, m.impulse)
 		}

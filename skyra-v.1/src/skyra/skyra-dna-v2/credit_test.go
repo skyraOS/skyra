@@ -6,17 +6,17 @@ import "testing"
 // closure the more load-bearing edge (b1, the higher-weighted branch) learns more than
 // the incidental one (b2). This is the eligibility trace — the graph as the trace.
 func TestDistributeCreditGradesFrameByActivation(t *testing.T) {
-	g := buildGrouping()
+	g := buildFrameEpisode()
 	store := NewActivationStore()
 
 	// Assemble the frame (store empty → static Probability weights: b1 .7, b2 .3).
 	frame := FrameOf(g, 10000, store, 0)
 	edges := frame.Edges()
-	if len(edges) < 4 { // grouping→gist, gist→root, root→b1, root→b2
+	if len(edges) < 4 { // episode→frame, frame→root, root→b1, root→b2
 		t.Fatalf("frame has %d edges, want ≥4: %v", len(edges), edges)
 	}
 
-	b1, b2 := "g1:gist:1→other-pred:1-0", "g1:gist:1→other-pred:1-1"
+	b1, b2 := "g1:frame:1→other-pred:1-0", "g1:frame:1→other-pred:1-1"
 	if edges[b1] <= edges[b2] {
 		t.Fatalf("expected b1 more active than b2: b1=%.3f b2=%.3f", edges[b1], edges[b2])
 	}
@@ -41,12 +41,12 @@ func TestDistributeCreditGradesFrameByActivation(t *testing.T) {
 
 // A negative closure drives the frame's edges DOWN — blame flows the same way credit does.
 func TestDistributeBlameLowersStrength(t *testing.T) {
-	g := buildGrouping()
+	g := buildFrameEpisode()
 	store := NewActivationStore()
 	edges := FrameOf(g, 10000, store, 0).Edges()
 	store.CrossFrame(edges, 0)
 
-	b1 := "g1:gist:1→other-pred:1-0"
+	b1 := "g1:frame:1→other-pred:1-0"
 	before, _ := store.Strength(b1, 0) // crossed, A still 0
 	store.DistributeCredit(edges, -1, 1)
 	after, _ := store.Strength(b1, 0)

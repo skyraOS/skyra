@@ -5,12 +5,11 @@ import (
 	"strings"
 
 	"skyra-v1/src/debug"
-	dna "skyra-v1/src/skyra/skyra-dna"
 	"skyra-v1/src/skyra/traverse"
 )
 
 // The coherence-settle (active-grouping.md, "Alignment vs closure") is the SOLE writer of A
-// (alignment / edge strength). Given the active episode's FIXED gist (the framing = truth),
+// (alignment / edge strength). Given the active episode's FIXED frame (the framing = truth),
 // it batch-grades the episode's nodes against that framing, writes each score as A onto the
 // edge that reached the node, prunes the nodes below 0 (excluded from THIS settle only — not
 // deleted), re-traverses the survivors so freed budget swaps misfit-near for coherent-far,
@@ -25,29 +24,29 @@ const (
 	settleStress      = 1.0  // salience stamp for settle grades (matches closure's stand-in)
 )
 
-// coherenceSettle runs the settle over one grouping against its fixed gist and returns the
-// number of passes taken (for logging). No-op without a gist, a store, or inference.
-func coherenceSettle(grouping *dna.MemoryCell, store *ActivationStore, tick int, infer InferFunc) int {
-	if grouping == nil || store == nil || infer == nil {
+// coherenceSettle runs the settle over one episode against its fixed frame and returns the
+// number of passes taken (for logging). No-op without a frame, a store, or inference.
+func coherenceSettle(episode *MemoryCell, store *ActivationStore, tick int, infer InferFunc) int {
+	if episode == nil || store == nil || infer == nil {
 		return 0
 	}
-	gist := gistOf(grouping)
-	if gist == "" {
+	frame := frameText(episode)
+	if frame == "" {
 		return 0
 	}
-	activeGistID := ""
-	if gist := latestGist(grouping); gist != nil {
-		activeGistID = gist.ID()
+	activeFrameID := ""
+	if frame := latestFrame(episode); frame != nil {
+		activeFrameID = frame.ID()
 	}
 	excluded := map[string]bool{} // node IDs pruned this settle (exclude-this-settle, not deletion)
 	crossed := map[string]bool{}  // edges Crossed this settle — F-bump once, so Grade's new record isn't deadened
 	prevAvg := 0.0
 	for pass := 1; pass <= settleMaxPasses; pass++ {
-		items := collectSettleItems(frameOfExcluding(grouping, settleFrameBudget, store, tick, excluded), activeGistID)
+		items := collectSettleItems(frameOfExcluding(episode, settleFrameBudget, store, tick, excluded), activeFrameID)
 		if len(items) == 0 {
 			return pass - 1
 		}
-		grades := gradeCoherence(gist, items, infer)
+		grades := gradeCoherence(frame, items, infer)
 		if len(grades) == 0 {
 			return pass - 1 // a failed/empty grade settles nothing this pass
 		}
@@ -103,11 +102,11 @@ type settleItem struct {
 }
 
 // collectSettleItems walks the lit subgraph and returns every node that renders a
-// line — the items graded against the framing — EXCEPT the active gist (the
-// framing is the truth; it is never graded against itself). Prior gists ARE items:
+// line — the items graded against the framing — EXCEPT the active frame (the
+// framing is the truth; it is never graded against itself). Prior frames ARE items:
 // a superseded framing is graded like anything else — in tension → prunes/decays,
 // still coherent → survives as history (the "before I thought x" trajectory).
-func collectSettleItems(res *traverse.Result, activeGistID string) []settleItem {
+func collectSettleItems(res *traverse.Result, activeFrameID string) []settleItem {
 	var items []settleItem
 	var walk func(r *traverse.Result)
 	walk = func(r *traverse.Result) {
@@ -115,8 +114,8 @@ func collectSettleItems(res *traverse.Result, activeGistID string) []settleItem 
 			return
 		}
 		if r.EdgeKey != "" { // non-root: has an edge whose A the grade writes
-			if fn, ok := r.Node.(*frameNode); ok && fn.cell.ID() != activeGistID {
-				if line := renderCellText(fn.cell, fn.rootGist); line != "" {
+			if fn, ok := r.Node.(*frameNode); ok && fn.cell.ID() != activeFrameID {
+				if line := renderCellText(fn.cell, fn.rootFrame); line != "" {
 					items = append(items, settleItem{edgeKey: r.EdgeKey, nodeID: r.Node.ID(), line: line})
 				}
 			}
@@ -131,10 +130,10 @@ func collectSettleItems(res *traverse.Result, activeGistID string) []settleItem 
 
 // gradeCoherence batch-grades the items' coherence to the framing in one inference, returning
 // item-number → alignment. Numbering is 1-based to match the prompt and ParseCoherenceGrades.
-func gradeCoherence(gist string, items []settleItem, infer InferFunc) map[int]float64 {
+func gradeCoherence(frame string, items []settleItem, infer InferFunc) map[int]float64 {
 	var b strings.Builder
 	b.WriteString("FRAMING: ")
-	b.WriteString(gist)
+	b.WriteString(frame)
 	b.WriteString("\n\nItems (each from the working set):\n")
 	for i, it := range items {
 		b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, it.line))

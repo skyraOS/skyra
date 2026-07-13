@@ -10,8 +10,9 @@ Items ordered by how much they block.
 
 Already decided (2026-07-12, recorded in the parent docs): universal querier
 contract; annotated-sentence format direction; summary-node shape; efficient ∥
-final parallel with join at atomic set-commit; three workers / three AIMD
-lineages.
+final parallel with join at atomic set-commit; three workers, with independent
+graded AIMD lineages only for Efficient and Final. Material/Formal remains
+structural and ungraded.
 
 ---
 
@@ -32,7 +33,7 @@ parser is the validator. The exact syntax must pin:
 - what parses to V (annotated referents) vs E (annotated relations), and what
   unannotated text is allowed (glue words only?)
 - parse-failure handling: retry-with-correction (motor's proven pattern) at the
-  same budget, or does a parse failure count as `contradicted` for AIMD?
+  same budget, or does a parse failure produce a negative AIMD grade?
   (Lean: retry-with-correction, bounded; malformed output is a format error,
   not an epistemic error — it must not tax specificity.)
 
@@ -56,20 +57,17 @@ parser is the validator. The exact syntax must pin:
 
 ---
 
-## 2. Set-fit aggregation — supported / contradicted / unknown
+## 2. Categorical set-fit aggregation
 
-**Blocks:** retain-or-requery, the AIMD update, cascade wiring.
+**Blocks:** nothing; categorical aggregation is rejected.
 
-How local relationship grades aggregate into one classification for the active
-set. Lean: **mass-weighted mean of graded-relationship signs, two thresholds;
-`unknown` when total graded mass is below a floor.** Substrate-computable, no
-LLM. To pin: the two thresholds; whether structural-edge grades and causal-edge
-grades aggregate together or the causal edges classify separately (a solid
-present compound with a failed efficient story should probably requery only the
-efficient lineage — the three-lineage decision suggests **per-lineage
-classification**, with "the set" = the present lineage's classification).
+Efficient and Final emit continuous grades in `[-1,1]`. One grade directly
+samples its one contextual edge EMA. If several grade samples must be reduced
+within one substrate episode, their mass-weighted mean remains continuous; it
+is never thresholded into supported/contradicted/unknown. Material/Formal does
+not participate in signed grading.
 
-**Decision:** _open_
+**Decision (2026-07-12): removed. Continuous grade or no-grade only.**
 
 ---
 
@@ -78,11 +76,15 @@ classification**, with "the set" = the present lineage's classification).
 **Blocks:** edge-defeat semantics, zero-interpretation.
 
 The minimum Evidence mass before a zero-trending edge counts as **defeated**
-rather than **untested**. Lean: **one constant, two uses** — the same floor
-that gates `unknown` in item 2: an edge cannot count as defeated until it has
-seen at least the mass that would have let its set count as graded at all.
+rather than **untested**. This interprets accumulated continuous EMA history;
+it does not classify an individual grade. An edge cannot count as defeated
+until it has received sufficient graded mass. No-grade contributes no mass.
 
-**Decision:** _open_
+**Decision (2026-07-12): no floor and no defeated category.** Defeat is exactly
+zero signed edge strength. Remaining amplitude is allocated in proportion to
+absolute edge strength; zero receives no excitation. An absent signed record is
+no alignment and also receives no excitation. Active-set grading reaches fresh
+edges directly by ID, so first grading does not depend on traversal.
 
 ---
 
@@ -97,7 +99,11 @@ fragment guarantees truncation-not-abstraction); B_max bounded by what the
 grading judge can actually verify per pass. Values are tuning parameters; the
 *shape* (mid-start, expressibility floor) is the decision.
 
-**Decision:** _open_
+**Decision (2026-07-12): shape and first-run defaults decided.** Controller
+configuration remains tunable. V0 starts with `B_min=32`, `B_max=256`,
+`B0=128`, `alpha=10`, and `beta=0.5`. Positive/negative continuous grade
+magnitude scales the AIMD update; grade zero and no-grade both hold while
+remaining distinct instrumentation events.
 
 ---
 
@@ -109,11 +115,13 @@ With the parallel fan-out, Efficient/Final targets are queried up front — so t
 old "dangling belief reference" question becomes: **may a fan-out worker emit a
 summary node with a deferred/empty subgraph** (a belief sentence awaiting its
 own compound), or must every emission be a full compound? Lean: **allow
-summary-node-only** at low budget — it is exactly the `unknown`-protected state,
+summary-node-only** at low budget — it is exactly the no-grade-protected state,
 it is what a coarse rung *means* for a causal belief, and it keeps the AIMD
 penalty path cheap. A later re-anchored query fills the compound in.
 
-**Decision:** _open_
+**Decision (2026-07-12): full subgraph required.** Efficient and Final workers
+must emit a complete annotated sentence whose parsed semantic subgraph is
+nonempty. Summary-only causal beliefs are forbidden; structure is the output.
 
 ---
 
@@ -135,11 +143,18 @@ new context." A requery mints a new set. Options:
   fresh-edge rule, but a within-lineage requery would zero causal learning
   every time the present description sharpens — probably wrong.
 
-Lean: **(A)**, stated as: the **lineage** is the edge's context; set-replacement
-*within* a lineage re-attaches; only a genuinely new lineage (new situation)
-mints fresh edges.
+**Decision (2026-07-12): option B.** A new Aitia set is a new contextual graph.
+Efficient/Final CausalNodes may be reused as offered referents, but the set
+always mints fresh causal edges. Signed state never transfers. The old set
+remains immutable history.
 
-**Decision:** _open_
+**Amended (2026-07-12, budget-lineage correction):** `QueryTokenBudget` is
+keyed by emitting lineage (the Efficient and Final voices), not by edge, so
+there is no edge-keyed budget to transfer. The lineage's budget deliberately
+survives set boundaries: edges carry contextual learning and die with their
+sets; the voice carries its earned specificity forward, which is what lets a
+negative grade produce the *next* emission at a reduced budget (the AIMD
+requery-at-reduced-budget loop).
 
 ---
 
@@ -162,7 +177,7 @@ lineages, evidence routing) arrives with multi-episode attention, not before.
 
 ---
 
-## 8. Birth activation for history traversal (deferred note — don't lose it)
+## 8. Birth activation for history traversal
 
 **Blocks:** nothing in v0 (the active set is reached by Slice pointer, not
 traversal). Bites when anything traverses **history** — the Praxis screen,
@@ -175,7 +190,11 @@ answers when it bites: birth stamps an initial Familiarity (a born edge was
 just active); or provenance/history walks are a separate non-proportional read
 (inspection, not recall). Parked, recorded so it isn't rediscovered mid-build.
 
-**Decision:** _deferred (v0-safe)_
+**Decision (2026-07-12): deterministic inspection, no invented activation.**
+Praxis/history/provenance walks follow typed ports without consulting signed
+strength, so they expose fresh, absent, and explicit-zero edges. Ordinary
+cognitive recall remains proportional to nonzero magnitude. Inspection does
+not stamp Familiarity and does not create an exploration floor.
 
 ---
 
@@ -191,7 +210,10 @@ rewards token-cheap reuse, and instructing "you should reuse" invites reuse as a
 compression cheat rather than a fit judgment. Prompt lists lineage candidates
 with their ids; says nothing about preferring them.
 
-**Decision:** _open_
+**Decision (2026-07-12): offer-only.** The structural prompt exposes active and
+observation `CausalNode` IDs but does not prefer composition. If the worker
+chooses `<compose>`, the parser requires at least one offered causal stable ID;
+`<requery>` is required to remain standalone.
 
 ---
 
@@ -231,16 +253,40 @@ inherits its purpose from what was live in the frame that produced it).
 
 ## 12. Causal distinction on incoming nodes — decomposition timing and depth
 
-**Blocks:** observation-born CausalNode minting for utterances (Phase 2's
-ingest path).
+**Blocks:** nothing; resolved for Phase 3's ingest path.
 
-Perceive returns decompose into knowledge subgraphs by code (already
-structured). Utterances need a parse — own small inference, or deferred until
-the node is first probed? And how much causal structure an incoming node gets
-stamped at birth ties back to items 10 and 11: there's a through line within
-the causal abstraction stack somewhere, and we shouldn't be hasty to draw it.
+Perceive returns may continue using their already structured representation.
+Utterances receive an eager, light LLM decomposition pass that emits the
+universal annotated sentence/subgraph contract. Structure is the purpose of
+the pass; reducing the event to speaker/text transport metadata is not a valid
+shortcut. The observation subgraph commits before grading fans out.
 
-**Decision:** _open_
+The observation-born `CausalNode` is the shared input. Material/Formal is not
+graded: its worker chooses retain, compose, or requery over the whole immutable
+subgraph. Only active Efficient and Final beliefs receive independent signed
+grades. Ordinary grading does not traverse composition ancestry. Missing belief
+positions spawn no grader. Incoming Final-cause birth stamping remains
+separately governed by item 11.
+
+**Decision (2026-07-12): eager light-LLM decomposition, then a structural
+Material/Formal operation plus Efficient/Final grading as described above._
+
+---
+
+## 13. Material/Formal grade-edge ownership
+
+**Blocks:** nothing; resolved by removing the premise.
+
+Material/Formal is the active immutable representation of the present
+situation, not an unbounded causal belief. It is never graded, owns no signed
+EMA, and requires no `PresentEdgeID`. Incoming observations drive a structural
+retain/compose/requery operation. Efficient and Final remain the two graded
+causal beliefs.
+
+Inherited edges continue to record composition ancestry only. They are never a
+fallback storage location for a Material/Formal grade.
+
+**Decision (2026-07-12): no Material/Formal grading or EMA._
 
 ---
 
@@ -253,5 +299,7 @@ the causal abstraction stack somewhere, and we shouldn't be hasty to draw it.
 
 ## Resolution order
 
-1 first (everything emits through it). Then 2+3 together (one floor), 4, 5, 6,
-7. 8 stays parked.
+1 first (everything emits through it). For Phase 4, settle the structural
+retain/compose/requery contract, followed by 6 and 9. Items 2+3 now apply only
+when Efficient/Final grading lands. Items 7, 12, and 13 are decided; 8 stays
+parked.

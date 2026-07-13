@@ -2,7 +2,7 @@
 // (traversal-implementation-plan.md): run a scripted multi-turn conversation on live
 // Codex with the full economy wired — the frame feeds self:predict, its edges are
 // crossed, and the midlevel coherence-settle grades each episode's nodes against its
-// fixed gist, writing alignment (A) onto the edges (closure→A is unwired). After every
+// fixed frame, writing alignment (A) onto the edges (closure→A is unwired). After every
 // turn it prints the edge-alignments so you can watch them MOVE — the accumulation loop,
 // and whether an edited episode's edges climb N across turns.
 //

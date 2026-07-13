@@ -7,23 +7,22 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/skyra"
-	dna "skyra-v1/src/skyra/skyra-dna"
 )
 
-// midlevel:frame — assemble the exchange from the entity index, infer the gist
-// (real inference), create the grouping. Ported from v1 midlevel.observeExternal
-// (cold-start create path). Sets root.Grouping so the membrane threads it to the
+// midlevel:frame — assemble the exchange from the entity index, infer the frame
+// (real inference), create the episode.observeExternal
+// (cold-start create path). Sets root.Episode so the membrane threads it to the
 // fan-out's predict workers. Reports "framed" / "empty".
 func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
-	gi := root.DNA().Groupings()
+	episodes := root.DNA().Episodes()
 	exchange := renderExchange(root.Nodes)
 	// the current surroundings — the active episode's traversed perceive records,
 	// normalized (freshest per entity). Lets midlevel frame purely SPATIAL episodes
-	// (the maze; sharpening the default grouping from sense data alone) — decision
+	// (the maze; sharpening the default episode from sense data alone) — decision
 	// 4, perceive-build-uncertainties.md. Read-only assembly: no crossing here (the
 	// settle crosses what it grades; self's assembly crosses what it feeds).
 	locations := ""
-	if g := gi.Active(); g != nil {
+	if g := episodes.Active(); g != nil {
 		locations = strings.Join(
 			renderLocations(FrameOf(g, settleFrameBudget, root.DNA().Activation(), root.DNA().Clock())), "\n")
 	}
@@ -36,110 +35,165 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "empty"
 		return
 	}
-	present := framePresent(exchange, locations, gi.OpenEpisodes())
+	activeSet, hasActive := root.DNA().ActiveSet()
+	activeID := ""
+	if hasActive {
+		activeID = activeSet.PresentID
+	}
+	offered := structuralCandidateIDs(root.DNA().CausalNodes(), activeID, root.ObservationID)
+	present := structuralPresent(root.DNA(), exchange, locations, activeID, root.ObservationID, offered)
 	resp, err := infer(frameOpSystem, present)
 	if err != nil {
 		root.Condition = "empty" // a failed call frames nothing this cycle
 		return
 	}
-	op, id, gist, ok := ParseFrameOp(resp)
-	if !ok {
-		root.Condition = "empty"
-		return
-	}
-
-	// The querier contract (Phase 1): the gist is an ANNOTATED sentence; the
-	// subgraph is parsed from it (the parser is the validator). Malformed
-	// annotation gets bounded retry-with-correction — a format error, not an
-	// epistemic error (no AIMD tax; the budget controller lands in Phase 3).
-	parsed, perr := ParseAnnotated(gist)
+	op, parsed, perr := validateStructuralOp(root.DNA().CausalNodes(), resp, hasActive, offered)
 	for attempt := 1; perr != nil && attempt <= parseMaxRetries; attempt++ {
-		resp, err = infer(frameOpSystem, present+"\n\n---\n"+CorrectionMessage(gist, perr))
+		resp, err = infer(frameOpSystem, present+"\n\n---\n"+StructuralCorrectionMessage(resp, perr))
 		if err != nil {
 			break
 		}
-		op2, id2, gist2, ok2 := ParseFrameOp(resp)
-		if !ok2 {
-			continue
-		}
-		op, id, gist = op2, id2, gist2
-		parsed, perr = ParseAnnotated(gist)
+		op, parsed, perr = validateStructuralOp(root.DNA().CausalNodes(), resp, hasActive, offered)
 	}
 	ts := root.DNA().Tick()
 
 	// Sentence + subgraph commit transactionally. A format failure is returned to
 	// the LLM at the same epistemic budget; after bounded retries, commit neither
-	// the legacy gist nor the Aitia set. The previous active state remains valid.
+	// the active frame or Aitia set. The previous active state remains valid.
 	if perr != nil {
 		debug.Being("skyra", "querier", fmt.Sprintf("annotation failed after retries (%v) — retaining active state", perr))
 		root.Condition = "query-format-error"
 		return
 	}
-	comp := root.DNA().CausalNodes().Persist(parsed, ts)
-	gist = parsed.Sentence
-
-	// EDIT: mint a NEW gist on the existing episode (the sequence — the prior gist
-	// stays and decays as "before I thought x"; the episode continues, so its edges
-	// persist and re-grade — the compounding fix).
-	if op == "edit" {
-		if g := gi.Edit(id, gist, ts); g != nil {
-			root.Grouping = g
-			debug.Being("skyra", "midlevel", fmt.Sprintf("edit %s gist=%q", id, gist))
+	if op == StructuralRetain {
+		root.Episode = episodes.Active()
+		if activeSet.EfficientEdgeID == "" || activeSet.FinalEdgeID == "" {
+			set, err := buildFullCausalSet(root.DNA(), activeID, ts)
+			if err != nil {
+				debug.Being("skyra", "causal", fmt.Sprintf("expansion failed: %v — retaining prior active state", err))
+				root.Condition = "causal-format-error"
+				return
+			}
+			root.DNA().ActivateSet(set.ID)
 		}
+		debug.Being("skyra", "querier", fmt.Sprintf("retain causal-node %s", activeID))
+	} else {
+		comp := root.DNA().CausalNodes().Persist(parsed, ts)
+		frame := parsed.Sentence
+		set, err := buildFullCausalSet(root.DNA(), comp.Cell.ID(), ts)
+		if err != nil {
+			debug.Being("skyra", "causal", fmt.Sprintf("expansion failed: %v — retaining prior active state", err))
+			root.Condition = "causal-format-error"
+			return
+		}
+		if activeEpisode := episodes.Active(); activeEpisode != nil {
+			root.Episode = episodes.Edit(activeEpisode.ID(), frame, ts)
+		}
+		if root.Episode == nil {
+			episodeID := fmt.Sprintf("%s:episode:%d", root.DNA().BeingID(), ts)
+			root.Episode = episodes.Create(episodeID, frame, ts)
+		}
+		if op == StructuralCompose && root.ObservationID != "" {
+			attachCompositionEvidence(root.DNA().CausalNodes(), comp.Cell.ID(), root.ObservationID)
+		}
+		root.DNA().ActivateSet(set.ID)
+		if g := latestFrame(root.Episode); g != nil {
+			g.SetContent(Frame{Text: frame, Timestamp: ts})
+		}
+		debug.Being("skyra", "querier", fmt.Sprintf("%s causal-node %s: %q V=%d E=%d → set %s active",
+			op, comp.Cell.ID(), frame, len(comp.Parents), len(parsed.Edges), set.ID))
 	}
-	// NEW (or an edit against an unknown id): open a fresh episode.
-	if root.Grouping == nil {
-		groupID := fmt.Sprintf("%s:g:%d", root.DNA().BeingID(), ts)
-		root.Grouping = gi.Create(groupID, gist, ts) // Create sets it active
-		debug.Being("skyra", "midlevel", fmt.Sprintf("new %s gist=%q", groupID, gist))
-	}
-
-	// Commit the minimal-Aitia side: mint the set around the CausalNode, activate
-	// it on the Slice (atomic replacement — retain-or-requery's requery half),
-	// and cross-link the spine gist to its canonical CausalNode.
-	set := root.DNA().CausalNodes().MintSet(comp.Cell.ID(), ts)
-	root.DNA().ActivateSet(set.ID)
-	if g := latestGist(root.Grouping); g != nil {
-		g.SetContent(dna.Gist{Text: gist, Timestamp: ts, CausalNodeID: comp.Cell.ID()})
-	}
-	debug.Being("skyra", "querier", fmt.Sprintf("causal-node %s: %q V=%d E=%d → set %s active",
-		comp.Cell.ID(), gist, len(comp.Parents), len(parsed.Edges), set.ID))
 
 	consolidateInteraction(root) // hang the exchange on the episode + entity→episode
 
-	// The coherence-settle: with the gist now FIXED, grade the episode's nodes against it and
+	// The coherence-settle: with the frame now FIXED, grade the episode's nodes against it and
 	// write alignment (A) onto their edges, pruning misfits until it plateaus. midlevel
 	// withholds its frame until here — the settle is the sole writer of A (active-grouping.md).
-	passes := coherenceSettle(root.Grouping, root.DNA().Activation(), ts, infer)
-	debug.Being("skyra", "midlevel", fmt.Sprintf("settled %s in %d passes", root.Grouping.ID(), passes))
+	passes := coherenceSettle(root.Episode, root.DNA().Activation(), ts, infer)
+	debug.Being("skyra", "midlevel", fmt.Sprintf("settled %s in %d passes", root.Episode.ID(), passes))
 
 	root.Condition = "framed"
 }
 
+func buildFullCausalSet(d *DNA, presentID string, ts int) (AitiaSet, error) {
+	efficientParsed, finalParsed, err := expandCausalBeliefs(d, presentID)
+	if err != nil {
+		return AitiaSet{}, err
+	}
+	efficient := d.CausalNodes().Persist(efficientParsed, ts)
+	final := d.CausalNodes().Persist(finalParsed, ts)
+	return d.CausalNodes().MintFullSet(presentID, efficient.Cell.ID(), final.Cell.ID(), ts)
+}
+
+func validateStructuralOp(ci *CausalNodes, raw string, hasActive bool, offered map[string]float64) (string, ParsedSubgraph, error) {
+	op, annotated, ok := ParseStructuralOp(raw)
+	if !ok {
+		return "", ParsedSubgraph{}, fmt.Errorf("expected exactly one <retain/>, <compose>...</compose>, or <requery>...</requery> operation")
+	}
+	if op == StructuralRetain {
+		if !hasActive {
+			return "", ParsedSubgraph{}, fmt.Errorf("retain requires an active Material/Formal subgraph")
+		}
+		return op, ParsedSubgraph{}, nil
+	}
+	parsed, err := ParseAnnotated(annotated)
+	if err != nil {
+		return "", ParsedSubgraph{}, err
+	}
+	causalRefs := 0
+	for _, node := range parsed.Nodes {
+		if node.StableID != "" && ci.Get(node.StableID) != nil {
+			if _, allowed := offered[node.StableID]; !allowed {
+				return "", ParsedSubgraph{}, fmt.Errorf("CausalNode %q was not offered in this structural pass", node.StableID)
+			}
+			causalRefs++
+		}
+	}
+	if op == StructuralCompose && causalRefs == 0 {
+		return "", ParsedSubgraph{}, fmt.Errorf("compose must reference at least one existing CausalNode by stable ID")
+	}
+	if op == StructuralRequery && causalRefs != 0 {
+		return "", ParsedSubgraph{}, fmt.Errorf("requery must emit a standalone subgraph without CausalNode references")
+	}
+	return op, parsed, nil
+}
+
+func StructuralCorrectionMessage(raw string, err error) string {
+	return fmt.Sprintf("Your previous response was:\n%s\n\nIt was invalid: %v. Re-emit the same decision as exactly one operation: <retain/>, <compose>annotated sentence</compose>, or <requery>annotated sentence</requery>. Compose must cite an offered CausalNode ID; requery must be standalone.", raw, err)
+}
+
+func attachCompositionEvidence(ci *CausalNodes, presentID, observationID string) {
+	for _, record := range ci.EdgesOf(presentID) {
+		if record.Kind == EdgeInherited {
+			_ = ci.AttachEvidence(record.ID, observationID)
+		}
+	}
+}
+
 // consolidateInteraction attaches the just-arrived interaction to the framed
-// episode's CURRENT gist (records belong to the framing they arrived under) and
+// episode's CURRENT frame (records belong to the framing they arrived under) and
 // wires the entity → episode edge — so the exchange lives on the spine the frame
 // walks (into the frame + economy), not only in the entity index.
 func consolidateInteraction(root *EphemeralRoot) {
-	if root.Grouping == nil {
+	if root.Episode == nil {
 		return
 	}
-	gist := latestGist(root.Grouping)
-	if gist == nil {
+	frame := latestFrame(root.Episode)
+	if frame == nil {
 		return
 	}
 	node, entity, ok := root.Nodes.Latest()
 	if !ok {
 		return
 	}
-	root.DNA().Groupings().AddChild(gist, gist.ID()+"→"+node.ID(), node)
-	root.Nodes.LinkGrouping(entity, root.Grouping)
+	root.DNA().Episodes().AddChild(frame, frame.ID()+"→"+node.ID(), node)
+	root.Nodes.LinkEpisode(entity, root.Episode)
 }
 
 // framePresent renders the framing-op present: the exchange + the current
 // surroundings (normalized perceived locations, when present) + the open episodes
 // the op decides edit-or-new against.
-func framePresent(exchange, locations string, episodes []struct{ ID, Gist string }) string {
+func framePresent(exchange, locations string, episodes []struct{ ID, Frame string }) string {
 	var b strings.Builder
 	if locations != "" {
 		b.WriteString("Surroundings:\n")
@@ -157,7 +211,91 @@ func framePresent(exchange, locations string, episodes []struct{ ID, Gist string
 		b.WriteString("(none yet — this is the first exchange → open a <new> one)")
 	} else {
 		for _, e := range episodes {
-			b.WriteString(fmt.Sprintf("[id=%s] %s\n", e.ID, e.Gist))
+			b.WriteString(fmt.Sprintf("[id=%s] %s\n", e.ID, e.Frame))
+		}
+	}
+	return b.String()
+}
+
+func structuralPresent(d *DNA, exchange, locations, activeID, observationID string, offered map[string]float64) string {
+	var b strings.Builder
+	if locations != "" {
+		b.WriteString("SURROUNDINGS:\n")
+		b.WriteString(locations)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("EXCHANGE:\n")
+	if exchange == "" {
+		b.WriteString("(none)\n")
+	} else {
+		b.WriteString(exchange)
+	}
+	b.WriteString("\nACTIVE MATERIAL/FORMAL:\n")
+	if activeID == "" {
+		b.WriteString("(none — cold start requires requery)\n")
+	} else {
+		b.WriteString(renderCausalStructure(d.CausalNodes(), activeID))
+	}
+	b.WriteString("\nOBSERVATION SUBGRAPH:\n")
+	if observationID == "" {
+		b.WriteString("(none)\n")
+	} else {
+		b.WriteString(renderCausalStructure(d.CausalNodes(), observationID))
+	}
+	b.WriteString("\nOFFERED COMPOSITION CANDIDATES:\n")
+	ids := make([]string, 0, len(offered))
+	for id := range offered {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		b.WriteString(fmt.Sprintf("[candidate=%s amplitude=%.4f] %s\n", id, offered[id], causalSentence(d.CausalNodes().Get(id))))
+	}
+	if len(ids) == 0 {
+		b.WriteString("(none)\n")
+	}
+	return b.String()
+}
+
+func structuralCandidateIDs(ci *CausalNodes, activeID, observationID string) map[string]float64 {
+	scores := map[string]int{}
+	if query, ok := ci.QueryOf(observationID); ok {
+		for _, candidate := range ci.Candidates(query) {
+			scores[candidate.CausalNodeID] = candidate.Occurrences
+		}
+	}
+	// The active and observation nodes are always legal composition referents,
+	// even when reverse retrieval has no overlap score for one of them.
+	for _, id := range []string{activeID, observationID} {
+		if id != "" && scores[id] == 0 {
+			scores[id] = 1
+		}
+	}
+	total := 0
+	for _, score := range scores {
+		total += score
+	}
+	out := map[string]float64{}
+	if total == 0 {
+		return out
+	}
+	for id, score := range scores {
+		out[id] = float64(score) / float64(total)
+	}
+	return out
+}
+
+func renderCausalStructure(ci *CausalNodes, id string) string {
+	cell := ci.Get(id)
+	if cell == nil {
+		return fmt.Sprintf("[id=%s] (missing)\n", id)
+	}
+	content, _ := cell.Content().(CausalNodeContent)
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("[id=%s] %s\n", id, content.Sentence))
+	for _, edge := range ci.EdgesOf(id) {
+		if edge.Kind == EdgeStructural {
+			b.WriteString(fmt.Sprintf("  %s --%s--> %s\n", edge.FromID, edge.Label, edge.ToID))
 		}
 	}
 	return b.String()
@@ -176,11 +314,11 @@ func renderExchange(ei *NodeRegistry) string {
 	var lines []line
 	for _, e := range ei.Snapshot() {
 		for _, c := range e.Children() {
-			mc, ok := c.(*dna.MemoryCell)
+			mc, ok := c.(*MemoryCell)
 			if !ok {
 				continue
 			}
-			if rec, ok := mc.Content().(dna.InteractionRecord); ok {
+			if rec, ok := mc.Content().(InteractionRecord); ok {
 				lines = append(lines, line{rec.Timestamp, fmt.Sprintf("[t%d] %s: %s", rec.Timestamp, rec.From, rec.Utterance)})
 			}
 		}
@@ -194,34 +332,26 @@ func renderExchange(ei *NodeRegistry) string {
 	return b.String()
 }
 
-// coldStartSystem — the framing prompt (ported verbatim from v1).
+// coldStartSystem — the framing prompt.
 const coldStartSystem = "You are an evolving being reading a live exchange. In one short " +
 	"phrase, predict what this exchange is about and what you should be trying to do. " +
 	"Respond with only the tag: <label>your framing</label>"
 
-// frameOpSystem — the edit/new framing operator (active-grouping.md). Decides whether the
-// exchange CONTINUES an open episode (edit + sharpened gist) or STARTS a new one, leaning
-// toward continue (islands are the failure to avoid). The gist is truth.
+// frameOpSystem is the ungraded Material/Formal structural controller.
 const frameOpSystem = "You are an evolving being organizing your own memory. You are given " +
-	"the recent EXCHANGE (what was just said), your current SURROUNDINGS (perceived locations, " +
-	"when present), and a list of OPEN EPISODES you are already holding — each a short gist of " +
-	"an ongoing thread, with an id.\n\n" +
-	"Decide whether the exchange CONTINUES one of the open episodes or STARTS a new one.\n\n" +
-	"- If it continues an episode, reply:  <edit id=\"THE-ID\">annotated sentence</edit>\n" +
-	"    (restate that episode's gist to account for what just happened)\n" +
-	"- If it is a new thread, reply:        <new>annotated sentence</new>\n\n" +
-	"PREFER continuing an episode when the exchange plausibly extends it; open a new one only " +
-	"when the topic GENUINELY shifts.\n\n" +
-	"The gist is ONE COMPLETE ANNOTATED SENTENCE — your claim about what this moment is and " +
-	"what you should be doing, with its structure marked inline:\n" +
+	"the OBSERVATION SUBGRAPH and the ACTIVE MATERIAL/FORMAL representation, when one exists. " +
+	"Material/Formal is structural and ungraded. Choose exactly one operation:\n\n" +
+	"- <retain/> when the active representation already fits without structural change.\n" +
+	"- <compose>annotated sentence</compose> when the observation extends it. Compose MUST " +
+	"reference at least one offered CausalNode using [ordinal=causal:id].\n" +
+	"- <requery>annotated sentence</requery> when no active representation exists or replacement " +
+	"is required. Requery MUST be standalone with no CausalNode stable reference.\n\n" +
+	"For compose/requery, emit ONE COMPLETE ANNOTATED SENTENCE:\n" +
 	"- mark each referent with an ordinal:  michael[1]  or  {the skyra project}[2]\n" +
 	"- mark each relationship on its verb/word:  asked[1→2]\n" +
 	"- reuse an ordinal to re-reference the same thing:  michael[1] ... he[1]\n" +
 	"Every referent gets a node annotation; every asserted relationship gets an edge " +
-	"annotation; plain connecting words stay unannotated.\n\n" +
-	"Example: <new>michael[1] wants[1→2] help[2] with[2→3] {the skyra project}[3], and " +
-	"skyra[4] should assist[4→3]</new>\n\n" +
-	"Reply with only the one tag."
+	"annotation; plain connecting words stay unannotated. Reply with only the operation."
 
 // coherenceSystem — the settle's batch coherence grader (active-grouping.md), adapted from
 // the comparator (validated to ~100k). Grades each item's coherence to the FRAMING (truth);
