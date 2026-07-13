@@ -349,3 +349,42 @@ func TestSignedStoreMechanics(t *testing.T) {
 		t.Fatal("grade counts")
 	}
 }
+
+// The 2026-07-13 live-run failure class: verb-group particles. Brace-edges
+// carry multi-word relations; particles are forgiven only ADJACENT to an
+// annotated edge; a bare copula still fails (no silent relation drop).
+func TestParseVerbGroupsAndParticles(t *testing.T) {
+	// Brace-edge: multi-word relation label, correct direction, clean sentence.
+	p, err := ParseAnnotated("michael[1] {asked about}[1→2] {skyra's well-being}[2]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Edges) != 1 || p.Edges[0].Label != "asked about" || p.Edges[0].From != 1 || p.Edges[0].To != 2 {
+		t.Fatalf("brace-edge = %+v", p.Edges)
+	}
+	if p.Sentence != "michael asked about skyra's well-being" {
+		t.Fatalf("sentence = %q", p.Sentence)
+	}
+
+	// The exact shapes the live runs rejected, now legal via edge adjacency.
+	for _, sentence := range []string{
+		"michael[1] asked[1→2] about {skyra's well-being}[2]", // particle after edge
+		"michael[1] is testing[1→2] {a harness}[2]",           // auxiliary before edge
+		"skyra[1] will identify[1→2] {michael's location}[2]", // modal before edge
+		"{the observation}[1] records[1→2] that michael[2]",   // complementizer after edge
+	} {
+		if _, err := ParseAnnotated(sentence); err != nil {
+			t.Fatalf("%q should parse via edge-adjacent particle: %v", sentence, err)
+		}
+	}
+
+	// No adjacent edge → particles stay errors: a bare copula can never
+	// silently drop the relationship.
+	if _, err := ParseAnnotated("streets[1] are wet[2]"); err == nil {
+		t.Fatal("bare copula between two nodes must fail, not silently drop the relation")
+	}
+	// Particles forgiven only in the edge-adjacent gap, not sentence-wide.
+	if _, err := ParseAnnotated("michael[1] greeted[1→2] skyra[2] happily with vigor"); err == nil {
+		t.Fatal("non-particle unannotated token must still fail")
+	}
+}

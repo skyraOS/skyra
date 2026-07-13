@@ -78,7 +78,8 @@ const observationDecompositionSystem = "You decompose one observed utterance int
 	"Stand on the most specific ground firmly supported by the observation; do not diagnose, " +
 	"invent motives, or reduce the event to speaker/text transport metadata. Mark every referent " +
 	"with an ordinal, such as michael[1] or {the outage}[2]. Mark every relationship on its word, " +
-	"such as reported[1→2]. Every meaningful referent and relationship must be represented in " +
+	"such as reported[1→2]; multi-word verb groups take braces, such as {asked about}[1→2] or " +
+	"{is testing}[1→2]. Every meaningful referent and relationship must be represented in " +
 	"the graph. Plain words may only be grammatical glue."
 
 // classify forks the sensory lane (the workflow's intake fork). A perceive-return

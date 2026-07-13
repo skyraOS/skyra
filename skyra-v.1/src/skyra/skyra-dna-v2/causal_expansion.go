@@ -143,6 +143,7 @@ func offerLabel(d *DNA, id, presentID string) string {
 const causalBeliefFormat = "Annotated sentence format:\n" +
 	"- mark each referent with an ordinal:  michael[1]  or  {the well-being}[2]\n" +
 	"- mark each relationship on its verb/word:  asked[1→2]\n" +
+	"- multi-word verb groups take braces:  {asked about}[1→2]  {will identify}[1→2]\n" +
 	"- reuse an ordinal to re-reference the same thing:  michael[1] ... he[1]\n" +
 	"- cite an OFFERED CausalNode by binding its id to an ordinal:  {that exchange}[1=causal:3:7]\n" +
 	"Every referent gets a node annotation; every asserted relationship gets an edge " +

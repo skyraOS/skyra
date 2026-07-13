@@ -21,10 +21,16 @@ import (
 //	        word[k=stable:id]  — explicit reuse (the composition hook:
 //	                             {the outage}[1=causal:g42])
 //	edges:  verb[a→b]          — the annotated word/phrase is the edge label;
+//	        {asked about}[a→b] — multi-word verb groups take braces;
 //	                             ASCII -> accepted; multi-arc = multiple edges
 //	coreference: repeating an ordinal re-references the node
 //	             (michael[1] … he[1]); first occurrence's label names it
-//	glue:   unannotated text — ignored for the graph, kept in the sentence
+//	glue:   unannotated text — ignored for the graph, kept in the sentence.
+//	        Particles (auxiliaries/prepositions: "is", "will", "about", …) are
+//	        forgiven ONLY in gaps adjacent to an annotated edge — they ride the
+//	        relation ("asked[1→3] about", "will identify[1→2]"). A particle with
+//	        no adjacent edge stays an error, so a bare copula can never silently
+//	        drop a relationship (streets[1] are wet[2] still fails).
 //
 // Parse failures return a ParseErrors carrying every problem found, so the
 // retry-with-correction prompt (bounded, NO AIMD tax — a format error is not an
@@ -81,6 +87,24 @@ var glueWords = map[string]bool{
 	"to": true, "and": true, "or": true, "but": true,
 }
 
+// particleWords are forgiven only in gaps ADJACENT to an edge annotation —
+// the auxiliary/preposition riding an annotated verb ("is testing[1→4]",
+// "asked[1→3] about"). The live-run failure class (2026-07-13): the model's
+// sense of grammatical glue includes verb-group particles; the parser's did
+// not. Adjacency keeps the no-silent-drop property: one of these standing
+// alone (a bare copula as the only relation) still fails the parse.
+var particleWords = map[string]bool{
+	"is": true, "are": true, "was": true, "were": true,
+	"be": true, "been": true, "being": true,
+	"will": true, "would": true, "shall": true, "should": true,
+	"can": true, "could": true, "may": true, "might": true, "must": true,
+	"has": true, "have": true, "had": true,
+	"do": true, "does": true, "did": true,
+	"about": true, "of": true, "with": true, "for": true,
+	"at": true, "in": true, "on": true, "by": true, "from": true,
+	"as": true, "that": true,
+}
+
 // ParseAnnotated parses one annotated sentence into its subgraph. It returns a
 // *ParseErrors listing every problem when the emission is malformed.
 func ParseAnnotated(raw string) (ParsedSubgraph, error) {
@@ -89,11 +113,13 @@ func ParseAnnotated(raw string) (ParsedSubgraph, error) {
 
 	matches := annotRe.FindAllStringSubmatch(raw, -1)
 	byOrdinal := map[int]*ParsedNode{}
-	for _, m := range matches {
+	isEdge := make([]bool, len(matches))
+	for i, m := range matches {
 		label := normalizeLabel(firstNonEmpty(m[1], m[2]))
 		body := strings.TrimSpace(m[3])
 
 		if em := edgeBodyRe.FindStringSubmatch(body); em != nil {
+			isEdge[i] = true
 			from, _ := strconv.Atoi(em[1])
 			to, _ := strconv.Atoi(em[2])
 			if label == "" {
@@ -138,13 +164,17 @@ func ParseAnnotated(raw string) (ParsedSubgraph, error) {
 
 	// Inspect only text OUTSIDE annotations. Any non-glue word there is semantic
 	// content with no node/edge representation, violating sentence↔subgraph
-	// correspondence. Report all omissions in one correction pass.
+	// correspondence. Particles are forgiven only where an edge annotation
+	// borders the gap. Report all omissions in one correction pass.
 	cursor := 0
-	for _, loc := range annotRe.FindAllStringIndex(raw, -1) {
-		collectUnannotated(raw[cursor:loc[0]], &pe)
+	locs := annotRe.FindAllStringIndex(raw, -1)
+	for i, loc := range locs {
+		edgeAdjacent := (i > 0 && isEdge[i-1]) || isEdge[i]
+		collectUnannotated(raw[cursor:loc[0]], edgeAdjacent, &pe)
 		cursor = loc[1]
 	}
-	collectUnannotated(raw[cursor:], &pe)
+	trailingEdge := len(isEdge) > 0 && isEdge[len(isEdge)-1]
+	collectUnannotated(raw[cursor:], trailingEdge, &pe)
 
 	// every edge endpoint must be a declared node ordinal (whole-sentence scan
 	// already done, so forward references are fine).
@@ -171,12 +201,17 @@ func ParseAnnotated(raw string) (ParsedSubgraph, error) {
 	return out, nil
 }
 
-func collectUnannotated(gap string, pe *ParseErrors) {
+func collectUnannotated(gap string, edgeAdjacent bool, pe *ParseErrors) {
 	for _, word := range wordRe.FindAllString(gap, -1) {
-		if normalized := strings.ToLower(word); !glueWords[normalized] {
-			pe.Problems = append(pe.Problems,
-				fmt.Sprintf("unannotated semantic token %q — mark it as a node or relationship", word))
+		normalized := strings.ToLower(word)
+		if glueWords[normalized] {
+			continue
 		}
+		if edgeAdjacent && particleWords[normalized] {
+			continue // a particle riding the adjacent annotated relation
+		}
+		pe.Problems = append(pe.Problems,
+			fmt.Sprintf("unannotated semantic token %q — mark it as a node or relationship, or wrap the verb group: {asked about}[1→2]", word))
 	}
 }
 
@@ -214,6 +249,7 @@ func CorrectionMessage(raw string, err error) string {
 			"Re-emit the SAME claim as one annotated sentence. Format:\n"+
 			"- mark each referent:  michael[1]  or  {the skyra project}[2]\n"+
 			"- mark each relationship on its verb/word:  asked[1→2]\n"+
+			"- multi-word verb groups take braces:  {asked about}[1→2]  {will identify}[1→2]\n"+
 			"- reuse an ordinal to re-reference:  michael[1] ... he[1]\n"+
 			"- known ids may bind explicitly:  michael[1=entity:michael]\n"+
 			"Every referent needs a node annotation; every relationship needs an edge annotation.",
