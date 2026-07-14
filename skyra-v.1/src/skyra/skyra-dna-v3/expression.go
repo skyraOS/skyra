@@ -10,6 +10,9 @@ import "fmt"
 // observation->projection cycle projects it again. That keeps the parser and the scheduler
 // trivial, permanently.
 type Expression struct {
+	// ID is assigned by the expression graph when the emission is placed.
+	ID string
+
 	// Framing is the emission's own system prompt — the summary under which these bets
 	// were made. It is graded by the accuracy of the predictions it produced, which is how
 	// a framing earns (or loses) its place in future retrieval. The model never rewrites a

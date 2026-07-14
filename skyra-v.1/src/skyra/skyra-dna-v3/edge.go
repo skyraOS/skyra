@@ -33,7 +33,9 @@ type Edge struct {
 	// Target is the world state, by Triple.Key().
 	Target string
 
-	P     float64 // EMA of P(Target | Source). the prior AND the retrieval weight.
+	P float64 // EMA of P(Target | Source). the prior AND the retrieval weight.
+	//        NOTE: P is only meaningful once N > 0. A fresh edge has NO OPINION —
+	//        see prior(). Reading P=0 as "this never happens" is a real and vicious bug.
 	N     int     // trials — how many times this edge has come due. sets α and confidence.
 	F     float64 // recency/use, lazily decayed. stale edges fall out of retrieval.
 	Flast int     // tick of the last F update
@@ -60,8 +62,9 @@ const (
 // TruthUnknown MUST NOT move the EMA. An unresolved expect is not a failed one — the being
 // simply has not looked. Treating "I didn't check" as "it didn't happen" would drag every
 // edge in the graph toward zero, which is the single most destructive bug available in this
-// design. This is why observations must declare their SCOPE: inside it, absence is falsity;
-// outside it, absence is silence.
+// design. It is why every expect carries a `within`: at maturity the settler goes and LOOKS,
+// so absence becomes a fact rather than a silence, and UNKNOWN is a waiting room rather than
+// a destination.
 func (e *Edge) Observe(outcome Truth, tick int) {
 	if outcome == TruthUnknown {
 		return
@@ -70,7 +73,13 @@ func (e *Edge) Observe(outcome Truth, tick int) {
 	if outcome == TruthTrue {
 		o = 1.0
 	}
-	alpha := math.Max(alphaFloor, 1/float64(e.N+1))
+	// 1/(N+2), not 1/(N+1): a SINGLE observation must not produce certainty. Starting from an
+	// uninformative 0.5, the first update moves P to 0.75, not to 1.0 — so the second bet is not
+	// graded against a prior of "always" on the strength of one sample.
+	if e.N == 0 {
+		e.P = 0.5
+	}
+	alpha := math.Max(alphaFloor, 1/float64(e.N+2))
 	e.P += alpha * (o - e.P)
 	e.N++
 	e.F = e.readF(tick) + 1
@@ -98,11 +107,28 @@ func (e *Edge) Grade(claim float64, outcome Truth, mode Mode) float64 {
 	if outcome == TruthUnknown {
 		return 0 // unresolved is not wrong. no grade.
 	}
-	pc, pp := clamp(claim), clamp(e.P)
+	pc, pp := clamp(claim), clamp(e.prior())
 	if outcome == TruthFalse {
 		pc, pp = 1-pc, 1-pp
 	}
 	return (math.Log(pc) - math.Log(pp)) * mode.Weight()
+}
+
+// prior is what the being ACTUALLY BELIEVES about this edge — and an unmeasured edge believes
+// nothing.
+//
+// P=0 with N=0 does NOT mean "this never happens." It means "I have no idea," and grading against
+// it would hand out an enormous bonus for "beating" a base rate that was never measured:
+//
+//	log(0.95) − log(0.001) = +6.86     ← nonsense. the graph had no opinion to beat.
+//
+// So: no evidence, no opinion. An unmeasured edge grades against 0.5, and the model earns nothing
+// for agreeing with a coin flip.
+func (e *Edge) prior() float64 {
+	if e.N == 0 {
+		return 0.5
+	}
+	return e.P
 }
 
 // RetrievalWeight ranks this edge as precedent: how reliably it produces its target, weighted
