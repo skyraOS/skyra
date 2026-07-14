@@ -157,7 +157,10 @@ PREDICATES YOU CAN CHECK:
   file:/p   contains:<text>     true | false     (the text goes IN the predicate)
   dir:/     status              ok | failed      (of the last exec)
   build:/   status              ok | failed      (re-runs the build when checked)
-  build:/   output              <what failed>    (empty when ok)
+
+CURRENT WORLD STATE may also show  build:/ missing <name>  — a hint the world gives on a failed
+build, naming a file it still needs. Read it and act on it. Do not PREDICT it; it is not yours to
+claim, only the world's to report.
 
 Predicting anything else is pointless — nothing can check it.
 

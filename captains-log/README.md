@@ -6,6 +6,8 @@ Two kinds of entry:
 
 - **Activation phases** (`phase-NN-*.md`) — the core log. Each is a Skyra experiment run:
   what was set up, what was observed, what it means. Numbers-driven (see Format + Rules).
+  Experiment numbering runs in series: `.1xxx` was the comparator work (phases 03–06); `.2xxx`
+  is the `skyra-dna-v3` prediction-diff learning work, opening at `phase-07` / `.2001`.
 - **Field observations** (`observations/NN-*.md`) — qualitative observations of *existing*
   systems (e.g. an agentic harness), kept when they bear directly on the architecture.
   Not experiments, no debug numbers, no next phase — they deliberately break the

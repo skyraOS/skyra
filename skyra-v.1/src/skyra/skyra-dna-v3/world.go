@@ -56,20 +56,20 @@ func (w *World) Do(a Act) Outcome {
 // curve. The world does not lie about it: a failed build reports WHAT was missing, so the being can
 // learn the prerequisite from a real observation rather than being told.
 func (w *World) build(a Act) Outcome {
-	src, _ := w.resolve("app.src")
-	conf, _ := w.resolve("app.conf")
-	_, srcErr := os.Stat(src)
-	_, confErr := os.Stat(conf)
+	// A THREE-PART RECIPE the being is never told. The build reports the FIRST missing input, so the
+	// being discovers the recipe one prerequisite at a time — and precedent lets it front-load all
+	// three next time.
 	status, missing := "ok", ""
-	switch {
-	case srcErr != nil:
-		status, missing = "failed", "app.src"
-	case confErr != nil:
-		status, missing = "failed", "app.conf"
+	for _, need := range []string{"app.src", "app.conf", "app.lock"} {
+		path, _ := w.resolve(need)
+		if _, err := os.Stat(path); err != nil {
+			status, missing = "failed", need
+			break
+		}
 	}
 	return Outcome{Status: "succeeded", Effects: []Triple{
 		{Subject: "build:/", Predicate: "status", Object: status},
-		{Subject: "build:/", Predicate: "output", Object: missing},
+		{Subject: "build:/", Predicate: "missing", Object: missing},
 	}}
 }
 
