@@ -106,46 +106,48 @@ func parseAct(el element) (Act, error) {
 	return a, nil
 }
 
-// parseExpectLine reads:  <mode> <confidence> <within> <subject> <predicate> <object>
+// parseExpectLine reads:  <confidence> <within> <subject> <predicate> <object>
+//
+// THERE IS NO MODE TOKEN, and that is deliberate. Mode.Weight() is the GRADE MULTIPLIER, so a model
+// choosing its own mode would be choosing its own stakes — marking `interpret` on something
+// measurable cuts its losses to 0.3x, which lets a badly-calibrated model DAMPEN ITS OWN SIGNAL.
+// That is the exact failure this system exists to detect.
+//
+// Mode is a routing instruction for the incoming impulse: how does an observation resolve against
+// this claim? That is a question about the WORLD'S INSTRUMENTS, not the model's intent. The
+// substrate stamps it from the affordance registry. See affordance.go.
 //
 // The object is last and may be quoted, so it can carry spaces. Everything before it is a fixed
 // number of fields, which is what makes a single malformed line cheap to drop.
 func parseExpectLine(line string) (Triple, int, error) {
-	f, obj, err := split(line, 5)
+	f, obj, err := split(line, 4)
 	if err != nil {
 		return Triple{}, 0, err
 	}
-	mode, err := parseMode(f[0])
-	if err != nil {
-		return Triple{}, 0, err
-	}
-	conf, err := strconv.ParseFloat(f[1], 64)
+	conf, err := strconv.ParseFloat(f[0], 64)
 	if err != nil || conf < 0 || conf > 1 {
-		return Triple{}, 0, fmt.Errorf("confidence %q is not a probability in [0,1]", f[1])
+		return Triple{}, 0, fmt.Errorf("confidence %q is not a probability in [0,1]", f[0])
 	}
-	within, err := strconv.Atoi(f[2])
+	within, err := strconv.Atoi(f[1])
 	if err != nil || within <= 0 {
-		return Triple{}, 0, fmt.Errorf("within %q is not a positive number of traversals; a bet with no deadline is never settled", f[2])
+		return Triple{}, 0, fmt.Errorf("within %q is not a positive number of traversals; a bet with no deadline is never settled", f[1])
 	}
 	return Triple{
-		Mode: mode, Confidence: conf,
-		Subject: f[3], Predicate: f[4], Object: obj,
+		Confidence: conf,
+		Subject:    f[2], Predicate: f[3], Object: obj,
 	}, within, nil
 }
 
-// parseRequiresLine reads:  <mode> <subject> <predicate> <object>
+// parseRequiresLine reads:  <subject> <predicate> <object>
 //
-// No confidence and no within: a `requires` is a condition about NOW, not a bet about later.
+// No confidence, no within, no mode: a `requires` is a condition about NOW, not a bet about later,
+// and its mode is the world's to say, not the model's.
 func parseRequiresLine(line string) (Triple, error) {
-	f, obj, err := split(line, 3)
+	f, obj, err := split(line, 2)
 	if err != nil {
 		return Triple{}, err
 	}
-	mode, err := parseMode(f[0])
-	if err != nil {
-		return Triple{}, err
-	}
-	return Triple{Mode: mode, Subject: f[1], Predicate: f[2], Object: obj}, nil
+	return Triple{Subject: f[0], Predicate: f[1], Object: obj}, nil
 }
 
 // split takes n leading whitespace-separated fields, then treats the remainder as the object —
@@ -164,16 +166,6 @@ func split(line string, n int) ([]string, string, error) {
 		return nil, "", fmt.Errorf("empty object")
 	}
 	return head, rest, nil
-}
-
-func parseMode(s string) (Mode, error) {
-	switch Mode(s) {
-	case ModeExact:
-		return ModeExact, nil
-	case ModeInterpret:
-		return ModeInterpret, nil
-	}
-	return "", fmt.Errorf("unknown mode %q (want exact or interpret)", s)
 }
 
 // --- tolerant element scanning ---

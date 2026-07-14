@@ -147,12 +147,38 @@ existing scoring rule** once the edge learns `τ` (typical traversals to resolut
 **zero** against the base rate, and only betting *shorter than τ and being right* earns credit. Same
 machinery, no new mechanism. That is the argument for adding `τ` later rather than never.
 
-### Mode — two, and only two
+### Mode — DERIVED BY THE WORLD, never written by the model
 
 ```text
 exact      the incoming impulse is matched by VALUE COMPARISON
-interpret  the incoming impulse is run through the ALIGNER, then compared
+interpret  the decomposer read it out of an observation
 ```
+
+> **There is no mode token in the grammar. The substrate stamps it.**
+
+`Mode.Weight()` is the **grade multiplier** (`exact` ×1.0, `interpret` ×0.3). A model that chose its
+own mode would be choosing its own stakes:
+
+```text
+mark `interpret` on something MEASURABLE   → losses cut to 0.3x.  RISK REDUCTION.
+mark `exact` on something UNMEASURABLE     → 1.0x fidelity on a pure inference.
+```
+
+The first is the dangerous one. A **well**-calibrated model prefers `exact` (a bigger multiplier on a
+positive expectation). A **badly**-calibrated one prefers `interpret`, because it caps the damage
+when it is wrong — so **a bad model could dampen its own signal**, which is precisely the signal this
+system exists to measure.
+
+Mode is a *routing instruction for the incoming impulse* — a question about **the world's
+instruments**, not the model's intent. So the world answers it:
+
+```text
+mode = exact       iff the world exposes a perceive for (namespace, predicate)
+mode = interpret   otherwise
+```
+
+Deterministic, unfakeable, and sourced from the same affordance registry that seeds the cold-start
+present. See `src/skyra/skyra-dna-v3/affordance.go`.
 
 **`ask` is not a mode. `ask` is an expression** — an act that *produces* an observation. The
 interpretation of what it returns is a `requires` on a downstream expression. Dropping `ask` as a

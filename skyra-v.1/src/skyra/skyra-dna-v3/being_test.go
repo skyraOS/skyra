@@ -24,7 +24,7 @@ func TestCycleGradesAgainstRealWorld(t *testing.T) {
 		return `
 <framing>write the file</framing>
 <act id="a1" target="file:/hello.txt" primitive="write">hello world</act>
-<expect of="a1">  exact  0.90  1  file:/hello.txt  exists  true  </expect>
+<expect of="a1">  0.90  1  file:/hello.txt  exists  true  </expect>
 `
 	})
 
@@ -56,8 +56,8 @@ func TestWrongPredictionIsPunished(t *testing.T) {
 		return `
 <framing>claim a file exists that I never write</framing>
 <act id="a1" target="file:/real.txt" primitive="write">x</act>
-<expect of="a1">  exact  0.95  1  file:/real.txt   exists  true   </expect>
-<expect of="a1">  exact  0.95  1  file:/ghost.txt  exists  true   </expect>
+<expect of="a1">  0.95  1  file:/real.txt   exists  true   </expect>
+<expect of="a1">  0.95  1  file:/ghost.txt  exists  true   </expect>
 `
 	})
 	_, err := b.Run([]Triple{{Subject: "file:/real.txt", Predicate: "exists", Object: "true"}}, 3)
@@ -175,19 +175,19 @@ func TestPassesToClosureFalls(t *testing.T) {
 			return `
 <framing>seen this before — write it and verify</framing>
 <act id="a1" target="file:/out.txt" primitive="write">done</act>
-<expect of="a1">  exact  0.95  1  file:/out.txt  exists  true  </expect>`
+<expect of="a1">  0.95  1  file:/out.txt  exists  true  </expect>`
 		}
 		// cold: emit only the verify step first, leaving a hole
 		if call == 1 {
 			return `
 <framing>cold start — verify the output</framing>
-<act id="a1" target="dir:/" primitive="exec" requires="exact file:/out.txt exists true">ls out.txt</act>
-<expect of="a1">  exact  0.80  1  dir:/  status  ok  </expect>`
+<act id="a1" target="dir:/" primitive="exec" requires="file:/out.txt exists true">ls out.txt</act>
+<expect of="a1">  0.80  1  dir:/  status  ok  </expect>`
 		}
 		return `
 <framing>ground the hole: actually write the file</framing>
 <act id="a2" target="file:/out.txt" primitive="write">done</act>
-<expect of="a2">  exact  0.95  1  file:/out.txt  exists  true  </expect>`
+<expect of="a2">  0.95  1  file:/out.txt  exists  true  </expect>`
 	})
 
 	target := []Triple{{Subject: "file:/out.txt", Predicate: "exists", Object: "true"}}
@@ -248,7 +248,7 @@ func TestReport(t *testing.T) {
 		return `
 <framing>go</framing>
 <act id="a1" target="file:/a.txt" primitive="write">x</act>
-<expect of="a1">  exact  0.9  1  file:/a.txt  exists  true  </expect>`
+<expect of="a1">  0.9  1  file:/a.txt  exists  true  </expect>`
 	})
 	b.Run([]Triple{{Subject: "file:/a.txt", Predicate: "exists", Object: "true"}}, 3)
 	fmt.Println(b.Report())

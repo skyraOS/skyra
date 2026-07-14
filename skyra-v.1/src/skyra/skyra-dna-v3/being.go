@@ -20,6 +20,10 @@ type Being struct {
 	Obs   *ObservationGraph
 	Expr  *ExpressionGraph
 
+	// Aff is the world's instrument list, and it is what STAMPS every claim's Mode. The model does
+	// not get to choose its own grade multiplier — see affordance.go.
+	Aff *Affordances
+
 	// Infer is the ONE model call site in the system. Everything else is arithmetic.
 	Infer func(system, present string) (string, error)
 
@@ -45,6 +49,7 @@ func NewBeing(w *World, infer func(string, string) (string, error)) *Being {
 		World: w,
 		Obs:   NewObservationGraph(),
 		Expr:  NewExpressionGraph(),
+		Aff:   DefaultAffordances(),
 		Infer: infer,
 	}
 }
@@ -209,6 +214,7 @@ func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
 		// 4. DRAIN — place everything. Extra nodes the plan did not need are still gradeable bets.
 		b.seq++
 		e := res.Expression
+		b.Aff.Stamp(&e) // THE WORLD says what is measurable, not the model.
 		b.Expr.Place(fmt.Sprintf("e%d", b.seq), &e)
 		plan = append(plan, &e)
 	}

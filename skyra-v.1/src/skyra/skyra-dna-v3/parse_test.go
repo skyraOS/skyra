@@ -8,19 +8,19 @@ const goodEmission = `
 <act id="a1" target="file:/src/auth.go" primitive="write">func Authenticate() {}</act>
 
 <act id="a2" target="build:/src" primitive="compile"
-     requires="exact file:/src/auth.go exists true"/>
+     requires="file:/src/auth.go exists true"/>
 
 <act id="a3" target="being:michael" primitive="engage"
-     requires="exact test:auth_test.go status fail">The refactor broke two tests — revert?</act>
+     requires="test:auth_test.go status fail">The refactor broke two tests — revert?</act>
 
 <expect of="a1">
-  exact      0.95  1   file:/src/auth.go   exists    true
-  exact      0.90  1   file:/src/auth.go   contains  "func Authenticate"
+  0.95  1   file:/src/auth.go   exists    true
+  0.90  1   file:/src/auth.go   contains  "func Authenticate"
 </expect>
-<expect of="a2">  exact      0.85  3   build:/src          status    ok         </expect>
-<expect of="a3">  exact      0.99  2   being:michael       received  "revert?"  </expect>
-<expect of="a3">  interpret  0.40  8   being:michael       state     satisfied  </expect>
-<expect of="a1 a2">  exact  0.60  5   test:auth_test.go   status    pass       </expect>
+<expect of="a2">  0.85  3   build:/src          status    ok         </expect>
+<expect of="a3">  0.99  2   being:michael       received  "revert?"  </expect>
+<expect of="a3">  0.40  8   being:michael       state     satisfied  </expect>
+<expect of="a1 a2">  0.60  5   test:auth_test.go   status    pass       </expect>
 `
 
 func TestParse(t *testing.T) {
@@ -63,9 +63,13 @@ func TestParse(t *testing.T) {
 	if e.Expects[2].Within != 3 {
 		t.Errorf("within = %d, want 3", e.Expects[2].Within)
 	}
-	// interpret mode
-	if e.Expects[4].Mode != ModeInterpret {
-		t.Errorf("mode = %q, want interpret", e.Expects[4].Mode)
+	// MODE IS NOT THE MODEL'S TO SET. The parser leaves it empty; the substrate stamps it from the
+	// world's instruments. See TestAffordancesStampMode.
+	for i, x := range e.Expects {
+		if x.Mode != "" {
+			t.Errorf("expect %d came out of the parser with mode %q — the model does not get to "+
+				"choose its own grade multiplier", i, x.Mode)
+		}
 	}
 	// JOINT: cardinality on `of` is the edge's source cardinality
 	joint := e.Expects[5]
@@ -85,11 +89,11 @@ func TestParseDegradesGracefully(t *testing.T) {
 <framing>partly broken</framing>
 <act id="a1" target="file:/x" primitive="write">body</act>
 <expect of="a1">
-  exact   0.95  1   file:/x   exists   true
-  exact   BOGUS 1   file:/x   size     10
-  exact   0.90  0   file:/x   mode     644
-  banana  0.90  1   file:/x   owner    me
-  exact   0.80  2   file:/x   perms    rw
+  0.95  1   file:/x   exists   true
+  BOGUS 1   file:/x   size     10
+  0.90  0   file:/x   mode     644
+  0.90  BANANA   file:/x   owner    me
+  0.80  2   file:/x   perms    rw
 </expect>
 `)
 	if err != nil {
@@ -115,7 +119,7 @@ func TestParseSurvivesTruncation(t *testing.T) {
 	truncated := `
 <framing>ran out of tokens</framing>
 <act id="a1" target="file:/x" primitive="write">body</act>
-<expect of="a1">  exact  0.95  1  file:/x  exists  true  </expect>
+<expect of="a1">  0.95  1  file:/x  exists  true  </expect>
 <act id="a2" target="file:/y" primitive="wr`
 
 	res, err := Parse(truncated)
@@ -135,7 +139,7 @@ func TestValidateRejectsUnfalsifiableAct(t *testing.T) {
 	res, err := Parse(`
 <act id="a1" target="file:/x" primitive="write">body</act>
 <act id="a2" target="file:/y" primitive="write">body</act>
-<expect of="a1">  exact  0.95  1  file:/x  exists  true  </expect>
+<expect of="a1">  0.95  1  file:/x  exists  true  </expect>
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +153,7 @@ func TestValidateRejectsUnfalsifiableAct(t *testing.T) {
 func TestParseRejectsBetWithNoDeadline(t *testing.T) {
 	res, _ := Parse(`
 <act id="a1" target="file:/x" primitive="write">body</act>
-<expect of="a1">  exact  0.95  0  file:/x  exists  true  </expect>
+<expect of="a1">  0.95  0  file:/x  exists  true  </expect>
 `)
 	if len(res.Expression.Expects) != 0 {
 		t.Error("parser accepted an expect with within=0")

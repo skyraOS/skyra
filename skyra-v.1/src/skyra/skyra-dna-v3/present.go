@@ -112,21 +112,21 @@ FORMAT — reply with only this:
 <framing>one sentence: what you think is going on and what you are trying to do</framing>
 
 <act id="a1" target="file:/path" primitive="write">file contents</act>
-<act id="a2" target="dir:/" primitive="exec" requires="exact file:/path exists true">shell command</act>
+<act id="a2" target="dir:/" primitive="exec" requires="file:/path exists true">shell command</act>
 
-<expect of="a1">  exact  0.95  1  file:/path  exists  true  </expect>
-<expect of="a2">  exact  0.80  1  dir:/       status  ok    </expect>
+<expect of="a1">  0.95  1  file:/path  exists  true  </expect>
+<expect of="a2">  0.80  1  dir:/       status  ok    </expect>
 
 PRIMITIVES:  write (payload is the file body) · exec (payload is a shell command, runs in target dir)
 
-EXPECT LINE:  exact <confidence 0..1> <within> <subject> <predicate> <object>
+EXPECT LINE:  <confidence 0..1> <within> <subject> <predicate> <object>
   confidence  your probability that this comes true.
   within      how many ticks until it should be checked. 1 = immediately after the act.
 
 PREDICATES YOU CAN CHECK:  exists (true|false) · contains (true|false) · status (ok|failed)
 
-REQUIRES:  requires="exact <subject> <predicate> <object>"  — an act only fires once this is
-OBSERVED to be true. This is how you order work: no <parallel>, no <if>. State the condition.
+REQUIRES:  requires="<subject> <predicate> <object>"  — an act only fires once this is OBSERVED
+to be true. This is how you order work: no <parallel>, no <if>. State the condition.
 
 RULES:
 - Every act MUST have at least one expect. An act you cannot be wrong about teaches nothing.
