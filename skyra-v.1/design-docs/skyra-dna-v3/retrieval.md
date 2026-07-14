@@ -53,7 +53,7 @@ Exact conjunction matching returns **zero** on anything novel, even when a parti
 been useful. So **rank, don't filter**:
 
 ```text
-score(prior) = Σ over matching triples ( overlap × ledger_weight(that edge) )
+score(prior) = Σ over matching triples ( overlap × grade_weight(that edge) )
 ```
 
 Top-k by how many target triples it satisfied, **weighted by how well that precedent's predictions
@@ -62,7 +62,7 @@ predicted confidently and was wrong decays out of retrieval.
 
 > **This is where the grade changes what gets recalled.**
 >
-> Not "the model remembers better." **The ledger reranks the posting lists.**
+> Not "the model remembers better." **The grades rerank the posting lists.**
 
 ## The arrow, closed
 
@@ -70,7 +70,7 @@ predicted confidently and was wrong decays out of retrieval.
 observation → projection
    = resolve incoming into the graph        (exact first; aligner on the residual)
    → take the target/residual triples as the query
-   → intersect posting lists, rank by overlap × ledger weight
+   → intersect posting lists, rank by overlap × grade weight
    → surface graded precedent as the framing
    → the model adapts it into the next expression
 ```

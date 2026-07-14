@@ -25,7 +25,7 @@
 // # The laws
 //
 // LAW 1 — Observation is the only writer of world state. Expression has no write access.
-// Writing a file PROJECTS "file exists"; the world graph does not contain it until
+// Writing a file PROJECTS "file exists"; the observation graph does not contain it until
 // something came back and said so. The being can be wrong, but it cannot believe its own
 // output into reality. World state is therefore a fold over the observation log:
 // deterministic, replayable, auditable, fiction-free.

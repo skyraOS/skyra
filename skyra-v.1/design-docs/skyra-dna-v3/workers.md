@@ -11,7 +11,7 @@ Six workers. **Only two call a model.**
 ```text
 TRIGGER    an impulse arrives — user message, world Outcome, perception return
 INPUT      the raw impulse + the known-ID table
-OUTPUT     observation triples → written to the WORLD graph
+OUTPUT     observation triples → written to the OBSERVATION graph
 MODEL      yes — small
 PRESENT    no. it receives the impulse, not a frame.
 BLOCKS     NO. async + buffered.
@@ -126,7 +126,7 @@ This deletes v2's motor-collapse inference call entirely.
 ```text
 TRIGGER    an observation resolves an open expect
 INPUT      the expect + the observed triple
-OUTPUT     a ledger write on the edge (projection → act → observation)
+OUTPUT     a grade write on the edge (projection → act → observation)
 MODEL      NO — it is a set difference
 PRESENT    NO
 BLOCKS     no

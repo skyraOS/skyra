@@ -40,7 +40,7 @@ causality is never an opinion.
 
 The real defect in v2 was a **type mismatch**. A `CausalNode` is an annotated sentence; a perception
 is world state. You cannot subtract one from the other — so comparing them required a **judge**, and
-the judge is what poisoned the ledger.
+the judge is what poisoned the grades.
 
 ```text
 v2   causal node (annotated sentence)  vs  perception (world state)   → needs a JUDGE
@@ -54,7 +54,7 @@ vocabulary, same node types. The diff becomes arithmetic.
 
 > **Expression has no write access to world state. Observation is the only writer.**
 
-Writing a file **projects** `file:… exists true`. The world graph does **not** contain
+Writing a file **projects** `file:… exists true`. The observation graph does **not** contain
 `file:… exists true` until something came back and said so.
 
 This kills the most damaging agent failure in production: *"I wrote the file"* → proceed as if it
@@ -63,11 +63,11 @@ being can be wrong, but it **cannot believe its own output into reality**.
 
 ### What the rule buys
 
-The world graph is a **fold over the observation log**. That is its definition, and four properties
+The observation graph is a **fold over the observation log**. That is its definition, and four properties
 fall out of it:
 
 ```text
-deterministic   same observation log → same world graph
+deterministic   same observation log → same observation graph
 replayable      rewind = fold to time T
 auditable       every node traces to the observation that produced it
 fiction-free    nothing self-authored can ever enter
@@ -81,12 +81,12 @@ Event-sourcing does not have to be designed for the world half. It **is** the fo
 "I emitted `write file X`"   expression graph. self-authored. TRUE BY CONSTRUCTION —
                              I always know what I did.
 
-"file X exists"              world graph. ONLY after something told me so.
+"file X exists"              observation graph. ONLY after something told me so.
                              I never know what RESULTED until I look.
 ```
 
 This gives `indeterminate` (see [ephemeral-world-workers](../world/)) a natural home: *I emitted it,
-I don't know whether it committed, so my world graph claims nothing.* Perceive to resolve.
+I don't know whether it committed, so my observation graph claims nothing.* Perceive to resolve.
 
 ### Evidence the rule is right
 

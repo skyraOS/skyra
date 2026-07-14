@@ -83,8 +83,8 @@ interpret   inferred state of a person         ~0.3   the aligner translated it
 —           a model said it was good            0     FORBIDDEN — no source (LAW 2)
 ```
 
-`grade weight ∝ channel independence × channel fidelity`. High-confidence world evidence moves the
-ledger hard; a soft inference about someone's mood nudges it. **Both legitimate, neither pretending
+`grade weight ∝ channel independence × channel fidelity`. High-confidence world evidence moves a
+grade hard; a soft inference about someone's mood nudges it. **Both legitimate, neither pretending
 to be the other.**
 
 This replaces provenance-as-a-field with **provenance-as-a-coefficient**.
@@ -114,7 +114,7 @@ severe reorganization    many beliefs flip    → SHOCK: revise, replan.   SLOW
 Not a count of flipped triples — **weighted by what you were confident about**:
 
 ```text
-shock = Σ over invalidated triples ( prior_confidence × ledger_weight )
+shock = Σ over invalidated triples ( prior_confidence × grade_weight )
 ```
 
 A 0.95 belief collapsing is an earthquake. A 0.30 belief collapsing is a Tuesday. That is Bayesian
@@ -150,8 +150,8 @@ observation; `interpret` when its channel produces one).
 
 ## Open
 
-- **Information gain relative to what prior?** The ledger's current confidence on that triple, the
-  retrieval's expectation, or a base rate? *Lean: the ledger — it is already the being's stated
+- **Information gain relative to what prior?** The recorded grade on that triple, the
+  retrieval's expectation, or a base rate? *Lean: the recorded grade — it is already the being's stated
   belief.*
 - Does a purely-additive observation earn anything if the being **predicted** the addition? *It
   should — additive-and-predicted is the best case: a bold bet that landed.*

@@ -26,11 +26,11 @@ type Mode string
 
 const (
 	// ModeExact resolves by value comparison against observed state. Free, instant,
-	// unambiguous. Ledger weight ~1.0.
+	// unambiguous. Grade weight ~1.0.
 	ModeExact Mode = "exact"
 
 	// ModeInterpret resolves by running the aligner over an observation that already
-	// crossed the boundary, then comparing. Noisy. Ledger weight ~0.3.
+	// crossed the boundary, then comparing. Noisy. Grade weight ~0.3.
 	//
 	// It is a method OVER an observation, never a substitute for one: if nothing was
 	// observed, nothing is interpreted and the claim stays TruthUnknown. That is what
@@ -38,8 +38,10 @@ const (
 	ModeInterpret Mode = "interpret"
 )
 
-// Weight is the channel fidelity of a mode — how hard a grade arriving through it is
-// allowed to move the ledger. Provenance as a coefficient rather than as a field.
+// Weight is the channel fidelity of a mode — how much a grade arriving through this channel
+// is allowed to count. Provenance as a coefficient rather than as a field: a grade read off
+// the filesystem and a grade inferred from someone's mood are both legitimate, and neither
+// gets to pretend it is the other.
 func (m Mode) Weight() float64 {
 	switch m {
 	case ModeExact:

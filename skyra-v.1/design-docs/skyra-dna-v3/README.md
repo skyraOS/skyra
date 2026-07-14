@@ -22,6 +22,47 @@ v2's ceiling was structural, not incidental:
 
 v3 removes all three by changing the representation, not by adding machinery.
 
+## Vocabulary — use these names, no others
+
+Two things are durable. Everything else is a projection of them.
+
+```text
+DURABLE
+  observation log     append-only. the raw record of everything that crossed the boundary.
+                      the ONLY thing the decomposer writes.
+
+  expression graph    acts, expects, framings — AND THEIR GRADES.
+                      the planner writes it; the grader grades it.
+                      >>> THIS IS THE BEING'S MEMORY. <<<
+
+DERIVED  (rebuildable, never authoritative)
+  observation graph   a fold over the observation log. holds WORLD STATE.
+  reverse index       posting lists over the expression graph.
+  workflow            the plan. per-target, disposable, thrown away on kill.
+```
+
+### Words that are NOT stores
+
+```text
+world state     the CONTENT of the observation graph. a fine phrase; not a thing.
+grade           a number on an expect (its accuracy) or on a framing (its joint accuracy).
+                it is a FIELD ON THE EXPRESSION GRAPH, not a separate store.
+                there is no "ledger." A/S/F/N are fields on expects.
+grade weight    how hard a grade is allowed to move things. = channel fidelity × confidence.
+```
+
+### Banned
+
+`world graph` (say **observation graph**) · `ledger` as a noun for a store (say **grades**) ·
+`memory store` (say **expression graph**)
+
+### Why the expression graph is the being
+
+The observation log is just *what happened* — anyone standing there would have recorded the same
+thing, and it is reconstructible. What cannot be reconstructed is the accumulated record of **what
+this being claimed, and how those claims fared.** That is the memory, that is the learning, and it is
+the only thing here that nobody can copy or scrape.
+
 ## The cycle
 
 ```text
@@ -135,7 +176,7 @@ Over N repeated exposures to one task class:
 
 Both curves down is the thesis. **Either alone is a warning, and either failure localizes:**
 
-- passes ↓ but error flat → retrieval is surfacing confident garbage; the ledger weighting is wrong.
+- passes ↓ but error flat → retrieval is surfacing confident garbage; the grade weighting is wrong.
 - error ↓ but passes flat → the world-model learns but the index doesn't.
 
 ## Open
