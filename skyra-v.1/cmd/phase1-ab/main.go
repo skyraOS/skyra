@@ -1,6 +1,6 @@
 // Command phase1-ab is the Phase-1 de-risk (traversal-implementation-plan.md): run one
 // real cognitive cycle on live Codex, then render the resulting other-distribution two
-// ways — the hand-built renderOtherDistribution vs. the traversal-assembled frame — and
+// ways — the hand-built renderFinalDistribution vs. the traversal-assembled frame — and
 // show them side by side. The question: does a traversed frame reconstruct (or beat) the
 // hand-built present?
 //
@@ -58,7 +58,7 @@ func main() {
 	for _, budget := range []float64{10000, 40} {
 		hand, traversal, lit := dnav2.ComparePresents(d, budget)
 		fmt.Printf("═══ budget = %.0f tokens (lit %d nodes) ═══\n\n", budget, lit)
-		fmt.Printf("── HAND (renderOtherDistribution) ──\n%s\n\n", orNone(hand))
+		fmt.Printf("── HAND (renderFinalDistribution) ──\n%s\n\n", orNone(hand))
 		fmt.Printf("── TRAVERSAL (AssembleFramePresent) ──\n%s\n\n", orNone(traversal))
 	}
 }

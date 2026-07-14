@@ -18,7 +18,7 @@ import (
 // axis; this loop does not touch it.
 
 const (
-	settleFrameBudget = 2000 // generous — grade the whole episode frame (matches credit/self)
+	settleFrameBudget = 2000 // generous — grade the whole episode frame (matches credit/efficient)
 	settleMaxPasses   = 4    // safety cap; the plateau/no-prune stop usually hits sooner
 	settlePlateauEps  = 0.02 // avg-alignment delta below which the settle is called settled
 	settleStress      = 1.0  // salience stamp for settle grades (matches closure's stand-in)

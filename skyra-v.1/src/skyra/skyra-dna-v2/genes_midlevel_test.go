@@ -9,7 +9,7 @@ import (
 )
 
 // The cold-start pipeline through framing: an external engage flows sensory →
-// other:grade(no-prior) → midlevel:frame (mock infer → frame → episode). Verifies
+// final:grade(no-prior) → midlevel:frame (mock infer → frame → episode). Verifies
 // the frame gene renders the exchange, creates the episode, and the orchestrator
 // threads it onto the board for the fan-out. Stops after framing (predicts not yet
 // ported) by having predict genes report a terminal-ish condition.
@@ -28,8 +28,8 @@ func TestColdStartFramesAndGroups(t *testing.T) {
 		return "", nil
 	})
 	// stub the not-yet-ported predict genes so the fan-out completes and the wave ends
-	d.RegisterObserve(string(StepOtherPredict), func(r *EphemeralRoot, o skyra.Space, i any) { r.Condition = "predicted" })
-	d.RegisterObserve(string(StepSelfPredict), func(r *EphemeralRoot, o skyra.Space, i any) { r.Condition = "predicted" })
+	d.RegisterObserve(string(StepFinalPredict), func(r *EphemeralRoot, o skyra.Space, i any) { r.Condition = "predicted" })
+	d.RegisterObserve(string(StepEfficientPredict), func(r *EphemeralRoot, o skyra.Space, i any) { r.Condition = "predicted" })
 	d.RegisterObserve(string(StepMotorCollapse), func(r *EphemeralRoot, o skyra.Space, i any) { r.Condition = "emitted" })
 
 	o, board := newOrch(d)

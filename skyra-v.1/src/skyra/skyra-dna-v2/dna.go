@@ -8,7 +8,7 @@ import (
 
 // DNA — the one canonical base cell (the genome). Holds ALL durable indexes (the
 // long-term graph) AND all competences (namespaced genes, keyed "namespace:gene"
-// e.g. "other:grade"). Sensory, midlevel, other, self, and motor are competence
+// e.g. "final:grade"). Sensory, midlevel, final, efficient, and motor are competence
 // namespaces: expression contexts of the one genome, not separate objects.
 //
 // Competences are registered once at boot (read-only during a wave → concurrent

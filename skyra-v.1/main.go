@@ -33,7 +33,7 @@ func main() {
 
 	board := dnav2.NewBoard()
 	slices := map[string]skyra.Slice{}
-	for _, ns := range []string{"sensory", "other", "self", "midlevel", "motor"} {
+	for _, ns := range []string{"sensory", "final", "efficient", "midlevel", "motor"} {
 		slices[ns] = world.NewSlice("skyra:"+ns, "skyra")
 	}
 	orch := dnav2.NewOrchestrator(d, board, relation.NewRelation(), world.NewSlice("skyra:membrane", "skyra"), slices)

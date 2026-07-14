@@ -22,10 +22,10 @@ func stubDNA(t *testing.T, tally *sync.Map) *DNA {
 		})
 	}
 	report(StepSensoryIntake, "external")
-	report(StepOtherGrade, "held") // a normal turn: prior bet held → frame
+	report(StepFinalGrade, "held") // a normal turn: prior bet held → frame
 	report(StepMidlevelFrame, "framed")
-	report(StepOtherPredict, "predicted")
-	report(StepSelfPredict, "predicted")
+	report(StepFinalPredict, "predicted")
+	report(StepEfficientPredict, "predicted")
 	report(StepMotorCollapse, "emitted")
 	return d
 }
@@ -34,18 +34,18 @@ func newOrch(d *DNA) (*Orchestrator, *Board) {
 	board := NewBoard()
 	kernel := relation.NewRelation()
 	slices := map[string]skyra.Slice{
-		"sensory":  world.NewSlice("skyra:sensory", "skyra"),
-		"other":    world.NewSlice("skyra:other", "skyra"),
-		"self":     world.NewSlice("skyra:self", "skyra"),
-		"midlevel": world.NewSlice("skyra:midlevel", "skyra"),
-		"motor":    world.NewSlice("skyra:motor", "skyra"),
+		"sensory":   world.NewSlice("skyra:sensory", "skyra"),
+		"final":     world.NewSlice("skyra:final", "skyra"),
+		"efficient": world.NewSlice("skyra:efficient", "skyra"),
+		"midlevel":  world.NewSlice("skyra:midlevel", "skyra"),
+		"motor":     world.NewSlice("skyra:motor", "skyra"),
 	}
 	o := NewOrchestrator(d, board, kernel, world.NewSlice("skyra:membrane", "skyra"), slices)
 	return o, board
 }
 
-// The full happy path routes end to end: sensory:external → other:grade:held →
-// midlevel:framed → fan-out {other:predict, self:predict} → join → motor. And
+// The full happy path routes end to end: sensory:external → final:grade:held →
+// midlevel:framed → fan-out {final:predict, efficient:predict} → join → motor. And
 // motor fires exactly once (the atomic join under the fan-out race).
 func TestOrchestratorHappyPathRoutes(t *testing.T) {
 	var tally sync.Map
@@ -77,7 +77,7 @@ func TestOrchestratorHappyPathRoutes(t *testing.T) {
 		t.Fatal("impulse X did not complete (flush never fired)")
 	}
 
-	for _, step := range []Step{StepSensoryIntake, StepOtherGrade, StepMidlevelFrame, StepOtherPredict, StepSelfPredict, StepMotorCollapse} {
+	for _, step := range []Step{StepSensoryIntake, StepFinalGrade, StepMidlevelFrame, StepFinalPredict, StepEfficientPredict, StepMotorCollapse} {
 		if _, ran := tally.Load(string(step)); !ran {
 			t.Errorf("step %s never ran", step)
 		}
@@ -96,7 +96,7 @@ func TestOrchestratorHappyPathRoutes(t *testing.T) {
 	}
 }
 
-// A total miss reframes (once), then proceeds. other:grade reports all-preds<0 the
+// A total miss reframes (once), then proceeds. final:grade reports all-preds<0 the
 // first time; the reframe re-runs midlevel and the rest of the pipeline.
 func TestOrchestratorReframeRail(t *testing.T) {
 	var tally sync.Map
@@ -104,7 +104,7 @@ func TestOrchestratorReframeRail(t *testing.T) {
 
 	var reframes int32
 	var mu sync.Mutex
-	d.RegisterObserve(string(StepOtherGrade), func(root *EphemeralRoot, origin skyra.Space, impulse any) {
+	d.RegisterObserve(string(StepFinalGrade), func(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		root.Condition = "all-preds<0" // always a total miss
 	})
 	d.RegisterObserve(string(StepMidlevelFrame), func(root *EphemeralRoot, origin skyra.Space, impulse any) {
@@ -125,7 +125,7 @@ func TestOrchestratorReframeRail(t *testing.T) {
 		t.Fatal("impulse X did not complete")
 	}
 
-	// other:grade → all-preds<0 → reframe (allowed once) → midlevel → fan-out → …
+	// final:grade → all-preds<0 → reframe (allowed once) → midlevel → fan-out → …
 	// midlevel runs exactly once (the single allowed reframe); a second reframe
 	// would be suppressed by the rail.
 	mu.Lock()

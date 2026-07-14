@@ -16,7 +16,7 @@ func TestDistributeCreditGradesFrameByActivation(t *testing.T) {
 		t.Fatalf("frame has %d edges, want ≥4: %v", len(edges), edges)
 	}
 
-	b1, b2 := "g1:frame:1→other-pred:1-0", "g1:frame:1→other-pred:1-1"
+	b1, b2 := "g1:frame:1→final-pred:1-0", "g1:frame:1→final-pred:1-1"
 	if edges[b1] <= edges[b2] {
 		t.Fatalf("expected b1 more active than b2: b1=%.3f b2=%.3f", edges[b1], edges[b2])
 	}
@@ -46,7 +46,7 @@ func TestDistributeBlameLowersStrength(t *testing.T) {
 	edges := FrameOf(g, 10000, store, 0).Edges()
 	store.CrossFrame(edges, 0)
 
-	b1 := "g1:frame:1→other-pred:1-0"
+	b1 := "g1:frame:1→final-pred:1-0"
 	before, _ := store.Strength(b1, 0) // crossed, A still 0
 	store.DistributeCredit(edges, -1, 1)
 	after, _ := store.Strength(b1, 0)

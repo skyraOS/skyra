@@ -63,7 +63,7 @@ func (b *Board) Row(impulseID, prev string) *Row {
 	return r
 }
 
-// Pending returns the impulseIDs whose join isn't satisfied yet (what motor/other
+// Pending returns the impulseIDs whose join isn't satisfied yet (what motor/final
 // inspection reads — "what's in flight").
 func (b *Board) Pending() []string {
 	b.mu.Lock()

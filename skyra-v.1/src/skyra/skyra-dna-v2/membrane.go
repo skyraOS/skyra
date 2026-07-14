@@ -17,7 +17,7 @@ type Orchestrator struct {
 	kernel skyra.Time
 
 	membraneSlice skyra.Slice            // per-step kernel tree-workspace (throwaway)
-	slices        map[string]skyra.Slice // namespace → active-state slice (other/self/midlevel/motor)
+	slices        map[string]skyra.Slice // namespace → active-state slice (final/efficient/midlevel/motor)
 
 	// flush is the trace-export hook, called when an impulse completes (deferred to
 	// an external store; nil = no-op).
@@ -94,7 +94,7 @@ func (m *membraneRoot) Observe(origin skyra.Space, impulse any) {
 	m.worker.ObservationID = row.ObservationID()
 	m.worker.Trace = row.Trace()
 	switch m.step {
-	case StepOtherPredict, StepSelfPredict, StepMotorCollapse:
+	case StepFinalPredict, StepEfficientPredict, StepMotorCollapse:
 		if g, ok := row.Episode().(*MemoryCell); ok {
 			m.worker.Episode = g
 		}
@@ -142,8 +142,8 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 
 	case route.Wait:
 		// a predict branch completed — mark the join and try to fire motor
-		if agent := agentOf(m.step); agent != "" {
-			row.Mark("episode", agent) // MVP: one active episode
+		if cause := causeOf(m.step); cause != "" {
+			row.Mark("episode", cause) // MVP: one active episode
 		}
 		if row.TryFireMotor() {
 			o.run(StepMotorCollapse, m.impulseID, m.impulse)
@@ -154,13 +154,13 @@ func (m *membraneRoot) Express(origin skyra.Space, impulse any) any {
 
 	case len(route.Next) > 1:
 		// fan-out: declare the join set, then spawn one membrane wave per branch
-		agents := make([]string, 0, len(route.Next))
+		causes := make([]string, 0, len(route.Next))
 		for _, s := range route.Next {
-			if a := agentOf(s); a != "" {
-				agents = append(agents, a)
+			if cause := causeOf(s); cause != "" {
+				causes = append(causes, cause)
 			}
 		}
-		row.Declare("episode", agents...) // MVP: one active episode
+		row.Declare("episode", causes...) // MVP: one active episode
 		for _, s := range route.Next {
 			o.run(s, m.impulseID, m.impulse)
 		}

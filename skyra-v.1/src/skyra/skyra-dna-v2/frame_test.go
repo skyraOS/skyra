@@ -6,25 +6,25 @@ import (
 )
 
 // buildEpisode mints an episode on the frame-owned spine — shell → frame →
-// two-branch other-distribution, the same shape Create + appendOtherDistribution
+// two-branch final-cause distribution, the same shape Create + appendFinalDistribution
 // produce.
 func buildFrameEpisode() *MemoryCell {
 	g := NewMemoryCell("g1", KindEpisode, Episode{Created: 1}, nil)
 	frame := NewMemoryCell("g1:frame:1", KindFrame, Frame{Text: "help with the kernel", Timestamp: 1}, nil)
 	g.AddChild("g1→g1:frame:1", frame)
-	root := NewMemoryCell("g1:frame:1→other-pred:1", KindPrediction, Prediction{Role: "other", Timestamp: 1}, nil)
-	b1 := NewMemoryCell("g1:frame:1→other-pred:1-0", KindPrediction,
-		Prediction{Text: "asks about the kernel", Role: "other", Probability: 0.7, Timestamp: 1}, nil)
-	b2 := NewMemoryCell("g1:frame:1→other-pred:1-1", KindPrediction,
-		Prediction{Text: "asks about setup", Role: "other", Probability: 0.3, Timestamp: 1}, nil)
-	root.AddChild("g1:frame:1→other-pred:1-0", b1)
-	root.AddChild("g1:frame:1→other-pred:1-1", b2)
-	frame.AddChild("g1:frame:1→other-pred:1", root)
+	root := NewMemoryCell("g1:frame:1→final-pred:1", KindPrediction, Prediction{Role: "final", Timestamp: 1}, nil)
+	b1 := NewMemoryCell("g1:frame:1→final-pred:1-0", KindPrediction,
+		Prediction{Text: "asks about the kernel", Role: "final", Probability: 0.7, Timestamp: 1}, nil)
+	b2 := NewMemoryCell("g1:frame:1→final-pred:1-1", KindPrediction,
+		Prediction{Text: "asks about setup", Role: "final", Probability: 0.3, Timestamp: 1}, nil)
+	root.AddChild("g1:frame:1→final-pred:1-0", b1)
+	root.AddChild("g1:frame:1→final-pred:1-1", b2)
+	frame.AddChild("g1:frame:1→final-pred:1", root)
 	return g
 }
 
 // A generous budget lights the frame and both branches — the traversal reconstructs what
-// renderOtherDistribution hand-builds.
+// renderFinalDistribution hand-builds.
 func TestAssembleFrameLightsFrameAndBranches(t *testing.T) {
 	present, lit := AssembleFramePresent(buildFrameEpisode(), 10000)
 
@@ -56,8 +56,8 @@ func TestTightBudgetPrunesTheFrame(t *testing.T) {
 func TestLearnedStrengthReweightsFrame(t *testing.T) {
 	g := buildFrameEpisode()
 	frame := g.Children()["g1→g1:frame:1"].(*MemoryCell)
-	root := frame.Children()["g1:frame:1→other-pred:1"].(*MemoryCell)
-	b1Key, b2Key := "g1:frame:1→other-pred:1-0", "g1:frame:1→other-pred:1-1"
+	root := frame.Children()["g1:frame:1→final-pred:1"].(*MemoryCell)
+	b1Key, b2Key := "g1:frame:1→final-pred:1-0", "g1:frame:1→final-pred:1-1"
 
 	// Phase-1 (no store): static Probability favors b1 (0.7 > 0.3).
 	cold := (&frameNode{cell: root}).Frontier(nil, nil)

@@ -10,8 +10,8 @@ import (
 )
 
 // The whole cold-start turn: an external engage flows through every ported gene on
-// mock inference and produces an emitted action — sensory → other:grade(no-prior)
-// → midlevel:frame → fan-out{other:predict, self:predict} → join → motor:collapse.
+// mock inference and produces an emitted action — sensory → final:grade(no-prior)
+// → midlevel:frame → fan-out{final:predict, efficient:predict} → join → motor:collapse.
 func TestColdStartFullPipelineEmitsAction(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
@@ -24,14 +24,14 @@ func TestColdStartFullPipelineEmitsAction(t *testing.T) {
 			return "<requery>assist[1] with[1→2] the {skyra project}[2]</requery>", nil
 		case strings.Contains(system, "External Perspective"):
 			return `<predictions><prediction p="0.7">asks about the kernel</prediction><prediction p="0.3">asks about setup</prediction></predictions>`, nil
-		// NOTE: the prompts cross-reference (motor mentions "inner voice", self
+		// NOTE: the prompts cross-reference (motor mentions "inner voice", efficient
 		// mentions "the motor system") — discriminate on the unique OPENING phrase.
 		case strings.Contains(system, "You are Skyra's motor system"):
 			return "<engage><michael>What part of the skyra project can I help with?</michael></engage>", nil
 		case strings.Contains(system, "You are Skyra's inner voice"):
-			// NOTE: self reads other's LATEST distribution — on turn 1's concurrent
-			// fan-out that's "(no prediction)" (other is landing at the same time).
-			// That's the lagged-reliance model, correct; self plans unconditioned.
+			// NOTE: efficient reads final's LATEST distribution — on turn 1's concurrent
+			// fan-out that's "(no prediction)" (final is landing at the same time).
+			// That's the lagged-reliance model; efficient plans unconditioned.
 			return "<prediction>Ask michael what part of the skyra project he wants help with</prediction>", nil
 		}
 		return "", nil

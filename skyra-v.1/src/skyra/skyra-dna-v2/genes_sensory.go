@@ -87,7 +87,7 @@ const observationDecompositionSystem = "You decompose one observed utterance int
 // internal is reserved for interrupts (e.g. motor engaging the self). What
 // distinguishes it from an action-reafference is only where the record lands:
 // perceive-return routes to the sensory ingest (deposit surroundings on the
-// spine); move/engage-return routes to self:grade (grade my action's execution).
+// spine); move/engage-return routes to efficient:grade (grade my action's execution).
 // See perceive-build-uncertainties.md §1.
 //   - perceive-return: the world's reply to my own perceive (Return + perceive)
 //   - reafference:     the world's reply to my own action (Return)

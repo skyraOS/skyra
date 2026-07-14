@@ -1,6 +1,6 @@
 // Command phase2-accumulate is the Phase-2e demonstration
 // (traversal-implementation-plan.md): run a scripted multi-turn conversation on live
-// Codex with the full economy wired — the frame feeds self:predict, its edges are
+// Codex with the full economy wired — the frame feeds efficient:predict, its edges are
 // crossed, and the midlevel coherence-settle grades each episode's nodes against its
 // fixed frame, writing alignment (A) onto the edges (closure→A is unwired). After every
 // turn it prints the edge-alignments so you can watch them MOVE — the accumulation loop,

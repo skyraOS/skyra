@@ -9,7 +9,7 @@ import (
 	"skyra-v1/src/skyra"
 )
 
-// self:grade — closes the prior self proposal against the reafference (the world's
+// efficient:grade — closes the prior efficient-cause proposal against reafference (the world's
 // reply to skyra's own action) via the execution judge. exec grade > 0 → "exec-ok".
 // A hard execution failure (judge said `no`, score 0 — the intent could not be
 // realized, e.g. a blocked move) → "exec=no", which reframes: an unrealizable intent
@@ -17,10 +17,10 @@ import (
 //
 // No realized proposal / failed call / parse leaves it ungraded and reports
 // "exec-ok" (carry on unchanged — the reafference lane still frames).
-func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
+func efficientGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "exec-ok"
 	episodes := root.DNA().Episodes()
-	proposal, pred, action, ok := episodes.LatestUngradedRealizedSelf()
+	proposal, pred, action, ok := episodes.LatestUngradedRealizedEfficient()
 	if !ok || root.DNA().Infer() == nil {
 		return
 	}
@@ -32,7 +32,7 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	present := fmt.Sprintf("Instruction:\n%s\n\nAction taken:\n%s %s %v\n\nEnvironment result:\n%s",
 		pred.Text, action.Primitive, action.EntityID, action.Content, result)
-	resp, err := root.Infer("self:grade")(execGraderSystem, present)
+	resp, err := root.Infer("efficient:grade")(execGraderSystem, present)
 	if err != nil {
 		return
 	}
@@ -40,18 +40,18 @@ func selfGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !parsed {
 		return
 	}
-	episodes.StampSelfGrade(proposal, score, result)
+	episodes.StampEfficientGrade(proposal, score, result)
 	if score == 0 {
 		root.Condition = "exec=no" // hard failure → reframe
 	}
-	root.Trace.Note("self:grade", fmt.Sprintf("exec=%.1f → %s proposal=%s", score, root.Condition, proposal.ID()))
-	debug.Being("skyra", "self", fmt.Sprintf("exec grade=%.1f → %s", score, root.Condition))
+	root.Trace.Note("efficient:grade", fmt.Sprintf("exec=%.1f → %s proposal=%s", score, root.Condition, proposal.ID()))
+	debug.Being("skyra", "efficient", fmt.Sprintf("exec grade=%.1f → %s", score, root.Condition))
 	// Closure → A is UNWIRED (2026-07-06): the coherence-settle is the sole writer of A. The
-	// execution outcome is still recorded on the proposal (StampSelfGrade above); it no longer
+	// execution outcome is still recorded on the proposal (StampEfficientGrade above); it no longer
 	// bumps edge alignment. Closure is a separate, parked axis — see active-grouping.md.
 }
 
-const selfFrameBudget = 2000 // generous — don't prune self's conditioning in normal operation
+const efficientFrameBudget = 2000 // generous — don't prune efficient-cause conditioning in normal operation
 
 // execGraderSystem — the execution judge. Adversarial-neutral, same posture as the
 // other-side grader: never told whose instruction it is, only compares instruction
@@ -64,22 +64,22 @@ const execGraderSystem = "You are a strict, impartial judge of execution. You ar
 	"means the instruction was not accomplished (at best partial).\n\n" +
 	"Reply with only one tag: <grade>yes</grade>, <grade>partial</grade>, or <grade>no</grade>."
 
-// self:predict — decide skyra's own next move under the framing, conditioned on
-// what the OTHER is expected to do ("self relies on other" — read live/lagged off
+// efficient:predict — propose Skyra's causal action under the framing, conditioned on
+// what the FINAL CAUSE predicts ("efficient relies on final" — read live/lagged off
 // the episode).Observe (predict half). Reports "predicted".
-func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
+func efficientPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "predicted"
 	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
-	// Phase 2e: the framing + other-distribution present is now TRAVERSAL-assembled off
+	// Phase 2e: the framing + final-cause distribution is now traversal-assembled off
 	// the episode (relevance = alignment, budget-bounded) and the traversed edges are
-	// crossed — instead of the hand-built renderOtherDistribution. The recent exchange
+	// crossed — instead of the hand-built renderFinalDistribution. The recent exchange
 	// (entity interactions) is still hand-rendered until entities join the traversal.
-	frame := FramePresentCrossing(root.Episode, selfFrameBudget, root.DNA().Activation(), root.DNA().Tick())
+	frame := FramePresentCrossing(root.Episode, efficientFrameBudget, root.DNA().Activation(), root.DNA().Tick())
 	present := fmt.Sprintf("%s\n\nRecent exchange:\n%s", frame, renderExchange(root.Nodes))
-	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("self present (traversal-assembled):\n%s", present))
-	resp, err := root.Infer("self:predict")(selfSystem, present)
+	debug.Being("skyra", "midlevel-frame", fmt.Sprintf("efficient present (traversal-assembled):\n%s", present))
+	resp, err := root.Infer("efficient:predict")(efficientSystem, present)
 	if err != nil {
 		return
 	}
@@ -87,22 +87,22 @@ func selfPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if !ok {
 		return
 	}
-	root.Trace.Note("self:predict", "plan="+text)
-	debug.Being("skyra", "self", fmt.Sprintf("plan=%q", text))
-	if born := appendSelfPrediction(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), text); born != "" {
+	root.Trace.Note("efficient:predict", "plan="+text)
+	debug.Being("skyra", "efficient", fmt.Sprintf("plan=%q", text))
+	if born := appendEfficientPrediction(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), text); born != "" {
 		root.DNA().CrossBirth(born) // node birth: the new edge was just active
 	}
 }
 
-// renderOtherDistribution reads the latest other-pred root off the episode's
+// renderFinalDistribution reads the latest final-pred root off the episode's
 // frames (the frame-owned spine) and lists its branches by probability. "(no
-// prediction)" if none (cold-start, or other hasn't landed yet — the lagged read).
-func renderOtherDistribution(episodes *EpisodeStore, episode *MemoryCell) string {
+// prediction)" if none (cold-start, or final hasn't landed yet — the lagged read).
+func renderFinalDistribution(episodes *EpisodeStore, episode *MemoryCell) string {
 	var latest *MemoryCell
 	latestTS := -1
 	for _, rootCell := range predictionsOf(episode) {
 		p, ok := rootCell.Content().(Prediction)
-		if !ok || p.Role != "other" || len(rootCell.Children()) == 0 {
+		if !ok || p.Role != "final" || len(rootCell.Children()) == 0 {
 			continue
 		}
 		if p.Timestamp > latestTS {
@@ -131,22 +131,22 @@ func renderOtherDistribution(episodes *EpisodeStore, episode *MemoryCell) string
 	return strings.Join(lines, "\n")
 }
 
-// appendSelfPrediction stamps skyra's proposed move onto the episode's CURRENT
+// appendEfficientPrediction stamps skyra's proposed move onto the episode's CURRENT
 // frame (per-cycle key; a proposal belongs to the framing it was made under). motor
-// reads the latest self proposal off the spine. Returns the birth edge key ("" if
+// reads the latest efficient-cause proposal off the spine. Returns the birth edge key ("" if
 // the episode has no frame yet).
-func appendSelfPrediction(episodes *EpisodeStore, episode *MemoryCell, ts int, text string) string {
+func appendEfficientPrediction(episodes *EpisodeStore, episode *MemoryCell, ts int, text string) string {
 	frame := latestFrame(episode)
 	if frame == nil {
 		return ""
 	}
-	key := fmt.Sprintf("%s→self-pred:%d", frame.ID(), ts)
-	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "self", Timestamp: ts}, nil)
+	key := fmt.Sprintf("%s→efficient-pred:%d", frame.ID(), ts)
+	pred := NewMemoryCell(key, KindPrediction, Prediction{Text: text, Role: "efficient", Timestamp: ts}, nil)
 	episodes.AddChild(frame, key, pred)
 	return key
 }
 
-const selfSystem = "You are Skyra's inner voice. Given the current framing and what the other person is likely to do next, decide what action Skyra should take.\n\n" +
+const efficientSystem = "You are Skyra's inner voice. Given the current framing and what the other person is likely to do next, decide what action Skyra should take.\n\n" +
 	"Write your decision as a clear instruction to the motor system — tell it exactly what to do.\n\n" +
 	"Examples:\n" +
 	"- Tell michael his coordinate is 500,500\n" +

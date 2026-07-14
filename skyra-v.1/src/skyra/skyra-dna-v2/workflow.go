@@ -9,14 +9,14 @@ package dnav2
 type Step string
 
 const (
-	StepSensoryIntake Step = "sensory:intake"
-	StepSensoryIngest Step = "sensory:ingest" // deposit a perceive-return's surroundings on the spine
-	StepOtherGrade    Step = "other:grade"
-	StepSelfGrade     Step = "self:grade"
-	StepMidlevelFrame Step = "midlevel:frame"
-	StepOtherPredict  Step = "other:predict"
-	StepSelfPredict   Step = "self:predict"
-	StepMotorCollapse Step = "motor:collapse"
+	StepSensoryIntake    Step = "sensory:intake"
+	StepSensoryIngest    Step = "sensory:ingest" // deposit a perceive-return's surroundings on the spine
+	StepFinalGrade       Step = "final:grade"
+	StepEfficientGrade   Step = "efficient:grade"
+	StepMidlevelFrame    Step = "midlevel:frame"
+	StepFinalPredict     Step = "final:predict"
+	StepEfficientPredict Step = "efficient:predict"
+	StepMotorCollapse    Step = "motor:collapse"
 )
 
 // Route is what a step's condition dispatches to: either a set of next steps to
@@ -31,11 +31,11 @@ type Route struct {
 // transition is the DAG: (step, condition) → Route. A missing entry is inert.
 var transition = map[Step]map[string]Route{
 	StepSensoryIntake: {
-		"external": {Next: []Step{StepOtherGrade}},
+		"external": {Next: []Step{StepFinalGrade}},
 		// the reafference lane forks by primitive: an action-return grades my
 		// execution; a perceive-return deposits what came back (a reafference too —
 		// NOT internal; internal is interrupts). perceive-build-uncertainties.md §1.
-		"reafference":     {Next: []Step{StepSelfGrade}},
+		"reafference":     {Next: []Step{StepEfficientGrade}},
 		"perceive-return": {Next: []Step{StepSensoryIngest}},
 		"internal":        {Next: []Step{StepMidlevelFrame}},
 	},
@@ -43,26 +43,26 @@ var transition = map[Step]map[string]Route{
 		// continue into framing for now (decision 1b — revisit with motor independence)
 		"deposited": {Next: []Step{StepMidlevelFrame}},
 	},
-	StepOtherGrade: {
+	StepFinalGrade: {
 		"all-preds<0": {Reframe: true},
 		"held":        {Next: []Step{StepMidlevelFrame}},
 		"no-prior":    {Next: []Step{StepMidlevelFrame}},
 	},
-	StepSelfGrade: {
+	StepEfficientGrade: {
 		"exec=no": {Reframe: true},
 		"exec-ok": {Next: []Step{StepMidlevelFrame}},
 	},
 	StepMidlevelFrame: {
-		"framed":              {Next: []Step{StepOtherPredict, StepSelfPredict}}, // fan-out + declare expects
+		"framed":              {Next: []Step{StepFinalPredict, StepEfficientPredict}}, // fan-out + declare expects
 		"empty":               {Done: true},
 		"query-format-error":  {Done: true}, // correction exhausted; active state retained
 		"causal-format-error": {Done: true}, // either causal worker failed; active state retained
 	},
-	StepOtherPredict: {
-		"predicted": {Wait: true}, // marks other done; the join fires motor
+	StepFinalPredict: {
+		"predicted": {Wait: true}, // marks final done; the join fires motor
 	},
-	StepSelfPredict: {
-		"predicted": {Wait: true}, // marks self done; the join fires motor
+	StepEfficientPredict: {
+		"predicted": {Wait: true}, // marks efficient done; the join fires motor
 	},
 	StepMotorCollapse: {
 		"emitted": {Done: true},
@@ -90,13 +90,13 @@ func namespaceOf(step Step) string {
 	return s
 }
 
-// agentOf returns the join agent a predict step marks ("other" / "self"), or "".
-func agentOf(step Step) string {
+// causeOf returns the causal lane a predict step marks ("final" / "efficient"), or "".
+func causeOf(step Step) string {
 	switch step {
-	case StepOtherPredict:
-		return "other"
-	case StepSelfPredict:
-		return "self"
+	case StepFinalPredict:
+		return "final"
+	case StepEfficientPredict:
+		return "efficient"
 	}
 	return ""
 }

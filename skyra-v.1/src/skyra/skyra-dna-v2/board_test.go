@@ -10,17 +10,17 @@ import (
 func TestBoardJoinFiresOnceWhenComplete(t *testing.T) {
 	b := NewBoard()
 	r := b.Row("X", "")
-	r.Declare("episode", "self", "other") // midlevel declares the expected set
+	r.Declare("episode", "efficient", "final") // midlevel declares the expected set
 
 	// not satisfied yet
 	if r.TryFireMotor() {
 		t.Fatal("motor fired before the join was satisfied")
 	}
-	r.Mark("episode", "self")
+	r.Mark("episode", "efficient")
 	if r.TryFireMotor() {
-		t.Fatal("motor fired with only self done")
+		t.Fatal("motor fired with only efficient done")
 	}
-	r.Mark("episode", "other")
+	r.Mark("episode", "final")
 
 	// both agents complete concurrently and both race TryFireMotor — exactly one wins
 	var fires int32
@@ -66,7 +66,7 @@ func TestBoardCausalChainAndLifecycle(t *testing.T) {
 	if len(b.Pending()) != 2 {
 		t.Fatalf("pending = %d, want 2", len(b.Pending()))
 	}
-	x.Append(Span{Step: "other:grade", Condition: "held", At: 1})
+	x.Append(Span{Step: "final:grade", Condition: "held", At: 1})
 	x.Append(Span{Step: "motor", Condition: "emitted", At: 2})
 	trace := x.Done()
 	if len(trace) != 2 {
@@ -81,11 +81,11 @@ func TestBoardCausalChainAndLifecycle(t *testing.T) {
 func TestBoardConcurrentAccess(t *testing.T) {
 	b := NewBoard()
 	r := b.Row("X", "")
-	r.Declare("episode", "self", "other")
+	r.Declare("episode", "efficient", "final")
 	var wg sync.WaitGroup
 	wg.Add(3)
-	go func() { defer wg.Done(); r.Mark("episode", "self") }()
-	go func() { defer wg.Done(); r.Mark("episode", "other") }()
+	go func() { defer wg.Done(); r.Mark("episode", "efficient") }()
+	go func() { defer wg.Done(); r.Mark("episode", "final") }()
 	go func() { defer wg.Done(); r.Append(Span{Step: "x", At: 1}) }()
 	wg.Wait()
 	if !r.TryFireMotor() {

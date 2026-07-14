@@ -11,7 +11,7 @@ import (
 
 // Phase 1 (traversal-implementation-plan.md): assemble the "present" for inference by
 // TRAVERSING the episode subgraph under a token budget — the analogue of the
-// hand-built renderers (renderOtherDistribution / renderExchange) that we A/B against.
+// hand-built renderers (renderFinalDistribution / renderExchange) that we A/B against.
 // Weights come from the predictions' existing fields (Probability); there is NO learning
 // yet. The point is to test whether a traversed frame holds up, not the economy.
 
@@ -117,13 +117,13 @@ func renderCellText(cell *MemoryCell, rootFrame string) string {
 		return "earlier framing: " + c.Text
 	case Prediction:
 		switch c.Role {
-		case "other":
+		case "final":
 			if c.Probability > 0 {
 				return fmt.Sprintf("  p=%.2f  %s", c.Probability, c.Text)
 			}
 			return "" // distribution root — container, no line of its own
-		case "self":
-			return "self proposes: " + c.Text
+		case "efficient":
+			return "efficient proposes: " + c.Text
 		}
 	case ActionRecord:
 		return fmt.Sprintf("action: %s %s %v", c.Primitive, c.EntityID, c.Content)
@@ -240,14 +240,14 @@ func renderFrame(res *traverse.Result) (string, int) {
 }
 
 // ComparePresents renders the latest episode two ways for the Phase-1 A/B — the
-// hand-built renderOtherDistribution and the traversal-built AssembleFramePresent.
+// hand-built renderFinalDistribution and the traversal-built AssembleFramePresent.
 // Exported so cmd/ can drive it after a real cognitive cycle.
 func ComparePresents(d *DNA, budget float64) (hand, traversal string, litNodes int) {
 	g := d.Episodes().Latest()
 	if g == nil {
 		return "", "", 0
 	}
-	hand = renderOtherDistribution(d.Episodes(), g)
+	hand = renderFinalDistribution(d.Episodes(), g)
 	traversal, litNodes = AssembleFramePresent(g, budget)
 	return hand, traversal, litNodes
 }

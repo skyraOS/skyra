@@ -20,7 +20,7 @@ func midlevelFrame(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	// normalized (freshest per entity). Lets midlevel frame purely SPATIAL episodes
 	// (the maze; sharpening the default episode from sense data alone) — decision
 	// 4, perceive-build-uncertainties.md. Read-only assembly: no crossing here (the
-	// settle crosses what it grades; self's assembly crosses what it feeds).
+	// settle crosses what it grades; efficient's assembly crosses what it feeds).
 	locations := ""
 	if g := episodes.Active(); g != nil {
 		locations = strings.Join(

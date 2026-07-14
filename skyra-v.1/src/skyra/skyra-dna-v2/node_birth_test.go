@@ -11,7 +11,7 @@ func TestNodeBirthCrossesEdges(t *testing.T) {
 	d := testDNA()
 	g := d.Episodes().Create("g1", "framing", d.Tick())
 
-	born := appendOtherDistribution(d.Episodes(), g, d.Tick(), []ParsedPrediction{
+	born := appendFinalDistribution(d.Episodes(), g, d.Tick(), []ParsedPrediction{
 		{Text: "a", Probability: 0.6}, {Text: "b", Probability: 0.4},
 	})
 	if len(born) != 3 { // root + 2 branches

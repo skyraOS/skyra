@@ -8,18 +8,19 @@ import (
 	"skyra-v1/src/skyra"
 )
 
-// other:grade — closes the prior other-distribution against the incoming external
+// final:grade — closes the prior final-cause distribution against incoming external
 // evidence via the adversarial-neutral judge. No open bet → "no-prior". A branch
 // matched → "held". A total miss (the distribution put zero mass on what happened)
-// → "all-preds<0", the trigger for grade-driven reframing.// OtherCell.gradePrior; the orchestrator routes the three conditions.
+// → "all-preds<0", the trigger for grade-driven reframing. The orchestrator
+// routes the three conditions.
 //
 // A failed call / parse leaves the bet ungraded — it persists and the next evidence
 // wave retries (slight evidence drift, accepted for the MVP), routing as "no-prior"
 // so the turn still frames.
-func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
+func finalGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "no-prior"
 	episodes := root.DNA().Episodes()
-	distRoot, kids := episodes.LatestUngradedOther()
+	distRoot, kids := episodes.LatestUngradedFinal()
 	if distRoot == nil || len(kids) == 0 || root.DNA().Infer() == nil {
 		return
 	}
@@ -40,7 +41,7 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 	present := fmt.Sprintf("Candidate predictions:\n%s\n\nThe message that actually arrived:\n%s",
 		strings.Join(lines, "\n"), evidence)
-	resp, err := root.Infer("other:grade")(graderSystem, present)
+	resp, err := root.Infer("final:grade")(graderSystem, present)
 	if err != nil {
 		return // bet stays ungraded; carry on unchanged (no-prior)
 	}
@@ -58,17 +59,17 @@ func otherGrade(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	} else {
 		matched, idx = false, 0
 	}
-	episodes.StampOtherGrade(distRoot, kids, idx, score, evidence)
+	episodes.StampFinalGrade(distRoot, kids, idx, score, evidence)
 
 	if matched {
 		root.Condition = "held"
 	} else {
 		root.Condition = "all-preds<0" // total miss → reframe
 	}
-	root.Trace.Note("other:grade", fmt.Sprintf("%s score=%.2f matched=%d evidence=%q", root.Condition, score, idx, evidence))
-	debug.Being("skyra", "other", fmt.Sprintf("grade → %s score=%.2f evidence=%q", root.Condition, score, evidence))
+	root.Trace.Note("final:grade", fmt.Sprintf("%s score=%.2f matched=%d evidence=%q", root.Condition, score, idx, evidence))
+	debug.Being("skyra", "final", fmt.Sprintf("grade → %s score=%.2f evidence=%q", root.Condition, score, evidence))
 	// Closure → A is UNWIRED (2026-07-06): the midlevel coherence-settle is the sole writer of
-	// A now. Closure (did the bet hold) is a separate, parked axis — StampOtherGrade above still
+	// A now. Closure (did the bet hold) is a separate, parked axis — StampFinalGrade above still
 	// records it on the prediction; it just no longer bumps edge alignment. See active-grouping.md
 	// and ActivationStore.DistributeCredit (kept, parked, for when the closure axis is designed).
 }
@@ -83,17 +84,17 @@ const graderSystem = "You are a strict, impartial judge. You are given numbered 
 	"near-misses and partial overlaps are NOT matches.\n\n" +
 	"Reply with only one tag: <match>N</match> (the matching candidate's number) or <match>none</match>."
 
-// other:predict — predict the other party's next move under the framing. Ported
-// from v1 other.Observe (predict half): read the handed episode, infer the
+// final:predict — predict the anticipated external outcome under the framing.
+// Ported from the legacy other.Observe prediction half: read the handed episode, infer the
 // calibrated distribution, append it to the episode spine. Reports "predicted".
-func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
+func finalPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	root.Condition = "predicted" // the worker completes the join regardless
 	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
 	present := fmt.Sprintf("Framing: %s\n\nRecent exchange:\n%s",
 		frameText(root.Episode), renderExchange(root.Nodes))
-	resp, err := root.Infer("other:predict")(otherSystem, present)
+	resp, err := root.Infer("final:predict")(finalSystem, present)
 	if err != nil {
 		return
 	}
@@ -107,29 +108,29 @@ func otherPredict(root *EphemeralRoot, origin skyra.Space, impulse any) {
 			top = p.Probability
 		}
 	}
-	debug.Being("skyra", "other", fmt.Sprintf("predicted %d branches, top p=%.2f", len(preds), top))
-	born := appendOtherDistribution(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), preds)
-	root.Trace.Note("other:predict", fmt.Sprintf("deposited %d branches, top p=%.2f", len(preds), top))
+	debug.Being("skyra", "final", fmt.Sprintf("predicted %d branches, top p=%.2f", len(preds), top))
+	born := appendFinalDistribution(root.DNA().Episodes(), root.Episode, root.DNA().Tick(), preds)
+	root.Trace.Note("final:predict", fmt.Sprintf("deposited %d branches, top p=%.2f", len(preds), top))
 	root.DNA().CrossBirth(born...) // node birth: the new edges were just active
 }
 
-// appendOtherDistribution writes the distribution onto the episode's CURRENT frame
+// appendFinalDistribution writes the distribution onto the episode's CURRENT frame
 // (the frame-owned spine — a bet belongs to the framing it was made under): a root
-// node (frame→other-pred:ts) carrying one child per prediction. Built fully, then
-// added under the index lock (self:predict reads it via the same lock). Returns the
+// node (frame→final-pred:ts) carrying one child per prediction. Built fully, then
+// added under the index lock (efficient:predict reads it via the same lock). Returns the
 // edge keys it created (frame→root + root→each branch) so the caller crosses them.
-func appendOtherDistribution(episodes *EpisodeStore, episode *MemoryCell, ts int, preds []ParsedPrediction) []string {
+func appendFinalDistribution(episodes *EpisodeStore, episode *MemoryCell, ts int, preds []ParsedPrediction) []string {
 	frame := latestFrame(episode)
 	if frame == nil {
 		return nil
 	}
-	rootKey := fmt.Sprintf("%s→other-pred:%d", frame.ID(), ts)
-	rootCell := NewMemoryCell(rootKey, KindPrediction, Prediction{Role: "other", Timestamp: ts}, nil)
+	rootKey := fmt.Sprintf("%s→final-pred:%d", frame.ID(), ts)
+	rootCell := NewMemoryCell(rootKey, KindPrediction, Prediction{Role: "final", Timestamp: ts}, nil)
 	born := []string{rootKey}
 	for i, p := range preds {
-		childKey := fmt.Sprintf("%s→other-pred:%d-%d", frame.ID(), ts, i)
+		childKey := fmt.Sprintf("%s→final-pred:%d-%d", frame.ID(), ts, i)
 		child := NewMemoryCell(childKey, KindPrediction, Prediction{
-			Text: p.Text, Role: "other", Probability: p.Probability, Timestamp: ts,
+			Text: p.Text, Role: "final", Probability: p.Probability, Timestamp: ts,
 		}, nil)
 		rootCell.AddChild(childKey, child)
 		born = append(born, childKey)
@@ -138,7 +139,7 @@ func appendOtherDistribution(episodes *EpisodeStore, episode *MemoryCell, ts int
 	return born
 }
 
-const otherSystem = `You are operating in the cognitive frame External Perspective.
+const finalSystem = `You are operating in the cognitive frame External Perspective.
 
 Your task is to predict several distinct, plausible futures of the conversation.
 

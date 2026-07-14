@@ -395,8 +395,8 @@ func (store *EpisodeStore) AddChild(episode *MemoryCell, edgeKey string, child s
 }
 
 // Snapshot returns an episode's direct children under the index lock — the safe
-// read path when other:predict and self:predict fan out concurrently (other writes
-// the distribution, self reads it). Prediction root nodes are immutable once added,
+// read path when final:predict and efficient:predict fan out concurrently (final writes
+// the distribution, efficient reads it). Prediction root nodes are immutable once added,
 // so their own children are lock-free to read.
 func (store *EpisodeStore) Snapshot(episode *MemoryCell) []skyra.Space {
 	store.mu.Lock()
@@ -428,11 +428,11 @@ func predictionsOf(g *MemoryCell) []*MemoryCell {
 	return out
 }
 
-// LatestUngradedOther finds the newest ungraded other-pred distribution across all
-// episodes — the prior bet other:grade closes against fresh evidence. Returns the
+// LatestUngradedFinal finds the newest ungraded final-pred distribution across all
+// episodes — the prior bet final:grade closes against fresh evidence. Returns the
 // distribution root and its branch children (sorted by edge key for stable prompt
 // numbering). nil if there is no open bet.
-func (store *EpisodeStore) LatestUngradedOther() (*MemoryCell, []*MemoryCell) {
+func (store *EpisodeStore) LatestUngradedFinal() (*MemoryCell, []*MemoryCell) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	var best *MemoryCell
@@ -440,7 +440,7 @@ func (store *EpisodeStore) LatestUngradedOther() (*MemoryCell, []*MemoryCell) {
 	for _, g := range store.byID {
 		for _, cc := range predictionsOf(g) {
 			p, ok := cc.Content().(Prediction)
-			if !ok || p.Role != "other" || p.Graded || len(cc.Children()) == 0 {
+			if !ok || p.Role != "final" || p.Graded || len(cc.Children()) == 0 {
 				continue
 			}
 			if p.Timestamp > bestTS {
@@ -463,11 +463,11 @@ func (store *EpisodeStore) LatestUngradedOther() (*MemoryCell, []*MemoryCell) {
 	return best, kids
 }
 
-// StampOtherGrade records the judge's verdict on a distribution under the index
+// StampFinalGrade records the judge's verdict on a distribution under the index
 // lock: the root carries the probability mass on the realized branch (the proper
 // score, 0 on a total miss); each branch child carries 1 (realized) / 0. matchedIdx
 // is 1-based; 0 marks a total miss.
-func (store *EpisodeStore) StampOtherGrade(root *MemoryCell, kids []*MemoryCell, matchedIdx int, score float64, evidence string) {
+func (store *EpisodeStore) StampFinalGrade(root *MemoryCell, kids []*MemoryCell, matchedIdx int, score float64, evidence string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if p, ok := root.Content().(Prediction); ok {
@@ -487,11 +487,11 @@ func (store *EpisodeStore) StampOtherGrade(root *MemoryCell, kids []*MemoryCell,
 	}
 }
 
-// LatestUngradedRealizedSelf finds the newest ungraded self proposal that has been
+// LatestUngradedRealizedEfficient finds the newest ungraded efficient-cause proposal that has been
 // REALIZED (carries an action child — the intent was actually emitted). Returns the
-// proposal root, its prediction content, and the latest action on it. self:grade
+// proposal root, its prediction content, and the latest action on it. efficient:grade
 // closes it against the reafference.
-func (store *EpisodeStore) LatestUngradedRealizedSelf() (*MemoryCell, Prediction, ActionRecord, bool) {
+func (store *EpisodeStore) LatestUngradedRealizedEfficient() (*MemoryCell, Prediction, ActionRecord, bool) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	var best *MemoryCell
@@ -500,7 +500,7 @@ func (store *EpisodeStore) LatestUngradedRealizedSelf() (*MemoryCell, Prediction
 	for _, g := range store.byID {
 		for _, cc := range predictionsOf(g) {
 			p, ok := cc.Content().(Prediction)
-			if !ok || p.Role != "self" || p.Graded || len(cc.Children()) == 0 {
+			if !ok || p.Role != "efficient" || p.Graded || len(cc.Children()) == 0 {
 				continue
 			}
 			if p.Timestamp > bestTS {
@@ -528,9 +528,9 @@ func (store *EpisodeStore) LatestUngradedRealizedSelf() (*MemoryCell, Prediction
 	return best, bestPred, action, true
 }
 
-// StampSelfGrade records the execution judge's verdict on a realized proposal under
+// StampEfficientGrade records the execution judge's verdict on a realized proposal under
 // the index lock (score 1 / 0.5 / 0; evidence = the world result).// gradePrior's write-back.
-func (store *EpisodeStore) StampSelfGrade(proposal *MemoryCell, score float64, evidence string) {
+func (store *EpisodeStore) StampEfficientGrade(proposal *MemoryCell, score float64, evidence string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if p, ok := proposal.Content().(Prediction); ok {

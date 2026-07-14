@@ -7,7 +7,7 @@ import (
 	"skyra-v1/src/skyra"
 )
 
-// motor:collapse — read self's proposal off the episode, collapse it into one
+// motor:collapse — read the efficient-cause proposal off the episode, collapse it into one
 // concrete world primitive (with retry-on-parse-fail), emit it, and record it.
 // Observe/Express + inferAction. Reports "emitted".
 func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
@@ -15,7 +15,7 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	if root.Episode == nil || root.DNA().Infer() == nil {
 		return
 	}
-	plan, proposal := readSelfProposal(root.DNA().Episodes(), root.Episode)
+	plan, proposal := readEfficientProposal(root.DNA().Episodes(), root.Episode)
 	if plan == "" || proposal == nil {
 		return
 	}
@@ -24,7 +24,7 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 		return
 	}
 	// the action hangs off the PROPOSAL (proposal→action) — the realization edge
-	// self:grade closes against the reafference, not off the episode.
+	// efficient:grade closes against the reafference, not off the episode.
 	action := NewMemoryCell(
 		fmt.Sprintf("%s→action:%d", proposal.ID(), root.DNA().Tick()),
 		KindAction,
@@ -46,15 +46,15 @@ func motorCollapse(root *EphemeralRoot, origin skyra.Space, impulse any) {
 	}
 }
 
-// readSelfProposal reads the latest self proposal off the episode's frames (the
+// readEfficientProposal reads the latest efficient-cause proposal off the episode's frames (the
 // frame-owned spine) — the plan text plus the proposal cell (motor hangs the action
 // off it: the realization edge).
-func readSelfProposal(episodes *EpisodeStore, episode *MemoryCell) (string, *MemoryCell) {
+func readEfficientProposal(episodes *EpisodeStore, episode *MemoryCell) (string, *MemoryCell) {
 	best := ""
 	var bestCell *MemoryCell
 	bestTS := -1
 	for _, mc := range predictionsOf(episode) {
-		if p, ok := mc.Content().(Prediction); ok && p.Role == "self" && p.Timestamp > bestTS {
+		if p, ok := mc.Content().(Prediction); ok && p.Role == "efficient" && p.Timestamp > bestTS {
 			bestTS, best, bestCell = p.Timestamp, p.Text, mc
 		}
 	}

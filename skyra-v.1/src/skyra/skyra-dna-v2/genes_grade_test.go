@@ -10,7 +10,7 @@ import (
 )
 
 // gradeMock is the turn-1 cold-start mock plus a parametrized adversarial judge, so
-// a phase-2 two-turn run can drive other:grade down either fork (held / total miss).
+// a phase-2 two-turn run can drive final:grade down either fork (held / total miss).
 func gradeMock(judge string) InferFunc {
 	return func(system, present string) (string, error) {
 		if response, ok := causalTestResponse(system); ok {
@@ -61,8 +61,8 @@ func condOf(trace []Span, step Step) string {
 	return ""
 }
 
-// Turn 1 establishes an other-distribution; turn 2's evidence realizes one branch,
-// so other:grade closes it as "held" and the prior bet is stamped graded.
+// Turn 1 establishes a final-cause distribution; turn 2's evidence realizes one branch,
+// so final:grade closes it as "held" and the prior bet is stamped graded.
 func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
@@ -75,14 +75,14 @@ func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
 	fireTurn(t, o, "X1", "", "can you help with the skyra project")
 	t2 := fireTurn(t, o, "X2", "X1", "how does the kernel work")
 
-	if got := condOf(t2, StepOtherGrade); got != "held" {
-		t.Fatalf("other:grade condition = %q, want held", got)
+	if got := condOf(t2, StepFinalGrade); got != "held" {
+		t.Fatalf("final:grade condition = %q, want held", got)
 	}
 	if condOf(t2, StepMidlevelFrame) != "framed" {
 		t.Fatal("held should route straight into midlevel:frame")
 	}
 	// the turn-1 distribution root must now be graded with the realized branch's mass.
-	root := priorOtherRoot(t, d)
+	root := priorFinalRoot(t, d)
 	p, _ := root.Content().(Prediction)
 	if !p.Graded || p.Grade != 0.7 {
 		t.Fatalf("prior root = {graded:%v grade:%.2f}, want {true 0.70}", p.Graded, p.Grade)
@@ -94,7 +94,7 @@ func TestGradeHeldStampsPriorAndFrames(t *testing.T) {
 	}
 }
 
-// Turn 2's evidence realizes NO branch — a total miss. other:grade reports
+// Turn 2's evidence realizes NO branch — a total miss. final:grade reports
 // "all-preds<0", which the orchestrator routes as a reframe (one-reframe rail), and
 // the turn still frames and emits.
 func TestGradeTotalMissReframes(t *testing.T) {
@@ -109,14 +109,14 @@ func TestGradeTotalMissReframes(t *testing.T) {
 	fireTurn(t, o, "X1", "", "can you help with the skyra project")
 	t2 := fireTurn(t, o, "X2", "X1", "actually, let's talk about something unrelated")
 
-	if got := condOf(t2, StepOtherGrade); got != "all-preds<0" {
-		t.Fatalf("other:grade condition = %q, want all-preds<0", got)
+	if got := condOf(t2, StepFinalGrade); got != "all-preds<0" {
+		t.Fatalf("final:grade condition = %q, want all-preds<0", got)
 	}
 	if !board.Row("X2", "").Reframed() {
 		t.Fatal("total miss should have tripped the reframe rail")
 	}
 	// the prior bet is stamped graded with zero mass (nothing realized).
-	root := priorOtherRoot(t, d)
+	root := priorFinalRoot(t, d)
 	p, _ := root.Content().(Prediction)
 	if !p.Graded || p.Grade != 0 {
 		t.Fatalf("prior root = {graded:%v grade:%.2f}, want {true 0.00}", p.Graded, p.Grade)
@@ -232,7 +232,7 @@ func TestInteractionConsolidatedOntoEpisode(t *testing.T) {
 }
 
 // execMock is the cold-start mock plus a parametrized execution judge, so a
-// reafference turn can drive self:grade down either fork (exec-ok / exec=no).
+// reafference turn can drive efficient:grade down either fork (exec-ok / exec=no).
 func execMock(execJudge string) InferFunc {
 	base := gradeMock("<match>none</match>")
 	return func(system, present string) (string, error) {
@@ -262,9 +262,9 @@ func fireReafference(t *testing.T, o *Orchestrator, id, prev, result string) []S
 	}
 }
 
-// After turn 1 emits an action, the world's reply faithfully executes it — self:grade
+// After turn 1 emits an action, the world's reply faithfully executes it — efficient:grade
 // closes the proposal "exec-ok" and stamps the proposal graded with a positive score.
-func TestSelfGradeExecOk(t *testing.T) {
+func TestEfficientGradeExecOk(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(execMock("<grade>yes</grade>"))
@@ -274,21 +274,21 @@ func TestSelfGradeExecOk(t *testing.T) {
 	fireTurn(t, o, "X1", "", "can you help with the skyra project")
 	r := fireReafference(t, o, "R1", "X1", "michael listened and replied")
 
-	if got := condOf(r, StepSelfGrade); got != "exec-ok" {
-		t.Fatalf("self:grade condition = %q, want exec-ok", got)
+	if got := condOf(r, StepEfficientGrade); got != "exec-ok" {
+		t.Fatalf("efficient:grade condition = %q, want exec-ok", got)
 	}
 	if board.Row("R1", "").Reframed() {
 		t.Fatal("faithful execution should not reframe")
 	}
-	p := gradedSelfProposal(t, d)
+	p := gradedEfficientProposal(t, d)
 	if !p.Graded || p.Grade != 1 {
-		t.Fatalf("self proposal = {graded:%v grade:%.2f}, want {true 1.00}", p.Graded, p.Grade)
+		t.Fatalf("efficient proposal = {graded:%v grade:%.2f}, want {true 1.00}", p.Graded, p.Grade)
 	}
 }
 
-// The world reports a hard failure (the intent could not be realized) — self:grade
+// The world reports a hard failure (the intent could not be realized) — efficient:grade
 // reports "exec=no", which trips the reframe rail.
-func TestSelfGradeExecFailReframes(t *testing.T) {
+func TestEfficientGradeExecFailReframes(t *testing.T) {
 	d := testDNA()
 	WireGenes(d)
 	d.SetInfer(execMock("<grade>no</grade>"))
@@ -298,41 +298,41 @@ func TestSelfGradeExecFailReframes(t *testing.T) {
 	fireTurn(t, o, "X1", "", "can you help with the skyra project")
 	r := fireReafference(t, o, "R1", "X1", "blocked: could not reach the destination")
 
-	if got := condOf(r, StepSelfGrade); got != "exec=no" {
-		t.Fatalf("self:grade condition = %q, want exec=no", got)
+	if got := condOf(r, StepEfficientGrade); got != "exec=no" {
+		t.Fatalf("efficient:grade condition = %q, want exec=no", got)
 	}
 	if !board.Row("R1", "").Reframed() {
 		t.Fatal("hard execution failure should have tripped the reframe rail")
 	}
-	p := gradedSelfProposal(t, d)
+	p := gradedEfficientProposal(t, d)
 	if !p.Graded || p.Grade != 0 {
-		t.Fatalf("self proposal = {graded:%v grade:%.2f}, want {true 0.00}", p.Graded, p.Grade)
+		t.Fatalf("efficient proposal = {graded:%v grade:%.2f}, want {true 0.00}", p.Graded, p.Grade)
 	}
 }
 
-// gradedSelfProposal returns the graded self proposal — the realized one self:grade
+// gradedEfficientProposal returns the graded efficient-cause proposal — the realized one efficient:grade
 // closed (the reafference cycle mints a fresh ungraded proposal, so "latest" won't do).
-func gradedSelfProposal(t *testing.T, d *DNA) Prediction {
+func gradedEfficientProposal(t *testing.T, d *DNA) Prediction {
 	t.Helper()
 	for _, g := range d.Episodes().All() {
 		for _, mc := range predictionsOf(g) {
-			if p, ok := mc.Content().(Prediction); ok && p.Role == "self" && p.Graded {
+			if p, ok := mc.Content().(Prediction); ok && p.Role == "efficient" && p.Graded {
 				return p
 			}
 		}
 	}
-	t.Fatal("no graded self proposal found")
+	t.Fatal("no graded efficient proposal found")
 	return Prediction{}
 }
 
-// priorOtherRoot returns the turn-1 other-distribution root (the oldest one).
-func priorOtherRoot(t *testing.T, d *DNA) *MemoryCell {
+// priorFinalRoot returns the turn-1 final-cause distribution root (the oldest one).
+func priorFinalRoot(t *testing.T, d *DNA) *MemoryCell {
 	t.Helper()
 	var oldest *MemoryCell
 	oldestTS := 1 << 30
 	for _, g := range d.Episodes().All() {
 		for _, mc := range predictionsOf(g) {
-			if p, ok := mc.Content().(Prediction); ok && p.Role == "other" && len(mc.Children()) > 0 {
+			if p, ok := mc.Content().(Prediction); ok && p.Role == "final" && len(mc.Children()) > 0 {
 				if p.Timestamp < oldestTS {
 					oldestTS, oldest = p.Timestamp, mc
 				}
@@ -340,7 +340,7 @@ func priorOtherRoot(t *testing.T, d *DNA) *MemoryCell {
 		}
 	}
 	if oldest == nil {
-		t.Fatal("no other-distribution root found")
+		t.Fatal("no final-cause distribution root found")
 	}
 	return oldest
 }

@@ -4,7 +4,7 @@
 // proves the ported grading + reframe fire on real inference:
 //
 //   - turn 1 (cold start): frame → predict → emit; establishes an other-distribution
-//   - turn 2 (on-track):    the reply realizes a predicted branch → other:grade "held"
+//   - turn 2 (on-track):    the reply realizes a predicted branch → final:grade "held"
 //   - turn 3 (pivot):       an unrelated turn → total miss → "all-preds<0" → REFRAME
 //
 // Prints, per turn: the grade condition, whether it reframed, the frame, and the
@@ -73,7 +73,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("  other:grade:  %s\n", condOf(trace, dnav2.StepOtherGrade))
+		fmt.Printf("  final:grade:  %s\n", condOf(trace, dnav2.StepFinalGrade))
 		fmt.Printf("  reframed:     %v\n", board.Row(tn.id, "").Reframed())
 		fmt.Printf("  framing:      %s\n", frame(d))
 		fmt.Printf("  self plan:    %s\n", selfPlan(d))
