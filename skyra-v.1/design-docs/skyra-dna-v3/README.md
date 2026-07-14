@@ -169,6 +169,7 @@ See [the-cycle.md](the-cycle.md).
 | [scoring.md](scoring.md) | grading — the edge as P(W|E), the EMA, beat-the-base-rate, the diff |
 | [the-wave.md](the-wave.md) | the two waves, the plan loop, the kill condition, what the kernel needs |
 | [workers.md](workers.md) | the six workers, their contracts, and when they fire |
+| [trace.md](trace.md) | visibility: the event trace (board data model), three tiers. NOT BUILT. |
 
 ## The shape of a cycle
 
