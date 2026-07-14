@@ -13,6 +13,19 @@ type Triple struct {
 	Subject    string
 	Predicate  string
 	Object     string
+
+	// Payload is the ONLY INTERPRETIVE SURFACE IN THE SYSTEM.
+	//
+	//	being:skyra  engage  being:michael        ← the triple. RAW. exact. it happened.
+	//	    Payload: "want to go to the mall"     ← INTERPRETED. the recursion point.
+	//
+	// Every triple is exact EXCEPT its payload. The payload is not really a field — it is a
+	// nested thing that DECOMPOSES INTO MORE TRIPLES, which gives the decomposer a one-sentence
+	// job description: turn payloads into triples. Nothing else in the graph ever needs a model.
+	//
+	// It is always active when perceiving an engagement: perceiving an engagement means opening
+	// the payload, which is exactly when interpretation is required.
+	Payload string
 }
 
 // Mode is a ROUTING INSTRUCTION FOR THE INCOMING IMPULSE — how an observation resolves
@@ -69,6 +82,15 @@ const (
 // Key is the triple's identity for indexing and diffing — mode and confidence are the
 // being's stance on the claim, not part of the claim itself, so they are excluded. Two
 // triples with the same key are claims about the same thing.
+//
+// Payload is excluded too, and deliberately: the payload is INSTANCE CONTENT, not claim
+// identity. "skyra engage michael" is the reusable pattern the reverse index matches on;
+// what was said is the particular. When the content itself must be claimed, it goes in the
+// OBJECT position of its own expect —
+//
+//	being:michael  received  "want to grab lunch?"
+//
+// — where it is part of the key and therefore gradeable.
 func (t Triple) Key() string {
 	return t.Subject + "\x00" + t.Predicate + "\x00" + t.Object
 }

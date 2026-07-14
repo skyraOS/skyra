@@ -48,26 +48,62 @@ type Observation struct {
 	At int
 }
 
-// Provenance separates what the world said from what the being made of it.
+// Provenance separates what the world said, from what the being made of it, from what the being
+// itself wrote down.
 type Provenance string
 
 const (
 	// ProvenanceRaw — transcribed, not inferred. The transcript, an Outcome's committed effects,
 	// a sensor reading. Unfalsifiable: it happened.
+	//
+	// Note that the RETURN OF A WAVE is raw. "The engage occurred; here is what it touched" is
+	// the WORLD REPORTING, not the agent's own output coming back to it. Do not confuse the two.
 	ProvenanceRaw Provenance = "raw"
 
-	// ProvenanceInterpreted — the decomposer's reading. A claim, and one day a graded one.
+	// ProvenanceInterpreted — the decomposer's reading of a payload. A claim, and one day a
+	// graded one.
 	ProvenanceInterpreted Provenance = "interpreted"
+
+	// ProvenanceMark — SELF-AUTHORED, and written onto the world. Traces, target state, notes.
+	// The world is not only what is true; it is also a place agents can WRITE TO. A whiteboard in
+	// the room. Anyone can read what is on it; it is not thereby a fact about the room.
+	//
+	// Without a rule, an agent writes a trace, walks away, comes back, perceives its own
+	// handwriting, and treats it as evidence about the world. That is LAUNDERING — the fiction
+	// problem wearing a lab coat. LAW 1 does not catch it (a mark is not an expression) and LAW 2
+	// does not catch it (it DID come back through perception).
+	//
+	// The rule is narrow and exact:
+	//
+	//	LEGITIMATE   "a wave of mine passed here at tick N"
+	//	             TRUE. a fact about my own history. perceiving it is MEMORY, not fiction.
+	//
+	//	FORBIDDEN    "there is a trace toward the kitchen, therefore food is in the kitchen"
+	//	             NO. the trace says I WENT THAT WAY. it says nothing about food.
+	//
+	//	A MARK MAY BE PERCEIVED AS A FACT ABOUT ITSELF. IT MAY NEVER BE EVIDENCE FOR A CLAIM
+	//	ABOUT ANYTHING ELSE.
+	//
+	// A mark can steer where you look. It can never settle what you claimed about the world. It
+	// is a SEARCH AID, not EVIDENCE — which is enforced mechanically by Fidelity() returning 0.
+	//
+	// Marks also decay on the tick of the AGENT THAT LAID THEM, not the world's: a trace records
+	// "I searched here," which is a fact about that agent's history, so it is measured on that
+	// agent's clock. See design-docs/world-agent-v2/traces.md.
+	ProvenanceMark Provenance = "mark"
 )
 
-// Fidelity is how much a grade resolved by this observation is allowed to count. A raw
-// observation settles a bet at full weight; an interpretation settles it at the same discount as
-// an interpret-mode claim, because that is exactly what it is.
+// Fidelity is how much a grade resolved by this observation is allowed to count.
 //
-// This is the mechanical form of the rule: an inference must never settle a bet at the authority
-// of a fact.
+//	raw           1.0    the world said so. settles a bet at full weight.
+//	interpreted   0.3    the decomposer read it out of a payload. discounted, because that is
+//	                     what it is — an inference must never settle a bet at a fact's authority.
+//	mark          0.0    SELF-AUTHORED. may never grade anything about the world.
 func (o Observation) Fidelity() float64 {
-	if o.Provenance == ProvenanceInterpreted {
+	switch o.Provenance {
+	case ProvenanceMark:
+		return 0
+	case ProvenanceInterpreted:
 		return ModeInterpret.Weight()
 	}
 	return ModeExact.Weight()

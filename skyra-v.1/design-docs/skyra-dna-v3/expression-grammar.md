@@ -37,6 +37,58 @@ unparseable. *"Parse failure kept motor from acting at all"* already happened on
   tree to walk.
 - **Token cost.** At 500 nodes, `<node>…</node>` ceremony is real money.
 
+## The central form: subject, primitive, object — and a payload
+
+```text
+skyra  engage   michael   + payload
+skyra  perceive michael   + payload
+```
+
+The triple is **flat and exact**. The **payload is the only interpretive surface in the entire
+system.**
+
+```text
+being:skyra  engage  being:michael           ← RAW. exact. it happened. unfalsifiable.
+    payload: "want to go to the mall"        ← INTERPRETED. the recursion point.
+```
+
+> **Every triple is exact except its payload.**
+
+The payload is not really a field — it is a **nested thing that decomposes into more triples.** Which
+gives the decomposer a one-sentence job description: *turn payloads into triples.* Nothing else in
+the graph ever needs a model.
+
+And it is **always active when perceiving an engagement**: perceiving an engagement means opening the
+payload, which is exactly when interpretation is required. This is the structural form of the
+`raw`/`interpreted` provenance split (see `observation.go`).
+
+## One act, two expects — the world agreeing and the agent agreeing
+
+An engage produces **two** claims, and they come back through **different channels** and mean
+**completely different things when they fail**:
+
+```xml
+<act id="a1" target="being:michael" primitive="engage">want to grab lunch?</act>
+
+<expect of="a1">  exact      0.99  1  being:michael  received  "want to grab lunch?"  </expect>
+<expect of="a1">  interpret  0.60  5  being:michael  state     agreeable              </expect>
+```
+
+```text
+DID THE WORLD AGREE?   "did you do the thing you said you did"
+                       → returns ON THE WAVE. an Outcome. RAW, exact.
+                       → NOT the agent's own output — it is the WORLD REPORTING.
+                       → failure means the ACTION failed. the message never sent.
+
+DID THE AGENT AGREE?   "did the other agent respond the way you predicted"
+                       → returns as a NEW IMPULSE. interpreted.
+                       → failure means the MODEL OF THEM failed. Michael didn't want lunch.
+```
+
+**Same code, different edges, different lessons.** It is the efficient/final split arriving from a
+new direction — *did my act execute* versus *did the world become what I wanted* — which is a good
+sign the ontology is holding.
+
 ## The triple
 
 ```text

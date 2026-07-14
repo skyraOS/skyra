@@ -83,6 +83,26 @@ record different logs, because they attend to different things.
 **The dependency is circular, in exactly the shape of the loop below. Neither graph is prior.
 Neither is disposable.**
 
+## Two clocks
+
+They measure different things and must not be confused.
+
+```text
+AGENT TICK   SUBJECTIVE. advances on COGNITION.
+             → `within` (bet maturity)   "how much have I thought since I bet?"
+             → mark decay                "how stale is my own search?"
+
+WORLD TICK   OBJECTIVE.  advances on THE WORLD.
+             → world-process timing      "the build takes 30s whether or not I think about it"
+```
+
+If the being idles for an hour and thinks nothing, **nothing has happened to it**. A bet does not
+mature because time passed; it matures because the being has *thought* and still does not know.
+
+And a mark decays on the clock of **whoever laid it** — a trace records *"I searched here,"* which is
+a fact about that agent's history, not the world's. Staleness protection does not come from decay
+anyway: **it comes from perception.** If the being needed to know, it looked.
+
 ## The cycle
 
 Written from **observation**, because the being does not begin by wanting something — it begins by
@@ -130,6 +150,13 @@ See [the-cycle.md](the-cycle.md).
    predicate vocabulary. Enough to speak the right language; not enough to know what answer was
    wanted. Otherwise the being resolves ambiguity toward its own bets, and manufactures the evidence
    that grades it.
+
+7. **A mark may be perceived as a fact about itself. It may never be evidence for a claim about
+   anything else.** The world holds *facts* (what is true) and *marks* (what agents wrote there —
+   traces, targets, notes). *"A wave of mine passed here"* is true and perceiving it is memory. *"So
+   food is in the kitchen"* is laundering. A mark can steer where you look; it can never settle what
+   you claimed. Enforced mechanically: `Observation.Fidelity()` returns **0** for a mark.
+   See [world-agent-v2](../world-agent-v2/README.md).
 
 ## The parts
 

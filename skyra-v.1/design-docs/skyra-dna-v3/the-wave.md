@@ -176,6 +176,32 @@ observations return       →  decomposer → world state (LAW 1) → grader
 **Descent creates final causes. Ascent creates efficient causes.** The descent said what each state
 is *for*; the ascent discovers what actually *produced* it.
 
+## Attention is a goal, not a mechanism
+
+The world-agent **holds impulses until an agent perceives them** — they are not pushed (see
+[world-agent-v2](../world-agent-v2/README.md)). Which raises the obvious objection: *Michael talks
+and Skyra never listens.*
+
+The answer is not a push channel and not a peripheral-vision hack:
+
+> **Bootstrap the current-state and expected-state graphs with an ACTIVE BRIDGE between them. Then
+> perception is already bootstrapped.**
+
+The being perceives because it has a **standing target that requires perceiving**. It hears Michael
+not because an interrupt fired, but because *knowing what Michael is doing is something it wants*,
+and the plan to get it includes looking. A bridge that never closes.
+
+```text
+attention is not a mechanism.  ATTENTION IS A GOAL.
+```
+
+No special-case machinery, no interrupt path, nothing bolted onto the loop — it is the ordinary
+workflow wave, running against a target the genome seeded.
+
+**And the genome already has the slot.** v.05's `being ~name skyra ~purpose I think, respond, and
+relate on behalf of the system` — **purpose IS the bootstrap target state.** The thing that was
+always going to come back is the thing that seeds the standing bridge.
+
 ## The workflow wave is a live goroutine
 
 It stays alive **while world state agrees with the plan**. It owns its own node-firing loop: it
