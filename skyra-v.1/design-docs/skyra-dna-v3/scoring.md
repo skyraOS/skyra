@@ -84,11 +84,42 @@ Clamp `p ∈ [ε, 1−ε]` so the log cannot blow up.
 The graph knows *"builds pass 70% of the time after this kind of edit."* Only the model can look at
 **this** diff and say *"…but this one touches the auth interface, so 0.2."*
 
-> **The model's job is to beat the base rate using the particulars of this instance.**
->
-> **The LLM only gets paid for information the graph did not already have.**
+> **The LLM only earns credit for information the graph did not already have.**
 
 That is precisely what a language model is good at, and precisely what a graph cannot do.
+
+### But the model is NEVER TOLD ANY OF THIS
+
+**The prompt does not describe the scoring rule.** Not the multiplier, not the prior, not the fact
+that beating the base rate is what pays. It asks for an honest probability and says nothing about
+consequences.
+
+```text
+the KERNEL   does not know what a weight MEANS
+the MODEL    does not know what its confidence is USED FOR
+```
+
+Three reasons, and each alone is sufficient:
+
+**It replaces calibration with strategy.** The incentive-compatibility theorem assumes an
+expected-utility maximizer. An LLM told *"you are scored on beating the base rate"* does not become
+calibrated — it **roleplays a score-maximizer**, reasoning narratively about the rule instead of
+about the world, and deviating from history *for its own sake*. That is contrarianism, not
+information.
+
+> **A calibrated model beats the base rate automatically whenever it actually knows something. Asking
+> for it is how you stop getting it.**
+
+**It contaminates the only metric that matters.** `Score` is the check on whether the model is
+earning its keep. A model that *knows* it is being tested on its edge over the base rate is no longer
+being tested on anything. Goodhart, arriving through the prompt.
+
+**And the rule will change.** α, τ, the fidelity weights, the retrieval formula — all of it gets
+tuned. A prompt encoding the scoring rule invalidates every prior run each time it moves.
+
+Enforced by `TestPromptDoesNotLeakTheScoringRule`, which fails on any of *scored / punish / reward /
+earn / paid / base rate / beat / credit / grade* appearing in the prompt — because this "improvement"
+will be attempted again by whoever next reads the prompt and finds it under-specified.
 
 ### And it gives you a falsifiable check on the architecture
 

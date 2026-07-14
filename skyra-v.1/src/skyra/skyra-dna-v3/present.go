@@ -51,6 +51,12 @@ func (b *Being) present(target, holes []Triple) string {
 
 	// PRECEDENT. The reverse index, ranked by P × confidence(N) × F — counted reliability, not
 	// anyone's opinion. The edges rerank the posting lists.
+	//
+	// Showing the base rate ("worked 70% of 10 tries") is EVIDENCE, not the answer key. A forecaster
+	// who does not know the historical rate is worse, not more honest — and the model still cannot
+	// infer the multiplier, the prior, or which direction pays. The line we are holding is:
+	//
+	//	SHOW IT WHAT HAPPENED.  NEVER SHOW IT WHAT ITS ANSWER IS WORTH.
 	query := holes
 	if len(query) == 0 {
 		query = target
@@ -98,14 +104,36 @@ func truncate(s string, n int) string {
 
 // plannerSystem is the ONE prompt in the system.
 //
-// Note what it does NOT say: it does not tell the model how to think, how to decompose a problem,
-// or what a good plan looks like. It states the grammar and the scoring rule, and then gets out of
-// the way. The framing the model emits is its own system prompt for that node, and the world
-// selects among framings by grading their predictions.
-const plannerSystem = `You are a being that acts on a world and LEARNS BY BEING WRONG.
+// # It does not tell the model how it is scored, and that is deliberate
+//
+// The obvious move is to explain the scoring rule — "you are paid for beating the base rate,
+// confident-and-wrong is punished hard." DO NOT DO THIS. It was in here, and it was a mistake.
+//
+//  1. IT REPLACES CALIBRATION WITH STRATEGY. The incentive-compatibility theorem for proper scoring
+//     rules assumes an expected-utility maximizer. An LLM told "you are scored on beating the base
+//     rate" does not become calibrated — it starts ROLEPLAYING a score-maximizer, reasoning
+//     narratively about the rule instead of about the world. Told that deviating from history pays,
+//     it deviates FOR ITS OWN SAKE. That is contrarianism, not information.
+//
+//     A calibrated model beats the base rate AUTOMATICALLY whenever it actually knows something.
+//     You do not have to ask for it. Asking for it is how you stop getting it.
+//
+//  2. IT CONTAMINATES THE ONE METRIC THAT MATTERS. Expression.Score is the check on whether the
+//     model is earning its keep at all. If the model knows it is being tested on that, the test
+//     measures something else — Goodhart, arriving through the prompt.
+//
+//  3. IT IS THE VOID-KERNEL DISCIPLINE, ONE LAYER UP. The kernel does not know what a weight MEANS.
+//     The model does not know what its confidence is USED FOR. Each layer knows only what its job
+//     requires; knowing more is leverage it should not have.
+//
+//  4. THE RULE WILL CHANGE. α, τ, the fidelity weights, the retrieval formula — all of it gets
+//     tuned. A prompt that encodes the scoring rule invalidates every prior run each time.
+//
+// So: describe the JOB and the FORMAT. Say nothing about consequences. The model reports what it
+// honestly believes; the substrate decides what that is worth.
+const plannerSystem = `You act on a world.
 
-Emit acts, and for every act, PREDICT what world state it will produce. Your predictions are
-scored against what actually happens.
+For every act, state what world state you expect it to produce, and how likely you think that is.
 
 FORMAT — reply with only this:
 
@@ -119,19 +147,17 @@ FORMAT — reply with only this:
 
 PRIMITIVES:  write (payload is the file body) · exec (payload is a shell command, runs in target dir)
 
-EXPECT LINE:  <confidence 0..1> <within> <subject> <predicate> <object>
-  confidence  your probability that this comes true.
+EXPECT LINE:  <likelihood 0..1> <within> <subject> <predicate> <object>
+  likelihood  your honest probability that this comes true. Not a target and not a hope — what you
+              actually think the odds are, given what you know about THIS case in particular.
   within      how many ticks until it should be checked. 1 = immediately after the act.
 
 PREDICATES YOU CAN CHECK:  exists (true|false) · contains (true|false) · status (ok|failed)
+Predicting anything else is pointless — nothing can check it.
 
 REQUIRES:  requires="<subject> <predicate> <object>"  — an act only fires once this is OBSERVED
 to be true. This is how you order work: no <parallel>, no <if>. State the condition.
 
 RULES:
-- Every act MUST have at least one expect. An act you cannot be wrong about teaches nothing.
-- YOU ARE SCORED ON BEATING THE BASE RATE, not on being right. If precedent says something works
-  70% of the time and you say 0.70, you earn NOTHING. You are paid only for what you know that the
-  history does not — so if THIS case is different, say so, and be specific.
-- Confident and wrong is punished hard. Confident and right, when history disagreed with you, pays
-  the most.`
+- Every act must have at least one expect.
+- Use your judgement. Say what you actually think will happen.`
