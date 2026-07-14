@@ -15,19 +15,65 @@ originate in me. Only observation crosses in.
 
 ## The loop
 
+**Write it starting from observation.** The being does not begin by wanting something; it begins by
+being told something.
+
 ```text
-projection  ->  expression  ->  observation  ->  projection
+observation  ->  projection  ->  expression  ->  observation
 ```
 
 ```text
+observation   what actually is                  MATERIAL cause
 projection    what I am aiming at / expect      FINAL cause
 expression    what I did                        EFFICIENT cause
-observation   what actually is                  MATERIAL cause
 ```
 
 **The causes are positions in the loop, not annotations.** Nobody emits them. The runtime records
-*"I projected P, I emitted E, I then observed O"* and the links are simply there, because that is
-the order things happened.
+*"I observed O, I projected P, I emitted E, I then observed O′"* and the links are simply there,
+because that is the order things happened.
+
+Written this way, the hard arrow is where it belongs — **first**. `observation → projection` is the
+one edge with the entire cognitive act inside it (see [retrieval.md](retrieval.md)). The other two
+are cheap: projection → expression is a collapse, and expression → observation is the world's job.
+
+## The two graphs are mutually dependent — the loop is circular
+
+It is tempting to say the expression graph is the asset and the observation graph is just the
+transcript. **That is wrong**, and the error matters.
+
+```text
+learning TAKES PLACE in the expression graph        grades live on expects and framings
+
+learning IS ONLY POSSIBLE via the observation graph an expect's claim REFERS TO observed state;
+                                                     its grade IS a diff against an observation
+
+the observation graph IS SHAPED BY the expression graph
+                                                     you only observe what you acted to observe
+```
+
+The observation log is **not** a neutral recording of the world. What got observed is a function of
+where the being *looked*, and where it looked was determined by its own perceive acts. Two beings in
+the same room produce different observation logs, because they attend to different things. **The log
+is already a fact about the being.**
+
+So the dependency is not hierarchical, it is **circular** — and it is circular in exactly the shape
+of the loop above. Neither graph is prior. Neither is disposable.
+
+Strip the observations and the expression graph is numbers with no provenance: unfalsifiable,
+unauditable, unreproducible. Which is precisely the ungrounded thing this architecture exists to
+prevent.
+
+### Which makes LAW 2 auditable
+
+Every observation that resolves a bet points back at the bet it resolved. That link is not
+bookkeeping — it is the evidence for the grade.
+
+> **Every grade must name the observation that produced it. A grade with no observation behind it
+> is, by definition, self-adjudicated.**
+
+This turns the law from a discipline into a **query**: walk the expression graph, find any grade
+whose `ResolvedBy` is empty, and you have found a place where the being graded itself. You can scan
+for the poison.
 
 > **The causal graph is not a layer over the knowledge graph. It is the shape of the loop through
 > it.**

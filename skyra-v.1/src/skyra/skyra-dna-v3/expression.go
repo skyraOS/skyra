@@ -63,6 +63,32 @@ type Expect struct {
 	Of []string
 
 	Triple
+
+	// Grade state. This IS the economy — there is no separate store. An expect is a claim,
+	// and its grade is how that claim has fared.
+	//
+	//   A  alignment  — the claim's accuracy against what was observed
+	//   S  salience   — arousal at reinforcement
+	//   F  frequency  — recency/use, decayed lazily
+	//   N  gradings   — how many times it has come due; sets learning rate AND confidence
+	//
+	// N is what keeps UNTESTED apart from WRONG. A bet on a branch never walked is not
+	// falsified — it is unresolved, and unresolved means LOW CONFIDENCE, not low alignment.
+	// Collapse those and you punish branches for not having been explored.
+	A, S, F float64
+	N       int
+
+	// ResolvedBy names the observations that closed this bet. It is not bookkeeping — it is
+	// the EVIDENCE FOR THE GRADE, and it is what makes LAW 2 auditable rather than merely
+	// stated:
+	//
+	//   Every grade must name the observation that produced it. A grade with no observation
+	//   behind it is, by definition, self-adjudicated.
+	//
+	// Which turns the law into a QUERY: walk the expression graph, find any graded expect
+	// whose ResolvedBy is empty, and you have found a place where the being graded itself.
+	// You can scan for the poison.
+	ResolvedBy []string
 }
 
 // Validate enforces LAW 5 — falsifiability, at the parser rather than by discipline.

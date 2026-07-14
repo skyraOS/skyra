@@ -56,22 +56,38 @@ grade weight    how hard a grade is allowed to move things. = channel fidelity �
 `world graph` (say **observation graph**) · `ledger` as a noun for a store (say **grades**) ·
 `memory store` (say **expression graph**)
 
-### Why the expression graph is the being
+### The two graphs are mutually dependent
 
-The observation log is just *what happened* — anyone standing there would have recorded the same
-thing, and it is reconstructible. What cannot be reconstructed is the accumulated record of **what
-this being claimed, and how those claims fared.** That is the memory, that is the learning, and it is
-the only thing here that nobody can copy or scrape.
+Learning **takes place** in the expression graph — grades live on expects and framings, and the
+accumulated record of *what this being claimed and how those claims fared* is the thing nobody can
+copy or scrape.
+
+But it is **only possible** because of the observation graph. An expect's claim refers to observed
+state; its grade *is* a diff against an observation. Strip the observations and the expression graph
+is numbers with no provenance.
+
+And the observation graph is **itself shaped by** the expression graph: you only observe what you
+acted to observe. The log is not a neutral transcript of the world — two beings in the same room
+record different logs, because they attend to different things.
+
+**The dependency is circular, in exactly the shape of the loop below. Neither graph is prior.
+Neither is disposable.**
 
 ## The cycle
 
+Written from **observation**, because the being does not begin by wanting something — it begins by
+being told something.
+
 ```text
-projection  ->  expression  ->  observation  ->  projection
-   (final)      (efficient)      (material)
+observation  ->  projection  ->  expression  ->  observation
+ (material)        (final)       (efficient)
 ```
 
 The four causes are **positions in this loop**, not annotations anyone emits. The causal graph is
 not a layer over the knowledge graph — it is **the shape of the loop through it**.
+
+Written this way the hard arrow comes first: `observation → projection` is the one edge with the
+entire cognitive act inside it. The other two are cheap.
 
 See [the-cycle.md](the-cycle.md).
 

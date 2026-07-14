@@ -12,15 +12,33 @@
 //
 // # The cycle
 //
-//	projection  ->  expression  ->  observation  ->  projection
-//	  (final)       (efficient)      (material)
+// Written from observation, because the being does not begin by wanting something — it
+// begins by being told something.
+//
+//	observation  ->  projection  ->  expression  ->  observation
+//	 (material)        (final)       (efficient)
 //
 // The four causes are POSITIONS IN THIS LOOP, not annotations anyone emits. The runtime
-// records "I projected P, I emitted E, I then observed O" and the links are simply there,
-// because that is the order things happened. The causal graph is not a layer over the
-// knowledge graph — it is the shape of the loop through it. That is why v2's entire causal
-// apparatus (CausalNodes, AitiaSet, the annotation grammar, causal-belief expansion)
+// records "I observed O, I projected P, I emitted E, I then observed O′" and the links are
+// simply there, because that is the order things happened. The causal graph is not a layer
+// over the knowledge graph — it is the shape of the loop through it. That is why v2's entire
+// causal apparatus (CausalNodes, AitiaSet, the annotation grammar, causal-belief expansion)
 // has no counterpart here.
+//
+// Written this way the hard arrow comes first: observation -> projection is the one edge with
+// the entire cognitive act inside it. The other two are cheap — projection -> expression is a
+// collapse, and expression -> observation is the world's job.
+//
+// # The two graphs are mutually dependent
+//
+// Learning TAKES PLACE in the expression graph (grades live on expects and framings). It is
+// ONLY POSSIBLE via the observation graph (an expect's claim refers to observed state; its
+// grade IS a diff against an observation). And the observation graph is itself SHAPED BY the
+// expression graph — you only observe what you acted to observe. The log is not a neutral
+// transcript of the world; two beings in the same room record different logs.
+//
+// The dependency is circular, in the shape of the loop above. Neither graph is prior. Neither
+// is disposable.
 //
 // # The laws
 //
