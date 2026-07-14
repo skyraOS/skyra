@@ -2,6 +2,7 @@ package dnav3
 
 import (
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 )
@@ -87,7 +88,12 @@ func parseAct(el element) (Act, error) {
 		ID:        id,
 		Target:    attr(el.open, "target"),
 		Primitive: attr(el.open, "primitive"),
-		Payload:   strings.TrimSpace(el.body),
+		// UNESCAPE XML ENTITIES. The first live run found this: the model emitted a correct plan —
+		// `sh /greet.sh > /out.txt` — but XML-escaped the redirect to `&gt;`. The shell then ran it
+		// literally (& backgrounds, `gt` not found), out.txt was never created, and a perfectly good
+		// plan was scored as a failure the model did not commit. The payload is content, not markup;
+		// entities in it are the envelope leaking in, and they come back out here.
+		Payload: html.UnescapeString(strings.TrimSpace(el.body)),
 	}
 	if a.Primitive == "" {
 		return Act{}, fmt.Errorf(`act %q has no primitive="..."`, id)

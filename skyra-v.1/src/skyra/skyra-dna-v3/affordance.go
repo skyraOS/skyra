@@ -1,5 +1,7 @@
 package dnav3
 
+import "strings"
+
 // The affordance registry: what the world can DO, and — the part that matters here — what the world
 // can MEASURE.
 //
@@ -58,8 +60,15 @@ func DefaultAffordances() *Affordances {
 }
 
 // Measurable reports whether the world has an instrument for this claim.
+//
+// A PARAMETERIZED predicate (`contains:"func main"`) is measurable iff its base (`contains`) is —
+// the argument names WHICH state, not whether the world can see it.
 func (a *Affordances) Measurable(t Triple) bool {
-	return a.measurable[namespaceOf(t.Subject)+"\x00"+t.Predicate]
+	pred := t.Predicate
+	if base, _, found := strings.Cut(pred, ":"); found {
+		pred = base
+	}
+	return a.measurable[namespaceOf(t.Subject)+"\x00"+pred]
 }
 
 // Mode stamps a triple with the mode the WORLD says it has. This overrides anything the model may

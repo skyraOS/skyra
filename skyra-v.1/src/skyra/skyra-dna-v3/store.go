@@ -1,6 +1,7 @@
 package dnav3
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -100,6 +101,7 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 	g.exprs[id] = e
 	g.order = append(g.order, id)
 
+	am := actMap(e)
 	for i := range e.Expects {
 		x := &e.Expects[i]
 		key := x.Key()
@@ -107,8 +109,9 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 		// reverse index: "how have I made this true before?"
 		g.index[key] = append(g.index[key], id)
 
-		// the learned edge. Source is a SET — cardinality gives joints for free.
-		ek := edgeKey(id, x.Of, key)
+		// the learned edge. Keyed by what the acts DO, not by which expression emitted them — so it
+		// ACCUMULATES across episodes. Source is a SET: cardinality gives joints for free.
+		ek := edgeKey(am, x.Of, key)
 		if g.edges[ek] == nil {
 			g.edges[ek] = &Edge{Source: x.Of, Target: key}
 		}
@@ -117,10 +120,17 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 
 // Edge returns the learned edge for one expect (creating it if this is its first sighting). An edge
 // with N=0 is not a bad edge — it is an UNMEASURED one.
+//
+// The edge is SHARED across every expression whose acts do the same thing. That is the whole point:
+// it is the memory.
 func (g *ExpressionGraph) Edge(exprID string, x Expect) *Edge {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	ek := edgeKey(exprID, x.Of, x.Key())
+	e := g.exprs[exprID]
+	if e == nil {
+		return &Edge{Source: x.Of, Target: x.Key()}
+	}
+	ek := edgeKey(actMap(e), x.Of, x.Key())
 	if g.edges[ek] == nil {
 		g.edges[ek] = &Edge{Source: x.Of, Target: x.Key()}
 	}
@@ -146,13 +156,16 @@ func (g *ExpressionGraph) Precedent(t Triple, tick int) []*Expression {
 		if e == nil {
 			continue
 		}
+		am := actMap(e)
 		best := 0.0
 		for _, x := range e.Expects {
 			if x.Key() != t.Key() {
 				continue
 			}
-			if w := g.edges[edgeKey(id, x.Of, x.Key())].RetrievalWeight(tick); w > best {
-				best = w
+			if ed := g.edges[edgeKey(am, x.Of, x.Key())]; ed != nil {
+				if w := ed.RetrievalWeight(tick); w > best {
+					best = w
+				}
 			}
 		}
 		out = append(out, scored{e, best})
@@ -194,10 +207,76 @@ type OpenBet struct {
 	Expect *Expect
 }
 
-// edgeKey identifies the learned edge: the SET of acts responsible (within this expression) → the
-// world state claimed. Sorted, so {a1,a2} and {a2,a1} are the same edge.
-func edgeKey(exprID string, of []string, target string) string {
-	src := append([]string(nil), of...)
-	sort.Strings(src)
-	return exprID + "\x00" + strings.Join(src, "+") + "\x00" + target
+// edgeKey identifies the learned edge: the SET of acts responsible → the world state claimed.
+//
+// # It must NOT include the expression instance
+//
+// This was the bug the first live run found, and it was fatal. The key used to be
+// (exprID, actIDs, target) — so every run minted a NEW expression (e1, e2, e3…), and therefore a
+// NEW, UNMEASURED edge for the same claim:
+//
+//	P=0.75 N=1  {a1} → file:/greet.sh exists true   [claimed 0.99]
+//	P=0.75 N=1  {a1} → file:/greet.sh exists true   [claimed 0.98]
+//	P=0.75 N=1  {a1} → file:/greet.sh exists true   [claimed 0.99]
+//
+// Four edges. Same claim. N=1 forever. P never converges, confidence(N) stays at rock bottom, and
+// THE BEING CANNOT LEARN ACROSS EPISODES — which is the one thing this entire architecture exists to
+// do.
+//
+// The same bug class as every other one we have hit: THE REUSABLE THING WAS KEYED BY THE INSTANCE
+// THAT MADE IT, NOT BY WHAT IT IS.
+//
+// So the key is the acts' REUSABLE IDENTITY — what they actually do — sorted, so {a1,a2} and
+// {a2,a1} are one edge:
+//
+//	{write→file:/greet.sh} → file:/greet.sh exists true
+//
+// That accumulates across every run that ever writes that file, which is exactly what an edge is
+// for: "given this expression, does this world state come back?"
+func edgeKey(acts map[string]Act, of []string, target string) string {
+	sigs := make([]string, 0, len(of))
+	for _, id := range of {
+		a, ok := acts[id]
+		if !ok {
+			sigs = append(sigs, "?"+id) // an expect attributed to an act that is not here
+			continue
+		}
+		sigs = append(sigs, a.Primitive+"→"+a.Target)
+	}
+	sort.Strings(sigs)
+	return strings.Join(sigs, "+") + "\x00" + target
+}
+
+// actMap indexes an expression's acts by ID, for edgeKey.
+func actMap(e *Expression) map[string]Act {
+	m := make(map[string]Act, len(e.Acts))
+	for _, a := range e.Acts {
+		m[a.ID] = a
+	}
+	return m
+}
+
+// EdgeReport dumps what the being has actually LEARNED — the counted conditional probabilities, not
+// anyone's opinion. This is the memory.
+func (g *ExpressionGraph) EdgeReport() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, id := range g.order {
+		e := g.exprs[id]
+		am := actMap(e)
+		for _, x := range e.Expects {
+			ek := edgeKey(am, x.Of, x.Key())
+			ed := g.edges[ek]
+			if ed == nil || ed.N == 0 || seen[ek] {
+				continue // an unmeasured edge is not a bad edge. it has nothing to say yet.
+			}
+			seen[ek] = true
+			out = append(out, fmt.Sprintf("P=%.2f N=%-2d  %s  →  %s %s %s",
+				ed.P, ed.N, strings.SplitN(ek, "\x00", 2)[0], x.Subject, x.Predicate, x.Object))
+		}
+	}
+	sort.Strings(out)
+	return out
 }

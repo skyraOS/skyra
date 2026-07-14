@@ -65,16 +65,27 @@ func (w *World) Perceive(t Triple) Outcome {
 		return Outcome{Status: "succeeded", Effects: []Triple{
 			{Subject: t.Subject, Predicate: "exists", Object: boolStr(statErr == nil)},
 		}}
-	case "contains":
+	}
+	// A PARAMETERIZED PREDICATE does not fit subject-predicate-object: in
+	// `file:/x contains "func main"`, the object is the ARGUMENT, not the value. The first live run
+	// proved this the hard way — Perceive returned `contains: true`, the grader compared it against
+	// `"func main"`, and the bet was structurally guaranteed to be false forever (P=0.12).
+	//
+	// So the argument folds INTO the predicate, making each parameterization its own addressable
+	// world state:
+	//
+	//	file:/x  contains:"func main"  →  true | false
+	if arg, ok := strings.CutPrefix(t.Predicate, "contains:"); ok {
 		b, readErr := os.ReadFile(path)
 		if readErr != nil {
-			// It does not exist. That is a FACT, and it is the fact the bet needed.
+			// It does not exist, so it contains nothing. That is a fact, and it is the fact the
+			// bet needed.
 			return Outcome{Status: "succeeded", Effects: []Triple{
-				{Subject: t.Subject, Predicate: "exists", Object: "false"},
+				{Subject: t.Subject, Predicate: t.Predicate, Object: "false"},
 			}}
 		}
 		return Outcome{Status: "succeeded", Effects: []Triple{
-			{Subject: t.Subject, Predicate: "contains", Object: boolStr(strings.Contains(string(b), t.Object))},
+			{Subject: t.Subject, Predicate: t.Predicate, Object: boolStr(strings.Contains(string(b), arg))},
 		}}
 	}
 	return Outcome{Status: "unavailable", Err: fmt.Sprintf("cannot perceive %q", t.Predicate)}

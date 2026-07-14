@@ -234,32 +234,68 @@ func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
 }
 
 // express fires acts whose requires are satisfied, and folds what the world says back in.
+//
+// # It is a LOOP, and that is not an optimization
+//
+// The first live run found this. A guarded act — exec, requiring `file:/x exists true` — cannot fire
+// immediately after the write that creates the file, because THE WRITE DOES NOT OBSERVE THE FILE.
+// The world reports "written"; whether it EXISTS is something the being must go and perceive. That
+// is LAW 1 working exactly as designed: expression cannot write world state.
+//
+// So the ascent has a rhythm:
+//
+//	fire what is runnable  →  the bets mature  →  SETTLE (go and look)  →  new observations
+//	→  guards that were UNKNOWN are now TRUE  →  fire the newly-unblocked  →  repeat
+//
+// A single pass fires only the unguarded acts and silently abandons the rest. The plan looks
+// "closed" and the being never does the second half of it — which is exactly what happened: `acts=1`
+// on every run, the exec never ran, and its bets were graded against a world where it had never
+// executed.
 func (b *Being) express(plan []*Expression, c *Cycle) {
-	for _, e := range plan {
-		runnable := e.Runnable(func(t Triple) Truth {
-			truth, _ := b.Obs.Resolve(t)
-			return truth
-		})
-		for _, a := range runnable {
-			b.tick++
-			out := b.World.Do(a) // MOTOR: no model, no present. it does not think, it executes.
-			c.Acts++
+	resolve := func(t Triple) Truth {
+		truth, _ := b.Obs.Resolve(t)
+		return truth
+	}
+	fired := map[string]bool{}
 
-			for _, t := range out.Effects {
-				b.Observe(t, ProvenanceRaw)
-			}
-			// arm every bet this act was responsible for — the bet starts running once the thing
-			// that was supposed to cause it has actually happened.
-			for i := range e.Expects {
-				if contains(e.Expects[i].Of, a.ID) && e.Expects[i].MaturesAt == 0 {
-					e.Expects[i].Arm(b.tick)
+	for round := 0; round < maxExpressRounds; round++ {
+		acted := false
+		for _, e := range plan {
+			for _, a := range e.Runnable(resolve) {
+				id := e.ID + "/" + a.ID
+				if fired[id] {
+					continue // an act fires ONCE. it is not idempotent and must not be replayed.
+				}
+				fired[id] = true
+				acted = true
+
+				b.tick++
+				out := b.World.Do(a) // MOTOR: no model, no present. it does not think, it executes.
+				c.Acts++
+				for _, t := range out.Effects {
+					b.Observe(t, ProvenanceRaw)
+				}
+				// arm every bet this act was responsible for — a bet only starts running once the
+				// thing that was supposed to cause it has actually happened.
+				for i := range e.Expects {
+					if contains(e.Expects[i].Of, a.ID) && e.Expects[i].MaturesAt == 0 {
+						e.Expects[i].Arm(b.tick)
+					}
 				}
 			}
 		}
+		b.tick++
+		b.Settle() // the bets come due; the being goes and looks. THIS IS WHAT UNBLOCKS THE NEXT ROUND.
+
+		if !acted {
+			return // nothing fired this round and nothing new can — the ascent is done.
+		}
 	}
-	b.tick++
-	b.Settle() // the bets come due; the being goes and looks.
 }
+
+// maxExpressRounds bounds the fire→settle→fire rhythm. A plan needing more rounds than this is
+// almost certainly cyclic, and the DAG rule says it cannot be.
+const maxExpressRounds = 8
 
 // Cycle is one target, pursued.
 type Cycle struct {
@@ -282,6 +318,9 @@ func contains(ss []string, s string) bool {
 func obsID(o Observation) string {
 	return fmt.Sprintf("%s@%d", o.Key(), o.At)
 }
+
+// EdgeReport exposes what the being has learned.
+func (b *Being) EdgeReport() []string { return b.Expr.EdgeReport() }
 
 // Report is the whole point: the two curves, and the check on whether the model earns its keep.
 func (b *Being) Report() string {

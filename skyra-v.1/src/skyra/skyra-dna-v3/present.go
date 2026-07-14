@@ -152,8 +152,15 @@ EXPECT LINE:  <likelihood 0..1> <within> <subject> <predicate> <object>
               actually think the odds are, given what you know about THIS case in particular.
   within      how many ticks until it should be checked. 1 = immediately after the act.
 
-PREDICATES YOU CAN CHECK:  exists (true|false) · contains (true|false) · status (ok|failed)
+PREDICATES YOU CAN CHECK:
+  file:/p   exists              true | false
+  file:/p   contains:<text>     true | false     (the text goes IN the predicate)
+  dir:/     status              ok | failed      (of the last exec)
+
 Predicting anything else is pointless — nothing can check it.
+
+A write reports only that it WROTE. Whether the file then EXISTS is something that has to be
+OBSERVED, so an act guarded on "file:/p exists true" will wait until that has actually been seen.
 
 REQUIRES:  requires="<subject> <predicate> <object>"  — an act only fires once this is OBSERVED
 to be true. This is how you order work: no <parallel>, no <if>. State the condition.
