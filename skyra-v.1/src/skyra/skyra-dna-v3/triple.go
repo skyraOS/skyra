@@ -29,8 +29,12 @@ const (
 	// unambiguous. Grade weight ~1.0.
 	ModeExact Mode = "exact"
 
-	// ModeInterpret resolves by running the aligner over an observation that already
-	// crossed the boundary, then comparing. Noisy. Grade weight ~0.3.
+	// ModeInterpret resolves against an observation the DECOMPOSER already interpreted on the
+	// way in. Noisy. Grade weight ~0.3.
+	//
+	// Note there is no grading-time translation step: interpretation happens at OBSERVATION
+	// time, so by the time a bet is settled the comparison is a plain exact match. The model
+	// cannot touch the grading path (LAW 4).
 	//
 	// It is a method OVER an observation, never a substitute for one: if nothing was
 	// observed, nothing is interpreted and the claim stays TruthUnknown. That is what
@@ -72,7 +76,7 @@ func (t Triple) Key() string {
 // WorldGiven reports whether the triple's subject is addressable by the world rather than
 // named by the model. World-given identity (file:, proc:, url:, coord:) costs NO
 // coreference — the world adjudicates it. Model-assigned identity (being:, concept:) must
-// go through the aligner.
+// go through the decomposer's interpretation, and are graded at reduced fidelity.
 //
 // This is the direct answer to the floor named in world-assertions-and-policy.md: entity
 // resolution bounds everything downstream (relevance-correctness <= resolution-correctness).

@@ -6,7 +6,7 @@
 
 ```text
 an EXPECT is a claim:        (triple, confidence)  — "this act will make this true, at 0.85"
-an OBSERVATION resolves it:  exact match, or the aligner translates one
+an OBSERVATION resolves it:  EXACT MATCH — the decomposer already interpreted it on the way in
 the GRADE is the residue:    it folds into the EDGE, and ResolvedBy names the evidence
 ```
 
@@ -106,7 +106,7 @@ That is a test, not a reassurance. Watch it from the first run.
 weighted = grade × Mode.Weight()
 
 exact       ~1.0    file / exit code / window state — free, instant, unambiguous
-interpret   ~0.3    the aligner translated an observation. noisy, but real.
+interpret   ~0.3    the decomposer INTERPRETED an observation. noisy, but real.
 (no source)  0      FORBIDDEN — LAW 2. no observation → no grade.
 ```
 
@@ -149,8 +149,10 @@ one, and its `P` must not be ranked as though it means anything yet.
 1. EXACT PASS (free, no model)
    For each expect, look up Key() = subject∥predicate∥object in the observation graph.
 
-2. RESIDUAL → ALIGNER
-   Only interpret-mode expects and unresolved references. LAW 3.
+2. THERE IS NO STEP 2.
+   Interpretation already happened — at OBSERVATION time, in the decomposer (LAW 4).
+   By the time a bet is settled, the comparison is a plain exact match. THE MODEL CANNOT
+   TOUCH THE GRADING PATH.
 
 3. FIVE OUTCOMES
    matched       predicted, observed, same value           → score it (true)

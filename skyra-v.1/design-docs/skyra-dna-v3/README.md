@@ -115,12 +115,21 @@ See [the-cycle.md](the-cycle.md).
    retrieval, and impulse handling all run an exact pass first and hand the model only what's left.
    This bounds cost *and* keeps the model out of the trusted path.
 
-4. **The aligner may translate; it may never judge.** It runs **once, on the observation side
-   only**. Predictions are literal stated claims and are never interpreted.
+4. **Interpretation happens at observation time, never at grading time.** The decomposer translates
+   an impulse into triples on the way *in*; the grader then does a pure exact match. **The model
+   cannot touch the grading path at all** — there is no grading-time aligner to misbehave.
 
-5. **Every act must be falsifiable.** Every `act` appears in at least one `expect`, or the emission
-   is rejected by the parser. (This is the constructive form of
+5. **Every act must be falsifiable, and every bet gets settled.** Every `act` appears in at least one
+   `expect`, and every `expect` carries a `within`, or the emission is rejected by the parser. At
+   maturity the substrate perceives the claimed triple — *the bet manufactures its own evidence.*
+   (Constructive form of
    [prediction-falsifiability-invariant](../laws/invariants/prediction-falsifiability-invariant.md).)
+
+6. **Observation is produced blind to desire.** The pass that turns an impulse into observation
+   triples must not see the open bets, their confidences, or the target — only the entity and
+   predicate vocabulary. Enough to speak the right language; not enough to know what answer was
+   wanted. Otherwise the being resolves ambiguity toward its own bets, and manufactures the evidence
+   that grades it.
 
 ## The parts
 
@@ -176,7 +185,7 @@ Two constraints from that doc that v3's design did **not** independently rederiv
   and **must not block the cognitive loop**. Producer/consumer: the decomposer fills the observed
   graph; cognition runs on whatever is resolved; late edges arrive next cycle.
 - **Preserve low-confidence ambiguity.** *"Forcing a hard link too early corrupts the graph
-  permanently."* The aligner must keep ambiguous references as **low-weight candidates**, not
+  permanently."* The decomposer must keep ambiguous references as **low-weight candidates**, not
   hard-link them. Entity resolution is **the floor** — relevance-correctness ≤
   resolution-correctness.
 

@@ -77,9 +77,9 @@ failing decays out.
 
 ```text
 observation → projection
-   = resolve incoming into the graph        (exact first; aligner on the residual)
+   = resolve incoming into the graph        (exact first; the decomposer on the residual)
    → take the target/residual triples as the query
-   → intersect posting lists, rank by overlap × grade weight
+   → intersect posting lists, rank by overlap × retrieval_weight (P × confidence(N) × F)
    → surface graded precedent as the framing
    → the model adapts it into the next expression
 ```
@@ -102,11 +102,12 @@ being:michael  wants  ???:go-to-mall
 ```
 
 Unknown nodes are resolved against the existing graph — **as low-weight candidates when ambiguous,
-never hard-linked** (see [expression-grammar.md](expression-grammar.md), the aligner discipline).
+never hard-linked** (see [expression-grammar.md](expression-grammar.md), the interpretation discipline).
 
-> **One mechanism, two uses:** resolving incoming observations, and aligning the diff.
+> **One worker, two uses:** resolving incoming observations, and speaking the vocabulary the diff
+> will later match against.
 
-Same code, same aligner, same discipline.
+Same worker, same discipline: the decomposer does both, and it may translate but never judge.
 
 **Decomposition is async and buffered.** Per
 [world-assertions-and-policy.md](../cognition/world-assertions-and-policy.md): text → triples is slow
@@ -149,5 +150,5 @@ wrong. Fast, cheap, and learning nothing.
   from the observation log, which LAW 1 guarantees.
 - Decay: do stale precedents fall out of posting lists, or only lose weight?
 - Top-k width — budgeted by the traversal budget?
-- The `interpret` layer's fuzzy match — embeddings, or the aligner over the top-k the exact layer
+- The `interpret` layer's fuzzy match — embeddings, or the decomposer over the top-k the exact layer
   returned? **Lean: the latter.** Keeps the model out of the retrieval path.

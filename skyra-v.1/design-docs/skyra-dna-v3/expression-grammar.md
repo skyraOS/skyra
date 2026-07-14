@@ -115,7 +115,7 @@ Mode is also the CHANNEL FIDELITY — how much a grade arriving through it count
 
 ```text
 exact       ~1.0    free, instant, unambiguous
-interpret   ~0.3    noisy; the aligner translated it
+interpret   ~0.3    noisy; the decomposer interpreted it on the way in
 (no source)  0      FORBIDDEN — see LAW 2
 ```
 
@@ -129,7 +129,7 @@ construction* — no hand-tuned anti-vagueness penalty. See [scoring.md](scoring
 
 ```text
 file:/src/auth.go   proc:1234   url:…   coord:478,479   ← WORLD-GIVEN. coreference is FREE.
-being:michael       concept:trust                       ← MODEL-ASSIGNED. costs the aligner.
+being:michael       concept:trust                       ← MODEL-ASSIGNED. costs interpretation.
 ```
 
 The prefix tells you at parse time, with zero inference, whether coreference costs anything. This is
@@ -216,9 +216,9 @@ of the [prediction-falsifiability invariant](../laws/invariants/prediction-falsi
 — *"a prediction that can't be wrong is a vibe, not cognition"* — enforced by the parser rather than
 by discipline.
 
-## The aligner discipline
+## The interpretation discipline
 
-> **The aligner runs ONCE, on the observation side only.**
+> **Interpretation happens at OBSERVATION time, in the decomposer — never at grading time.**
 
 ```text
 prediction   a literal stated claim.           NEVER interpreted.
@@ -226,14 +226,16 @@ observation  translated into that vocabulary.  Interpreted ONCE.
 diff         claim  vs  translated observation.
 ```
 
-Not aligner-vs-aligner. Claim-versus-interpreted-observation, one model call, on the side where the
-world's answer lives.
+Not model-vs-model. Claim-versus-interpreted-observation, with the single model call on the side
+where the world's answer lives — and by the time the grader runs, the comparison is a plain exact
+match. **There is no grading-time translator to misbehave.** LAW 4 is structural, not a rule anyone
+has to keep.
 
 This makes `interpret` **safe on a projection**, and it is where the compounding asset lives:
 predicting `being:michael state satisfied` at 0.40, having the reply resolve it true, and learning
 you were *underconfident about what satisfies him.* That is a model of a person, being corrected.
 
-**And the aligner must preserve ambiguity.** Per
+**And the decomposer must preserve ambiguity.** Per
 [world-assertions-and-policy.md](../cognition/world-assertions-and-policy.md): *"forcing a hard link
 too early corrupts the graph permanently."* Ambiguous references become **low-weight candidates**,
 not hard links. Evidence resolves them over time.

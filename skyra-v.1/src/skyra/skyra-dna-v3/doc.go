@@ -56,14 +56,24 @@
 // diff, retrieval, and impulse handling each run an exact pass first and hand the model
 // only what is left. This bounds cost and keeps the model out of the trusted path.
 //
-// LAW 4 — The aligner may translate; it may never judge. It runs ONCE, on the observation
-// side only. Predictions are literal stated claims and are never interpreted. Ambiguous
-// references are preserved as low-weight candidates, never hard-linked — forcing a hard
-// link too early corrupts the graph permanently.
+// LAW 4 — Interpretation happens at OBSERVATION time, never at GRADING time. The decomposer
+// translates an impulse into triples on the way in; the grader then does a pure exact match.
+// The model CANNOT TOUCH THE GRADING PATH AT ALL — there is no grading-time aligner to
+// misbehave. Ambiguous references are preserved as low-weight candidates, never hard-linked:
+// forcing a hard link too early corrupts the graph permanently.
 //
-// LAW 5 — Every act must be falsifiable. Every act appears in at least one expect, or the
-// emission is rejected by the parser. A prediction that cannot be wrong is a vibe, not
-// cognition.
+// LAW 5 — Every act must be falsifiable, and every bet gets settled. Every act appears in at
+// least one expect, and every expect carries a `within`, or the emission is rejected. At
+// maturity the substrate perceives the claimed triple — the bet manufactures its own evidence,
+// so absence stops being indistinguishable from "I never looked." A prediction that cannot be
+// wrong is a vibe, not cognition; a bet that is never settled is the same thing.
+//
+// LAW 6 — Observation is produced BLIND TO DESIRE. The pass that turns an impulse into
+// observation triples must not see the open bets, their confidences, or the target — only the
+// entity and predicate vocabulary. Enough to speak the right language; not enough to know what
+// answer was wanted. Otherwise the being resolves ambiguity toward its own bets and
+// manufactures the evidence that grades it, which is the poison this whole design exists to
+// keep out.
 //
 // # The measurement
 //
