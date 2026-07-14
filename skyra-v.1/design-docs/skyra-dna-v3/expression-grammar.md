@@ -15,12 +15,12 @@ What the LLM emits. XML **envelope**, line-oriented **triples** inside.
 <act id="a3" target="being:michael" primitive="ask"
      requires="exact test:auth_test.go status fail">The refactor broke two tests — revert?</act>
 
-<expect of="a1">  exact      0.95  file:/src/auth.go   exists   true                    </expect>
-<expect of="a1">  exact      0.90  file:/src/auth.go   contains "func Authenticate"    </expect>
-<expect of="a2">  exact      0.85  build:/src          status   ok                      </expect>
-<expect of="a2">  exact      0.70  test:auth_test.go   status   pass                    </expect>
-<expect of="a3">  exact      0.99  being:michael       replied  true                    </expect>
-<expect of="a3">  interpret  0.40  being:michael       state    satisfied               </expect>
+<expect of="a1">  exact      0.95  1   file:/src/auth.go   exists   true                  </expect>
+<expect of="a1">  exact      0.90  1   file:/src/auth.go   contains "func Authenticate"  </expect>
+<expect of="a2">  exact      0.85  3   build:/src          status   ok                    </expect>
+<expect of="a2">  exact      0.70  5   test:auth_test.go   status   pass                  </expect>
+<expect of="a3">  exact      0.99  2   being:michael       replied  true                  </expect>
+<expect of="a3">  interpret  0.40  8   being:michael       state    satisfied             </expect>
 ```
 
 ## Why this shape
@@ -40,8 +40,60 @@ unparseable. *"Parse failure kept motor from acting at all"* already happened on
 ## The triple
 
 ```text
-<mode>  <confidence>  <subject>  <predicate>  <object>
+<mode>  <confidence>  <within>  <subject>  <predicate>  <object>
 ```
+
+`within` appears only on an `expect` (a claim about the future needs a deadline; a `requires` is
+about now).
+
+### `within` — the bet's maturity, in TRAVERSALS
+
+Not wall clock. **The being's own subjective time, which advances on cognition.** If it idles for an
+hour and thinks nothing, nothing has happened to it. Counted from when the expect's act completed —
+the bet only starts running once the thing that was supposed to cause it actually happened.
+
+It is a **timer**, not a grading event: *"check this world state when the tick reaches N from here."*
+
+At maturity the substrate emits a **perceive at `(subject, predicate)` — mechanically, with no model
+call**, because the expect already names its own target.
+
+#### This is what solves scope
+
+The hard problem in grading was that **absence is not falsity**: a claim with no matching observation
+might be false, or the being might simply never have looked. A targeted perceive settles it — it
+comes back **authoritative for exactly the triple that was bet on**, so within it, absence *is*
+falsity.
+
+> **The bet manufactures its own evidence.**
+>
+> **Making a bet obliges you to go look. `within` is when.**
+
+No closed-world annotations on every observation. No special grader semantics. And it gives LAW 5
+teeth: not merely *"every act must carry a falsifiable expect"* but ***"every bet gets actively
+settled."*** The being cannot leave claims hanging, and it becomes **curious about its own open
+bets** for free — no prompting, no inference.
+
+A bet with no deadline is never settled, therefore unlearnable — so `Validate()` **rejects** it,
+exactly as it rejects an act with no expect.
+
+#### A second dimension to be wrong about
+
+```text
+WRONG ABOUT VALUE     "the build will pass."    It failed.
+WRONG ABOUT TIMING    "within 3 traversals."    It took 20.
+```
+
+Knowing **how long things take** is a large part of competence, and it is absent from every other
+part of this design.
+
+**V0 is STRICT:** at maturity, the perceive resolves the bet against whatever came back. A
+still-running build scores the bet *false*, and the being learns to bet longer. Crude, honest, and it
+collects the data.
+
+The obvious worry — that strictness rewards lazily long deadlines — is **already handled by the
+existing scoring rule** once the edge learns `τ` (typical traversals to resolution): betting `τ` earns
+**zero** against the base rate, and only betting *shorter than τ and being right* earns credit. Same
+machinery, no new mechanism. That is the argument for adding `τ` later rather than never.
 
 ### Mode — two, and only two
 
@@ -134,9 +186,9 @@ the parser and the scheduler trivial, permanently.
 ## Cardinality — individual and joint
 
 ```xml
-<expect of="a1">     exact  0.95  door:front   state     open                     </expect>
-<expect of="a2">     exact  0.99  being:kathy  heard     "walk through the door"  </expect>
-<expect of="a1 a2">  exact  0.60  being:kathy  location  beyond:door:front        </expect>
+<expect of="a1">     exact  0.95  1   door:front   state     open                     </expect>
+<expect of="a2">     exact  0.99  1   being:kathy  heard     "walk through the door"  </expect>
+<expect of="a1 a2">  exact  0.60  6   being:kathy  location  beyond:door:front        </expect>
 ```
 
 Single ID = individual. Multiple IDs = **joint**. No new keyword — cardinality does the work.
@@ -198,13 +250,18 @@ otherwise.
 ## Grammar, current state
 
 ```text
-ONE TRIPLE FORM   <mode> <confidence> <subject> <predicate> <object>
+ONE TRIPLE FORM   <mode> <confidence> [within] <subject> <predicate> <object>
+                  `within` on an EXPECT only — a claim about the future needs a deadline
 TWO MODES         exact | interpret            (ask is an EXPRESSION, not a mode)
 TWO POSITIONS     expect | requires            (same object, different tense)
 THREE-VALUED      true | false | unknown       (unknown = wait, never drop)
 CARDINALITY       of="a1"    individual → grades the ACT
                   of="a1 a2" joint      → grades the CAUSAL MODEL
-LAW               every act appears in ≥1 expect, or rejected
+LAW               every act appears in >=1 expect, or rejected
+LAW               every expect carries a `within`, or rejected — a bet with no deadline
+                  is never settled, therefore unlearnable
+MATURITY          at `within`, the substrate perceives (subject, predicate). no model call.
+                  the bet manufactures its own evidence — this is what solves scope.
 NO                parallel / if / else / loops — derived, guarded, outer-cycle
 ALIGNER           once, observation side only. may translate; may never judge.
                   ambiguity is preserved as low-weight candidates, never hard-linked.

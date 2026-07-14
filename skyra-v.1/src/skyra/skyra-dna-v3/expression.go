@@ -77,6 +77,45 @@ type Expect struct {
 
 	Triple
 
+	// Within is the bet's maturity, in TRAVERSALS — the being's own subjective clock, which
+	// advances on cognition rather than on wall time. If the being idles for an hour and
+	// thinks nothing, nothing has happened to it. Counted from when the expect's act completed.
+	//
+	// It is a TIMER, not a grading event: "check this world state when the tick reaches N from
+	// here." At maturity the substrate emits a perceive at (Subject, Predicate) — mechanically,
+	// with NO model call, because the expect already names its own target.
+	//
+	// # This is what solves scope
+	//
+	// The hard problem in grading was that ABSENCE IS NOT FALSITY: a claim with no matching
+	// observation might be false, or the being might simply never have looked. A targeted
+	// perceive settles it — it comes back authoritative for exactly the triple that was bet on,
+	// so within it, absence IS falsity. The bet manufactures its own evidence. No closed-world
+	// annotations on every observation, no special grader semantics.
+	//
+	//	MAKING A BET OBLIGES YOU TO GO LOOK. `Within` IS WHEN.
+	//
+	// Which gives LAW 5 teeth. It is no longer only "every act must carry a falsifiable
+	// expect" — it is "every bet gets actively settled." The being cannot leave claims hanging,
+	// and it becomes curious about its own open bets for free, with no prompting and no
+	// inference.
+	//
+	// # It is also a second dimension to be wrong about
+	//
+	//	WRONG ABOUT VALUE    "the build will pass."   It failed.
+	//	WRONG ABOUT TIMING   "within 3 traversals."   It took 20.
+	//
+	// Knowing how long things take is a large part of competence. V0 is STRICT: at maturity the
+	// perceive resolves the expect against whatever came back, so a still-running build scores
+	// the bet false and the being learns to bet longer. Crude, honest, and it collects the data.
+	//
+	// The obvious incentive worry — that strictness rewards lazily long deadlines — is already
+	// handled by the existing scoring rule, once the edge learns τ (typical traversals to
+	// resolution): betting τ earns ZERO against the base rate, and only betting shorter than τ
+	// and being right earns credit. Same machinery. That is the argument for adding τ later
+	// rather than never.
+	Within int
+
 	// AN EXPECT RESOLVES ONCE. It is a single claim, in a single instance: "file X exists,
 	// at 0.95." It is observed, it is scored, it is done. It is never re-graded.
 	//
@@ -86,6 +125,10 @@ type Expect struct {
 	//
 	//	THE EXPECT IS THE MEASUREMENT. THE EDGE IS WHAT LEARNS.
 	Resolution Truth
+
+	// MaturesAt is the tick Within resolves to, stamped when the expect's act completes.
+	// Zero means the act has not completed yet — the bet is not yet running.
+	MaturesAt int
 
 	// ResolvedBy names the observations that closed this bet. It is not bookkeeping — it is
 	// the EVIDENCE FOR THE GRADE, and it is what makes LAW 2 auditable rather than merely
@@ -124,6 +167,9 @@ func (e Expression) Validate() error {
 		if len(x.Of) == 0 {
 			return fmt.Errorf("expect %q is attributed to no act", x.Key())
 		}
+		if x.Within <= 0 {
+			return fmt.Errorf("expect %q has no maturity: a bet with no deadline is never settled, therefore unlearnable", x.Key())
+		}
 	}
 	return nil
 }
@@ -157,4 +203,35 @@ func actTruth(a Act, resolve func(Triple) Truth) Truth {
 		}
 	}
 	return result
+}
+
+// Arm stamps an expect's deadline. Called when the act it hangs off completes — the bet only
+// starts running once the thing that was supposed to cause it has actually happened.
+func (x *Expect) Arm(tick int) { x.MaturesAt = tick + x.Within }
+
+// Matured reports whether this bet is due and still open. A matured bet is not FALSE — it is
+// simply owed an observation, and the substrate now goes and gets one.
+func (x Expect) Matured(tick int) bool {
+	return x.Resolution == TruthUnknown && x.MaturesAt > 0 && tick >= x.MaturesAt
+}
+
+// Due returns the perceives the substrate must emit right now: one per matured, unresolved bet,
+// aimed at exactly the triple that was claimed.
+//
+// No model call. The expect already names its own target, so the perceive is fully determined —
+// which is the whole reason this settles the scope problem. A targeted perceive comes back
+// AUTHORITATIVE for that triple, and within it, absence IS falsity. The bet manufactures the
+// evidence that grades it.
+//
+// This is also LAW 5 with teeth: not merely "every act must carry a falsifiable expect," but
+// "every bet gets actively settled." The being cannot leave claims hanging, and it becomes
+// curious about its own open bets for free.
+func (e Expression) Due(tick int) []Triple {
+	var out []Triple
+	for _, x := range e.Expects {
+		if x.Matured(tick) {
+			out = append(out, x.Triple)
+		}
+	}
+	return out
 }

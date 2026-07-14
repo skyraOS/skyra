@@ -56,7 +56,8 @@ p̂ ← p̂ + α(outcome − p̂)          outcome ∈ {0, 1}
 > **`TruthUnknown` MUST NOT move the EMA.** An unresolved expect is not a failed one — the being
 > simply did not look. Treating *"I didn't check"* as *"it didn't happen"* would drag every edge in
 > the graph toward zero. This is the single most destructive bug available in this design, and it is
-> why **scope** (below) is not optional.
+> why every expect carries a **`within`** — a bet with no deadline is never settled, and an
+> unsettled bet is either a lie waiting to happen or a fact nobody went to get.
 
 ## The score — one formula, both properties
 
@@ -154,37 +155,53 @@ one, and its `P` must not be ranked as though it means anything yet.
 3. FIVE OUTCOMES
    matched       predicted, observed, same value           → score it (true)
    wrong-value   predicted X, observed Y for same (s,p)    → score it (false)
-   missing       predicted, IN SCOPE, not observed         → false
-   unresolved    predicted, OUT OF SCOPE                   → UNKNOWN. wait. DO NOT SCORE.
+   missing       predicted, PERCEIVED, not there           → false  (the targeted perceive
+                                                             is authoritative for its own triple)
+   pending       predicted, not yet matured                → UNKNOWN. wait. DO NOT SCORE.
+                                                             the `within` timer will settle it.
    spurious      observed, not predicted                   → additive: NEWS, no penalty
                                                              contradicting: SHOCK (below)
 ```
 
-### Absence is not falsity — and this is the open hole
+Note there is no "never resolved" outcome. **Every bet matures**, and at maturity the substrate goes
+and looks. `UNKNOWN` is a waiting room, not a destination.
+
+### Absence is not falsity — and `within` is what solves it
 
 If the being predicted `file:/src/auth.go exists true` and the observation graph says *nothing* about
 that file, **that is not a failed prediction. It did not look.**
 
-So **observations must carry a scope, and within that scope they are complete:**
+Treating *"I didn't check"* as *"it didn't happen"* would drag every edge in the graph toward zero.
+This was the last blocker on the grader.
+
+**The maturity timer settles it.** Every expect carries a `within` (see
+[expression-grammar.md](expression-grammar.md)). At maturity, the substrate emits a **perceive at
+exactly `(subject, predicate)`** — mechanically, no model call, because the expect already names its
+own target.
 
 ```text
-Outcome.Effects           authoritative for what the act changed
-a directory listing       authoritative for that directory
-a perceive with radius r  authoritative within r
-a user's message          authoritative for NOTHING except that they said it
+timer fires  →  perceive(subject, predicate)  →  observation  →  resolve normally
 ```
 
-> **Inside an observation's scope, absence = FALSE (closed-world).**
-> **Outside it, absence = UNKNOWN (open-world).**
+A **targeted** perceive comes back **authoritative for the triple that was bet on**. So within it,
+absence *is* falsity — and the general closed-world/open-world problem never has to be solved,
+because the being goes and looks at precisely the thing it claimed.
 
-Without that boundary the diff is wrong in both directions: it either punishes the being for things
-it never looked at, or it lets real failures sit forever as `unknown`.
+> **The bet manufactures its own evidence.**
+> **Making a bet obliges you to go look. `within` is when.**
 
-**This is a contract the WORLD must honor, not cognition.** If `Outcome` does not declare what it was
-authoritative about, the grader cannot distinguish a failed prediction from an unexamined one — and
-every edge in the graph decays toward zero.
+No scope annotations on every observation. No special grader semantics. `TruthUnknown` still never
+moves the EMA — it just stops being a permanent state, because every bet has a deadline after which
+it gets settled.
 
-**This is the last thing blocking the grader.**
+And this gives LAW 5 teeth: not merely *"every act must carry a falsifiable expect"* but ***"every
+bet gets actively settled."*** The being **cannot leave claims hanging**, and it becomes curious
+about its own open bets for free.
+
+**V0 is strict:** whatever the perceive returns resolves the bet. A still-running build scores false
+and the being learns to bet longer. Crude, honest, collects data. (See the `τ` note in
+[expression-grammar.md](expression-grammar.md) — the log-score-against-base-rate rule already
+punishes lazily long deadlines, once the edge learns typical timing.)
 
 ## Incompleteness is not contradiction
 
@@ -225,7 +242,7 @@ regime change. Neither had a way to detect it.
 
 ## Open
 
-- **SCOPE.** The blocker. See above.
+- ~~SCOPE~~ — SOLVED by the `within` timer. A targeted perceive is authoritative for its own triple.
 - **Shock threshold: fixed or adaptive?** A being in a novel world is surprised constantly; a fixed
   threshold would pin it in the slow path forever. Probably adaptive to a recent-surprise baseline.
 - **Retrieval is not graded.** If precedent P keeps being retrieved and keeps leading to failure,
