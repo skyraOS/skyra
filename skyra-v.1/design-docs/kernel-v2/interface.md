@@ -1,68 +1,63 @@
-# The Space Contract
+# The Contract
 
 **Status:** DESIGN · part of [kernel-v2](README.md)
 **Lifts from:** `specs/2026-07-08/space-kernel-interface-reform.md` (un-superseded — see README)
 
+The reform targets **`skyra.Time` and `skyra.Space`** — the kernel that actually runs (`relation.go`).
+Not `traverse.go`, which is an isolated Phase-0 sketch that nothing ever called.
+
 ## The problem the reform found
 
-Today's `Space` splits traversal discovery across two methods:
+Today `Space` splits traversal discovery across two methods:
 
 ```go
-Observe(origin Space, impulse any)      // mutates hidden state
-Children() map[string]Space             // the kernel asks what Observe prepared
+Observe(origin Space, impulse any)      // must MUTATE HIDDEN STATE to change the surface
+Children() map[string]Space             // the kernel later asks what Observe prepared
 Express(origin Space, impulse any) any
 ```
-
-> *"`Observe` must mutate hidden state if it wants to change what the kernel traverses, and the
-> kernel later asks `Children()` for the traversal surface."*
 
 And it blurs two genuinely different things:
 
 ```text
-DURABLE GRAPH CHILDREN     the edges that exist in memory
-PER-WAVE TRAVERSAL SURFACE the edges THIS WAVE lights
+DURABLE GRAPH CHILDREN      the edges that EXIST in memory
+PER-WAVE TRAVERSAL SURFACE  the edges THIS WAVE lights, and how probable they are
 ```
 
 For a `MemoryCell`, `Children()` means durable edges. For an ephemeral worker there are no durable
-edges — its children are *the roots selected for this wave*. One method, two meanings.
+edges — its children are *the roots selected for this wave*. **One method, two meanings.**
 
 ## The fix
 
-**`Observe` returns the traversal surface directly.**
+**`Observe` returns the traversal surface directly. `Children()` is deleted.**
 
 ```go
 type Space interface {
     ID() string
     Slice() Slice
-    NewActivation() ActivationRecord
-
-    // Cost is this node's weight against the budget, IN THE BUDGET'S UNITS. The kernel only
-    // reads it; it has no idea what the units are.
-    Cost(origin Space, impulse any) int
 
     // Observe: WHAT SHOULD THE KERNEL LOOK AT NEXT?
     //
-    // Returns the cell's ONWARD DISTRIBUTION for this wave: the edges it lights, each with a
-    // relative weight, keyed by edge identity. nil = leaf.
+    // Returns this cell's onward distribution FOR THIS WAVE: the edges it lights, each with
+    // the PROBABILITY that it reaches the wave's target. nil = leaf.
     //
-    // The cell owns the policy. The kernel only scales.
+    // The cell owns the policy. The kernel only orders by the number and never asks what it
+    // means.
     Observe(origin Space, impulse any) map[string]Alloc
 
     // Express: WHAT HAPPENED AFTER TRAVERSAL?
     //
-    // The post-order fold. It SEES ITS CHILDREN'S RESULTS — which the current signature does not
-    // allow, and which is the difference between a fold and a side effect.
+    // The post-order fold. It SEES ITS CHILDREN'S RESULTS — which the current signature does
+    // not allow, and which is the difference between a fold and a side effect.
     Express(origin Space, impulse any, children []*Result) any
 
     Agents() map[string]Space
     Content() any
 }
 
-// Alloc is one entry in the onward distribution: a child, and its RELATIVE weight.
+// Alloc is one entry in the onward distribution.
 type Alloc struct {
-    Target   Space
-    Weight   float64 // magnitude. the kernel scales budget by it and does NOT normalize.
-    Polarity int     // +1 / −1. MEANING, not transport. see transport.md.
+    Target Space
+    Weight float64 // P. "how likely is this edge to reach the wave's target." [0,1]. NO SIGN.
 }
 ```
 
@@ -71,40 +66,59 @@ Observe = what should the kernel look at next?
 Express = what should happen after traversal?
 ```
 
-No hidden state. No second method to keep in sync. The wave's surface is a **return value**, which
-is what lets it be a function of the wave.
+No hidden state. No second method to keep in sync. **The wave's surface is a return value**, which is
+what lets it be a function of *the wave* rather than of the cell alone.
 
-## Two changes from the 2026-07-08 draft
+## Three changes from the 2026-07-08 draft
 
-**1. `Alloc`, not bare `Space`.** The original returns `map[string]Space` and has the kernel look up
-edge strength in the slice's activation records. `traverse.go` already does better: the cell hands
-over its own weights.
+**1. `Alloc`, not bare `Space`.** The draft returns `map[string]Space` and has the kernel look up
+edge strength in the slice's activation records. The cell should hand over its own weights instead —
+which **subsumes `proportional-amplitude-allocation.md` entirely.**
 
-That **subsumes `proportional-amplitude-allocation.md` completely**. The cell decides how to
-distribute; the kernel multiplies. The kernel never learns what a weight *means* — not alignment, not
-probability, not relevance, not decay.
+**2. No polarity.** The draft carries signed magnitude, because v2's `A` was a judge's opinion on
+`[-1, 1]`. **In v3 the weight IS `P`, a probability.** Probabilities have no sign. `0.1` means
+*"unlikely,"* not *"negatively aligned."*
 
-**2. `Express` receives its children.** The current signature is:
+**3. No `Cost`.** The draft adds `Cost(origin, impulse) int` for affordability. **There is no budget**
+(see [traversal.md](traversal.md)) — so there is nothing to afford. The stop condition is
+`env.Done()`, and accounting (tokens consumed, nodes admitted) lives in `env.Admit()`, computed by the
+cell as the present is built.
+
+## `Time` — the kernel itself
 
 ```go
-Express(origin Space, impulse any) any     // cannot see what came back
+type Time interface {
+    ID() string
+    // Realize runs a wave. VOID: a wave's output is written to the traversed Slice and
+    // returned to the origin as a PERCEPTION wave. A return value would be a second,
+    // chosen results channel, which the Perception Invariant forbids.
+    Realize(origin, traversed Space, impulse any)
+}
 ```
 
-which is fine when `Express` is a side-effecting cell method and **useless when it is a real fold**.
-Groundedness, plan selection, and scatter-gather rollup all require the parent to see what its
-children returned. This is the one signature change the reform did not anticipate, and it is
-non-negotiable.
+**This stays void — and the fold does not conflict with it.** They are different mechanisms:
+
+```text
+INTRA-WAVE   Express(origin, impulse, children) any    the ascent. the parent SEES its children.
+INTER-WAVE   Realize(origin, traversed, impulse)       VOID. results return as PERCEPTION.
+```
+
+The fold flows up *inside* one wave. The wave's *result* comes back to the origin as a
+return-perception wave. **The Perception Invariant survives the fold intact** — and restoring it
+(suspended at `relation.go:56`, with results currently carried by `go kernel.Realize` side channels)
+is **part of this reform, not separate from it.** The side channels are the reason the kernel became
+scenery.
 
 ## The DAG is not the executor
 
-From `dag-kernel-responsibility-boundary.md`, and it is still exactly right:
+From `dag-kernel-responsibility-boundary.md`, still exactly right:
 
 ```text
 TODAY (wrong)                      INTENDED
-DAG creates worker                 DAG:    choose step, mount the ephemeral node,
+DAG creates worker                 DAG:    choose the step, mount the ephemeral node,
 worker.Observe does the WORK               attach observe/express, hand it to the kernel
 orchestrator reads condition       KERNEL: Observe → traverse → Express
-DAG routes next worker             WORKER: Observe QUERIES/ACTIVATES.
+DAG routes next worker             WORKER: Observe QUERIES / ACTIVATES.
                                            Express DOES and COMMITS.
 ```
 
@@ -112,23 +126,22 @@ DAG routes next worker             WORKER: Observe QUERIES/ACTIVATES.
 > **Express says: what happened after traversal?**
 
 v2 inverted this — the genes did their substantive work in `Observe` and `Express` was vestigial,
-which is precisely why the kernel became scenery and the orchestrator became the real executor.
+which is *precisely* why the kernel became scenery and the orchestrator became the real executor.
 
-**Getting this right is the whole point of the revision.** If `Observe` still does the work, the
-kernel is still decoration.
+**If `Observe` still does the work, the kernel is still decoration.** Getting this right is the whole
+point of the revision.
 
 ## Durable children versus the traversal surface
 
-They are different, and the reform's insistence on separating them is what makes the scheduler
-possible:
+They are different, and separating them is what makes the scheduler possible:
 
 ```text
-Children()  the DURABLE graph. what exists. (memory, topology, adjacency.)
-Observe()   the PER-WAVE surface. what THIS wave lights, and how brightly.
+the DURABLE graph   what EXISTS.        memory, topology, adjacency.
+Observe()           what THIS WAVE lights, and how probably.
 ```
 
 A retrieval wave and a present wave standing on the *same* cell light *different* edges with
-*different* weights. That is only expressible if the surface is computed per wave — which is what
-returning it from `Observe` buys.
+*different* probabilities. **That is only expressible if the surface is computed per wave** — which is
+exactly what returning it from `Observe` buys.
 
 See [scheduler.md](scheduler.md).
