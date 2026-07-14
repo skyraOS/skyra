@@ -43,10 +43,34 @@ func (w *World) Do(a Act) Outcome {
 		return w.write(a)
 	case "exec":
 		return w.exec(a)
+	case "build":
+		return w.build(a)
 	case "perceive":
 		return w.Perceive(Triple{Subject: a.Target, Predicate: attrOf(a.Payload)})
 	}
 	return Outcome{Status: "unavailable", Err: fmt.Sprintf("no primitive %q here", a.Primitive)}
+}
+
+// build has a HIDDEN PREREQUISITE: it succeeds only if BOTH the source and the config exist. This is
+// the thing a cold plan forgets and precedent remembers — the forcing function for the retrieval
+// curve. The world does not lie about it: a failed build reports WHAT was missing, so the being can
+// learn the prerequisite from a real observation rather than being told.
+func (w *World) build(a Act) Outcome {
+	src, _ := w.resolve("app.src")
+	conf, _ := w.resolve("app.conf")
+	_, srcErr := os.Stat(src)
+	_, confErr := os.Stat(conf)
+	status, missing := "ok", ""
+	switch {
+	case srcErr != nil:
+		status, missing = "failed", "app.src"
+	case confErr != nil:
+		status, missing = "failed", "app.conf"
+	}
+	return Outcome{Status: "succeeded", Effects: []Triple{
+		{Subject: "build:/", Predicate: "status", Object: status},
+		{Subject: "build:/", Predicate: "output", Object: missing},
+	}}
 }
 
 // Perceive reads world state at (subject, predicate) and reports it.
@@ -65,6 +89,11 @@ func (w *World) Perceive(t Triple) Outcome {
 		return Outcome{Status: "succeeded", Effects: []Triple{
 			{Subject: t.Subject, Predicate: "exists", Object: boolStr(statErr == nil)},
 		}}
+	case "status":
+		// perceiving a build RE-RUNS it: build status is a live fact, not a stored one.
+		if strings.HasPrefix(t.Subject, "build:") {
+			return w.build(Act{Target: t.Subject})
+		}
 	}
 	// A PARAMETERIZED PREDICATE does not fit subject-predicate-object: in
 	// `file:/x contains "func main"`, the object is the ARGUMENT, not the value. The first live run

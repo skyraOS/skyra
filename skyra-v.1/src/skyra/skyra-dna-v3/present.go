@@ -145,7 +145,7 @@ FORMAT — reply with only this:
 <expect of="a1">  0.95  1  file:/path  exists  true  </expect>
 <expect of="a2">  0.80  1  dir:/       status  ok    </expect>
 
-PRIMITIVES:  write (payload is the file body) · exec (payload is a shell command, runs in target dir)
+PRIMITIVES:  write (payload is the file body) · exec (shell command) · build (target build:/, no payload)
 
 EXPECT LINE:  <likelihood 0..1> <within> <subject> <predicate> <object>
   likelihood  your honest probability that this comes true. Not a target and not a hope — what you
@@ -156,6 +156,8 @@ PREDICATES YOU CAN CHECK:
   file:/p   exists              true | false
   file:/p   contains:<text>     true | false     (the text goes IN the predicate)
   dir:/     status              ok | failed      (of the last exec)
+  build:/   status              ok | failed      (re-runs the build when checked)
+  build:/   output              <what failed>    (empty when ok)
 
 Predicting anything else is pointless — nothing can check it.
 

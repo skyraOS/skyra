@@ -177,7 +177,8 @@ func TestPassesToClosureFalls(t *testing.T) {
 <act id="a1" target="file:/out.txt" primitive="write">done</act>
 <expect of="a1">  0.95  1  file:/out.txt  exists  true  </expect>`
 		}
-		// cold: emit only the verify step first, leaving a hole
+		// cold: emit only the verify step first, leaving a STRUCTURAL HOLE (it requires the file to
+		// exist, but nothing writes it) — which forces a second planning pass.
 		if call == 1 {
 			return `
 <framing>cold start — verify the output</framing>
@@ -200,6 +201,10 @@ func TestPassesToClosureFalls(t *testing.T) {
 		t.Fatal("first cycle did not close")
 	}
 
+	// fresh world, same memory — otherwise the second run sees the file already there and correctly
+	// does nothing. We are testing that PRECEDENT makes planning cheaper, not that a satisfied world
+	// needs no plan.
+	b.NewEpisode(NewWorld(t.TempDir()))
 	second, err := b.Run(target, 5)
 	if err != nil {
 		t.Fatal(err)

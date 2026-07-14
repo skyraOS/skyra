@@ -56,6 +56,18 @@ func NewBeing(w *World, infer func(string, string) (string, error)) *Being {
 
 func (b *Being) Tick() int { return b.tick }
 
+// NewEpisode swaps in a FRESH WORLD and a fresh observation graph, while KEEPING the expression
+// graph, the clock, and the metrics.
+//
+// This is the correct experimental shape, and it is also the correct real one: the observation
+// graph is per-world — a fold over a log about a world that no longer exists — while the expression
+// graph is DURABLE. It is the memory. A being that walks into a new room forgets what was on the old
+// room's floor; it does not forget what it has learned.
+func (b *Being) NewEpisode(w *World) {
+	b.World = w
+	b.Obs = NewObservationGraph()
+}
+
 // Observe writes an observation. THE ONLY WRITER of world state (LAW 1).
 func (b *Being) Observe(t Triple, p Provenance) Observation {
 	b.seq++
@@ -172,30 +184,76 @@ func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
 	c := &Cycle{Target: target}
 	b.Metrics.Cycles++
 
+	// THE RECONCILER. plan → act → observe → is the target met? if not, and something new was
+	// learned, RE-PLAN. This is the watcher from the design, and it is what lets a being DISCOVER a
+	// prerequisite: a bare build closes structurally but fails; the failure is observed
+	// (`build:/ output app.src`); the next plan sees it and writes the source. A single-shot Run
+	// cannot do that — it would plan once, fail once, and stop, learning a probability but never a
+	// structure.
+	//
+	// Cold, this takes several planning cycles (discover each prerequisite in turn). Warm, precedent
+	// surfaces the whole winning plan and it closes in one. THAT is the retrieval curve.
+	for cycle := 0; cycle < maxReconcileCycles; cycle++ {
+		if b.targetMet(target) {
+			break
+		}
+		plan, ok := b.plan(target, maxPasses, c)
+		if !ok {
+			c.Unresolved = true
+			break
+		}
+		c.Unresolved = false
+		b.express(plan, c) // the ascent — act, observe, grade
+	}
+
+	if !b.targetMet(target) {
+		c.Unresolved = true
+	}
+	b.Metrics.PassesToClosure = append(b.Metrics.PassesToClosure, c.Passes)
+	return c, nil
+}
+
+// maxReconcileCycles bounds plan→act→replan. A being that cannot reach the target in this many
+// cycles has hit a wall the world will not let it through.
+const maxReconcileCycles = 6
+
+// targetMet reports whether every target triple is OBSERVED true. Not projected — observed. The
+// being does not get to believe it is done.
+func (b *Being) targetMet(target []Triple) bool {
+	for _, t := range target {
+		if truth, _ := b.Obs.Resolve(t); truth != TruthTrue {
+			return false
+		}
+	}
+	return true
+}
+
+// plan runs the inner plan-to-closure loop: emit, drain, check closure, repeat until the plan's
+// requires are all grounded (structural closure) or a rail trips. Returns the closed plan.
+func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, bool) {
 	var plan []*Expression
 	lastHoles := -1
 
 	for pass := 0; pass < maxPasses; pass++ {
 		holes, closed := b.Closed(plan)
 		if len(plan) > 0 && closed {
-			break
+			return plan, true
 		}
-		// FIXPOINT: the model is not making progress. A pass cap alone lets it spin N times
-		// emitting nothing useful.
+		// FIXPOINT: the model is not making progress. A pass cap alone lets it spin N times emitting
+		// nothing useful.
 		if pass > 0 && len(holes) == lastHoles && len(holes) > 0 {
-			c.Unresolved = true
-			break
+			return plan, false
 		}
 		lastHoles = len(holes)
 
-		// 1+2. INDEX + PRESENT — free. precedent BEFORE the first call, which is what lets call
-		// #1 close the plan once the being knows the task.
+		// 1+2. INDEX + PRESENT — free. precedent BEFORE the first call, which is what lets call #1
+		// close the plan once the being knows the task.
 		present := b.present(target, holes)
 
 		// 3. PLAN — ONE model call. the only cost.
 		raw, err := b.Infer(plannerSystem, present)
 		if err != nil {
-			return c, fmt.Errorf("pass %d: %w", pass, err)
+			return plan, false
 		}
 		b.Metrics.InferenceCalls++
 		c.Passes++
@@ -218,19 +276,8 @@ func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
 		b.Expr.Place(fmt.Sprintf("e%d", b.seq), &e)
 		plan = append(plan, &e)
 	}
-
-	if _, closed := b.Closed(plan); !closed {
-		c.Unresolved = true
-	}
-	b.Metrics.PassesToClosure = append(b.Metrics.PassesToClosure, c.Passes)
-
-	if c.Unresolved {
-		return c, nil // NOTHING is emitted to the world. unresolved is a legitimate outcome.
-	}
-
-	// EXPRESS — the ascent. Fire runnable acts; the world reports; observations grade.
-	b.express(plan, c)
-	return c, nil
+	_, closed := b.Closed(plan)
+	return plan, closed
 }
 
 // express fires acts whose requires are satisfied, and folds what the world says back in.

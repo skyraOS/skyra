@@ -28,14 +28,6 @@ func main() {
 	verbose := flag.Bool("v", false, "print the present and every emission")
 	flag.Parse()
 
-	root, err := os.MkdirTemp("", "skyra-world-*")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer os.RemoveAll(root)
-	fmt.Printf("world: %s\n\n", root)
-
 	calls := 0
 	infer := func(system, present string) (string, error) {
 		calls++
@@ -49,16 +41,28 @@ func main() {
 		return out, err
 	}
 
-	being := dnav3.NewBeing(dnav3.NewWorld(root), infer)
+	freshWorld := func() *dnav3.World {
+		root, err := os.MkdirTemp("", "skyra-world-*")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return dnav3.NewWorld(root)
+	}
+	being := dnav3.NewBeing(freshWorld(), infer)
 
-	// The task. Deliberately MULTI-STEP: the script must exist, then be RUN, and the run must produce
-	// an output file with the right content in it. That is three dependent states — cold, the model
-	// has to discover the ordering; warm, precedent should hand it over. If passes-to-closure never
-	// falls on a task this shaped, retrieval is not working.
+	// The task. A build with a HIDDEN PREREQUISITE.
+	//
+	// The target asks only that the build succeed: `build:/ status ok`. But the world's build FAILS
+	// unless BOTH a source file AND a config file exist. The config is the thing a naive first
+	// attempt forgets — cold, the model tends to emit "write source; build", and the build fails or
+	// the plan leaves `file:/app.conf exists true` ungrounded, forcing another pass. Warm, precedent
+	// shows the complete plan — write source, write config, THEN build — and it closes in one pass.
+	//
+	// That is the shape that makes passes-to-closure fall: a prerequisite precedent remembers and a
+	// cold attempt does not.
 	target := []dnav3.Triple{
-		{Subject: "file:/greet.sh", Predicate: "exists", Object: "true"},
-		{Subject: "dir:/", Predicate: "status", Object: "ok"},
-		{Subject: "file:/out.txt", Predicate: "contains:hello", Object: "true"},
+		{Subject: "build:/", Predicate: "status", Object: "ok"},
 	}
 
 	fmt.Println("TARGET:")
@@ -71,6 +75,7 @@ func main() {
 	fmt.Println()
 
 	for i := 1; i <= *reps; i++ {
+		being.NewEpisode(freshWorld()) // fresh WORLD, same MEMORY — the whole point of the experiment
 		before := being.Metrics
 		c, err := being.Run(target, 6)
 		if err != nil {
