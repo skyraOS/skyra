@@ -53,16 +53,25 @@ Exact conjunction matching returns **zero** on anything novel, even when a parti
 been useful. So **rank, don't filter**:
 
 ```text
-score(prior) = Σ over matching triples ( overlap × grade_weight(that edge) )
+score(prior) = Σ over matching triples ( overlap × retrieval_weight(that edge) )
+
+retrieval_weight(edge) = P × confidence(N) × F(now)
+                         │        │            └─ recency. stale edges fall out.
+                         │        └─ trials. UNTESTED ≠ WRONG: an edge with N=0 is not a
+                         │           bad edge, it is an unmeasured one, and its P must not
+                         │           be ranked as though it means anything yet.
+                         └─ the EMA of P(W | E). how reliably this precedent produces the
+                            state we need.
 ```
 
-Top-k by how many target triples it satisfied, **weighted by how well that precedent's predictions
-actually held up.** A prior episode that predicted confidently and was right gets surfaced. One that
-predicted confidently and was wrong decays out of retrieval.
+Top-k by how many target triples it satisfied, **weighted by how reliably that precedent actually
+produces them.** A precedent whose edges have high `P` and high `N` gets surfaced. One that kept
+failing decays out.
 
 > **This is where the grade changes what gets recalled.**
 >
-> Not "the model remembers better." **The grades rerank the posting lists.**
+> Not "the model remembers better." **The edges rerank the posting lists** — and `P` is a counted
+> conditional probability, not anyone's opinion. See [scoring.md](scoring.md).
 
 ## The arrow, closed
 

@@ -45,16 +45,26 @@ DERIVED  (rebuildable, never authoritative)
 
 ```text
 world state     the CONTENT of the observation graph. a fine phrase; not a thing.
-grade           a number on an expect (its accuracy) or on a framing (its joint accuracy).
-                it is a FIELD ON THE EXPRESSION GRAPH, not a separate store.
-                there is no "ledger." A/S/F/N are fields on expects.
-grade weight    how hard a grade is allowed to move things. = channel fidelity × confidence.
+
+expect          a SINGLE CLAIM in a single instance. RESOLVES ONCE, is scored, is done.
+                carries no running economy. IT IS THE MEASUREMENT.
+
+edge            {expressions} → world state.  P = P(W | E), an EMA over counted outcomes.
+                IT IS WHAT LEARNS. its source is a SET — cardinality gives you joints free.
+                there is no "ledger": the economy is P/N/F on edges.
+
+grade           log(p_claim) − log(p̂_edge), at the outcome that occurred, × channel fidelity.
+                the being is scored on BEATING ITS OWN BASE RATE. reciting the edge earns zero.
 ```
+
+**`A` and `S` are dead.** `A` was *"coherence of node→framing, settle-written"* — a judge's opinion,
+which is the thing v3 exists to delete. `P` takes the same slot in the arithmetic but is computed
+from **counted outcomes**. `S` belonged to the settle's economy and nothing asks for it back.
 
 ### Banned
 
-`world graph` (say **observation graph**) · `ledger` as a noun for a store (say **grades**) ·
-`memory store` (say **expression graph**)
+`world graph` (say **observation graph**) · `ledger` as a noun for a store (say **the edges**) ·
+`memory store` (say **expression graph**) · `A` / `alignment` as an edge field (say **P**)
 
 ### The two graphs are mutually dependent
 
@@ -120,7 +130,7 @@ See [the-cycle.md](the-cycle.md).
 | [expression-grammar.md](expression-grammar.md) | what the LLM emits — triples, modes, guards, joint outcomes |
 | [closure-and-planning.md](closure-and-planning.md) | when a plan is done, holes, termination, the watcher |
 | [retrieval.md](retrieval.md) | the reverse index; how the grade changes what gets recalled |
-| [scoring.md](scoring.md) | information gain, contradiction vs incompleteness, surprise shock |
+| [scoring.md](scoring.md) | grading — the edge as P(W|E), the EMA, beat-the-base-rate, the diff |
 | [the-wave.md](the-wave.md) | the two waves, the plan loop, the kill condition, what the kernel needs |
 | [workers.md](workers.md) | the six workers, their contracts, and when they fire |
 

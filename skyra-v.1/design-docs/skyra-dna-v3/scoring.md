@@ -1,117 +1,214 @@
-# Scoring
+# Grading
 
-**Status:** DESIGN · part of [skyra-dna-v3](README.md)
+**Status:** DESIGN · part of [skyra-dna-v3](README.md) · implemented shape in `src/skyra/skyra-dna-v3/edge.go`
 
-## Incompleteness is not contradiction
-
-The cut is **epistemic, not spatial**:
+## What a grade is
 
 ```text
-PURELY ADDITIVE     the graph GREW. nothing you believed is now false.
-                    → you were INCOMPLETE. that is the permanent condition of being finite.
-
-REORGANIZING        triples you ASSERTED are now invalidated.
-                    → you were WRONG. that is the learning signal.
+an EXPECT is a claim:        (triple, confidence)  — "this act will make this true, at 0.85"
+an OBSERVATION resolves it:  exact match, or the aligner translates one
+the GRADE is the residue:    it folds into the EDGE, and ResolvedBy names the evidence
 ```
 
-Punishing incompleteness punishes the being for the world being *detailed*. A `.bak` file you didn't
-foresee does not make your model **wrong** — it makes it **partial**, and it will always be partial.
+A grade is **the accuracy of one specific claim, measured against one specific observation.** Not a
+verdict on an episode. Not a score for a turn. A number attached to a bet.
 
-**Only contradiction means wrong.** There is no coverage penalty for the merely unpredicted.
+## The expect is the measurement. The edge is what learns.
 
-## But that reopens under-prediction — so the incentive inverts
+**An expect resolves once.** `file:/src/auth.go exists true` at 0.95 → observed → done. It is never
+re-graded. So "accuracy over time" is not a property of an expect, and an expect carries no running
+economy.
 
-If silence cannot be contradicted, silence is free, and the degenerate strategy returns: predict
-nothing, score perfectly. The fix is **not** a penalty. It is to make prediction **pay**:
-
-> **credit ∝ information gain**
+What repeats is the **edge**:
 
 ```text
-silence                    earns ZERO
-trivia (already known)     earns ZERO   — no uncertainty reduced
-bold + right               earns MOST
-bold + wrong               costs MOST
+E ──────→ W        P(W | E)   "given this expression, does this world state come back?"
 ```
 
-Predicting `file:/etc/passwd exists true` at 0.999 earns nothing — you already knew. Predicting
-`test:auth_test.go status pass` at 0.70 when you genuinely don't know earns real credit when it
-lands.
+That is the learned object — **an estimate of a conditional probability**, updated by counted
+outcomes. Not a strength, not an affinity, not a judge's opinion of coherence.
 
-**Boldness is forced by the upside, not the downside.** And that is structurally better:
+### Joints are not a special case
 
-> **Rewards do not need scoping. Penalties do.**
-
-A penalty must be bounded (blind *about what?* — your acts? the room? the universe?). A reward needs
-no boundary: credit any true prediction, anywhere. Delete the penalty and the scoping problem
-disappears with it.
-
-**Consequence:** the being is paid in **surprise reduction** — the same currency the scheduler runs
-on. One economy, not two.
-
-## The rule
+An edge's **source is a set**. Cardinality does all the work:
 
 ```text
-proper scoring rule over stated claims    → makes hedging honest         (Brier / log)
-information-gain weighting                → makes silence and trivia worthless
-no coverage penalty                       → incompleteness is not a sin
+{open-door}              → door:front  state     open              P(W₁ | E₁)
+{tell-kathy}             → being:kathy heard     "walk through"    P(W₂ | E₂)
+{open-door, tell-kathy}  → being:kathy location  beyond:door       P(W₃ | E₁ ∧ E₂)   ← ONE edge
 ```
 
-The proper scoring rule needs the per-line confidence from
-[expression-grammar.md](expression-grammar.md). Honest calibration becomes score-maximizing *by
-construction* — no hand-tuned anti-vagueness term.
+`of="a1"` vs `of="a1 a2"` **is** the edge's source cardinality. Nothing new is needed.
 
-## The diff, in full
+Which is exactly why *"open door + told her ⟹ she walks through"* can be **wrong** while both
+individual edges stay **right**. Three edges, three EMAs, three independent things to be wrong about.
 
-At scale, "wrong" is not binary. The grade distributes across:
+## The EMA
 
 ```text
-matched          predicted and observed        → credit, weighted by information gain
-missing          predicted, didn't happen      → you were wrong
-spurious         happened, not predicted       → NEWS, not blindness (see above)
-wrong-value      right node, wrong state       → partial
-wrong-edge       right nodes, wrong relation   → partial
+p̂ ← p̂ + α(outcome − p̂)          outcome ∈ {0, 1}
+α = max(α_floor, 1/(N+1))
 ```
+
+`1/(N+1)` converges to the sample mean. **The floor keeps it plastic** — a pure sample mean assumes a
+*stationary world*, and the world is not stationary. Old evidence has to be able to wash out.
+
+> **`TruthUnknown` MUST NOT move the EMA.** An unresolved expect is not a failed one — the being
+> simply did not look. Treating *"I didn't check"* as *"it didn't happen"* would drag every edge in
+> the graph toward zero. This is the single most destructive bug available in this design, and it is
+> why **scope** (below) is not optional.
+
+## The score — one formula, both properties
+
+> **`grade = log(p_claim) − log(p̂_edge)`**, evaluated at the outcome that occurred.
+
+The edge's EMA **is the prior**. Which means the being is graded on **beating its own base rate**:
+
+```text
+edge 0.70   claim 0.70   W true     →   0.000    parroted the graph. added NOTHING.
+edge 0.70   claim 0.95   W true     →  +0.305    saw something specific about THIS instance.
+edge 0.70   claim 0.20   W FALSE    →  +0.981    called an upset. huge credit.
+edge 0.70   claim 0.95   W FALSE    →  −1.792    overconfident against history. brutal.
+silence (no claim)                  →   0.000    says nothing, learns nothing.
+```
+
+Strictly **proper** (hedging is punished honestly) *and* **information-weighted** (trivia and silence
+earn nothing) — in one formula. `information gain` and `no coverage penalty` stop being two
+mechanisms and become the same one.
+
+Clamp `p ∈ [ε, 1−ε]` so the log cannot blow up.
+
+### What this makes the model's job
+
+The graph knows *"builds pass 70% of the time after this kind of edit."* Only the model can look at
+**this** diff and say *"…but this one touches the auth interface, so 0.2."*
+
+> **The model's job is to beat the base rate using the particulars of this instance.**
+>
+> **The LLM only gets paid for information the graph did not already have.**
+
+That is precisely what a language model is good at, and precisely what a graph cannot do.
+
+### And it gives you a falsifiable check on the architecture
+
+A framing accumulates `Score` = the running mean of `(log p_claim − log p̂_edge)` over every expect it
+has ever made — **the model's edge over the base rate.**
+
+> **If Score hovers near zero across all framings, the model is parroting base rates and is not
+> earning its keep.**
+
+That is a test, not a reassurance. Watch it from the first run.
 
 ## Channel fidelity
 
-Grades are weighted by the channel they arrived through, not treated as equal:
-
 ```text
-exact       file / exit code / window state    ~1.0   free, instant, unambiguous
-exact       "michael literally said X"         ~0.9   it is in the transcript
-interpret   inferred state of a person         ~0.3   the aligner translated it
-—           a model said it was good            0     FORBIDDEN — no source (LAW 2)
+weighted = grade × Mode.Weight()
+
+exact       ~1.0    file / exit code / window state — free, instant, unambiguous
+interpret   ~0.3    the aligner translated an observation. noisy, but real.
+(no source)  0      FORBIDDEN — LAW 2. no observation → no grade.
 ```
 
-`grade weight ∝ channel independence × channel fidelity`. High-confidence world evidence moves a
-grade hard; a soft inference about someone's mood nudges it. **Both legitimate, neither pretending
-to be the other.**
+Provenance as a **coefficient**, not a field. A grade read off the filesystem and a grade inferred
+from someone's mood are both legitimate, and **neither gets to pretend it is the other.**
 
-This replaces provenance-as-a-field with **provenance-as-a-coefficient**.
-
-## Individual vs joint
+## The fields — smaller than v2's
 
 ```text
-individual failure  → the ACT was wrong           (the door didn't open)
-joint failure       → the CAUSAL MODEL was wrong  (open door + told her ≠ she walks through)
+ON THE EDGE  (expression → world state, or {expressions} → world state)
+  P     EMA of P(W | E).  THE PRIOR for scoring, AND the retrieval weight.
+  N     trials. sets α (learning rate) and confidence(N).
+  F     recency, lazily decayed. stale edges fall out of retrieval.
+
+ON THE FRAMING
+  Score  the model's edge over the base rate. ≈ 0 means the model is adding nothing.
 ```
 
-Different edges, different lessons. Collapsing them punishes *"open the door"* because Kathy is
-stubborn.
+**`A` is gone** — it was *"coherence of node→framing, settle-written"*: a judge's opinion, which is
+the thing v3 exists to delete. **`P` takes the same slot in the arithmetic but is computed from
+counted outcomes.**
+
+**`S` is gone** — it belonged to the settle's economy. Nothing in v3 asks for it back.
+
+Retrieval ranks by:
+
+```text
+retrieval_weight = P × confidence(N) × F(now)
+```
+
+Reliability, weighted by how much evidence backs it, decayed by staleness. `confidence(N)` is what
+keeps **untested** apart from **wrong**: an edge with `N=0` is not a bad edge, it is an *unmeasured*
+one, and its `P` must not be ranked as though it means anything yet.
+
+---
+
+## The diff
+
+```text
+1. EXACT PASS (free, no model)
+   For each expect, look up Key() = subject∥predicate∥object in the observation graph.
+
+2. RESIDUAL → ALIGNER
+   Only interpret-mode expects and unresolved references. LAW 3.
+
+3. FIVE OUTCOMES
+   matched       predicted, observed, same value           → score it (true)
+   wrong-value   predicted X, observed Y for same (s,p)    → score it (false)
+   missing       predicted, IN SCOPE, not observed         → false
+   unresolved    predicted, OUT OF SCOPE                   → UNKNOWN. wait. DO NOT SCORE.
+   spurious      observed, not predicted                   → additive: NEWS, no penalty
+                                                             contradicting: SHOCK (below)
+```
+
+### Absence is not falsity — and this is the open hole
+
+If the being predicted `file:/src/auth.go exists true` and the observation graph says *nothing* about
+that file, **that is not a failed prediction. It did not look.**
+
+So **observations must carry a scope, and within that scope they are complete:**
+
+```text
+Outcome.Effects           authoritative for what the act changed
+a directory listing       authoritative for that directory
+a perceive with radius r  authoritative within r
+a user's message          authoritative for NOTHING except that they said it
+```
+
+> **Inside an observation's scope, absence = FALSE (closed-world).**
+> **Outside it, absence = UNKNOWN (open-world).**
+
+Without that boundary the diff is wrong in both directions: it either punishes the being for things
+it never looked at, or it lets real failures sit forever as `unknown`.
+
+**This is a contract the WORLD must honor, not cognition.** If `Outcome` does not declare what it was
+authoritative about, the grader cannot distinguish a failed prediction from an unexamined one — and
+every edge in the graph decays toward zero.
+
+**This is the last thing blocking the grader.**
+
+## Incompleteness is not contradiction
+
+```text
+PURELY ADDITIVE     the graph GREW. nothing believed is now false.
+                    → INCOMPLETE. the permanent condition of being finite.
+
+REORGANIZING        triples you ASSERTED are now invalidated.
+                    → WRONG. that is the learning signal.
+```
+
+Punishing incompleteness punishes the being for the world being *detailed*. A `.bak` file it did not
+foresee does not make its model **wrong** — it makes it **partial**, and it will always be partial.
+
+**There is no coverage penalty.** The log-score-against-prior already makes silence worthless; it does
+not additionally need to be punished.
 
 ## Surprise shock — the slow path
 
-Three regimes, one measurement:
-
 ```text
 purely additive          world grew           → update. no shock.        FAST
-small contradiction      a few beliefs flip   → regrade, adjust weights. FAST
+small contradiction      a few beliefs flip   → regrade, adjust EMAs.    FAST
 severe reorganization    many beliefs flip    → SHOCK: revise, replan.   SLOW
 ```
-
-### Measuring shock
-
-Not a count of flipped triples — **weighted by what you were confident about**:
 
 ```text
 shock = Σ over invalidated triples ( prior_confidence × grade_weight )
@@ -119,41 +216,21 @@ shock = Σ over invalidated triples ( prior_confidence × grade_weight )
 
 A 0.95 belief collapsing is an earthquake. A 0.30 belief collapsing is a Tuesday. That is Bayesian
 surprise, and it is the right gain term: the slow path fires when **strong commitments** break, not
-when the world merely surprises you at the margins.
+when the world merely surprises at the margins. It makes the watcher's response **proportional** — it
+fires *as hard as it was wrong.*
 
-It also makes the watcher's response **proportional** rather than binary — it fires *as hard as it
-was wrong.*
-
-### Prior art
-
-This is the trigger that two earlier documents were waiting for:
-
-- the two-speed runtime — *"slow, only after a surprise shock: revise the material/formal account →
-  regroup → settle → atomic commit"*
-- *"Only an exceptional positive surprise delta may change the material/formal summary itself."*
-
-Both described the regime change. Neither had a way to detect it. The diff's reorganization
-magnitude is it.
-
-## Untested is not wrong
-
-Most projections on unexplored branches never come due — you only walk one path.
-
-```text
-falsified   → alignment down
-unresolved  → CONFIDENCE low; alignment untouched
-```
-
-Collapse these and you punish branches for not having been explored. Every prediction needs a
-**maturity condition** — when the bet comes due. Possibly implied by mode (`exact` resolves on next
-observation; `interpret` when its channel produces one).
+This is the trigger two earlier documents were waiting for (the two-speed runtime; *"only an
+exceptional positive surprise delta may change the material/formal summary"*). Both described the
+regime change. Neither had a way to detect it.
 
 ## Open
 
-- **Information gain relative to what prior?** The recorded grade on that triple, the
-  retrieval's expectation, or a base rate? *Lean: the recorded grade — it is already the being's stated
-  belief.*
-- Does a purely-additive observation earn anything if the being **predicted** the addition? *It
-  should — additive-and-predicted is the best case: a bold bet that landed.*
+- **SCOPE.** The blocker. See above.
 - **Shock threshold: fixed or adaptive?** A being in a novel world is surprised constantly; a fixed
-  threshold pins it in the slow path forever. Probably adaptive to a recent-surprise baseline.
+  threshold would pin it in the slow path forever. Probably adaptive to a recent-surprise baseline.
+- **Retrieval is not graded.** If precedent P keeps being retrieved and keeps leading to failure,
+  nothing punishes P — the failures land on the *new* expression's claims. Directly-placed precedent
+  is self-correcting (its own edges are re-run and re-scored); **adapted** precedent needs a
+  `DerivedFrom` link and a discounted back-propagation, or retrieval becomes a ratchet: precedent
+  gets used forever on the strength of grades it earned once and never re-earns.
+- **α_floor, confHalf, λ** are guesses. First things to tune against real runs.

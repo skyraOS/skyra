@@ -59,7 +59,7 @@ an observation resolves *against* this expectation. It therefore cannot be infer
 namespace: `being:kathy location beyond:door` is directly observable, `being:michael state happy` is
 not — same prefix, different channel.
 
-Mode is also the grade weight:
+Mode is also the CHANNEL FIDELITY — how much a grade arriving through it counts:
 
 ```text
 exact       ~1.0    free, instant, unambiguous

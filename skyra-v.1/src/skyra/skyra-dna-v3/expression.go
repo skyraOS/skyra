@@ -18,6 +18,19 @@ type Expression struct {
 
 	Acts    []Act
 	Expects []Expect
+
+	// Score is the running mean of (log p_claim − log p̂_edge) over every expect this framing
+	// has ever made — THE MODEL'S EDGE OVER THE BASE RATE.
+	//
+	// It is not "was the framing right." It is "did the framing know something the graph did
+	// not." A framing that recites what the edges already believe scores ZERO, however
+	// correct it is.
+	//
+	// Which makes it a falsifiable check on this entire architecture: IF SCORE HOVERS NEAR
+	// ZERO ACROSS ALL FRAMINGS, THE MODEL IS PARROTING BASE RATES AND IS NOT EARNING ITS
+	// KEEP. That is a test, not a reassurance, and it should be watched.
+	Score float64
+	Runs  int
 }
 
 // An Act is one emission into the world. It fires when every Requires is satisfied.
@@ -64,19 +77,15 @@ type Expect struct {
 
 	Triple
 
-	// Grade state. This IS the economy — there is no separate store. An expect is a claim,
-	// and its grade is how that claim has fared.
+	// AN EXPECT RESOLVES ONCE. It is a single claim, in a single instance: "file X exists,
+	// at 0.95." It is observed, it is scored, it is done. It is never re-graded.
 	//
-	//   A  alignment  — the claim's accuracy against what was observed
-	//   S  salience   — arousal at reinforcement
-	//   F  frequency  — recency/use, decayed lazily
-	//   N  gradings   — how many times it has come due; sets learning rate AND confidence
+	// So an expect carries NO running economy. It is the MEASUREMENT. What LEARNS is the
+	// Edge (see edge.go) — the reusable claim "given this expression, does this world state
+	// come back?" — and the expect's resolution is one sample folded into that edge's EMA.
 	//
-	// N is what keeps UNTESTED apart from WRONG. A bet on a branch never walked is not
-	// falsified — it is unresolved, and unresolved means LOW CONFIDENCE, not low alignment.
-	// Collapse those and you punish branches for not having been explored.
-	A, S, F float64
-	N       int
+	//	THE EXPECT IS THE MEASUREMENT. THE EDGE IS WHAT LEARNS.
+	Resolution Truth
 
 	// ResolvedBy names the observations that closed this bet. It is not bookkeeping — it is
 	// the EVIDENCE FOR THE GRADE, and it is what makes LAW 2 auditable rather than merely
@@ -85,7 +94,7 @@ type Expect struct {
 	//   Every grade must name the observation that produced it. A grade with no observation
 	//   behind it is, by definition, self-adjudicated.
 	//
-	// Which turns the law into a QUERY: walk the expression graph, find any graded expect
+	// Which turns the law into a QUERY: walk the expression graph, find any resolved expect
 	// whose ResolvedBy is empty, and you have found a place where the being graded itself.
 	// You can scan for the poison.
 	ResolvedBy []string

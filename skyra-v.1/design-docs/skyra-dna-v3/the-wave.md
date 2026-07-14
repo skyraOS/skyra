@@ -76,7 +76,7 @@ kernel stays oblivious.
 
 ```text
 triple's frontier       = the POSTING LIST for that triple    ← index lookup, ranked by
-                                                                grade_weight × overlap
+                                                       retrieval_weight × overlap
 expression's frontier   = its Requires                        ← stored on the expression
 world place's frontier  = its adjacency                       ← stored topology
 ```
