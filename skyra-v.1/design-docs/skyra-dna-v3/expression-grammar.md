@@ -10,17 +10,17 @@ What the LLM emits. XML **envelope**, line-oriented **triples** inside.
 <act id="a1" target="file:/src/auth.go" primitive="write">…content…</act>
 
 <act id="a2" target="build:/src" primitive="compile"
-     requires="exact file:/src/auth.go exists true"/>
+     requires="file:/src/auth.go exists true"/>
 
 <act id="a3" target="being:michael" primitive="ask"
-     requires="exact test:auth_test.go status fail">The refactor broke two tests — revert?</act>
+     requires="test:auth_test.go status fail">The refactor broke two tests — revert?</act>
 
-<expect of="a1">  exact      0.95  1   file:/src/auth.go   exists   true                  </expect>
-<expect of="a1">  exact      0.90  1   file:/src/auth.go   contains "func Authenticate"  </expect>
-<expect of="a2">  exact      0.85  3   build:/src          status   ok                    </expect>
-<expect of="a2">  exact      0.70  5   test:auth_test.go   status   pass                  </expect>
-<expect of="a3">  exact      0.99  2   being:michael       replied  true                  </expect>
-<expect of="a3">  interpret  0.40  8   being:michael       state    satisfied             </expect>
+<expect of="a1">  0.95  1   file:/src/auth.go   exists   true                  </expect>
+<expect of="a1">  0.90  1   file:/src/auth.go   contains "func Authenticate"  </expect>
+<expect of="a2">  0.85  3   build:/src          status   ok                    </expect>
+<expect of="a2">  0.70  5   test:auth_test.go   status   pass                  </expect>
+<expect of="a3">  0.99  2   being:michael       replied  true                  </expect>
+<expect of="a3">  0.40  8   being:michael       state    satisfied             </expect>
 ```
 
 ## Why this shape
@@ -70,8 +70,8 @@ An engage produces **two** claims, and they come back through **different channe
 ```xml
 <act id="a1" target="being:michael" primitive="engage">want to grab lunch?</act>
 
-<expect of="a1">  exact      0.99  1  being:michael  received  "want to grab lunch?"  </expect>
-<expect of="a1">  interpret  0.60  5  being:michael  state     agreeable              </expect>
+<expect of="a1">  0.99  1  being:michael  received  "want to grab lunch?"  </expect>
+<expect of="a1">  0.60  5  being:michael  state     agreeable              </expect>
 ```
 
 ```text
@@ -92,8 +92,10 @@ sign the ontology is holding.
 ## The triple
 
 ```text
-<mode>  <confidence>  <within>  <subject>  <predicate>  <object>
+<confidence>  <within>  <subject>  <predicate>  <object>
 ```
+
+**No mode token** — the substrate stamps it from the world's instruments. See below.
 
 `within` appears only on an `expect` (a claim about the future needs a deadline; a `requires` is
 about now).
@@ -264,9 +266,9 @@ the parser and the scheduler trivial, permanently.
 ## Cardinality — individual and joint
 
 ```xml
-<expect of="a1">     exact  0.95  1   door:front   state     open                     </expect>
-<expect of="a2">     exact  0.99  1   being:kathy  heard     "walk through the door"  </expect>
-<expect of="a1 a2">  exact  0.60  6   being:kathy  location  beyond:door:front        </expect>
+<expect of="a1">     0.95  1   door:front   state     open                     </expect>
+<expect of="a2">     0.99  1   being:kathy  heard     "walk through the door"  </expect>
+<expect of="a1 a2">  0.60  6   being:kathy  location  beyond:door:front        </expect>
 ```
 
 Single ID = individual. Multiple IDs = **joint**. No new keyword — cardinality does the work.
@@ -330,9 +332,10 @@ otherwise.
 ## Grammar, current state
 
 ```text
-ONE TRIPLE FORM   <mode> <confidence> [within] <subject> <predicate> <object>
+ONE TRIPLE FORM   <confidence> [within] <subject> <predicate> <object>
                   `within` on an EXPECT only — a claim about the future needs a deadline
-TWO MODES         exact | interpret            (ask is an EXPRESSION, not a mode)
+TWO MODES         exact | interpret  — DERIVED BY THE WORLD, never written by the model.
+                  the model does not get to choose its own grade multiplier.
 TWO POSITIONS     expect | requires            (same object, different tense)
 THREE-VALUED      true | false | unknown       (unknown = wait, never drop)
 CARDINALITY       of="a1"    individual → grades the ACT
