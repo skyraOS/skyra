@@ -123,7 +123,7 @@ the first emission, the model would be inventing a bridge it already had.
 
 Precedent can supply the plan. It cannot supply the judgment that **this precedent applies here**. A
 state change means something new happened, and deciding what it means — does the target still hold,
-is this the same situation, does what worked before work now — *is* the `observation → projection`
+is this the same situation, does what worked before work now — *is* the `observation → state change`
 arrow, and that arrow always has the model in it.
 
 It is also the guard against the failure a zero-call path would create: an agent blind-replaying
@@ -223,7 +223,7 @@ satisfied `requires` going false is an emergency.
 
 ### The restart is not a reset
 
-The killed wave's plan **is still in the expression graph**. A new wave rediscovers it through the
+The killed wave's plan **is still in the memory graph**. A new wave rediscovers it through the
 same reverse index — the nodes are there, their expects are there, their grades are there. The being
 does not start over; it re-derives, with one more piece of evidence than it had before.
 

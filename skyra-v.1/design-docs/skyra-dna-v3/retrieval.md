@@ -2,12 +2,12 @@
 
 **Status:** DESIGN · part of [skyra-dna-v3](README.md)
 
-This is the mechanism inside `observation → projection` — the one arrow with the entire cognitive act
+This is the mechanism inside `observation → state change` — the one arrow with the entire cognitive act
 in it.
 
 ## The selectivity argument
 
-Each node in an expression graph carries **many** world-state expects. But *all together*, they
+Each node in the memory graph carries **many** world-state expects. But *all together*, they
 carry a **very limited possibility space of previous observations.**
 
 A single triple is low-information — `door:front state open` matches a thousand past observations.
@@ -76,7 +76,7 @@ failing decays out.
 ## The arrow, closed
 
 ```text
-observation → projection
+observation → state change
    = resolve incoming into the graph        (exact first; the decomposer on the residual)
    → take the target/residual triples as the query
    → intersect posting lists, rank by overlap × retrieval_weight (P × confidence(N) × F)
@@ -147,7 +147,7 @@ wrong. Fast, cheap, and learning nothing.
 ## Open
 
 - Posting-list storage: on the nucleus, or a separate index? It is **derived state** — rebuildable
-  from the observation log, which LAW 1 guarantees.
+  from the observation nodes, which LAW 1 guarantees.
 - Decay: do stale precedents fall out of posting lists, or only lose weight?
 - Top-k width — budgeted by the traversal budget?
 - The `interpret` layer's fuzzy match — embeddings, or the decomposer over the top-k the exact layer

@@ -1,6 +1,9 @@
 # skyra-dna-v3
 
-**Status:** DESIGN — nothing built yet. v2 will be archived once v3 stands.
+**Status:** BUILDING — the walking skeleton runs against a live model, tests pass, and the first
+learning curves (prediction-diff, retrieval) have appeared. Trace visibility is specced, not built.
+The ontology is being matured in [specs/2026-07-14](../../specs/2026-07-14/). v2 will be archived
+once v3 stands.
 **Derived from:** `scratchpad/2026-07-13/` (the seven working notes).
 
 ## The one-line version
@@ -24,27 +27,45 @@ v3 removes all three by changing the representation, not by adding machinery.
 
 ## Vocabulary — use these names, no others
 
-Two things are durable. Everything else is a projection of them.
+There is **one durable store: the memory graph.** It holds three kinds of node, and the loop runs
+through them. All three are durable.
 
 ```text
-DURABLE
-  observation log     append-only. the raw record of everything that crossed the boundary.
-                      the ONLY thing the decomposer writes.
+THE MEMORY GRAPH — one store, three node types
 
-  expression graph    acts, expects, framings — AND THEIR GRADES.
-                      the planner writes it; the grader grades it.
-                      >>> THIS IS THE BEING'S MEMORY. <<<
+  observation    what crossed the boundary from the world; reality's return.
+                 append-only, immutable. the ONLY node type the decomposer writes.
+
+  state change   Skyra's interpretation of an observation — a revision to current or target
+                 state. has interior: a partially-specified region (slots), never an atom.
+
+  action         what Skyra emitted back across the boundary; its outcome is a new observation.
+
+LEARNING LIVES ON THE RELATIONSHIPS BETWEEN NODE TYPES — not in a separate store:
+
+  observation → state change   P(ΔS | O)   interpretation
+  state change → action        P(A | ΔS)   policy
+  action → observation         P(O′ | A)   consequence
+  >>> THE GRADED RELATIONSHIPS ARE THE BEING'S MEMORY. <<<
 
 DERIVED  (rebuildable, never authoritative)
-  observation graph   a fold over the observation log. holds WORLD STATE.
-  reverse index       posting lists over the expression graph.
-  workflow            the plan. per-target, disposable, thrown away on kill.
+  world state    a fold over the observation nodes.
+  reverse index  posting lists over the graph.
+  workflow       the plan. per-target, disposable, thrown away on kill.
 ```
+
+Starting an episode scopes a **view** over the graph — it never decides what is durable.
+
+**Migration key** (older sub-docs still use the two-graph words): what they call the *expression
+graph* is now the **state-change and action nodes plus their graded relationships** — still the
+memory, no longer a separate graph. What they call the *observation graph* is the **derived fold
+over the observation nodes** (= world state); the observation nodes themselves are durable in the
+one graph. Read every "two graphs" claim through this key until the sub-docs are swept.
 
 ### Words that are NOT stores
 
 ```text
-world state     the CONTENT of the observation graph. a fine phrase; not a thing.
+world state     the fold over the observation nodes. a fine phrase; not a store.
 
 expect          a SINGLE CLAIM in a single instance. RESOLVES ONCE, is scored, is done.
                 carries no running economy. IT IS THE MEASUREMENT.
@@ -63,25 +84,27 @@ from **counted outcomes**. `S` belonged to the settle's economy and nothing asks
 
 ### Banned
 
-`world graph` (say **observation graph**) · `ledger` as a noun for a store (say **the edges**) ·
-`memory store` (say **expression graph**) · `A` / `alignment` as an edge field (say **P**)
+`two graphs` / `expression graph` / `observation graph` as *separate durable stores* (say **the
+memory graph**, with **observation / state change / action** nodes) · `ledger` as a noun for a store
+(say **the edges**) · `A` / `alignment` as an edge field (say **P**)
 
-### The two graphs are mutually dependent
+### The boundary runs through the graph, by node type
 
-Learning **takes place** in the expression graph — grades live on expects and framings, and the
-accumulated record of *what this being claimed and how those claims fared* is the thing nobody can
-copy or scrape.
+`MINE` vs `THE WORLD'S` is not a split between two graphs. It is a property of node type:
 
-But it is **only possible** because of the observation graph. An expect's claim refers to observed
-state; its grade *is* a diff against an observation. Strip the observations and the expression graph
-is numbers with no provenance.
+```text
+observation            THE WORLD'S    reality returned it
+state change, action   MINE           I generated them
+```
 
-And the observation graph is **itself shaped by** the expression graph: you only observe what you
-acted to observe. The log is not a neutral transcript of the world — two beings in the same room
-record different logs, because they attend to different things.
+A grade is a cross-boundary diff, so it must span from an **action** node (MINE) to the
+**observation** it produced (THE WORLD'S). A "grade" that never reaches an observation node is a
+type error — this is LAW 2 as a typing rule. Grading a state change against an action is
+MINE-against-MINE: forbidden by construction, not by discipline.
 
-**The dependency is circular, in exactly the shape of the loop below. Neither graph is prior.
-Neither is disposable.**
+The loop is **circular** through this one graph: action nodes shape which observation nodes ever
+exist (you only observe what you acted to observe), and observation nodes grade the action nodes
+that reached for them. Neither node type is prior; none is disposable.
 
 ## Two clocks
 
@@ -116,7 +139,7 @@ observation  ->  projection  ->  expression  ->  observation
 The four causes are **positions in this loop**, not annotations anyone emits. The causal graph is
 not a layer over the knowledge graph — it is **the shape of the loop through it**.
 
-Written this way the hard arrow comes first: `observation → projection` is the one edge with the
+Written this way the hard arrow comes first: `observation → state change` is the one edge with the
 entire cognitive act inside it. The other two are cheap.
 
 See [the-cycle.md](the-cycle.md).
@@ -124,7 +147,7 @@ See [the-cycle.md](the-cycle.md).
 ## The laws
 
 1. **Observation is the only writer of world state.** Expression has no write access. The being
-   cannot believe its own output into reality. World state is a *fold over the observation log* —
+   cannot believe its own output into reality. World state is a *fold over the observation nodes* —
    deterministic, replayable, auditable, fiction-free.
 
 2. **Learning happens only across the boundary.** `MINE` (projections, actions) vs `THE WORLD'S`
@@ -162,7 +185,7 @@ See [the-cycle.md](the-cycle.md).
 
 | doc | what it settles |
 |---|---|
-| [the-cycle.md](the-cycle.md) | two graphs, the write rule, the boundary, what "causal" means now |
+| [the-cycle.md](the-cycle.md) | one graph / three node types, the write rule, the boundary, what "causal" means now |
 | [expression-grammar.md](expression-grammar.md) | what the LLM emits — triples, modes, guards, joint outcomes |
 | [closure-and-planning.md](closure-and-planning.md) | when a plan is done, holes, termination, the watcher |
 | [retrieval.md](retrieval.md) | the reverse index; how the grade changes what gets recalled |

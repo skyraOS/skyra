@@ -27,7 +27,7 @@ model-free.)*
 ```text
 TRIGGER    an impulse arrives — user message, world Outcome, perception return
 INPUT      the impulse + a PRESENT (bidirectional: current state ← impulse → expected state)
-OUTPUT     observation triples  → the observation graph
+OUTPUT     observation triples  → observation nodes
            target updates       → the expected state
 MODEL      yes
 PRESENT    YES — it traverses from current state AND expected state
@@ -39,20 +39,20 @@ This is the **memory worker**: *"every impulse tasks a memory worker with mainta
 graphs."* It is not a text parser. It reads the impulse **in the context of** what is already known
 and what is currently wanted, and it updates both.
 
-**It is the `observation → projection` arrow.** The planner is `projection → expression`.
+**It is the `observation → state change` arrow.** The planner is `state change → action`.
 
 ```text
 DECOMPOSER   what does this MEAN?    → observation triples + target updates
 PLANNER      how do I GET THERE?     → acts + expects
 ```
 
-**LAW 1 — the decomposer is the only writer of the observation graph.**
+**LAW 1 — the decomposer is the only writer of observation nodes.**
 
 **LAW 3 — exact first.** The string matcher resolves every world-given namespace (`file:`, `proc:`,
 `url:`, `coord:`) before the model sees anything. The model handles only the residual.
 
 **It must not block the cognitive loop.** Text → triples is slow. Producer/consumer: the decomposer
-fills the observation graph, cognition runs on whatever has resolved, late edges arrive next cycle.
+fills in observation nodes, cognition runs on whatever has resolved, late edges arrive next cycle.
 
 ### Its writes are the entire reactive surface
 
@@ -224,7 +224,7 @@ no inference.
 ### Three properties
 
 **Settlement outlives the wave.** The wave that placed the bet may be long dead. The bet lives in the
-expression graph and the grade is what matters, so **settlement acts belong to no workflow** — they are
+memory graph and the grade is what matters, so **settlement acts belong to no workflow** — they are
 standalone. A dead plan's bets still get settled, and that is correct: you still want to know whether
 you were right.
 

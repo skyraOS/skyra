@@ -15,38 +15,41 @@
 // Written from observation, because the being does not begin by wanting something — it
 // begins by being told something.
 //
-//	observation  ->  projection  ->  expression  ->  observation
-//	 (material)        (final)       (efficient)
+//	observation  ->  state change  ->  action  ->  observation
+//	 (material)         (final)       (efficient)
 //
-// The four causes are POSITIONS IN THIS LOOP, not annotations anyone emits. The runtime
-// records "I observed O, I projected P, I emitted E, I then observed O′" and the links are
-// simply there, because that is the order things happened. The causal graph is not a layer
-// over the knowledge graph — it is the shape of the loop through it. That is why v2's entire
-// causal apparatus (CausalNodes, AitiaSet, the annotation grammar, causal-belief expansion)
-// has no counterpart here.
+// (Older docs name the middle two projection and expression; they are the state-change and
+// action nodes.) The four causes are POSITIONS IN THIS LOOP, not annotations anyone emits. The
+// runtime records "I observed O, I interpreted it as ΔS, I emitted action A, I then observed O′"
+// and the links are simply there, because that is the order things happened. The causal graph is
+// not a layer over the knowledge graph — it is the shape of the loop through it. That is why v2's
+// entire causal apparatus (CausalNodes, AitiaSet, the annotation grammar, causal-belief
+// expansion) has no counterpart here.
 //
-// Written this way the hard arrow comes first: observation -> projection is the one edge with
-// the entire cognitive act inside it. The other two are cheap — projection -> expression is a
-// collapse, and expression -> observation is the world's job.
+// Written this way the hard arrow comes first: observation -> state change is the one edge with
+// the entire cognitive act inside it. The other two are cheap — state change -> action is a
+// collapse, and action -> observation is the world's job.
 //
-// # The two graphs are mutually dependent
+// # One graph, three node types — and the loop is circular
 //
-// Learning TAKES PLACE in the expression graph (grades live on expects and framings). It is
-// ONLY POSSIBLE via the observation graph (an expect's claim refers to observed state; its
-// grade IS a diff against an observation). And the observation graph is itself SHAPED BY the
-// expression graph — you only observe what you acted to observe. The log is not a neutral
-// transcript of the world; two beings in the same room record different logs.
+// There is one durable memory graph; observation, state change, and action are node types in it,
+// not separate stores. Learning LIVES ON the graded relationships between them (grades live on the
+// state-change → action → observation edges). It is ONLY POSSIBLE via the observation nodes (a
+// claim refers to observed state; its grade IS a diff against an observation). And which
+// observation nodes ever exist is itself SHAPED BY the action nodes — you only observe what you
+// acted to observe. The record is not a neutral transcript of the world; two beings in the same
+// room record different observations.
 //
-// The dependency is circular, in the shape of the loop above. Neither graph is prior. Neither
-// is disposable.
+// The dependency is circular, in the shape of the loop above. No node type is prior. None is
+// disposable.
 //
 // # The laws
 //
 // LAW 1 — Observation is the only writer of world state. Expression has no write access.
-// Writing a file PROJECTS "file exists"; the observation graph does not contain it until
-// something came back and said so. The being can be wrong, but it cannot believe its own
-// output into reality. World state is therefore a fold over the observation log:
-// deterministic, replayable, auditable, fiction-free.
+// Writing a file PROJECTS "file exists"; world state does not contain it until something came
+// back and said so. The being can be wrong, but it cannot believe its own output into reality.
+// World state is therefore a fold over the observation nodes: deterministic, replayable,
+// auditable, fiction-free.
 //
 // LAW 2 — Learning happens only across the boundary. MINE (projections, actions) vs THE
 // WORLD'S (observations). A grade is by definition a cross-boundary diff, so grading your

@@ -1,16 +1,19 @@
-# The Cycle — Two Graphs, One Loop
+# The Cycle — One Graph, Three Node Types
 
 **Status:** DESIGN · part of [skyra-dna-v3](README.md)
 
-## Two graphs
+## One graph, one boundary
+
+There is one memory graph, with three node types — **observation, state change, action**. The
+load-bearing line runs *through* it, by node type:
 
 ```text
-MINE          projections + actions      things I generated
-THE WORLD'S   observations               things reality returned
+MINE          state change + action      things I generated
+THE WORLD'S   observation                things reality returned
 ```
 
-Michael's cut was observe / action. One notch over is the load-bearing line: **what came from me**
-versus **what came from outside me.** A projection is my bet; an action is my emission. Both
+Michael's cut was observe / action. One notch over is the real line: **what came from me** versus
+**what came from outside me.** A state change is my interpretation; an action is my emission. Both
 originate in me. Only observation crosses in.
 
 ## The loop
@@ -19,49 +22,52 @@ originate in me. Only observation crosses in.
 being told something.
 
 ```text
-observation  ->  projection  ->  expression  ->  observation
+observation  ->  state change  ->  action  ->  observation
 ```
 
 ```text
-observation   what actually is                  MATERIAL cause
-projection    what I am aiming at / expect      FINAL cause
-expression    what I did                        EFFICIENT cause
+observation    what actually is                   MATERIAL cause
+state change   my interpretation / what I aim at   FINAL cause
+action         what I did                          EFFICIENT cause
 ```
+
+(Older docs name the middle two *projection* and *expression*; they are the state-change and action
+nodes.)
 
 **The causes are positions in the loop, not annotations.** Nobody emits them. The runtime records
 *"I observed O, I projected P, I emitted E, I then observed O′"* and the links are simply there,
 because that is the order things happened.
 
-Written this way, the hard arrow is where it belongs — **first**. `observation → projection` is the
-one edge with the entire cognitive act inside it (see [retrieval.md](retrieval.md)). The other two
-are cheap: projection → expression is a collapse, and expression → observation is the world's job.
+Written this way, the hard arrow is where it belongs — **first**. `observation → state change` is
+the one edge with the entire cognitive act inside it (see [retrieval.md](retrieval.md)). The other
+two are cheap: state change → action is a collapse, and action → observation is the world's job.
 
-## The two graphs are mutually dependent — the loop is circular
+## One graph, one loop — and it is circular
 
-It is tempting to say the expression graph is the asset and the observation graph is just the
-transcript. **That is wrong**, and the error matters.
+It is tempting to say the mine-typed nodes (state change, action) are the asset and the observation
+nodes are just the transcript. **That is wrong**, and the error matters.
 
 ```text
-learning TAKES PLACE in the expression graph        grades live on expects and framings
+learning LIVES ON the graded relationships          grades live on state change → action → observation
 
-learning IS ONLY POSSIBLE via the observation graph an expect's claim REFERS TO observed state;
+learning IS ONLY POSSIBLE via the observation nodes  a claim REFERS TO observed state;
                                                      its grade IS a diff against an observation
 
-the observation graph IS SHAPED BY the expression graph
+the observation nodes ARE SHAPED BY the action nodes
                                                      you only observe what you acted to observe
 ```
 
-The observation log is **not** a neutral recording of the world. What got observed is a function of
-where the being *looked*, and where it looked was determined by its own perceive acts. Two beings in
-the same room produce different observation logs, because they attend to different things. **The log
-is already a fact about the being.**
+The observation record is **not** a neutral recording of the world. What got observed is a function
+of where the being *looked*, and where it looked was determined by its own perceive acts. Two beings
+in the same room produce different observations, because they attend to different things. **The
+record is already a fact about the being.**
 
-So the dependency is not hierarchical, it is **circular** — and it is circular in exactly the shape
-of the loop above. Neither graph is prior. Neither is disposable.
+So the dependency is not hierarchical, it is **circular** — in exactly the shape of the loop above.
+No node type is prior. None is disposable.
 
-Strip the observations and the expression graph is numbers with no provenance: unfalsifiable,
-unauditable, unreproducible. Which is precisely the ungrounded thing this architecture exists to
-prevent.
+Strip the observation nodes and the graded relationships are numbers with no provenance:
+unfalsifiable, unauditable, unreproducible. Which is precisely the ungrounded thing this
+architecture exists to prevent.
 
 ### Which makes LAW 2 auditable
 
@@ -71,7 +77,7 @@ bookkeeping — it is the evidence for the grade.
 > **Every grade must name the observation that produced it. A grade with no observation behind it
 > is, by definition, self-adjudicated.**
 
-This turns the law from a discipline into a **query**: walk the expression graph, find any grade
+This turns the law from a discipline into a **query**: walk the graded relationships, find any grade
 whose `ResolvedBy` is empty, and you have found a place where the being graded itself. You can scan
 for the poison.
 
@@ -100,7 +106,7 @@ vocabulary, same node types. The diff becomes arithmetic.
 
 > **Expression has no write access to world state. Observation is the only writer.**
 
-Writing a file **projects** `file:… exists true`. The observation graph does **not** contain
+Writing a file **projects** `file:… exists true`. World state does **not** contain
 `file:… exists true` until something came back and said so.
 
 This kills the most damaging agent failure in production: *"I wrote the file"* → proceed as if it
@@ -109,11 +115,11 @@ being can be wrong, but it **cannot believe its own output into reality**.
 
 ### What the rule buys
 
-The observation graph is a **fold over the observation log**. That is its definition, and four properties
+World state is a **fold over the observation nodes**. That is its definition, and four properties
 fall out of it:
 
 ```text
-deterministic   same observation log → same observation graph
+deterministic   same observation nodes → same world state
 replayable      rewind = fold to time T
 auditable       every node traces to the observation that produced it
 fiction-free    nothing self-authored can ever enter
@@ -124,15 +130,15 @@ Event-sourcing does not have to be designed for the world half. It **is** the fo
 ### The resulting epistemics
 
 ```text
-"I emitted `write file X`"   expression graph. self-authored. TRUE BY CONSTRUCTION —
+"I emitted `write file X`"   action node. self-authored. TRUE BY CONSTRUCTION —
                              I always know what I did.
 
-"file X exists"              observation graph. ONLY after something told me so.
+"file X exists"              world state (observation nodes). ONLY after something told me so.
                              I never know what RESULTED until I look.
 ```
 
 This gives `indeterminate` (see [ephemeral-world-workers](../world/)) a natural home: *I emitted it,
-I don't know whether it committed, so my observation graph claims nothing.* Perceive to resolve.
+I don't know whether it committed, so my world state claims nothing.* Perceive to resolve.
 
 ### Evidence the rule is right
 
@@ -163,23 +169,23 @@ the boundary the evidence came from.**
 ## Where the grade lands
 
 ```text
-projection ──emitted──> action ──returned──> observation
-     └───────────────── diff ───────────────────┘
+state change ──emitted──> action ──returned──> observation
+     └────────────────── diff ─────────────────────┘
 ```
 
-On the **edge**: *this projection, via this action, produced this much error.*
+On the **edge**: *this state change, via this action, produced this much error.*
 
 Which is where edge-owned activation already lives. **The edges ARE the causal claims, and they
 carry their own accuracy.** The economy grades the loop with no new machinery.
 
 ## What this does not solve
 
-**`observation → projection` is one arrow with the entire cognitive act inside it.**
+**`observation → state change` is one arrow with the entire cognitive act inside it.**
 
 ```text
-projection  ->  expression      collapse. easy.
-expression  ->  observation     the world's job. free.
-observation ->  projection      ← EVERYTHING HARD IS HERE
+state change  ->  action         collapse. easy.
+action        ->  observation    the world's job. free.
+observation   ->  state change   ← EVERYTHING HARD IS HERE
 ```
 
 The collapse **isolates** the hard part rather than removing it. See [retrieval.md](retrieval.md) —

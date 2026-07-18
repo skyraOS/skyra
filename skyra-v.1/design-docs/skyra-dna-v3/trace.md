@@ -59,7 +59,7 @@ observation behind it is self-adjudicated."* The audit chain becomes the trace's
 grep the trace for a grade with empty `ResolvedBy` and find the poison directly. The trace is not
 just for debugging; it is the mechanical form of the law.
 
-**Append-only, immutable, JSONL.** Same discipline as the observation log. Greppable AND analyzable:
+**Append-only, immutable, JSONL.** Same discipline as the observation nodes. Greppable AND analyzable:
 "why did passes fall on run 4" is answerable from the file without re-running, and the two curves
 plot straight off it.
 

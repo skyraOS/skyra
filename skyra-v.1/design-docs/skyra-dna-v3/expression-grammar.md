@@ -260,7 +260,7 @@ fiction.**
 
 > **The emission is a DAG. Iteration lives in the outer cycle.**
 
-If something needs retrying, the next `observation → projection` cycle projects it again. This keeps
+If something needs retrying, the next `observation → state change` cycle projects it again. This keeps
 the parser and the scheduler trivial, permanently.
 
 ## Cardinality — individual and joint

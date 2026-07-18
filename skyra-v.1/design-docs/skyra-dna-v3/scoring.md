@@ -178,7 +178,7 @@ one, and its `P` must not be ranked as though it means anything yet.
 
 ```text
 1. EXACT PASS (free, no model)
-   For each expect, look up Key() = subject∥predicate∥object in the observation graph.
+   For each expect, look up Key() = subject∥predicate∥object in world state.
 
 2. THERE IS NO STEP 2.
    Interpretation already happened — at OBSERVATION time, in the decomposer (LAW 4).
@@ -201,7 +201,7 @@ and looks. `UNKNOWN` is a waiting room, not a destination.
 
 ### Absence is not falsity — and `within` is what solves it
 
-If the being predicted `file:/src/auth.go exists true` and the observation graph says *nothing* about
+If the being predicted `file:/src/auth.go exists true` and world state says *nothing* about
 that file, **that is not a failed prediction. It did not look.**
 
 Treating *"I didn't check"* as *"it didn't happen"* would drag every edge in the graph toward zero.
