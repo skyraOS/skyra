@@ -2,6 +2,12 @@
 
 **Status:** DESIGN · part of [skyra-dna-v3](README.md)
 
+> **2026-07-20:** the observe-side companion is specced —
+> [specs/2026-07-20/the-observe-wave.md](../../specs/2026-07-20/the-observe-wave.md).
+> It is not a third kernel wave: it upgrades this doc's FREE index steps (plan-loop
+> 1/2/5) with class-grouped, diversity-ranked precedent and commits impulse
+> resolutions as state-change nodes. Waves 1 and 2 are untouched.
+
 The kernel does **two** things. It does not do the diff and it does not do closure — those are set
 operations and must never get a traversal.
 

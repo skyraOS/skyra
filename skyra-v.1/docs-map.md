@@ -1,6 +1,6 @@
 # The Working Set
 
-**Updated:** 2026-07-13 (V0 validated live; working-memory-loop design recorded)
+**Updated:** 2026-07-20 (episode-as-region decided; paper tests #1–#2 run)
 
 The curated list of load-bearing docs — what you need to work on the system
 *today*. Everything else in the tree is either design source (kept live because
@@ -91,6 +91,59 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
 
 ## 7. The next designs and remaining gaps
 
+0. **The observe mechanism over the spine** —
+   [specs/2026-07-19/observe-mechanism-over-spine.md](specs/2026-07-19/observe-mechanism-over-spine.md):
+   spreading activation over an immutable O→A spine, interpretation only at the two
+   collapse bookends. Ground decision
+   [episode-as-region](specs/2026-07-20/episode-as-region.md): episode = class of
+   similar spans (the spine-native relational region); statistics count at the class,
+   descent to exemplar only. Paper tests
+   [#1](specs/2026-07-19/observe-paper-test.md) and
+   [#2](specs/2026-07-20/observe-paper-test-2.md) both pass on paper: references
+   resolve by convergence, class statistics select without a signed middle, and ties
+   break on **root diversity** (superposition within a root, interference across
+   roots). [Paper test #3](specs/2026-07-20/observe-paper-test-3.md) (cross-root
+   contradiction) **retires the signed middle** and settles the phase slot:
+   compatibility = witnessed joint co-occurrence of committed bindings, checked at
+   collapse; zero joint precedent = novelty flag (legal, surfaced to express).
+   Coverage gates commitment; verb/relational tokens and context are ordinary roots.
+   [Paper test #4](specs/2026-07-20/observe-paper-test-4.md) closes the last
+   hand-wave: segmentation recovered mechanically from the unsegmented spine (4/4
+   boundaries by adaptive renewal gaps, 3/3 classes by baseline-weighted
+   co-occurrence over resolved entities; open tail span provisional until close).
+   **The mechanism is fully paper-validated.** Substrate deltas before code:
+   witnessed timestamps on moments; signatures over resolved entities; the
+   strict-alternation question parked (null-action fallback). Ground decision
+   [settlement-set](specs/2026-07-20/settlement-set.md), **keyed to v3**: no LLM
+   grades observations — expects (triple, confidence, within) resolve once by exact
+   match; accumulation lives on edge EMAs; state-holding = re-issued bets;
+   raw/interpreted provenance splits the deterministic portion from the open
+   interpretation portion (the decomposer + collapse commits). Carries the keying
+   table mapping this session's v2-flavored vocabulary onto v3.
+   [Live segmentation run](specs/2026-07-20/live-segmentation-run.md) — the rules
+   replayed against the 2026-07-13 session: six correct spans, one correct class
+   merge, promiscuity discounting fired unprompted. Composition correction:
+   **over-segment (finest rhythm) then merge (rule 2)**, don't tune k. Bottleneck =
+   canonical entity resolution — natively solved by v3's exact triple keys.
+   **Decision: land in v3, no v4** — the wave is retrieval.md matured; version bumps
+   are for representation breaks and nothing here breaks v3's. **Landed 2026-07-20:**
+   `Observation.Wall` + `segment.go` (`Spans`/`Classes`/`Lens`, pure functions; paper
+   test #4's toy is the unit-test fixture; rhythm baseline = lower quartile).
+   **Specced and built:** [the-observe-wave](specs/2026-07-20/the-observe-wave.md) —
+   the mechanism inside `observation → state change`, zero inference. `wave.go`
+   landed 2026-07-20 (deltas 1–5): `ResolutionIndex` (tier-1 compression proposer,
+   counted priors), `Roots`/`HeatClasses` (diversity-first), `Resolve` (Born-rule
+   `Stats` hook, coverage-gated stitching, joint-precedent novelty flag),
+   `Resolution.Commit` (interpreted resolved-to observations that feed the next
+   index — cost scales with surprise at ingest), `ClassEdges` (stats joined through
+   evidence). Ground decided: **targets are read, not written** — the winning class's
+   settled completion is the derived target (free); the framing call authors one only
+   on novelty; a single genome-seeded purpose bootstraps; `Run(target)` survives
+   unchanged with the supplier swapped from harness to history. Delta 6 **landed**
+   as `ingest.go` (`ObserveImpulse`: impulse → wave → commits → precedent-read
+   target; nil target + novelty flag hands authoring to the framing call). The
+   observe mechanism is now fully built through the seam. Next: replay the next
+   live session; grow an impulse source so `ObserveImpulse` runs in anger.
 1. **The working-memory loop** —
    [specs/2026-07-13/working-memory-loop/](specs/2026-07-13/working-memory-loop/README.md)
    (design recorded 2026-07-13, ledger all-open): WM-as-buffer, impulse shells
