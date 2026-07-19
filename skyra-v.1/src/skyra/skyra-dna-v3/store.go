@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The two durable stores, and the derived index over them.
@@ -30,10 +31,18 @@ func NewObservationGraph() *ObservationGraph {
 	return &ObservationGraph{cur: map[string]Observation{}}
 }
 
+// wallNow supplies Write's wall-clock stamp. A variable so replay and tests can supply
+// historical time — a replayed observation must carry the moment it HAPPENED, not the moment
+// it was replayed.
+var wallNow = func() int64 { return time.Now().UnixMilli() }
+
 // Write appends an observation and folds it into world state. THIS IS THE ONLY WRITER.
 func (g *ObservationGraph) Write(o Observation) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if o.Wall == 0 {
+		o.Wall = wallNow()
+	}
 	g.log = append(g.log, o)
 	g.cur[sp(o.Triple)] = o
 }

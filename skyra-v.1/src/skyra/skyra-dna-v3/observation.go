@@ -46,6 +46,13 @@ type Observation struct {
 
 	// At is the tick this landed.
 	At int
+
+	// Wall is the wall-clock moment this landed, unix milliseconds. WITNESSED, like At — the
+	// runtime has it for free at write time, and segmentation cannot run without it (span
+	// boundaries are renewal gaps in REAL time; ticks have no duration). Recovering this later
+	// from file mtimes is archaeology — specs/2026-07-20/live-segmentation-run.md did exactly
+	// that once, and once was enough. Stamped by ObservationGraph.Write if zero.
+	Wall int64
 }
 
 // Provenance separates what the world said, from what the being made of it, from what the being
