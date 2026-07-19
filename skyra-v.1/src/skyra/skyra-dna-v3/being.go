@@ -16,7 +16,7 @@ import (
 // Both down is the thesis. Either alone is a warning, and either failure LOCALIZES — which is the
 // whole reason the architecture was built this way.
 type Being struct {
-	World *World
+	World Realm
 	Obs   *ObservationGraph
 	Expr  *ExpressionGraph
 
@@ -26,6 +26,12 @@ type Being struct {
 
 	// Infer is the ONE model call site in the system. Everything else is arithmetic.
 	Infer func(system, present string) (string, error)
+
+	// System is the planner's system prompt. It defaults to the sandboxed-filesystem
+	// vocabulary; a different Realm supplies its own primitives and perceivable
+	// predicates here. The FORMAT (acts, expects, requires) is the same everywhere —
+	// only the world's instrument list changes.
+	System string
 
 	tick int
 	seq  int
@@ -44,13 +50,14 @@ type Metrics struct {
 	Rejects         int
 }
 
-func NewBeing(w *World, infer func(string, string) (string, error)) *Being {
+func NewBeing(w Realm, infer func(string, string) (string, error)) *Being {
 	return &Being{
-		World: w,
-		Obs:   NewObservationGraph(),
-		Expr:  NewExpressionGraph(),
-		Aff:   DefaultAffordances(),
-		Infer: infer,
+		World:  w,
+		Obs:    NewObservationGraph(),
+		Expr:   NewExpressionGraph(),
+		Aff:    DefaultAffordances(),
+		Infer:  infer,
+		System: plannerSystem,
 	}
 }
 
@@ -63,7 +70,7 @@ func (b *Being) Tick() int { return b.tick }
 // graph is per-world — a fold over a log about a world that no longer exists — while the expression
 // graph is DURABLE. It is the memory. A being that walks into a new room forgets what was on the old
 // room's floor; it does not forget what it has learned.
-func (b *Being) NewEpisode(w *World) {
+func (b *Being) NewEpisode(w Realm) {
 	b.World = w
 	b.Obs = NewObservationGraph()
 }
@@ -203,7 +210,9 @@ func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
 			break
 		}
 		c.Unresolved = false
-		b.express(plan, c) // the ascent — act, observe, grade
+		if b.express(plan, c) { // the ascent — act, observe, grade
+			break // an observed world event superseded the rest of this expression
+		}
 	}
 
 	if !b.targetMet(target) {
@@ -251,7 +260,7 @@ func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, b
 		present := b.present(target, holes)
 
 		// 3. PLAN — ONE model call. the only cost.
-		raw, err := b.Infer(plannerSystem, present)
+		raw, err := b.Infer(b.System, present)
 		if err != nil {
 			return plan, false
 		}
@@ -298,7 +307,7 @@ func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, b
 // "closed" and the being never does the second half of it — which is exactly what happened: `acts=1`
 // on every run, the exec never ran, and its bets were graded against a world where it had never
 // executed.
-func (b *Being) express(plan []*Expression, c *Cycle) {
+func (b *Being) express(plan []*Expression, c *Cycle) (superseded bool) {
 	resolve := func(t Triple) Truth {
 		truth, _ := b.Obs.Resolve(t)
 		return truth
@@ -322,6 +331,9 @@ func (b *Being) express(plan []*Expression, c *Cycle) {
 				for _, t := range out.Effects {
 					b.Observe(t, ProvenanceRaw)
 				}
+				if out.Status == "superseded" {
+					return true
+				}
 				// arm every bet this act was responsible for — a bet only starts running once the
 				// thing that was supposed to cause it has actually happened.
 				for i := range e.Expects {
@@ -335,9 +347,10 @@ func (b *Being) express(plan []*Expression, c *Cycle) {
 		b.Settle() // the bets come due; the being goes and looks. THIS IS WHAT UNBLOCKS THE NEXT ROUND.
 
 		if !acted {
-			return // nothing fired this round and nothing new can — the ascent is done.
+			return false // nothing fired this round and nothing new can — the ascent is done.
 		}
 	}
+	return false
 }
 
 // maxExpressRounds bounds the fire→settle→fire rhythm. A plan needing more rounds than this is

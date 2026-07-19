@@ -18,11 +18,21 @@ import (
 // The world REPORTS. It does not GRADE. It has never seen the being's prediction and it must not:
 // its independence is the entire reason its evidence is worth anything.
 
+// Realm is everything the being requires of a world: execute one act and report, and answer a
+// targeted perceive. Two methods, because the being touches its world in exactly two places —
+// motor (express) and the settler. Anything that can answer an Act with an Outcome can host the
+// being; the sandboxed filesystem below is one Realm, not the definition of one.
+type Realm interface {
+	Do(Act) Outcome
+	Perceive(Triple) Outcome
+}
+
 // Outcome is what a world worker returns. Statuses are kept distinct on purpose — "blocked" and
 // "denied" and "unavailable" are three different lessons, and collapsing them into "it didn't work"
-// throws away most of the signal.
+// throws away most of the signal. "superseded" means an independently observed world event made
+// the rest of the current expression obsolete; its Effects carry the observation that did so.
 type Outcome struct {
-	Status  string // succeeded | blocked | denied | unavailable | indeterminate
+	Status  string // succeeded | blocked | denied | unavailable | indeterminate | superseded
 	Effects []Triple
 	Err     string
 }
