@@ -2435,3 +2435,490 @@ It is also where the project became conscious of its own method. Twenty-four pha
 - output format: 5-digit index transcription errors at scale — cite content or chunk IDs
 - the backfill of the June v.1 cognition phases (signal layer, resonance, episodic) into this timeline
 - the moat-timing decision — when to flip the exit condition — remains the live judgment
+
+---
+
+# Backfill: Phases 26–34
+
+## Scope of this backfill
+
+Phase 25 closed on `2026-06-14` and left a debt: "the backfill of the June v.1 cognition
+phases into this timeline." That debt is now larger than it was when it was recorded,
+because the five weeks after it contain the single most consequential structural event in
+the project's history — the dissolution of the causal graph and the move to `skyra-dna-v3`.
+
+This section covers `fda8914` (`2026-06-15`) → `74c33ef` (`2026-07-20`): **146 commits in
+35 days.** It is written from git history, the captain's log, and the specs under
+`skyra-v.1/specs/`.
+
+The pace note is worth recording on its own. Phases 0–25 spanned four months. Phases 26–34
+span five weeks and contain two full substrate generations (`dnav2`, `dnav3`), the project's
+first measured learning curve, and the deletion of more architecture than any prior phase
+built.
+
+## Phase 26: The Cell Layer And Working Memory As Lit Subgraph
+
+### Dates
+
+- `2026-06-21` → `2026-06-26`
+
+### Representative commits
+
+- `339d024` v.1 cognition: edge-owned activation + the cell layer on the void kernel
+- `bd82c0e` working-memory-as-lit-subgraph, completed/alignment split, sensory pipeline
+- `b55704d` enforce one-graph WM in the docs (kill two-store / two-graph framing)
+- `bfb90e1` v.1 sensorimotor boundary: thin membrane + sensory/motor sub-actors
+- `3cfccb7` captains-log: field-observation category + membrane-leak observation
+
+### What happened
+
+The comparator from Phase 25 ran on hand-built presents. This phase built the thing that
+would produce a present for real.
+
+Working memory stopped being a store and became a **lit subgraph** — not a container that
+holds things, but the region of the one durable graph that is currently active. The
+corresponding documentation change was to kill every remaining "two-store" and "two-graph"
+framing, which had survived from earlier generations as vocabulary after the architecture
+had already stopped justifying it.
+
+The sensorimotor boundary arrived as a **thin membrane** with sensory and motor sub-actors
+and cell-initiated crossing. The captain's log opened a new category — field observation —
+with the membrane-leak note, the first recorded instance of the runtime contaminating its
+own input.
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Working memory as a store to read from | Working memory as the lit region of the one graph |
+| Two-graph / two-store framing in docs | One graph, enforced in the documentation |
+| Activation owned by nodes | Activation owned by edges, on the void kernel |
+| Sensory and motor implicit | A thin membrane with explicit sub-actors and cell-initiated crossing |
+
+## Phase 27: The Cognitive Chain And The Prediction Invariant
+
+### Dates
+
+- `2026-06-26` → `2026-07-02`
+
+### Representative commits
+
+- `24cdb5d` wire the full cognitive chain (Global → other → self → voting → motor)
+- `8352ee5` other agent: predict step — reads the grouping, predicts, appends
+- `2db9151` self agent: predict step — relies on other, predicts skyra's move
+- `87e663d` design: prediction-falsifiability invariant + world-assertion policy chain
+- `9137017` MVP: skip voting — self hands its move straight to motor
+- `ee6ce44` first embodied runs — maze world, wait primitive, ghost-bug fix
+- `163a803` rename Global → MidLevel
+
+### What happened
+
+The full loop closed. An impulse entered at sensory, assembled a frame at MidLevel
+(renamed from Global mid-phase), passed through an **other** agent that predicts the world
+and a **self** agent that predicts Skyra's own move, and collapsed at motor.
+
+The self/other split is the phase's real content. `other` predicts what the world will do;
+`self` reads that prediction and predicts what Skyra will do about it. This is an active
+inference shape, arrived at from the architecture rather than imported from the literature.
+
+`87e663d` is the commit that matters most in hindsight. The **prediction-falsifiability
+invariant** — a prediction that cannot be wrong does not count — is recorded here, three
+weeks before `dnav3` was conceived, and survives verbatim into `dnav3` as LAW 5. The
+world-assertion policy chain in the same commit is the seed of LAW 1.
+
+Then the being was embodied: a maze world, a `wait` primitive, and a ghost-bug fix
+(occupancy sets plus an identity registry) from the first runs where a body existed to be
+confused about.
+
+### What this phase produced
+
+- the full cognitive chain, wired end to end and running
+- self/other as separate predictors with lagged mutual reliance
+- the prediction-falsifiability invariant — later LAW 5
+- first embodied runs, and the first bugs only a body can produce
+
+## Phase 28: The Two-Stroke Cycle And Slice-Based Dispatch
+
+### Dates
+
+- `2026-07-03` (a single day — roughly 25 commits)
+
+### Representative commits
+
+- `6c3a779` Stage A: the grade half — adversarial-neutral judges, per-cycle bets
+- `ee6b74f` two-stroke cycle (concurrent self/other, mutual lagged reliance) + relay valve
+- `110c504` self-dialog is private — inner speech never enters the medium
+- `9855280` settle the kernel/slice concurrency model (ownership cut + fine-grained locking)
+- `92ade5a` / `d6a909d` slice-based-dispatch — routing off the slice/impulse, not pointers
+- `d4834b0` dnav2 shell: DNA + ephemeral root (transcript) + competence type
+- `f3c34ea` port other:predict + self:predict + motor:collapse — phase 1 cold-start complete
+- `3c9bbd1` cmd/validate-v2 — phase 1 VALIDATED on real Codex
+
+### What happened
+
+The densest day in the repository's history, and the one that names the current branch.
+
+**Slice-based dispatch** replaced hardcoded pointer routing: a wave routes off the slice
+and the impulse, with competence carried on the wave, an ephemeral root, and an
+impulse-keyed join. This is the mechanism that makes the pipeline stop being a pipeline.
+
+The **two-stroke cycle** made self and other concurrent with mutual lagged reliance, and
+introduced **adversarial-neutral judges** with per-cycle bets — an attempt to get a
+trustworthy grade out of a judge by structuring the judge's incentives. It is worth marking
+that this is the last serious attempt to make judged grading work. Eleven days later the
+approach is abandoned entirely.
+
+`110c504` records a genuine design catch: self-dialog is private, delivered by identity, so
+inner speech never enters the medium. Without it the being's own reasoning becomes input to
+its peers.
+
+The concurrency model was settled before the fan-out was built — ownership cut, fine-grained
+locking, an append/claim invariant, three state classes, and a required concurrency-scenario
+walk per seam. Inference runs lockless.
+
+`dnav2` is born at the end of this day: DNA, ephemeral root, competence type, a coordination
+board, an orchestrator membrane, and the six ports. Validated the same day against real
+Codex.
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Routing by hardcoded pointers | Routing off slice + impulse, competence on the wave |
+| Sequential self → other | Two-stroke: concurrent, mutual lagged reliance |
+| Grading as an open problem | Adversarial-neutral judges with per-cycle bets (final attempt) |
+| Concurrency deferred | Ownership cut and locking settled before fan-out |
+
+## Phase 29: The Void Kernel And The Accumulation Loop
+
+### Dates
+
+- `2026-07-05`
+
+### Representative commits
+
+- `9264346` traversal-mechanics — fold activation into Observe, void the kernel
+- `0a5c4b2` budget is world-defined (units + conservation)
+- `ddea1d5` resolve cost location (`Cost()` on the Space)
+- `ac5cb74` traverse: Phase 0 — isolated transport substrate (void kernel)
+- `33c70af` / `fe19db5` / `91a0d45` activation record + bump, learned strength reweights the frame, credit write-back (the eligibility trace)
+- `c064cff` close the accumulation loop live
+
+### What happened
+
+The kernel was **voided** — deliberately stripped of all cognition. It carries no decay
+factor, no threshold, no normalization, and no notion of what the budget measures. Two
+lines of arithmetic:
+
+```text
+child_budget = (parent_budget − parent_cost) × weight
+descend iff  child_budget ≥ child_cost
+```
+
+Budget became world-defined, with units and conservation owned by the world rather than the
+kernel, and `Cost()` moved onto the Space. The kernel only reads what it was handed. This is
+LAW 3's ancestor: the trusted path is arithmetic, and everything interpretive lives outside it.
+
+The accumulation loop then closed live across five increments: an activation record and
+bump, learned strength reweighting the frame, credit write-back as an eligibility trace, and
+node-birth wiring to bootstrap edges. Edge-owned learning became real rather than designed.
+
+### Why this phase matters
+
+`traverse/` is the only package in the tree that is deliberately isolated from cognition,
+and it is still standing three generations later. Voiding the kernel is the move that let
+every later substrate be swapped without touching transport.
+
+## Phase 30: Active Grouping, Episodes, And The Perceive Build
+
+### Dates
+
+- `2026-07-06` → `2026-07-08`
+
+### Representative commits
+
+- `995104b` active-grouping spec + park closure (alignment != closure)
+- `94e86a5` the coherence grader (adapted from the comparator)
+- `f24adc0` increments 4b/4c/5 — the coherence-settle owns A
+- `0306793` settle crosses the edges it grades (fixes edge-deadening)
+- `f407ad7` the gist-owned spine — gists are children, a sequence
+- `674f480` the sensory ingest — perceptions land on the spine
+- `7e056ba` tui: the bridge drops skyra's own engage echo (kills the self-stimulation loop)
+
+### What happened
+
+Episodes became first-class as **active groupings**, with an edit/new operator deciding
+whether an incoming impulse extends the current episode or starts one. The comparator from
+Phase 25 was adapted into a **coherence grader** — its first reuse outside the experiment
+harness. `995104b` parks goal closure with a distinction that matters: alignment is not
+closure.
+
+`0306793` is a good example of the failure modes this architecture produces: settle was
+grading edges without crossing them, so graded edges quietly deadened. The fix is one line
+of intent — settle crosses the edges it grades — and the bug class only exists because
+learning lives on edges.
+
+The perceive build gave the being a spine: gists as an ordered sequence of children, a
+reafference lane forking by primitive, perceptions landing on the spine, and a normalization
+pass pinning the freshest location per entity at the frame top.
+
+`7e056ba` closes the membrane leak logged back in Phase 26 — the bridge was feeding Skyra's
+own engage echo back to it as perception, a self-stimulation loop. Under LAW 1 as later
+written, this is precisely the failure the law exists to make structurally impossible.
+
+## Phase 31: Cause And Effect V0 — The Aitia Machinery
+
+### Dates
+
+- `2026-07-08` → `2026-07-13`
+
+### Representative commits
+
+- `14c8be7` / `f5cfade` affordance and kernel reform plans; SpaceTime kernel reform specs
+- `315125d` / `e42ad06` aitia maxim telos schema praxis frame
+- `249f449` specs: the Evidence collapse — two graphs, four structural types
+- `17e0d46` the agreed vocabulary — CausalNode, birth frame, NodeRegistry, EdgeRecord
+- `b281c42` Phase 0 — the annotated-sentence parser, compound persistence, signed store
+- `6684c82` cause-and-effect V0 — phases 2–7, the loop closed
+- `675dea5` docs: the first live run, and what it cost
+
+### What happened
+
+The most elaborate machinery the project ever built, and the shortest-lived.
+
+Causality was made explicit: `CausalNode` as a single perspectival type, an `AitiaSet`, a
+birth frame, a `NodeRegistry` as durable working memory, `EdgeRecord` for evidence, an
+annotation grammar with a wire format the expansion workers were taught, verb-group
+particles with brace-edges, and cause lanes named for the causes they carry. Evidence lives
+on edges; causal inheritance is node-only. Resolution unified with the observed graph, and
+sentence plus subgraph commit transactionally.
+
+Then it was run live, and `675dea5` records what it cost:
+
+- six external messages plus three perception returns
+- **95 inference calls over ~28.5 minutes**
+- a single parse or causal-expansion failure could leave motor unable to act at all
+
+It also proved something real: after moving on stale location information and being
+criticized for it, the being changed its policy to perceive first, then move. Behaviorally
+genuine learning — obtained via a human scolding it, at 95 calls.
+
+### Why this phase matters
+
+This phase is the strongest evidence in the timeline for the project's own method. The
+causal apparatus was built properly, to its own standard, and then run against reality —
+and reality returned a number that condemned it. The fixed pipeline could not stay, and no
+amount of further design would have shown that. Only the run did.
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Causality implicit in the loop | Causality asserted through an explicit annotation grammar |
+| Evidence undefined | Evidence on edges, four structural types, node-only inheritance |
+| Cost unmeasured | 95 inference calls / 28.5 min for one live exchange — the pipeline condemned |
+
+## Phase 32: The V3 Turn — The Causal Graph Dissolves
+
+### Dates
+
+- `2026-07-14` (a single day)
+
+### Representative commits
+
+- `32b2114` scratchpad: two graphs — the causal graph dissolves
+- `8d0574d` / `ae5e037` the expression grammar; the reverse index — and the number
+- `7aeb005` dnav3: scaffold — design docs, package, and the wave
+- `77e0da2` write the cycle from observation, and make LAW 2 auditable
+- `8da8ca5` grading — the edge is a conditional probability, and the EMA is the prior
+- `6f001d3` the decomposer is the memory worker — and the aligner dies
+- `f2340cb` the model does not choose its own grade multiplier
+- `fe2977d` the model is not told how it is scored
+- `3787458` run it against a real model — four bugs reality found
+- `3fa2144` the reconciler — and the retrieval curve appears
+- `34e0b95` captains-log: phase-07 / .2001 — prediction-diff learning, the first real curve
+
+### What happened
+
+The pivotal day. `32b2114` is the moment: **the causal graph dissolves.**
+
+The realization is that the four causes are *positions in the loop*, not annotations anyone
+emits. If the runtime records "I observed O, I interpreted it as ΔS, I emitted action A, I
+then observed O′", the causal links are simply there, because that is the order things
+happened. The causal graph is not a layer over the knowledge graph — it is the shape of the
+loop through it.
+
+Every piece of Phase 31 therefore has no counterpart in v3. `CausalNode`, `AitiaSet`, the
+annotation grammar, causal-belief expansion: deleted, not ported. Six days of the most
+intricate work in the repository, removed by a representation change.
+
+Three of v2's ceilings fall with it:
+
+- free-text predictions could only be graded by an LLM judge → predictions become
+  falsifiable claims about observable state, and the grade is a **diff**
+- causality had to be asserted by the model → causality becomes positional
+- the goal was re-derived every turn → the target persists
+
+`8da8ca5` replaces the judge with arithmetic: the edge is a conditional probability
+`P(world state | expression)` computed from counted outcomes, with an EMA as prior.
+`6f001d3` kills the aligner — the decomposer interprets at observation time, so there is no
+grading-time aligner left to misbehave (LAW 4).
+
+`f2340cb` and `fe2977d` are the anti-gaming pair, and they are the phase's sharpest work:
+the world stamps the grade multiplier so the model cannot choose it, and the prompt never
+states the scoring rule — enforced by a test, `TestPromptDoesNotLeakTheScoringRule`.
+
+Then it ran. `3787458` records four bugs that only a real model found, including the
+`N=1-forever` bug — the edge key had to be `(primitive → target)` rather than the expression
+instance, or nothing accumulates across episodes. `3fa2144` adds the reconciler and the
+retrieval curve appears.
+
+`34e0b95` logs `.2001`: passes-to-closure `5 → 1`, stable at the floor from run 4; 30
+inference calls for 20 episodes against 95 for one v2 exchange; 90% bet accuracy; edge over
+base rate decaying `0.36 → 0.01` as the graph absorbs the recipe. The being discovered a
+three-part prerequisite that was never in the prompt, from the world's own failure reports.
+
+### Why this phase matters
+
+Every prior phase changed what the architecture *was*. This one changed what the learning
+signal *is*, and in doing so made the previous six days of work unnecessary. It is the
+clearest instance of the project's overbuild-then-compress loop completing in a single day,
+and the first time the substrate demonstrably learned.
+
+### What changed
+
+| Before | After |
+|--------|-------|
+| Causality asserted by the model | Causality positional — the order things happened |
+| Grade from an LLM judge | Grade as arithmetic diff; no model in the grading path |
+| Confidence model-reported | Confidence as counted `P(state \| expression)` with EMA prior |
+| Goal re-derived each turn | Target persists across turns |
+| Learning unmeasured | Both curves down: ~5× planning cost reduction, 90% bet accuracy |
+
+## Phase 33: The Observe Wave
+
+### Dates
+
+- `2026-07-17` → `2026-07-19`
+
+### Representative commits
+
+- `ccdfaf8` docs: summarize current Skyra direction
+- `66a54a3` feat: advance traversal and field architecture
+- `42b3f31` feat: add interactive 3D globe realm
+- `dd13202` docs: observe mechanism — paper tests 1–4, ground decisions, wave spec
+- `5a49ff6` dnav3: build the observe wave — segmentation, wave, ingest seam
+
+### What happened
+
+`dnav3`'s hard arrow is `observation → state change` — the one edge with the entire
+cognitive act inside it. This phase built the mechanism for it, and built it with **zero
+inference calls**: index lookups and arithmetic over derived segmentation and resolution
+history, the same species as every other set operation in v3.
+
+The wave runs roots → heat → rank → select → coverage → joint → commit. Ranking is
+diversity-first: a root's candidates are alternatives and can never corroborate each other,
+so corroboration is counted across roots. Selection is by counted statistics. Ungroundable
+roots stitch from lower-ranked classes, and a committed binding set with zero joint
+precedent is flagged as a novel stitch — legal, but marked.
+
+Four paper tests preceded the build. The globe realm (`world3d`) arrived alongside: a
+cube-sphere with adjacency computed geometrically rather than from a hand-written edge
+table, on the reasoning that the 24 edge stitchings are a classic source of silent wrap
+bugs and geometry cannot disagree with itself.
+
+## Phase 34: Spans Own Their Predictions
+
+### Dates
+
+- `2026-07-20`
+
+### Representative commits
+
+- `b2c68f9` dnav3: spans own their predictions — and the class layer comes out
+- `74c33ef` research: replacing triples with compression — unfreeze the codebook
+
+### What happened
+
+The observe wave was three days old when its class layer came out.
+
+The grader had been asking the expression graph for every open prediction and matching
+globally by `(subject, predicate)`. That loses the episode the bet was made in: two
+unrelated spans can carry claims about the same address, and one observation settles both
+though only one was active. A grade collectable by an episode that did not place the bet is
+not a grade.
+
+The correction makes ownership structural — the span that births an expression owns every
+prediction it emits — and replaces the class layer with a transient activation field:
+
+```text
+span owns expression -> expression emits predictions -> actions arm predictions
+impulse heats entities/triples -> reverse indexes heat spans
+causal propagation extends the active region
+only active-span, causally armed predictions may grade
+```
+
+`Class` leaves the active architecture. Posting lists retrieve spans directly, causal edges
+already carry the repeated statistics, and the activation field carries current relevance;
+the clustering object between them duplicated all three and made a transitive similarity
+decision before the causal record had earned one. The wave remains in the tree as prototype
+history.
+
+Activation is **continuously replaced, never accumulated** — `BeginImpulse` decays the old
+field and the new impulse bumps what matters now. Memory rendering became a fixed token
+budget selected by `A/token`, so the projection stays bounded with no compaction pass. A
+synthetic 100k-token / 4,000-span endurance run holds the active projection to 256 tokens
+and reactivates the first cold memory without compacting.
+
+Stress validation: 546,293 fuzz executions, a 1,000-bet delayed-settlement flood, race and
+full-repository checks, and a 100,000-unrelated-bet index benchmark. It found two real
+defects, both fixed — cross-episode grading, and **mark-to-world-state laundering**, a
+projection reaching world state without an observation. That second one is LAW 1 being
+violated in the one place nobody was looking, and it is the strongest argument in the
+timeline for writing the laws down as laws.
+
+`74c33ef` opens the next question as research, not implementation: a triple is already a
+compression code — discrete, addressable, falsifiable — and the decomposer is a
+hand-specified compressor with a frozen dictionary. The substrate is representation-agnostic
+as long as the atom is a discrete addressable key, so the codebook could in principle be
+learned by compression over the observation stream. Keep the substrate, change what the keys
+denote.
+
+## What Actually Changed Across Phases 26–34
+
+| Dimension | `2026-06-15` | `2026-07-20` |
+|-----------|--------------|--------------|
+| Substrate | v.1 cognition on the void kernel | `skyra-dna-v3` |
+| Learning signal | judged (comparator, coherence grader) | computed diff; no model in the grading path |
+| Causality | to be built explicitly | positional — a consequence of loop order |
+| Working memory | lit subgraph of the durable graph | transient EMA activation field, continuously replaced |
+| Grading scope | global match on `(subject, predicate)` | span-owned, causally armed, active-region only |
+| Measured learning | none | two curves down; ~5× planning cost reduction |
+| Cost per exchange | 95 inference calls / 28.5 min | 30 calls for 20 episodes |
+
+## The Pattern Across These Nine Phases
+
+The same shape runs three times: build the machinery properly, run it, let the number
+condemn it, and delete more than was added.
+
+- Phase 28 built adversarial-neutral judges — the last attempt at trustworthy judged grading
+- Phase 31 built the full causal apparatus, then measured it at 95 calls
+- Phase 33 built the class-mediated observe wave, and Phase 34 removed its class layer three days later
+
+In each case the replacement was smaller than what it replaced, and in each case the
+decisive input was a run rather than an argument. Phase 25 named this loop and noted it has
+no built-in exit. Phases 26–34 are that loop running at its fastest, and the open question
+it raised — when to stop iterating and hold still long enough for the runtime to accrue
+lived experience — is more pressing now than when it was recorded, not less.
+
+## What Is Still Open After Phase 34
+
+- **`.2001` is n=1 in task, model, and seed.** No variance band. `.2002` — variance plus a
+  second task shape — is the first thing an external reader will ask for.
+- **The world is deterministic.** A non-stationary world, where the recipe changes mid-run
+  and the EMA's plasticity floor must wash old edges out, is untested.
+- **Retrieval is one-hop brute force.** The kernel does not exist. Finding a deep-bridge task
+  where flat retrieval stalls is the falsifiable trigger for building the wave.
+- **The decomposer has not run in anger.** Span-owned activation is stress-validated
+  synthetically; real conversation endurance remains.
+- **The compression research is unbuilt** and records its own open problems.
