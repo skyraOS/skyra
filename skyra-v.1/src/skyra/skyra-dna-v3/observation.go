@@ -1,5 +1,12 @@
 package dnav3
 
+// EpisodeID, SpanID, and ObservationID are durable provenance identities. They are
+// deliberately opaque to the graph: callers compare them for equality and never recover
+// ownership from a recomputed log position.
+type EpisodeID string
+type SpanID string
+type ObservationID string
+
 // An Observation is one triple written into the observation graph by the decomposer — the ONLY
 // writer (LAW 1). It is what crossed the boundary from the world.
 //
@@ -30,6 +37,14 @@ package dnav3
 //     an interpret-mode claim — because that is what it is. Letting an inference settle a bet at
 //     1.0 is precisely the failure this architecture exists to prevent.
 type Observation struct {
+	// ID is unique inside the being's durable history. EpisodeID says which world this
+	// observation belongs to; SpanID says which external impulse (or synthetic direct run)
+	// causally owns it.
+	ID         ObservationID
+	EpisodeID  EpisodeID
+	SpanID     SpanID
+	TokenCount int
+
 	Triple
 
 	// Provenance is which side of the line this came from. It is not metadata — it is the

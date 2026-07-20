@@ -71,3 +71,25 @@ func TestDifferentActsAreDifferentEdges(t *testing.T) {
 			"they have different reliabilities and must be learned separately")
 	}
 }
+
+func TestBetsAtUsesAddressIndex(t *testing.T) {
+	g := NewExpressionGraph()
+	e := &Expression{
+		SpanID: "episode:1/span:7",
+		Acts:   []Act{{ID: "a1"}, {ID: "a2"}},
+		Expects: []Expect{
+			{Of: []string{"a1"}, Within: 1, Triple: Triple{Subject: "file:/x", Predicate: "exists", Object: "true"}},
+			{Of: []string{"a2"}, Within: 1, Triple: Triple{Subject: "file:/y", Predicate: "exists", Object: "true"}},
+		},
+	}
+	g.Place("e1", e)
+
+	got := g.BetsAt(Triple{Subject: "file:/x", Predicate: "exists", Object: "false"})
+	if len(got) != 1 || got[0].Expect != &e.Expects[0] {
+		t.Fatalf("address index returned %+v, want only file:/x exists prediction", got)
+	}
+	owned := g.ExpressionsInSpan(e.SpanID)
+	if len(owned) != 1 || owned[0] != e {
+		t.Fatalf("span ownership index returned %+v, want expression e1", owned)
+	}
+}

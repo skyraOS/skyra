@@ -152,9 +152,7 @@ func (s *server) hunt(g *game) {
 	for s.world.CaughtBy() == "" && s.gameActive(g) {
 		s.being.NewEpisode(s.realm)
 		seed := s.realm.Panorama()
-		for _, t := range seed.Effects {
-			s.being.Observe(t, dnav3.ProvenanceRaw)
-		}
+		s.being.ObserveImpulse(seed.Effects, target)
 		c, err := s.being.Run(target, 4)
 		if err != nil {
 			s.hub.publish(map[string]any{"type": "error", "err": err.Error()})

@@ -4,6 +4,15 @@
 **Status:** SPEC (draft). Mechanism paper-validated (tests #1–#4); segmentation
 substrate landed (`segment.go`); this document specifies the wave itself for
 implementation in v3.
+
+> **Revised 2026-07-20:** the class-mediated form in this document is superseded
+> as the active direction by
+> [span-owned-predictions-and-activation](span-owned-predictions-and-activation.md).
+> Spans now own expressions/predictions directly; entity/address/triple posting
+> lists heat spans without a `Class` layer; short-lived EMA activation over
+> entities, spans, and causal edges scopes grading. The implementation here is
+> retained as prototype history until the direct-span replacement lands.
+
 **Position:** the mechanism inside `observation → state change` — the slot
 [retrieval.md](../../design-docs/skyra-dna-v3/retrieval.md) reserved ("the one arrow
 with the entire cognitive act in it"). It is NOT a third kernel wave:

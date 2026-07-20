@@ -19,6 +19,15 @@ type Being struct {
 	World Realm
 	Obs   *ObservationGraph
 	Expr  *ExpressionGraph
+	Spans *SpanIndex
+
+	// Activation is continuously replaced working memory. Durable history lives in
+	// Obs/Expr; this field decides which region is rendered now.
+	Activation *ActivationField
+
+	// CountTokens stamps every durable memory node and every concrete rendered node.
+	// Providers may replace the deterministic default with their own tokenizer.
+	CountTokens TokenCounter
 
 	// Aff is the world's instrument list, and it is what STAMPS every claim's Mode. The model does
 	// not get to choose its own grade multiplier — see affordance.go.
@@ -34,7 +43,14 @@ type Being struct {
 	System string
 
 	tick int
-	seq  int
+
+	episodeNumber   int
+	observationSeq  int
+	expressionSeq   int
+	spanSeq         int
+	episodeID       EpisodeID
+	currentSpan     SpanID
+	currentBornFrom []ObservationID
 
 	Metrics Metrics
 }
@@ -51,17 +67,24 @@ type Metrics struct {
 }
 
 func NewBeing(w Realm, infer func(string, string) (string, error)) *Being {
-	return &Being{
-		World:  w,
-		Obs:    NewObservationGraph(),
-		Expr:   NewExpressionGraph(),
-		Aff:    DefaultAffordances(),
-		Infer:  infer,
-		System: plannerSystem,
+	b := &Being{
+		World:       w,
+		Obs:         NewObservationGraph(),
+		Expr:        NewExpressionGraph(),
+		Spans:       NewSpanIndex(),
+		Activation:  NewActivationField(DefaultActivationConfig()),
+		CountTokens: ApproxTokenCount,
+		Aff:         DefaultAffordances(),
+		Infer:       infer,
+		System:      plannerSystem,
 	}
+	b.startEpisode()
+	return b
 }
 
-func (b *Being) Tick() int { return b.tick }
+func (b *Being) Tick() int             { return b.tick }
+func (b *Being) EpisodeID() EpisodeID  { return b.episodeID }
+func (b *Being) CurrentSpanID() SpanID { return b.currentSpan }
 
 // NewEpisode swaps in a FRESH WORLD and a fresh observation graph, while KEEPING the expression
 // graph, the clock, and the metrics.
@@ -71,20 +94,86 @@ func (b *Being) Tick() int { return b.tick }
 // graph is DURABLE. It is the memory. A being that walks into a new room forgets what was on the old
 // room's floor; it does not forget what it has learned.
 func (b *Being) NewEpisode(w Realm) {
+	config := DefaultActivationConfig()
+	if b.Activation != nil {
+		config = b.Activation.Config
+	}
 	b.World = w
 	b.Obs = NewObservationGraph()
+	b.Spans = NewSpanIndex()
+	b.Activation = NewActivationField(config)
+	b.startEpisode()
 }
 
-// Observe writes an observation. THE ONLY WRITER of world state (LAW 1).
-func (b *Being) Observe(t Triple, p Provenance) Observation {
-	b.seq++
+func (b *Being) startEpisode() {
+	b.episodeNumber++
+	b.episodeID = EpisodeID(fmt.Sprintf("episode:%d", b.episodeNumber))
+	b.observationSeq = 0
+	b.spanSeq = 0
+	b.currentSpan = ""
+	b.currentBornFrom = nil
+}
+
+// startExternalSpan begins one occurrence with an identity independent of derived
+// wall-clock segmentation.
+func (b *Being) startExternalSpan() SpanID {
+	b.spanSeq++
+	b.currentSpan = SpanID(fmt.Sprintf("%s/span:%d", b.episodeID, b.spanSeq))
+	b.currentBornFrom = nil
+	return b.currentSpan
+}
+
+// ensureSpan gives direct Run/Observe callers a synthetic occurrence. ObserveImpulse
+// replaces it with an explicit external span.
+func (b *Being) ensureSpan() SpanID {
+	if b.currentSpan == "" {
+		b.startExternalSpan()
+	}
+	return b.currentSpan
+}
+
+// appendObservation performs the durable write only. Grading is intentionally separate:
+// an impulse can be fully appended and segmented/activated before any bet is considered.
+func (b *Being) appendObservation(t Triple, p Provenance, confidence float64, derivedFrom []string, span SpanID) Observation {
+	b.observationSeq++
 	o := Observation{
-		Triple:     t,
-		Provenance: p,
-		At:         b.tick,
+		ID:          ObservationID(fmt.Sprintf("%s/observation:%d", b.episodeID, b.observationSeq)),
+		EpisodeID:   b.episodeID,
+		SpanID:      span,
+		Triple:      t,
+		Provenance:  p,
+		Confidence:  confidence,
+		DerivedFrom: append([]string(nil), derivedFrom...),
+		At:          b.tick,
 	}
 	o.Subject, o.Predicate, o.Object = t.Subject, t.Predicate, t.Object
-	b.Obs.Write(o)
+	counter := b.CountTokens
+	if counter == nil {
+		counter = ApproxTokenCount
+	}
+	o.TokenCount = counter(observationMemoryText(o))
+	o = b.Obs.Write(o)
+	if b.Spans != nil {
+		b.Spans.Add(o)
+	}
+	return o
+}
+
+// Observe writes and then grades one observation in the current occurrence. It remains
+// THE ONLY public writer of world state (LAW 1).
+func (b *Being) Observe(t Triple, p Provenance) Observation {
+	o := b.appendObservation(t, p, 0, nil, b.ensureSpan())
+	b.activateObservation(o)
+	b.grade(o)
+	return o
+}
+
+func (b *Being) observeInSpan(t Triple, p Provenance, span SpanID) Observation {
+	if span == "" {
+		span = b.ensureSpan()
+	}
+	o := b.appendObservation(t, p, 0, nil, span)
+	b.activateObservation(o)
 	b.grade(o)
 	return o
 }
@@ -98,9 +187,27 @@ func (b *Being) grade(o Observation) {
 	if o.Fidelity() == 0 {
 		return // a MARK. self-authored. may never grade anything about the world (LAW 7).
 	}
-	for _, bet := range b.Expr.Open() {
+	for _, bet := range b.Expr.BetsAt(o.Triple) {
 		x := bet.Expect
-		if sp(x.Triple) != sp(o.Triple) {
+		if x.Resolution != TruthUnknown || !x.Armed {
+			continue
+		}
+		if bet.Expr.EpisodeID == "" || bet.Expr.EpisodeID != o.EpisodeID {
+			continue // an old world's prediction cannot be adjudicated by its replacement Realm.
+		}
+		if bet.Expr.SpanID == "" {
+			continue
+		}
+		if b.Activation != nil {
+			// A causal descendant carrying the owner span is active by construction.
+			// Retrieved prior spans additionally qualify through the transient field.
+			if bet.Expr.SpanID != o.SpanID && !b.Activation.SpanActive(bet.Expr.SpanID) {
+				continue // cold birth region: invisible to the grader.
+			}
+		} else if bet.Expr.SpanID != o.SpanID {
+			continue // activation-disabled tests retain exact causal-span eligibility.
+		}
+		if o.At < x.ArmedAt {
 			continue
 		}
 		// dedup: an observation that already settled this bet does not get to settle it twice.
@@ -115,8 +222,12 @@ func (b *Being) grade(o Observation) {
 		}
 
 		edge := b.Expr.Edge(bet.Expr.ID, *x)
-		g := edge.Grade(x.Confidence, truth, x.Mode) // log p_claim − log p̂_edge, BEFORE the update
-		edge.Observe(truth, b.tick)                  // then fold the outcome in
+		mode := x.Mode
+		if o.Fidelity() < mode.Weight() {
+			mode = ModeInterpret
+		}
+		g := edge.Grade(x.Confidence, truth, mode) // log p_claim − log p̂_edge, BEFORE the update
+		edge.Observe(truth, b.tick)                // then fold the outcome in
 
 		x.Resolution = truth
 		x.ResolvedBy = append(x.ResolvedBy, obsID(o))
@@ -141,12 +252,15 @@ func (b *Being) grade(o Observation) {
 // absence decidable: a targeted perceive is authoritative for its own triple.
 func (b *Being) Settle() {
 	for _, bet := range b.Expr.Open() {
+		if bet.Expr.EpisodeID != b.episodeID {
+			continue // the originating Realm is gone; never settle its bet against the new world.
+		}
 		if !bet.Expect.Matured(b.tick) {
 			continue
 		}
 		out := b.World.Perceive(bet.Expect.Triple)
 		for _, t := range out.Effects {
-			b.Observe(t, ProvenanceRaw)
+			b.observeInSpan(t, ProvenanceRaw, bet.Expr.SpanID)
 		}
 	}
 }
@@ -279,10 +393,22 @@ func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, b
 		}
 
 		// 4. DRAIN — place everything. Extra nodes the plan did not need are still gradeable bets.
-		b.seq++
+		b.expressionSeq++
 		e := res.Expression
+		e.EpisodeID = b.episodeID
+		e.SpanID = b.ensureSpan()
+		e.BornFrom = append([]ObservationID(nil), b.currentBornFrom...)
 		b.Aff.Stamp(&e) // THE WORLD says what is measurable, not the model.
-		b.Expr.Place(fmt.Sprintf("e%d", b.seq), &e)
+		counter := b.CountTokens
+		if counter == nil {
+			counter = ApproxTokenCount
+		}
+		e.TokenCount = counter(expressionMemoryText(&e))
+		b.Expr.Place(fmt.Sprintf("e%d", b.expressionSeq), &e)
+		if b.Activation != nil {
+			b.Activation.BumpNode("expression:"+e.ID, 1)
+			b.Activation.BumpSpan(e.SpanID, 1)
+		}
 		plan = append(plan, &e)
 	}
 	_, closed := b.Closed(plan)
@@ -328,18 +454,14 @@ func (b *Being) express(plan []*Expression, c *Cycle) (superseded bool) {
 				b.tick++
 				out := b.World.Do(a) // MOTOR: no model, no present. it does not think, it executes.
 				c.Acts++
+				// World.Do has returned: the act is complete. Arm eligible predictions BEFORE
+				// appending its effects, so an immediate outcome is causally after arming.
+				e.Complete(a.ID, b.tick)
 				for _, t := range out.Effects {
-					b.Observe(t, ProvenanceRaw)
+					b.observeInSpan(t, ProvenanceRaw, e.SpanID)
 				}
 				if out.Status == "superseded" {
 					return true
-				}
-				// arm every bet this act was responsible for — a bet only starts running once the
-				// thing that was supposed to cause it has actually happened.
-				for i := range e.Expects {
-					if contains(e.Expects[i].Of, a.ID) && e.Expects[i].MaturesAt == 0 {
-						e.Expects[i].Arm(b.tick)
-					}
 				}
 			}
 		}
@@ -376,6 +498,9 @@ func contains(ss []string, s string) bool {
 }
 
 func obsID(o Observation) string {
+	if o.ID != "" {
+		return string(o.ID)
+	}
 	return fmt.Sprintf("%s@%d", o.Key(), o.At)
 }
 

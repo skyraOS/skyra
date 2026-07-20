@@ -37,14 +37,25 @@ func NewObservationGraph() *ObservationGraph {
 var wallNow = func() int64 { return time.Now().UnixMilli() }
 
 // Write appends an observation and folds it into world state. THIS IS THE ONLY WRITER.
-func (g *ObservationGraph) Write(o Observation) {
+// The returned value is the exact stored record, including a generated wall stamp.
+func (g *ObservationGraph) Write(o Observation) Observation {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if o.Wall == 0 {
 		o.Wall = wallNow()
 	}
+	if o.TokenCount <= 0 {
+		o.TokenCount = ApproxTokenCount(observationMemoryText(o))
+	}
 	g.log = append(g.log, o)
-	g.cur[sp(o.Triple)] = o
+	// A mark is durable history and remains available to retrieval/activation through
+	// the log, but it is not independent evidence about world state. Folding it into cur
+	// would let self-authored text satisfy guards and targets, and could erase a raw fact
+	// at the same address.
+	if o.Provenance != ProvenanceMark {
+		g.cur[sp(o.Triple)] = o
+	}
+	return o
 }
 
 // Resolve is THE DIFF, and it is a set operation — no model, ever.
@@ -90,7 +101,14 @@ type ExpressionGraph struct {
 	exprs map[string]*Expression
 	edges map[string]*Edge    // edgeKey → the learned P(W | E)
 	index map[string][]string // triple Key() → expression IDs that PRODUCED it (the reverse index)
+	bets  map[string][]betRef // (subject,predicate) → predictions at that address
+	spans map[SpanID][]string // birth span → expression IDs
 	order []string            // insertion order, so retrieval is deterministic
+}
+
+type betRef struct {
+	exprID string
+	index  int
 }
 
 func NewExpressionGraph() *ExpressionGraph {
@@ -98,6 +116,8 @@ func NewExpressionGraph() *ExpressionGraph {
 		exprs: map[string]*Expression{},
 		edges: map[string]*Edge{},
 		index: map[string][]string{},
+		bets:  map[string][]betRef{},
+		spans: map[SpanID][]string{},
 	}
 }
 
@@ -106,9 +126,13 @@ func NewExpressionGraph() *ExpressionGraph {
 func (g *ExpressionGraph) Place(id string, e *Expression) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if e.TokenCount <= 0 {
+		e.TokenCount = ApproxTokenCount(expressionMemoryText(e))
+	}
 	e.ID = id
 	g.exprs[id] = e
 	g.order = append(g.order, id)
+	g.spans[e.SpanID] = append(g.spans[e.SpanID], id)
 
 	am := actMap(e)
 	for i := range e.Expects {
@@ -117,6 +141,8 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 
 		// reverse index: "how have I made this true before?"
 		g.index[key] = append(g.index[key], id)
+		// grading index: "which predictions could this observed address settle?"
+		g.bets[sp(x.Triple)] = append(g.bets[sp(x.Triple)], betRef{exprID: id, index: i})
 
 		// the learned edge. Keyed by what the acts DO, not by which expression emitted them — so it
 		// ACCUMULATES across episodes. Source is a SET: cardinality gives joints for free.
@@ -125,6 +151,38 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 			g.edges[ek] = &Edge{Source: x.Of, Target: key}
 		}
 	}
+}
+
+// ExpressionsInSpan is the exact ownership lookup used by activation. The slice is
+// insertion ordered so replay and traces are deterministic.
+func (g *ExpressionGraph) ExpressionsInSpan(span SpanID) []*Expression {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	ids := g.spans[span]
+	out := make([]*Expression, 0, len(ids))
+	for _, id := range ids {
+		if e := g.exprs[id]; e != nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// BetsAt returns predictions at one observed address. Eligibility (span, armed,
+// unresolved, temporal order) remains the grader's concern.
+func (g *ExpressionGraph) BetsAt(t Triple) []OpenBet {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	refs := g.bets[sp(t)]
+	out := make([]OpenBet, 0, len(refs))
+	for _, ref := range refs {
+		e := g.exprs[ref.exprID]
+		if e == nil || ref.index < 0 || ref.index >= len(e.Expects) {
+			continue
+		}
+		out = append(out, OpenBet{Expr: e, Expect: &e.Expects[ref.index]})
+	}
+	return out
 }
 
 // Edge returns the learned edge for one expect (creating it if this is its first sighting). An edge

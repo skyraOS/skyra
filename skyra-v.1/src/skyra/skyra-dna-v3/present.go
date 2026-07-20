@@ -5,13 +5,8 @@ import (
 	"strings"
 )
 
-// The present. At this scale it is brute force — the wave (budgeted traversal, AND/OR descent,
-// concurrency) is an OPTIMIZATION for a graph that is large, and it is not on the critical path to
-// the number.
-//
-// What matters here is that the INDEX RUNS BEFORE THE MODEL CALL. Precedent is retrieved and shown,
-// so call #1 can close the plan once the being knows the task. That is what makes
-// passes-to-closure fall, and it is the difference between a learning curve existing and not.
+// The present is not accumulated conversation and is never compacted. It is materialized
+// anew from the transient activation field under a fixed token budget on every model call.
 
 // present assembles what the planner sees:
 //
@@ -22,22 +17,7 @@ import (
 func (b *Being) present(target, holes []Triple) string {
 	var s strings.Builder
 
-	s.WriteString("CURRENT WORLD STATE (observed — this is all the being actually knows):\n")
-	log := b.Obs.Log()
-	if len(log) == 0 {
-		s.WriteString("  (nothing observed yet)\n")
-	}
-	seen := map[string]bool{}
-	for i := len(log) - 1; i >= 0; i-- { // latest first
-		o := log[i]
-		if seen[sp(o.Triple)] {
-			continue
-		}
-		seen[sp(o.Triple)] = true
-		fmt.Fprintf(&s, "  %s %s %s\n", o.Subject, o.Predicate, o.Object)
-	}
-
-	s.WriteString("\nTARGET WORLD STATE:\n")
+	s.WriteString("TARGET WORLD STATE:\n")
 	for _, t := range target {
 		fmt.Fprintf(&s, "  %s %s %s\n", t.Subject, t.Predicate, t.Object)
 	}
@@ -49,38 +29,32 @@ func (b *Being) present(target, holes []Triple) string {
 		}
 	}
 
-	// PRECEDENT. The reverse index, ranked by P × confidence(N) × F — counted reliability, not
-	// anyone's opinion. The edges rerank the posting lists.
-	//
-	// Showing the base rate ("worked 70% of 10 tries") is EVIDENCE, not the answer key. A forecaster
-	// who does not know the historical rate is worse, not more honest — and the model still cannot
-	// infer the multiplier, the prior, or which direction pays. The line we are holding is:
-	//
-	//	SHOW IT WHAT HAPPENED.  NEVER SHOW IT WHAT ITS ANSWER IS WORTH.
 	query := holes
 	if len(query) == 0 {
 		query = target
 	}
-	var prec strings.Builder
-	shown := map[string]bool{}
-	for _, q := range query {
-		for _, e := range b.Expr.Precedent(q, b.tick) {
-			if shown[e.ID] {
-				continue
-			}
-			shown[e.ID] = true
-			edge := b.Expr.Edge(e.ID, matching(e, q))
-			fmt.Fprintf(&prec, "  [worked %.0f%% of %d tries] %s\n", edge.P*100, edge.N, e.Framing)
-			for _, a := range e.Acts {
-				fmt.Fprintf(&prec, "      <act id=%q target=%q primitive=%q>%s</act>\n",
-					a.ID, a.Target, a.Primitive, truncate(a.Payload, 200))
-			}
-		}
+	memory := b.ActiveMemory(query)
+	s.WriteString("\nCURRENT WORLD STATE AND ACTIVE MEMORY ")
+	if b.Activation != nil {
+		fmt.Fprintf(&s, "(continuous projection, budget=%d tokens):\n",
+			b.Activation.Config.MemoryTokens)
+	} else {
+		s.WriteString(":\n")
 	}
-	if prec.Len() > 0 {
-		s.WriteString("\nPRECEDENT — how you have made these states true before:\n")
-		s.WriteString(prec.String())
-		s.WriteString("\nAdapt precedent where it fits. Where it does not, emit something new.\n")
+	if len(memory) == 0 {
+		s.WriteString("  (nothing active)\n")
+	}
+	hasPrecedent := false
+	for _, node := range memory {
+		if node.Kind == "precedent" {
+			hasPrecedent = true
+		}
+		fmt.Fprintf(&s, "  [A=%.3f tokens=%d A/token=%.6f] %s\n",
+			node.Activation, node.TokenCount, node.Density(),
+			strings.ReplaceAll(node.Text, "\n", "\n      "))
+	}
+	if hasPrecedent {
+		s.WriteString("\nPRECEDENT is active memory, not an answer key. Adapt it only where it fits.\n")
 	}
 
 	return s.String()

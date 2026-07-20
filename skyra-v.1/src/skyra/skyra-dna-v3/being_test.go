@@ -18,6 +18,16 @@ func newTestBeing(t *testing.T, script func(present string) string) *Being {
 	})
 }
 
+type outcomeRealm struct {
+	effect Triple
+}
+
+func (w outcomeRealm) Do(Act) Outcome {
+	return Outcome{Status: "succeeded", Effects: []Triple{w.effect}}
+}
+
+func (outcomeRealm) Perceive(Triple) Outcome { return Outcome{Status: "unavailable"} }
+
 // The whole loop: emit → act on a real filesystem → observe what came back → grade.
 func TestCycleGradesAgainstRealWorld(t *testing.T) {
 	b := newTestBeing(t, func(string) string {
@@ -116,7 +126,9 @@ func TestAbsenceIsNotFalsity(t *testing.T) {
 func TestSettlerGoesAndLooks(t *testing.T) {
 	b := newTestBeing(t, func(string) string { return "" })
 	e := &Expression{
-		Acts: []Act{{ID: "a1", Target: "file:/absent", Primitive: "write"}},
+		EpisodeID: b.EpisodeID(),
+		SpanID:    b.ensureSpan(),
+		Acts:      []Act{{ID: "a1", Target: "file:/absent", Primitive: "write"}},
 		Expects: []Expect{{
 			Of:     []string{"a1"},
 			Triple: Triple{Mode: ModeExact, Confidence: 0.8, Subject: "file:/absent", Predicate: "exists", Object: "true"},
@@ -135,6 +147,170 @@ func TestSettlerGoesAndLooks(t *testing.T) {
 	}
 	if len(e.Expects[0].ResolvedBy) == 0 {
 		t.Error("a grade with no observation behind it is self-adjudicated (LAW 2)")
+	}
+}
+
+func TestUnarmedPredictionCannotResolve(t *testing.T) {
+	b := newTestBeing(t, func(string) string { return "" })
+	e := &Expression{
+		EpisodeID: b.EpisodeID(),
+		SpanID:    b.ensureSpan(),
+		Acts:      []Act{{ID: "a1", Primitive: "write"}},
+		Expects: []Expect{{
+			Of:     []string{"a1"},
+			Within: 1,
+			Triple: Triple{Mode: ModeExact, Confidence: 0.9, Subject: "file:/x", Predicate: "exists", Object: "true"},
+		}},
+	}
+	b.Expr.Place("e1", e)
+
+	first := b.Observe(e.Expects[0].Triple, ProvenanceRaw)
+	if e.Expects[0].Resolution != TruthUnknown {
+		t.Fatal("an observation resolved a prediction before its cause completed")
+	}
+
+	e.Complete("a1", b.tick)
+	if e.Expects[0].Resolution != TruthUnknown {
+		t.Fatal("arming retroactively consumed an earlier observation")
+	}
+	second := b.Observe(e.Expects[0].Triple, ProvenanceRaw)
+	if e.Expects[0].Resolution != TruthTrue {
+		t.Fatal("an armed prediction did not resolve from a later matching observation")
+	}
+	if obsID(first) == obsID(second) {
+		t.Fatalf("same triple at same tick reused evidence ID %q", obsID(first))
+	}
+	if got := e.Expects[0].ResolvedBy; len(got) != 1 || got[0] != obsID(second) {
+		t.Fatalf("ResolvedBy = %v, want only the post-arm observation %q", got, obsID(second))
+	}
+}
+
+func TestJointPredictionArmsAfterFinalResponsibleAct(t *testing.T) {
+	e := &Expression{
+		Acts: []Act{{ID: "open"}, {ID: "tell"}},
+		Expects: []Expect{{
+			Of:     []string{"open", "tell"},
+			Within: 3,
+			Triple: Triple{Subject: "being:kathy", Predicate: "location", Object: "beyond:door"},
+		}},
+	}
+
+	e.Complete("open", 2)
+	if e.Expects[0].Armed {
+		t.Fatal("joint prediction armed after only its first responsible act")
+	}
+	e.Complete("tell", 5)
+	x := e.Expects[0]
+	if !x.Armed || x.ArmedAt != 5 || x.MaturesAt != 8 {
+		t.Fatalf("joint prediction lifecycle = armed:%v at:%d matures:%d, want true/5/8",
+			x.Armed, x.ArmedAt, x.MaturesAt)
+	}
+}
+
+func TestImmediateWorldEffectArrivesAfterArming(t *testing.T) {
+	effect := Triple{Subject: "device:lamp", Predicate: "state", Object: "on"}
+	b := NewBeing(outcomeRealm{effect: effect}, func(string, string) (string, error) { return "", nil })
+	e := &Expression{
+		EpisodeID: b.EpisodeID(),
+		SpanID:    b.ensureSpan(),
+		Acts:      []Act{{ID: "a1", Primitive: "switch"}},
+		Expects: []Expect{{
+			Of:     []string{"a1"},
+			Within: 2,
+			Triple: Triple{Mode: ModeExact, Confidence: 0.9, Subject: effect.Subject, Predicate: effect.Predicate, Object: effect.Object},
+		}},
+	}
+	b.Expr.Place("e1", e)
+
+	b.express([]*Expression{e}, &Cycle{})
+
+	if !e.Expects[0].Armed || e.Expects[0].Resolution != TruthTrue {
+		t.Fatalf("immediate effect lifecycle = armed:%v resolution:%v, want armed/true",
+			e.Expects[0].Armed, e.Expects[0].Resolution)
+	}
+	if len(e.Expects[0].ResolvedBy) != 1 {
+		t.Fatalf("immediate effect did not leave one evidence ID: %v", e.Expects[0].ResolvedBy)
+	}
+}
+
+func TestObservationGradesOnlyBetOwnedByItsSpan(t *testing.T) {
+	b := newTestBeing(t, func(string) string { return "" })
+	makeBet := func(id string, span SpanID) *Expression {
+		e := &Expression{
+			EpisodeID: b.EpisodeID(),
+			SpanID:    span,
+			Acts:      []Act{{ID: "a1", Primitive: "write"}},
+			Expects: []Expect{{
+				Of:     []string{"a1"},
+				Within: 1,
+				Triple: Triple{Mode: ModeExact, Confidence: 0.9, Subject: "file:/shared", Predicate: "exists", Object: "true"},
+			}},
+		}
+		b.Expr.Place(id, e)
+		e.Complete("a1", b.tick)
+		return e
+	}
+
+	span1 := b.startExternalSpan()
+	e1 := makeBet("e1", span1)
+	span2 := b.startExternalSpan()
+	e2 := makeBet("e2", span2)
+
+	b.observeInSpan(e1.Expects[0].Triple, ProvenanceRaw, span1)
+	if e1.Expects[0].Resolution != TruthTrue {
+		t.Fatal("active span's prediction did not resolve")
+	}
+	if e2.Expects[0].Resolution != TruthUnknown {
+		t.Fatal("one span's observation resolved a same-address prediction born in another span")
+	}
+}
+
+func TestRunStampsExpressionWithImpulseOwnership(t *testing.T) {
+	b := newTestBeing(t, func(string) string {
+		return `
+<framing>write the owned file</framing>
+<act id="a1" target="file:/owned.txt" primitive="write">x</act>
+<expect of="a1"> 0.9 1 file:/owned.txt exists true </expect>`
+	})
+	b.ObserveImpulse([]Triple{{
+		Subject: "being:michael", Predicate: "requested", Object: "file:/owned.txt",
+	}}, nil)
+	spanID := b.CurrentSpanID()
+	log := b.Obs.Log()
+	if len(log) == 0 || !b.Activation.SpanActive(spanID) {
+		t.Fatal("impulse did not enter the active observe loop")
+	}
+	born := log[0].ID
+
+	target := Triple{Subject: "file:/owned.txt", Predicate: "exists", Object: "true"}
+	if _, err := b.Run([]Triple{target}, 2); err != nil {
+		t.Fatal(err)
+	}
+	es := b.Expr.Precedent(target, b.tick)
+	if len(es) == 0 {
+		t.Fatal("placed expression missing from reverse index")
+	}
+	if es[0].EpisodeID != b.EpisodeID() || es[0].SpanID != spanID {
+		t.Fatalf("expression ownership = %q/%q, want %q/%q",
+			es[0].EpisodeID, es[0].SpanID, b.EpisodeID(), spanID)
+	}
+	if len(es[0].BornFrom) != 1 || es[0].BornFrom[0] != born {
+		t.Fatalf("BornFrom = %v, want [%s]", es[0].BornFrom, born)
+	}
+}
+
+func TestNewEpisodeStartsFreshIdentityNamespace(t *testing.T) {
+	b := newTestBeing(t, func(string) string { return "" })
+	first := b.Observe(Triple{Subject: "a", Predicate: "b", Object: "c"}, ProvenanceRaw)
+	firstEpisode := b.EpisodeID()
+	b.NewEpisode(NewWorld(t.TempDir()))
+	second := b.Observe(Triple{Subject: "a", Predicate: "b", Object: "c"}, ProvenanceRaw)
+
+	if b.EpisodeID() == firstEpisode {
+		t.Fatal("NewEpisode reused its durable episode identity")
+	}
+	if first.ID == second.ID || first.SpanID == second.SpanID {
+		t.Fatalf("episode-local counters collided across episodes: first=%+v second=%+v", first, second)
 	}
 }
 

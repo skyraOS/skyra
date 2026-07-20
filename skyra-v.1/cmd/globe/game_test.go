@@ -43,10 +43,8 @@ func TestSeekerCatchesStaticSnitch(t *testing.T) {
 	being.System = seekerSystem
 
 	seed := realm.Panorama()
-	for _, tr := range seed.Effects {
-		being.Observe(tr, dnav3.ProvenanceRaw)
-	}
 	target := []dnav3.Triple{{Subject: "snitch:/", Predicate: "caught-by", Object: "skyra"}}
+	being.ObserveImpulse(seed.Effects, target)
 	c, err := being.Run(target, 4)
 	if err != nil {
 		t.Fatal(err)

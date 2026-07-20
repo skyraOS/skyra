@@ -54,9 +54,7 @@ func TestGlobeLearningCurve(t *testing.T) {
 		if seed.Status != "succeeded" {
 			t.Fatalf("run %d: panorama failed: %s", run, seed.Err)
 		}
-		for _, tr := range seed.Effects {
-			being.Observe(tr, dnav3.ProvenanceRaw)
-		}
+		being.ObserveImpulse(seed.Effects, target)
 		c, err := being.Run(target, 6)
 		if err != nil {
 			t.Fatalf("run %d: %v", run, err)

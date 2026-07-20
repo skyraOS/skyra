@@ -76,6 +76,9 @@ func main() {
 
 	for i := 1; i <= *reps; i++ {
 		being.NewEpisode(freshWorld()) // fresh WORLD, same MEMORY — the whole point of the experiment
+		being.ObserveImpulse([]dnav3.Triple{{
+			Subject: "being:operator", Predicate: "requests", Object: "build:/",
+		}}, target)
 		before := being.Metrics
 		c, err := being.Run(target, 6)
 		if err != nil {

@@ -1,83 +1,56 @@
 package dnav3
 
-import (
-	"sort"
-	"strings"
-)
-
-// Ingest — the observe-wave seam (spec delta 6, the-observe-wave.md §Ground).
+// Ingest — the continuous-replacement seam.
 //
-// The seam does not replace Run(target); it changes WHO SUPPLIES THE TARGET:
+// The seam does not replace Run(target); it changes WHO SUPPLIES THE TARGET and
+// which durable memory is visible:
 //
-//	impulse observed → wave resolves → target derived
-//	                   (class completion; the framing call on novelty)
-//	                 → Run(target)        ← unchanged
+//	impulse appended → activation decays/bumps → direct spans + causal edges
+//	                 → bounded active memory → target derived
+//	                 → Run(target)
 //
-// ObserveImpulse is the top half. It writes the impulse (LAW 1), runs the wave (zero
-// inference), commits the readings, and derives the target from the primary class's
-// MEASURED edges — the settled completion: what this kind of situation reliably ends
-// with, counted, not authored.
+// ObserveImpulse is the top half. It writes the impulse (LAW 1), updates the
+// transient field with zero inference, grades eligible active-span predictions, and
+// derives a target from activated measured causal edges.
 //
-// When precedent cannot supply a target (novel stitch, unmeasured class, cold start),
-// Target comes back nil with the Resolution's flags attached — and AUTHORING STAYS
-// WITH THE CALLER'S FRAMING CALL. That is the design, not a gap: only the model can
-// judge that a first-time situation warrants wanting something, and its commit founds
-// the precedent the next impulse reads for free. cmd/dnav3's harness-supplied targets
-// are exactly this caller-authored path until a worker owns it.
+// When measured precedent cannot supply a target, Target is nil and AUTHORING STAYS
+// WITH FRAMING. Resolution remains in the result as compatibility for the retired
+// class-wave inspection types; Primary is -1 and Novel records this target decision.
 type IngestResult struct {
 	Resolution Resolution
 	Target     []Triple // nil when precedent cannot supply one — author via framing
 	Authored   bool     // false: read from precedent. true is the CALLER's to set.
 }
 
-// ObserveImpulse runs the observe wave over one decomposed impulse. Everything here
-// is arithmetic; segmentation and indexes are rebuilt from the log each call — at
-// walking-skeleton scale brute force is correct, and derived indexes are cheap to be
-// wrong about by construction.
+// ObserveImpulse runs continuous replacement over one decomposed impulse. Durable
+// history is appended; transient activation decays, retrieves spans directly, and
+// propagates through measured causal edges. No conversation buffer is accumulated
+// and no compaction step exists.
 func (b *Being) ObserveImpulse(impulse []Triple, context []Triple) IngestResult {
 	// 1. The impulse crosses the boundary — raw, the world's (LAW 1).
+	spanID := b.startExternalSpan()
 	var written []Observation
 	var derivedFrom []string
 	for _, t := range impulse {
-		o := b.Observe(t, ProvenanceRaw)
+		o := b.appendObservation(t, ProvenanceRaw, 0, nil, spanID)
 		written = append(written, o)
 		derivedFrom = append(derivedFrom, obsID(o))
 	}
-
-	// 2. Derived substrate: spans, classes, lens, resolution history, class stats.
-	log := b.Obs.Log()
-	spans := Spans(log, 0)
-	classes := Classes(log, spans, 0)
-	lens := Lens(classes)
-	rx := BuildResolutionIndex(log)
-	byClass := b.Expr.ClassEdges(log, spans, classes)
-
-	// 3. The wave.
-	roots := Roots(written, context, rx)
-	res := Resolve(log, spans, classes, lens, roots, classStatsFn(byClass))
-
-	// 4. Commit the readings — interpreted, counted confidence, evidence attached.
-	//    These found the resolution index the NEXT impulse proposes from.
-	for _, o := range res.Commit(derivedFrom) {
-		b.ObserveInterpreted(o.Triple, o.Confidence, o.DerivedFrom)
+	b.currentBornFrom = make([]ObservationID, 0, len(written))
+	for _, o := range written {
+		b.currentBornFrom = append(b.currentBornFrom, o.ID)
 	}
 
-	// 5. The target, read off precedent: the primary class's measured completions.
-	out := IngestResult{Resolution: res}
-	if res.Novel || res.Primary < 0 {
-		return out // the framing call's job now — see the type comment.
+	// The complete impulse is durable before activation and grading begin.
+	b.activateImpulse(written, context)
+	for _, o := range written {
+		b.grade(o)
 	}
-	seen := map[string]bool{}
-	for _, ed := range byClass[res.Primary] {
-		if ed.N == 0 || ed.P < 0.5 {
-			continue // unmeasured edges have no opinion; unreliable ones are not wants
-		}
-		if !seen[ed.Target] {
-			seen[ed.Target] = true
-			out.Target = append(out.Target, keyTriple(ed.Target))
-		}
-	}
-	sort.Slice(out.Target, func(i, j int) bool { return out.Target[i].Key() < out.Target[j].Key() })
+
+	// A measured causal continuation can supply the target for free. With no reliable
+	// continuation the situation is novel and framing authors what to pursue.
+	out := IngestResult{Target: b.deriveActivatedTarget()}
+	out.Resolution = Resolution{Primary: -1, Novel: len(out.Target) == 0}
 	return out
 }
 
@@ -85,55 +58,8 @@ func (b *Being) ObserveImpulse(impulse []Triple, context []Triple) IngestResult 
 // its counted confidence and the raw evidence it was derived from. Same write path as
 // every observation (LAW 1); fidelity stays capped by provenance.
 func (b *Being) ObserveInterpreted(t Triple, confidence float64, derivedFrom []string) Observation {
-	b.seq++
-	o := Observation{
-		Triple:      t,
-		Provenance:  ProvenanceInterpreted,
-		Confidence:  confidence,
-		DerivedFrom: derivedFrom,
-		At:          b.tick,
-	}
-	o.Subject, o.Predicate, o.Object = t.Subject, t.Predicate, t.Object
-	b.Obs.Write(o)
+	o := b.appendObservation(t, ProvenanceInterpreted, confidence, derivedFrom, b.ensureSpan())
+	b.activateObservation(o)
 	b.grade(o)
 	return o
-}
-
-// classStatsFn adapts class-grouped edges into the wave's Born-rule hook: the counted
-// reliability of a reading within a class is the best measured edge whose claim
-// mentions the term.
-func classStatsFn(byClass map[int][]*Edge) Stats {
-	return func(class int, term string) (float64, int) {
-		bestP, bestN := 0.0, 0
-		for _, ed := range byClass[class] {
-			if ed.N == 0 {
-				continue
-			}
-			t := keyTriple(ed.Target)
-			if t.Subject != term && t.Predicate != term && t.Object != term {
-				continue
-			}
-			if bestN == 0 || ed.P > bestP {
-				bestP, bestN = ed.P, ed.N
-			}
-		}
-		return bestP, bestN
-	}
-}
-
-// keyTriple inverts Triple.Key — the derived target is world state by address, so the
-// key carries everything Run needs (mode and confidence are a stance, not the claim).
-func keyTriple(key string) Triple {
-	parts := strings.SplitN(key, "\x00", 3)
-	t := Triple{Mode: ModeExact}
-	if len(parts) > 0 {
-		t.Subject = parts[0]
-	}
-	if len(parts) > 1 {
-		t.Predicate = parts[1]
-	}
-	if len(parts) > 2 {
-		t.Object = parts[2]
-	}
-	return t
 }

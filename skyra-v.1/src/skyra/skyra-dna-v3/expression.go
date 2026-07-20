@@ -13,6 +13,14 @@ type Expression struct {
 	// ID is assigned by the expression graph when the emission is placed.
 	ID string
 
+	// EpisodeID and SpanID name the occurrence that birthed this emission. BornFrom
+	// is the exact incoming evidence that caused it. Predictions inherit this ownership
+	// through their expression; it is never reconstructed from later settlement evidence.
+	EpisodeID  EpisodeID
+	SpanID     SpanID
+	BornFrom   []ObservationID
+	TokenCount int
+
 	// Framing is the emission's own system prompt — the summary under which these bets
 	// were made. It is graded by the accuracy of the predictions it produced, which is how
 	// a framing earns (or loses) its place in future retrieval. The model never rewrites a
@@ -34,6 +42,11 @@ type Expression struct {
 	// KEEP. That is a test, not a reassurance, and it should be watched.
 	Score float64
 	Runs  int
+
+	// Completed records which acts actually finished and at what traversal tick. It is
+	// durable expression state because joint predictions arm only after every act in Of
+	// has completed.
+	Completed map[string]int
 }
 
 // An Act is one emission into the world. It fires when every Requires is satisfied.
@@ -133,6 +146,12 @@ type Expect struct {
 	// Zero means the act has not completed yet — the bet is not yet running.
 	MaturesAt int
 
+	// ArmedAt is the causal eligibility boundary. An observation may settle this prediction
+	// only if it was appended after arming. For a joint prediction this is stamped after the
+	// final responsible act completes.
+	ArmedAt int
+	Armed   bool
+
 	// ResolvedBy names the observations that closed this bet. It is not bookkeeping — it is
 	// the EVIDENCE FOR THE GRADE, and it is what makes LAW 2 auditable rather than merely
 	// stated:
@@ -155,9 +174,22 @@ type Expect struct {
 // The emission must otherwise degrade gracefully: an unparseable line is dropped and
 // logged, never fatal. Fewer predictions is always an acceptable outcome; no action is not.
 func (e Expression) Validate() error {
+	acts := make(map[string]bool, len(e.Acts))
+	for _, a := range e.Acts {
+		if a.ID == "" {
+			return fmt.Errorf("act has no id")
+		}
+		if acts[a.ID] {
+			return fmt.Errorf("duplicate act id %q", a.ID)
+		}
+		acts[a.ID] = true
+	}
 	projected := make(map[string]bool, len(e.Acts))
 	for _, x := range e.Expects {
 		for _, id := range x.Of {
+			if !acts[id] {
+				return fmt.Errorf("expect %q names unknown act %q", x.Key(), id)
+			}
 			projected[id] = true
 		}
 	}
@@ -210,12 +242,41 @@ func actTruth(a Act, resolve func(Triple) Truth) Truth {
 
 // Arm stamps an expect's deadline. Called when the act it hangs off completes — the bet only
 // starts running once the thing that was supposed to cause it has actually happened.
-func (x *Expect) Arm(tick int) { x.MaturesAt = tick + x.Within }
+func (x *Expect) Arm(tick int) {
+	x.ArmedAt = tick
+	x.Armed = true
+	x.MaturesAt = tick + x.Within
+}
+
+// Complete records one finished act and arms every prediction whose full causal source
+// set is now complete. A joint prediction cannot arm on the first contributing act.
+func (e *Expression) Complete(actID string, tick int) {
+	if e.Completed == nil {
+		e.Completed = map[string]int{}
+	}
+	e.Completed[actID] = tick
+	for i := range e.Expects {
+		x := &e.Expects[i]
+		if x.Armed {
+			continue
+		}
+		ready := true
+		for _, id := range x.Of {
+			if _, ok := e.Completed[id]; !ok {
+				ready = false
+				break
+			}
+		}
+		if ready {
+			x.Arm(tick)
+		}
+	}
+}
 
 // Matured reports whether this bet is due and still open. A matured bet is not FALSE — it is
 // simply owed an observation, and the substrate now goes and gets one.
 func (x Expect) Matured(tick int) bool {
-	return x.Resolution == TruthUnknown && x.MaturesAt > 0 && tick >= x.MaturesAt
+	return x.Resolution == TruthUnknown && x.Armed && x.MaturesAt > 0 && tick >= x.MaturesAt
 }
 
 // Due returns the perceives the substrate must emit right now: one per matured, unresolved bet,

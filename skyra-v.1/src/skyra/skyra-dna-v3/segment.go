@@ -43,6 +43,7 @@ const (
 // renewal gaps. Indices are into the log slice the span was computed from — a span is a
 // VIEW, not a store.
 type Span struct {
+	ID          SpanID
 	First, Last int   // log indices, inclusive
 	WallStart   int64 // wall of the first moment
 	WallEnd     int64 // wall of the last moment
@@ -93,7 +94,7 @@ func Spans(log []Observation, k float64) []Span {
 }
 
 func span(log []Observation, first, last int) Span {
-	return Span{First: first, Last: last, WallStart: log[first].Wall, WallEnd: log[last].Wall}
+	return Span{ID: log[first].SpanID, First: first, Last: last, WallStart: log[first].Wall, WallEnd: log[last].Wall}
 }
 
 // A Class is an episode in the episode-as-region sense: the holder of similar spans — the

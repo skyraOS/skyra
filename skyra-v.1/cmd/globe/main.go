@@ -233,9 +233,7 @@ func (s *server) runEpisodes(reps int) {
 
 		// the being opens its eyes: one panoramic wave seeds the observation graph
 		seed := s.realm.Panorama()
-		for _, t := range seed.Effects {
-			s.being.Observe(t, dnav3.ProvenanceRaw)
-		}
+		s.being.ObserveImpulse(seed.Effects, target)
 
 		before := s.being.Metrics
 		c, err := s.being.Run(target, 6)

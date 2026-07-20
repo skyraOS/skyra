@@ -345,6 +345,12 @@ func (g *ExpressionGraph) ClassEdges(log []Observation, spans []Span, classes []
 		return 0, false
 	}
 	indexOfObsID := func(id string) (int, bool) {
+		for i, o := range log {
+			if o.ID != "" && string(o.ID) == id {
+				return i, true
+			}
+		}
+		// Compatibility for historical/replayed observations written before stable IDs.
 		at := 0
 		key := id
 		if cut := strings.LastIndex(id, "@"); cut >= 0 {

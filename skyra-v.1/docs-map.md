@@ -91,7 +91,36 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
 
 ## 7. The next designs and remaining gaps
 
-0. **The observe mechanism over the spine** —
+0. **Span-owned predictions and activation** —
+   [specs/2026-07-20/span-owned-predictions-and-activation.md](specs/2026-07-20/span-owned-predictions-and-activation.md):
+   the governing correction to the observe/grader loop. Expressions and their
+   predictions belong to the span that birthed them; incoming impulses maintain a
+   short-lived EMA activation field over entities, triples, spans, and causal
+   edges; the grader sees only active-span, causally armed predictions reached
+   through an exact prediction-address index. Removes `Class` from the active
+   architecture: direct entity/address/triple → span posting lists provide
+   retrieval, causal-edge P/N provide repeated statistics, and activation provides
+   current relevance. Also requires stable observation/span identity, joint arming
+   after every source act, append-before-grade sequencing, settlement reactivation,
+   and provenance-capped grading. **Status: implementing. Milestone 1 landed
+   2026-07-20:** stable identities and birth ownership, expression-by-span and
+   prediction-by-address indexes, per-act completion and correct joint arming,
+   append-before-grade ingest, owner-span world/settlement returns, active-span
+   grading, stable evidence IDs, and provenance-capped grade weight. Direct span
+   **Continuous replacement landed 2026-07-20:** direct span postings,
+   node/entity/triple/span/edge EMA activation, bounded causal propagation,
+   per-observation/expression token stamps, fixed-budget `A/token` memory
+   selection, activated target derivation, and active ingest wiring in dnav3/globe.
+   The class wave remains prototype history, not the active ingest mechanism.
+   A synthetic 100k-token/4,000-span endurance test holds the active projection
+   to 256 tokens and reactivates the first cold memory without compaction.
+   **Stress-validated
+   2026-07-20:** deterministic reference-model trials, 546,293 fuzz executions,
+   1,000-bet delayed-settlement flood, race/full-repository checks, and a
+   100,000-unrelated-bet index benchmark. Stress found and fixed cross-episode
+   grading and mark-to-world-state laundering.
+
+- **Observe-mechanism prototype history** —
    [specs/2026-07-19/observe-mechanism-over-spine.md](specs/2026-07-19/observe-mechanism-over-spine.md):
    spreading activation over an immutable O→A spine, interpretation only at the two
    collapse bookends. Ground decision
@@ -129,7 +158,7 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
    are for representation breaks and nothing here breaks v3's. **Landed 2026-07-20:**
    `Observation.Wall` + `segment.go` (`Spans`/`Classes`/`Lens`, pure functions; paper
    test #4's toy is the unit-test fixture; rhythm baseline = lower quartile).
-   **Specced and built:** [the-observe-wave](specs/2026-07-20/the-observe-wave.md) —
+   **Prototype specced and built:** [the-observe-wave](specs/2026-07-20/the-observe-wave.md) —
    the mechanism inside `observation → state change`, zero inference. `wave.go`
    landed 2026-07-20 (deltas 1–5): `ResolutionIndex` (tier-1 compression proposer,
    counted priors), `Roots`/`HeatClasses` (diversity-first), `Resolve` (Born-rule
@@ -142,8 +171,11 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
    unchanged with the supplier swapped from harness to history. Delta 6 **landed**
    as `ingest.go` (`ObserveImpulse`: impulse → wave → commits → precedent-read
    target; nil target + novelty flag hands authoring to the framing call). The
-   observe mechanism is now fully built through the seam. Next: replay the next
-   live session; grow an impulse source so `ObserveImpulse` runs in anger.
+   observe mechanism is built through its class-mediated seam, now retained as
+   prototype history. The active replacement is span-owned activation above;
+   its replacement reaches direct-span parity. Stable identity/ownership and
+   span-scoped grading have now landed; the next implementation work is the direct
+   span index and EMA activation rather than replaying the class seam live.
 1. **The working-memory loop** —
    [specs/2026-07-13/working-memory-loop/](specs/2026-07-13/working-memory-loop/README.md)
    (design recorded 2026-07-13, ledger all-open): WM-as-buffer, impulse shells
