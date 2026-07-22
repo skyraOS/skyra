@@ -9,20 +9,46 @@
 
 ## The question
 
-> **Does substituting a computed prediction–observation diff for an LLM-judged
-> grade reduce planning cost across repeated exposure to a task, and does the
-> reduction survive a memory ablation?**
+> **Does an agent whose learning signal is a computed prediction–observation diff
+> reduce its planning cost across repeated exposure to a task class — and is the
+> durable, observation-grounded graph the mechanism of that reduction?**
 
 This is the narrow, defensible form. It is deliberately not the research program
-(below, under Future Work). It is a single claim with enumerable failure modes.
+(below, under Future Work). It is a single mechanistic claim with an ablation that
+can kill it.
 
 ### Why this phrasing, specifically
 
-"Substituting X **for** Y" defines a controlled experiment. The baseline is not an
-external agent with a hundred confounds — it is *this architecture with one part
-swapped*. Same substrate, same world, same task, same retrieval and rendering. One
-independent variable: how the grade is produced. That is the cleanest comparison the
-system admits, and it is the reason the narrow question beats the broad one for an MS.
+Two clauses, and the second does the work. Clause 1 is a curve: cost falls with
+exposure. Clause 2 asks whether the accumulated graph *causes* that fall, and it is
+answered by removing the graph and watching the curve flatten.
+
+Both comparisons are **internal** — the system against its own earlier state, and the
+system against itself with one component disabled. No external agent, no second
+architecture, no confounds imported from someone else's substrate. Same world, same
+task, same retrieval and rendering, because it is literally the same binary.
+
+### Why there is no LLM-judge baseline
+
+An earlier draft phrased this as *substituting* a computed diff **for** an LLM-judged
+grade, which requires a judge arm. That framing does not survive contact with the
+architecture:
+
+- **The judge has nowhere to stand.** v3 expectations are triples with exact
+  addresses. Handing a judge a predicted triple and an observed triple asks it to
+  perform string equality — a task it cannot win and was never needed for. The
+  comparison is rigged by construction, and a reader will see that immediately.
+- **It is not one independent variable.** The judge was necessary in v2 *because*
+  predictions were free text. Representation and grading method are a package deal:
+  free-text-plus-judge and triple-plus-diff differ in two things at once, so "only
+  the source of the number changes" is simply false.
+- **It cannot falsify anything.** The result is knowable in advance — equal accuracy
+  at best, plus latency and variance. An experiment whose outcome is known before it
+  runs is not evidence.
+
+The signal-quality question the judge was meant to answer is answered better, and
+deterministically, by the noise sweep below. See Related Work for where the judge
+argument *does* belong.
 
 ---
 
@@ -30,73 +56,89 @@ system admits, and it is the reason the narrow question beats the broad one for 
 
 The question is only falsifiable once these are fixed. Settle them before writing.
 
-- **The grade (treatment).** A computed diff between a committed, falsifiable
-  expectation and a subsequent observation of world state. No model in the grading
-  path. Accumulates on edges as `P(world state | expression)` with an EMA prior.
-- **The grade (baseline).** An LLM judge scoring the same expectation against the
-  same outcome, feeding the *same* edge/EMA machinery — only the source of the number
-  changes. See Build Debt: this module does not exist yet.
+- **The grade.** A computed diff between a committed, falsifiable expectation and a
+  subsequent observation of world state. No model in the grading path. Accumulates on
+  edges as `P(world state | expression)` with an EMA prior.
 - **Planning cost.** Primary: **passes-to-closure** (planning cycles until the target
-  is observed-met). Architecture-neutral — both arms plan identically. Secondary:
-  total inference calls, and wall-clock. See Metrics for why passes is primary.
+  is observed-met). Secondary: total inference calls, and wall-clock. See Metrics for
+  why passes is primary.
 - **Repeated exposure.** N episodes of one task class, fresh world each episode,
   persistent expression graph. Only what was *learned* carries across.
 - **Memory ablation.** The durable graph / accumulated edges disabled. Prediction:
   planning cost stops falling — isolating the graph as the mechanism.
+- **Grade corruption (the noise sweep).** `Truth` is flipped with probability *r*
+  immediately before the edge update — *after* settlement, so nothing in the loop
+  changes except the quality of the learning signal. *r* is the dial that replaces
+  the judge arm, and it must be seeded so every run replays exactly.
 
 ---
 
-## Experimental design — a 2×2 factorial
+## Experimental design — one ablation, one dose-response
 
-|                   | **Memory on**                          | **Memory off**              |
-|-------------------|----------------------------------------|-----------------------------|
-| **Computed diff** | cost falls — *the thesis*              | cost flat — *ablation*      |
-| **LLM judge**     | cost falls less / noisier / higher floor — *the comparison* | cost flat — *control* |
+### 1. The ablation (clause 2) — the load-bearing experiment
 
-- **Main effect (clause 1):** computed-diff vs LLM-judge, memory on. Does the diff
-  reduce planning cost relative to the judge?
-- **Ablation (clause 2):** memory on vs off, computed-diff arm. Does the reduction
-  survive removing the graph? If cost still falls with memory off, the graph is not
-  the mechanism and the thesis is wrong.
+|                   | **Memory on**             | **Memory off**             |
+|-------------------|---------------------------|----------------------------|
+| **Computed diff** | cost falls — *the thesis* | cost flat — *the ablation* |
 
-Every cell has a predicted outcome that can be falsified. Run all four; the fourth
-(judge, memory off) is a near-free control that completes the factorial.
+Two cells. If cost still falls with the graph disabled, the graph is not the
+mechanism, the LLM alone is doing the work, and the thesis is dead. This is the only
+experiment that can kill it, so it gets the seeds and the scrutiny.
+
+### 2. The noise sweep (signal quality) — dose-response, no LLM
+
+Flip `Truth` with probability *r* before the edge update. Sweep, memory on,
+everything else fixed:
+
+```text
+r = 0      the thesis curve
+r = 0.1    degraded, still falling
+r = 0.25   substantially flattened
+r = 0.5    uninformative on a binary — should land on the memory-off curve
+```
+
+Predicted result: monotone degradation, with `r = 0.5` collapsing onto the ablation.
+
+That bracket is the whole point. **Any grader whatsoever — an LLM judge included —
+sits at some unmeasured *r* on this axis.** The sweep does not merely replace the
+judge comparison, it *subsumes* it: one binary result against one judge at one
+unknown error rate is strictly less information than the curve that contains it. And
+it is deterministic, reproducible, and free.
 
 ---
 
-## Metrics — two orthogonal axes
+## Metrics — two axes, one measured and one structural
 
-The result is not "the diff learns better." It is **Pareto dominance** across two axes.
+1. **Capability axis — passes-to-closure.** Does the curve fall, and does it stop
+   falling under ablation? *Measured*, with variance bands.
+2. **Efficiency axis — grading cost.** *Analytic, not empirical.* The diff adds
+   **zero** calls to the trusted loop; any model-in-the-loop grader adds one per
+   grade. This needs no experiment — it is a property of the construction, and it is
+   un-arguable precisely because no benchmark is involved.
 
-1. **Capability axis — passes-to-closure.** Is the learning signal as good?
-2. **Efficiency axis — cost + latency.** Given equal quality, what does producing the
-   signal take?
+Splitting the axes this way removes the rigged-comparison objection entirely: there
+is no comparison to rig. The capability claim is measured against the system's own
+earlier state; the efficiency claim is a structural fact about where the network
+calls are.
 
-The strong claim: *at least as good on capability, strictly better on cost and
-latency.* This framing also defuses the rigged-comparison objection — the efficiency
-win is on a **separate axis** from the capability claim, not a restatement of it.
-
-**The equal-curve case is not a null result.** If the curves overlap, capability is
-equal and the entire interest of the thesis moves to the efficiency axis — where the
-computed diff dominates by construction (grading is arithmetic; the judge is a network
-call per grade). So the thesis is interesting whether the curves separate *or* overlap:
-separation is a capability win, overlap is an efficiency win, and the diff dominates in
-both. State this explicitly — it removes the fear that "same curve" kills the result.
+**A flat curve is falsification, not a null result** — and it is the outcome this
+design is built to detect early rather than in month five. If the curve falls but the
+noise sweep fails to degrade it, that is *also* informative and *also* bad: something
+other than the graded signal is driving the improvement, and the ablation says what.
 
 ### Reporting rules (so the numbers survive scrutiny)
 
 - **Neutral unit + concrete unit for each metric.**
   - Cost: grading calls per closure (neutral, primary) *and* dollars (concrete).
   - Latency: grading calls in the critical loop (neutral) *and* wall-clock (concrete).
-- **Passes-to-closure is primary, not total calls.** The diff grades for free; the
-  judge costs a call per grade. Measuring total calls hands the diff a trivial win and
-  invites the rigged-comparison charge. Lead with passes (fair); report cost/latency
-  as the separate efficiency result.
-- **Isolate grading latency from confounds.** API latency is noisy (network, provider
-  load, retries). The deterministic, un-arguable statement is structural: the diff adds
-  **zero** calls to the trusted loop; the judge adds **one per grade**. Report the
-  call-count delta as the result; report wall-clock as its concrete instantiation with
-  variance bars.
+- **Passes-to-closure is primary, not total calls.** Passes measures whether the
+  being got better. Total calls conflates that with how the grade is produced. Lead
+  with passes; report calls and wall-clock separately as the efficiency result.
+- **State grading cost structurally, not as a benchmark.** API latency is noisy
+  (network, provider load, retries) and a wall-clock number invites an argument about
+  the harness. The un-arguable statement is structural: **zero** calls added to the
+  trusted loop. Report that; report wall-clock only as its concrete instantiation,
+  with variance bars.
 - **Variance, or it is an anecdote.** `.2001` is n=1 in seed. Every cell needs a band
   (≥8–10 seeds) or "falls" and "falls less" are not distinguishable.
 
@@ -112,24 +154,32 @@ are what turn "my thing is faster" into "my thing is a different kind of system.
 
 ## Build debt the question creates
 
-- **An LLM-judge grading head for dnav3.** The counterfactual must exist and must be a
-  fair swap: drops in where the computed diff sits, feeds the same edge/EMA machinery,
-  everything downstream identical. dnav2's judge was a different architecture and does
-  not count. Well-scoped (~1–2 days), but the single largest build item — scope it in
-  the proposal so the comparison does not read as hand-wavy.
+**None.** This is the main practical consequence of dropping the judge arm: every
+experiment above runs on the current substrate.
+
+- The ablation needs a flag disabling durable edge accumulation.
+- The noise sweep needs one seeded flip on `Truth` immediately before the edge update
+  — `being.go`, at the `edge.Observe(truth, b.tick)` call site. A few lines.
+- Everything else is instrumentation that already exists: `Metrics.Resolved`,
+  `Metrics.Correct`, `Metrics.GradeSum`, and passes-to-closure.
+
+The previous draft carried an LLM-judge grading head for dnav3 as "~1–2 days and the
+single largest build item." It is now zero days, and that runway goes to seeds and a
+second task shape — which is where it buys actual defensibility.
 
 ---
 
 ## Experiment order — fail fast on the one that matters
 
-1. **Judge vs diff, memory on, on a hard-enough task — FIRST.** This is the load-
-   bearing comparison. If the curves separate, there is a thesis. If they overlap, the
-   task is too easy to distinguish the mechanisms (or the efficiency-only story is the
-   thesis) — learn this now, while there is runway to make the world harder, not in
-   month five.
-2. Memory ablation (computed-diff arm).
-3. Variance band across seeds for every cell.
-4. Second task shape, to show the curve is not task-specific.
+1. **The ablation, on a hard-enough task — FIRST.** Memory on vs memory off. This is
+   the load-bearing experiment and the only one that can kill the thesis. If cost does
+   not fall with memory on, or falls just as well with it off, learn that now — while
+   there is runway to make the world harder — not in month five.
+2. **Variance bands** across seeds for both cells. `.2001` is n=1 in seed; below
+   ≥8–10 seeds, "falls" and "flat" are not distinguishable claims.
+3. **The noise sweep**, once the ablation has separated. It is only interesting if
+   there is a curve to degrade.
+4. **A second task shape**, to show the curve is not task-specific.
 
 ---
 
@@ -153,6 +203,13 @@ Several results have named ancestors. Raising them first is the difference betwe
 - **Active inference / predictive processing** (Friston). observation → state change →
   action → observation with prediction error as the signal. Phase 27's own invariant
   already gestures here.
+- **LLM-as-judge** (Zheng et al., 2023, and the self-evaluation literature). This is
+  where the judge belongs — as *position*, not as an experimental arm. The argument is
+  architectural and needs no run: a judged grade bottoms out in an opinion with no
+  independent source, and the documented biases (self-preference, position, verbosity)
+  are exactly what a component with an incentive to look good will exploit. dnav2 is
+  the lineage evidence — that architecture was built, run, and hit precisely this
+  ceiling, which is why v3 exists. Cite the history; do not re-run it.
 
 The novel core has no clean ancestor: **an ungameable grade produced by keeping the
 model out of its own grading path** (LAWs 4 and 6, and
@@ -163,12 +220,14 @@ incentive to look good; dnav3 does, and builds structure specifically to neutral
 
 ## What would falsify the thesis
 
-- Planning cost does not fall in the computed-diff arm → the compounding claim dies.
-- Cost falls but survives the memory ablation → the graph is not the mechanism; the
-  LLM alone is doing the work.
-- The judge arm matches the diff on passes *and* the efficiency gap is negligible →
-  no result on either axis (unlikely — grading cost is structural — but stated for
-  completeness).
+- **Planning cost does not fall** → the compounding claim dies outright.
+- **Cost falls but survives the memory ablation** → the graph is not the mechanism;
+  the LLM alone is doing the work. The sharpest failure, and the reason the ablation
+  runs first.
+- **The noise sweep does not degrade the curve** → the improvement is not coming from
+  the graded signal, so the stated mechanism is wrong even though the curve is real.
+- **The curve falls on only one task shape** → a speedup specific to that task, not a
+  property of the mechanism.
 
 ---
 
