@@ -18,6 +18,12 @@ It treats same-claim fusion as the current phase analogue while keeping redundan
 discounting distinct from contradiction cancellation until a true node forces the
 latter.
 
+**Implementation checkpoint:** v3 now implements paragraph-count as a deterministic
+structural parser. Content dimensions carry an explicit paragraph-carrier identity and
+one-based slot. When fewer paragraphs arrive than predicted, materialized slots settle and
+absent slots become `VOID`; only settled rows enter the generic learning projection. List
+and code-block carriers have not yet been added.
+
 ## The unifying rule
 
 The foundation is settled:

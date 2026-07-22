@@ -153,11 +153,13 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
    from prior observation IDs into stable prediction-dimension IDs, recording claimed
    influence without treating it as earned credit. Birth evidence stays separate from
    later settlement evidence. Scalar grades are projections, not the stored object.
-   **Minimum implementation landed 2026-07-21:** exact-address, token-count, and marker
-   parsers; stable consequence/interpretation prediction IDs; durable comparisons before
-   Bernoulli projection; live `<evidence>` parsing; Unicode range/future-reference checks;
-   and separate birth/settlement histories. Structure, regex, semantic similarity,
-   base-rate population, void propagation, and residual learning remain open.
+   **Minimum implementation landed 2026-07-21:** exact-address, token-count,
+   paragraph-count, and marker parsers; stable consequence/interpretation prediction IDs;
+   durable comparisons before Bernoulli projection; live `<evidence>` parsing; Unicode
+   range/future-reference checks; and separate birth/settlement histories. Paragraph
+   content now names its carrier slot: absent slots remain durable `VOID` rows and are
+   excluded from the settled-only learning projection. List/code-block structure, regex,
+   semantic similarity, base-rate population, and residual learning remain open.
    **Phase 1
    (differentiation-state on the derived target) LANDED 2026-07-21 after paper validation
    by Toys #5+#6+#6B:** group `deriveActivatedTarget` by the `edgeKey` source prefix,

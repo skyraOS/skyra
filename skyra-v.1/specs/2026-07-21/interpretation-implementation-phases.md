@@ -472,10 +472,18 @@ Toy #9F executable regressions cover the three parsers, multidimensional retenti
 Unicode ranges, signed-bound checks, future evidence, ordering invariance, immutable storage
 copies, live LLM-format parsing, and independent two-axis comparison histories.
 
-**Still open in Phase 4F:** paragraph/list/code-block parsers, regex, versioned semantic
-similarity, populated base-rate calibration, structural carrier materialization and void
-propagation, and a residual-history learner richer than the compatibility Bernoulli
-projection. Phase 5 remains behind the parts of this gate it actually consumes.
+**PARAGRAPH CARRIER SLICE LANDED 2026-07-21:** the fixed registry now includes
+`paragraph_count`. A content dimension names its structural carrier and one-based slot.
+The comparison first measures the carrier, settles content inside every materialized
+paragraph slot, and records children of absent slots as `VOID` with no fabricated actual
+value or settlement evidence. The generic learning projection exposes settled dimensions
+only. The forcing three-predicted/one-arrived regression proves that the scale miss learns,
+paragraph one settles, and paragraphs two and three do not become negative evidence.
+
+**Still open in Phase 4F:** list/code-block parsers, regex, versioned semantic similarity,
+populated base-rate calibration, and a residual-history learner richer than the
+compatibility Bernoulli projection. Phase 5 remains behind the parts of this gate it
+actually consumes.
 
 ---
 

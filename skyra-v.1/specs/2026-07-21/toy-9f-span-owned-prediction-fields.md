@@ -2,8 +2,10 @@
 
 **Date:** 2026-07-21  
 **Status:** PARTIAL PASS · minimum live Phase-4F slice landed 2026-07-21; exact-address,
-token-count, marker, signed attribution, and retained-comparison rails pass. Structural,
-regex, semantic-similarity, base-rate, and void-carrier rails remain open  
+token-count, paragraph-count, marker, signed attribution, retained-comparison, and
+paragraph-carrier void rails pass. List/code-block structure, regex, semantic similarity,
+base-rate calibration, and residual-history learning remain open
+
 **Parent:** [Interpretation Layer — Implementation Phases](interpretation-implementation-phases.md)  
 **Reads on:** [Scale, Structure, Content](scale-structure-content.md),
 [Predicate Diagnosticity](predicate-diagnosticity.md), and
@@ -300,9 +302,14 @@ separate from later settling observations. No grading-time LLM call was added.
 Executable Phase-4F tests cover multidimensional retention, range/marker/exact parsers,
 Unicode attribution bounds, future/invalid reference rejection, insertion-order
 invariance, storage-copy isolation, no-credit-on-comparison, live parser authorship, and
-separate consequence/interpretation comparison histories.
+separate consequence/interpretation comparison histories. The missing-carrier forcing
+case is also live: a predicted three-paragraph response receiving one paragraph settles
+the paragraph-count miss and paragraph-one content, retains paragraph-two and
+paragraph-three predictions as evidence-free `VOID` rows, and excludes those rows from
+the generic settled-only learning projection.
 
-The full gate remains open for paragraph/list/code-block parsers, regex, fixed embedding
-similarity and version identity, base-rate calibration records with `Ready=true`, explicit
-void propagation from absent structural carriers, and learned residual-history updates.
+The full gate remains open for list/code-block parsers, regex, fixed embedding similarity
+and version identity, base-rate calibration records with `Ready=true`, and learned
+residual-history updates. Paragraph slots prove the carrier/void structure; additional
+structural parsers should reuse it rather than introduce another settlement rule.
 Phase 5 must not assume those unfinished dimensions exist.

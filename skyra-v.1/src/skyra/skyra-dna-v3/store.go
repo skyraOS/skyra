@@ -187,6 +187,21 @@ func (g *ExpressionGraph) PredictionField(id PredictionID) (*PredictionField, bo
 	return &clone, true
 }
 
+// ReplaceUnsettledPredictionField freezes a pre-settlement refinement such as a
+// held-out calibration. Once any comparison exists, the authored field is immutable.
+func (g *ExpressionGraph) ReplaceUnsettledPredictionField(field PredictionField) bool {
+	if g == nil || field.ID == "" {
+		return false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, exists := g.predictionFields[field.ID]; !exists || len(g.comparisons[field.ID]) != 0 {
+		return false
+	}
+	g.predictionFields[field.ID] = clonePredictionField(field)
+	return true
+}
+
 func (g *ExpressionGraph) RecordComparison(field ComparisonField) {
 	if g == nil || field.PredictionID == "" {
 		return

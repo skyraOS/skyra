@@ -250,3 +250,62 @@ func TestToy9FLegacyExpectationsProjectIntoSeparateDurableFields(t *testing.T) {
 		t.Fatal("two distinct addresses recorded one settling observation")
 	}
 }
+
+func TestToy9FAbsentParagraphCarriersVoidTheirContentPredictions(t *testing.T) {
+	b := NewBeing(nil, nil)
+	span := b.startExternalSpan()
+	prior := b.appendObservation(Triple{
+		Subject: "message:/request", Predicate: "text", Object: "please answer in three paragraphs",
+	}, ProvenanceRaw, 0, nil, span)
+	field := PredictionField{
+		ID: "p-structural", EpisodeID: b.EpisodeID(), SpanID: span, AuthoredAfter: prior.Sequence,
+		Dimensions: []PredictionDimension{
+			{ID: "scale.paragraphs", Parser: ParserParagraphCount, Range: NumberRange{Low: 3, High: 3}},
+			{ID: "paragraph.1.topic", Parser: ParserStringMarkers, Markers: []string{"alpha"},
+				CarrierDimensionID: "scale.paragraphs", CarrierSlot: 1},
+			{ID: "paragraph.2.topic", Parser: ParserStringMarkers, Markers: []string{"beta"},
+				CarrierDimensionID: "scale.paragraphs", CarrierSlot: 2},
+			{ID: "paragraph.3.topic", Parser: ParserStringMarkers, Markers: []string{"gamma"},
+				CarrierDimensionID: "scale.paragraphs", CarrierSlot: 3},
+		},
+	}
+	if _, err := b.AdmitPredictionField(field); err != nil {
+		t.Fatal(err)
+	}
+	settlement := b.appendObservation(Triple{
+		Subject: "message:/reply", Predicate: "text",
+		Object: "alpha beta gamma all appear, but only inside the one paragraph that arrived",
+	}, ProvenanceRaw, 0, nil, b.startExternalSpan())
+	comparison, err := b.CompareAndRecordPrediction(field.ID, []Observation{settlement})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	byID := map[DimensionID]DimensionComparison{}
+	for _, dimension := range comparison.Dimensions {
+		byID[dimension.Dimension.ID] = dimension
+	}
+	if got := byID["scale.paragraphs"]; got.State != DimensionSettled || got.Truth != TruthFalse ||
+		got.Observed.Number != 1 || got.Relation != "below_range" {
+		t.Fatalf("paragraph scale=%+v, want settled one-versus-three miss", got)
+	}
+	if got := byID["paragraph.1.topic"]; got.State != DimensionSettled || got.Truth != TruthTrue {
+		t.Fatalf("materialized paragraph content=%+v, want settled true", got)
+	}
+	for _, id := range []DimensionID{"paragraph.2.topic", "paragraph.3.topic"} {
+		got := byID[id]
+		if got.State != DimensionVoid || got.Truth != TruthUnknown || got.Relation != "carrier_absent" ||
+			len(got.Observed.Evidence) != 0 {
+			t.Fatalf("absent carrier child %q=%+v, want evidence-free void", id, got)
+		}
+	}
+	settled := comparison.SettledDimensions()
+	if len(settled) != 2 {
+		t.Fatalf("learning projection contains %d dimensions, want only scale and paragraph 1", len(settled))
+	}
+	for _, dimension := range settled {
+		if dimension.State != DimensionSettled {
+			t.Fatalf("learning projection admitted non-settled dimension %+v", dimension)
+		}
+	}
+}

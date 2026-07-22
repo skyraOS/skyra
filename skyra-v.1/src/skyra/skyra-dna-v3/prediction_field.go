@@ -20,9 +20,10 @@ type DimensionID string
 type PredictionParserID string
 
 const (
-	ParserExactAddress  PredictionParserID = "exact_address"
-	ParserTokenCount    PredictionParserID = "token_count"
-	ParserStringMarkers PredictionParserID = "string_markers"
+	ParserExactAddress   PredictionParserID = "exact_address"
+	ParserTokenCount     PredictionParserID = "token_count"
+	ParserParagraphCount PredictionParserID = "paragraph_count"
+	ParserStringMarkers  PredictionParserID = "string_markers"
 )
 
 // NumberRange is an inclusive predicted range. It stays a simple envelope while
@@ -38,15 +39,26 @@ type PredictionDimension struct {
 	ID     DimensionID
 	Parser PredictionParserID
 
+	// CarrierDimensionID and CarrierSlot express structural ownership. A
+	// one-based slot materializes only when the carrier parser observes that
+	// many units. An absent slot voids this dimension rather than falsifying it.
+	CarrierDimensionID DimensionID
+	CarrierSlot        int
+
 	// exact_address
 	Exact Triple
 
-	// token_count
+	// token_count / paragraph_count
 	Range NumberRange
 
 	// string_markers
 	Markers    []string
 	MinMatches int
+
+	// Calibration is frozen before the predicted observation arrives. Runtime
+	// settlement copies it into the comparison; the settling impulse never
+	// participates in estimating its own information value.
+	Calibration BaseRateCalibration
 }
 
 // EvidenceAttribution is the LLM's frozen claim that one passage in an already
@@ -95,13 +107,21 @@ type ObservedDimension struct {
 	Evidence []ObservationID
 }
 
-// BaseRateCalibration is retained beside the raw comparison. Phase 4F does not
-// invent a base-rate estimator; Ready=false explicitly preserves that boundary.
+// BaseRateCalibration retains the positive-fire diagnosticity objective and the
+// witnessed counts behind it. Ready means the caller-declared held-out support
+// floor was met and the ratio was arithmetically defined; it is not promotion.
 type BaseRateCalibration struct {
-	Ready    bool
-	WindowID string
-	Coverage float64
-	Surprise float64
+	Ready              bool
+	WindowID           string
+	CategorySamples    int
+	NonCategorySamples int
+	TotalSamples       int
+	CategoryFires      int
+	TotalFires         int
+	Coverage           float64
+	BaseRate           float64
+	Surprise           float64
+	ExpectedCredit     float64
 }
 
 // DimensionComparison is the durable learning coordinate: prediction, actual
@@ -261,6 +281,27 @@ func validatePredictionField(field PredictionField, observation func(Observation
 			return fmt.Errorf("dimension %q: %w", dimension.ID, err)
 		}
 	}
+	for _, dimension := range field.Dimensions {
+		if dimension.CarrierDimensionID == "" {
+			continue
+		}
+		if dimension.CarrierDimensionID == dimension.ID {
+			return fmt.Errorf("dimension %q cannot license itself", dimension.ID)
+		}
+		var carrier *PredictionDimension
+		for i := range field.Dimensions {
+			if field.Dimensions[i].ID == dimension.CarrierDimensionID {
+				carrier = &field.Dimensions[i]
+				break
+			}
+		}
+		if carrier == nil {
+			return fmt.Errorf("dimension %q names missing carrier %q", dimension.ID, dimension.CarrierDimensionID)
+		}
+		if carrier.Parser != ParserParagraphCount {
+			return fmt.Errorf("dimension %q carrier %q is not structural", dimension.ID, dimension.CarrierDimensionID)
+		}
+	}
 
 	for _, attribution := range field.Attributions {
 		if attribution.PredictionID != field.ID {
@@ -295,11 +336,11 @@ func validatePredictionDimension(dimension PredictionDimension) error {
 		if dimension.Exact.Subject == "" || dimension.Exact.Predicate == "" || dimension.Exact.Object == "" {
 			return fmt.Errorf("exact parser requires a complete expected triple")
 		}
-	case ParserTokenCount:
+	case ParserTokenCount, ParserParagraphCount:
 		if math.IsNaN(dimension.Range.Low) || math.IsNaN(dimension.Range.High) ||
 			math.IsInf(dimension.Range.Low, 0) || math.IsInf(dimension.Range.High, 0) ||
 			dimension.Range.Low < 0 || dimension.Range.High < dimension.Range.Low {
-			return fmt.Errorf("token parser requires a finite ordered non-negative range")
+			return fmt.Errorf("count parser requires a finite ordered non-negative range")
 		}
 	case ParserStringMarkers:
 		if len(dimension.Markers) == 0 {
@@ -315,6 +356,12 @@ func validatePredictionDimension(dimension PredictionDimension) error {
 		}
 	default:
 		return fmt.Errorf("unknown fixed parser %q", dimension.Parser)
+	}
+	if dimension.CarrierDimensionID == "" && dimension.CarrierSlot != 0 {
+		return fmt.Errorf("carrier slot requires a carrier dimension")
+	}
+	if dimension.CarrierDimensionID != "" && dimension.CarrierSlot < 1 {
+		return fmt.Errorf("carrier slot must be one-based")
 	}
 	return nil
 }
@@ -333,11 +380,58 @@ func ComparePredictionField(field PredictionField, observations []Observation) C
 	}
 	dimensions := append([]PredictionDimension(nil), field.Dimensions...)
 	sort.Slice(dimensions, func(i, j int) bool { return dimensions[i].ID < dimensions[j].ID })
+	byID := make(map[DimensionID]DimensionComparison, len(dimensions))
 	for _, dimension := range dimensions {
-		comparison.Dimensions = append(comparison.Dimensions,
-			comparePredictionDimension(dimension, observations))
+		if dimension.CarrierDimensionID != "" {
+			continue
+		}
+		byID[dimension.ID] = comparePredictionDimension(dimension, observations)
+	}
+	for _, dimension := range dimensions {
+		if dimension.CarrierDimensionID == "" {
+			continue
+		}
+		carrier, ok := byID[dimension.CarrierDimensionID]
+		switch {
+		case !ok || carrier.State == DimensionUnknown:
+			byID[dimension.ID] = unmaterializedDimension(dimension, DimensionUnknown, "carrier_unknown")
+		case carrier.State == DimensionVoid:
+			byID[dimension.ID] = unmaterializedDimension(dimension, DimensionVoid, "carrier_void")
+		case int(carrier.Observed.Number) < dimension.CarrierSlot:
+			byID[dimension.ID] = unmaterializedDimension(dimension, DimensionVoid, "carrier_absent")
+		default:
+			byID[dimension.ID] = comparePredictionDimension(dimension,
+				paragraphSlotObservations(observations, dimension.CarrierSlot))
+		}
+	}
+	for _, dimension := range dimensions {
+		comparison.Dimensions = append(comparison.Dimensions, byID[dimension.ID])
 	}
 	return comparison
+}
+
+// SettledDimensions is the only generic projection surface exposed to learners.
+// Unknown and void coordinates stay durable in the comparison but cannot become
+// negative evidence merely because no eligible observation materialized.
+func (field ComparisonField) SettledDimensions() []DimensionComparison {
+	settled := make([]DimensionComparison, 0, len(field.Dimensions))
+	for _, dimension := range field.Dimensions {
+		if dimension.State == DimensionSettled && dimension.Truth != TruthUnknown {
+			settled = append(settled, dimension)
+		}
+	}
+	return settled
+}
+
+func unmaterializedDimension(dimension PredictionDimension, state DimensionSettlement, relation string) DimensionComparison {
+	return DimensionComparison{
+		Dimension:   dimension,
+		Observed:    ObservedDimension{ID: dimension.ID, Parser: dimension.Parser},
+		State:       state,
+		Truth:       TruthUnknown,
+		Relation:    relation,
+		Calibration: dimension.Calibration,
+	}
 }
 
 // CompareAndRecordPrediction evaluates one admitted field and retains the full
@@ -372,7 +466,7 @@ func (b *Being) compareExactExpectation(x *Expect, observation Observation) Trut
 	if err != nil {
 		return TruthUnknown
 	}
-	for _, dimension := range comparison.Dimensions {
+	for _, dimension := range comparison.SettledDimensions() {
 		if dimension.Dimension.ID == x.DimensionID {
 			return dimension.Truth
 		}
@@ -382,10 +476,11 @@ func (b *Being) compareExactExpectation(x *Expect, observation Observation) Trut
 
 func comparePredictionDimension(dimension PredictionDimension, observations []Observation) DimensionComparison {
 	result := DimensionComparison{
-		Dimension: dimension,
-		Observed:  ObservedDimension{ID: dimension.ID, Parser: dimension.Parser},
-		State:     DimensionUnknown,
-		Truth:     TruthUnknown,
+		Dimension:   dimension,
+		Observed:    ObservedDimension{ID: dimension.ID, Parser: dimension.Parser},
+		State:       DimensionUnknown,
+		Truth:       TruthUnknown,
+		Calibration: dimension.Calibration,
 	}
 	switch dimension.Parser {
 	case ParserExactAddress:
@@ -441,6 +536,29 @@ func comparePredictionDimension(dimension PredictionDimension, observations []Ob
 		default:
 			result.Truth, result.Relation = TruthTrue, "in_range"
 		}
+	case ParserParagraphCount:
+		paragraphs := observedParagraphs(observations)
+		for _, observation := range observations {
+			if observation.Fidelity() != 0 {
+				result.Observed.Evidence = append(result.Observed.Evidence, observation.ID)
+			}
+		}
+		if len(result.Observed.Evidence) == 0 {
+			return result
+		}
+		result.Observed.Number = float64(len(paragraphs))
+		result.State = DimensionSettled
+		actual := result.Observed.Number
+		switch {
+		case actual < dimension.Range.Low:
+			result.Truth, result.Relation = TruthFalse, "below_range"
+			result.Residual = actual - dimension.Range.Low
+		case actual > dimension.Range.High:
+			result.Truth, result.Relation = TruthFalse, "above_range"
+			result.Residual = actual - dimension.Range.High
+		default:
+			result.Truth, result.Relation = TruthTrue, "in_range"
+		}
 	case ParserStringMarkers:
 		minimum := dimension.MinMatches
 		if minimum == 0 {
@@ -476,6 +594,55 @@ func comparePredictionDimension(dimension PredictionDimension, observations []Ob
 		}
 	}
 	return result
+}
+
+type observedParagraph struct {
+	text     string
+	evidence ObservationID
+}
+
+func observedParagraphs(observations []Observation) []observedParagraph {
+	var paragraphs []observedParagraph
+	for _, observation := range observations {
+		if observation.Fidelity() == 0 {
+			continue
+		}
+		var current []string
+		flush := func() {
+			text := strings.TrimSpace(strings.Join(current, "\n"))
+			if text != "" {
+				paragraphs = append(paragraphs, observedParagraph{text: text, evidence: observation.ID})
+			}
+			current = nil
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(observation.Object, "\r\n", "\n"), "\n") {
+			if strings.TrimSpace(line) == "" {
+				flush()
+				continue
+			}
+			current = append(current, line)
+		}
+		flush()
+	}
+	return paragraphs
+}
+
+func paragraphSlotObservations(observations []Observation, slot int) []Observation {
+	paragraphs := observedParagraphs(observations)
+	if slot < 1 || slot > len(paragraphs) {
+		return nil
+	}
+	paragraph := paragraphs[slot-1]
+	for _, observation := range observations {
+		if observation.ID != paragraph.evidence {
+			continue
+		}
+		scoped := observation
+		scoped.Object = paragraph.text
+		scoped.TokenCount = ApproxTokenCount(paragraph.text)
+		return []Observation{scoped}
+	}
+	return nil
 }
 
 func clonePredictionField(field PredictionField) PredictionField {
