@@ -1,6 +1,7 @@
 package dnav3
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,13 +23,14 @@ import (
 // decomposer writes it. Expression has no write access, so the being cannot believe its own output
 // into reality.
 type ObservationGraph struct {
-	mu  sync.Mutex
-	log []Observation          // append-only. THE durable thing.
-	cur map[string]Observation // (subject,predicate) → latest. derived: the fold.
+	mu   sync.Mutex
+	log  []Observation          // append-only. THE durable thing.
+	cur  map[string]Observation // (subject,predicate) → latest. derived: the fold.
+	byID map[ObservationID]Observation
 }
 
 func NewObservationGraph() *ObservationGraph {
-	return &ObservationGraph{cur: map[string]Observation{}}
+	return &ObservationGraph{cur: map[string]Observation{}, byID: map[ObservationID]Observation{}}
 }
 
 // wallNow supplies Write's wall-clock stamp. A variable so replay and tests can supply
@@ -48,6 +50,7 @@ func (g *ObservationGraph) Write(o Observation) Observation {
 		o.TokenCount = ApproxTokenCount(observationMemoryText(o))
 	}
 	g.log = append(g.log, o)
+	g.byID[o.ID] = o
 	// A mark is durable history and remains available to retrieval/activation through
 	// the log, but it is not independent evidence about world state. Folding it into cur
 	// would let self-authored text satisfy guards and targets, and could erase a raw fact
@@ -56,6 +59,17 @@ func (g *ObservationGraph) Write(o Observation) Observation {
 		g.cur[sp(o.Triple)] = o
 	}
 	return o
+}
+
+// Observation returns one durable record by provenance identity.
+func (g *ObservationGraph) Observation(id ObservationID) (Observation, bool) {
+	if g == nil || id == "" {
+		return Observation{}, false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	o, ok := g.byID[id]
+	return o, ok
 }
 
 // Resolve is THE DIFF, and it is a set operation — no model, ever.
@@ -97,13 +111,29 @@ func sp(t Triple) string { return t.Subject + "\x00" + t.Predicate }
 // observation log is what happened; this is what the being made of it, and it is the only part
 // nobody else could reconstruct.
 type ExpressionGraph struct {
-	mu    sync.Mutex
-	exprs map[string]*Expression
-	edges map[string]*Edge    // edgeKey → the learned P(W | E)
-	index map[string][]string // triple Key() → expression IDs that PRODUCED it (the reverse index)
-	bets  map[string][]betRef // (subject,predicate) → predictions at that address
-	spans map[SpanID][]string // birth span → expression IDs
-	order []string            // insertion order, so retrieval is deterministic
+	mu                    sync.Mutex
+	exprs                 map[string]*Expression
+	edges                 map[string]*Edge                         // edgeKey → the learned P(W | E)
+	index                 map[string][]string                      // triple Key() → expression IDs that PRODUCED it (the reverse index)
+	bets                  map[string][]betRef                      // (subject,predicate) → predictions at that address
+	spans                 map[SpanID][]string                      // birth span → expression IDs
+	settlementSpans       map[string]map[Truth]map[SpanID]struct{} // edgeKey → outcome → resolving spans
+	settlementSourceSpans map[string]map[Truth]map[SpanID]struct{} // edgeKey → outcome → prediction-time source spans
+	order                 []string                                 // insertion order, so retrieval is deterministic
+
+	// Interpretation claims use the same counted Edge math through an independent
+	// typed path. They never share keys, settlement indexes, or updates with action
+	// consequence edges.
+	interpretations     map[string]*InterpretationClaim
+	interpretationBets  map[string][]string // (subject,predicate) → interpretation claim IDs
+	interpretationEdges map[string]*Edge
+	interpretationOrder []string
+
+	// Phase 4F retains authored multidimensional predictions and every comparison
+	// separately from the scalar Edge projection. These maps survive episodes with
+	// the rest of ExpressionGraph memory.
+	predictionFields map[PredictionID]PredictionField
+	comparisons      map[PredictionID][]ComparisonField
 }
 
 type betRef struct {
@@ -113,12 +143,178 @@ type betRef struct {
 
 func NewExpressionGraph() *ExpressionGraph {
 	return &ExpressionGraph{
-		exprs: map[string]*Expression{},
-		edges: map[string]*Edge{},
-		index: map[string][]string{},
-		bets:  map[string][]betRef{},
-		spans: map[SpanID][]string{},
+		exprs:                 map[string]*Expression{},
+		edges:                 map[string]*Edge{},
+		index:                 map[string][]string{},
+		bets:                  map[string][]betRef{},
+		spans:                 map[SpanID][]string{},
+		settlementSpans:       map[string]map[Truth]map[SpanID]struct{}{},
+		settlementSourceSpans: map[string]map[Truth]map[SpanID]struct{}{},
+		interpretations:       map[string]*InterpretationClaim{},
+		interpretationBets:    map[string][]string{},
+		interpretationEdges:   map[string]*Edge{},
+		predictionFields:      map[PredictionID]PredictionField{},
+		comparisons:           map[PredictionID][]ComparisonField{},
 	}
+}
+
+func (g *ExpressionGraph) PlacePredictionField(field PredictionField) {
+	if g == nil || field.ID == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.predictionFields == nil {
+		g.predictionFields = map[PredictionID]PredictionField{}
+	}
+	if _, exists := g.predictionFields[field.ID]; exists {
+		return
+	}
+	g.predictionFields[field.ID] = clonePredictionField(field)
+}
+
+func (g *ExpressionGraph) PredictionField(id PredictionID) (*PredictionField, bool) {
+	if g == nil || id == "" {
+		return nil, false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	field, ok := g.predictionFields[id]
+	if !ok {
+		return nil, false
+	}
+	clone := clonePredictionField(field)
+	return &clone, true
+}
+
+func (g *ExpressionGraph) RecordComparison(field ComparisonField) {
+	if g == nil || field.PredictionID == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.comparisons == nil {
+		g.comparisons = map[PredictionID][]ComparisonField{}
+	}
+	g.comparisons[field.PredictionID] = append(g.comparisons[field.PredictionID], cloneComparisonField(field))
+}
+
+func (g *ExpressionGraph) Comparisons(id PredictionID) []ComparisonField {
+	if g == nil || id == "" {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	stored := g.comparisons[id]
+	out := make([]ComparisonField, len(stored))
+	for i := range stored {
+		out[i] = cloneComparisonField(stored[i])
+	}
+	return out
+}
+
+// Consequence resolves an audited reference to one existing action prediction.
+func (g *ExpressionGraph) Consequence(ref ConsequenceRef) (*Expression, *Expect, bool) {
+	if g == nil || ref.ExpressionID == "" || ref.ExpectIndex < 0 {
+		return nil, nil, false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	e := g.exprs[ref.ExpressionID]
+	if e == nil || ref.ExpectIndex >= len(e.Expects) {
+		return nil, nil, false
+	}
+	return e, &e.Expects[ref.ExpectIndex], true
+}
+
+// PlaceInterpretation installs one falsifiable abductive claim and its wholly
+// separate learned history. Admission validation and arming happen on Being.
+func (g *ExpressionGraph) PlaceInterpretation(id string, claim *InterpretationClaim) {
+	if g == nil || id == "" || claim == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	claim.ID = id
+	if claim.Context.PredictionID == "" {
+		claim.Context.PredictionID = PredictionID(id + "/context")
+	}
+	if claim.Context.DimensionID == "" {
+		claim.Context.DimensionID = "exact"
+	}
+	g.interpretations[id] = claim
+	g.interpretationOrder = append(g.interpretationOrder, id)
+	g.interpretationBets[sp(claim.Context.Triple)] = append(g.interpretationBets[sp(claim.Context.Triple)], id)
+	key := interpretationEdgeKey(claim.Category, claim.Context.Key())
+	if g.interpretationEdges[key] == nil {
+		g.interpretationEdges[key] = &Edge{Source: []string{claim.Category}, Target: claim.Context.Key()}
+	}
+	if g.predictionFields == nil {
+		g.predictionFields = map[PredictionID]PredictionField{}
+	}
+	if _, exists := g.predictionFields[claim.Context.PredictionID]; !exists {
+		g.predictionFields[claim.Context.PredictionID] = exactPredictionField(
+			claim.Context.PredictionID, claim.Context.DimensionID, claim.EpisodeID, claim.SpanID,
+			"interpretation", id, claim.ArmedAfter, claim.Context.Triple)
+	}
+}
+
+func (g *ExpressionGraph) InterpretationBetsAt(t Triple) []*InterpretationClaim {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	ids := g.interpretationBets[sp(t)]
+	out := make([]*InterpretationClaim, 0, len(ids))
+	for _, id := range ids {
+		if claim := g.interpretations[id]; claim != nil {
+			out = append(out, claim)
+		}
+	}
+	return out
+}
+
+func (g *ExpressionGraph) Interpretation(id string) *InterpretationClaim {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.interpretations[id]
+}
+
+func (g *ExpressionGraph) InterpretationEdge(id string) *Edge {
+	if g == nil {
+		return &Edge{}
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	claim := g.interpretations[id]
+	if claim == nil {
+		return &Edge{}
+	}
+	key := interpretationEdgeKey(claim.Category, claim.Context.Key())
+	if g.interpretationEdges[key] == nil {
+		g.interpretationEdges[key] = &Edge{Source: []string{claim.Category}, Target: claim.Context.Key()}
+	}
+	return g.interpretationEdges[key]
+}
+
+func (g *ExpressionGraph) OpenInterpretations() []*InterpretationClaim {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]*InterpretationClaim, 0, len(g.interpretationOrder))
+	for _, id := range g.interpretationOrder {
+		claim := g.interpretations[id]
+		if claim != nil && claim.Context.Resolution == TruthUnknown {
+			out = append(out, claim)
+		}
+	}
+	return out
 }
 
 // Place inserts an emission and wires its edges + posting lists. This is the placer worker: no
@@ -135,8 +331,35 @@ func (g *ExpressionGraph) Place(id string, e *Expression) {
 	g.spans[e.SpanID] = append(g.spans[e.SpanID], id)
 
 	am := actMap(e)
+	attributions := map[PredictionID][]EvidenceAttribution{}
+	for _, attribution := range e.PredictionAttributions {
+		attributions[attribution.PredictionID] = append(attributions[attribution.PredictionID], attribution)
+	}
+	seenPredictionIDs := map[PredictionID]bool{}
 	for i := range e.Expects {
 		x := &e.Expects[i]
+		if x.PredictionID == "" {
+			x.PredictionID = PredictionID(fmt.Sprintf("%s/expect:%d", id, i))
+		} else if !strings.HasPrefix(string(x.PredictionID), id+"/") {
+			x.PredictionID = PredictionID(id + "/" + string(x.PredictionID))
+		}
+		if seenPredictionIDs[x.PredictionID] {
+			x.PredictionID = PredictionID(fmt.Sprintf("%s#%d", x.PredictionID, i))
+		}
+		seenPredictionIDs[x.PredictionID] = true
+		if x.DimensionID == "" {
+			x.DimensionID = "exact"
+		}
+		if g.predictionFields == nil {
+			g.predictionFields = map[PredictionID]PredictionField{}
+		}
+		if _, exists := g.predictionFields[x.PredictionID]; !exists {
+			field := exactPredictionField(
+				x.PredictionID, x.DimensionID, e.EpisodeID, e.SpanID,
+				"consequence", id, e.PredictionAuthoredAfter, x.Triple)
+			field.Attributions = append([]EvidenceAttribution(nil), attributions[x.PredictionID]...)
+			g.predictionFields[x.PredictionID] = field
+		}
 		key := x.Key()
 
 		// reverse index: "how have I made this true before?"
@@ -202,6 +425,84 @@ func (g *ExpressionGraph) Edge(exprID string, x Expect) *Edge {
 		g.edges[ek] = &Edge{Source: x.Of, Target: x.Key()}
 	}
 	return g.edges[ek]
+}
+
+// RecordSettlement retains where one reusable edge was actually adjudicated, separated by
+// outcome. Co-occurrence reads TruthTrue spans only: a false trial says that the edge came due,
+// not that its target completion occurred.
+func (g *ExpressionGraph) RecordSettlement(exprID string, x Expect, outcome Truth, span SpanID) {
+	if outcome == TruthUnknown || span == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	e := g.exprs[exprID]
+	if e == nil {
+		return
+	}
+	ek := edgeKey(actMap(e), x.Of, x.Key())
+	if g.settlementSpans[ek] == nil {
+		g.settlementSpans[ek] = map[Truth]map[SpanID]struct{}{}
+	}
+	if g.settlementSpans[ek][outcome] == nil {
+		g.settlementSpans[ek][outcome] = map[SpanID]struct{}{}
+	}
+	g.settlementSpans[ek][outcome][span] = struct{}{}
+	if e.SpanID != "" {
+		if g.settlementSourceSpans == nil {
+			g.settlementSourceSpans = map[string]map[Truth]map[SpanID]struct{}{}
+		}
+		if g.settlementSourceSpans[ek] == nil {
+			g.settlementSourceSpans[ek] = map[Truth]map[SpanID]struct{}{}
+		}
+		if g.settlementSourceSpans[ek][outcome] == nil {
+			g.settlementSourceSpans[ek][outcome] = map[SpanID]struct{}{}
+		}
+		g.settlementSourceSpans[ek][outcome][e.SpanID] = struct{}{}
+	}
+}
+
+// SettlementInSpan is the O(1) resolving-provenance membership form. Phase 1
+// co-occurrence and audits may ask where an outcome arrived; density feature
+// extraction deliberately uses SettlementSourceInSpan instead.
+func (g *ExpressionGraph) SettlementInSpan(edgeKey string, outcome Truth, span SpanID) bool {
+	if g == nil || edgeKey == "" || outcome == TruthUnknown || span == "" {
+		return false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, ok := g.settlementSpans[edgeKey][outcome][span]
+	return ok
+}
+
+// SettlementSourceInSpan answers whether a prediction born from this span later
+// settled with the requested outcome. Density features must come from this
+// prediction-time side, never from the resolving span that may contain effects.
+func (g *ExpressionGraph) SettlementSourceInSpan(edgeKey string, outcome Truth, span SpanID) bool {
+	if g == nil || edgeKey == "" || outcome == TruthUnknown || span == "" {
+		return false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, ok := g.settlementSourceSpans[edgeKey][outcome][span]
+	return ok
+}
+
+// SettlementSpans returns a deterministic copy of the spans that settled one edge with the
+// requested polarity.
+func (g *ExpressionGraph) SettlementSpans(ek string, outcome Truth) []SpanID {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	set := g.settlementSpans[ek][outcome]
+	out := make([]SpanID, 0, len(set))
+	for span := range set {
+		out = append(out, span)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 // Precedent answers the reverse-index query: which prior expressions produced this world state?
@@ -301,6 +602,12 @@ type OpenBet struct {
 // That accumulates across every run that ever writes that file, which is exactly what an edge is
 // for: "given this expression, does this world state come back?"
 func edgeKey(acts map[string]Act, of []string, target string) string {
+	return edgeSourceKey(acts, of) + "\x00" + target
+}
+
+// edgeSourceKey is the reusable identity of the responsible act set, without a consequence
+// target. Interpretation grouping uses it to compare alternative completions of the same slot.
+func edgeSourceKey(acts map[string]Act, of []string) string {
 	sigs := make([]string, 0, len(of))
 	for _, id := range of {
 		a, ok := acts[id]
@@ -308,10 +615,17 @@ func edgeKey(acts map[string]Act, of []string, target string) string {
 			sigs = append(sigs, "?"+id) // an expect attributed to an act that is not here
 			continue
 		}
-		sigs = append(sigs, a.Primitive+"→"+a.Target)
+		requires := make([]string, len(a.Requires))
+		for i, requirement := range a.Requires {
+			requires[i] = requirement.Key()
+		}
+		sort.Strings(requires)
+		payload := sha256.Sum256([]byte(a.Payload))
+		sigs = append(sigs, fmt.Sprintf("%s→%s\x1fpayload:%x\x1frequires:%s",
+			a.Primitive, a.Target, payload, strings.Join(requires, "\x1e")))
 	}
 	sort.Strings(sigs)
-	return strings.Join(sigs, "+") + "\x00" + target
+	return strings.Join(sigs, "+")
 }
 
 // actMap indexes an expression's acts by ID, for edgeKey.

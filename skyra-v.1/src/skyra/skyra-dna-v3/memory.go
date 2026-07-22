@@ -40,8 +40,11 @@ func expressionMemoryText(e *Expression) string {
 			a.ID, a.Target, a.Primitive, truncate(a.Payload, 200))
 	}
 	for _, x := range e.Expects {
-		fmt.Fprintf(&s, "<expect> %.2f %d %s %s %s </expect>\n",
-			x.Confidence, x.Within, x.Subject, x.Predicate, x.Object)
+		fmt.Fprintf(&s, "<expect id=%q> %.2f %d %s %s %s </expect>\n",
+			x.PredictionID, x.Confidence, x.Within, x.Subject, x.Predicate, x.Object)
+	}
+	for _, attribution := range e.PredictionAttributions {
+		fmt.Fprintf(&s, "<evidence>%s</evidence>\n", formatEvidenceAttribution(attribution))
 	}
 	return strings.TrimSpace(s.String())
 }
@@ -220,7 +223,11 @@ func (b *Being) activeMemoryNodes(query []Triple) []MemoryNode {
 				kind = "mark"
 				label = "mark"
 			}
-			text := fmt.Sprintf("%s [%s] %s", label, o.SpanID, observationMemoryText(o))
+			// Preserve the legacy contiguous triple text for existing consumers while
+			// exposing the stable observation ID and an explicit quoted object surface
+			// for Phase-4F character-range attribution.
+			text := fmt.Sprintf("%s [observation=%s span=%s] %s [object-text=%q]",
+				label, o.ID, o.SpanID, observationMemoryText(o), o.Object)
 			nodes[string(o.ID)] = MemoryNode{
 				ID:         string(o.ID),
 				Kind:       kind,

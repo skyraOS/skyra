@@ -1,6 +1,6 @@
 # The Working Set
 
-**Updated:** 2026-07-20 (episode-as-region decided; paper tests #1–#2 run)
+**Updated:** 2026-07-21 (interpretation/prediction boundary recorded; next toy pinned)
 
 The curated list of load-bearing docs — what you need to work on the system
 *today*. Everything else in the tree is either design source (kept live because
@@ -90,6 +90,193 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
 | Safety | [design-docs/immune-system/](design-docs/immune-system/) |
 
 ## 7. The next designs and remaining gaps
+
+**SPINE — episodes over the field** —
+   [specs/2026-07-21/episodes-over-the-field.md](specs/2026-07-21/episodes-over-the-field.md):
+   the organizing frame for the interpretation layer. An episode is not a class computed
+   beside the field — it is an **owned heated region of the activation field**, and the
+   criterion that defines it **is the field** (membership = co-heating). One machine:
+   **combination** merges co-heating spans/criteria (`Edge.Source ∧`), **differentiation**
+   splits at emergent **density pockets** (bottom-up; a predicate only *names* the pocket
+   after the fact; a pocket is an MDL code), and **abstraction is free** (resolution on
+   continuous density). **Belonging must not blur into ambiguity:** balanced heat alone is
+   not ambiguity (it is also "both wanted"); the discriminator is **co-occurrence** —
+   `same source ∧ empty co-occurrence intersection ∧ no dominant heat` = pending choice,
+   which is `JointPrecedent` reborn on the live path. **Landed 2026-07-21:** the live path
+   now retains polarity-separated, source-conditioned settlement spans and derives structured
+   branches instead of flattening completions. **Cold rides the LLM** (clarify-or-not bottoms out in expression +
+   prediction — a curve to ride, not fight) while the label preserves the counted material
+   so the region **graduates** to a counted signal that fades in as `f(density/span/episode)`;
+   resolvable ambiguity narrows to a valley, irreducible ambiguity **calcifies as a
+   well-counted coin flip** (never deleted). Scales because episodes live on the active
+   region (`O(active)`, transient, rebuildable) — reconciling episodes-back with the
+   flat continuous path. Re-hangs the seven 07-21 docs as facets of one machine; the two
+   load-bearing unknowns (criterion vocabulary, valley-depth threshold) are named and
+   localized. **First build step: revive joint-precedent on the live path** (group
+   `deriveActivatedTarget` by source, raise the three-condition signal); Toy #5 is its
+   regression test, and [Toy #6 — ambiguity-signal discrimination](specs/2026-07-21/ambiguity-signal-discrimination.md)
+   **paper-walked and PASSED** the signal itself: it fires on ambiguity and stays silent
+   on all three belonging shapes (conjunction, confident, cross-source context), with each
+   foil defeated by a *distinct* necessary condition — proving all three clauses
+   load-bearing. **Re-run (v2)** with co-occurrence as a **Jaccard rate** vs a threshold
+   `ConjunctionOverlap` (not a boolean): strictly better — additionally fires on a real fork
+   that shared one accidental co-occurrence (which the boolean silenced), without leaking
+   any belonging case, and exposes the middle band as a tunable config field (its own
+   number — see the `DifferentiationConfig` note below, not a shared scalar). Supersedes
+   the *framing* of
+   [episode-as-region](specs/2026-07-20/episode-as-region.md).
+   **Build plan:** [interpretation-implementation-phases](specs/2026-07-21/interpretation-implementation-phases.md)
+   — dependency-ordered phases, each gated by a paper test. **Phases 1–4 have landed code,
+   but Phase 3 now has only a validated geometry prototype; trusted predicate promotion
+   remains blocked and pocket matches are mechanically provisional. Phase 4F's minimum
+   field/parser slice has landed, with richer rails still required before Phase 5.**
+   [Toy #7 — the graduation handoff](specs/2026-07-21/toy-7-graduation-handoff.md)
+   separates topology from maturity, uses conservative effective edge trials with the
+   existing `N/(N+5)` saturation, and routes cold/confident/ambiguous/unresolved state into
+   the existing inference context without another model call.
+   [Toy #8 — density opens the valley before the predicate names it](specs/2026-07-21/toy-8-density-pocket-differentiation.md)
+   partially gates Phase 3: active positive-settlement spans form raw feature vectors; conservative
+   within-vs-between Jaccard geometry and recurrence earn the valley before region-relative
+   diagnosticity fits an exact raw name, while equal-distribution ambiguity never splits.
+   Its unique-match-to-commit path is implemented but no longer treated as trusted.
+   [Toy #9 — one impulse, two addresses, two independent updates](specs/2026-07-21/toy-9-two-address-claim-paths.md)
+   gates Phase 4: admitted `InterpretationClaim`s own a category-context prediction,
+   raw abductive provenance, and an audited consequence reference. Consequence and
+   interpretation histories are independently indexed and metered while reusing the same
+   `Edge{P,N}` math, so a traversal hit and a Skyra-context miss cannot corrupt each other.
+   [Toy #9F — span-owned prediction fields preserve the measurement](specs/2026-07-21/toy-9f-span-owned-prediction-fields.md)
+   corrects the temporary exact-triple/Boolean representation before differential
+   abduction: the LLM selects a supplied parser and emits typed prediction arguments; the
+   frozen impulse is parsed into the same dimensions; and the durable comparison retains
+   predicted values, actual measurements, residuals, calibration, provenance, and
+   settled/void/unknown metadata. The LLM may also point signed Unicode character ranges
+   from prior observation IDs into stable prediction-dimension IDs, recording claimed
+   influence without treating it as earned credit. Birth evidence stays separate from
+   later settlement evidence. Scalar grades are projections, not the stored object.
+   **Minimum implementation landed 2026-07-21:** exact-address, token-count, and marker
+   parsers; stable consequence/interpretation prediction IDs; durable comparisons before
+   Bernoulli projection; live `<evidence>` parsing; Unicode range/future-reference checks;
+   and separate birth/settlement histories. Structure, regex, semantic similarity,
+   base-rate population, void propagation, and residual learning remain open.
+   **Phase 1
+   (differentiation-state on the derived target) LANDED 2026-07-21 after paper validation
+   by Toys #5+#6+#6B:** group `deriveActivatedTarget` by the `edgeKey` source prefix,
+   add a pure `classifySource` that **partitions each source's completions into branches**
+   (NOT a flat confident/conjunction/ambiguous enum — Toy #6B showed a source can be
+   conjunctive *within* a branch and ambiguous *between* branches at once, and the enum
+   rules overlap for 3+ completions); conjunction/ambiguous become orthogonal derived
+   readings and dominance is evaluated at the **branch** level. Return a structured
+   `TargetGroup{Branches, Unresolved, State}` in **deterministic canonical order that carries
+   no winner semantics** (not literally "unordered"), and expose a `DifferentiationConfig`.
+   Settled sub-decisions (per [toy-6b](specs/2026-07-21/toy-6b-branch-partition.md)):
+   partition by **connected-components + clique test** (a bridge component is left
+   whole-`Unresolved` — NOT complete-linkage greedy, which is order-dependent
+   and breaks the ID-swap invariant); branch heat **`max`, never sum/avg**; **`Unresolved`
+   VETOES confidence** (a dominant clean branch beside an unresolved lump reads UNRESOLVED,
+   never commit); `conjunction` is **branch-local** (any emitted branch >1 completion), while
+   confidence/ambiguity are source-level. **Two blocking correctness points:** co-occurrence
+   must be **source-conditioned AND polarity-separated** — a
+   `settlementSpans[SIG\x00target][Truth]` index using **`TruthTrue` spans only** (because
+   `grade()` settles an `A`-prediction *false* where `B` occurs, so an outcome-blind index
+   makes every fork look like a conjunction; and full-`edgeKey` keying keeps an unrelated
+   source from contaminating the intersection). Cross-source contamination, polarity, and the
+   unresolved-veto are executable 1a fixtures. Missing positive-span provenance routes
+   UNRESOLVED rather than treating absent index history as evidence of separation.
+   **Phase 1b return contract:**
+   `Novel = no measured candidate groups at all` (NOT "nothing committed" — ambiguous/
+   unresolved is known-but-undecided, not novel); legacy `Target []Triple` gets a defined
+   projection only when every source group is confident; otherwise it is nil, never a
+   silent partial re-flatten to conjunction. Full-repository and v3 race suites pass.
+   Phase 4F names Toy #9F as the immediate gate. Phase 5 (differential abduction) remains
+   behind it and names Toy #10 as its own gate.
+   The four separation thresholds (co-occurrence overlap, dominance margin, split valley
+   depth, promotion evidence) are **independent named fields** in `DifferentiationConfig`,
+   NOT one fused `θ` — they are statistically different quantities (promotion is a count,
+   not a `[0,1]` fraction) and fusing would let unrelated tests tune each other; share the
+   principle, not the scalar, and unify only if evidence shows a shared latent.
+
+**CURRENT CORRECTIVE AUDIT — Phase 3 geometry is not yet trusted interpretation** —
+   [specs/2026-07-21/phase-3-audit-geometry-is-not-trusted-interpretation.md](specs/2026-07-21/phase-3-audit-geometry-is-not-trusted-interpretation.md):
+   preserves density-before-naming geometry while blocking operational pocket commits.
+   Candidate selection still needs disjoint labeled evaluation and sparse support, and
+   episode replacement still lacks durable interpretation recall. Two audit corrections
+   have landed: density now samples prediction-time source spans rather than resolving
+   effects, and source identity includes payload digest plus sorted guards. Restoration of
+   commit authority still requires promotion evidence and a durable learned-code path.
+
+**REFLECTIVE NOTE — phase as relational alignment** —
+   [specs/2026-07-21/phase-as-relational-alignment.md](specs/2026-07-21/phase-as-relational-alignment.md):
+   the phase metaphor keeps resurfacing through mechanism rather than import.
+   Same-claim fusion currently supplies redundancy cancellation, but Skyra has no
+   earned contradiction-cancellation primitive or true nodes. The note argues that
+   partial redundancy is a useful continuum while contradiction remains a distinct
+   address-bound compatibility relation; a common signed geometry would need to prove
+   it preserves falsification, polarity, calibration, and provenance.
+
+**CURRENT COMPOSITION — scale, structure, content** —
+   [specs/2026-07-21/scale-structure-content.md](specs/2026-07-21/scale-structure-content.md):
+   every tool becomes base-rate-relative surprise; sensors measuring one claim fuse,
+   while distinct claims sum. Token range sets an observation budget, structure spends
+   it into slots, and content fills those slots with falsifiable predicates. Only
+   settled predicates enter a scalar grade: lower-tier predicates owned by an
+   unmaterialized scale or slot are void, not failed. The durable result is instead a
+   multidimensional comparison field retaining predicted and actual values, residuals,
+   calibration, ownership, and evidence. Token-count predictions stay ranges while actual
+   counts and residuals are preserved; autonomous same-claim detection remains open.
+
+**CURRENT MECHANISM — predicate diagnosticity** —
+   [specs/2026-07-21/predicate-diagnosticity.md](specs/2026-07-21/predicate-diagnosticity.md):
+   consequences are frozen boolean predicates learned rather than hand-written.
+   Candidate predicates may use regexes, marker sets, embeddings, or other tools;
+   runtime grading remains deterministic and LLM-free. Held-out coverage multiplied
+   by log diagnosticity selects the useful middle: exact predicates lose through low
+   coverage, broad predicates lose through high base-rate firing. Cold start and
+   finite-window search bias remain open.
+
+**CURRENT CORRECTION — the two-bit outcome** —
+   [specs/2026-07-21/the-two-bit-outcome.md](specs/2026-07-21/the-two-bit-outcome.md):
+   the Michael/traversal example separates a lucky hit from a clean hit. Traversal
+   can confirm the action prediction while `for school` falsifies the Skyra-context
+   interpretation. Therefore action success cannot grade resemblance: interpretation
+   must license its own category-discriminating context prediction, with a distinct
+   settlement address and update. Toy #9 implements two independently falsifiable typed
+   claim paths over one shared edge-learning primitive.
+
+**CURRENT RESEARCH NOTE — two-axis inference** —
+   [specs/2026-07-21/two-axis-inference.md](specs/2026-07-21/two-axis-inference.md):
+   interpretation has no direct falsification address. Model it as a resemblance edge
+   whose confidence is derived from the world settlement of the distinct consequence
+   edges it licensed. Abduction proposes, deduction exports a checkable consequence,
+   and induction carries credit back. Unifies novel LLM proposals and learned-code
+   promotion; leaves abductive search and differential failure attribution explicitly
+   open. The immediate test is whether v3 can keep resemblance and consequence
+   histories independent and update them differently from one outcome.
+
+**ARCHITECTURAL BOUNDARY — interpretation is not deterministic prediction** —
+   [specs/2026-07-21/interpretation-prediction-induction-boundary.md](specs/2026-07-21/interpretation-prediction-induction-boundary.md):
+   abduction proposes `P`; deduction derives the consequence `Q` conditional on `P`;
+   an eligible blind world observation settles `Q` or `not-Q`; only then does
+   induction revise confidence in `P`. Candidate-specific predictions may be exact
+   while the interpretation remains plural. Prediction and retrieval cannot confirm
+   their own premise. This is the governing learning boundary for interpretation.
+
+**TOY TEST #5 — RUN — genuinely balanced ambiguity with no dominant signal** —
+   spec [specs/2026-07-21/genuinely-balanced-ambiguity.md](specs/2026-07-21/genuinely-balanced-ambiguity.md);
+   result [specs/2026-07-21/balanced-ambiguity-run.md](specs/2026-07-21/balanced-ambiguity-run.md).
+   Walked against the **live** continuous-replacement path (`ObserveImpulse` →
+   activation → `deriveActivatedTarget`), not the retired class-wave. **PASS by
+   construction** on the two fatal invariants: the substrate does not appoint a winner
+   (returns the whole equal-heat set, no argmax) and heat can never become evidence
+   (`Edge.P/N` move only in `Edge.Observe` from resolved observations; the activation
+   field carries no truth statistic). Also holds: raw evidence later breaks the
+   symmetry and is named, interpreted grade stays fidelity-capped, the blind pass sees
+   no target. **The gap it scopes:** the live path returns a flat `[]Triple` target
+   that conflates a *conjunction* of co-targets with a *superposition* of mutually
+   exclusive readings — the class-wave's `Root.Candidates` exclusivity was flattened
+   away, so a pending A-XOR-B choice is unrepresentable, there is no residual /
+   fixed-point / clarify-or-wait rail, and an ID-order tie-break is readable as
+   preference by framing. **This is the gate in front of the interpretation phases and
+   it is now walked** — it does not block Phase B, it scopes it (see below).
 
 0. **Span-owned predictions and activation** —
    [specs/2026-07-20/span-owned-predictions-and-activation.md](specs/2026-07-20/span-owned-predictions-and-activation.md):

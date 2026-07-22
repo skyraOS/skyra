@@ -25,6 +25,10 @@ type Being struct {
 	// Obs/Expr; this field decides which region is rendered now.
 	Activation *ActivationField
 
+	// Interpretation is the current span's counted handoff to the existing inference
+	// call. It is transient: ObserveImpulse replaces it and NewEpisode clears it.
+	Interpretation InterpretationHandoff
+
 	// CountTokens stamps every durable memory node and every concrete rendered node.
 	// Providers may replace the deterministic default with their own tokenizer.
 	CountTokens TokenCounter
@@ -44,13 +48,14 @@ type Being struct {
 
 	tick int
 
-	episodeNumber   int
-	observationSeq  int
-	expressionSeq   int
-	spanSeq         int
-	episodeID       EpisodeID
-	currentSpan     SpanID
-	currentBornFrom []ObservationID
+	episodeNumber     int
+	observationSeq    int
+	expressionSeq     int
+	interpretationSeq int
+	spanSeq           int
+	episodeID         EpisodeID
+	currentSpan       SpanID
+	currentBornFrom   []ObservationID
 
 	Metrics Metrics
 }
@@ -64,6 +69,12 @@ type Metrics struct {
 	Correct         int
 	GradeSum        float64 // Σ (log p_claim − log p̂_edge). THE MODEL'S EDGE OVER THE BASE RATE.
 	Rejects         int
+
+	// Interpretation outcomes remain a separate axis. Folding these into the
+	// consequence counters would recreate the lucky-hit corruption in reporting.
+	InterpretationResolved int
+	InterpretationCorrect  int
+	InterpretationGradeSum float64
 }
 
 func NewBeing(w Realm, infer func(string, string) (string, error)) *Being {
@@ -109,9 +120,11 @@ func (b *Being) startEpisode() {
 	b.episodeNumber++
 	b.episodeID = EpisodeID(fmt.Sprintf("episode:%d", b.episodeNumber))
 	b.observationSeq = 0
+	b.interpretationSeq = 0
 	b.spanSeq = 0
 	b.currentSpan = ""
 	b.currentBornFrom = nil
+	b.Interpretation = InterpretationHandoff{}
 }
 
 // startExternalSpan begins one occurrence with an identity independent of derived
@@ -140,6 +153,7 @@ func (b *Being) appendObservation(t Triple, p Provenance, confidence float64, de
 		ID:          ObservationID(fmt.Sprintf("%s/observation:%d", b.episodeID, b.observationSeq)),
 		EpisodeID:   b.episodeID,
 		SpanID:      span,
+		Sequence:    b.observationSeq,
 		Triple:      t,
 		Provenance:  p,
 		Confidence:  confidence,
@@ -181,8 +195,8 @@ func (b *Being) observeInSpan(t Triple, p Provenance, span SpanID) Observation {
 // grade is the GRADER. It is arithmetic on the observation write path — not a worker, not a model,
 // not a judgment. It folds one resolved bet into the edge's EMA.
 //
-// The model cannot touch this path at all. Interpretation already happened, at OBSERVATION time,
-// in the decomposer (LAW 4). By the time a bet is settled the comparison is a plain exact match.
+// The model cannot touch this path at all. Any payload interpretation happened before placement;
+// by settlement time both consequence and interpretation-context checks are plain comparisons.
 func (b *Being) grade(o Observation) {
 	if o.Fidelity() == 0 {
 		return // a MARK. self-authored. may never grade anything about the world (LAW 7).
@@ -216,9 +230,9 @@ func (b *Being) grade(o Observation) {
 			continue
 		}
 
-		truth := TruthFalse
-		if o.Object == x.Object {
-			truth = TruthTrue
+		truth := b.compareExactExpectation(x, o)
+		if truth == TruthUnknown {
+			continue
 		}
 
 		edge := b.Expr.Edge(bet.Expr.ID, *x)
@@ -228,6 +242,7 @@ func (b *Being) grade(o Observation) {
 		}
 		g := edge.Grade(x.Confidence, truth, mode) // log p_claim − log p̂_edge, BEFORE the update
 		edge.Observe(truth, b.tick)                // then fold the outcome in
+		b.Expr.RecordSettlement(bet.Expr.ID, *x, truth, o.SpanID)
 
 		x.Resolution = truth
 		x.ResolvedBy = append(x.ResolvedBy, obsID(o))
@@ -239,6 +254,45 @@ func (b *Being) grade(o Observation) {
 		b.Metrics.GradeSum += g
 		if truth == TruthTrue {
 			b.Metrics.Correct++
+		}
+	}
+	b.gradeInterpretations(o)
+}
+
+// gradeInterpretations is deliberately separate from consequence grading. It is
+// indexed by the interpretation's own context address and updates only the typed
+// interpretation history; action success never enters this function as backward credit.
+func (b *Being) gradeInterpretations(o Observation) {
+	for _, claim := range b.Expr.InterpretationBetsAt(o.Triple) {
+		x := &claim.Context
+		if x.Resolution != TruthUnknown || !x.Armed || claim.EpisodeID != o.EpisodeID {
+			continue
+		}
+		if o.Sequence <= claim.ArmedAfter || o.At < x.ArmedAt {
+			continue // prediction must exist before the settling append
+		}
+		if contains(x.ResolvedBy, obsID(o)) {
+			continue
+		}
+
+		truth := b.compareExactExpectation(x, o)
+		if truth == TruthUnknown {
+			continue
+		}
+		edge := b.Expr.InterpretationEdge(claim.ID)
+		mode := x.Mode
+		if o.Fidelity() < mode.Weight() {
+			mode = ModeInterpret
+		}
+		claim.Score = edge.Grade(x.Confidence, truth, mode)
+		edge.Observe(truth, b.tick)
+		x.Resolution = truth
+		x.ResolvedBy = append(x.ResolvedBy, obsID(o))
+
+		b.Metrics.InterpretationResolved++
+		b.Metrics.InterpretationGradeSum += claim.Score
+		if truth == TruthTrue {
+			b.Metrics.InterpretationCorrect++
 		}
 	}
 }
@@ -261,6 +315,15 @@ func (b *Being) Settle() {
 		out := b.World.Perceive(bet.Expect.Triple)
 		for _, t := range out.Effects {
 			b.observeInSpan(t, ProvenanceRaw, bet.Expr.SpanID)
+		}
+	}
+	for _, claim := range b.Expr.OpenInterpretations() {
+		if claim.EpisodeID != b.episodeID || !claim.Context.Matured(b.tick) {
+			continue
+		}
+		out := b.World.Perceive(claim.Context.Triple)
+		for _, t := range out.Effects {
+			b.observeInSpan(t, ProvenanceRaw, claim.SpanID)
 		}
 	}
 }
@@ -398,13 +461,17 @@ func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, b
 		e.EpisodeID = b.episodeID
 		e.SpanID = b.ensureSpan()
 		e.BornFrom = append([]ObservationID(nil), b.currentBornFrom...)
+		expressionID := fmt.Sprintf("e%d", b.expressionSeq)
+		attributionRejects := b.prepareExpressionPredictionFields(expressionID, &e)
+		b.Metrics.Rejects += len(attributionRejects)
+		c.Rejects = append(c.Rejects, attributionRejects...)
 		b.Aff.Stamp(&e) // THE WORLD says what is measurable, not the model.
 		counter := b.CountTokens
 		if counter == nil {
 			counter = ApproxTokenCount
 		}
 		e.TokenCount = counter(expressionMemoryText(&e))
-		b.Expr.Place(fmt.Sprintf("e%d", b.expressionSeq), &e)
+		b.Expr.Place(expressionID, &e)
 		if b.Activation != nil {
 			b.Activation.BumpNode("expression:"+e.ID, 1)
 			b.Activation.BumpSpan(e.SpanID, 1)

@@ -21,18 +21,19 @@ type ObservationID string
 // output crosses into the observation graph — and therefore the one place that still needs its own
 // grounding.
 //
-// # The feedback loop is TABLED, but the marking is not
+// # The feedback loop now has an admitted claim path
 //
-// Eventually an interpreted triple is a CLAIM, so it is an Edge with a P like everything else —
-// P(interpretation correct | this kind of impulse) — graded by later contradiction (bring the
-// water; he says "no, I meant the report"). That is not built.
+// A decomposed interpreted triple is still only a marked reading. Phase 4 adds the path by which
+// one becomes learnable: ProposeInterpretation admits a separate InterpretationClaim only when it
+// owns a pre-observation context prediction, raw DerivedFrom evidence, and an audited link to the
+// consequence it licensed. Later world settlement updates its typed interpretation history.
 //
-// What IS required now, because it is cheap today and impossible to retrofit:
+// The observation-side requirements remain:
 //
 //  1. mark every triple raw or interpreted. if they are indistinguishable in the graph, the
 //     feedback loop can NEVER be added — you will not know which claims were yours.
 //  2. interpreted triples carry a confidence and a DerivedFrom pointer to the raw evidence.
-//     THAT POINTER IS THE EDGE you will eventually grade.
+//     The admitted claim path validates this pointer before learning.
 //  3. an interpreted triple never gets exact fidelity. It resolves an expect at ~0.3, the same as
 //     an interpret-mode claim — because that is what it is. Letting an inference settle a bet at
 //     1.0 is precisely the failure this architecture exists to prevent.
@@ -43,6 +44,7 @@ type Observation struct {
 	ID         ObservationID
 	EpisodeID  EpisodeID
 	SpanID     SpanID
+	Sequence   int // strict append order inside the episode; unlike Tick, unique within an impulse
 	TokenCount int
 
 	Triple
@@ -56,7 +58,8 @@ type Observation struct {
 	Confidence float64
 
 	// DerivedFrom names the raw observations this interpretation was read out of. Empty for a
-	// raw triple. This is the edge that the (tabled) decomposer feedback loop will grade.
+	// raw triple. An Observation is not graded merely for carrying it; ProposeInterpretation
+	// validates the provenance and opens a separately falsifiable claim.
 	DerivedFrom []string
 
 	// At is the tick this landed.

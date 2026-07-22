@@ -21,6 +21,7 @@ func (b *Being) present(target, holes []Triple) string {
 	for _, t := range target {
 		fmt.Fprintf(&s, "  %s %s %s\n", t.Subject, t.Predicate, t.Object)
 	}
+	b.presentInterpretation(&s)
 
 	if len(holes) > 0 {
 		s.WriteString("\nUNGROUNDED REQUIRES — nothing in the plan produces these. THIS IS YOUR TASK:\n")
@@ -58,6 +59,68 @@ func (b *Being) present(target, holes []Triple) string {
 	}
 
 	return s.String()
+}
+
+// presentInterpretation is the Phase-2 express seam. It spends no inference call:
+// counted interpretation is framed inside the same current-span context the planner
+// already receives. Heat ranks activation only; it is shown for topology inspection,
+// never promoted into evidence or winner semantics.
+func (b *Being) presentInterpretation(s *strings.Builder) {
+	h := b.Interpretation
+	if !h.Available {
+		return
+	}
+	fmt.Fprintf(s, "\nCOUNTED INTERPRETATION — route=%s effective-N=%d maturity=%.3f\n",
+		h.Route, h.EffectiveN, h.Maturity)
+	switch h.Route {
+	case InterpretationCold:
+		s.WriteString("  No measured candidate precedent. Use judgment for this reading.\n")
+	case InterpretationConfident:
+		s.WriteString("  Counted commit available. Treat it as precedent, not observed world truth.\n")
+	case InterpretationAmbiguous:
+		s.WriteString("  Hold every branch. Clarify, choose a branch-safe act, or wait; do not appoint a winner from order or heat.\n")
+	case InterpretationUnresolved:
+		s.WriteString("  Requires differentiation. Clarify or wait; unresolved material vetoes every apparent commit.\n")
+	}
+
+	for _, group := range h.Groups {
+		fmt.Fprintf(s, "  source=%q state=%s effective-N=%d valley=%.3f\n",
+			strings.NewReplacer("\x00", " -> ", "\x1f", " | ", "\x1e", ", ").Replace(group.Source), group.State,
+			groupEffectiveTrials(group), group.ValleyDepth)
+		if group.Differentiated {
+			if group.SelectedByPocket {
+				s.WriteString("    density pockets differentiated; a promoted predicate selected this reading\n")
+			} else if group.PocketMatch >= 0 {
+				s.WriteString("    density pockets differentiated; one raw predicate matched provisionally and cannot commit\n")
+			} else {
+				s.WriteString("    density pockets differentiated; current evidence did not select exactly one\n")
+			}
+		}
+		for i, branch := range group.Branches {
+			label := "candidate"
+			if group.State == SourceConfident && group.Committed == i {
+				label = "committed"
+			}
+			fmt.Fprintf(s, "    %s branch heat=%.3f:\n", label, branch.Heat)
+			for _, completion := range branch.Completions {
+				fmt.Fprintf(s, "      [N=%d] %s %s %s\n", completion.Trials,
+					completion.Triple.Subject, completion.Triple.Predicate, completion.Triple.Object)
+			}
+			if branch.Pocket != nil {
+				p := branch.Pocket.Predicate
+				fmt.Fprintf(s, "      pocket when RAW {%s %s %s} [coverage=%.3f base=%.3f diagnosticity=%.3f]\n",
+					p.Triple.Subject, p.Triple.Predicate, p.Triple.Object,
+					p.Coverage, p.BaseRate, p.Diagnosticity)
+			}
+		}
+		if len(group.Unresolved) > 0 {
+			s.WriteString("    unresolved component:\n")
+			for _, completion := range group.Unresolved {
+				fmt.Fprintf(s, "      [N=%d heat=%.3f] %s %s %s\n", completion.Trials, completion.Heat,
+					completion.Triple.Subject, completion.Triple.Predicate, completion.Triple.Object)
+			}
+		}
+	}
 }
 
 func matching(e *Expression, q Triple) Expect {
@@ -116,8 +179,11 @@ FORMAT — reply with only this:
 <act id="a1" target="file:/path" primitive="write">file contents</act>
 <act id="a2" target="dir:/" primitive="exec" requires="file:/path exists true">shell command</act>
 
-<expect of="a1">  0.95  1  file:/path  exists  true  </expect>
-<expect of="a2">  0.80  1  dir:/       status  ok    </expect>
+<expect id="p1" of="a1">  0.95  1  file:/path  exists  true  </expect>
+<expect id="p2" of="a2">  0.80  1  dir:/       status  ok    </expect>
+
+When a visible observation passage influenced a prediction, you may add:
+<evidence>[observation-id][start:end]:+0.8->[p1.exact]</evidence>
 
 PRIMITIVES:  write (payload is the file body) · exec (shell command) · build (target build:/, no payload)
 
@@ -125,6 +191,11 @@ EXPECT LINE:  <likelihood 0..1> <within> <subject> <predicate> <object>
   likelihood  your honest probability that this comes true. Not a target and not a hope — what you
               actually think the odds are, given what you know about THIS case in particular.
   within      how many ticks until it should be checked. 1 = immediately after the act.
+
+EVIDENCE LINE (optional): offsets are Unicode characters into the cited observation's quoted
+  object text, start inclusive and end exclusive. -1 strongly argues against that prediction
+  dimension, 0 is neutral, +1 strongly argues for it. This is your claimed influence, not a
+  probability. Cite only observations displayed above and only prediction IDs in this emission.
 
 PREDICATES YOU CAN CHECK:
   file:/p   exists              true | false

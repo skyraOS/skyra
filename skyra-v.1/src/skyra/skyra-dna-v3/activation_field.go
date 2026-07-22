@@ -3,14 +3,25 @@ package dnav3
 import (
 	"math"
 	"sort"
+	"strings"
 )
 
 type ActivationConfig struct {
-	Lambda       float64
-	Epsilon      float64
-	SpanFloor    float64
-	HopLimit     int
-	MemoryTokens int
+	Lambda          float64
+	Epsilon         float64
+	SpanFloor       float64
+	HopLimit        int
+	MemoryTokens    int
+	Differentiation DifferentiationConfig
+}
+
+// DifferentiationConfig keeps related separation decisions together without pretending that
+// overlap, heat dominance, density valleys, and promotion evidence share one scalar or unit.
+type DifferentiationConfig struct {
+	ConjunctionOverlap float64
+	DominanceMargin    float64
+	SplitValleyDepth   float64
+	PromotionEvidence  float64
 }
 
 func DefaultActivationConfig() ActivationConfig {
@@ -20,6 +31,12 @@ func DefaultActivationConfig() ActivationConfig {
 		SpanFloor:    0.05,
 		HopLimit:     2,
 		MemoryTokens: 2048,
+		Differentiation: DifferentiationConfig{
+			ConjunctionOverlap: 0.2,
+			DominanceMargin:    0.1,
+			SplitValleyDepth:   0.2,
+			PromotionEvidence:  1,
+		},
 	}
 }
 
@@ -52,6 +69,19 @@ func NewActivationField(config ActivationConfig) *ActivationField {
 	}
 	if config.MemoryTokens <= 0 {
 		config.MemoryTokens = 2048
+	}
+	defaults := DefaultActivationConfig().Differentiation
+	if config.Differentiation.ConjunctionOverlap <= 0 || config.Differentiation.ConjunctionOverlap > 1 {
+		config.Differentiation.ConjunctionOverlap = defaults.ConjunctionOverlap
+	}
+	if config.Differentiation.DominanceMargin <= 0 {
+		config.Differentiation.DominanceMargin = defaults.DominanceMargin
+	}
+	if config.Differentiation.SplitValleyDepth <= 0 {
+		config.Differentiation.SplitValleyDepth = defaults.SplitValleyDepth
+	}
+	if config.Differentiation.PromotionEvidence <= 0 {
+		config.Differentiation.PromotionEvidence = defaults.PromotionEvidence
 	}
 	return &ActivationField{
 		Config:   config,
@@ -306,20 +336,57 @@ func (b *Being) propagateActivation() {
 	}
 }
 
-func (b *Being) deriveActivatedTarget() []Triple {
+type SourceState string
+
+const (
+	SourceConfident  SourceState = "confident"
+	SourceAmbiguous  SourceState = "ambiguous"
+	SourceUnresolved SourceState = "unresolved"
+)
+
+type Completion struct {
+	Triple  Triple
+	EdgeKey string
+	Heat    float64
+	Trials  int // settled trials on the causal edge; Phase 2 uses this as counted support
+}
+
+type Branch struct {
+	Completions []Completion
+	Heat        float64
+	Pocket      *DensityPocket // fitted only after Phase 3's density valley earns a split
+}
+
+type TargetGroup struct {
+	Source      string
+	Branches    []Branch
+	Unresolved  []Completion
+	State       SourceState
+	Conjunction bool
+	Committed   int // branch index when State is confident; -1 otherwise
+
+	// Phase 3 readings. RawValley is topology alone; ValleyDepth includes recurrence
+	// maturity. Differentiated means every branch earned a diagnostic pocket name.
+	RawValley        float64
+	ValleyDepth      float64
+	Differentiated   bool
+	SelectedByPocket bool // true only after a separately validated promotion gate authorizes commitment
+	PocketMatch      int  // provisional unique predicate match; descriptive only, -1 when none/ambiguous
+}
+
+type settlementSpanLookup func(edgeKey string, outcome Truth) []SpanID
+
+func (b *Being) deriveActivatedTarget() []TargetGroup {
 	if b.Activation == nil {
 		return nil
 	}
-	type candidate struct {
-		t    Triple
-		heat float64
-	}
-	byKey := map[string]candidate{}
+	bySource := map[string]map[string]Completion{}
 	for _, source := range b.Activation.RankedSpans() {
 		for _, e := range b.Expr.ExpressionsInSpan(source.SpanID) {
 			am := actMap(e)
 			for _, x := range e.Expects {
 				ek := edgeKey(am, x.Of, x.Key())
+				sk := edgeSourceKey(am, x.Of)
 				ed := b.Expr.Edge(e.ID, x)
 				if ed.N == 0 || ed.P < 0.5 {
 					continue
@@ -328,30 +395,185 @@ func (b *Being) deriveActivatedTarget() []Triple {
 				if heat < b.Activation.Config.Epsilon {
 					continue
 				}
-				if old, ok := byKey[x.Key()]; !ok || heat > old.heat {
-					byKey[x.Key()] = candidate{t: x.Triple, heat: heat}
+				if bySource[sk] == nil {
+					bySource[sk] = map[string]Completion{}
+				}
+				if old, ok := bySource[sk][ek]; !ok || heat > old.Heat {
+					bySource[sk][ek] = Completion{Triple: x.Triple, EdgeKey: ek, Heat: heat, Trials: ed.N}
 				}
 			}
 		}
 	}
-	out := make([]candidate, 0, len(byKey))
-	for _, c := range byKey {
-		out = append(out, c)
+	sources := make([]string, 0, len(bySource))
+	for source := range bySource {
+		sources = append(sources, source)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].heat != out[j].heat {
-			return out[i].heat > out[j].heat
+	sort.Strings(sources)
+	groups := make([]TargetGroup, 0, len(sources))
+	active := b.Activation.RankedSpans()
+	activeSpans := make([]SpanID, len(active))
+	for i, span := range active {
+		activeSpans[i] = span.SpanID
+	}
+	for _, source := range sources {
+		completions := make([]Completion, 0, len(bySource[source]))
+		for _, completion := range bySource[source] {
+			completions = append(completions, completion)
 		}
-		return out[i].t.Key() < out[j].t.Key()
+		group := classifySource(source, completions, b.Expr.SettlementSpans,
+			b.Activation.Config.Differentiation)
+		group = differentiateSource(group, b.Expr.SettlementSourceInSpan, b.Spans.Observations,
+			activeSpans, b.currentSpan, b.Activation.Config.Differentiation)
+		groups = append(groups, group)
+	}
+	return groups
+}
+
+func classifySource(source string, completions []Completion, spans settlementSpanLookup, cfg DifferentiationConfig) TargetGroup {
+	defaults := DefaultActivationConfig().Differentiation
+	if cfg.ConjunctionOverlap <= 0 || cfg.ConjunctionOverlap > 1 {
+		cfg.ConjunctionOverlap = defaults.ConjunctionOverlap
+	}
+	if cfg.DominanceMargin <= 0 {
+		cfg.DominanceMargin = defaults.DominanceMargin
+	}
+	completions = append([]Completion(nil), completions...)
+	sort.Slice(completions, func(i, j int) bool {
+		if completions[i].Triple.Key() != completions[j].Triple.Key() {
+			return completions[i].Triple.Key() < completions[j].Triple.Key()
+		}
+		return completions[i].EdgeKey < completions[j].EdgeKey
 	})
-	if len(out) == 0 {
+	g := TargetGroup{Source: source, Committed: -1, PocketMatch: -1}
+	if len(completions) == 0 {
+		return g
+	}
+	if len(completions) == 1 {
+		branch := Branch{Completions: append([]Completion(nil), completions...), Heat: completions[0].Heat}
+		g.Branches = []Branch{branch}
+		g.State, g.Committed = SourceConfident, 0
+		return g
+	}
+
+	adjacent := make([][]bool, len(completions))
+	positive := make([][]SpanID, len(completions))
+	missing := make([]bool, len(completions))
+	for i := range completions {
+		positive[i] = lookupSpans(spans, completions[i].EdgeKey)
+		missing[i] = len(positive[i]) == 0
+	}
+	for i := range adjacent {
+		adjacent[i] = make([]bool, len(completions))
+		adjacent[i][i] = true
+		for j := 0; j < i; j++ {
+			if !missing[i] && !missing[j] && jaccardSpans(positive[i], positive[j]) >= cfg.ConjunctionOverlap {
+				adjacent[i][j], adjacent[j][i] = true, true
+			}
+		}
+	}
+
+	visited := make([]bool, len(completions))
+	for start := range completions {
+		if visited[start] {
+			continue
+		}
+		if missing[start] {
+			visited[start] = true
+			g.Unresolved = append(g.Unresolved, completions[start])
+			continue
+		}
+		queue := []int{start}
+		visited[start] = true
+		var component []int
+		for len(queue) > 0 {
+			i := queue[0]
+			queue = queue[1:]
+			component = append(component, i)
+			for j := range completions {
+				if adjacent[i][j] && !visited[j] {
+					visited[j] = true
+					queue = append(queue, j)
+				}
+			}
+		}
+		clique := true
+		for _, i := range component {
+			for _, j := range component {
+				clique = clique && adjacent[i][j]
+			}
+		}
+		if !clique {
+			for _, i := range component {
+				g.Unresolved = append(g.Unresolved, completions[i])
+			}
+			continue
+		}
+		branch := Branch{}
+		for _, i := range component {
+			branch.Completions = append(branch.Completions, completions[i])
+			branch.Heat = math.Max(branch.Heat, completions[i].Heat)
+		}
+		g.Conjunction = g.Conjunction || len(branch.Completions) > 1
+		g.Branches = append(g.Branches, branch)
+	}
+
+	sort.Slice(g.Branches, func(i, j int) bool { return branchKey(g.Branches[i]) < branchKey(g.Branches[j]) })
+	if len(g.Unresolved) > 0 {
+		g.State = SourceUnresolved
+		return g
+	}
+	if len(g.Branches) == 1 {
+		g.State, g.Committed = SourceConfident, 0
+		return g
+	}
+	best, second := -1, -1
+	for i := range g.Branches {
+		if best < 0 || g.Branches[i].Heat > g.Branches[best].Heat {
+			second, best = best, i
+		} else if second < 0 || g.Branches[i].Heat > g.Branches[second].Heat {
+			second = i
+		}
+	}
+	if best >= 0 && second >= 0 && g.Branches[best].Heat-g.Branches[second].Heat >= cfg.DominanceMargin {
+		g.State, g.Committed = SourceConfident, best
+	} else {
+		g.State = SourceAmbiguous
+	}
+	return g
+}
+
+func lookupSpans(lookup settlementSpanLookup, edgeKey string) []SpanID {
+	if lookup == nil {
 		return nil
 	}
-	targets := make([]Triple, len(out))
-	for i, c := range out {
-		targets[i] = c.t
+	return lookup(edgeKey, TruthTrue)
+}
+
+func jaccardSpans(a, b []SpanID) float64 {
+	left := make(map[SpanID]struct{}, len(a))
+	union := make(map[SpanID]struct{}, len(a)+len(b))
+	for _, span := range a {
+		left[span], union[span] = struct{}{}, struct{}{}
 	}
-	return targets
+	intersection := 0
+	for _, span := range b {
+		if _, ok := left[span]; ok {
+			intersection++
+		}
+		union[span] = struct{}{}
+	}
+	if len(union) == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(len(union))
+}
+
+func branchKey(branch Branch) string {
+	keys := make([]string, len(branch.Completions))
+	for i, completion := range branch.Completions {
+		keys[i] = completion.Triple.Key()
+	}
+	return strings.Join(keys, "\x00branch\x00")
 }
 
 func bump(current, heat float64) float64 {

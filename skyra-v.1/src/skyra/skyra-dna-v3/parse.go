@@ -3,6 +3,7 @@ package dnav3
 import (
 	"fmt"
 	"html"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -53,12 +54,21 @@ func Parse(raw string) (ParseResult, error) {
 
 	for _, el := range elements(raw, "expect") {
 		of := strings.Fields(attr(el.open, "of"))
+		localID := strings.TrimSpace(attr(el.open, "id"))
 		if len(of) == 0 {
 			res.Rejects = append(res.Rejects, Reject{Line: el.open, Reason: `expect has no of="..."`})
 			continue
 		}
 		// An <expect> block may carry several triple lines; each is independent.
-		for _, line := range strings.Split(el.body, "\n") {
+		lines := strings.Split(el.body, "\n")
+		nonempty := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				nonempty++
+			}
+		}
+		lineIndex := 0
+		for _, line := range lines {
 			if strings.TrimSpace(line) == "" {
 				continue
 			}
@@ -67,16 +77,59 @@ func Parse(raw string) (ParseResult, error) {
 				res.Rejects = append(res.Rejects, Reject{Line: strings.TrimSpace(line), Reason: err.Error()})
 				continue
 			}
+			predictionID := PredictionID(localID)
+			if localID != "" && nonempty > 1 {
+				predictionID = PredictionID(fmt.Sprintf("%s:%d", localID, lineIndex))
+			}
 			res.Expression.Expects = append(res.Expression.Expects, Expect{
+				PredictionID: predictionID, DimensionID: "exact",
 				Of: of, Triple: t, Within: within,
 			})
+			lineIndex++
 		}
+	}
+
+	for _, el := range elements(raw, "evidence") {
+		attribution, err := parseEvidenceAttribution(strings.TrimSpace(el.body))
+		if err != nil {
+			res.Rejects = append(res.Rejects, Reject{Line: strings.TrimSpace(el.body), Reason: err.Error()})
+			continue
+		}
+		res.Expression.PredictionAttributions = append(res.Expression.PredictionAttributions, attribution)
 	}
 
 	if len(res.Expression.Acts) == 0 {
 		return res, fmt.Errorf("emission contains no acts")
 	}
 	return res, nil
+}
+
+var evidenceAttributionPattern = regexp.MustCompile(
+	`^\[([^\]]+)\]\[(\d+):(\d+)\]:([+-]?(?:\d+(?:\.\d*)?|\.\d+))->\[([^\.\]]+)\.(.+)\]$`,
+)
+
+func parseEvidenceAttribution(line string) (EvidenceAttribution, error) {
+	match := evidenceAttributionPattern.FindStringSubmatch(strings.TrimSpace(line))
+	if match == nil {
+		return EvidenceAttribution{}, fmt.Errorf("evidence must be [observation][start:end]:influence->[prediction.dimension]")
+	}
+	start, err := strconv.Atoi(match[2])
+	if err != nil {
+		return EvidenceAttribution{}, fmt.Errorf("evidence start offset is invalid")
+	}
+	end, err := strconv.Atoi(match[3])
+	if err != nil {
+		return EvidenceAttribution{}, fmt.Errorf("evidence end offset is invalid")
+	}
+	influence, err := strconv.ParseFloat(match[4], 64)
+	if err != nil {
+		return EvidenceAttribution{}, fmt.Errorf("evidence influence is invalid")
+	}
+	return EvidenceAttribution{
+		ObservationID: ObservationID(match[1]), StartChar: start, EndChar: end,
+		PredictionID: PredictionID(match[5]), DimensionID: DimensionID(match[6]),
+		ClaimedInfluence: influence,
+	}, nil
 }
 
 func parseAct(el element) (Act, error) {

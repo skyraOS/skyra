@@ -30,6 +30,12 @@ type Expression struct {
 	Acts    []Act
 	Expects []Expect
 
+	// PredictionAttributions are optional signed passage references emitted with
+	// this expression. They remain authored provenance; settlement never treats
+	// their magnitude as earned credit.
+	PredictionAttributions  []EvidenceAttribution
+	PredictionAuthoredAfter int // observation-sequence boundary shared by this emission's fields
+
 	// Score is the running mean of (log p_claim − log p̂_edge) over every expect this framing
 	// has ever made — THE MODEL'S EDGE OVER THE BASE RATE.
 	//
@@ -78,6 +84,11 @@ type Act struct {
 // An Expect is a claim about the world AFTER acting, attributed to the act (or acts) that
 // produce it.
 type Expect struct {
+	// PredictionID/DimensionID connect the legacy exact Triple expectation to
+	// its Phase-4F field. Place assigns deterministic IDs when the parser did not.
+	PredictionID PredictionID
+	DimensionID  DimensionID
+
 	// Of names the acts responsible. Cardinality does real work here:
 	//
 	//   len(Of) == 1   INDIVIDUAL. A failure grades the ACT — the door didn't open.
