@@ -24,10 +24,10 @@ import (
 
 	"skyra-v1/src/debug"
 	"skyra-v1/src/inference"
-	"skyra-v1/src/skyra"
-	"skyra-v1/src/skyra/relation"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
-	"skyra-v1/src/skyra/world3d"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
+	"skyra-v1/src/skyra/spacetime"
+	"skyra-v1/src/skyra/spacetime/relation"
+	"skyra-v1/src/skyra/distributed-agent/world3d"
 )
 
 //go:embed index.html

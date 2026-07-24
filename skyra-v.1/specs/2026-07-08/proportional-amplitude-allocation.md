@@ -334,7 +334,7 @@ blocked convergence records for already-visited children
 Current implementation lives in:
 
 ```text
-src/skyra/relation/relation.go
+src/skyra/spacetime/relation/relation.go
   scoreChildren
 ```
 

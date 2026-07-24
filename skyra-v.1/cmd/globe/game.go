@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"skyra-v1/src/debug"
-	"skyra-v1/src/skyra"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
-	"skyra-v1/src/skyra/world3d"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
+	"skyra-v1/src/skyra/spacetime"
+	"skyra-v1/src/skyra/distributed-agent/world3d"
 )
 
 // The seeker duel: you and the being hunt the same snitch, first catch wins.

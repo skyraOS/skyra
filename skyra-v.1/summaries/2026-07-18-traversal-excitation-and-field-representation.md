@@ -12,11 +12,11 @@ The traversal base case and collapse boundary are explicitly unsettled.
 Skyra high level is an distributed system abstraction over an individuals devices. The aim is to give an agent a world to inhabit where the world is your devices.
 
 The 3 current components are:
-Skyra-ky-agent
-Skyra-world-agent
+Skyra-cognitive-agent
+Skyra-distributed-agent
 skyra-kernel
 
-This summery will mostly focus on Skyra-ky-agent
+This summery will mostly focus on Skyra-cognitive-agent
 
 Skyra remains a graph-based embodied learning system whose durable truth comes only from
 observation. The LLM is still moving away from the center of the runtime and toward the unresolved
@@ -159,7 +159,7 @@ the interpretation of convergence.
 
 ### Shared substrate
 
-`src/skyra/space.go` currently defines:
+`src/skyra/spacetime/space.go` currently defines:
 
 - `Space`, the universal traversable cell;
 - `Slice`, per-being traversal records, maps, tree, result, and proper time;
@@ -167,7 +167,7 @@ the interpretation of convergence.
 - `Impulse`, the event envelope;
 - edge-keyed activation records.
 
-`src/skyra/relation/relation.go` implements one rooted depth-first wave with:
+`src/skyra/spacetime/relation/relation.go` implements one rooted depth-first wave with:
 
 - path-local cycle prevention;
 - amplitude attenuation and branch conservation;
@@ -197,7 +197,7 @@ Observe(traversal context) -> traversal-local frontier
 
 The exact Go signature remains open.
 
-The standalone `src/skyra/traverse` package already has a `Frontier`-like contract and budgeted
+The standalone `src/skyra/spacetime/traverse` package already has a `Frontier`-like contract and budgeted
 subgraph assembly. It is mechanically closer to the new direction, but it uses a global
 visited-once set that would currently suppress convergence through a second root/path.
 

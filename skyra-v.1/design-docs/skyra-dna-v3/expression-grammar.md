@@ -180,7 +180,7 @@ mode = interpret   otherwise
 ```
 
 Deterministic, unfakeable, and sourced from the same affordance registry that seeds the cold-start
-present. See `src/skyra/skyra-dna-v3/affordance.go`.
+present. See `src/skyra/cognitive-agent/skyra-dna-v3/affordance.go`.
 
 **`ask` is not a mode. `ask` is an expression** — an act that *produces* an observation. The
 interpretation of what it returns is a `requires` on a downstream expression. Dropping `ask` as a

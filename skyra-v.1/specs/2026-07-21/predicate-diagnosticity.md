@@ -423,6 +423,24 @@ Still open:
 Until those are settled, a new predicate should remain provisional and its apparent
 diagnosticity should not be mistaken for mature confidence.
 
+## Implementation checkpoint
+
+The positive-fire objective now has a Phase-4F implementation. A calibration window names
+raw observations that predate the candidate prediction and points to category truth through
+a separate admitted prediction's already-settled comparison. The candidate cannot label
+itself, declared selection attributions cannot overlap the evaluation observations, and a
+settling impulse cannot recalibrate its own information value. Every dimension retains the
+support counts behind coverage and base rate plus the resulting per-fire PMI and
+coverage-weighted expected credit.
+
+The worked 20/80 arithmetic is an executable regression, including `Q_evil`. Calibration
+retains counts in four explicit states: insufficient support, measured inert, measured
+anti-diagnostic, and calibrated. Zero-probability cases remain finite; only calibrated
+positive PMI derives `Ready()`. This is not yet autonomous blind-window allocation: the caller must genuinely
+withhold the named evaluation window from candidate generation, and undeclared exposure
+cannot be detected from the graph. Full non-fire scoring, confidence intervals, search-size
+pricing, drift, and promotion remain open exactly as above.
+
 ## Bottom line
 
 The consequence check is deterministic and LLM-free, exactly as required. The

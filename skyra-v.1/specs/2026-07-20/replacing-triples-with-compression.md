@@ -9,7 +9,7 @@ built. Honest open problems at the end.
 [../2026-07-14/parser-compilation.md](../2026-07-14/parser-compilation.md) (the compile
 signal) · [span-owned-predictions-and-activation.md](span-owned-predictions-and-activation.md)
 (why triples stop scaling)
-**Bootstraps from:** the v3 `Triple` contract (`src/skyra/skyra-dna-v3/triple.go`).
+**Bootstraps from:** the v3 `Triple` contract (`src/skyra/cognitive-agent/skyra-dna-v3/triple.go`).
 
 ## The question, sharpened
 

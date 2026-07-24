@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"skyra-v1/src/skyra/relation"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
-	"skyra-v1/src/skyra/world3d"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
+	"skyra-v1/src/skyra/spacetime/relation"
+	"skyra-v1/src/skyra/distributed-agent/world3d"
 )
 
 // The whole loop, headless: real Being, real globe, real kernel, real walks — scripted

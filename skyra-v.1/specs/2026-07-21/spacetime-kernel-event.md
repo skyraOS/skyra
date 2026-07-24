@@ -10,6 +10,16 @@ wave begins.
 **Does not supersede:** the current kernel-v2 traversal, scheduler, or
 `Observe`/`Express` decisions.
 
+> **SUPERSEDED IN PART (2026-07-23) — `Amplitude` is not a `Spacetime` field.**
+> [kernel-alteration](../2026-07-22/kernel-alteration.md) §1a makes amplitude
+> **space-owned** (it *is* the excitation field; `amplitude = phase + magnitude`),
+> read from the space rather than carried by the kernel event. What this spec got
+> RIGHT stands — amplitude is *not* a token budget, the kernel does *not* divide it
+> across branches, `child budget = parent remainder × edge weight` is WRONG. What is
+> superseded is only its *location*: the `Amplitude float64` field on `Spacetime`,
+> and the "Field semantics → `Amplitude`" section. The kernel event carries the
+> **impulse payload only**. See the marked sections below.
+
 **Parents:**
 [Space / Kernel Interface Reform](../2026-07-08/space-kernel-interface-reform.md) ·
 [Directed Affordance Invocation](../2026-07-08/directed-affordance-invocation.md) ·
@@ -26,7 +36,8 @@ type Spacetime struct {
 	Origin    Space
 	Traversed Space
 	Impulse   any
-	Amplitude float64
+	Amplitude float64 // SUPERSEDED 2026-07-23 — amplitude is space-owned (excitation field),
+	                   // not a kernel wave-start field. see kernel-alteration §1a.
 }
 
 type Time interface {
@@ -85,7 +96,26 @@ was handed.
 cognition routing, or another event type. The time kernel may transport it but
 must not interpret its cognitive meaning.
 
-### `Amplitude`
+### `Amplitude` — SUPERSEDED 2026-07-23
+
+> **`Amplitude` is not a `Spacetime` field.** [kernel-alteration](../2026-07-22/kernel-alteration.md)
+> §1a makes amplitude **space-owned** — it is the excitation field, `amplitude = phase +
+> magnitude`, held in the spaces and read by `Observe`. The kernel event carries the impulse
+> payload only. The question this section left open (*"may `Amplitude` be deleted from
+> `Spacetime`?"*) is answered: yes — it does not live on the kernel event. It moves to the
+> **space**, not onto `Impulse` (that prohibition still holds).
+
+What this section got RIGHT, and which the correction preserves:
+
+```text
+WRONG   impulse.Amplitude = traversal execution state mixed into domain content   (still WRONG)
+WRONG   child budget = parent remainder x edge weight                             (still WRONG — kernel does no math)
+RIGHT   amplitude is NOT a token budget, NOT divided by the kernel                (still RIGHT)
+RIGHT   weights order traversal; the environment decides when it is full          (still RIGHT)
+```
+
+The single change: **amplitude's home is the space, not `Spacetime`.** Original text of this
+section retained below for the record.
 
 `Amplitude` is the initial strength assigned to this wave. If activation
 attenuates during traversal, that attenuation begins from this value.
@@ -217,11 +247,13 @@ the same `Space`.
 
 The mechanical implementation order is:
 
-1. Add `Spacetime` beside `Time` and `Space` in `src/skyra/space.go`.
+1. Add `Spacetime` beside `Time` and `Space` in `src/skyra/spacetime/space.go`.
 2. Change `Time.Realize` to `Realize(Spacetime)`.
 3. Change `relation.Relation.Realize` and its internal entry point to accept the
    value.
-4. Move initial amplitude from `Impulse` onto `Spacetime`.
+4. ~~Move initial amplitude from `Impulse` onto `Spacetime`.~~ **[SUPERSEDED 2026-07-23]**
+   Amplitude is space-owned (excitation field), not carried on `Spacetime` — remove it from
+   `Impulse` and do not add it to the kernel event. See kernel-alteration §1a.
 5. Update every wave spawn, fake kernel, harness, and test.
 6. Restore return perception by spawning a new `Spacetime`, when the broader
    kernel-v2 return-path work lands.

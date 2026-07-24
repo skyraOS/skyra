@@ -683,7 +683,7 @@ be two unexplained short-decay systems.
 
 ### Landed 2026-07-20 — bounded milestone 1
 
-The first implementation slice is in `src/skyra/skyra-dna-v3/`:
+The first implementation slice is in `src/skyra/cognitive-agent/skyra-dna-v3/`:
 
 - Stable episode, span, and observation identities are stamped on runtime writes.
 - Expressions carry `EpisodeID`, birth `SpanID`, and `BornFrom`.

@@ -4,8 +4,8 @@
 
 ## Files
 
-- `../../src/skyra/world/space.go` — `World`, `Point`
-- `../../src/skyra/world/slice.go` — `Slice`
+- `../../src/skyra/distributed-agent/world/space.go` — `World`, `Point`
+- `../../src/skyra/distributed-agent/world/slice.go` — `Slice`
 
 ## Design sources
 

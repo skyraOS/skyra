@@ -158,8 +158,26 @@ is FOUNDATIONAL for v.1: what a being sends is chosen, what it perceives is not.
    durable comparisons before Bernoulli projection; live `<evidence>` parsing; Unicode
    range/future-reference checks; and separate birth/settlement histories. Paragraph
    content now names its carrier slot: absent slots remain durable `VOID` rows and are
-   excluded from the settled-only learning projection. List/code-block structure, regex,
-   semantic similarity, base-rate population, and residual learning remain open.
+   excluded from the settled-only learning projection. Named raw pre-birth calibration
+   windows now freeze per-dimension support counts, coverage, base rate, PMI,
+   and coverage-weighted credit; category labels must come from a separate admitted and
+   settled prediction path. The worked diagnostic-middle/match-anything arithmetic passes,
+   with explicit insufficient-support, measured-inert, measured-anti-diagnostic, and
+   calibrated states; only finite positive PMI derives readiness. Explicit claim identity and a
+   conservative same-claim projection landed 2026-07-22: held-out expected credit chooses
+   one representative before the outcome, its per-fire PMI contributes only if it
+   settles true, and distinct claim winners sum. This blocks duplicate stacking and
+   outcome-dependent sensor fallback. List/code-block structure, regex, semantic
+   similarity, full non-fire scoring, autonomous claim discovery, learned joint fusion,
+   and residual learning remain open.
+   **Measurement audit:** [Defects Found in Review](specs/2026-07-22/defects-found-in-review.md)
+   records the independent Claude/Codex review and its verified cross-run recall probe.
+   Tier 1 closed 2026-07-22: closure passes are now recorded for target-met runs only with
+   an explicit `closures/attempts` denominator, and current-span mandatory memory is always
+   admitted with token overruns exposed in selection stats and the planner present. The
+   remaining in-scope review items also closed: calibration now has four finite states,
+   PMI naming is exact, the declared-attribution blindness assumption is explicit, and the
+   risk register reflects the implemented two-bit and held-out-calibration boundaries.
    **Phase 1
    (differentiation-state on the derived target) LANDED 2026-07-21 after paper validation
    by Toys #5+#6+#6B:** group `deriveActivatedTarget` by the `edgeKey` source prefix,

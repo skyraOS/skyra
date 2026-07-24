@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"skyra-v1/src/skyra/relation"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
-	"skyra-v1/src/skyra/world3d"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
+	"skyra-v1/src/skyra/spacetime/relation"
+	"skyra-v1/src/skyra/distributed-agent/world3d"
 )
 
 // The duel, headless, with the snitch held still: the being perceives it, walks to it,

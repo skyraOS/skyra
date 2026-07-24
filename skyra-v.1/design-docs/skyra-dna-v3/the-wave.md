@@ -184,8 +184,8 @@ is *for*; the ascent discovers what actually *produced* it.
 
 ## Attention is a goal, not a mechanism
 
-The world-agent **holds impulses until an agent perceives them** — they are not pushed (see
-[world-agent-v2](../world-agent-v2/README.md)). Which raises the obvious objection: *Michael talks
+The distributed-agent **holds impulses until an agent perceives them** — they are not pushed (see
+[distributed-agent-v2](../distributed-agent-v2/README.md)). Which raises the obvious objection: *Michael talks
 and Skyra never listens.*
 
 The answer is not a push channel and not a peripheral-vision hack:

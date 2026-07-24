@@ -271,7 +271,7 @@ Implemented:
 Focused tests:
 
 ```sh
-go test ./src/skyra/relation ./src/skyra/world
+go test ./src/skyra/spacetime/relation ./src/skyra/distributed-agent/world
 ```
 
 Known broad failure:

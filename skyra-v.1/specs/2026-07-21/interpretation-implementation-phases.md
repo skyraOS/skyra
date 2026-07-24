@@ -480,10 +480,42 @@ value or settlement evidence. The generic learning projection exposes settled di
 only. The forcing three-predicted/one-arrived regression proves that the scale miss learns,
 paragraph one settles, and paragraphs two and three do not become negative evidence.
 
+**POSITIVE-FIRE CALIBRATION SLICE LANDED 2026-07-21:** each dimension may now freeze a
+named, counted calibration before runtime settlement. Calibration cases use raw pre-birth
+observation IDs and category truth from a different admitted prediction's already-settled
+comparison; free category booleans, self-labeling, future evidence, and overlap with
+declared predicate-selection attributions are rejected. The retained record contains
+category/non-category support, fire counts, coverage, base rate, per-fire PMI, and
+coverage-weighted expected credit. Explicit positive and negative support floors control
+calibration state; crossing them does not promote the predicate. The executable 20/80 worked example
+selects `Q_B` and discounts `Q_evil` exactly as the research note predicts. The current
+objective remains positive-fire-only because non-fire scoring is still open on paper.
+
+**CALIBRATION STATE REFINEMENT LANDED 2026-07-22:** calibration now distinguishes
+`INSUFFICIENT_SUPPORT`, `MEASURED_INERT`, `MEASURED_ANTI_DIAGNOSTIC`, and `CALIBRATED`.
+Every state retains its counted window. Zero coverage with zero base rate is inert; zero
+coverage with positive base rate is anti-diagnostic; finite non-positive PMI is likewise
+anti-diagnostic. No state stores `NaN` or infinity. `Ready()` is derived only from
+`CALIBRATED`, whose scalar is finite positive PMI.
+
+**CONSERVATIVE SAME-CLAIM FUSION LANDED 2026-07-22:** every admitted dimension now carries
+an explicit claim identity. The scalar projection groups dimensions by that identity,
+chooses one representative using frozen held-out expected credit before reading the current
+outcome, and—only if that winner settles true—adds its per-fire PMI. Distinct claim
+winners sum. Duplicate sensors cannot stack, a broad sibling cannot dilute or inflate a
+stronger winner, and the projection cannot opportunistically fall back to a weaker sensor
+that happened to fire. Void, unknown, unready, and non-positive dimensions contribute
+nothing while remaining in the durable comparison. Dimension and claim order are
+irrelevant. Author-supplied `Ready` calibration is rejected as an authority violation.
+
+This is deliberately winner-takes-claim, not a claim that max/selection is the final fusion
+mathematics. A true multi-sensor rule must itself be jointly calibrated on held-out data;
+otherwise choosing among whichever sensors fired creates an option-value loophole.
+
 **Still open in Phase 4F:** list/code-block parsers, regex, versioned semantic similarity,
-populated base-rate calibration, and a residual-history learner richer than the
-compatibility Bernoulli projection. Phase 5 remains behind the parts of this gate it
-actually consumes.
+full non-fire scoring, autonomous claim-identity discovery, jointly calibrated multi-sensor
+fusion, and a residual-history learner richer than the compatibility Bernoulli projection.
+Phase 5 remains behind the parts of this gate it actually consumes.
 
 ---
 

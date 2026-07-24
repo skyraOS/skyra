@@ -195,7 +195,7 @@ Board:
 ```
 
 This is now upstream of the implementation plan because the existing
-`src/skyra/traverse` mini-kernel needs to collapse into the real `Time` kernel
+`src/skyra/spacetime/traverse` mini-kernel needs to collapse into the real `Time` kernel
 before the data model hardens around the wrong traversal substrate.
 
 Settled direction:
@@ -356,7 +356,7 @@ Revised proposed order:
 3. Add Cost to Space.
 4. Make Observe return edge-keyed traversal surface.
 5. Add bounded ActiveStateHistory to Slice.
-6. Collapse frame traversal off src/skyra/traverse and onto Time kernel.
+6. Collapse frame traversal off src/skyra/spacetime/traverse and onto Time kernel.
 7. Introduce Scheduler/Board next-wave helper.
 8. Add universal landing-spine helper.
 9. Make external engage use the landing spine.

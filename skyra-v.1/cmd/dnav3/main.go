@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"skyra-v1/src/inference"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
 )
 
 func main() {

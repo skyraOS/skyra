@@ -14,6 +14,18 @@
 > Port selection belongs to `MemoryCell.Observe`; port names do not cross into
 > the generic kernel.
 
+> **Correction (2026-07-23) — THE KERNEL DOES ZERO MATH.** This spec left
+> amplitude *allocation* to `Observe` but kept *affordability* as a kernel check.
+> That seam is wrong: allocation and affordability are **one computation** — you
+> cannot allocate without costs, and once allocated you already know who cannot
+> pay. Both belong in `Observe`. The kernel keeps parents and children in line —
+> call `Observe`, enforce visited-once, descend into the survivors it returns,
+> call `Express` post-order, record the result tree — and does **no arithmetic
+> at all**: no allocation, no affordability, no `Cost`. It threads an opaque
+> payload (`impulse any` / `Spacetime.Amplitude`) it never reads. The sections
+> below are corrected inline and marked `[CORRECTED 2026-07-23]`. Carried forward
+> as the live spec: [../2026-07-22/kernel-alteration.md](../2026-07-22/kernel-alteration.md).
+
 This spec records a target cleanup to the `skyra.Space` contract and kernel
 traversal lifecycle.
 
@@ -178,7 +190,8 @@ type Spacetime struct {
     Origin    Space
     Traversed Space
     Impulse   Impulse
-    Amplitude float64
+    Amplitude float64 // SUPERSEDED 2026-07-23 — amplitude is space-owned (excitation field),
+                      // not carried on the kernel event. see kernel-alteration §1a.
 }
 
 type Time interface {
@@ -190,7 +203,11 @@ type Time interface {
 `Spacetime` is the concrete event of a wave moving through a traversed space under
 the time kernel. It is not an interface.
 
-Amplitude belongs on `Spacetime`, not on `Impulse`.
+**[SUPERSEDED 2026-07-23]** ~~Amplitude belongs on `Spacetime`, not on `Impulse`.~~
+Amplitude is **space-owned** — it is the excitation field (`phase + magnitude`), read from the
+space, not carried on `Spacetime`. It belongs on neither the kernel event nor `Impulse`. The
+kernel event carries the impulse payload only. See
+[kernel-alteration](../2026-07-22/kernel-alteration.md) §1a.
 
 Target split:
 
@@ -231,26 +248,22 @@ content under the active tokenizer. Immutable content lets this cost be cached
 per rendering/tokenizer policy. A world point may still use a domain-specific
 hop cost, and an ephemeral worker may charge zero or a small fixed cost.
 
-Affordability remains a generic kernel check:
+**Affordability is an `Observe` computation, not a kernel check. [CORRECTED
+2026-07-23]** Allocation and affordability are one operation, and it lives entirely
+in `Observe`:
 
 ```text
-if incoming budget/amplitude can pay target.Cost:
-  traverse target
-  remaining = incoming budget/amplitude - target.Cost
-else:
-  skip target
+Observe(incoming amplitude):
+  claim_i       = abs(edgeStrength_i)
+  allocation_i  = available * claim_i / sum(open claims)     # allocate
+  keep child_i  iff allocation_i >= child_i.Cost()            # affordability, same pass
+  return the surviving children, each carrying its remaining allocation
 ```
 
-The kernel allocates parent amplitude across open edges by absolute edge
-magnitude before affordability:
-
-```text
-claim_i = abs(edgeStrength_i)
-allocation_i = available * claim_i / sum(open claims)
-
-if allocation_i >= target_i.Cost:
-  traverse target_i with allocation_i - target_i.Cost
-```
+`Observe` reads `incoming amplitude` from the opaque payload the kernel threads,
+consults its children's `Cost`, and returns **only the affordable survivors**. The
+kernel then descends into whatever map comes back — it performs no subtraction, no
+division, no `>=`. It never calls `Cost`; `Cost` is consumed inside `Observe`.
 
 Polarity is carried separately as relationship meaning. Both strong tension and
 strong resonance are traversable; a zero-magnitude edge receives no ordinary
@@ -258,31 +271,36 @@ allocation. See
 [proportional-amplitude-allocation.md](./proportional-amplitude-allocation.md).
 
 There is no fixed inherited-Aitia depth. Magnitude, token affordability, and
-path-local cycle protection determine how much ancestry fits in a wave.
+path-local cycle protection determine how much ancestry fits in a wave — all
+decided in `Observe`.
 
-But the policy that decides which children are returned, which edges are exposed,
-and what cognitive decay/weighting means belongs in `Observe`, not in the kernel.
+The policy that decides which children are returned, which edges are exposed, what
+cognitive decay/weighting means, **and which children can afford their cost**,
+belongs in `Observe`, not in the kernel.
 
 ---
 
 ## Kernel Policy Boundary
 
-The kernel should own transport mechanics:
+The kernel should own transport mechanics **and nothing that computes a number**:
+**[CORRECTED 2026-07-23 — `apply generic affordability` removed]**
 
 ```text
-- one wave starts with a budget/amplitude,
+- one wave starts with a budget/amplitude (threaded as opaque payload, never read),
 - one wave records on one slice,
 - call Observe,
-- traverse returned edge-keyed spaces,
+- descend into the edge-keyed survivors Observe returns,
 - enforce visited-once,
-- apply generic affordability,
 - call Express post-order,
 - record the traversal result tree and traversed edge keys.
 ```
 
-The kernel should not own cognition-specific weighting mechanics:
+The kernel should not own any cognition-specific mechanics — **including
+affordability and allocation, which are arithmetic**:
 
 ```text
+- allocation of amplitude across edges,      # [CORRECTED 2026-07-23 — moved here]
+- affordability (can a child pay its Cost),  # [CORRECTED 2026-07-23 — moved here]
 - alignment,
 - probability,
 - relevance,
@@ -531,7 +549,7 @@ node, what should I traverse from here for this impulse?
 
 ## Kernel Code Shape
 
-The central kernel change is in `src/skyra/relation/relation.go`.
+The central kernel change is in `src/skyra/spacetime/relation/relation.go`.
 
 Current traversal flow:
 
@@ -658,7 +676,7 @@ kernel's traversal question directly.
 
 ## Mini-Kernel Collapse Checklist
 
-The current `src/skyra/traverse` package is a prototype traversal substrate used
+The current `src/skyra/spacetime/traverse` package is a prototype traversal substrate used
 by frame assembly and settle. It should collapse into the real `Time` kernel once
 the `Space` contract can carry the missing mechanics.
 
@@ -675,23 +693,25 @@ included/traversed, not about the edge that reached it.
 
 ### 2. Affordability
 
-Settled direction:
+Settled direction: **[CORRECTED 2026-07-23 — affordability is an `Observe`
+computation, not a kernel check.]**
 
-Once `Cost` exists on `Space`, the kernel can own generic affordability:
+`Cost` exists on `Space`, but the kernel never calls it. A parent's `Observe`
+allocates amplitude to its children and, in the **same pass**, drops any child
+whose allocation cannot cover its `Cost`:
 
 ```text
-remaining = currentAmplitude - node.Cost()
-childAmplitude = ...
-
-if childAmplitude >= child.Cost():
-  traverse child
-else:
-  skip child
+Observe(incoming amplitude):
+  allocate incoming amplitude across edges by magnitude
+  keep child iff its allocation >= child.Cost()
+  return survivors, each with its remaining allocation
 ```
 
-The kernel does not know why a child was exposed or what cognitive policy produced
-its allocation. It only checks whether the traversal can pay the target node's
-cost.
+The kernel receives only survivors and descends into them. It does not know why a
+child was exposed, what policy produced its allocation, or whether any child was
+dropped — because it performs no allocation and no affordability check. The earlier
+version of this item put the `>=` on the kernel; that was the same seam this
+correction closes.
 
 ### 3. Slice Read Access
 
@@ -972,8 +992,8 @@ traversal accounting settle needs; settle itself remains DNA/cognition policy.
 Settled direction:
 
 ```text
-1. Cost on Space.
-2. Generic affordability in kernel.
+1. Cost on Space (consumed by Observe, never by the kernel).
+2. Allocation AND affordability in Observe — the kernel does zero math. [CORRECTED 2026-07-23]
 3. Result tree read from the traversed Space's slice.
 5. Collapse or shrink frameNode adapter.
 6. Frame rendering reads the real kernel tree.

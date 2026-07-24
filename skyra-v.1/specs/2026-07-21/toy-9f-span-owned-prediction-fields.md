@@ -3,8 +3,9 @@
 **Date:** 2026-07-21  
 **Status:** PARTIAL PASS · minimum live Phase-4F slice landed 2026-07-21; exact-address,
 token-count, paragraph-count, marker, signed attribution, retained-comparison, and
-paragraph-carrier void rails pass. List/code-block structure, regex, semantic similarity,
-base-rate calibration, and residual-history learning remain open
+paragraph-carrier void rails pass. Conservative explicit same-claim fusion also passes.
+List/code-block structure, regex, semantic similarity, full non-fire scoring, learned joint
+fusion, and residual-history learning remain open
 
 **Parent:** [Interpretation Layer — Implementation Phases](interpretation-implementation-phases.md)  
 **Reads on:** [Scale, Structure, Content](scale-structure-content.md),
@@ -309,7 +310,36 @@ paragraph-three predictions as evidence-free `VOID` rows, and excludes those row
 the generic settled-only learning projection.
 
 The full gate remains open for list/code-block parsers, regex, fixed embedding similarity
-and version identity, base-rate calibration records with `Ready=true`, and learned
-residual-history updates. Paragraph slots prove the carrier/void structure; additional
-structural parsers should reuse it rather than introduce another settlement rule.
+and version identity, full non-fire scoring, and learned residual-history updates.
+Paragraph slots prove the carrier/void structure; additional structural parsers should
+reuse it rather than introduce another settlement rule.
+
+The positive-fire calibration rail is now live. A named window points only to durable raw
+pre-birth observations and category labels owned by separate admitted predictions whose
+comparisons already settled from raw evidence. Declared predicate-selection evidence may
+not overlap the calibration observations, and the prediction may not label itself.
+Per dimension the frozen record retains category/non-category support, fire counts,
+coverage, base rate, `PMI = log(coverage/base-rate)`, and
+`coverage × PMI`. The worked `Q_A/Q_B/Q_C/Q_evil` arithmetic is executable: the
+diagnostic middle wins and the match-anything predicate approaches zero. Missing support
+is recorded as `INSUFFICIENT_SUPPORT`; a never-firing measured predicate is
+`MEASURED_INERT`; zero category coverage with positive base rate, or any finite
+non-positive PMI, is `MEASURED_ANTI_DIAGNOSTIC`; only finite positive PMI is
+`CALIBRATED`. Every state preserves measured counts, and `Ready()` is derived only from
+`CALIBRATED`. This is arithmetic readiness, not promotion; true blindness still depends on
+the caller withholding the named window from candidate generation.
+
+The conservative same-claim projection is also live as of 2026-07-22. Every authored
+dimension must name the claim it measures; missing claim identity is rejected rather than
+silently treating redundant sensors as independent. Within a claim, the representative is
+selected from frozen calibration by maximum expected credit before the current outcome is
+inspected. Only that representative may contribute its per-fire PMI if it settles
+true. There is no fallback to a weaker sensor that happened to fire. Distinct claim winners
+sum; duplicates, broad siblings, unready sensors, non-positive sensors, unknown rows, and
+void rows cannot inflate the result. Calibration itself is substrate-owned and cannot be
+supplied on an authored prediction.
+
+This is a conservative selection projection, not the mature learned joint predicate. It
+proves the identity and anti-stacking structure while leaving autonomous claim discovery
+and jointly calibrated multi-sensor fusion open.
 Phase 5 must not assume those unfinished dimensions exist.

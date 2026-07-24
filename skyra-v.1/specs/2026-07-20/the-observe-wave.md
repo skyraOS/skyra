@@ -146,7 +146,7 @@ untouched.
 
 ## Code deltas (in order)
 
-**Deltas 1–5 landed 2026-07-20** in `src/skyra/skyra-dna-v3/wave.go` (+`wave_test.go`,
+**Deltas 1–5 landed 2026-07-20** in `src/skyra/cognitive-agent/skyra-dna-v3/wave.go` (+`wave_test.go`,
 all against the paper-toy fixture):
 
 1. ~~ClassStats~~ → `ExpressionGraph.ClassEdges(log, spans, classes)`: edges grouped

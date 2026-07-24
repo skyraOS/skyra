@@ -1,0 +1,601 @@
+package dnav3
+
+import (
+	"fmt"
+	"sort"
+)
+
+// The Being: the walking skeleton. Single-threaded, unbudgeted, no kernel — the wave is an
+// OPTIMIZATION for a graph that is large, and at this scale brute force is correct.
+//
+// What this exists to produce is two numbers:
+//
+//	passes-to-closure  ↓    retrieval is working — planning is getting cheaper
+//	prediction error   ↓    the world-model is working — the bets are getting better
+//
+// Both down is the thesis. Either alone is a warning, and either failure LOCALIZES — which is the
+// whole reason the architecture was built this way.
+type Being struct {
+	World Realm
+	Obs   *ObservationGraph
+	Expr  *ExpressionGraph
+	Spans *SpanIndex
+
+	// Activation is continuously replaced working memory. Durable history lives in
+	// Obs/Expr; this field decides which region is rendered now.
+	Activation *ActivationField
+
+	// Interpretation is the current span's counted handoff to the existing inference
+	// call. It is transient: ObserveImpulse replaces it and NewEpisode clears it.
+	Interpretation InterpretationHandoff
+
+	// CountTokens stamps every durable memory node and every concrete rendered node.
+	// Providers may replace the deterministic default with their own tokenizer.
+	CountTokens TokenCounter
+
+	// Aff is the world's instrument list, and it is what STAMPS every claim's Mode. The model does
+	// not get to choose its own grade multiplier — see affordance.go.
+	Aff *Affordances
+
+	// Infer is the ONE model call site in the system. Everything else is arithmetic.
+	Infer func(system, present string) (string, error)
+
+	// System is the planner's system prompt. It defaults to the sandboxed-filesystem
+	// vocabulary; a different Realm supplies its own primitives and perceivable
+	// predicates here. The FORMAT (acts, expects, requires) is the same everywhere —
+	// only the world's instrument list changes.
+	System string
+
+	tick int
+
+	episodeNumber     int
+	observationSeq    int
+	expressionSeq     int
+	interpretationSeq int
+	spanSeq           int
+	episodeID         EpisodeID
+	currentSpan       SpanID
+	currentBornFrom   []ObservationID
+
+	Metrics             Metrics
+	LastMemorySelection MemorySelectionStats
+}
+
+// Metrics is the point of the whole exercise.
+type Metrics struct {
+	Cycles          int // attempted Run calls; denominator for closure rate
+	Closures        int // target-met Run calls
+	InferenceCalls  int // per cycle, this is passes-to-closure
+	PassesToClosure []int
+	Resolved        int
+	Correct         int
+	GradeSum        float64 // Σ (log p_claim − log p̂_edge). THE MODEL'S EDGE OVER THE BASE RATE.
+	Rejects         int
+
+	// Interpretation outcomes remain a separate axis. Folding these into the
+	// consequence counters would recreate the lucky-hit corruption in reporting.
+	InterpretationResolved int
+	InterpretationCorrect  int
+	InterpretationGradeSum float64
+}
+
+func NewBeing(w Realm, infer func(string, string) (string, error)) *Being {
+	b := &Being{
+		World:       w,
+		Obs:         NewObservationGraph(),
+		Expr:        NewExpressionGraph(),
+		Spans:       NewSpanIndex(),
+		Activation:  NewActivationField(DefaultActivationConfig()),
+		CountTokens: ApproxTokenCount,
+		Aff:         DefaultAffordances(),
+		Infer:       infer,
+		System:      plannerSystem,
+	}
+	b.startEpisode()
+	return b
+}
+
+func (b *Being) Tick() int             { return b.tick }
+func (b *Being) EpisodeID() EpisodeID  { return b.episodeID }
+func (b *Being) CurrentSpanID() SpanID { return b.currentSpan }
+
+// NewEpisode swaps in a FRESH WORLD and a fresh observation graph, while KEEPING the expression
+// graph, the clock, and the metrics.
+//
+// This is the correct experimental shape, and it is also the correct real one: the observation
+// graph is per-world — a fold over a log about a world that no longer exists — while the expression
+// graph is DURABLE. It is the memory. A being that walks into a new room forgets what was on the old
+// room's floor; it does not forget what it has learned.
+func (b *Being) NewEpisode(w Realm) {
+	config := DefaultActivationConfig()
+	if b.Activation != nil {
+		config = b.Activation.Config
+	}
+	b.World = w
+	b.Obs = NewObservationGraph()
+	b.Spans = NewSpanIndex()
+	b.Activation = NewActivationField(config)
+	b.startEpisode()
+}
+
+func (b *Being) startEpisode() {
+	b.episodeNumber++
+	b.episodeID = EpisodeID(fmt.Sprintf("episode:%d", b.episodeNumber))
+	b.observationSeq = 0
+	b.interpretationSeq = 0
+	b.spanSeq = 0
+	b.currentSpan = ""
+	b.currentBornFrom = nil
+	b.Interpretation = InterpretationHandoff{}
+	b.LastMemorySelection = MemorySelectionStats{}
+}
+
+// startExternalSpan begins one occurrence with an identity independent of derived
+// wall-clock segmentation.
+func (b *Being) startExternalSpan() SpanID {
+	b.spanSeq++
+	b.currentSpan = SpanID(fmt.Sprintf("%s/span:%d", b.episodeID, b.spanSeq))
+	b.currentBornFrom = nil
+	return b.currentSpan
+}
+
+// ensureSpan gives direct Run/Observe callers a synthetic occurrence. ObserveImpulse
+// replaces it with an explicit external span.
+func (b *Being) ensureSpan() SpanID {
+	if b.currentSpan == "" {
+		b.startExternalSpan()
+	}
+	return b.currentSpan
+}
+
+// appendObservation performs the durable write only. Grading is intentionally separate:
+// an impulse can be fully appended and segmented/activated before any bet is considered.
+func (b *Being) appendObservation(t Triple, p Provenance, confidence float64, derivedFrom []string, span SpanID) Observation {
+	b.observationSeq++
+	o := Observation{
+		ID:          ObservationID(fmt.Sprintf("%s/observation:%d", b.episodeID, b.observationSeq)),
+		EpisodeID:   b.episodeID,
+		SpanID:      span,
+		Sequence:    b.observationSeq,
+		Triple:      t,
+		Provenance:  p,
+		Confidence:  confidence,
+		DerivedFrom: append([]string(nil), derivedFrom...),
+		At:          b.tick,
+	}
+	o.Subject, o.Predicate, o.Object = t.Subject, t.Predicate, t.Object
+	counter := b.CountTokens
+	if counter == nil {
+		counter = ApproxTokenCount
+	}
+	o.TokenCount = counter(observationMemoryText(o))
+	o = b.Obs.Write(o)
+	if b.Spans != nil {
+		b.Spans.Add(o)
+	}
+	return o
+}
+
+// Observe writes and then grades one observation in the current occurrence. It remains
+// THE ONLY public writer of world state (LAW 1).
+func (b *Being) Observe(t Triple, p Provenance) Observation {
+	o := b.appendObservation(t, p, 0, nil, b.ensureSpan())
+	b.activateObservation(o)
+	b.grade(o)
+	return o
+}
+
+func (b *Being) observeInSpan(t Triple, p Provenance, span SpanID) Observation {
+	if span == "" {
+		span = b.ensureSpan()
+	}
+	o := b.appendObservation(t, p, 0, nil, span)
+	b.activateObservation(o)
+	b.grade(o)
+	return o
+}
+
+// grade is the GRADER. It is arithmetic on the observation write path — not a worker, not a model,
+// not a judgment. It folds one resolved bet into the edge's EMA.
+//
+// The model cannot touch this path at all. Any payload interpretation happened before placement;
+// by settlement time both consequence and interpretation-context checks are plain comparisons.
+func (b *Being) grade(o Observation) {
+	if o.Fidelity() == 0 {
+		return // a MARK. self-authored. may never grade anything about the world (LAW 7).
+	}
+	for _, bet := range b.Expr.BetsAt(o.Triple) {
+		x := bet.Expect
+		if x.Resolution != TruthUnknown || !x.Armed {
+			continue
+		}
+		if bet.Expr.EpisodeID == "" || bet.Expr.EpisodeID != o.EpisodeID {
+			continue // an old world's prediction cannot be adjudicated by its replacement Realm.
+		}
+		if bet.Expr.SpanID == "" {
+			continue
+		}
+		if b.Activation != nil {
+			// A causal descendant carrying the owner span is active by construction.
+			// Retrieved prior spans additionally qualify through the transient field.
+			if bet.Expr.SpanID != o.SpanID && !b.Activation.SpanActive(bet.Expr.SpanID) {
+				continue // cold birth region: invisible to the grader.
+			}
+		} else if bet.Expr.SpanID != o.SpanID {
+			continue // activation-disabled tests retain exact causal-span eligibility.
+		}
+		if o.At < x.ArmedAt {
+			continue
+		}
+		// dedup: an observation that already settled this bet does not get to settle it twice.
+		// A LOST observation is a gap. A DOUBLED one is a lie.
+		if contains(x.ResolvedBy, obsID(o)) {
+			continue
+		}
+
+		truth := b.compareExactExpectation(x, o)
+		if truth == TruthUnknown {
+			continue
+		}
+
+		edge := b.Expr.Edge(bet.Expr.ID, *x)
+		mode := x.Mode
+		if o.Fidelity() < mode.Weight() {
+			mode = ModeInterpret
+		}
+		g := edge.Grade(x.Confidence, truth, mode) // log p_claim − log p̂_edge, BEFORE the update
+		edge.Observe(truth, b.tick)                // then fold the outcome in
+		b.Expr.RecordSettlement(bet.Expr.ID, *x, truth, o.SpanID)
+
+		x.Resolution = truth
+		x.ResolvedBy = append(x.ResolvedBy, obsID(o))
+
+		bet.Expr.Score = (bet.Expr.Score*float64(bet.Expr.Runs) + g) / float64(bet.Expr.Runs+1)
+		bet.Expr.Runs++
+
+		b.Metrics.Resolved++
+		b.Metrics.GradeSum += g
+		if truth == TruthTrue {
+			b.Metrics.Correct++
+		}
+	}
+	b.gradeInterpretations(o)
+}
+
+// gradeInterpretations is deliberately separate from consequence grading. It is
+// indexed by the interpretation's own context address and updates only the typed
+// interpretation history; action success never enters this function as backward credit.
+func (b *Being) gradeInterpretations(o Observation) {
+	for _, claim := range b.Expr.InterpretationBetsAt(o.Triple) {
+		x := &claim.Context
+		if x.Resolution != TruthUnknown || !x.Armed || claim.EpisodeID != o.EpisodeID {
+			continue
+		}
+		if o.Sequence <= claim.ArmedAfter || o.At < x.ArmedAt {
+			continue // prediction must exist before the settling append
+		}
+		if contains(x.ResolvedBy, obsID(o)) {
+			continue
+		}
+
+		truth := b.compareExactExpectation(x, o)
+		if truth == TruthUnknown {
+			continue
+		}
+		edge := b.Expr.InterpretationEdge(claim.ID)
+		mode := x.Mode
+		if o.Fidelity() < mode.Weight() {
+			mode = ModeInterpret
+		}
+		claim.Score = edge.Grade(x.Confidence, truth, mode)
+		edge.Observe(truth, b.tick)
+		x.Resolution = truth
+		x.ResolvedBy = append(x.ResolvedBy, obsID(o))
+
+		b.Metrics.InterpretationResolved++
+		b.Metrics.InterpretationGradeSum += claim.Score
+		if truth == TruthTrue {
+			b.Metrics.InterpretationCorrect++
+		}
+	}
+}
+
+// Settle is the SETTLER. Every matured, unresolved bet gets a targeted perceive — mechanically, no
+// model call, because the expect already names its own target.
+//
+//	MAKING A BET OBLIGES YOU TO GO LOOK. `Within` IS WHEN.
+//
+// This is what makes the being curious about its own open bets, for free, and it is what makes
+// absence decidable: a targeted perceive is authoritative for its own triple.
+func (b *Being) Settle() {
+	for _, bet := range b.Expr.Open() {
+		if bet.Expr.EpisodeID != b.episodeID {
+			continue // the originating Realm is gone; never settle its bet against the new world.
+		}
+		if !bet.Expect.Matured(b.tick) {
+			continue
+		}
+		out := b.World.Perceive(bet.Expect.Triple)
+		for _, t := range out.Effects {
+			b.observeInSpan(t, ProvenanceRaw, bet.Expr.SpanID)
+		}
+	}
+	for _, claim := range b.Expr.OpenInterpretations() {
+		if claim.EpisodeID != b.episodeID || !claim.Context.Matured(b.tick) {
+			continue
+		}
+		out := b.World.Perceive(claim.Context.Triple)
+		for _, t := range out.Effects {
+			b.observeInSpan(t, ProvenanceRaw, claim.SpanID)
+		}
+	}
+}
+
+// Closed reports whether every `requires` in the plan unifies with (a) observed world state, or
+// (b) an `expect` of another act in the plan.
+//
+// SET MEMBERSHIP. No graded overlap, no threshold, no judge — which is what retired the hardest
+// open question in the original planning sketch.
+func (b *Being) Closed(plan []*Expression) ([]Triple, bool) {
+	projected := map[string]bool{}
+	for _, e := range plan {
+		for _, x := range e.Expects {
+			projected[x.Key()] = true
+		}
+	}
+	var holes []Triple
+	for _, e := range plan {
+		for _, a := range e.Acts {
+			for _, r := range a.Requires {
+				if projected[r.Key()] {
+					continue
+				}
+				if truth, _ := b.Obs.Resolve(r); truth == TruthTrue {
+					continue
+				}
+				holes = append(holes, r)
+			}
+		}
+	}
+	sort.SliceStable(holes, func(i, j int) bool { return holes[i].Key() < holes[j].Key() })
+	return holes, len(holes) == 0
+}
+
+// Run is the plan loop. Steps 1, 2, 4, 5 are FREE. Only step 3 costs money, and the entire game is
+// making step 5 do more work over time so step 3 runs fewer times.
+//
+// The floor is ONE model call, never zero: the irreducible call is the FRAMING, not the plan.
+// Precedent can supply a plan; only the model can judge that the precedent applies. Nothing is
+// executed on precedent alone.
+func (b *Being) Run(target []Triple, maxPasses int) (*Cycle, error) {
+	c := &Cycle{Target: target}
+	b.Metrics.Cycles++
+
+	// THE RECONCILER. plan → act → observe → is the target met? if not, and something new was
+	// learned, RE-PLAN. This is the watcher from the design, and it is what lets a being DISCOVER a
+	// prerequisite: a bare build closes structurally but fails; the failure is observed
+	// (`build:/ output app.src`); the next plan sees it and writes the source. A single-shot Run
+	// cannot do that — it would plan once, fail once, and stop, learning a probability but never a
+	// structure.
+	//
+	// Cold, this takes several planning cycles (discover each prerequisite in turn). Warm, precedent
+	// surfaces the whole winning plan and it closes in one. THAT is the retrieval curve.
+	for cycle := 0; cycle < maxReconcileCycles; cycle++ {
+		if b.targetMet(target) {
+			break
+		}
+		plan, ok := b.plan(target, maxPasses, c)
+		if !ok {
+			c.Unresolved = true
+			break
+		}
+		c.Unresolved = false
+		if b.express(plan, c) { // the ascent — act, observe, grade
+			break // an observed world event superseded the rest of this expression
+		}
+	}
+
+	if !b.targetMet(target) {
+		c.Unresolved = true
+	} else {
+		c.Unresolved = false
+		b.Metrics.Closures++
+		b.Metrics.PassesToClosure = append(b.Metrics.PassesToClosure, c.Passes)
+	}
+	return c, nil
+}
+
+// maxReconcileCycles bounds plan→act→replan. A being that cannot reach the target in this many
+// cycles has hit a wall the world will not let it through.
+const maxReconcileCycles = 6
+
+// targetMet reports whether every target triple is OBSERVED true. Not projected — observed. The
+// being does not get to believe it is done.
+func (b *Being) targetMet(target []Triple) bool {
+	for _, t := range target {
+		if truth, _ := b.Obs.Resolve(t); truth != TruthTrue {
+			return false
+		}
+	}
+	return true
+}
+
+// plan runs the inner plan-to-closure loop: emit, drain, check closure, repeat until the plan's
+// requires are all grounded (structural closure) or a rail trips. Returns the closed plan.
+func (b *Being) plan(target []Triple, maxPasses int, c *Cycle) ([]*Expression, bool) {
+	var plan []*Expression
+	lastHoles := -1
+
+	for pass := 0; pass < maxPasses; pass++ {
+		holes, closed := b.Closed(plan)
+		if len(plan) > 0 && closed {
+			return plan, true
+		}
+		// FIXPOINT: the model is not making progress. A pass cap alone lets it spin N times emitting
+		// nothing useful.
+		if pass > 0 && len(holes) == lastHoles && len(holes) > 0 {
+			return plan, false
+		}
+		lastHoles = len(holes)
+
+		// 1+2. INDEX + PRESENT — free. precedent BEFORE the first call, which is what lets call #1
+		// close the plan once the being knows the task.
+		present := b.present(target, holes)
+
+		// 3. PLAN — ONE model call. the only cost.
+		raw, err := b.Infer(b.System, present)
+		if err != nil {
+			return plan, false
+		}
+		b.Metrics.InferenceCalls++
+		c.Passes++
+
+		res, perr := Parse(raw)
+		b.Metrics.Rejects += len(res.Rejects)
+		c.Rejects = append(c.Rejects, res.Rejects...)
+		if perr != nil {
+			continue // no acts. try again; the fixpoint rail will stop us if it keeps happening.
+		}
+		if err := res.Expression.Validate(); err != nil {
+			c.Rejects = append(c.Rejects, Reject{Line: "<emission>", Reason: err.Error()})
+			continue
+		}
+
+		// 4. DRAIN — place everything. Extra nodes the plan did not need are still gradeable bets.
+		b.expressionSeq++
+		e := res.Expression
+		e.EpisodeID = b.episodeID
+		e.SpanID = b.ensureSpan()
+		e.BornFrom = append([]ObservationID(nil), b.currentBornFrom...)
+		expressionID := fmt.Sprintf("e%d", b.expressionSeq)
+		attributionRejects := b.prepareExpressionPredictionFields(expressionID, &e)
+		b.Metrics.Rejects += len(attributionRejects)
+		c.Rejects = append(c.Rejects, attributionRejects...)
+		b.Aff.Stamp(&e) // THE WORLD says what is measurable, not the model.
+		counter := b.CountTokens
+		if counter == nil {
+			counter = ApproxTokenCount
+		}
+		e.TokenCount = counter(expressionMemoryText(&e))
+		b.Expr.Place(expressionID, &e)
+		if b.Activation != nil {
+			b.Activation.BumpNode("expression:"+e.ID, 1)
+			b.Activation.BumpSpan(e.SpanID, 1)
+		}
+		plan = append(plan, &e)
+	}
+	_, closed := b.Closed(plan)
+	return plan, closed
+}
+
+// express fires acts whose requires are satisfied, and folds what the world says back in.
+//
+// # It is a LOOP, and that is not an optimization
+//
+// The first live run found this. A guarded act — exec, requiring `file:/x exists true` — cannot fire
+// immediately after the write that creates the file, because THE WRITE DOES NOT OBSERVE THE FILE.
+// The world reports "written"; whether it EXISTS is something the being must go and perceive. That
+// is LAW 1 working exactly as designed: expression cannot write world state.
+//
+// So the ascent has a rhythm:
+//
+//	fire what is runnable  →  the bets mature  →  SETTLE (go and look)  →  new observations
+//	→  guards that were UNKNOWN are now TRUE  →  fire the newly-unblocked  →  repeat
+//
+// A single pass fires only the unguarded acts and silently abandons the rest. The plan looks
+// "closed" and the being never does the second half of it — which is exactly what happened: `acts=1`
+// on every run, the exec never ran, and its bets were graded against a world where it had never
+// executed.
+func (b *Being) express(plan []*Expression, c *Cycle) (superseded bool) {
+	resolve := func(t Triple) Truth {
+		truth, _ := b.Obs.Resolve(t)
+		return truth
+	}
+	fired := map[string]bool{}
+
+	for round := 0; round < maxExpressRounds; round++ {
+		acted := false
+		for _, e := range plan {
+			for _, a := range e.Runnable(resolve) {
+				id := e.ID + "/" + a.ID
+				if fired[id] {
+					continue // an act fires ONCE. it is not idempotent and must not be replayed.
+				}
+				fired[id] = true
+				acted = true
+
+				b.tick++
+				out := b.World.Do(a) // MOTOR: no model, no present. it does not think, it executes.
+				c.Acts++
+				// World.Do has returned: the act is complete. Arm eligible predictions BEFORE
+				// appending its effects, so an immediate outcome is causally after arming.
+				e.Complete(a.ID, b.tick)
+				for _, t := range out.Effects {
+					b.observeInSpan(t, ProvenanceRaw, e.SpanID)
+				}
+				if out.Status == "superseded" {
+					return true
+				}
+			}
+		}
+		b.tick++
+		b.Settle() // the bets come due; the being goes and looks. THIS IS WHAT UNBLOCKS THE NEXT ROUND.
+
+		if !acted {
+			return false // nothing fired this round and nothing new can — the ascent is done.
+		}
+	}
+	return false
+}
+
+// maxExpressRounds bounds the fire→settle→fire rhythm. A plan needing more rounds than this is
+// almost certainly cyclic, and the DAG rule says it cannot be.
+const maxExpressRounds = 8
+
+// Cycle is one target, pursued.
+type Cycle struct {
+	Target     []Triple
+	Passes     int // PASSES-TO-CLOSURE. this is the learning curve.
+	Acts       int
+	Rejects    []Reject
+	Unresolved bool
+}
+
+func contains(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+func obsID(o Observation) string {
+	if o.ID != "" {
+		return string(o.ID)
+	}
+	return fmt.Sprintf("%s@%d", o.Key(), o.At)
+}
+
+// EdgeReport exposes what the being has learned.
+func (b *Being) EdgeReport() []string { return b.Expr.EdgeReport() }
+
+// Report is the whole point: the two curves, and the check on whether the model earns its keep.
+func (b *Being) Report() string {
+	m := b.Metrics
+	acc := 0.0
+	if m.Resolved > 0 {
+		acc = float64(m.Correct) / float64(m.Resolved)
+	}
+	edge := 0.0
+	if m.Resolved > 0 {
+		edge = m.GradeSum / float64(m.Resolved)
+	}
+	return fmt.Sprintf(
+		"closures=%d/%d  passes-to-closure=%v  inference-calls=%d\n"+
+			"bets: resolved=%d correct=%d (%.0f%%)\n"+
+			"EDGE OVER BASE RATE = %+.4f   <- near zero means the model is PARROTING and not earning its keep\n"+
+			"rejects=%d",
+		m.Closures, m.Cycles, m.PassesToClosure, m.InferenceCalls,
+		m.Resolved, m.Correct, acc*100, edge, m.Rejects)
+}

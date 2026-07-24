@@ -1,10 +1,10 @@
-# world-agent-v2
+# distributed-agent-v2
 
 **Status:** DESIGN — nothing built. Companion to [skyra-dna-v3](../skyra-dna-v3/README.md).
 **Supersedes in spirit:** `design-docs/world/*` (v1 world), and folds in
 `distributed systems design docs/ephemeral-world-workers.md`.
 
-## What a world-agent is
+## What a distributed-agent is
 
 > **An agent in this runtime is a series of spaces that belong to the same underlying thing — a
 > bounded group of specialized spaces.**
@@ -13,13 +13,13 @@ That is the definition, and it is **not** "a thing that thinks."
 
 ```text
 skyra-agent    COGNITION — nucleus, expression graph, grades.   it MOVES.
-world-agent    SPACES    — topology, state, affordances.        it IS MOVED OVER.
+distributed-agent    SPACES    — topology, state, affordances.        it IS MOVED OVER.
 device-agent   SPACES    — a bounded group of device spaces.    it IS MOUNTED.
 ```
 
 There is not one agent. There are many. **Right now exactly one of them has cognition.**
 
-The skyra-agent moves across the world and mounts other world-agents. World-agents are strictly
+The skyra-agent moves across the world and mounts other distributed-agents. World-agents are strictly
 spaces that cognitive agents move over, do work on, and mount.
 
 ## The one law that keeps this honest
@@ -146,7 +146,7 @@ Still to write (mostly by lifting from `distributed systems design docs/`):
 
 ## Open
 
-- Does a world-agent ever get cognition? Everything written assumes **no** — the correspondence maps
+- Does a distributed-agent ever get cognition? Everything written assumes **no** — the correspondence maps
   DNA → *place capability registry*, not DNA → DNA. If that changes, a mount becomes two learning
   beings meeting rather than one being visiting a place that answers, and much of this is wrong.
 - Shared worlds: if two cognitive agents leave marks in the same space, whose tick governs whose

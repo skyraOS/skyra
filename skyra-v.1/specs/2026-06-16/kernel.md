@@ -4,9 +4,9 @@
 
 ## Files
 
-- `../../src/skyra/relation/relation.go` — the kernel (`traverse`)
-- `../../src/skyra/relation/relation_test.go` — remove the crossing test
-- `../../src/skyra/space.go` — the interface (only for the `[after]` Executables split)
+- `../../src/skyra/spacetime/relation/relation.go` — the kernel (`traverse`)
+- `../../src/skyra/spacetime/relation/relation_test.go` — remove the crossing test
+- `../../src/skyra/spacetime/space.go` — the interface (only for the `[after]` Executables split)
 
 ## Design sources
 

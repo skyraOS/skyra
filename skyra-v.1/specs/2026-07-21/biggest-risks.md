@@ -72,7 +72,8 @@ structure passes. In particular:
 ## Risk 1 — Lucky-hit corruption
 
 **Severity:** P0  
-**Current state:** specified, not implemented  
+**Current state:** two-bit claim and settlement paths implemented; routing/decomposition
+risks remain
 **Owned by:** Phase 4
 
 ### Failure
@@ -95,13 +96,21 @@ This is the most direct way for good task performance to conceal worsening cogni
 ### Existing protection
 
 - Consequence predictions have explicit targets, eligibility, and settlement evidence.
-- The two-bit architecture requires independent interpretation and consequence claim paths.
+- `InterpretationClaim` and consequence predictions have independent identities,
+  falsification addresses, comparison histories, edge updates, and metrics.
+- Interpretation settlement reads only the interpretation's own context prediction; action
+  success cannot enter that update path.
+- Toy #9 executes all four outcome combinations and verifies that removing the
+  interpretation-specific observation leaves interpretation unknown.
 
-### Missing protection
+### Remaining risk
 
-V3 currently has the consequence edge. It does not yet have an independently settled
-interpretation claim that licenses a category-discriminating prediction at a distinct
-address.
+- Interpreted observations can still influence routing before repeated contrary settlement
+  has learned enough to suppress them.
+- The decomposition boundary remains a capability/prompt seam rather than a complete type-
+  level proof of blindness at every caller.
+- A context predicate can still be poorly chosen; Phase-4F calibration and claim fusion
+  constrain this, but learned predicate promotion remains provisional.
 
 ### Required gate
 
@@ -120,7 +129,8 @@ not infer it from action success. No shared scalar may update both histories.
 
 ### Stop condition
 
-Do not describe Skyra as learning interpretations while this gate is open.
+The two-bit gate is closed. Do not describe interpretation routing as mature while the
+remaining decomposition and predicate-promotion risks above are open.
 
 ---
 
@@ -149,11 +159,11 @@ which evidence is collected next.
 - Interpreted observations carry confidence and `DerivedFrom` pointers.
 - Interpreted observations have capped fidelity.
 - Marks have zero grading fidelity.
+- Admitted interpretations own a separately falsifiable context prediction and update only
+  from that prediction's later settlement.
 
 ### Missing protection
 
-- The interpretation claim itself is not yet graded by later category-discriminating
-  observations.
 - The decomposer's blindness is an architectural rule but is not yet a hard capability
   boundary at every caller.
 - Low grading fidelity does not limit routing influence.
@@ -330,7 +340,9 @@ existence and code truth must remain separate records.
 
 **Severity:** P0  
 **Current state:** diagnosticity objective specified; landed fitter still reuses selection
-evidence, but its ability to create, override, or veto a commit is now blocked  
+evidence, but its ability to create, override, or veto a commit is now blocked. Phase-4F
+has a separate caller-declared held-out calibration rail; autonomous blind allocation is
+still open
 **Owned by:** Phase 3 predicate fitting and Phase 4 settlement
 
 ### Failure
@@ -352,6 +364,12 @@ meaning of the check can drift after the prediction was made.
   ```
 
 - Predicate/version identity changes when its model or threshold changes.
+- Phase-4F calibration retains support/fire counts and separates insufficient support,
+  measured inert, measured anti-diagnostic, and finite positive-PMI calibration states.
+- Same-claim selection consumes only finite positive calibrated PMI; inert,
+  anti-diagnostic, void, unknown, and under-supported dimensions cannot contribute.
+- Held-out overlap is rejected against declared prediction attributions. Undeclared model
+  exposure remains undetectable and is not claimed away.
 
 ### Confirmed Phase-3 failure
 

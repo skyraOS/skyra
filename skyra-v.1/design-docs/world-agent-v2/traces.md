@@ -1,7 +1,7 @@
 # Traces — Stigmergy
 
 **Status:** DESIGN DIRECTION. **NOT BUILT, and not to be built yet.**
-Part of [world-agent-v2](README.md).
+Part of [distributed-agent-v2](README.md).
 
 > **Do not build this until the being can be wrong about something.** It is a whole subsystem,
 > downstream of a core loop that does not exist. Written down so it is not lost, and so the hazard

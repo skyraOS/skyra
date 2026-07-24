@@ -11,7 +11,7 @@ test.
 [interpretation-prediction-induction-boundary.md](interpretation-prediction-induction-boundary.md) ·
 [genuinely-balanced-ambiguity.md](genuinely-balanced-ambiguity.md) ·
 [../2026-07-20/replacing-triples-with-compression.md](../2026-07-20/replacing-triples-with-compression.md) ·
-[../../src/skyra/skyra-dna-v3/interpretation_learning_spec.md](../../src/skyra/skyra-dna-v3/interpretation_learning_spec.md)
+[../../src/skyra/cognitive-agent/skyra-dna-v3/interpretation_learning_spec.md](../../src/skyra/cognitive-agent/skyra-dna-v3/interpretation_learning_spec.md)
 
 **Sharpened by:**
 [The Two-Bit Outcome: Interpretation and Prediction Are Separately Falsifiable](the-two-bit-outcome.md).

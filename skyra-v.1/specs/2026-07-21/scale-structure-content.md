@@ -22,7 +22,14 @@ latter.
 structural parser. Content dimensions carry an explicit paragraph-carrier identity and
 one-based slot. When fewer paragraphs arrive than predicted, materialized slots settle and
 absent slots become `VOID`; only settled rows enter the generic learning projection. List
-and code-block carriers have not yet been added.
+and code-block carriers have not yet been added. A second checkpoint now freezes per-tool
+positive-fire calibration from raw pre-birth held-out windows: coverage, base rate,
+PMI, expected credit, and their support counts survive into each comparison.
+As of 2026-07-22, explicit same-claim identity and a conservative scalar projection are
+also live: held-out expected credit selects one representative per claim before runtime
+settlement, that winner contributes per-fire PMI if true, and distinct winners sum.
+This prevents duplicate and sensor-lottery stacking. Learned joint fusion, autonomous
+same-claim detection, and full non-fire scoring remain open.
 
 ## The unifying rule
 

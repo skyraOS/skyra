@@ -24,17 +24,17 @@ There is not one agent. There are many. Right now exactly one of them has cognit
 
 ```text
 skyra-agent    cognition — nucleus, genes, learning        (moves)
-world-agent    spaces — topology, state, affordances       (is moved over)
+distributed-agent    spaces — topology, state, affordances       (is moved over)
 device-agent   spaces — a bounded group of device spaces   (is mounted)
 ```
 
-The skyra-agent moves across the world and mounts other world-agents / devices.
+The skyra-agent moves across the world and mounts other distributed-agents / devices.
 
 ## The Kernel Might Be The Same Kernel
 
 Kubernetes has the same pattern, and it mirrors Observe/Express traversal.
 
-We could potentially use the **same kernel** we use for the skyra-agent for the world-agent —
+We could potentially use the **same kernel** we use for the skyra-agent for the distributed-agent —
 where the world does distributed-systems computation with it.
 
 ---

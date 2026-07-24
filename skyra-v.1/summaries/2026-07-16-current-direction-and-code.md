@@ -62,7 +62,7 @@ identity and observation-side parser learning are named but less mature.
 
 ### Shared graph substrate
 
-The common runtime contracts are in `src/skyra/space.go`:
+The common runtime contracts are in `src/skyra/spacetime/space.go`:
 
 - `Space` is the universal traversable cell;
 - `Slice` owns per-being traversal records, maps, results, and proper time;
@@ -72,19 +72,19 @@ The common runtime contracts are in `src/skyra/space.go`:
 - activation records are keyed by edge identity, allowing the same node to have
   different strength in different contexts.
 
-The relation kernel in `src/skyra/relation/relation.go` performs depth-first graph
+The relation kernel in `src/skyra/spacetime/relation/relation.go` performs depth-first graph
 waves with amplitude attenuation, branch conservation, activation thresholds,
 visited-path termination, post-order expression, and brief slice bookkeeping
 locks. It deliberately does not interpret cognitive meaning.
 
-The separate `src/skyra/traverse` package is an even smaller budgeted traversal
+The separate `src/skyra/spacetime/traverse` package is an even smaller budgeted traversal
 substrate. It walks a weighted frontier, prunes unaffordable children, returns the
 lit subgraph, and exposes the traversed edges as an eligibility set. This clean,
 domain-ignorant traversal is close to the kernel role envisioned by the new specs.
 
 ### Embodied spatial world
 
-`src/skyra/world` implements a spatial environment with:
+`src/skyra/distributed-agent/world` implements a spatial environment with:
 
 - coordinates and placed agents;
 - perception, engagement, movement, bump, and wait primitives;
@@ -93,7 +93,7 @@ domain-ignorant traversal is close to the kernel role envisioned by the new spec
 - walls, paths, and deterministic maze generation;
 - results returned as explicit world-authored impulses.
 
-`src/skyra/user-dna` represents the human participant. It performs no inference;
+`src/skyra/user-agent/user-dna` represents the human participant. It performs no inference;
 it records inbound and outbound impulses and accumulates known entities.
 
 ### DNA v2: integrated but superseded cognition

@@ -474,7 +474,7 @@ benchmark remained approximately 312–370 ns/op across 0 to 100,000 unrelated b
 For this review, the currently affected packages also pass:
 
 ```text
-go test ./src/skyra/skyra-dna-v3 ./src/skyra/world3d ./cmd/globe
+go test ./src/skyra/cognitive-agent/skyra-dna-v3 ./src/skyra/distributed-agent/world3d ./cmd/globe
 ```
 
 ## Compression research: triples are a bootstrap codebook

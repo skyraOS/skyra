@@ -179,7 +179,7 @@ See [the-cycle.md](the-cycle.md).
    traces, targets, notes). *"A wave of mine passed here"* is true and perceiving it is memory. *"So
    food is in the kitchen"* is laundering. A mark can steer where you look; it can never settle what
    you claimed. Enforced mechanically: `Observation.Fidelity()` returns **0** for a mark.
-   See [world-agent-v2](../world-agent-v2/README.md).
+   See [distributed-agent-v2](../distributed-agent-v2/README.md).
 
 ## The parts
 

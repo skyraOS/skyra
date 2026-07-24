@@ -1,6 +1,6 @@
 package placegateway
 
-import "skyra-v1/src/skyra"
+import "skyra-v1/src/skyra/spacetime"
 
 // PlaceRef is the smallest thing the gateway needs to know about a target
 // place. Keep it small until the place model settles.
@@ -21,4 +21,3 @@ type Handler interface {
 type PrimitiveHandler interface {
 	HandlePrimitive(place PlaceRef, impulse skyra.Impulse) (any, error)
 }
-

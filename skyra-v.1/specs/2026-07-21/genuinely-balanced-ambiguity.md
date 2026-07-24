@@ -5,7 +5,7 @@
 **Tests:** interpretation closure, held expectation fields, graph-query fixed points,
 and behavior when the substrate has no earned basis for collapse.  
 **Parent:**
-[interpretation-learning](../../src/skyra/skyra-dna-v3/interpretation_learning_spec.md)
+[interpretation-learning](../../src/skyra/cognitive-agent/skyra-dna-v3/interpretation_learning_spec.md)
 
 ## The question
 
@@ -298,4 +298,3 @@ learning is implemented, the substrate must demonstrate:
 
 > **When reality has not supplied a reason to choose, Skyra knows that it does not
 > know—and acts to acquire the missing distinction rather than appointing a winner.**
-

@@ -1,7 +1,7 @@
 # kernel-v2
 
 **Status:** DESIGN — nothing built. Companion to [skyra-dna-v3](../skyra-dna-v3/README.md) and
-[world-agent-v2](../world-agent-v2/README.md).
+[distributed-agent-v2](../distributed-agent-v2/README.md).
 **Lifts from:** `specs/2026-07-08/` — the reform was written, marked superseded, and never built.
 
 ## The uncomfortable fact

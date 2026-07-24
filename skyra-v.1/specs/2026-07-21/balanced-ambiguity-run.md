@@ -3,7 +3,7 @@
 **Date:** 2026-07-21
 **Status:** RUN (paper walk executed) · the gate the interpretation phases sit behind
 **Spec:** [genuinely-balanced-ambiguity.md](genuinely-balanced-ambiguity.md) (the fixture and pass conditions)
-**Walked against:** the *continuous-replacement* path in `src/skyra/skyra-dna-v3/`
+**Walked against:** the *continuous-replacement* path in `src/skyra/cognitive-agent/skyra-dna-v3/`
 (`ingest.go ObserveImpulse` → `activation_field.go activateImpulse / propagateActivation /
 deriveActivatedTarget` → `memory.go`), **not** the retired class-wave (`wave.go Resolve`)
 the fixture's Pass-0/1/2 vocabulary is written in.

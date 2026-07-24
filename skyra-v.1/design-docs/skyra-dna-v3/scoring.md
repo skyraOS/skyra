@@ -1,6 +1,6 @@
 # Grading
 
-**Status:** DESIGN · part of [skyra-dna-v3](README.md) · implemented shape in `src/skyra/skyra-dna-v3/edge.go`
+**Status:** DESIGN · part of [skyra-dna-v3](README.md) · implemented shape in `src/skyra/cognitive-agent/skyra-dna-v3/edge.go`
 
 ## What a grade is
 

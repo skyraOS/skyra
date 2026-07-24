@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"skyra-v1/src/skyra"
-	dnav3 "skyra-v1/src/skyra/skyra-dna-v3"
-	"skyra-v1/src/skyra/world"
-	"skyra-v1/src/skyra/world3d"
+	dnav3 "skyra-v1/src/skyra/cognitive-agent/skyra-dna-v3"
+	"skyra-v1/src/skyra/spacetime"
+	"skyra-v1/src/skyra/distributed-agent/world"
+	"skyra-v1/src/skyra/distributed-agent/world3d"
 )
 
 // The bridge: dna-v3 mounted on the globe, over the time kernel.

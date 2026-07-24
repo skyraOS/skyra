@@ -84,7 +84,7 @@ the budget *measures* or whether it's *conserved*. All of it is in the cells.
 
 ## The interface change
 
-`src/skyra/space.go`, current:
+`src/skyra/spacetime/space.go`, current:
 
 ```go
 type Space interface {
