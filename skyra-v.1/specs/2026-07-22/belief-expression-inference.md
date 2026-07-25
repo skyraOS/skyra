@@ -206,12 +206,29 @@ The call must not receive:
 
 - previously created concrete Beliefs, including held interpretations;
 - the current target;
-- open Expectations;
+- **any concrete Expectation — open or settled** (see below);
 - prediction confidences;
 - the answer planning wants;
 - pending or merely proposed Actions;
 - downstream action success presented as evidence that an interpretation was
   correct.
+
+**Settled Expectations are hidden too — DECIDED 2026-07-24.** Open ones are excluded by
+LAW 6. Settled ones are excluded because a settled bet is informationally redundant against
+the Observation that settled it, while showing it would hand the desire-blind call a
+prediction and its confidence. Calibration reaches cognition as **aggregated precedent**
+(edge `P`, `N`, base rates such as *"worked 63% of 8 tries"*), never as a readable prior bet.
+
+Combined with the same-kind law hiding Expectations from `ActionPhase`
+([perturb-observe §6a](perturb-observe-traversal.md#6a-creation-phase-controls-concrete-visibility)),
+this yields:
+
+> **No inference call ever reads a concrete Expectation.** It is written by the action call
+> and read only by the settler and the grader — both deterministic, neither a model. LAW 4
+> becomes structural rather than remembered.
+
+Revisitable on one condition: a demonstrated case where the belief call needs the prior
+claim itself rather than its aggregate statistics.
 
 Completed Actions are visible as historical context, not as backward credit.
 They remain explicitly typed MINE or THE WORLD'S so the model cannot confuse what

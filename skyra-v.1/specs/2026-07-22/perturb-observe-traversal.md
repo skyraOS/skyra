@@ -247,10 +247,10 @@ The governing law is:
 
 This makes traversal visibility phase-dependent:
 
-| Creation phase | Concrete Observations | Concrete Beliefs | Concrete Actions |
-|---|---:|---:|---:|
-| `BeliefPhase` | visible | hidden | visible when completed |
-| `ActionPhase` | visible | visible | hidden |
+| Creation phase | Concrete Observations | Concrete Beliefs | Concrete Actions | Concrete Expectations |
+|---|---:|---:|---:|---:|
+| `BeliefPhase` | visible | hidden | visible when completed | **hidden** |
+| `ActionPhase` | visible | visible | hidden | **hidden** |
 
 Therefore:
 
@@ -258,6 +258,84 @@ Therefore:
 BELIEF PRESENT = Observations + completed Actions
 ACTION PRESENT = Beliefs + Observations
 ```
+
+### Expectations are a phase of the Action layer — DECIDED 2026-07-24
+
+An Expectation is **belief-like in content** — `doc.go`'s four causes put the *state change*
+(final cause) between observation and action, and an Expectation is that final cause stated as
+a falsifiable address. That ontology is real and is not what the layer encodes.
+
+**The layer encodes creation and traversal structure, not ontology.** By creation, an
+Expectation is inseparable from its act:
+
+> LAW 5 — *every act appears in at least one expect, and every expect carries a `within`, or
+> the emission is rejected.*
+
+An act without an expect is rejected; an expect without acts has no `By`. They are **one
+emission with two faces** — what I do, and what I claim results. So the Expectation is a phase
+of the Action layer:
+
+```text
+L0  tokenized observations
+L1  tokenized beliefs
+L2  tokenized actions        ← two faces: the ACT, and its EXPECTATION
+```
+
+**Why this placement and not the alternatives:**
+
+```text
+L1-phase (belief phase)   ActionPhase would create an L1 record while needing to SEE L1
+                          records — the audit in §5 then needs sub-type discrimination
+                          inside L1. Rejected.
+
+own field (L3)            clean, but adds a type and misorders the causal chain: an
+                          expectation is not "after" an action, it is emitted WITH it.
+                          Rejected.
+
+L2-phase                  CreationPhase maps 1:1 to layers. BeliefPhase → L1,
+                          ActionPhase → L2 (acts + expects). §5's audit stays trivial:
+                          "zero prior concrete L2 in an ActionPhase payload." CHOSEN.
+```
+
+### The uniform visibility rule
+
+With expectations on L2, the law needs no carve-outs:
+
+> **Same-kind hidden; other-kind visible when done.**
+
+- `ActionPhase` hides **all** prior concrete L2 — acts and expectations alike. Same-kind, one
+  rule, no sub-type branch. This is what prevents the action worker becoming an imitation
+  engine for either its prior acts *or* its prior bets.
+- `BeliefPhase` hides L1 (same-kind) and sees L2 acts **when completed** — historical context,
+  never backward credit.
+
+### Expectations are hidden from BeliefPhase even when settled
+
+**Open expectations** are hidden by LAW 6 — the belief call must not see the open bets, their
+confidences, or the target, or it resolves ambiguity toward the answer it wants.
+
+**Settled expectations are also hidden**, which is the less obvious half:
+
+```text
+a settled bet adds nothing the settling OBSERVATION does not already carry
+showing it hands the belief call a prediction AND its confidence — the exact desire leak
+calibration is supposed to arrive as AGGREGATED precedent (edge P, N, base rates),
+    never as a readable prior bet
+```
+
+So the Expectation column is uniformly **hidden**, and the property that follows is worth
+stating as a law in its own right:
+
+> **No inference call ever reads a concrete Expectation.** It is written by the action call,
+> and read only by the settler and the grader — both deterministic, neither a model.
+
+That makes LAW 4 (*"the model cannot touch the grading path at all"*) structural rather than
+remembered.
+
+**Revisitable.** The settled-expectations ruling rests on the claim that a settled bet is
+informationally redundant against its settling observation. If a case appears where the belief
+call demonstrably needs the prior claim — not its aggregate statistics — this cell is the one
+to reopen, and only this cell.
 
 The same-kind node is not removed from perturbation. On ascent it becomes
 transparent:

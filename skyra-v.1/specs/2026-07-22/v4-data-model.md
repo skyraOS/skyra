@@ -104,9 +104,15 @@ it simply has nothing reading it yet.
                                    ▼              │
                         ┌────────────────────────────────┐
                         │             BELIEF             │
-                        │  many triples · the heated unit│
+                        │  many triples · a concrete whole│
                         └────────────────────────────────┘
 ```
+
+> **Corrected 2026-07-24.** This box read *"the heated unit."* It is not. Heat lives on the
+> **segmented** field — `SegmentedToken{ParentID, Position, Token}` — and every concrete type
+> (Observation, Belief, Action) has a segmented projection that conducts it. A Belief is a
+> **concrete bounded whole**; it is reached *because* its tokens are hot, not because it is
+> itself the unit of heat. See [tokenizer §3](tokenizer.md#the-concretesegmented-cycle).
 
 **Endpoints are things. The two mappings are named for the acts that make them.** They are
 mirror images: Observation collapses many acts into belief; Expression expands belief into
@@ -396,16 +402,41 @@ settle credits nothing, which is the honest outcome.
 **Partial settlement of a Belief:** its credit is a running mean over settled triples only,
 so a Belief accrues as evidence arrives rather than waiting on its slowest bet.
 
-### Predictions and beliefs are the same type at different stages
+### Predictions and beliefs are the same KIND OF CLAIM, but not the same layer
+
+> **Refined 2026-07-24.** This section originally read *"the same type at different stages."*
+> The **content** claim stands; the **type-identity** claim does not. An Expectation lives on
+> the Action layer, not as a phase of Belief — see
+> [perturb-observe §6a](perturb-observe-traversal.md#expectations-are-a-phase-of-the-action-layer--decided-2026-07-24).
 
 ```text
 belief      Belief + activation           HELD.   heat, no stake.
 prediction  Triple + confidence + within   STAKED. a bet with a deadline.
 ```
 
+**What is still true — the content.** Both are state claims. `doc.go`'s four causes place the
+*state change* (final cause) between observation and action, and a prediction is that final
+cause stated as a falsifiable address. *A prediction is a belief to come true* is accurate
+about what it **is**.
+
+**What changed — the layer.** Layer assignment encodes creation and traversal structure, not
+ontology, and by creation a prediction is inseparable from its act:
+
+> LAW 5 — *every act appears in at least one expect, and every expect carries a `within`, or
+> the emission is rejected.*
+
+An act without an expect is rejected; an expect without acts has no `By`. One emission, two
+faces. So the Expectation is a **phase of the Action layer (L2)**, which also makes
+`CreationPhase` map 1:1 onto layers (`BeliefPhase → L1`, `ActionPhase → L2`) and keeps the
+same-kind visibility audit free of sub-type discrimination.
+
 They convert: a prediction settles → the observation that settled it becomes a belief →
 that belief enters the heated region → it is a belief. The loop is
 beliefs → expression → predictions → observations → beliefs.
+
+**Note the conversion runs through the world, not through a phase flip.** A prediction does
+not *become* a belief by changing state; it is settled by an Observation, and that Observation
+grounds a Belief. LAW 1 stays load-bearing in the cycle.
 
 `Predicts` stays **singular**. A set of predictions is just N expectations, and splitting
 them is strictly more diagnostic — three claims tell you *which* failed; one conjunctive
@@ -482,8 +513,8 @@ there is nothing left for it to do.
 |---|---|
 | **occurrence identity** — "this one impulse arriving" | **Observation** — it *is* one act of observing |
 | **grading eligibility scope** — a bet settles only if its birth region is warm | **the Expression's Beliefs** — is any of them still hot |
-| **activation unit** — heat bumped and decayed per span | **Belief** — the heated unit, explicitly (§1) |
-| **retrieval key** — postings map terms → spans | **Belief** — postings map terms → beliefs |
+| **activation unit** — heat bumped and decayed per span | **the segmented field** — heat is carried by `SegmentedToken`s, which name their concrete parent. *(corrected 2026-07-24; this cell read "Belief — the heated unit")* |
+| **retrieval key** — postings map terms → spans | **the segmented field** — token/address indexes reach segmented material, whose `ParentID` names the concrete record |
 | **frame membership proxy** | **`Expression.Beliefs`** — taken when that field was recorded |
 
 ### Segmentation survives the dissolution
@@ -499,6 +530,68 @@ v4   PerceivedActs ──cut by wall-time gaps──▶ Observations ──merge
 
 Same signal, same rule, one fewer layer. Episodes group Observations rather than spans, and
 the derivation still runs one way.
+
+### Segmentation happens on the OBSERVE axis
+
+*(Folded in 2026-07-24 from the retired `traversal-spine.md` §8, which filed this on the
+descent. No decisions changed — only the axis, and the reasoning is unchanged.)*
+
+Boundary is a property of the **concrete** form: *"a concrete form owns identity, boundary,
+order, provenance"* ([tokenizer §3](tokenizer.md#the-concretesegmented-cycle)). `Perturb`
+traverses segmented material that already carries a `ParentID` — it forms no boundaries.
+Bundling PerceivedActs into one Observation **is** concrete realization, which happens during
+`Observe`.
+
+> **Perturb routes. Observe bounds.** Segmentation is a realization decision, not a routing
+> one.
+
+**The two axes split across two owners:**
+
+```text
+MEMBERSHIP   which occurrences are the same KIND    the heatmap — co-heat already carries
+                                                     recency (decay) and relatedness (propagation)
+TEMPORAL     where does one occurrence END           the bet's `Within` — an occurrence ends
+                                                     when its expectations mature and settle
+```
+
+Causation is temporal by definition, so the temporal boundary is not detected separately —
+the causal commitment *is* the extent. `Within` is wall-denominated ([time](time.md) §3d), so
+wall time enters through the bet rather than through an independent gap rule. That matters
+because the field cannot feel idle time pass: it decays per impulse, so a
+build-then-idle-then-build sequence would wrongly merge under pure co-heat, and separates
+correctly under `Within`.
+
+A second occurrence arriving *inside* the first's open window is **not** contamination — it is
+§3's *early change = surprise*: the stability claim *"I do not expect to revise this"* was
+violated, which is a real finding.
+
+**Two regimes, by whether a claim carries an open expectation:**
+
+```text
+WITH an open expectation     temporal care REQUIRED   supplied by `Within`
+WITHOUT one                   attention only           group aggressively; the worst case is a
+                                                       bad retrieval, which decays
+```
+
+This is the grouping law holding — *grouping may confer attention, never settlement rights.*
+Care is spent only where settlement can happen.
+
+**Settlement touches only `OBSERVED-heat ∩ open expectation`.** Active heat has two evidence
+phases and only one may settle:
+
+```text
+OBSERVED heat     the world reported this            → may settle at this address
+PROPAGATED heat   hot by co-heat / spreading only     → attention ONLY, never settles
+```
+
+Settling on propagated heat manufactures evidence by mistaking excitation for observation.
+Note this is the **amplitude evidence phase**, not `CreationPhase` — `perturb-observe` §6a is
+explicit that the two are different.
+
+**The log is append-only, which is what keeps segmentation reversible.** Observations are
+appended, never merged or mutated, so segmentation is a *derived read* over the log and is
+never irreversibly stamped at write time. The Slice preserves this on the traversal side too:
+*"a branch that later returns nothing was still genuinely perturbed."*
 
 ---
 
@@ -1068,7 +1161,7 @@ exists so the cost is visible per-struct rather than buried in §2.
 | 1 | `Act` | the shared base — an event at a place, at a time | **Yes.** It is what makes perceived and engaged the same kind of thing, which is the symmetry the spine rests on. |
 | 2 | `PerceivedAct` | the world's contract: it happened | **Yes.** `Source`, `At`, `Wall` are all non-derivable. |
 | 3 | `Observation` | the mapping many acts → beliefs | **Yes** — and on a specific test: it is what makes two competing readings *siblings*. Without it, preserved ambiguity is indistinguishable from coincidence. |
-| 4 | `Belief` | many triples; the heated unit | **Yes.** Separates the unit of retrieval from the unit of settlement, which are genuinely different sizes. |
+| 4 | `Belief` | many triples; a concrete bounded whole | **Yes** — but not for the reason first given. *(corrected 2026-07-24: this read "the heated unit," and justified itself by separating retrieval from settlement.)* Heat is on the segmented field, so that is not what it earns. It earns its place as the unit of a **reading** — what makes two competing interpretations of the same evidence independently identifiable, which HOLD requires. |
 | 5 | `Settlement` | the event that closes a claim | **Yes.** §7 rule 1 requires it; it is what makes the other five immutable. |
 
 ### Deleted from earlier drafts — four

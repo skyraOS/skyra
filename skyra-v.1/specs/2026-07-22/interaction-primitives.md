@@ -444,6 +444,51 @@ makes it owned.
 
 ## 9. The field is the first layer of traversal — DECIDED 2026-07-23
 
+> **Field material corrected 2026-07-24.** §9 was written when the field was thought of as
+> *entities → triples → spans*. It is not. The field is the **segmented
+> Observation–Belief–Action material** — `SegmentedToken{ParentID, Position, Token}` — with
+> typed addresses (IDs, world addresses, primitives, time, truth) staying exact and
+> untokenized. See [tokenizer §3](tokenizer.md#the-concretesegmented-cycle).
+>
+> **Everything below survives; only what it is made of changes.** The mapping:
+>
+> ```text
+> §9 as written          reads now as
+> entities, routing   →  the codec alphabet and typed address indexes
+> triples, the heatmap→  SEGMENTED TOKENS carry the heat
+> spans, reverse index→  `SegmentedToken.ParentID` IS the reverse index, to the concrete parent
+> Conductor.Target    →  a segmented token, not a triple
+> ```
+>
+> Two consequences worth stating: the reverse-index layer stops needing its own construct
+> (`ParentID` already is it), and **conductor cardinality resolves to ONE** — a token has
+> exactly one parent, by construction. That was an open question; it is closed by the
+> representation rather than by a decision.
+
+### 9.0 Descent conserves — folded in from the retired `traversal-spine.md` §3
+
+*(2026-07-24. Reconciliation only; the arithmetic is unchanged.)*
+
+The field has two kinds of heat movement and they use **different arithmetic by direction**:
+
+```text
+WITHIN a layer  (propagation)   crossing = a · P · conf        CREATES. source not depleted.
+                                per-link, reliability-weighted (§9.4).
+
+BETWEEN layers  (descent)       share = heat(parent) / |children|   CONSERVES. divide equally,
+                                then sum at the child.
+```
+
+So descent is the distributed-SOURCE / IDF pattern applied downward — a parent's heat divides
+equally among its children rather than copying in full to each, and a child **accumulates**
+across every hot parent that reaches it. Convergence is rewarded, exactly as in §9.4.
+
+> **Within-layer propagation creates; between-layer descent conserves. Neither is the other's
+> default.**
+
+Equal division is the chosen policy; weighting the descent by recency or reliability is
+available and deliberately not turned on.
+
 Everything above §9 describes the field as a thing that holds and gates excitation. **That
 was the category error.** The field does not gate anything. It is a **heatmap** — a potential
 landscape — and it is the **first layer of traversal**, not a store that traversal later
@@ -574,12 +619,14 @@ heat unbounded, bound the *walk*.
 
 ### 9.7 What this section OPENS or leaves open
 
-1. **Triple-grained or belief-grained heat?** A Conductor excites *a triple*
-   (entity-path routing is triple-grained, and TRANSPORT crosses per-expect). But
-   [v4-data-model](v4-data-model.md) §1 is emphatic that **the Belief is the heated unit** —
-   *"a Belief is what heats; a Triple is what settles."* These disagree about the grain of
-   excitation. Either the conductor rolls up to a belief before ranking, or the "heated unit"
-   claim softens. **Unresolved, and it is the load-bearing one for the next part.**
+1. ~~**Triple-grained or belief-grained heat?**~~ **CLOSED 2026-07-24 — neither.** The
+   question presupposed that heat lives at one of those two grains. It lives on the
+   **segmented field**: tokens carry heat, and every concrete type (Observation, Belief,
+   Action) has a segmented projection that conducts it. A Belief is a concrete bounded whole
+   reached *because* its tokens are hot — not itself the unit of heat. `v4-data-model` §1,
+   §4a, and §9 have been corrected accordingly. The Triple is typed propositional content
+   inside a Belief and the address an Expectation predicts; it was never a competing grain,
+   because one contains the other.
 
 2. **The combination rule now runs at read.** v3's saturating `bump` made the sum-vs-max
    choice silently at write. Deferring it to read is correct (9.3) but means the rule must be

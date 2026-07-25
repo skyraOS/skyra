@@ -1,10 +1,40 @@
 # The Traversal Spine — the Descent, Layer by Layer
 
+> # ⚠ RETIRED 2026-07-24 — DO NOT BUILD FROM THIS DOCUMENT
+>
+> **This doc describes a field model that no longer exists.** It was written on 2026-07-23,
+> before [tokenizer](tokenizer.md) and [perturb-observe-traversal](perturb-observe-traversal.md)
+> established the concrete/segmented representation. Its layer names collide with the live
+> ones and will mislead:
+>
+> ```text
+> THIS DOC (dead)                  LIVE MODEL
+> LAYER 0  ENTITIES            →   L0  tokenized observations
+> LAYER 1  TRIPLES  (heatmap)  →   L1  tokenized beliefs
+> LAYER 2  SPANS               →   L2  tokenized actions (+ expectations, as a phase)
+> ```
+>
+> The live field is **segmented Observation–Belief–Action token material**
+> (`SegmentedToken{ParentID, Position, Token}`), not entities/triples/spans.
+>
+> **Everything worth keeping has been folded into its real home — nothing was discarded:**
+>
+> | was here | now lives in |
+> |---|---|
+> | §1–§2 layer model, Conductor, reverse index | [interaction-primitives §9](interaction-primitives.md) (field material corrected; `ParentID` **is** the reverse index) |
+> | §3 heat flow — within-layer creates, between-layer conserves | [interaction-primitives §9.0](interaction-primitives.md) |
+> | §5 unbounded-until-the-walk | [interaction-primitives §9](interaction-primitives.md) |
+> | §6 held questions — grain, cardinality | **both closed.** grain: [interaction-primitives §9.7 #1](interaction-primitives.md); cardinality: **one**, since a token has exactly one `ParentID` |
+> | §8 segmentation | [v4-data-model §4a](v4-data-model.md) — *"Segmentation happens on the OBSERVE axis"*. It was filed here on the descent axis; that was the error. |
+> | §8.5 the cut, affordability-as-density | [kernel-alteration §9](kernel-alteration.md) and [belief-expression-inference §5](belief-expression-inference.md) |
+>
+> Retained below **only as the record of how the descent was reasoned out.** The reasoning
+> largely survived; the material it was reasoning about did not.
+
+---
+
 **Date:** 2026-07-23
-**Status: WORKING — in-session design.** Layers 0–2 and the flow rule are solidified. Two
-questions are deliberately HELD (grain, cardinality — §6) to be answered after the spine is
-fully walked. The descent stops at the span boundary, which is where segmentation,
-prediction, and spans intersect — the next conversation (§7).
+**Status: RETIRED — superseded, see banner above.** Formerly: *WORKING — in-session design.*
 
 **Interface:** [Perturb and Observe](perturb-observe-traversal.md) owns the phase
 contract. Frontier selection, allocation, affordability, and descent belong to
