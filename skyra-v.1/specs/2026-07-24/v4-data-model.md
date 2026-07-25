@@ -132,7 +132,7 @@ WORLD boundary) while collapsing two vocabularies into one.
 | **PerceivedAct** | *(nothing)* | An act that happened — the world's, another being's, or mine returning. Unfalsifiable. |
 | **EngageAct** | `Act` | An act the being intends. Carries guards. |
 | **Observation** | *(nothing — v3's `Observation` was a triple)* | **The mapping** many PerceivedActs → Beliefs, at a fidelity. |
-| **Belief** | *(nothing)* | **Many triples.** The unit of heat and retrieval. |
+| **Belief** | *(nothing)* | **Many triples · a concrete bounded whole.** Reached *because* its segmented tokens are hot — NOT itself the unit of heat (corrected 2026-07-24; see the box above and tokenizer §3). |
 | **Triple** | `Triple`, minus `Mode`/`Confidence`/`Payload` | One subject-predicate-object claim. **The unit of settlement.** |
 | **`Expression.Beliefs`** | *(nothing — the frame is discarded)* | The activation-weighted Beliefs one Expression was assembled from. A field, not a struct — a Belief is a Belief whether or not it is currently in one. |
 | **Expression** | `Expression` | **The mapping** beliefs → EngageActs. One emission. |
@@ -196,7 +196,7 @@ type Observation struct {
     Fidelity float64 // the CHANNEL's quality. mechanical 1.0, inferential ~0.3.
 }
 
-// Many triples. The heated unit.
+// Many triples. A concrete bounded whole; its SEGMENTED tokens carry heat (corrected 2026-07-24).
 type Belief struct {
     ID            BeliefID
     ObservationID ObservationID // what produced this. never empty.

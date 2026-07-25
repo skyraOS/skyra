@@ -1,8 +1,26 @@
 # Workers
 
 **Date:** 2026-07-22
-**Status:** OPEN LIST. The registry of v4 workers and their responsibilities. Grows as the
-port is designed; nothing here is built.
+**Status: SUPERSEDED IN PART — pre-token-model. Needs a rewrite pass; do not treat as
+current.** This registry predates three later decisions and is inconsistent with them:
+> - **Heat.** It says *"a Belief is the unit of heat"* (vocabulary note, worker #9). **Wrong**
+>   — heat is on the segmented token field ([definitions §0](definitions.md),
+>   [v4-data-model §1](v4-data-model.md)). A Belief is a concrete whole reached because its
+>   tokens are hot.
+> - **The traversal.** Its `sensory:*` / `plan:*` worker split predates
+>   [perturb-observe-traversal](perturb-observe-traversal.md) (Perturb/Observe) and
+>   [belief-expression-inference](belief-expression-inference.md) (the two inference calls).
+>   `plan:articulate`, `sensory:propagate`, etc. do not map cleanly onto Perturb/Observe.
+> - **Ingest.** `ObserveImpulse takes []Triple` describes the v3 signature, not the
+>   concrete/segmented cycle.
+>
+> **What survives:** the *responsibilities* (grade is write-path, the surprise gate, the
+> desire-blind boundary) and the naming convention. The **boundaries and vocabulary** need
+> re-deriving against the live set. Excluded from the coherence map ([COHERENCE](COHERENCE.md))
+> until rewritten.
+
+**Original status:** OPEN LIST. The registry of v4 workers and their responsibilities. Grows as
+the port is designed; nothing here is built.
 
 **Reads on:** [v4-port](v4-port.md) (the cycle inventory these are derived from),
 [v4-data-model](v4-data-model.md) (**the vocabulary — read first**),

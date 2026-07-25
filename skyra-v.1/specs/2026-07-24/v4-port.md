@@ -204,12 +204,19 @@ sense.
 
 ## 5. Open questions
 
-1. **One transition table or three?** Collapsing all three levels into one table is what
-   turns 6/6/8 into a single budget attenuating through depth. It is also the bigger
-   change. Not decided.
-2. **Does `plan:articulate` become `traverse.Assemble`, or does `traverse` get replaced by the
-   knapsack?** They are different arithmetic — attenuation vs. density-greedy — and only
-   one can be the kernel. This is the real technical fork in the port.
+> **Partially resolved 2026-07-24.** Q1 and Q2 below are closed by later docs; Q3–Q6 remain
+> open. This doc is otherwise a valid *measurement of the v3 code* (§2) and stays as reference.
+
+1. ~~**One transition table or three?**~~ **RESOLVED.** There is one wave with two phases,
+   `Perturb` (descent) and `Observe` (ascent), not three nested loops with 6/6/8 bounds. See
+   [perturb-observe-traversal](perturb-observe-traversal.md) and
+   [kernel-alteration](kernel-alteration.md).
+2. ~~**`traverse.Assemble` vs the knapsack — "the real technical fork."**~~ **RESOLVED — it
+   was not a fork.** Affordability *is* local density; the kernel does zero math and each
+   Space's `Observe` owns allocation-with-affordability.
+   See [kernel-alteration §9](kernel-alteration.md) and
+   [settlement-and-surprise §7b](settlement-and-surprise.md). "attenuation vs density-greedy"
+   was a false dichotomy — magnitude-as-weight makes affordability price-per-token.
 3. **How much of the substrate contract is adopted, and in what order** (§4a) — `Slice`
    alone, or `Space`/`Time`/`Impulse` together.
 4. **`Realm` as leaf contract, or replaced by a Space subtree?** Bears directly on

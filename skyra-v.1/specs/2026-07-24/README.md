@@ -3,6 +3,10 @@
 The current, self-consistent design set. Brought forward from `2026-07-22` after a
 reconciliation pass that removed the last known contradictions between docs.
 
+> **Start with [COHERENCE.md](COHERENCE.md)** — the sweep result. It says which docs are the
+> LIVE CORE (build from these), which are v3 reference, and which are stale/excluded. If you
+> only read one meta-doc, read that one.
+
 **Nothing in this set contradicts anything else in this set.** Where a doc corrects an
 earlier position, the correction is marked inline with its date and reasoning — the old
 position is kept, not deleted.
@@ -33,6 +37,7 @@ position is kept, not deleted.
 |---|---|
 | [belief-expression-inference](belief-expression-inference.md) | **CORE DECISION.** Two inference calls, the desire-blind boundary, resolve / hold / disregard. |
 | [settlement-and-surprise](settlement-and-surprise.md) | **SPLIT DECIDED, measure open.** Per-expectation settlement is credit + falsification; a window distribution diff is surprise + coverage. The diff gates; settlement grades. |
+| [staged-emission-and-credit](staged-emission-and-credit.md) | **RULE SETTLED.** Citation routes, activation weights — the model names its triggers, the system weighs its credit. `trigger→product` emission; prediction-as-a-stage proposed. |
 | [time](time.md) | Proper time. §3b–d and §4 decided; §3a and §3e still open. |
 
 **4 · Getting there**
