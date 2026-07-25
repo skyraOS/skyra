@@ -387,6 +387,64 @@ does it grade             NO — same rule as p: a dynamics signal gates and dia
 
 ---
 
+## 4a. The loop — the crank unrolled, and where each quantity governs
+
+The four quantities are not four ideas. They are **the four arcs of one cycle** — the crank
+(§0) unrolled across the record types. This is the dynamic spine; the measurement law (§0) is
+the static one.
+
+```text
+   observation ──▶ belief ──▶ act ─ ─▶ prediction ──▶ [ THE WORLD ] ──▶ observation ──▶ …
+        │            │          │           ┊               │                 │
+   interpret     select      guard      (proposed         SETTLES          new reading,
+   (belief       an act      while      stage — §3 of     the addressed    graded on the
+    worker)      from the    the        staged-emission)  claim            way in
+                 belief                                                     │
+        └──────────────────────── ONE TURN OF THE CRANK ───────────────────┘
+```
+
+**The dashed arc is proposed, not decided.** `act ─ ─▶ prediction` as a *separate* stage is
+[staged-emission-and-credit §3](staged-emission-and-credit.md). Today the prediction is
+bundled with the act (expectations are a phase of L2). Drawn dashed so the diagram does not
+encode a proposal as fact.
+
+### The loop is NOT closed inside the being
+
+> **The only arc that pays is the one through the world.** `belief → act → prediction` is a
+> chain in the being's head; it becomes a *loop* only when the world settles the prediction
+> and returns an observation. Remove the world step and you have the being spinning in its own
+> head — the self-reference *nothing measures itself* (§0) exists to forbid. **The world
+> closure is not one stage among four; it is the quarter that makes the other three
+> legitimate.**
+
+### Which arc each quantity governs
+
+```text
+A   ATTENTION   the DESCENT into each stage — what is live to interpret/select/guard    ranks
+p   TRUTH       the ASCENT out of each stage — what is shown, filtered, weighted         decides
+g   GRADE       the WORLD-CLOSURE arc — the prediction meeting its outcome               pays
+ΔB  DYNAMICS    the NET MOTION of one full turn — how the belief set moved               moves
+```
+
+So `A` and `p` operate *within* every stage (descent in, ascent out); `g` operates *only on
+the world arc* (the boundary read, §5); `ΔB` measures the *whole turn*. That is why only `g`
+touches learning — it is the only quantity that lives on the arc through the world.
+
+### The crank rhythm
+
+One turn of this loop is one settlement folded into the accumulator — **one turn of the
+crank, and (roughly) one tick** (a tick is one Observation; the world arc produces it). The
+loop and the crank (§0) are the same object: the crank is the loop seen as accumulation, the
+loop is the crank seen as motion.
+
+*(Each arc is owned by a doc; this section routes, it does not re-derive.
+`observation→belief` and `belief→act`: [belief-expression-inference](belief-expression-inference.md).
+`act→prediction` and the citation format: [staged-emission-and-credit](staged-emission-and-credit.md).
+world settlement: [settlement-and-surprise §3](settlement-and-surprise.md). the descent/ascent
+mechanics: [perturb-observe-traversal](perturb-observe-traversal.md).)*
+
+---
+
 ## 5. How they compose
 
 ```text
