@@ -90,11 +90,54 @@ now. The agent's Observe/Express against it is unchanged.
 
 ### This is already the code
 
-The dnav2 Orchestrator *is* this membrane: it holds the nucleus and runs waves
-against a world. To "load into the MacBook," point that same orchestrator's world
-reference at the MacBook's `world.Space`. Nothing in cognition or the kernel
-changes. All new work lives strictly *below* the membrane — the transport that
-lets a `world.Space` live on another machine and marshal a crossing.
+> Updated 2026-07-28. This section previously named the dnav2 Orchestrator. dnav2 is archived
+> at `skyra/archive/_skyra-dna-v2` and no `Orchestrator` type exists in the live tree. The
+> membrane's descendant is below.
+
+`dnav3.Being` is the membrane. It holds the nucleus — `Obs`, `Expr`, `Spans`,
+`Activation`, `Aff`, and `Infer`, the one model call site — and it carries
+exactly one world reference:
+
+```go
+type Being struct {
+    World Realm
+    ...
+}
+
+type Realm interface {
+    Do(Act) Outcome
+    Perceive(Triple) Outcome
+}
+```
+
+To "load into the MacBook," assign a different `Realm` to `Being.World`. That is
+the whole re-seat. Nothing in cognition changes, because cognition never had a
+handle on the world beyond those two methods.
+
+Note there are **two boundaries, not one**, and they are at different altitudes:
+
+```text
+Realm    cognition ↔ world    Do / Perceive          dnav3/world.go        LIVE
+Space    kernel ↔ node        Perturb / Observe      spacetime/space.go    DECIDED, NOT YET BUILT
+```
+
+`space.go` today still carries the wide interface — `Children()`, `Agents()`,
+`Slice()`, `NewActivation()`, `Content()`, `Observe`, `Express`, `ID()`. The
+narrowing to two closed methods is specified in
+`skyra/specs/2026-07-27/kernel-alteration.md` and is a precondition for anything
+here: `Children() map[string]Space` cannot cross a network without serializing an
+adjacency map per call or proxying every node.
+
+`Realm` is what a being mounts. `Space` is what the kernel walks. A device-place
+has to satisfy both — `Realm` so a being can act in it, `Space` so the kernel can
+traverse it — and `distributed-agent/world` already does, with `world.World`
+implementing `skyra.Space` and dispatching `perceive`, `engage`, `move`, and
+`wait` in `Observe`. Those are the same four primitives the membrane section
+below names, already live against the local world.
+
+Once it lands, both boundaries are two methods wide, which is what makes the
+transport claim credible: all new work lives strictly *below* the membrane, and
+there are four calls total to marshal.
 
 ### Relocation and projection are one operation at two granularities
 

@@ -6,7 +6,9 @@ falsification unit; a window distribution diff is added as a separate surprise a
 signal. **The divergence measure, the window definition, and whether the diff ever produces a
 grade are OPEN** (§8) — this doc exists to be fleshed out.
 
-**Reads on:** [belief-expression-inference](belief-expression-inference.md) (the two calls),
+**Reads on:** [definitions](definitions.md) §3a–§3b (the two graded arms, and which curve
+carries "prediction error" — §7's metric question is answered there),
+[belief-expression-inference](belief-expression-inference.md) (the two calls),
 [interaction-primitives](interaction-primitives.md) §7 (projected/observed phase — the
 prerequisite), [v4-data-model](v4-data-model.md) §3 (individual settlement, the credit walk),
 [time](time.md) §4 (the sensory organ that sweeps open addresses), [workers](workers.md) (the
@@ -173,7 +175,7 @@ it unobserved-as-false would corrupt every future grade scored against it.
 
 ---
 
-## 7. What each signal's curve should look like — OPEN, and it matters
+## 7. What each signal's curve should look like — WHICH METRIC IS RESOLVED; magnitude open
 
 The two signals have different expected shapes, and one of them is counter-intuitive.
 
@@ -246,8 +248,19 @@ coverage (the diff)   unanticipated share of what landed     should ↓ as the b
 ```
 
 *"Prediction error decreases"* is honestly served by **calibration**, not by `GradeSum`.
-**OPEN:** which quantity carries the thesis claim, and whether `GradeSum`'s decay toward zero
-should be stated as a success condition.
+
+> **RESOLVED 2026-07-25 — in favour of calibration.** `GradeSum` is not the prediction-error
+> curve and never was; it is the **headroom** curve. Prediction improving looks like
+> calibration error falling *while* `GradeSum` decays, and reading that decay as failure is
+> the trap. `GradeSum`'s approach to its floor is therefore **not** a failure condition and
+> must not be stated as one — what is falsifiable is the *floor's* value (§7's identity:
+> positive ⇒ instance-level information, zero ⇒ counting could have done it alone).
+> Full statement, including why the two graded arms reach their floors at different times:
+> [definitions §3a–§3b](definitions.md).
+
+**Still open here:** the expected *magnitude* of the floor, and how many reps it takes to
+reach it — which is what makes [time §3e](time.md)'s baseline distribution a prerequisite for
+reading either curve.
 
 This bears directly on the baseline ([time](time.md) §3e): a non-monotone metric can only be
 compared **at equal rep counts**, and its expected shape has to be known before anyone can

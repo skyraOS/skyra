@@ -95,9 +95,37 @@ L2" decision — cleanly, because that decision's core was *completeness*, which
 +  desire-blindness strengthens — the belief worker is even further from predictions
 +  "no inference call ever reads a concrete Expectation" SURVIVES (PredictionPhase hides prior expects)
 +  predicts the FUTURE BELIEF SET → closes the loop belief → belief
++  ΔB BECOMES GRADEABLE — see below
 −  a third model call
 −  a third CreationPhase row
+−  the action worker loses its implicit future-awareness — see below
 ```
+
+### The strongest argument for it, added 2026-07-25
+
+The prediction worker and the belief worker then emit **the same type at the same addresses,
+one step apart**: the expected post-action belief set, and the actual next belief set. They
+subtract. `ΔB` stops being a quantity merely observed about the field and becomes the
+**settlement of one worker's output against another's** — `BORN`/`MOVED` measured against
+what was projected, at named addresses, where absence within an address is falsity.
+
+That is exactly the property [settlement-and-surprise §6](settlement-and-surprise.md) says the
+window diff cannot inherit. It does not close the gap — `BORN` beliefs that no prediction
+covered are coverage failures and still need the diff — but it converts the predicted portion
+from a **gate** into something **gradeable**. See
+[definitions §4.3a](definitions.md).
+
+### The cost it does not advertise, added 2026-07-25
+
+Today express and expect are one call, so the action worker has **implicit future-awareness**:
+it cannot propose an act whose outcome it cannot state, because it must state it in the same
+breath. [workers](workers.md) names this — *"splitting removes that constraint, and nothing
+currently replaces it, because there is no act-side learning."*
+
+So staging is what makes [definitions §3b](definitions.md)'s bet — *steering runs through
+belief and retrieval, never lookahead* — actually load-bearing. **Adopting the split and that
+bet together is a larger step than either alone**, and the fused call has been hiding how
+large.
 
 ### The phase table grows to three — and stays clean
 
@@ -119,8 +147,17 @@ guarantee, different mechanism.
 ```text
 perturb-observe §6a   add PredictionPhase; expectations move from "phase of L2" to own phase
 belief-expression     add the prediction call as a third present
+definitions §3b       already written ASSUMING the split — the tense division and the
+                      "action does not see futures" bet. drop its assumes-note if adopted.
+definitions §4.3a     already written — ΔB as settlement of prediction against next belief
 workers               (already stale) — re-derive against three phases
 ```
+
+**The prediction present, from [definitions §3b](definitions.md):** the committed act set,
+the **address space** those acts can produce readings at (the affordance registry —
+world-given, not a projection), the **counted value distribution** at each of those addresses,
+the current beliefs, and observed settlement latency. Never a pre-computed projected outcome:
+that is the base rate wearing a costume, and it excites the addresses it names.
 
 ---
 

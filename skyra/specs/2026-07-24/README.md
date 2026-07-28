@@ -19,7 +19,7 @@ position is kept, not deleted.
 
 | doc | status |
 |---|---|
-| [definitions](definitions.md) | **THE MEASUREMENT LAW + FORMAL DEFINITIONS.** §0: the runtime admits only the measurable; measurement is a position on the falsification–truth scale. Then Attention `A` (ranks), Truth `p` (decides), Grade `g` (pays), Dynamics `ΔB` (moves). Start here. |
+| [definitions](definitions.md) | **THE MEASUREMENT LAW + FORMAL DEFINITIONS.** §0: the runtime admits only the measurable; measurement is a position on the falsification–truth scale. Then Attention `A` (ranks), Truth `p` (decides), Grade `g` (pays), Dynamics `ΔB` (moves). **§3a the two graded arms · §3b the tense split — *sight runs backward, forward is only ever committed to*.** Start here. |
 | [v4-data-model](v4-data-model.md) | **CORE VOCABULARY.** §1–3 settled. The spine: Observation → Belief → Action, and what each record is. |
 | [tokenizer](tokenizer.md) | The stable sensory alphabet and the **concrete/segmented cycle** — the representation everything else assumes. |
 
@@ -36,8 +36,8 @@ position is kept, not deleted.
 | doc | status |
 |---|---|
 | [belief-expression-inference](belief-expression-inference.md) | **CORE DECISION.** Two inference calls, the desire-blind boundary, resolve / hold / disregard. |
-| [settlement-and-surprise](settlement-and-surprise.md) | **SPLIT DECIDED, measure open.** Per-expectation settlement is credit + falsification; a window distribution diff is surprise + coverage. The diff gates; settlement grades. |
-| [staged-emission-and-credit](staged-emission-and-credit.md) | **RULE SETTLED.** Citation routes, activation weights — the model names its triggers, the system weighs its credit. `trigger→product` emission; prediction-as-a-stage proposed. |
+| [settlement-and-surprise](settlement-and-surprise.md) | **SPLIT DECIDED, measure open.** Per-expectation settlement is credit + falsification; a window distribution diff is surprise + coverage. The diff gates; settlement grades. §7's metric question closed by definitions §3b. |
+| [staged-emission-and-credit](staged-emission-and-credit.md) | **RULE SETTLED.** Citation routes, activation weights — the model names its triggers, the system weighs its credit. `trigger→product` emission; prediction-as-a-stage proposed — now with its strongest argument (ΔB becomes gradeable) and its hidden cost (the action worker loses implicit future-awareness). |
 | [time](time.md) | Proper time. §3b–d and §4 decided; §3a and §3e still open. |
 
 **4 · Getting there**
@@ -110,8 +110,10 @@ settlement-surprise §7a MEASURE β FIRST — one logged field decides whether t
 settlement-surprise §7b the p ≈ 0 suppress branch, and tail accuracy of the curve
 settlement-surprise §8  the divergence measure: coverage vs calibration (or both)
 settlement-surprise §8  what bounds the window · does the diff ever grade, or only gate
-settlement-surprise §7  WHICH METRIC CARRIES "prediction error" — GradeSum decays to zero
-                        as the graph converges, so its healthy shape is an inverted U
+settlement-surprise §7  the FLOOR's magnitude, and reps-to-reach-it (the metric question
+                        itself is CLOSED — see definitions §3b)
+definitions §3a         the baseline fork is ONE PER ARM, and both are open
+definitions §3a         where a reading's discriminating test lives (v4-data-model §5)
 kernel-alteration       the Observe signature migration across every Space implementation
 interaction-prim §9.7   distinct-origin dedup identity for raw injections
 time §3a                does the cognitive agent take a Slice
@@ -119,10 +121,19 @@ time §3e                RECORD THE BASELINE — a distribution, not a run. bloc
 v4-data-model §4b       compaction: the log grows without bound once runs stop wiping it
 ```
 
-**Two of these block measurement rather than design.** `time` §3e — no baseline distribution,
-so no claim about the port preserving behavior is falsifiable. And
-`settlement-and-surprise` §7 — if `GradeSum` is the thesis's "prediction error," a converged
-run and a broken run look alike, because a converging system drives it toward zero.
+**One open bet, stated so it is visible** — [definitions §3b](definitions.md): act selection
+is steered by belief and retrieval alone, never by lookahead. It loses if `GradeSum` rises
+while `PassesToClosure` stays flat, and the fallback is already half-built
+(`Expectation.By` is act-keyed and unread).
+
+**One of these blocks measurement rather than design.** `time` §3e — no baseline
+distribution, so no claim about the port preserving behavior is falsifiable, and no way to
+say how many reps either curve needs to reach its floor.
+
+> **Closed 2026-07-25.** `settlement-and-surprise` §7's *which metric carries "prediction
+> error"* is answered in favour of **calibration**. `GradeSum` is the **headroom** curve, and
+> its decay toward the floor is expected rather than a failure — so a converged run and a
+> broken run no longer look alike. See [definitions §3a–§3b](definitions.md).
 
 **One prerequisite now has two dependents.** `interaction-primitives` §7 (projected/observed
 phase) is required by both the settlement-eligibility surface
