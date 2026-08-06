@@ -416,3 +416,32 @@ because `the perceive is the interface` was already the rule.
 
 That both SDKs independently converged on thread-resume, function-registered tools, and mode-based
 sandboxing is evidence this is the shape of the category rather than one vendor's idea.
+
+### Support both runners, and let confinement vary
+
+> **The perceive is the interface, so it does not care which runner produced the worktree.**
+
+Which is what makes two runners cheap. But they do not confine equally, and designing to the weaker
+floor would throw away the stronger guarantee for nothing:
+
+```text
+DO NOT   design to the weakest common confinement. that discards tools: [] — total
+         interception — to match a runner that cannot offer it.
+
+DO       let the runtime KNOW which runner a limb has, and shift where grading leans.
+```
+
+```text
+STRONG CONFINEMENT   the tool layer is the whole action vocabulary. tool RESULTS are
+                     runtime-computed, so the sharp cheap perceive carries most of the load.
+
+WEAK CONFINEMENT     effects can escape the tools that were modelled. THE DIFF CARRIES MORE.
+```
+
+The diff was already ground truth, so nothing new is needed to absorb the difference — the weaker
+runner is simply more expensive to observe. **Confinement strength is a property of the limb**, and
+this design already tolerates limbs of differing trust, because it never trusted any of them.
+
+**Cost is not a design input.** Switching runners when one gets expensive is glue, and glue belongs
+outside the model. What the model owes is that the switch changes nothing structural — which the
+above is what buys.

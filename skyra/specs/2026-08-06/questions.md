@@ -161,11 +161,15 @@ OPEN   which macOS runtime. apple/container's per-container VM is the better iso
 function-registered tools. The Claude SDK can remove **every** built-in (`tools: []`); Codex can
 only override built-ins by name.
 
+**Decided: support both, and let confinement vary per limb** — execution.md. Designing to the
+weakest common floor would discard `tools: []` for nothing. The runtime knows which runner a limb
+has and shifts how much grading leans on the diff.
+
 ```text
-OPEN   whether to require the strong form. it does not port evenly, so committing to
-       "the process can call nothing the runtime did not author" narrows the runner
-       choice — which may be worth it, since that guarantee is what makes interception
-       total.
+OPEN   nothing structural. what remains is operational: the two runners' subscription
+       stories are not symmetric — Anthropic sanctions SDK use on a plan through a named
+       monthly credit, while OpenAI's subscription login lives at the CLI and its guidance
+       steers programmatic use toward API keys.
 ```
 
 ---
