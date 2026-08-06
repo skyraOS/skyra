@@ -297,6 +297,64 @@ whose expectation finally closed. These are the same job: **acting on world stat
 They are probably not a new worker. BOUNDARY owns crossings, a worktree is the residue of a
 crossing, and the four behaviors should be defended against growing a fifth.
 
+## The world is a flat map of agents
+
+**No world object.** A map of agents, each with its own namespace and its own graph.
+
+This is not flatness *instead of* structure — it is **derived** structure instead of declared.
+BOUNDARY already resolves reach at construction, so *who can reach whom* is a property of the mount
+edges. A world object would be a second place for that answer to live, and a second place for it to
+disagree.
+
+```text
+nothing is stored that a walk can derive   ← the same rule, applied to the society
+```
+
+It also keeps two things from blurring that are easy to conflate once agents can spawn agents:
+
+```text
+PROCESS   an ephemeral limb. spawned by an expectation, has a pid, exits.
+AGENT     a durable peer with its own graph and namespace. lives in the map.
+```
+
+**Differentiation grows structure inside an agent. It never creates agents.** So the map stays
+hand-authored, which is what makes flat sufficient for this version.
+
+```text
+WATCH   nothing forbids a cycle — A mounts B mounts A. crossings are new waves, so a cycle
+        is unbounded wave ping-pong. same family as questions.md Q7, and probably wants one
+        answer covering both.
+```
+
+## System space and user space
+
+The internal workers' expectations are **system space**; outward expectations are **user space**.
+
+The metaphor is doing real work rather than decorating: it names a cut already made three times
+independently — retrieval competence being private per agent, living in its own mount, and being
+kept out of differentiation.
+
+```text
+SYSTEM SPACE   retrieval competence, interpretation quality, budget allocation.
+               private. its own mount. not swept into differentiation.
+
+USER SPACE     everything the agent is actually for.
+```
+
+### You cannot boot into system space
+
+> **A system-space expectation may be ENTERED FROM user space. It may never be the standing root.**
+
+The kernel does not run for its own sake; it runs on behalf of a caller. Without this an agent
+spirals into self-maintenance — getting better at retrieval, grading how well it got better at
+retrieval, and never doing any work. That is `retrieval may never be the reason attention is there`,
+one level up.
+
+**A resemblance to check, not to assume.** User space reaching system space looks like the syscall
+surface, but [syscalls.md](syscalls.md) is process → runtime while this is expectation → expectation
+inside one graph. The *rule* transfers — a controlled surface, never arbitrary access. The mechanism
+probably does not.
+
 ## Why the graph may be walked while it is learned
 
 Nothing is removed or rewritten, so a stack cannot be standing on something that ceases to exist.

@@ -95,14 +95,16 @@ without a grade, an action grown into an expectation.
 ## The critical path
 
 ```text
-COST         no Node carries a token count. it unblocks the assembly walk AND
-             differentiation — one mechanism, two dependents.
+Q1   THE BOUNDARY   nothing spends the outbox, so no support flows, the fold has never
+                    run, and calibration is never computed.
 
-THE BOUNDARY nothing spends the outbox, so no support flows, the fold has never run, and
-             calibration is never computed.
+Q14  COST           no Node carries a token count. it unblocks the assembly walk,
+                    differentiation, AND retrieval — one quantity, three dependents.
 ```
 
-Nothing else on the questions sheet moves until one of those does.
+Nothing else on the questions sheet moves until one of those does. **Take Q1 first** — COST is
+engineering, the boundary is validation, and building further on arithmetic that has never executed
+is what would have to be unwound.
 
 ## Still the live reasoning
 

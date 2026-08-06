@@ -191,6 +191,59 @@ ALSO   nothing decides who may enter the catalog. a trusted aggregator is not a 
        catalog, and find-before-build makes the catalog load-bearing.
 ```
 
+## 14 · COST
+
+**The other half of the critical path, alongside Q1. It had no number until 2026-08-06, which is
+why Q8 and Q10 both said "downstream of COST" and pointed at nothing.**
+
+> **No Node carries a token count.**
+
+One missing quantity, three dependents:
+
+```text
+THE ASSEMBLY WALK    child_budget = (parent_budget − parent_cost) × weight
+                     descend iff child_budget ≥ child_cost
+                     specced in behaviors.md, cannot run. `weight` is also undefined.
+
+DIFFERENTIATION      splits when observation load exceeds allocated budget. both terms
+                     are token counts.
+
+RETRIEVAL (Q10)      the same budgeted walk, behind `blocked`.
+```
+
+### What is actually undecided
+
+It is not "add an int field."
+
+```text
+WHAT IS MEASURED    the node's own content, or the node plus what a walk would gather
+                    beneath it? the descend rule reads per-node; the budget split reads
+                    recursive.
+
+STORED OR DERIVED   cost is derivable from content, and stored cost can drift from the
+                    content it describes.
+
+WHOSE TOKENIZER     cost is model-specific, and Q12 commits to TWO RUNNERS. so a node's
+                    cost is not one number unless it is deliberately approximate.
+```
+
+### What the existing rules already imply
+
+```text
+DERIVE IT, AND CACHE IT IN THE INDEX
+```
+
+`nothing is stored that a walk can derive` says derive. The reverse index is already declared
+**derived, rebuildable, deletable, cheap to be wrong about** — which is exactly the tolerance a
+cached token count wants. Cost on the Node would be durable state that can disagree with the
+content; cost in the index cannot, because it is thrown away and rebuilt.
+
+And **approximate, not per-runner.** Budgets are heuristics, not contracts. A characters-over-four
+estimate is the same for both runners and wrong by an amount that does not change any descend
+decision that was not already marginal.
+
+Neither is decided. Both are what the design's own priors point at.
+
 ---
 
 ## Answered, and where the answer went
