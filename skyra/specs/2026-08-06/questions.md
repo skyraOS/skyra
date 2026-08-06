@@ -132,19 +132,24 @@ value is having none.
 **From syscalls.md, and the largest thing behind that surface.**
 
 CONTINUE and RE-ASSEMBLE both mean *walk the graph for a value a process needs*. A retrieval walk,
-heating nothing, over the active subgraph first, graded against observations. The shape is not
-designed.
+heating nothing, over the active subgraph first.
 
-Downstream of the same COST question as the assembly walk.
+**Settled:** retrieval is a private expectation per agent, in its own mount, perceived by whether
+the process re-traps on the same condition — behaviors.md.
 
-## 11 · Whether confinement is available
+**Open:** the walk itself. What bounds it, what it ranks by, and how a value gets handed back into a
+blocked process. Downstream of the same COST question as the assembly walk.
 
-**From execution.md.** Hiding beats denying, because denying manufactures spurious `blocked` traps.
-Linux user namespaces give unprivileged hiding; macOS has no equivalent, so hiding there means a
-container or VM.
+## 11 · Confinement — mostly answered, one thing left
+
+**Checked 2026-08-06 — execution.md.** Linux namespaces hide unprivileged. macOS needs a container,
+and both Docker Desktop and `apple/container` provide one; the confined unit is a **clone, not a
+worktree**, and it is copied in rather than bind-mounted.
 
 ```text
-NEEDED   verify what the target platform actually offers before designing against hiding.
+OPEN   which macOS runtime. apple/container's per-container VM is the better isolation
+       story; Docker Desktop is the mature one. not urgent — the clone-in approach works
+       on either, which is why this stopped being blocking.
 ```
 
 ---

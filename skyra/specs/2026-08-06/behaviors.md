@@ -103,6 +103,51 @@ into whatever it happened to consult. **Retrieval may never be the reason attent
 It will erode by accident if unguarded — both are the same `Walk` type, and whether it bumps is
 one line.
 
+### Retrieval competence is itself an expectation, and it is private
+
+Retrieval can be done well or badly, so it is something the agent should get better at — which in
+this model means an expectation with a perceive, graded like anything else.
+
+**It does not violate the heat rule.** The rule protects *content* from gaining activation by being
+looked at:
+
+```text
+THE CONTENT WALKED   config paths, prior plans, history.  MUST NOT HEAT.
+THE RETRIEVAL NODE   "am I good at finding things here."  a different node. may heat.
+```
+
+Heating *"I am good at finding config paths"* does not heat the config path. A competence node is
+not content. The walk it performs still heats nothing.
+
+**Private is structural, not a preference.** A shared retrieval expectation is a node two agents
+both write, and EXPECT-is-the-only-writer is a per-agent rule — sharing it creates a mutable node
+with two owners. It would also not work: good retrieval strategy depends on the shape of *your*
+graph.
+
+These belong in **their own mount**, so meta-expectations do not compete with world expectations for
+activation and are not swept into differentiation.
+
+### Its perceive is the re-trap
+
+Constitutive: no expectation without one, and the obvious candidate is the bad one.
+
+```text
+WEAK    "did the process eventually succeed?"    long, indirect, confounded. a process
+                                                 fails for reasons unrelated to what it
+                                                 was handed.
+
+SHARP   "did the process trap AGAIN for the      local, immediate, falsifiable. a re-trap
+        same condition?"                         on the same need means retrieval missed.
+```
+
+Cheap, and genuinely about the retrieval rather than about the work. Without something like it the
+retrieval node is unfalsifiable decoration — the failure `shape.md` names for confidence edges,
+reappearing on a node.
+
+**The first internal competence modelled as an expectation.** Others follow — interpretation
+quality, budget allocation — and each one is more meta-structure in the graph. The mount is what
+keeps that from polluting attention.
+
 ## Two kinds of Space, and only one is a behavior
 
 `Perturb` returns one Space per call, so **a behavior cannot walk a frontier itself.** Walking is

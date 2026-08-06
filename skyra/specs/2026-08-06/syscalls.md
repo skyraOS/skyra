@@ -125,8 +125,11 @@ SUSPEND     attention moving does NOT suspend a limb. ONE STACK bounds attention
             processes keep running. there is no signal here.
 ```
 
-## Retrieval behind `blocked` needs its own session
+## Retrieval behind `blocked`
 
-The CONTINUE and RE-ASSEMBLE responses both mean *walk the graph for a value the process needs*.
-That is a **retrieval** walk — it heats nothing — over the active subgraph first, and graded against
-observations. The shape is not designed. It is the largest thing behind this surface.
+The CONTINUE and RE-ASSEMBLE responses both mean *walk the graph for a value the process needs*. A
+**retrieval** walk — it heats nothing — over the active subgraph first.
+
+Retrieval is itself an expectation, private per agent, and its perceive is **whether the process
+traps again for the same condition**: [behaviors.md](behaviors.md). The walk's shape is still
+undesigned and is the largest thing behind this surface.

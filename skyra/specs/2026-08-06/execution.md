@@ -211,8 +211,63 @@ Denying manufactures spurious `blocked` calls indistinguishable from genuine und
 Hiding does not. A design argument, not a preference.
 
 **Available where:** Linux user + mount namespaces give unprivileged hiding. macOS has no
-equivalent — `sandbox_exec` denies rather than hides — so hiding there means a container or VM. To
-be verified before it is assumed.
+equivalent — `sandbox_exec` denies rather than hides — so hiding there means a container, which
+gets its own mount namespace and therefore hides correctly. Host directories bind-mount in without
+copying; the cost is that many-small-file work is slower than native.
+
+### A git worktree does not confine. Use a clone.
+
+The word **worktree** is right for the concept — one process's slice of the world — and wrong for
+the implementation.
+
+`git worktree add` writes a `.git` **file** holding an absolute path back into the main repository's
+`.git/worktrees/`. It is not self-contained:
+
+```text
+MOUNT ONLY THE WORKTREE   git breaks. the gitdir it points at is not there.
+MOUNT THE REPO TOO        git works, and confinement is gone — the process sees every
+                          branch and every other worktree, and can WRITE the shared .git.
+```
+
+The second is worse than a leak: a process corrupting the shared `.git` damages every other
+process's slice at once, which is the opposite of the isolation this is for.
+
+```text
+SO   the confined unit is a CLONE. self-contained .git, mounts cleanly, and one process
+     cannot reach another's history.
+COST a clone across a mount boundary cannot hardlink, so it genuinely copies.
+     --depth 1 or --filter=blob:none if that bites.
+```
+
+### macOS runtimes — checked, 2026-08-06
+
+Two options, both real.
+
+```text
+DOCKER DESKTOP     one shared Linux VM, all containers inside it. bind mounts via
+                   virtiofs. mature.
+
+apple/container    at 1.0. OCI images, Swift, built on the Virtualization framework.
+                   ONE VM PER CONTAINER — stronger isolation than a shared VM, which
+                   is the direction this design wants.
+```
+
+**But its bind mounts currently reintroduce DENY.** UID/GID mapping across the virtiofs boundary is
+incomplete — there is no `--userns keep-id` equivalent, so a non-root process in the container finds
+bind-mounted files owned by root and cannot write them. Cross-volume single-file mounts also fail to
+propagate writes back to the host, silently.
+
+That is the failure this doc already argued against: **the process hits EPERM on a path the runtime
+walled off by accident, and traps for a condition the runtime manufactured.**
+
+```text
+CONVERGES   don't bind-mount the repo. CLONE INTO the container.
+
+            the git argument and the permission argument arrive at the same place
+            from different directions, which is the strongest reason to trust it.
+```
+
+Bind mounts stay useful for handing *in* small read-only inputs. They should not carry the worktree.
 
 ### Reaping and re-exec are BOUNDARY
 
