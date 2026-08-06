@@ -1,0 +1,386 @@
+# Behaviors
+
+**Date:** 2026-08-06
+**Status: SPEC.** Carries `2026-08-03/behaviors.md` and absorbs `2026-08-03/assembly.md` —
+ASSEMBLE is not a behavior, it is a walk EXPECT builds, so it is a section here rather than a doc.
+
+> **One kernel. All the math is behavior.**
+
+A behavior is a `(Perturb, Observe)` pair coupled to a node for one walk. The kernel runs it and
+cannot tell one from another.
+
+```text
+PERTURB   READS.  decides WHERE. selection, activation, trust, budget, cost, ordering.
+                  writes nothing.
+OBSERVE   WRITES. decides WHAT IS TRUE. commits to the graph, ACCUMULATES sends, folds.
+                  never decides where. it does not touch the world.
+```
+
+Full rule, and why eviction depends on it: [phases.md](phases.md).
+
+```text
+1  INTERPRET   grades. writes EDGES, never nodes.
+2  EXPECT      plans. writes NODES. the only writer of state.
+3  ACT         closes by ACK.
+4  BOUNDARY    crossings.
+
+   WALK        not a behavior. execution walks HEAT; retrieval walks DO NOT.
+```
+
+---
+
+## Every node asks the same two questions
+
+There is no dispatch table keyed on kind × phase. There is one shape, and the answer to the second
+question *is* what a phase would have been:
+
+```text
+Perturb:
+  1. AM I CLOSED?             → yes: promote nothing.
+  2. WHAT WOULD CLOSE ME?     → build that space and return it.
+```
+
+```text
+ACTION, open        what closes me is an ACK.
+                    → a send-space. it accumulates the send; the boundary fires it.
+
+EXPECTATION, open   TWO answers, in order:
+                    children not all closed          → a walk over the unclosed ones
+                    children closed, self not closed → a request: "what would close me?"
+
+ROOT                an expectation like any other. standing, so never closed, so it always
+                    descends.
+```
+
+The expectation's two answers are what the iterating `Perturb` is for: walk the children, fold, ask
+again, and now the answer is different. One frame, two phases, no branching outside the node.
+
+**`Perturb` builds a space; it does not accumulate.** The accumulating happens when that space runs
+and folds, in `Observe`. If `Perturb` accumulated directly, an evicted descent would leave sends
+queued and the eviction guarantee would be gone.
+
+### Descent advances through what is closed
+
+```text
+DESCEND   pass a sibling only if it is CLOSED. stop at the first open one.
+          → the frontier is wherever the descent stops.
+```
+
+"Cannot advance unless closed" is about moving PAST a node, not descending INTO one.
+
+Sequential execution falls out with no `requires` field:
+
+```text
+E has [a1, a2], parent policy = sequential
+  wave 1   descent reaches a1. open. stop. request the send. the ack closes it.
+  wave 2   descent passes a1, reaches a2. open. stop. request the send.
+```
+
+One action per round trip, legislated by nobody. **Concurrent policy turns it off** — the parent
+declaring concurrent lets descent pass an unclosed sibling, and both go out in one wave.
+
+### A send is a Space, so the fire record is a transcript hop
+
+A send crosses the kernel, so it gets a hop, and the hop carries the `WaveID`. *"Did this action
+fire, and in which wave"* is a transcript query; no separate send log is needed.
+
+```text
+ack = −1                                   DIDN'T RUN.        retry, or the action is wrong.
+ack = +1, no effects citing W yet          IN FLIGHT.         wait. do not re-fire.
+ack = +1, effects arrived, self not closed RAN, DIDN'T WORK.  → EXPECT.
+```
+
+### Two traversals, and only one heats
+
+```text
+EXECUTION traversal   the active subgraph. THIS is attention. it heats.
+RETRIEVAL traversal   EXPECT reading history for context. reads only. HEATS NOTHING.
+```
+
+Without the split, looking something up makes it likelier to be executed, and the being spirals
+into whatever it happened to consult. **Retrieval may never be the reason attention is there.**
+
+It will erode by accident if unguarded — both are the same `Walk` type, and whether it bumps is
+one line.
+
+## Two kinds of Space, and only one is a behavior
+
+`Perturb` returns one Space per call, so **a behavior cannot walk a frontier itself.** Walking is
+delegated:
+
+```text
+HANDLE   a durable node + a behavior.   the coupling.
+WALK     a frontier + a fold.           EPHEMERAL ONLY. no node, no behavior, no dispatch.
+```
+
+A `WALK` holds a cursor and yields members one at a time. It writes nothing durable, so an evicted
+walk has changed nothing at all.
+
+**Members are opened with a leaf behavior.** Opening them with the namespace default makes each
+member run a nested turn — the walk recurses, the tree explodes, and EXPECT fires once per nested
+turn. A walk *visits* its frontier; it does not re-enter it.
+
+## Workers nest, and nesting is what orders them
+
+A worker's `Perturb` sets up; its `Observe` does the work. Post-order fires the **inner `Observe`
+first**, so ordering is depth:
+
+```text
+descend    EXPECT.P  →  INTERPRET.P  →  WALK …
+ascend     … WALK.O  →  INTERPRET.O  →  EXPECT.O
+```
+
+**This is not the scheduler's job and must not become it** — round-robin decides which execution
+steps next, never which cognition happens first. Ordering lives in the structure, where it cannot
+be tuned.
+
+---
+
+## 1 · INTERPRET — impulse → support edges
+
+Interpreting and grading are one call: scoring `relationship ∈ [-1,1]` answers *how does this bear
+on that*, which cannot be done without reading both.
+
+```text
+P   grab the graph. build the frontier from the impulse and the active position.
+    return a WALK over it. reads only; traverses nothing itself.
+
+O   receive the COMPLETE candidate set in one piece.
+    exact match against an expectation's perceive → WRITE THE SUPPORT EDGE.
+    accumulate everything unresolved as residual.
+```
+
+**It writes EDGES and never NODES.** A stored reading is a claim about the world and therefore
+state — see [shape.md](shape.md).
+
+**It is re-entrant.** The boundary's answer arrives as an impulse of its own; the next pass matches
+exactly and writes the support edges, producing no residual. The consumer wave is the same
+behavior.
+
+### There is no exact pass on a raw payload
+
+Matching is a comparison, a raw payload has no structure to compare, and giving it one is a model
+call. dnav3 got pure comparison at grading only because its decomposer had already produced a
+triple — judgement first, comparison after. Merged, there is no earlier pass.
+
+```text
+STRUCTURED     world returns, boundary answers.   exact comparison is real here.
+UNSTRUCTURED   user text, another agent's prose.  RESIDUAL by definition.
+```
+
+So the whole frontier coming back as residual is the **correct** answer for raw input, not a
+placeholder.
+
+### What counts as a gap — two kinds
+
+`2026-07-27/workers.md` uses low confidence as a proxy for unplaceable. The proxy breaks:
+*"seatbelt is tight"* is read **confidently** and is still unplaceable.
+
+```text
+1  COULD NOT READ IT          low confidence in the reading itself       unintelligible
+2  READ IT, IT MATTERS,       high |relationship|, and NO NODE EXISTS    MISSING STRUCTURE
+   NOWHERE TO PUT IT
+```
+
+Kind 2 drives replanning, and sign is irrelevant to it. **Negative support alone must not trigger
+EXPECT** — you tried to stand, you did not, nothing else came back: no unplaceable impulse, nothing
+to build from, and structure invented there is Toy 4's forbidden fabrication. Failure that surfaces
+nothing teaches a probability, not a structure.
+
+Which puts weight on the perceive. *"Am I standing?"* returns the negative and nothing else. *"Why
+am I still seated?"* can return the seatbelt. **An expectation whose perceive only checks its own
+closure can fail forever without ever producing a gap.**
+
+### What it may and may not see
+
+```text
+MAY SEE      the live expectations. it cannot score against them otherwise.
+MAY NOT SEE  the AUTHORED CONFIDENCE on them, or the target.
+```
+
+The protection is that **the predictor cannot influence the assessor** — it does not know what
+number it is meant to hit. This is weaker than dnav3 LAW 6, which withheld the bets entirely; that
+cannot survive a merge, since one call is one context.
+
+**The cost, detected not prevented:** the interpreter can converge toward whatever is live. Log
+both, from the first run, because neither is derivable afterward:
+
+```text
+revision rate               falling → converging, OR self-confirming. AMBIGUOUS.
+cross-form contradiction    rising while revision falls → the reading is bending
+```
+
+## 2 · EXPECT — what closes this node
+
+The expectation worker: CREATES, REFINES, BINDS, and AUTHORS the confidence that a gap will close.
+
+### Two triggers, both mechanical
+
+```text
+children all closed AND self not closed   →  REPLAN
+observation load exceeds allocated budget →  DIFFERENTIATE   (differentiation.md)
+```
+
+Both halves of the first are derived closure — **no model is needed to know it should run**, only
+to do the work. It satisfies the fabrication guard structurally: children closing means their
+perceives *returned something*, so evidence has arrived by construction.
+
+It works at a leaf. An expectation whose only child is its perceive, where the perceive came back
+*"not standing"*: perceive closed, self not closed, EXPECT runs.
+
+```text
+P   build the frontier around the attachment point — a RETRIEVAL walk, budgeted.
+O   AddExpectation, with its perceive. AddAction to bind and order.
+```
+
+### It is re-entrant, so nothing else places the result
+
+```text
+wave 1   EXPECT requests.  outbox ← "what would close this node, given this history"
+wave 2   the answer arrives. EXPECT writes the children.
+```
+
+**And the descent finds the node on its own.** The node's children are closed and the node is open,
+so a descent from the standing root passes everything closed and stops there. The frontier is where
+the answer belongs.
+
+### It alters the TREE. It never builds the STACK.
+
+A stack is what you get from walking a tree. A worker that could construct one directly would be
+choosing execution order by hand. Growth is picked up by **walking again** — append-only makes that
+safe, and dnav3's reconciler is the precedent: *"if the target is not met, and something new was
+learned, RE-PLAN."*
+
+### TEMPORARILY UNGATED
+
+**EXPECT runs on every impulse for now, gap or no gap.** A condition nobody has watched fire cannot
+be calibrated, so the turn runs an unconditional pipeline and the state machine needs no branch.
+
+```text
+RUN      unconditional.
+RECORD   the gap test's verdict per impulse, unused.
+COMPARE  what EXPECT did  vs  what the gate would have permitted.
+```
+
+While ungated, structure will be **fabricated** — that is the point of watching it — and the graph
+is append-only, so the bloat is permanent. These early graphs are disposable and should be treated
+that way from the start.
+
+## 3 · ACT — execute a primitive
+
+```text
+P   nil. an action is a leaf.
+O   ACCUMULATE the send. the boundary fires it.
+    effects come back as RAW IMPULSES.
+```
+
+No residual: execution happens or it does not, and failure is an impulse like any other. Perceive
+is not a separate job — it is an act whose primitive reads instead of writes.
+
+Because nothing fires inside the wave, **an evicted wave can never have acted.**
+
+## 4 · BOUNDARY — advertise · deliver · accept
+
+```text
+P   resolve the mount name. reach was decided at construction; nothing is checked here.
+O   accumulate the crossing. the Receipt reports the SEND, never what the target concluded.
+```
+
+`show-affordance` stays a static registry read. If answering costs an inference call, discovery
+stops being cheap enough to do speculatively.
+
+---
+
+## The assembly walk
+
+Absorbed from `2026-08-03/assembly.md`. Not a behavior — **a `WALK` with a budget**, built by
+EXPECT to answer *what would close this node*. A **retrieval** walk, so it heats nothing.
+
+### Three jobs, and one is a different wave
+
+```text
+ASSEMBLY    walk the activated region, gather until the budget is spent.  MECHANICAL.
+RENDERING   turn what was gathered into the prompt.                       MECHANICAL.
+GRADING     score what came back.                                         A DIFFERENT WAVE.
+```
+
+Grading cannot be the assembly wave's `Observe`: at that moment nothing has come back, because what
+would be graded *is* the response, and the response does not exist until this wave produces the
+prompt that asks for it.
+
+### Two directions, opposite
+
+```text
+BUDGET         DESCENDS.  it must be known BEFORE deciding whether to promote.
+ACCUMULATION   ASCENDS.   a post-order fold; it does not exist until unwind.
+```
+
+An accumulation at a frame is only what was gathered *beneath* it, and on descent nothing beneath
+has run. So the budget is carried **down** instead, and the descent decision needs no total:
+
+```text
+child_budget = (parent_budget − parent_cost) × weight
+descend iff  child_budget ≥ child_cost
+```
+
+Per-execution state — budget remaining, tokens spent, what has been gathered — lives **on the
+Stack**. Shared across frames within one execution is not the shared-state problem: single-threaded,
+one owner, and the execution is the unit of eviction.
+
+### The reverse index is activation, and it is a cache
+
+```text
+THE GRAPH   authoritative.
+THE INDEX   DERIVED. rebuildable. deletable. cheap to be wrong about.
+```
+
+`2026-07-27/workers.md` already names it: *activation SELECTS which expectations an impulse is
+relevant to — **tokens***. So the index belongs to `Perturb`, and activation is **additive only**:
+it raises what is in view and never dims what arrived.
+
+---
+
+## Exact / residual is not a phase boundary
+
+```text
+PHASE        Perturb / Observe    read vs write       WHEN in the walk
+RESOLUTION   exact / residual     here vs deferred    WHAT HAPPENS to each item
+```
+
+Exact work happens in **both** phases; residual is spent in **neither**, because a wave never calls
+the model. It is a per-item outcome: each item resolves, or accumulates on the stack and is spent
+at the boundary afterward.
+
+```text
+PERTURB'S RESIDUAL   "I could not build a frontier from this."   ← this IS the gap signal
+OBSERVE'S RESIDUAL   "I could not match or score this."
+```
+
+**Anything that has to leave the agent folds to the root and goes out from there** — two kinds of
+leaving, *doing* and *asking*, and the wave does neither.
+
+## What a turn looks like
+
+```text
+impulse arrives  →  the one stack, entered at the standing root
+  INTERPRET   read it, grade what matches, accumulate the rest
+  EXPECT      (ungated: always)
+              ↓ boundary — the model is called HERE, outside any wave
+  ACT         accumulate sends
+              ↓ boundary fires them
+              ↓ effects arrive AS RAW IMPULSES
+  (a new wave, back to INTERPRET)
+```
+
+## What is left for a scheduler
+
+```text
+ADMISSION   FIFO. never consults attention.
+ORDERING    round-robin, and with one stack there is nothing to rotate.
+COUPLING    each node names a CONDITION; the agent owns what answers it.
+
+WHEN TO START     nothing yet triggers a wave no impulse asked for.
+INFERENCE BUDGET  exact-first bounds what inference SEES; nothing bounds how many boundary
+                  calls a turn may make.
+THE STEP LOOP     nothing drives the runner outside tests.
+```

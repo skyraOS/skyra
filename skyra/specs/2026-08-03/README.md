@@ -1,4 +1,20 @@
-# 2026-08-03
+# 2026-08-03 — RETIRED
+
+> **Superseded by [2026-08-06](../2026-08-06/). Do not cite this set.**
+>
+> Its live content moved; what stayed behind is history. The docs below still contain their
+> supersession banners and revision markers, which is why the set was consolidated — a doc that
+> needs a banner to be read correctly has stopped being a spec and become a record.
+>
+> ```text
+> ENTERED 08-06 INTACT   kernel · phases · closure · differentiation
+> MERGED                 graph + families → shape.md ·  assembly → behaviors.md
+> REWRITTEN              execution · questions · behaviors
+> DID NOT ENTER          graph.md — its headline rule had become false
+> ```
+>
+> The reasoning is still here. Cite it only where the argument matters, never for the rules.
+
 
 **The strip-down continues, and the first mechanism is now CODE.** `2026-07-27` stands as the
 record of the design reasoning. This set carries forward only what has been built or is being

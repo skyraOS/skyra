@@ -1,0 +1,184 @@
+# Questions
+
+**Date:** 2026-08-06
+
+Decisions not yet made, carried across sessions. A question leaves this doc when it is answered,
+and the answer goes to the doc that owns it.
+
+Distinct from `2026-07-27/FLAGS.md`, which records *defects found in the design*. These are
+choices nobody has made.
+
+Renumbered on entry to this set. Six of the previous ten had been answered and were still listed
+as open.
+
+---
+
+## 1 · The boundary
+
+**The keystone. Was never on the sheet, which was a mistake.**
+
+Nothing spends the outbox. No model call exists, so:
+
+```text
+no support values flow      →  the fold has never run
+T · G · P · coherence       →  written, never exercised
+calibration                 →  never computed — and shape.md says that is the ONLY thing
+                               making confidence edges safe. right now they are decoration.
+```
+
+Two of the three are downstream of the first. A stub returning a fixed grade instead of calling a
+model would start support flowing and let the fold run.
+
+```text
+NEEDED   something that takes the outbox, does the outside work, and returns results as
+         impulses. it can be fake before it is real.
+```
+
+## 2 · What a closure event carries
+
+**From closure.md.**
+
+Closure is per-execution; the *event* is durable and is what `P` folds over and what the
+*"this closed recently"* search reads.
+
+```text
+NEEDED   at minimum a node, a wave, and a time. enough for P to fold, and enough for
+         re-execution to find.
+```
+
+## 3 · `BehaviorID` in the transcript
+
+**A defect in built code, not a future concern.**
+
+A turn opens the *same node* with four behaviors, so the transcript reads:
+
+```text
+0  depth=0  skyra:/     ← turn
+1  depth=1  skyra:/     ← interpret
+5  depth=1  skyra:/     ← expect
+6  depth=1  skyra:/     ← pursue
+```
+
+Four hops, one identity, nothing distinguishing them. The transcript's one job is answering *what
+actually ran*.
+
+The constraint: **`Hop` must not learn what a node is.** The kernel cannot grow
+`NodeID()`/`BehaviorID()` accessors without learning that a Space decomposes into data and methods.
+
+```text
+EITHER   the Space reports one opaque identity the minter composes
+OR       the kernel gets a second read-only accessor, and we accept it
+```
+
+## 4 · Unhomed impulse
+
+**The remaining half of Toy 5.**
+
+An impulse arrives while the stack is standing somewhere it does not bear on.
+
+```text
+DROPPED   loses contradictory evidence, which is the toy's failure exactly
+QUEUED    needs an aging rule and something that decides when to revisit
+MOVES THE STACK   powerful, and the obvious way to build an attention hijack the being
+                  cannot refuse
+```
+
+Direct grading means such an impulse *can* attach once the stack is in the right place. Nothing
+says how it gets there.
+
+## 5 · A second grading of the same impulse
+
+**A debt from killing the interpretation node — shape.md.**
+
+Re-scoring needs an impulse re-presented once the field grows a target for it, or it sits at ≈0
+forever. A second reading is now a second support edge between the same pair, which `O(E)` being a
+*set of distinct observations* forbids.
+
+```text
+NEEDED   newest wins, both count, or the first is superseded. support is immutable, so it
+         cannot be a rewrite.
+```
+
+## 6 · What structured impulses carry
+
+Only **structured** impulses — world returns and boundary answers — need content comparable to a
+perceive. Raw payloads are residual by definition and need none.
+
+`Node.Label` may be enough, or it may need something comparable rather than merely printable. The
+gap test is *"is there a node for this?"*, and that question licenses EXPECT.
+
+## 7 · What the child edge asserts
+
+**Retrieval only.** It no longer blocks execution — closure is one observation from the current
+execution, and `P` ranks. A wrong reading produces worse retrieval order, not wrong closure.
+
+**Candidate:** the child edge is the AUTHORED CONFIDENCE, and support multiplies through it. A
+child grounded at `0.8` beneath a `0.3` confidence contributes `0.24` — *how much of this child's
+grounding is mine to claim.*
+
+## 8 · Re-execution has no bound
+
+*"Cannot close → search history → run the prerequisite again"* could chain a long way back through
+stale prerequisites. Nothing stops it.
+
+## 9 · Differentiation's shape
+
+**From differentiation.md, and only live once COST exists.**
+
+```text
+TWO CHILDREN OR N       forcing two means the tree records split HISTORY rather than structure
+THE PARENT'S PERCEIVE   it keeps one, but is now grounded through children — redundancy, or a
+                        genuinely different question?
+WHAT PARTITIONS         dnav3 has clustering machinery built against the old model
+DEPTH AND ATTENUATION   a heavily-used region differentiates, gets deep, and depth attenuates —
+                        so the more a region is used, the quieter each part becomes
+```
+
+## 10 · Where round-robin lives
+
+**Deferred, not forgotten.** `kernel/runner.go` is currently unreachable under ONE STACK. Whether
+scheduling belongs in the kernel package at all is undecided — it is a policy, and the kernel's
+value is having none.
+
+---
+
+## Answered, and where the answer went
+
+```text
+08-06  IS THERE A CLOSURE THRESHOLD    no. closed is +1 — the most recent grade in this
+                                       execution.                          → closure.md
+
+08-06  DOES P MEASURE CLOSURE          no. P ranks for retrieval; closure is one
+                                       observation.                        → closure.md
+
+08-06  CONCURRENT STACKS               → ONE STACK.                        → execution.md
+
+08-06  WHAT OWNS THE SESSION TIER      nothing. execution spans waves through the GRAPH,
+                                       not through held state.             → execution.md
+
+08-06  WHERE DOES INTERPRETATION LIVE  nowhere. the node is killed; EXPECT is the only
+                                       writer of state.                    → shape.md
+
+08-06  WHAT IS ASSEMBLE                a WALK with a budget, built by EXPECT.
+                                                                           → behaviors.md
+
+08-05  IS A WAVE ONE DESCENT OR STEP   neither. Perturb ITERATES; a frame is asked
+                                       repeatedly and pops when it promotes nothing.
+                                                                           → kernel.md
+
+08-05  DOES A WAVE STOP AT THE AGENT   yes. crossings are new waves, correlated by WaveID.
+                                                                           → execution.md
+
+08-05  CAN A FILE BECOME A DIRECTORY   no. the runtime refuses the growth.  → shape.md
+
+08-05  WHERE DO ACTIONS LIVE / Q       expectations are directories, actions are files,
+                                       derived by composition. the entry IS the edge Q
+                                       lives on.                           → shape.md
+
+08-04  MANY ENTRIES                    a frontier is a chain, not a fan-out.
+                                                                           → behaviors.md
+
+07-23  §13 Q3 GROUPING BEHAVIOR        a Space does not encode sequential/parallel — it
+                                       reads the ORDERING POLICY off the parent.
+                                                                           → shape.md
+```
