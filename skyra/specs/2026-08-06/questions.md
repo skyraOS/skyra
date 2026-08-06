@@ -172,6 +172,20 @@ OPEN   nothing structural. what remains is operational: the two runners' subscri
        steers programmatic use toward API keys.
 ```
 
+## 13 · Nothing enforces "a description is data"
+
+**From behaviors.md.** Discovered tool descriptions are third-party text that reaches the model at
+selection time. The rule is stated; no mechanism holds it.
+
+```text
+NEEDED   whether selection reads descriptions in a context that can be instructed at all,
+         or whether they are reduced to features before the model sees them. the second is
+         stronger and costs expressiveness.
+```
+
+Related: nothing yet decides **who may enter the catalog** — a trusted aggregator is not a vetted
+catalog, and "find before build" makes the catalog load-bearing.
+
 ---
 
 ## Answered, and where the answer went

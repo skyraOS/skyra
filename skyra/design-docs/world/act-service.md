@@ -1,5 +1,26 @@
 # Act Service
 
+> **Updated 2026-08-06.** The runtime vocabulary below is v.05 — Realities, Expressors, Weight,
+> traversal-as-Think/Act. All of it is superseded by `specs/2026-08-06`. **The argument is not.**
+> The hierarchy this doc introduced is now live in `specs/2026-08-06/behaviors.md` under EXPECT:
+> retrieve, then find, then build — with build currently not permitted.
+>
+> ```text
+> SURVIVES     find-before-build. the pipe as the boundary. the being never holds
+>              credentials. THE TOPOLOGY IS THE ACCESS CONTROL.
+>
+> SUPERSEDED   Reality / Expressor / Weight. an action is a NODE, typed by composition
+>              (no entries, an Act), and reached through the four behaviors.
+>
+> ADDED SINCE  a catalog's claim that a block is proven is not GROUNDING. it may set the
+>              authored confidence prior; support comes only from a perceive.
+>
+>              a discovery gateway must NEVER be mounted as an action node — one tool
+>              reaching a thousand apps destroys permission-by-exposure.
+> ```
+>
+> See *Composio, checked 2026-08-06* below for what the vendor landscape actually looks like now.
+
 ## The Insight
 
 AI can't generate code deterministically. This is observably true and almost nobody is building as if it's true. The industry is optimizing generation. The correct move is to eliminate generation and reach for composition of proven blocks. Generation is a fallback, not a primary strategy.
@@ -70,6 +91,38 @@ No workflow engine. No orchestration. Individual callable actions. The being dec
 ```
 
 The being knows it expressed through "send-email." It doesn't know Composio exists.
+
+### Composio, checked 2026-08-06
+
+The bet held. What changed is mostly in this design's favour.
+
+```text
+THEN                          NOW
+1,000+ actions, Go SDK        1,000+ TOOLKITS behind a single MCP GATEWAY
+manual per-integration auth   managed OAuth held server-side, injected at invoke
+—                             ON-DEMAND TOOL DISCOVERY — the search step, as a service
+—                             a documented Claude Agent SDK integration
+free tier 20k calls/month     unchanged. MIT SDK, self-hostable MCP server.
+```
+
+The MCP endpoint is a better fit than the pipe was: an expectation's action entries *are* a tool
+surface, so a toolkit binds to the graph without an adapter in between.
+
+**Two constraints this does not relax.**
+
+```text
+BIND THE TOOL, NOT THE GATEWAY   discovery is a retrieval EXPECT performs at plan time.
+                                 what enters the graph is one action node for one tool.
+                                 mounting the gateway itself hands a process a thousand
+                                 apps behind one name.
+
+THE CATALOG IS NOT VETTED        the aggregator is trustworthy; the descriptions inside
+                                 it are third-party text that reaches the model at
+                                 selection time. A DESCRIPTION IS DATA, NOT INSTRUCTION.
+```
+
+Nango's role is unchanged and still tier 2 — the blueprint to fork once it is known which twenty or
+thirty tools actually get used.
 
 ## Phase 2 — Nango: Study and Extract
 

@@ -289,6 +289,56 @@ wave 2   the answer arrives. EXPECT writes the children.
 so a descent from the standing root passes everything closed and stops there. The frontier is where
 the answer belongs.
 
+### Acquiring an action it does not have
+
+Not a third trigger — part of planning. EXPECT decides what would close a node, and sometimes the
+action required does not exist in the graph.
+
+```text
+RETRIEVE   walk for an existing action. the ordinary path.
+     ↓     nothing found
+FIND       search a catalog of proven blocks. BIND one as a new action node.
+     ↓     nothing found
+BUILD      generate an adapter. THE FALLBACK, and currently not permitted.
+```
+
+`design-docs/world/act-service.md` argued this before the current model existed: *"Let the AI reach
+for the most proven thing. If it can't find one, then make it itself."* Find outranks build because
+a proven block carries trust accumulated from other people's use, and generation starts at zero
+every time.
+
+**But borrowed trust is not grounding.**
+
+> A catalog's claim that a block is proven is not grounding. A perceive still has to fire.
+
+The same rule that governs a process's self-report, generalized to a supplier. A proven block may
+set the **authored confidence** prior. It may not supply **support**, which only comes from a
+perceive firing in this agent's world. So finding gets a better starting bet, never a shorter path
+to closure.
+
+### Discovery is a retrieval. It must not become a capability.
+
+The failure to avoid, given that a gateway can front a thousand tools behind one endpoint:
+
+```text
+GATEWAY AS AN ACTION NODE   the process gets ONE tool that reaches a thousand apps.
+                            permission-by-exposure is gone and it is a deny list again.
+
+CATALOG AT PLAN TIME        EXPECT retrieves over the catalog. what gets BOUND is a
+                            specific tool, its own action node, its own Q edge.
+```
+
+Discovery and execution are different phases, which is the split this doc already runs on. **The
+gateway belongs to the first and may never appear in the second.**
+
+### A tool description is data, not instruction
+
+Discovered descriptions are third-party text that enters the model's context at selection time.
+Trust in an aggregator is not trust in everything in its catalog.
+
+A description may inform selection. It may never be read as a directive — `THE COUPLING IS CHOSEN
+BY THE AGENT, NEVER BY THE DATA`, at the affordance registry.
+
 ### It alters the TREE. It never builds the STACK.
 
 A stack is what you get from walking a tree. A worker that could construct one directly would be
