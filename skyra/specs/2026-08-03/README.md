@@ -43,12 +43,13 @@ observation  ──▶  state change  ──▶  action  ──▶  observation
 | doc | owns | status |
 |---|---|---|
 | [kernel](kernel.md) | the substrate. `Perturb` / `Observe` closed over `Space`, the returned transcript, and what the kernel is structurally incapable of doing. | **BUILT** — `src/skyra/spacetime/kernel` |
-| [execution](execution.md) | durable graph vs. ephemeral traversal, the execution anchor, and **ONE STACK**. | **FOUNDATION** — rev. 08-06 |
+| [execution](execution.md) | durable graph vs. ephemeral traversal, the execution anchor, **ONE STACK**, and **program/process** — where actions get delegated. | **FOUNDATION** — rev. 08-06 |
 | [families](families.md) | **one family of state, two edge kinds.** the interpretation node is gone: EXPECT is the only writer of state. | **SPEC** — rev. 08-06 |
 | [graph](graph.md) | the expectation family's shape, and the perceive that makes every expectation graded. **superseded in part by [families](families.md)** — it assumed the expectation tree was the whole store. | **RULE SETTLED** — 08-03 |
 | [phases](phases.md) | **`Perturb` reads. `Observe` writes.** the rule every behavior follows, and why eviction depends on it. | **RULE** — 08-05 |
 | [behaviors](behaviors.md) | the four behaviors, and the one question every node asks: *am I closed / what would close me.* | **SPEC** — rev. 08-06 |
 | [assembly](assembly.md) | retrieval and rendering. **a WALK with a budget**, not a behavior. budget down, accumulation up — and why grading is a different wave. | **SPEC** — rev. 08-06 |
+| [differentiation](differentiation.md) | **structure from overload.** an expectation splits when it no longer fits its allocated frame. EXPECT's second trigger. | **WORKING TOWARD** — 08-06 |
 | [closure](closure.md) | **closure is one observation, this execution. `P` is retrieval.** supersedes `2026-07-27/truth.md`'s claim that `P` measures closure. | **RESOLVED** — 08-06 |
 | [questions](questions.md) | decisions not yet made, carried across sessions. | **LIVE** |
 
