@@ -172,19 +172,24 @@ OPEN   nothing structural. what remains is operational: the two runners' subscri
        steers programmatic use toward API keys.
 ```
 
-## 13 · Nothing enforces "a description is data"
+## 13 · Binding an already-admitted irrevocable tool
 
-**From behaviors.md.** Discovered tool descriptions are third-party text that reaches the model at
-selection time. The rule is stated; no mechanism holds it.
+**Mostly answered — behaviors.md.** A description enters as an expectation and is checked
+immediately after firing; revertable mismatches revert. The gate on new capability is at **tool
+admission**, once per tool, not per invocation.
+
+An isolated describing context was considered and rejected: it would have required something to
+safely read hostile text, where the admission gate triggers on structure instead. **Structural beats
+semantic.**
 
 ```text
-NEEDED   whether selection reads descriptions in a context that can be instructed at all,
-         or whether they are reduced to features before the model sees them. the second is
-         stronger and costs expressiveness.
-```
+OPEN   admission covers new capability, not misuse of granted capability. so: does the
+       FIRST BINDING of an irrevocable tool to a new expectation deserve its own gate?
+       more than once, far less than always.
 
-Related: nothing yet decides **who may enter the catalog** — a trusted aggregator is not a vetted
-catalog, and "find before build" makes the catalog load-bearing.
+ALSO   nothing decides who may enter the catalog. a trusted aggregator is not a vetted
+       catalog, and find-before-build makes the catalog load-bearing.
+```
 
 ---
 

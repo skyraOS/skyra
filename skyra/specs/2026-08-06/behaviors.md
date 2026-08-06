@@ -255,6 +255,29 @@ revision rate               falling → converging, OR self-confirming. AMBIGUOU
 cross-form contradiction    rising while revision falls → the reading is bending
 ```
 
+### The immune system belongs here — a direction
+
+**Not built.** Recorded because the home is already obvious and choosing it later would be worse.
+
+Detecting *"this does not belong"* is a grading judgement on incoming material, which is what
+INTERPRET is. It also already carries the only self-monitoring in the design — revision rate and
+cross-form contradiction, logged to catch the interpreter bending toward whatever is live. An immune
+system is that instinct generalized from *is my reading drifting* to *is something acting on me.*
+
+```text
+DETECTION   INTERPRET's. it reads everything arriving and scores it.
+RESPONSE    NOT INTERPRET'S. it writes edges, never nodes, and quarantining or killing
+            is an action. detection here, response through EXPECT and BOUNDARY.
+```
+
+That split is the same one that keeps INTERPRET from being a writer of state, so the immune system
+does not get an exemption from it.
+
+**One signal to keep from the start**, since it is cheap and not derivable afterward: a burst of
+novel irrevocable requests is itself an observation. Rate of first-use irrevocable actions is a
+perceive on the planner's health, which makes flooding a detectable event rather than a successful
+one.
+
 ## 2 · EXPECT — what closes this node
 
 The expectation worker: CREATES, REFINES, BINDS, and AUTHORS the confidence that a gap will close.
@@ -331,13 +354,68 @@ CATALOG AT PLAN TIME        EXPECT retrieves over the catalog. what gets BOUND i
 Discovery and execution are different phases, which is the split this doc already runs on. **The
 gateway belongs to the first and may never appear in the second.**
 
-### A tool description is data, not instruction
+### A description is an expectation, checked immediately after firing
 
-Discovered descriptions are third-party text that enters the model's context at selection time.
-Trust in an aggregator is not trust in everything in its catalog.
+Discovered descriptions are third-party text. A description is a **claim about the world** — *"this
+sends an email"* — and this model has exactly one way to hold such a claim:
 
-A description may inform selection. It may never be read as a directive — `THE COUPLING IS CHOSEN
-BY THE AGENT, NEVER BY THE DATA`, at the affordance registry.
+> Every claim about the world is falsifiable by construction, because creating one is the only way
+> to state one.
+
+So a description does not enter as trusted text. It enters as **the expectation the tool is graded
+against**, and the check runs immediately after the invocation rather than at leisure: interception
+already sees the observation side, so what the tool did is compared against what it said it would
+do, and a revertable mismatch is reverted.
+
+**This buys supplier calibration for free.** A catalog whose descriptions overclaim produces high
+authored confidence against low assigned support on the same node — `actions.md`'s calibration
+comparison, pointed at a vendor.
+
+A description may still inform selection. It may never be read as a directive — `THE COUPLING IS
+CHOSEN BY THE AGENT, NEVER BY THE DATA`, at the affordance registry.
+
+### Revertable and irrevocable
+
+Grading after the fact only helps if the effect can be undone, so the split has to exist. **It is
+derived, not declared** — BOUNDARY already owns crossings, so *"does this leave the runtime"* is
+read off the action's mount and cannot disagree with the structure.
+
+```text
+REVERTABLE     worktree effects inside the confinement. throw the clone away.
+
+IRREVOCABLE    ↳ CROSSES THE BOUNDARY   sent, posted, paid. read off the mount.
+               ↳ WRITES THE GRAPH       append-only. LOCAL, AND STILL FINAL.
+```
+
+**Confinement is what makes the first row true.** `rm -rf` inside a confined clone is undoable
+because the clone is disposable; without that decision, "local" would not imply "revertable" at all.
+
+The second irrevocable class is the one that is easy to miss: EXPECT writes nodes, nothing is ever
+removed, and a bad expectation is worse than a bad send — a send is one event, an expectation shapes
+every future plan that retrieves it.
+
+### The gate is at admission, not invocation
+
+> **A tool is reviewed when it enters the runtime. Not every time it is used.**
+
+Per-request approval is the standard way human-in-the-loop fails: it floods, and a flooded gate is a
+click-through. Reviewing once, at the point a capability is granted, costs the user one decision per
+tool instead of one per action.
+
+```text
+NOT THE SAME ADMISSION   impulse admission must not consult attention — FIFO, never ranked.
+                         TOOL admission is a capability grant and is deliberately gated.
+                         two different doors; do not let the vocabulary merge them.
+```
+
+```text
+COVERS         the catalog as an entry point for NEW capability. nothing arrives unseen.
+DOES NOT       misuse of a capability already granted.
+```
+
+The residual is the ordinary posture of any assistant holding credentials: having accepted *"this
+agent may send email,"* the remaining question is whether the **first binding** of an irrevocable
+tool to a new expectation deserves its own gate. Undecided, and the natural next decision.
 
 ### It alters the TREE. It never builds the STACK.
 
