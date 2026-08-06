@@ -215,6 +215,26 @@ equivalent — `sandbox_exec` denies rather than hides — so hiding there means
 gets its own mount namespace and therefore hides correctly. Host directories bind-mount in without
 copying; the cost is that many-small-file work is slower than native.
 
+### Put the runtime inside the VM
+
+Which collapses the macOS problem into the Linux one.
+
+```text
+RUNTIME ON THE HOST   every process file crosses the host↔VM virtiofs boundary. UID/GID
+                      mapping, ownership, and diff performance are all problems.
+
+RUNTIME IN THE VM     the runtime is a Linux process. it creates the clone on VM-native
+                      filesystem, OWNS IT OUTRIGHT, and confines its own children with
+                      namespaces — the mechanism that was good all along.
+```
+
+**One VM, runtime inside, N confined processes** — not one VM per process. Cheaper, and the diff
+becomes a local git operation instead of one over virtiofs, which retires the performance caveat
+too.
+
+A host↔VM mount still exists, but it now serves only the **runtime**, which is trusted and may run
+as root in a disposable VM. A far weaker requirement than serving an untrusted non-root process.
+
 ### A git worktree does not confine. Use a clone.
 
 The word **worktree** is right for the concept — one process's slice of the world — and wrong for
@@ -338,8 +358,61 @@ The surface is two traps out, one signal in, and no grading verb: [syscalls.md](
 One brain holding expectation and attention; limbs with real local competence acting without
 central command. The center learns *whether reaching that way works*, never how the arm does it.
 
-### Before building any of it
+### What the SDKs expose — checked 2026-08-06
 
-What the chosen SDK exposes for spawning, streaming, interrupting, and killing a long-running
-agent has to be checked rather than assumed. The shapes above are what the design wants; whether
-they are available is a separate question.
+This was listed as *"check rather than assume."* Checked. Both provide the shape.
+
+```text
+CLAUDE AGENT SDK   createSdkMcpServer / create_sdk_mcp_server registers tools that run
+                   IN-PROCESS, not as a subprocess. streaming messages out.
+
+                   tools: []   REMOVES EVERY BUILT-IN. the agent can then call nothing
+                               except what the runtime authored.
+
+                   a sandbox runtime in beta takes directory and network-host allowlists
+                   without a container.
+
+CODEX SDK          startThread / resumeThread, sessions persisted on disk, and
+                   `codex exec` for non-interactive runs. tools registered as functions,
+                   and built-ins are OVERRIDABLE BY NAME (read_file, local_shell,
+                   apply_patch).
+
+                   sandbox_mode: read-only | workspace-write | danger-full-access.
+                   network off by default under workspace-write.
+```
+
+### `tools: []` is the interesting one
+
+A process whose entire action vocabulary is runtime-authored makes **interception total** — the
+runtime does not observe the effect, it *performs* it. `THE COUPLING IS CHOSEN BY THE AGENT, NEVER
+BY THE DATA`, arriving at the process boundary.
+
+And it upgrades what those results are:
+
+```text
+A TOOL CALL      what the process ASKED FOR.        an expression.
+A TOOL RESULT    what the runtime's handler DID.    runtime-computed. gradeable.
+```
+
+**It does not retire the diff.** Any tool general enough to be useful — a shell most of all — lets
+effects exceed what the tool signature modelled. So this instantiates a rule already written here:
+a targeted perceive is cheaper and sharper, and the diff is the fallback and the ground truth.
+
+### The asymmetry to plan around
+
+Removing every built-in is a Claude SDK capability. Codex's override-by-name is weaker — replacing
+`local_shell` is not the same as a guarantee that no other path exists. **The strong confinement
+story does not port evenly**, so it should not be assumed when choosing a runner.
+
+Codex's macOS seatbelt also has open bugs where `network_access` is silently ignored, and a setting
+that silently fails to apply is worse than one that errors. Under the VM decision above the runtime
+is on Linux and seatbelt never runs, so this is dodged rather than solved.
+
+### On depending on someone else's runner
+
+The exposure is real and it is small. What the runtime needs is **spawn · stream · interrupt · kill,
+plus a tool ABI** — and the tool layer is ours. If the runner is replaced, the tools survive it,
+because `the perceive is the interface` was already the rule.
+
+That both SDKs independently converged on thread-resume, function-registered tools, and mode-based
+sandboxing is evidence this is the shape of the category rather than one vendor's idea.

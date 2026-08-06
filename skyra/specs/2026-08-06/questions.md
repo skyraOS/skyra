@@ -146,10 +146,26 @@ blocked process. Downstream of the same COST question as the assembly walk.
 and both Docker Desktop and `apple/container` provide one; the confined unit is a **clone, not a
 worktree**, and it is copied in rather than bind-mounted.
 
+**The runtime goes inside the VM**, which turns the macOS problem into the Linux one: it owns the
+clone on native filesystem and namespaces its own children. One VM, N confined processes.
+
 ```text
 OPEN   which macOS runtime. apple/container's per-container VM is the better isolation
-       story; Docker Desktop is the mature one. not urgent — the clone-in approach works
-       on either, which is why this stopped being blocking.
+       story; Docker Desktop is the mature one. not urgent — the runtime-in-VM approach
+       works on either, which is why this stopped being blocking.
+```
+
+## 12 · Which runner, and how much of it to depend on
+
+**Checked 2026-08-06 — execution.md.** Both SDKs provide spawn, stream, resume, and
+function-registered tools. The Claude SDK can remove **every** built-in (`tools: []`); Codex can
+only override built-ins by name.
+
+```text
+OPEN   whether to require the strong form. it does not port evenly, so committing to
+       "the process can call nothing the runtime did not author" narrows the runner
+       choice — which may be worth it, since that guarantee is what makes interception
+       total.
 ```
 
 ---
