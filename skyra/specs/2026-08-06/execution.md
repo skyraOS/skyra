@@ -150,6 +150,78 @@ report it. Hold it as the fallback: a targeted perceive is cheaper and sharper, 
 what you reach for when you **cannot name what you expect** — the same condition as unplaceable
 residual.
 
+## The worktree is a third lifetime
+
+The two structures at the top of this doc are not enough once work happens outside the runtime.
+
+```text
+DURABLE     THE GRAPH       structure and history. persists.
+EPHEMERAL   THE PROCESS     has a pid, exits.
+WORLD       THE WORKTREE    outlives the process that made it.
+                            dies by RUNTIME DECISION, never by the process.
+```
+
+### Exit freezes the worktree. It does not drop it.
+
+Continue-vs-scrap is decided by firing the perceive against the worktree and grading it. **If exit
+dropped the worktree there would be nothing left to perceive**, and the only surviving artifact
+would be the exit status — the exit-code failure arriving by a new route: not by *trusting* the
+status, but by destroying the evidence until the status is all that remains.
+
+```text
+exit  →  worktree FROZEN, process gone
+      →  the runtime computes the diff
+      →  INTERPRET grades it against the expectation
+      →  continue · re-assemble · rewrite · scrap
+      →  the worktree is dropped HERE, and only on scrap
+```
+
+**Dropping is the scrap branch**, which is a decision the process is structurally least qualified to
+make: it would be grading its own accumulated work, and a process that spent an hour building
+something will not tell you to throw it away.
+
+It is also what makes CONTINUE constructible at all. An exited process cannot be resumed; what
+continues is the **work**, by re-exec'ing on the same worktree under the rewritten program. That
+requires the worktree to outlive the process.
+
+### Scrap is cheaper than it looks
+
+Append-only means the learning already landed. Support edges written during the process's life are
+in the graph and stay there. **The worktree is not the graph** — scrapping loses world-work, never
+history, including the record that this approach did not get there.
+
+That matters because otherwise the runtime has a thumb on the scale toward continuing, and
+continuing on invalid state is the silent failure. Scrap is loud and bounded.
+
+### Confinement is what makes the diff a valid perceive
+
+Not hygiene. If a process can write outside its worktree, **the diff no longer captures what it
+did** — the perceive is silently incomplete and every grade downstream of it is wrong. The runtime
+would be grading a subset of the effects without knowing which subset.
+
+The process should also not know it is confined:
+
+```text
+HIDE   the path does not exist. the process treats it as an ordinary absent file.
+DENY   the path exists and returns EPERM. the process TRAPS — asking the runtime for
+       access to something the runtime itself walled off.
+```
+
+Denying manufactures spurious `blocked` calls indistinguishable from genuine underspecification.
+Hiding does not. A design argument, not a preference.
+
+**Available where:** Linux user + mount namespaces give unprivileged hiding. macOS has no
+equivalent — `sandbox_exec` denies rather than hides — so hiding there means a container or VM. To
+be verified before it is assumed.
+
+### Reaping and re-exec are BOUNDARY
+
+Worktrees outlive processes, so something must re-exec on them, and something must reap the ones
+whose expectation finally closed. These are the same job: **acting on world state after a grade.**
+
+They are probably not a new worker. BOUNDARY owns crossings, a worktree is the residue of a
+crossing, and the four behaviors should be defended against growing a fifth.
+
 ## Why the graph may be walked while it is learned
 
 Nothing is removed or rewritten, so a stack cannot be standing on something that ceases to exist.
@@ -197,15 +269,14 @@ returns, the process runs beyond the boundary, results arrive as impulses. The w
 blocks. What is new is that a crossing becomes an open channel with a lifecycle rather than a send
 with a receipt.
 
-### Interpretation is the interrupt handler
+### The process-facing surface
 
-```text
-CONTINUOUS   interpretation polls a running process        does not work
-EVENT        the process throws when it needs something;   an interrupt IS an impulse
-             interpretation answers
-```
+Polling a running process does not work; the process traps when it needs something and the trap is
+an impulse. That much was right. **Calling it an interrupt was not** — a trap that blocks for a
+return value is a syscall, and filing it as an interrupt is what let a *grading* behavior get named
+as the handler.
 
-Tool-use shape, needing nothing that does not already exist.
+The surface is two traps out, one signal in, and no grading verb: [syscalls.md](syscalls.md).
 
 ### It is octopus-shaped
 

@@ -86,20 +86,7 @@ MOVES THE STACK   powerful, and the obvious way to build an attention hijack the
 Direct grading means such an impulse *can* attach once the stack is in the right place. Nothing
 says how it gets there.
 
-## 5 · A second grading of the same impulse
-
-**A debt from killing the interpretation node — shape.md.**
-
-Re-scoring needs an impulse re-presented once the field grows a target for it, or it sits at ≈0
-forever. A second reading is now a second support edge between the same pair, which `O(E)` being a
-*set of distinct observations* forbids.
-
-```text
-NEEDED   newest wins, both count, or the first is superseded. support is immutable, so it
-         cannot be a rewrite.
-```
-
-## 6 · What structured impulses carry
+## 5 · What structured impulses carry
 
 Only **structured** impulses — world returns and boundary answers — need content comparable to a
 perceive. Raw payloads are residual by definition and need none.
@@ -107,7 +94,7 @@ perceive. Raw payloads are residual by definition and need none.
 `Node.Label` may be enough, or it may need something comparable rather than merely printable. The
 gap test is *"is there a node for this?"*, and that question licenses EXPECT.
 
-## 7 · What the child edge asserts
+## 6 · What the child edge asserts
 
 **Retrieval only.** It no longer blocks execution — closure is one observation from the current
 execution, and `P` ranks. A wrong reading produces worse retrieval order, not wrong closure.
@@ -116,12 +103,12 @@ execution, and `P` ranks. A wrong reading produces worse retrieval order, not wr
 child grounded at `0.8` beneath a `0.3` confidence contributes `0.24` — *how much of this child's
 grounding is mine to claim.*
 
-## 8 · Re-execution has no bound
+## 7 · Re-execution has no bound
 
 *"Cannot close → search history → run the prerequisite again"* could chain a long way back through
 stale prerequisites. Nothing stops it.
 
-## 9 · Differentiation's shape
+## 8 · Differentiation's shape
 
 **From differentiation.md, and only live once COST exists.**
 
@@ -134,17 +121,42 @@ DEPTH AND ATTENUATION   a heavily-used region differentiates, gets deep, and dep
                         so the more a region is used, the quieter each part becomes
 ```
 
-## 10 · Where round-robin lives
+## 9 · Where round-robin lives
 
 **Deferred, not forgotten.** `kernel/runner.go` is currently unreachable under ONE STACK. Whether
 scheduling belongs in the kernel package at all is undecided — it is a policy, and the kernel's
 value is having none.
+
+## 10 · Retrieval behind `blocked`
+
+**From syscalls.md, and the largest thing behind that surface.**
+
+CONTINUE and RE-ASSEMBLE both mean *walk the graph for a value a process needs*. A retrieval walk,
+heating nothing, over the active subgraph first, graded against observations. The shape is not
+designed.
+
+Downstream of the same COST question as the assembly walk.
+
+## 11 · Whether confinement is available
+
+**From execution.md.** Hiding beats denying, because denying manufactures spurious `blocked` traps.
+Linux user namespaces give unprivileged hiding; macOS has no equivalent, so hiding there means a
+container or VM.
+
+```text
+NEEDED   verify what the target platform actually offers before designing against hiding.
+```
 
 ---
 
 ## Answered, and where the answer went
 
 ```text
+08-06  A SECOND GRADING OF THE SAME    both count. STORE TWO EDGES, FOLD ONE — the second
+       IMPULSE                         is a record about the GRADER, not a second piece of
+                                       evidence about the world. divergence between them is
+                                       the learning signal.               → shape.md
+
 08-06  IS THERE A CLOSURE THRESHOLD    no. closed is +1 — the most recent grade in this
                                        execution.                          → closure.md
 

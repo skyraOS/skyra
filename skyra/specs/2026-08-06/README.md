@@ -12,6 +12,9 @@ The rule is inherited from `2026-07-27` and applied to the docs as well as the m
 Applying that to nine docs produced six. The compression was real: `graph.md` led with a rule that
 had become false, and `assembly.md` described a behavior that turned out to be a walk.
 
+`syscalls.md` was added afterward, the first doc to enter this set by being required rather than
+carried.
+
 ---
 
 ## The loop
@@ -39,7 +42,8 @@ given that action, what is the next EXPECTATION
 |---|---|---|
 | [kernel](kernel.md) | the substrate. `Perturb` / `Observe` closed over `Space`, the returned transcript, and what the kernel cannot do. | **BUILT** — `src/skyra/spacetime/kernel` |
 | [shape](shape.md) | one family of state, three structural states, two edge kinds, and the only writer. | **SETTLED** |
-| [execution](execution.md) | durable vs ephemeral, the anchor, **ONE STACK**, interception, and the program/process direction. | **FOUNDATION** |
+| [execution](execution.md) | durable vs ephemeral, the anchor, **ONE STACK**, interception, the worktree's lifetime, and the program/process direction. | **FOUNDATION** |
+| [syscalls](syscalls.md) | the process-facing surface. **two traps out, one signal in, no grading verb.** | **SPEC** |
 | [phases](phases.md) | **`Perturb` reads. `Observe` writes.** and why eviction depends on it. | **RULE** |
 | [behaviors](behaviors.md) | the four, the one question every node asks, and the assembly walk. | **SPEC** |
 | [closure](closure.md) | **closed is +1, this execution. `P` is retrieval.** | **RESOLVED** |

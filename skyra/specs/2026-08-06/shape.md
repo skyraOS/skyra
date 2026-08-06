@@ -144,14 +144,30 @@ fan-in and never touched the fold. Now they are ten support edges, and *"distinc
 necessarily independent"* is a defect in the grounding arithmetic again — back where
 `2026-07-27/trust.md` left it.
 
-**Re-scoring lost its home.** `2026-07-27/workers.md` needs an impulse re-presented once the field
-grows a target for it, or it sits at ≈0 forever. A second interpretation node was a clean place for
-a second reading. Now a second reading is a second support edge between the same pair — which
-`O(E)` being a *set of distinct observations* forbids, since it is the same impulse counted twice.
+**Re-scoring lost its home, and got one back.** `2026-07-27/workers.md` needs an impulse
+re-presented once the field grows a target for it, or it sits at ≈0 forever. A second interpretation
+node was a clean place for a second reading. Now a second reading is a second support edge between
+the same pair — which `O(E)` being a *set of distinct observations* forbids, since it is the same
+impulse counted twice.
+
+> **Store two edges. Fold one.**
+
+Both readings persist; support is immutable, so neither is rewritten and nothing is destroyed. But
+only one enters `T`/`G`, because two edges from one impulse is Toy 2's inflated fan-in arriving
+again — and this doc already records that Toy 2 came back.
 
 ```text
-NEEDED   what a second grading of the same impulse means. newest wins, both count, or the
-         first is superseded. support is immutable, so it cannot be a rewrite.
+THE FIRST EDGE    evidence about the WORLD.    folds.
+THE SECOND EDGE   a record about the GRADER.   does not fold.
+```
+
+The divergence between them is the learning signal: it is the only place the system can see its own
+reading of one thing change. Discarding either reading destroys it, which is why *newest wins* and
+*first is superseded* were both worse.
+
+```text
+STILL OPEN   which edge folds when there are more than two, and whether "first" is the
+             right choice or merely the simplest.
 ```
 
 ## The caveat that keeps confidence safe
