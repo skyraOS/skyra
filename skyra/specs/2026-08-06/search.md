@@ -137,8 +137,67 @@ WEIGHT              behaviors.md's descend rule reads
 
 HOW MANY CANDIDATES the index returns a ranked list and nothing bounds its length.
 
-PARAPHRASE          this is LEXICAL. "seatbelt is tight" and "still restrained" share no
-                    tokens. cmd/semantic-sim exists because that limit was already known;
-                    nomic-embed-text runs locally and is the obvious upgrade path.
-                    exact-first is still right — measure the lexical path before adding a
-                    similarity index that can only decide what gets CONSIDERED anyway.
+COLD START          see below. an agent with no history has no relatedness, so early
+                    input is almost entirely unplaceable residual.
+```
+
+---
+
+## No semantic embeddings
+
+> **A pretrained embedding is someone else's opinion about what is similar. This is personal, and
+> relatedness has to move with the person.**
+
+Not a preference. `2026-07-22/tokenizer.md` §2 already set the test a representational prior must
+pass, and an embedding fails most of it:
+
+```text
+                                              CODEC        EMBEDDING
+reversible                                    yes          no
+original signal not normalized or discarded   yes          no
+fixed and explicitly identified               yes          by name only
+MEANING NOT ASSIGNED BY THE PRIOR             yes          THAT IS ALL IT DOES
+similarity confers attention, never settles   yes          yes
+```
+
+The codec holds an opinion about **bytes** — which recurring sequences deserve an identity. An
+embedding holds an opinion about **meaning**, it is lossy, and nobody can audit it. `The tokenizer
+shapes retrieval geometry. It does not rewrite evidence.` An embedding shapes which evidence is ever
+*seen*, which is upstream of everything that gets graded.
+
+`cmd/semantic-sim` exists because this was suspected already. Its own header names the branch it was
+testing as one *"retrieval.md explicitly leans against."*
+
+### Relatedness is structure the agent built, not a function over text
+
+```text
+1  LEXICAL          exact token overlap. the index above.
+
+2  CHARACTER N-GRAMS  typo and spacing tolerance. an opinion about SPELLING, not about
+                      meaning. mechanical, auditable, and already listed in tokenizer.md §5.
+
+3  CO-OCCURRENCE     tokens that repeatedly appear in impulses supporting the SAME
+                     expectation become related — FOR THIS PERSON. derived from support
+                     edges the agent already has, second-order over the same index.
+
+4  THE GRAPH         "seatbelt" relates to "standing" because an EXPECTATION was built
+                     linking them. that expectation is falsifiable; a cosine is not.
+```
+
+The fourth is the real answer and the other three are approach paths. **Relatedness is not a metric
+here. It is the graph**, and it is grounded because every edge in it was graded.
+
+### The cost, stated plainly
+
+A new agent has no co-occurrence history and no structure, so early input is almost entirely
+unplaceable residual. It starts ignorant and has to learn that two things go together — which is
+arguably correct, since a person with no experience does not know it either.
+
+The real hazard is not slowness:
+
+> `behaviors.md` — while ungated, structure will be **fabricated**, and the graph is append-only,
+> so the bloat is permanent.
+
+An agent with no relatedness fires EXPECT on nearly everything, so cold start and the ungated
+pipeline compound. **These early graphs are disposable and should be treated that way** — which
+that doc already says, and this makes it load-bearing rather than incidental.
