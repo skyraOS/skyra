@@ -110,7 +110,7 @@ stale prerequisites. Nothing stops it.
 
 ## 8 · Differentiation's shape
 
-**From differentiation.md, and only live once COST exists.**
+**From differentiation.md.** COST now exists — [search.md](search.md) — so this is live.
 
 ```text
 TWO CHILDREN OR N       forcing two means the tree records split HISTORY rather than structure
@@ -135,10 +135,10 @@ CONTINUE and RE-ASSEMBLE both mean *walk the graph for a value a process needs*.
 heating nothing, over the active subgraph first.
 
 **Settled:** retrieval is a private expectation per agent, in its own mount, perceived by whether
-the process re-traps on the same condition — behaviors.md.
+the process re-traps on the same condition — behaviors.md. What it ranks by is
+[search.md](search.md): term match ranks, activation only breaks ties.
 
-**Open:** the walk itself. What bounds it, what it ranks by, and how a value gets handed back into a
-blocked process. Downstream of the same COST question as the assembly walk.
+**Open:** what bounds the candidate list, and how a value gets handed back into a blocked process.
 
 ## 11 · Confinement — mostly answered, one thing left
 
@@ -191,58 +191,28 @@ ALSO   nothing decides who may enter the catalog. a trusted aggregator is not a 
        catalog, and find-before-build makes the catalog load-bearing.
 ```
 
-## 14 · COST
+## 14 · `weight` in the descend rule
 
-**The other half of the critical path, alongside Q1. It had no number until 2026-08-06, which is
-why Q8 and Q10 both said "downstream of COST" and pointed at nothing.**
+**What is left of COST.** COST itself is answered — [search.md](search.md). One tokenization pass
+produces the index entry and the token count; cost is derived, cached in the rebuildable index,
+per-node for its own content, and deliberately approximate because Q12 commits to two runners.
 
-> **No Node carries a token count.**
-
-One missing quantity, three dependents:
-
-```text
-THE ASSEMBLY WALK    child_budget = (parent_budget − parent_cost) × weight
-                     descend iff child_budget ≥ child_cost
-                     specced in behaviors.md, cannot run. `weight` is also undefined.
-
-DIFFERENTIATION      splits when observation load exceeds allocated budget. both terms
-                     are token counts.
-
-RETRIEVAL (Q10)      the same budgeted walk, behind `blocked`.
-```
-
-### What is actually undecided
-
-It is not "add an int field."
+What did not come with it:
 
 ```text
-WHAT IS MEASURED    the node's own content, or the node plus what a walk would gather
-                    beneath it? the descend rule reads per-node; the budget split reads
-                    recursive.
-
-STORED OR DERIVED   cost is derivable from content, and stored cost can drift from the
-                    content it describes.
-
-WHOSE TOKENIZER     cost is model-specific, and Q12 commits to TWO RUNNERS. so a node's
-                    cost is not one number unless it is deliberately approximate.
+child_budget = (parent_budget − parent_cost) × weight
 ```
 
-### What the existing rules already imply
+`weight` has never been defined anywhere in the set. It is what decides how a parent's remaining
+budget is divided among children, so it is the difference between a descent that spends everything
+on the first child and one that spreads.
 
 ```text
-DERIVE IT, AND CACHE IT IN THE INDEX
+CANDIDATES   authored confidence · P · uniform · something the parent declares
 ```
 
-`nothing is stored that a walk can derive` says derive. The reverse index is already declared
-**derived, rebuildable, deletable, cheap to be wrong about** — which is exactly the tolerance a
-cached token count wants. Cost on the Node would be durable state that can disagree with the
-content; cost in the index cannot, because it is thrown away and rebuilt.
-
-And **approximate, not per-runner.** Budgets are heuristics, not contracts. A characters-over-four
-estimate is the same for both runners and wrong by an amount that does not change any descend
-decision that was not already marginal.
-
-Neither is decided. Both are what the design's own priors point at.
+Nothing rules any of them in. It is small compared to what COST was, and the assembly walk cannot
+run without it.
 
 ---
 

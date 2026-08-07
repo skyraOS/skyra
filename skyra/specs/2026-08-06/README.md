@@ -46,6 +46,7 @@ given that action, what is the next EXPECTATION
 | [syscalls](syscalls.md) | the process-facing surface. **two traps out, one signal in, no grading verb.** | **SPEC** |
 | [phases](phases.md) | **`Perturb` reads. `Observe` writes.** and why eviction depends on it. | **RULE** |
 | [behaviors](behaviors.md) | the four, the one question every node asks, and the assembly walk. | **SPEC** |
+| [search](search.md) | the reverse index, ranking, and **cost falls out of the same pass.** | **SPEC** |
 | [closure](closure.md) | **closed is +1, this execution. `P` is retrieval.** | **RESOLVED** |
 | [differentiation](differentiation.md) | structure from overload. EXPECT's second trigger. | **WORKING TOWARD** |
 | [questions](questions.md) | decisions nobody has made. renumbered. | **LIVE** |
@@ -97,14 +98,14 @@ without a grade, an action grown into an expectation.
 ```text
 Q1   THE BOUNDARY   nothing spends the outbox, so no support flows, the fold has never
                     run, and calibration is never computed.
-
-Q14  COST           no Node carries a token count. it unblocks the assembly walk,
-                    differentiation, AND retrieval — one quantity, three dependents.
 ```
 
-Nothing else on the questions sheet moves until one of those does. **Take Q1 first** — COST is
-engineering, the boundary is validation, and building further on arithmetic that has never executed
-is what would have to be unwound.
+**COST is answered** — [search.md](search.md). One tokenization pass produces the index entry and
+the token count, so it came free with the search model rather than as separate work. What is left of
+it is `weight` in the descend rule, now Q14 and much smaller.
+
+That leaves **the boundary alone on the critical path.** Nothing else on the sheet moves until it
+does.
 
 ## Still the live reasoning
 
