@@ -96,8 +96,12 @@ without a grade, an action grown into an expectation.
 ## The critical path
 
 ```text
-Q1   THE BOUNDARY   nothing spends the outbox, so no support flows, the fold has never
+Q1   THE EXCHANGE   nothing spends the outbox, so no support flows, the fold has never
                     run, and calibration is never computed.
+
+                    it is NOT the Namespace and NOT the BOUNDARY behavior — both live
+                    inside a wave, and nothing fires inside a wave. rename before
+                    building.
 ```
 
 **COST is answered** — [search.md](search.md). One tokenization pass produces the index entry and

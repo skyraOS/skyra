@@ -462,6 +462,20 @@ O   accumulate the crossing. the Receipt reports the SEND, never what the target
 `show-affordance` stays a static registry read. If answering costs an inference call, discovery
 stops being cheap enough to do speculatively.
 
+### This behavior does not fire anything
+
+A collision in the vocabulary, flagged 2026-08-06 and not yet renamed. Two different things in this
+set are called *the boundary*:
+
+```text
+BOUNDARY the BEHAVIOR   this section. ACCUMULATES a crossing. a Space, inside a wave.
+THE EXCHANGE            runs AFTER a wave and FIRES what was accumulated. not a Space.
+```
+
+Sentences like *"accumulate the send, the boundary fires it"* mean the second. One object cannot do
+both, because **nothing fires inside a wave** — the property that makes an evicted wave guaranteed
+never to have acted. See [questions.md](questions.md) Q1.
+
 ---
 
 ## The assembly walk

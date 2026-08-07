@@ -13,9 +13,9 @@ as open.
 
 ---
 
-## 1 · The boundary
+## 1 · The exchange
 
-**The keystone. Was never on the sheet, which was a mistake.**
+**The keystone, and the only thing left on the critical path.**
 
 Nothing spends the outbox. No model call exists, so:
 
@@ -26,12 +26,63 @@ calibration                 →  never computed — and shape.md says that is th
                                making confidence edges safe. right now they are decoration.
 ```
 
-Two of the three are downstream of the first. A stub returning a fixed grade instead of calling a
-model would start support flowing and let the fold run.
+### Three more dependents, all added 2026-08-06
+
+```text
+SUPPLIER CALIBRATION   descriptions-as-expectations catches an overclaiming catalog only
+                       by comparing authored confidence to assigned support.
+
+THE RE-TRAP PERCEIVE   retrieval-as-expectation is graded by whether a process traps
+                       again. that grade has nowhere to land.
+
+CO-OCCURRENCE          search.md's personal relatedness model is derived from SUPPORT
+                       EDGES. none exist, because nothing grades.
+```
+
+The last one is the sharp version: the alternative to embeddings was designed against a substrate
+that has never been written to once.
+
+### It is not the Namespace, and not the BOUNDARY behavior
+
+A naming collision, caught 2026-08-06 and not yet fixed in the prose.
+
+```text
+BOUNDARY the BEHAVIOR   crossings to other agents. resolves a mount name and ACCUMULATES.
+                        a Space, inside a wave, reached through Perturb/Observe.
+
+NAMESPACE               ADDRESSING. what is reachable and by what name. also inside.
+
+THE EXCHANGE            TRANSPORT. runs AFTER a wave, fires what was accumulated, calls
+                        the model, feeds results back as impulses. not a Space, not a
+                        behavior — it DRIVES the kernel rather than being driven by it.
+```
+
+`behaviors.md` already relies on the split without naming it — *"ACT: accumulate the send. **the
+boundary fires it**"* — and one object cannot both accumulate and fire, because **nothing fires
+inside a wave**. That is what makes eviction safe.
+
+> Rename before building. Someone will otherwise put firing logic in the BOUNDARY behavior on the
+> strength of a sentence saying the boundary fires.
+
+### Undecided: is the model a mount?
+
+```text
+YES   asking and crossing stop being two kinds of leaving. a model call is a crossing,
+      crossings are new waves correlated by WaveID, one mechanism covers both. consistent
+      with what is already written.
+
+NO    a mount points at a PEER with its own graph, namespace and expectations. the model
+      has none — it is a limb, not a peer. calling it a mount imports a relationship that
+      is not there.
+```
+
+Leaning **no**: keep the model as the exchange's own capability and reserve mounts for agents. It
+changes what gets built, so it should be settled first.
 
 ```text
 NEEDED   something that takes the outbox, does the outside work, and returns results as
-         impulses. it can be fake before it is real.
+         impulses. IT CAN BE FAKE BEFORE IT IS REAL — a stub returning a fixed grade
+         starts support flowing and lets the fold run.
 ```
 
 ## 2 · What a closure event carries
