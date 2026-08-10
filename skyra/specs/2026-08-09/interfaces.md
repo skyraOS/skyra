@@ -53,8 +53,10 @@ type ObservationID string
 type EntityID      string
 type HostID        string
 type SpanID        string
-type Language      string   // "nl" · "python3.11" · "bash" · "sql"
 ```
+
+**There is no `Language`.** It was a self-report the kernel would have acted on without verifying —
+see below, and `world.md` for the same argument one level up.
 
 ### Engram
 
@@ -258,6 +260,7 @@ type Invocation struct {
     Span         SpanID
     Observations []*Observation
     Entity       EntityID
+    Host         HostID        // where it actually landed. RECORDED, NOT KEYED — see below.
     Cite         ObservationID // what prompted reaching for this. A GROUPING KEY ONLY.
 
     // WRITTEN at commit.
@@ -275,10 +278,14 @@ type Acceptance struct {
 }
 ```
 
-**The invocation carries the ENTITY, not the host.** Same question to Claude and to Michael is a
-*different* question. Same question to Claude reached two ways is the *same* question. And if one
-entity gives different answers on two hosts, that is not a reason to add the host — it is evidence
-**the entity is under-specified**, and the fix is to split it.
+**The entity is KEYED; the host is only RECORDED.** Same question to Claude and to Michael is a
+*different* question. Same question to Claude reached two ways is the *same* question — so the host
+does not enter what makes two askings comparable, and if one entity answers differently on two hosts
+that is evidence **the entity is under-specified**, not a reason for a second key.
+
+It is still written down, for the case where the host is the **target** rather than the interpreter:
+turning on the wrong TV matters, and a record that cannot say which one was addressed cannot learn
+from it. Recorded, readable, and invisible to the same-question fold.
 
 ---
 
@@ -422,7 +429,7 @@ func (k *Kernel) Run(e *Engram, ent EntityID, obs []*Observation) (*Observation,
 //
 // Stalled heads, orphaned roots and runaways are read from here. They are eviction
 // decisions and nothing else in the system can make them: a possibility sees down, an
-// engram sees its own edges, and no entity spans invocations.
+// engram sees its own children, and no entity spans invocations.
 func (k *Kernel) Introspect(from SpanID) Status
 ```
 
@@ -533,6 +540,11 @@ type Member struct {
     Cite         ObservationID   // PER MEMBER, never per group
     Entity       EntityID        // resolved in frame. WHO interprets the child.
     Observations []ObservationID
+
+    // OPTIONAL, and usually empty. Delivery picks a host on the way out, so naming
+    // one is only meaningful where the host is the TARGET rather than the
+    // interpreter — turning on THIS TV, not that one. See world.md.
+    Host HostID
 }
 
 // Commit closes the possibility and is THE ONLY DURABLE WRITE.

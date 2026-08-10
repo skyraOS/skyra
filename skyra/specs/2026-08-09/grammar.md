@@ -71,7 +71,7 @@ return. They are independent only in that neither needs the other's return to be
 
 ### It is what makes irreducibly joint action representable
 
-Two simultaneous releases are a group of two — separate possibilities, separate edges, separate
+Two simultaneous releases are a group of two — separate possibilities, separate engrams, separate
 credit, executed together. The alternative was hiding both inside one body, which works and destroys
 the ability to learn about either one.
 
@@ -124,7 +124,7 @@ precisely because a selection has one cause; a group-level cite reintroduces sib
 one place the design has it solved.
 
 It also breaks two things downstream: `(Q → P)` pairs are what recur and therefore carry statistics,
-and a *set* does not recur the same way — and pruning is supposed to be finer than the edge, so
+and a *set* does not recur the same way — and pruning is supposed to be finer than the engram, so
 `(Q → P)` can go while `(R → P)` stays. With a group-level cite, only whole groups are prunable.
 
 Same possibilities, same concurrency; each keeps its own reason for being there.
@@ -180,11 +180,12 @@ Same bytes, different provenance, and only the type keeps them apart.
 ## Identity
 
 A durable engram owns its ID. An observation needs no separate minting — its identity is
-**which possibility produced it, in which span, at which position**.
+**which engram produced it, in which span, at which position**. Engram and span together name the
+opening; position names the emission within it.
 
 Provenance is therefore intrinsic to the ID rather than a field beside it, and a returning child
-hands its parent `(observation, possibility)`, which is exactly what the parent needs to form the
-edge.
+hands its parent `(observation, engram)` — which is exactly what the parent needs to attach it. The
+possibility itself is gone by then, and nothing durable should have needed it.
 
 ## One universal signature
 

@@ -81,7 +81,7 @@ This is Toy 1's *blindness ≠ independence* arriving at the credit layer.
 
 ## 5 · History must not become a cache
 
-The edge carries the return it cited, which makes reading a stored answer instead of invoking
+A child engram carries the return it cited, which makes reading a stored answer instead of invoking
 trivially available. That is the stored present the design refuses.
 
 The rule is written. **A structural form of it — one that makes the substitution unexpressible rather
@@ -173,13 +173,13 @@ whether it is visible — a perspective label, not a type. The signature may nev
                                       type safety replaced by learning.     → grammar.md
 
 08-09  WHAT CREATE AUTHORS            nothing separate. mint on closure — a body is improvised,
-                                      runs, and persists if it closes.      → spaces.md
+                                      runs, and persists if it closes.      → possibilities.md
 
 08-09  THE INGRESS PRECONDITION       all ingress goes through discover, whose contract is to
                                       resolve. unexpressible, not forbidden. → discover.md
 
-08-09  WHAT A POSSIBILITY SEES        everything on its engram's edges. down, never up.
-                                                                            → spaces.md
+08-09  WHAT A POSSIBILITY SEES        everything on its engram's children. down, never up.
+                                                                            → possibilities.md
 
 08-09  THE WORD "SYSCALL"             DISSOLVED. blocked → discover(obs: nil). exit → commit.
                                       kill → eviction, runtime-side. three special forms
@@ -198,13 +198,13 @@ whether it is visible — a perspective label, not a type. The signature may nev
                                       rendering — otherwise a sender chooses your coupling at
                                       the perceptual layer.                  → world.md
 
-08-09  HOW LATE CREDIT LANDS          on the edge, which persists. the space's mortality was the
+08-09  HOW LATE CREDIT LANDS          on the child engram, which persists. the space's mortality was the
                                       wrong object to watch.                → credit.md
 
-08-09  MUTATION VS APPEND-ONLY        the edge stores events; magnitude is derived by counting.
+08-09  MUTATION VS APPEND-ONLY        the child engram stores events; magnitude is derived by counting.
                                                                             → credit.md
 
-08-09  SUCCESSFUL CONTENT DESTROYED   the edge carries the return it cited, stored on change.
+08-09  SUCCESSFUL CONTENT DESTROYED   the child engram carries the return it cited.
                                                                             → credit.md
 
 08-09  THE KERNEL FORK                supersede by version. v4 stays, the direction is v5.

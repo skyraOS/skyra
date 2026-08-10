@@ -1,20 +1,27 @@
 # Traversal — does the two-phase interface survive?
 
-**Date:** 2026-08-08
-**Status: OPEN.** The question has been asked and nothing has been argued. This doc holds what the
-split is currently carrying, so that whatever replaces it is checked against the real list.
+**Date:** 2026-08-08 · carried into 08-09
+**Status: CHECKLIST.** The inventory was written before anything replaced the split. It is kept as
+the **bill** — what the two methods were carrying, and what pays for each item now.
 
 > **`Perturb` / `Observe` is not one decision. It is at least four, and they were made
 > separately.**
 
+**All bare doc references below are to `2026-08-06`** — `phases.md`, `behaviors.md`, `locality.md`,
+and that set's `kernel.md`. This set now has a `kernel.md` of its own and they are not the same
+document.
+
 ---
 
-## The question
+## The question, and what answered it
 
 Whether the traversal interface stays two methods, and if not, what happens to the work those two
-methods are currently doing for free.
+methods were doing for free.
 
-Nothing is argued here yet. What follows is the inventory.
+**It is not two methods, and it is not methods.** `Perturb` was `Observe` with `realized = nil` — a
+name for the first iteration of a loop already iterating. What replaced it is a **grammar**: a
+possibility emits `SELECT` or `COMMIT` and nothing else parses. The inventory below is what that has
+to pay for, settled item by item at the end.
 
 ## What the split is load-bearing for
 
@@ -89,32 +96,62 @@ only the boundary reaches the concrete     the invariant, as method reachability
 concurrent waves share no state            nothing shared to corrupt
 ```
 
-**The spine test is the one flagged to watch** — kernel.md says it fails if the kernel ever gains
-the ability to branch. Any replacement interface should be checked against it first, because it is
-the test most likely to be quietly weakened by a change that looks like a simplification.
+---
 
-## The thing that must not be re-imported
+## The bill, settled
 
-Whatever replaces it, the constraint from `kernel.md` §2 is the floor:
+Five of the six are kept and one is deliberately dropped.
+
+```text
+1  EVICTION SAFETY     KEPT, AND CHEAPER. every durable write is caused by a commit, so a
+                       possibility cut off mid-exploration wrote nothing. the phase rule
+                       engineered this with a permission split; now it is just where the
+                       information lives.                                       credit.md
+
+2  NOTHING FIRES       KEPT. same mechanism as 1 — there is no write to leave behind, so
+   MID-DESCENT         an evicted possibility leaves no trace at all.           credit.md
+
+3  THE API SPLIT       DROPPED, and replaced by something stronger. it was "the phase rule
+                       cannot be broken by forgetting it." now the rule is not expressible:
+                       incapacity is a PARSING property, not a handed-in Reader. two forms
+                       parse and there is no third.                             grammar.md
+
+4  ORDERING WITHOUT    KEPT, and made explicit. ordering was nesting depth; it is now
+   A SCHEDULER         invocation cardinality. the runtime does not find, select, or order a
+                       frontier — it executes the group already emitted.        grammar.md
+
+5  THE RETURN PATH     KEPT. the commit is singular and a returning child hands its parent
+   IS THE TREE         (observation, possibility) — exactly what forms the child engram. no
+                       Node, no TraversalPair, no double-buffer.    grammar.md · credit.md
+
+6  THE ONE SHAPE       KEPT, and widened. one universal signature, and `Step` is the only
+                       method that produces anything. no dispatch table, and nothing
+                       per-callee to discover.                                  grammar.md
+```
+
+**The dropped one is the honest cost**, and it is not free: an API split is checkable by a compiler,
+where a grammar is checked by a parser at runtime. What is bought is that the constraint now covers
+everything a possibility could emit rather than the two methods someone remembered to split.
+
+## The tests are not migrated
+
+`kernel_test.go` belongs to `skyra-dna-v4`, which stays and runs. Nothing here migrates — the fork is
+by version, not by rewrite. **The claims those tests encode still apply as claims**, and the spine
+test is the one to re-earn first: `2026-08-06/kernel.md` flags that it fails if the kernel ever gains
+the ability to branch, and it remains the test most likely to be quietly weakened by something that
+reads as a simplification.
+
+## The floor still holds
+
+The constraint from `2026-08-06/kernel.md` §2, which no replacement was allowed to re-import:
 
 > The kernel cannot enumerate children, interpret grouping, select or order a frontier, compare
 > magnitudes, read a cost, or infer meaning.
 
-Safe by incapacity, never by restraint. An interface that hands the kernel more to look at is a
-worse interface no matter how much simpler it reads, and `locality.md` already names the specific
-regression to watch for — a driver that rebuilds the tree is enumerating composition, Law 7
-inverted.
+**Carried intact.** See `kernel.md` in *this* set, where it becomes *the kernel holds execution
+topology and no semantics* — it may know that a chain runs and where its head is, and it may read
+nothing. Safe by incapacity, never by restraint.
 
----
-
-## To fill in
-
-```text
-THE ACTUAL ARGUMENT    not written. what is wrong with the split, in its own terms, before
-                       anything is proposed to replace it.
-
-WHAT REPLACES IT       nothing proposed.
-
-WHICH OF THE SIX       a replacement does not have to keep all of them. it has to say which
-SURVIVE                ones it drops and what pays for them.
-```
+`locality.md` names the regression to watch: a driver that rebuilds the tree is enumerating
+composition, Law 7 inverted. An interface that hands the kernel more to look at is a worse interface
+however much simpler it reads.

@@ -371,7 +371,7 @@ NODE-OWNED RECORDS        a cell written by every parent that invoked it. shared
                           and positives lose their conditions.
 
 SPAN-OWNED VERDICTS       one record, N joining against it. a possibility sees everything on its
-                          engram's edges and nothing else, so a join would make long-range
+                          engram's children and nothing else, so a join would make long-range
                           standing a global read during gather.
 
 NODE TAGS                 avoids walking the chain, pays in lost context. the walk is bounded by

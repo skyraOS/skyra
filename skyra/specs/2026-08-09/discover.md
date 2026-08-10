@@ -73,7 +73,7 @@ discover
 ```
 
 So discover's own history records **which resolver suited which kind of need**, accumulating on its
-edges like anything else. The regress stops because `discover` is nameable in every frame — a
+children like anything else. The regress stops because `discover` is nameable in every frame — a
 builtin name, not something you must discover in order to discover.
 
 ### Which dissolves a rule into a strategy

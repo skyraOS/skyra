@@ -51,11 +51,11 @@ given that action, what is the next EXPECTATION
 | doc | owns | status |
 |---|---|---|
 | [grammar](grammar.md) | SELECT / COMMIT, citation, the five questions, capability as scoping, the universal signature. | **SPEC** |
-| [spaces](spaces.md) | the layering, what a possibility is, leaf vs orchestrator, composition, mint-on-closure, what a possibility sees. | **SPEC** |
+| [possibilities](possibilities.md) | the layering, what a possibility is, leaf vs orchestrator, composition, mint-on-closure, what a possibility sees. | **SPEC** |
 | [kernel](kernel.md) | the active/durable split, the write chain, permissions, monitor, impulses, roots and heads. | **SPEC** |
 | [world](world.md) | entity, host, `here`, graders vs interpreters, affordance, no ground truth. | **SPEC** |
 | [discover](discover.md) | the two mechanisms, create-on-rejection, ingress, the bootstrap, refinement. | **SPEC** |
-| [credit](credit.md) | the write, conditional childhood, edge ownership, the walk, hop profiles, events-not-counts, selection as correction. | **SPEC** |
+| [credit](credit.md) | the write, conditional childhood, parent ownership, the walk, hop profiles, events-not-counts, selection as correction. | **SPEC** |
 | [interfaces](interfaces.md) | the implementation shape for `skyra-dna-v5`. types, emissions, the frame. | **PROPOSAL** |
 | [traversal](traversal.md) | what `Perturb`/`Observe` was carrying, and what pays for each item now. | **CHECKLIST** |
 | [questions](questions.md) | decisions nobody has made, ordered by how much rests on them. | **LIVE** |
@@ -71,7 +71,7 @@ NO GROUND TRUTH         one structure held locally by each observer. no third th
 ONE WRITE               at the parent's return. eviction safety falls out rather than being built.
 NOTHING HAPPENING IS    the kernel holds all active work; the graph holds only what completed.
 REPRESENTABLE           crash semantics collapse to nothing.
-WHAT WORKED, NOT        edges form on citation. exploration costs nothing permanent.
+WHAT WORKED, NOT        a child engram forms on citation. exploration costs nothing permanent.
 WHAT WAS TRIED
 ALL LEARNING IS         selection learns; synthesis does not. possibilities are selected less,
 TOPOLOGICAL             never improved.

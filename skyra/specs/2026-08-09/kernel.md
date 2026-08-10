@@ -13,7 +13,7 @@
 KERNEL HOLDS   possibilities in flight · frames · entity bindings · buffered impulses ·
                the group barrier · roots and heads.        ALL EPHEMERAL.
 
-GRAPH HOLDS    engrams · history · edges · credit.
+GRAPH HOLDS    engrams · history · children · credit.
                nothing that is HAPPENING. only what happened.
 ```
 
@@ -158,7 +158,7 @@ rather than the entity re-reading a full frame and diffing it itself.**
 
 And the reception property survives on the scoping. Within one invocation an entity sees only what
 that possibility sees — its own children's returns. **Down, never up.** Monitor cannot reach a
-parent's edge because the subscription is dead before the parent ever forms one.
+parent's engram because the subscription is dead before the parent ever forms one.
 
 ### Three constraints
 
@@ -195,7 +195,7 @@ the implementation — build both and compare.
 
 ### What it is for
 
-`spaces.md` records the tension: what a possibility sees is simultaneously the learning mechanism and
+`possibilities.md` records the tension: what a possibility sees is simultaneously the learning mechanism and
 the per-step transfer cost, and the two pull against each other. **A delta protocol relieves it
 rather than picking a side.** It is not required for the first build.
 
@@ -210,7 +210,7 @@ there: *open the page* returns immediately with a handle, and the browser is wor
 
 So the diff is a diff of a **referent**, and the observation is what makes it nameable.
 
-This is the missing half of a mechanism already present. `spaces.md` left the watch case as *a live
+This is the missing half of a mechanism already present. `possibilities.md` left the watch case as *a live
 process is a crossing that streams; results arrive as impulses* — and never said where an impulse
 lands. **Monitor is where.** An impulse folds into an entity's context mid-invocation with no select,
 no new possibility, and no polling.
@@ -270,7 +270,7 @@ IT CANNOT    read content · judge · assign credit.       NO SEMANTICS.
 
 **A scheduler's view, not a world model.** It knows *that* a chain runs and where its head is; it
 cannot know what any of it means, because meaning lives in observations it cannot interpret and
-credit lives on edges it does not write. **The locality commitment was about judgement.** Execution
+credit lives on engrams it does not write. **The locality commitment was about judgement.** Execution
 topology was never local, and pretending otherwise means nobody can schedule.
 
 The time claim survives intact: **knowing the shape of live chains is not knowing their order.** The
@@ -297,7 +297,7 @@ A RUNAWAY         depth or breadth past a bound.
 ```
 
 **These are eviction decisions, and nothing else in the system can make them.** A possibility sees
-down; an engram sees its own edges; no entity spans invocations. Eviction requires exactly the view
+down; an engram sees its own children; no entity spans invocations. Eviction requires exactly the view
 the kernel has and nobody else does. That is a justification for globality, not a convenience.
 
 ### The report goes to the root

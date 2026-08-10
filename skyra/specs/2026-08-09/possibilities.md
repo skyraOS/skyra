@@ -156,8 +156,8 @@ separate authoring step: **an expectation is improvised, it runs, and if it clos
 Which separates two filters that are easy to conflate:
 
 ```text
-ENGRAMS   minted on closure.     record what was TRIED.
-EDGES     formed on citation.    record what WORKED.
+MINTED ON CLOSURE   an engram exists at all.        records what was TRIED.
+FORMED ON CITATION  it becomes a CHILD of the asker. records what WORKED.
 ```
 
 **Discovery sees attempts; selection sees successes.** A possibility walks its engram's children, so
@@ -167,7 +167,7 @@ arises, discovery finds the orphan instead of re-improvising it.
 
 ## What a possibility sees
 
-Everything on its engram's edges — the successes and the failures.
+Everything on its engram's children — the successes and the failures.
 
 ```text
 the child engram's name
@@ -177,13 +177,13 @@ the cite-source of each selection — (Q → P)
 ```
 
 So the prompt is: *here is what I have used, what it said, when it worked, and when it did not.* No
-weights change. **The entity sees a richer edge set over time**, which is what topological learning
+weights change. **The entity sees a richer child set over time**, which is what topological learning
 means in practice.
 
 ### It sees DOWN, never UP
 
-Its edges point at its children, so it sees their history. Its own reception lives on its **parents'**
-edges, which it cannot reach.
+Its engram owns its children, so it sees their history. Its own reception lives on its **parents'**
+engrams, which it cannot reach.
 
 > **No engram can know how it has been received.**
 
@@ -194,7 +194,7 @@ inside.**
 ### Synthesis has no historical input at all
 
 The one-shot sees the frame and what was gathered. Nothing else — its own past returns live on its
-parents' edges.
+parents' engrams.
 
 So composition quality is a function of the entity's priors and the material handed to it. **The
 system improves by changing what gets gathered, never by composing better.**
