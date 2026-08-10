@@ -118,6 +118,10 @@ mechanism — no `async`, no `await`, no execution flag.
 parent then blocks on something that may run for an hour, which is exactly what *actions as residual*
 existed to prevent in the older lineage.
 
+**And it now arrives earlier, from a different direction.** A grant miss escalates to the root, so a
+member can block on *a human deciding* — which is slower than any process and has no timeout anyone
+controls. `kernel.md`'s permission model makes this the common case rather than the exotic one.
+
 Named here so the demand is recognized when it arrives, rather than partial completion being
 smuggled in as a flag without a case behind it.
 
@@ -141,8 +145,24 @@ declaration. If the kernel checks it and then spawns something the OS does not c
 described nothing and the record reads as bounded — the silent-success class again. So the alphabet
 is bounded by what a restricted user, a sandbox profile or a namespace actually enforces.
 
-Deferred. Nothing needs it before the first build has world effects at all, and `introspect:self` is
-the first grant the design genuinely requires.
+Nothing needs it before the first build has world effects at all, and `introspect:self` is the first
+grant the design genuinely requires.
+
+**What is settled since:** a miss escalates rather than failing closed, an approval is an event and
+never becomes a grant, permissions are engrams so approval strategies compete, and a kernel-rooted
+chain can never exceed the grants of the chain that provoked it. See [kernel.md](kernel.md).
+
+**What is now load-bearing and was not:** grants gate the *world* boundary, and the transaction model
+rests on them. This stopped being deferrable the moment materialization was tied to root acceptance.
+
+**And what staging costs, which is the open part.** An overlay is the first mechanism that makes the
+kernel hold a view of the world — a worktree, a snapshot, a mount namespace, per capability class and
+per OS. Everything else in this set is bookkeeping over the runtime's own execution. Nobody has
+estimated what that costs, whether read-after-write across a deep chain stays cheap, or what happens
+when two concurrent group members stage conflicting writes to one path.
+
+That last one has no answer yet. Cardinality > 1 means siblings run together, siblings cannot see
+each other, and nothing prevents both writing `/work/x`.
 
 ## 10 · Who may select create
 
@@ -155,7 +175,17 @@ Nothing registers on invocation, and creation is reached by name through select.
 survive as a peer to `discover` at all — what is left of it is the write at return, which the parent
 performs.
 
-## 12 · Does "possibility" survive as a word
+## 12 · Should every kernel method be an engram
+
+The rule adopted is that they are — a permission is an engram, its approval is a possibility, and the
+kernel realizes them the ordinary way. It buys competition among approval strategies and costs a
+special channel.
+
+**Whether the indirection pays on the cheap, hot, uninteresting ones is not settled.** Some methods
+may simply be better as methods. The rule stands until something built says otherwise, which makes
+this an implementation question rather than a design one.
+
+## 13 · Does "possibility" survive as a word
 
 If the structure is identical to an expectation, the word may only be marking *whose* it is and
 whether it is visible — a perspective label, not a type. The signature may never need it.
@@ -240,4 +270,38 @@ whether it is visible — a perspective label, not a type. The signature may nev
        LOCALITY VIOLATION             no judgement, writes no credit. locality was about
                                       judgement; knowing the shape of live chains is not knowing
                                       their order.                          → kernel.md
+
+08-09  WHEN A WORLD EFFECT            at ROOT ACCEPTANCE. staged when asked for. the CHAIN is
+       ACTUALLY HAPPENS               the transaction, never the possibility — nested aborts
+                                      have no good answer.                  → kernel.md
+
+08-09  WHICH STAGED EFFECTS           the ones the credit walk reaches. materialization follows
+       LAND                           citation, so one traversal does both. a discard is a
+                                      RECORDED EVENT, never a silent no-op — citation was
+                                      designed with cheap failure and this is not.
+                                                                            → kernel.md
+
+08-09  HOW A NON-REVERSIBLE           stage the INTENT, not the effect. an email cannot be
+       EFFECT IS STAGED               un-sent but can be un-sent-YET, which makes the general
+                                      case cover everything and the overlay a storage-class
+                                      convenience.                          → kernel.md
+
+08-09  WHAT HAPPENS ON A              it ESCALATES. the kernel asks the root; approve performs,
+       GRANT MISS                     deny is an ordinary failed invocation. failing closed
+                                      would lose every unanticipated effect silently.
+                                                                            → kernel.md
+
+08-09  HOW APPROVAL IS MODELLED       a permission is an ENGRAM, its approval a possibility. no
+                                      special channel, and approval strategies compete. an
+                                      approval is an EVENT and never becomes a grant.
+                                                                            → kernel.md
+
+08-09  WHAT MAKES AN ENGRAM           its name being in the KERNEL'S FRAME. scoping, not a flag
+       KERNEL-CALLABLE                — a flag would be a declaration.       → kernel.md
+
+08-09  DOES A KERNEL ROOT BREAK       no, under two rules: a kernel root is DERIVATIVE and dies
+       "SYSTEM SPACE IS NEVER         with the chain that provoked it, and it can never exceed
+       THE STANDING ROOT"             that chain's grants — which also kills the permission
+                                      regress and blocks escalation through the grantor.
+                                      EVICTION is the class to bound.        → kernel.md
 ```

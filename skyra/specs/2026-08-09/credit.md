@@ -28,6 +28,11 @@ The write covers the possibility's **whole life at once** — which children wer
 passed to each, which returns were used. An evicted possibility leaves no trace at all, which is what
 *nothing happened* should mean.
 
+**That is a claim about the graph, and it needs the world to hold too.** A leaf that spawned a
+process which wrote a file has left a trace, and the graph's silence would make the record say
+nothing happened — the silent-wrong-answer shape this design refuses. What closes it is staging
+world effects until the root accepts: [kernel.md](kernel.md), *the chain is the transaction*.
+
 > **Every durable write in the system is caused by a commit.** Credit fires when an ancestor commits;
 > mint-on-closure is at commit; an inbound observation is not recorded until the possibility that
 > used it commits. Eviction safety stops being a property you verify and becomes one you cannot
@@ -338,6 +343,12 @@ mechanisms and neither substitutes for the other.
 > **The human's synthesis is acceptance. Accepting a change IS citation; rejecting is not-citing.**
 
 The human is simply the outermost parent, running the same operation with a different surface.
+
+**And it is the same event that materializes.** Acceptance stops being something the runtime watches
+for after the fact and becomes the act that realizes the chain's staged world effects — which is a
+better grounding for the one signal the whole pressure model rests on. *The root is not special* for
+**dispersal**, which every commit performs identically; it is special for **materialization**, which
+happens once per chain. Two axes, easy to conflate. See [kernel.md](kernel.md).
 
 ```text
 COMPUTED    the change was kept. the diff was not reverted. the file still stands.

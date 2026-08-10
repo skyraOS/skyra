@@ -11,7 +11,8 @@
 
 ```text
 KERNEL HOLDS   possibilities in flight · frames · entity bindings · buffered impulses ·
-               the group barrier · roots and heads.        ALL EPHEMERAL.
+               the group barrier · roots and heads · STAGED EFFECTS · the chain registry.
+                                                           ALL EPHEMERAL.
 
 GRAPH HOLDS    engrams · history · children · credit.
                nothing that is HAPPENING. only what happened.
@@ -32,6 +33,10 @@ The split is what makes engrams a record of things that **completed**.
 **Crash semantics collapse to nothing.** The kernel dies, everything in flight evaporates, and the
 graph is exactly the set of completed commits. No half-written state, no reconciliation pass, no
 recovery protocol — ever. One leak and a recovery story is owed for the life of the system.
+
+And once world effects are staged rather than performed, that extends past the graph: **an
+unmaterialized effect dies with the kernel too**, so *nothing happened* finally means nothing
+happened. See *the chain is the transaction*, below.
 
 It is also what makes hosts fungible. **The kernel holds the binding, not the host**, so a host dying
 mid-invocation is a re-assemble elsewhere rather than a lost possibility.
@@ -91,8 +96,8 @@ because the kernel cannot know in advance what a process will do, only gate the 
 
 ## Grants flow down from the root
 
-*Status: **DEFERRED**. The shape is settled; the vocabulary is not, and nothing needs it before the
-first build has world effects at all.*
+*Status: **PROVISIONAL**. The shape is settled and load-bearing; the vocabulary is not. Nothing needs
+it before the first build has world effects at all.*
 
 > **Authority is granted at the root of a chain and narrows on the way down. Nothing widens it.**
 
@@ -124,12 +129,190 @@ user, a sandbox profile, a mount namespace. **The vocabulary of grants is theref
 the platform layer can enforce, not by what is convenient to express**, and it is one more reason
 the `os_*` surface is the one that has to be gotten right.
 
+### A miss is a question, not an error
+
+The check does not fail closed. It **escalates**:
+
+```text
+COVERED BY A GRANT   the root provisioned it ahead of time.   perform.
+NOT COVERED          ask the root.                            approve → perform.
+                                                              deny → the invocation fails,
+                                                              ordinarily.
+```
+
+Which is what keeps an unanticipated effect from being silently lost. Failing closed would mean every
+effect nobody thought to provision in advance disappears; escalating means it stops and asks.
+
+**Denial is an ordinary return.** It lands on the parent's record and the parent selects differently
+— so approval becomes *learnable*, and a child that is always denied is topology the system routes
+around without a rule being written about it.
+
+**An approval is an event, not a grant.** Approving one email must never become the capability to
+send email. Same logic as records-are-events: record the act, derive nothing standing from it.
+Otherwise the permission model widens by use, which is how real ones rot.
+
 ### What is undecided
 
 Whether grants are checked per driver call, realized once at spawn, or both. Whether they name
 resources (`/work/**`) or capabilities (`fs:write`) or both. And whether a grant is content or
 structure — the port precedent in `world.md` says content is the default answer, and this may be the
 exception, since **credit must never read it**. See [questions.md](questions.md).
+
+---
+
+## The chain is the transaction
+
+> **A world effect is staged when it is asked for and realized when the root accepts. The root is the
+> commit point.**
+
+Which repairs something the set currently overstates. `credit.md` says an evicted possibility *leaves
+no trace at all, which is what nothing happened should mean.* **That is true of the graph and false
+of the world** — a leaf that spawned a process that wrote a file has left a trace, and the graph's
+silence makes the record say nothing happened. The same silent-wrong-answer shape the design refuses
+everywhere else.
+
+**The chain is the unit, not the possibility.** A possibility is a frame inside a transaction, not a
+transaction itself — nested transactions raise *what does it mean for a child to commit into a parent
+that later aborts*, and there is no good answer. The chain has one commit point, and it is where
+authority, acceptance and the human already are.
+
+### Stage the effect, or stage the intent
+
+An email cannot be un-sent. It can be un-sent-*yet*, and that is the whole trick:
+
+```text
+STORAGE          stage the EFFECT.   an overlay — a worktree, a snapshot, a mount. B reads
+                                     back what A wrote.
+
+EVERYTHING ELSE  stage the INTENT.   the kernel holds "send this." nothing to read back, and
+                                     nothing that wanted to.
+```
+
+**The second is the general case**; the overlay is a storage-class convenience layered on it. Every
+world effect passes through a driver call and the kernel gates every driver call, so there is no
+class of effect this cannot hold — which is why the earlier stageable/not-stageable split was the
+wrong cut.
+
+### Materialization follows citation
+
+Which staged effects land, when a chain half-worked? A wrote, B failed, the root accepted anyway.
+
+The answer is already in the design. The credit walk descends `Cites` from the accepted observation,
+so any invocation it reaches contributed to what was accepted. **Those effects land. Anything the
+walk never reaches is discarded**, for the same reason it earns no credit — a scratch file written by
+an uncited step should not survive.
+
+```text
+THE CREDIT WALK      which invocations contributed to what was accepted.
+MATERIALIZATION      exactly the same set.
+```
+
+One traversal, two jobs. *Credit follows data* and *effects follow data* stop being two claims.
+
+### A discard is an event, not an absence
+
+**The one place this must not simply inherit the credit mechanism.** Citation was designed with cheap
+failure — a mis-derived citation costs a mis-ranking, and the system corrects. Here the same mistake
+costs a **lost write**, and the tolerances were never set for that.
+
+```text
+A writes a config · B reads it and reports · only B goes up · A's write vanishes
+```
+
+*Not in your output, influence at most* is right for credit and possibly catastrophic for effects.
+So:
+
+> **Every staged effect must be explicitly disposed — landed or discarded — and the discard is
+> recorded.** An unreachable staged effect is a reportable fact, never a no-op.
+
+Escalation covers the other half: an effect nobody anticipated stops and asks rather than proceeding
+into a chain that may never carry it forward.
+
+---
+
+## Permissions are engrams
+
+A permission is not a special channel. **It is an engram, invoked by the kernel, realized exactly the
+way anything else is.** The approval is a possibility; the human or the policy is the entity manning
+it.
+
+Which makes the permission model **learnable and competitive**, the payoff that justifies the whole
+move:
+
+```text
+ask-the-human           ─┐
+auto-approve-under-X     ├─  three engrams for one need. history accumulates on each.
+check-a-policy-file     ─┘   SELECTION MOVES BETWEEN THEM.
+```
+
+Same shape as `discover` being an orchestrator over resolvers. Nobody edits a policy; the policy is
+outcompeted.
+
+### Kernel-callable is scoping, not a flag
+
+An engram carrying *callable-by-the-kernel* would be a declaration, and the set refuses those.
+
+> **An engram is kernel-callable iff its name is in the kernel's root frame.**
+
+Not a property of the engram — a fact about scope, and the same mechanism that makes `discover`
+nameable in every frame. The bootstrap already gives the kernel a frame axiomatically.
+
+**And the reverse direction is a grant.** Who may call *into* kernel methods is checked the same way
+everything else is: `introspect:self` is one, and it narrows down a chain like any other.
+
+### Two classes of root
+
+The kernel already had kernel-rooted chains — `credit.md` says *credit assignment is a possibility,
+not a mechanism*, so the dispersal walk is one. This generalizes what was already there, and the
+registry holds the provenance:
+
+```text
+USER-ROOTED     the ask came from outside. a human at the root.
+KERNEL-ROOTED   the kernel originated it. permissions · credit walks · eviction.
+```
+
+Which brushes against a rule carried from `2026-08-06/execution.md`:
+
+> A system-space expectation may be ENTERED FROM user space. It may never be the standing root.
+
+**The constraint that keeps it true:**
+
+> **A kernel root is derivative. It exists because a user root provoked it, and it dies with it.**
+
+Permission chains and credit walks satisfy that trivially. **Eviction does not** — it is provoked by
+a timer rather than by a chain, and it is the one class that could grow with *graph size* instead of
+with work. That is the class to bound, and it is the reason the registry carries provenance at all:
+**if kernel-rooted work ever outgrows user-rooted work, the self-maintenance spiral has started and
+it is countable rather than felt.**
+
+### A kernel-rooted chain can never exceed what provoked it
+
+A permission engram wants to read a policy file. That is a storage call. That needs a permission,
+which invokes a permission engram, which wants to read a policy file.
+
+> **A kernel-rooted chain runs under the grants of the chain that provoked it, and can never exceed
+> them.**
+
+Monotonic narrowing, applied one level up. It terminates the regress, and it closes the classic hole
+in every permission system: **you cannot escalate through the thing that grants permissions**,
+because it holds strictly less than what it is adjudicating for.
+
+### Grading falls out
+
+The effect's observation cites the approval observation, so the approval sits in the citation chain.
+When the root accepts, the ordinary walk descends through it and credits the permission engram like
+any other child.
+
+*Did this approval strategy serve chains that ended up accepted* is therefore answered by the
+mechanism that already exists — no grader invented for system space, the same thing that happened
+when `discover` stopped needing a bespoke perceive.
+
+### Held provisionally
+
+**Some kernel methods may be better as methods.** Making every one an engram is the rule adopted here
+because it is the smaller design and because it buys competition; whether the indirection pays for
+itself on the cheap, hot, uninteresting ones is an implementation question and not a settled one.
+The rule stands until something built says otherwise.
 
 ## Monitor
 
@@ -280,7 +463,7 @@ per-cell.
 ### Roots and heads
 
 ```text
-MANY ROOTS        independent asks alive at once.
+MANY ROOTS        independent asks alive at once. user-rooted or kernel-rooted.
 MANY HEADS/ROOT   the concurrent frontier — cardinality > 1 branches the chain.
 
     root₁ ──────┬── head
@@ -291,9 +474,11 @@ MANY HEADS/ROOT   the concurrent frontier — cardinality > 1 branches the chain
 From that view, and from no other:
 
 ```text
-A STALLED HEAD    has not moved.
-AN ORPHANED ROOT  the asker is gone.
-A RUNAWAY         depth or breadth past a bound.
+A STALLED HEAD       has not moved.
+AN ORPHANED ROOT     the asker is gone — and its staged effects are discarded by the
+                     mechanism that was already here.
+A RUNAWAY            depth or breadth past a bound.
+KERNEL-ROOTED WORK   outgrowing user-rooted work. THE SPIRAL, made countable.
 ```
 
 **These are eviction decisions, and nothing else in the system can make them.** A possibility sees
@@ -352,6 +537,30 @@ than discovered later. Note that it is *not* the sibling blindness in `questions
 about credit assignment across a composition after the fact, and it stays open. This is about
 coordination during flight, and it is closed.
 
+**Staging is the first mechanism that makes the kernel hold a view of the world.** Everything else
+here is bookkeeping over its own execution. An overlay is not — it is real machinery, per capability
+class, and it is the largest thing this doc adds.
+
+**Approval fatigue is not solved by any of it.** Making the asker an engram makes the *strategy*
+learnable; it does not make a human's patience infinite. Ask enough times and the answer is always
+yes, then the grant is widened to stop the nagging, and the permission model describes nothing.
+
+The mitigation is already in the machinery, which is the only reason this is a cost rather than a
+defect: **asking is expensive, and it lands on the parent's record.** A child that escalates before
+every action has internalized nothing — the same reading as *cited from an observation* versus
+*cited from durable structure*. So `escalations / invocation` wants to sit beside `used / seen`, as a
+measure of how well-provisioned a chain is rather than how well-behaved it is.
+
+**And the human occupies both roles in one chain.** They are the grader at the root and an
+interpreter manning a permission possibility partway down. `world.md` permits it — *a human and a
+model are interchangeable as interpreters* — and the grader rule survives literally, because the
+kernel invokes the permission and the kernel is not below anything. But it is the first place the two
+roles meet inside one chain, and it deserves a toy run before it is trusted.
+
+**A chain waiting on a human is the group barrier's worst case.** `questions.md §8` names a
+long-running spawn as the demand that will force partial completion. Escalation is that demand
+arriving earlier and from a different direction.
+
 ---
 
 ## Rejected
@@ -385,4 +594,28 @@ GRANTS AS DECLARATIONS  a permission the platform layer does not realize. the pr
 
 GRANTS THAT WIDEN       a select handing down authority it did not have. authority enters at the
                         root and narrows; anything else means ancestry stops determining reach.
+
+FAILING CLOSED ON A     every effect nobody thought to provision in advance disappears
+GRANT MISS              silently. escalation makes the unanticipated case stop and ask.
+
+AN APPROVAL BECOMING    approving one email granting the capability to send email. the
+A GRANT                 permission model would widen by use, which is how real ones rot.
+                        record the act, derive nothing standing from it.
+
+A SPECIAL APPROVAL      a bespoke channel for asking a human. a permission is an engram, its
+CHANNEL                 approval is a possibility, and both are realized the ordinary way —
+                        which is also what makes approval strategies COMPETE.
+
+A CALLABLE-BY-KERNEL    a declaration on an engram, and the set refuses those. kernel-callable
+FLAG                    is a fact about the KERNEL'S FRAME, not a property of the callee.
+
+PER-POSSIBILITY         every possibility its own transaction. nested aborts have no good
+TRANSACTIONS            answer — what does a child committing into a parent that later aborts
+                        mean. the CHAIN is the unit; the root is the commit point.
+
+A STAGEABLE /           an earlier cut, and the wrong one. an email cannot be un-sent but can
+NOT-STAGEABLE SPLIT     be un-sent-YET. stage the intent and every effect is coverable.
+
+DISCARD AS A NO-OP      a staged effect the walk never reaches, dropped silently. citation was
+                        designed with cheap failure; here the same mistake loses a write.
 ```

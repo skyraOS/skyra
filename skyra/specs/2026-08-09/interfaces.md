@@ -406,9 +406,35 @@ type Kernel struct {
 
     // ALL EPHEMERAL. Dies with the process, and the graph is exactly the set of
     // completed commits. There is no recovery protocol because there is nothing
-    // half-written to recover.
-    roots map[SpanID]*Possibility          // independent asks alive right now
+    // half-written to recover — INCLUDING world effects, which are staged rather
+    // than performed until the root accepts.
+    roots map[SpanID]*Root                 // independent asks alive right now
     heads map[SpanID][]*Possibility        // the frontier under each. >1 from cardinality >1
+}
+
+// A Root is a chain. It is the TRANSACTION BOUNDARY — grants enter here, staged
+// effects materialize here, and a possibility is a frame inside it rather than a
+// transaction of its own.
+type Root struct {
+    Possibility *Possibility
+
+    // PROVENANCE. A kernel root is DERIVATIVE: it exists because a user root
+    // provoked it and dies with it. Counted so that kernel-rooted work outgrowing
+    // user-rooted work — the self-maintenance spiral — is measurable rather than
+    // felt. EVICTION is the class that could grow with graph size instead of work.
+    Origin   RootOrigin // User | Kernel
+    Provoker SpanID     // empty only for the maintenance class
+
+    // Authority, entering at the root and narrowing on the way down. A kernel root
+    // inherits its provoker's and can NEVER EXCEED THEM — which terminates the
+    // permission regress and blocks escalation through the grantor.
+    Grants []Grant
+
+    // Held, not performed. Materialized along the citation chain when the root
+    // accepts; anything the walk never reaches is DISCARDED AND THE DISCARD IS
+    // RECORDED. Never a silent no-op — citation tolerates cheap failure and a lost
+    // write is not that.
+    staged []*Effect
 }
 
 // Run pairs an engram with an entity and drives the loop. It does NOT check the

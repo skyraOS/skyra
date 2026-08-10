@@ -52,7 +52,7 @@ given that action, what is the next EXPECTATION
 |---|---|---|
 | [grammar](grammar.md) | SELECT / COMMIT, citation, the five questions, capability as scoping, the universal signature. | **SPEC** |
 | [possibilities](possibilities.md) | the layering, what a possibility is, leaf vs orchestrator, composition, mint-on-closure, what a possibility sees. | **SPEC** |
-| [kernel](kernel.md) | the active/durable split, the write chain, permissions, monitor, impulses, roots and heads. | **SPEC** |
+| [kernel](kernel.md) | the active/durable split, the write chain, grants, the chain as transaction, permissions as engrams, monitor, impulses, roots and heads. | **SPEC** |
 | [world](world.md) | entity, host, `here`, graders vs interpreters, affordance, no ground truth. | **SPEC** |
 | [discover](discover.md) | the two mechanisms, create-on-rejection, ingress, the bootstrap, refinement. | **SPEC** |
 | [credit](credit.md) | the write, conditional childhood, parent ownership, the walk, hop profiles, events-not-counts, selection as correction. | **SPEC** |
@@ -71,6 +71,10 @@ NO GROUND TRUTH         one structure held locally by each observer. no third th
 ONE WRITE               at the parent's return. eviction safety falls out rather than being built.
 NOTHING HAPPENING IS    the kernel holds all active work; the graph holds only what completed.
 REPRESENTABLE           crash semantics collapse to nothing.
+THE CHAIN IS THE        world effects are staged when asked for and realized when the root
+TRANSACTION             accepts. materialization follows the same walk credit does.
+NO SPECIAL CHANNELS     a permission is an engram and its approval is a possibility, so
+                        approval strategies compete like everything else.
 WHAT WORKED, NOT        a child engram forms on citation. exploration costs nothing permanent.
 WHAT WAS TRIED
 ALL LEARNING IS         selection learns; synthesis does not. possibilities are selected less,
