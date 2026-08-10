@@ -1,5 +1,24 @@
 # Expectations and Actions
 
+> ## SUPERSEDED IN PART — 2026-07-30
+>
+> [expectations](expectations.md) now owns the shape. What changed:
+>
+> ```text
+> CARDINALITY   an expectation has 0:* actions and 0:* expectations, at least one of
+>               the two. an action has ≥1 expectation and is always a LEAF.
+>               the "exactly one in both directions" rule below is REPLACED.
+>
+> GRADING       the observation worker grades leaf actions. everything above inherits.
+>
+> AUTHORSHIP    the expectation worker authors the confidence, not the action worker —
+>               there is no action worker. see workers.md.
+> ```
+>
+> **What survives unchanged:** the core move (an action predicts SUPPORT, never an
+> observation), the two signals and why they must not be run together, `Q(E,A)` as a delta,
+> and selection. Those sections are still live.
+
 **Date:** 2026-07-27
 
 > **Expectations are the persistent state. Actions are operators that attempt to transform the
@@ -146,8 +165,16 @@ number and a lucky action reads as a good one.
 ### Why the authored number is safe to measure against
 
 The observation worker assigns support independently and does not know what was predicted, what
-was wanted, or what any of it is for. **Two model calls, mutually blind, one scoring the other.**
-The predictor cannot influence the assessor.
+was wanted, or what any of it is for. **The predictor cannot influence the assessor.**
+
+> **Restated 07-30.** This was previously argued as *"two model calls, mutually blind."* Mutual
+> blindness was never what licensed it, and saying so made the merge of the action worker into
+> the expectation worker look dangerous when it is not. The rule is one-directional:
+>
+> **Blindness is required of ASSESSORS, not of claimants.**
+>
+> The claimant may see whatever helps it claim well. Only the thing that scores it must be
+> blind, and it still is.
 
 ## Q(E,A)
 

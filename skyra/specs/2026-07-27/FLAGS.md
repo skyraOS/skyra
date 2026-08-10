@@ -32,6 +32,67 @@ could therefore inflate trust unless observational independence or shared proven
 `T` just as strong support does. A directional truth value must retain `G` or another signed
 quantity.
 
+## Confidence is self-reported
+
+**New 07-30.** `confidence ∈ [0,1]` gives the system a way to say *I read this and could not
+place it*, which is what Toy 5 needed. But it is authored by the same worker whose reading it
+describes.
+
+```text
+CATCHES    known unknowns — unfamiliar vocabulary, unplaceable observations
+BLIND TO   confident misreadings — Toy 1, where the interpreter never hesitates
+```
+
+Nothing grades confidence. It is the one number in the system with no blind assessor, which is
+tolerable only because it routes rather than settles. If it ever starts weighting anything, that
+exemption stops being safe.
+
+## Goal degeneration under the merged worker
+
+**New 07-30.** The expectation worker sets targets *and* selects actions, so it must see `Q`.
+The earlier separation — repertoire yes, `Q` no — is no longer available.
+
+Targets will tend to bend toward existing competence. Closure rates rise, confidence rises,
+ambition contracts. Every local measurement improves while the system gets smaller, which is why
+this is hard to catch by inspection.
+
+```text
+average P at creation time     rising  → targets are getting easier
+novelty rate                   falling → fewer genuinely new expectations
+```
+
+Log both from the first run. Neither is derivable after the fact.
+
+## Motivation requires re-scoring
+
+**New 07-30.** An observation that triggers a creation scored ≈0 against a field that lacked its
+target. If observations are scored only on arrival, it stays at ≈0 forever and never acquires
+the edge that would make motivation derivable.
+
+The expectation worker must re-present triggering observations for scoring after it creates or
+refines. The substrate permits it — the evidence set is append-only — but it is an explicit step,
+and without it the mechanism silently does not work.
+
+## The basis moves, and now it moves routinely
+
+**Promoted 07-30.** `truth.md` flags that `ΔP` is undefined over a changing node set until
+`BORN / DIED / MOVED` are separated. That was theoretical. Goal refinement makes it routine:
+adding children beneath an expectation drops its `P` sharply **with nothing having failed**.
+
+`dynamics.md` reads `‖ΔP‖ large → surprise → widen attention`. So the controller will read the
+being getting smarter as the world breaking. `ΔP` must distinguish *the basis changed* from
+*the world moved* before dynamics can consume it at all.
+
+## Slice concurrency is live again
+
+**Updated 07-30.** Sequential actions were expected to defuse kernel §13 Q4. Sibling
+expectations run concurrently, so two action sequences can be in flight, both writing to a Slice
+whose lock is held per wave.
+
+Narrower than before — credit attribution survives, since grading happens per leaf action and
+each expectation inherits along its own path. It is a transcript-integrity problem, not a credit
+problem.
+
 ## “Nothing appends” contradicts ΔP
 
 `README.md` — *“an expectation’s record closes as soon as both halves exist — its evidence at the
@@ -51,6 +112,9 @@ Toy 5      o* must eventually bear on an already-trusted E
 The observation worker’s own description in the same document — *“it sets the edge… it scores what
 exists and never creates”* — is appending: scoring what exists means attaching support to
 expectations conceived in earlier waves.
+
+**Resolved 07-30** — the README now states the narrowed rule directly. Retained here because the
+reasoning is the argument for it.
 
 The immutability instinct is aimed at the wrong edge. What the passage protects against is stated
 two lines earlier — *stops an old expectation from being rewritten every time something new comes

@@ -53,74 +53,60 @@ change. Position measures **closure** — how much of the change has happened.
 Two kinds, and they are opposite relations:
 
 ```text
-EVIDENCE   ──▶ observations / other expectations   EPISTEMIC — what grounds this change
-ACTION     ──▶ its one action                      CAUSAL — what makes this change happen
+CHILDREN   ──▶ 0:* expectations    EPISTEMIC — what grounds this change
+ACTIONS    ──▶ 0:* actions         CAUSAL — what makes this change happen
+                                   at least one of the two must be present
 ```
 
-The expectation sits between what it rests on and what closes it, and holds both.
+The expectation sits between what it rests on and what closes it, and holds both. Actions are
+leaves and own nothing. See [expectations](expectations.md).
 
 **Incoming is a query, never a field.** *"Which expectations does `E` support?"* is a walk over
 the edge set; *"candidate actions for `E`"* is a fold over `Q`. Neither is stored, which is what
 stops an old expectation from being rewritten every time something new comes to rest on it.
 
-So an expectation's record closes as soon as both halves exist — its evidence at the time, and
-its action. **Nothing appends to it afterward.**
+### What is immutable, and what is not
 
-## What each worker cannot see
-
-```text
-OBSERVATION WORKER   never sees ACTIONS
-                     a completed act leaks intent. it needs none: it assigns support,
-                     and causation lives in Q, where the action is known anyway.
-
-ACTION WORKER        never sees OBSERVATIONS
-                     it runs on interpreted state only, so a raw payload it might
-                     misread cannot reach it.
-```
-
-Each blindness is what licenses trusting the other's output.
-
-## The observation worker
-
-It sees the field from its own perspective — addresses, objects, everything in frame. It
-assigns support values. It does not know what is wanted, what was claimed, or what any of it
-is for.
-
-**It sets the edge. The value is support, signed on `[-1,1]`.** That range is load-bearing: it
-is what gives trust free depth attenuation and what stops chains from amplifying without bound.
-
-**It scores what exists and never creates.** If an observation bears on nothing in the field,
-the observation worker correctly does nothing. Novelty belongs to the expectation worker, which
-sees observations too. That is what keeps this worker narrow enough to stay blind.
-
-### What is in its frame
-
-It cannot score every expectation against every observation, so the frame is selected — using
-both quantities for exactly what each is for:
+An earlier draft here said *nothing appends to a record afterward*. Read literally that freezes
+`O(E)` at creation, which freezes `P` for all time — and the whole set runs on `ΔP`. The
+substrate is append-only, not immutable, and the rule is narrower than it was stated:
 
 ```text
-ACTIVATION   SELECTS   which expectations this observation is RELEVANT to     tokens
-TRUST        RANKS     which of those matter most                             mass
-budget       CUTS
+ACTION EDGE      write-once. it closes the record.
+SUPPORT VALUE    immutable once written. never revised in place.
+EVIDENCE SET     APPEND-ONLY. new grounding may arrive at any time.
 ```
 
-This is **trust's first concrete consumer.** It stops being a quantity we defined and becomes
-the thing that decides what the observation worker looks at.
+`P` therefore moves by accretion and never by rewrite. That is what the original sentence was
+protecting — an old expectation is not *rewritten* when something new comes to rest on it — and
+it holds without freezing the evidence.
 
-> **The observation worker is the system's operational definition of the world.**
+## Two workers
 
-There is no separate deterministic oracle to compare it against, and at a boundary there never
-was — the world produces raw returns and something has to read them. As models improve, the
-quality of that reading improves with no redesign. That is a property, not a compromise.
-
-What it makes the most important measurable in the system is the interpreter's own stability,
-and that is checkable without an oracle:
+There were three. The action worker is folded into the expectation worker — see
+[workers](workers.md) for the full statement.
 
 ```text
-revision rate    how often a reading is displaced when more evidence arrives
-                 rising  →  the interpreter is unstable, and so is everything downstream
-                 falling →  it is converging on a consistent reading of this world
+OBSERVATION WORKER    grades state      how far are we from target     CURRENT
+EXPECTATION WORKER    proposes state    what should be true, and how   TARGET + BRIDGE
 ```
+
+The observation worker emits **two numbers** — `relationship ∈ [-1,1]`, signed, which is the
+only thing that enters the arithmetic; and `confidence ∈ [0,1]`, which routes and must never
+weight. Together they separate *unrelated* from *not understood*, two states one number
+conflates at the bottom of its range.
+
+The rule that licenses this is narrower than the two blindness rules it replaces:
+
+> **Blindness is required of ASSESSORS, not of claimants.**
+
+The observation worker is the assessor and is still blind to actions. Both other roles are
+claimants, and claimants may see whatever helps them claim well, because something blind grades
+them afterward. Merging two claimants changes nothing about the licensing.
+
+The cost is real and stated in [workers](workers.md): the worker that sets targets now also sees
+what has worked, so targets will tend to bend toward existing competence. That cannot be
+prevented while the merge holds. It can be measured.
 
 ## Three layers
 
@@ -130,7 +116,9 @@ expectation → action           LEARNS      policy              actions
 the transition itself          CONTROLS    runtime dynamics    dynamics
 ```
 
-Two learners and one controller. Dynamics claims nothing, so it needs no grading arm.
+Still two learning problems and one controller — but two learners is now a statement about
+**signals**, not about workers. Both learning signals land on the expectation worker; they must
+not be run together. Dynamics claims nothing, so it needs no grading arm.
 
 ---
 
@@ -149,6 +137,8 @@ stripping it is a design decision and this was a move.
 
 | doc | owns | status |
 |---|---|---|
+| [workers](workers.md) | the two workers. what each owns, what each sees, and the rule that licenses the arrangement — **blindness is required of assessors, not claimants.** | **TWO WORKERS** — 07-30 |
+| [expectations](expectations.md) | the shape. `0:*` actions and `0:*` expectations, grading at leaf actions, the falsifiability invariant, order. | **MODEL SETTLED** — 07-30 |
 | [kernel alteration](kernel-alteration.md) | the substrate the loop runs on. `Perturb` / `Observe`, both closed over `Space`. the kernel executes what it is returned and does no cognitive math. | **DECIDED** — admitted 07-28 |
 | [trust](trust.md) | accumulated observational magnitude, scaled by expectation edges. **unsigned mass** — unbounded, ranks, never settles. | **FINAL** |
 | [truth](truth.md) | the normalized **signed** grounding. bounded. **the signal is its change over time, not its level.** | **TENTATIVE** — normalizer unsettled |
@@ -169,9 +159,9 @@ All derived at evaluation, never persisted. The graph stores only edge values.
 ## Not yet in this set
 
 ```text
-THE EXPECTATION WORKER   what it is handed, and what licenses it to create a new
-                         expectation rather than support an existing one.
-                         the only worker without a frame yet.
+CREATION LICENSE         the expectation worker now HAS a frame — activation high,
+                         support ≈ 0 (workers.md). what remains open is what licenses
+                         CREATING a new expectation rather than refining an existing one.
 
 INDEPENDENCE             trust.md — distinct observation RECORDS are not necessarily
                          independent EVIDENCE. correlated sources inflate T, and

@@ -81,6 +81,24 @@ That resolves an ambiguity `P` alone cannot. A claim sitting at the midpoint may
 (`T` high, coherence low) or **unexamined** (`T` low). Nothing new is stored — it is a ratio of
 two derived quantities.
 
+### Three states, not two
+
+**Added 07-30.** With the observation worker emitting confidence alongside relationship
+([workers](workers.md)), the midpoint resolves completely:
+
+```text
+high T · low coherence    CONTESTED        evidence pulls both ways
+low T                     UNEXAMINED       little has borne on it
+low confidence            NOT UNDERSTOOD   it was read, and could not be placed
+```
+
+The third is a different failure from the first two and was previously invisible — it looked
+like `unexamined`, which is what made it dangerous. An unexamined claim wants more looking. An
+unintelligible one wants a *new expectation*, and routes to the expectation worker instead.
+
+Still nothing persisted. Confidence lives on the reading, not on the edge, and never enters `T`
+or `G` — see [trust](trust.md).
+
 ---
 
 ## What Truth is for — the change, not the level

@@ -25,12 +25,20 @@ computed on demand.
 ## The graph
 
 ```text
-Observation ── support ──▶ Expectation
+Observation ── support ──▶ Action ── support ──▶ Expectation
 Expectation ── support ──▶ Expectation
 ```
 
-**Observations are the only source of grounding.** Expectations neither create nor store it;
-they only scale what reaches them from beneath.
+> **Updated 07-30.** The graph gained a layer. The observation worker grades **leaf actions**,
+> not expectations directly — see [expectations](expectations.md). The arithmetic below is
+> unchanged: still a product of edge scalars along a path, still a sum of absolute
+> contributions. There is simply one more hop between an observation and the expectation it
+> ultimately grounds.
+
+**Observations are the only source of grounding, and grading happens only at leaves.**
+Expectations neither create nor store grounding; they only scale what reaches them from beneath.
+An expectation with no actions of its own is grounded *entirely* through its children — strict
+inheritance, and it falls out of cardinality rather than being imposed.
 
 These edges are owned by the expectation they ground — *an expectation owns every edge it points
 at, and never one that points at it* ([README](README.md)). So "what grounds `E`" is a field;
@@ -84,6 +92,32 @@ T(B) = 0.7(0.2) + 0.7(0.5) + 0.7(0.3) = 0.7
 ```
 
 The graph stores four numbers — `0.2, 0.5, 0.3, 0.7`. Nothing else is written.
+
+## Confidence is not a scalar on the edge
+
+**Added 07-30.** The observation worker emits two numbers — `relationship ∈ [-1,1]` and
+`confidence ∈ [0,1]` ([workers](workers.md)). Only relationship appears above.
+
+It is tempting to fold the second in as expected-value weighting:
+
+```text
+c(o,E) = relationship × confidence × …        DO NOT
+```
+
+> **Novel evidence is exactly the evidence that reads as low-confidence, and novel evidence is
+> what contradicts established beliefs.**
+
+Weighting `T` by confidence would systematically shrink the mass of unfamiliar contradictory
+observations — which is [Toy 5](toy-runthroughs.md) reappearing inside the arithmetic, where it
+is far harder to see, because it would look like principled uncertainty handling rather than a
+suppression mechanism.
+
+```text
+RELATIONSHIP   →   T, G, P, coherence            the measurement
+CONFIDENCE     →   frames, routing, admission    the control
+```
+
+The same rule the controller lives under: *it may inform when-to-think; it may not move an edge.*
 
 ## Two properties that fall out
 
