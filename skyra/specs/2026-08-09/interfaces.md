@@ -391,12 +391,39 @@ about the agent's structure is decided in advance.
 ```go
 // ONE kernel. Not one per entity — differences in how an entity is reached live in
 // runtime adapters, never as separate types here.
-type Kernel struct{ /* graph, entity registry, span minting */ }
+//
+// It is THE ONLY GLOBAL THING, and only over EXECUTION TOPOLOGY: it holds every live
+// chain and can read none of them. No content, no judgement, no credit.
+type Kernel struct {
+    /* graph, entity registry, ID minting */
+
+    // ALL EPHEMERAL. Dies with the process, and the graph is exactly the set of
+    // completed commits. There is no recovery protocol because there is nothing
+    // half-written to recover.
+    roots map[SpanID]*Possibility          // independent asks alive right now
+    heads map[SpanID][]*Possibility        // the frontier under each. >1 from cardinality >1
+}
 
 // Run pairs an engram with an entity and drives the loop. It does NOT check the
 // pairing — a mismatch is an ordinary failure, observed and recorded on the
 // invoker's engram.
 func (k *Kernel) Run(e *Engram, ent EntityID, obs []*Observation) (*Observation, Record)
+
+// Introspect answers what is running, from the only view that has it.
+//
+// BOUNDED BY THE SUBTREE, not by the grammar. The asker sees the heads descending from
+// `from` and nothing else — never upward, so it cannot learn its own reception, and
+// never sideways, so there is no coordination in flight. The kernel holds ancestry, so
+// the bound is exact.
+//
+// Reachable out of band by the root's asker, and by a possibility through a system
+// engram manned by the runtime entity — the exemption discover and create already hold.
+// WHO MAY ASK is a grant, not a structural rule.
+//
+// Stalled heads, orphaned roots and runaways are read from here. They are eviction
+// decisions and nothing else in the system can make them: a possibility sees down, an
+// engram sees its own edges, and no entity spans invocations.
+func (k *Kernel) Introspect(from SpanID) Status
 ```
 
 ### The runtime is also an entity, and the two roles must not touch
@@ -415,21 +442,28 @@ can reach the write path, it can influence what is recorded about itself — the
 honest-witness split exists to prevent. The entity role must hold no reference the kernel role uses
 to write.
 
-```go
-```
+Open a possibility · `Step(expectation, frame)` · on `Select`, run the group concurrently, await all
+of it, append to `Returned`, then `Monitor` each return **in emitted order** · on `Commit`, mint the
+observation and close.
 
-Open a possibility · `Step(expectation, frame)` · on `Select`, run the group concurrently and append
-to `Returned` · on `Commit`, mint the observation and close.
+**Monitor at closure, not as members land.** Arrival order is a scheduling accident; pushing on
+arrival makes the entity's context depend on it, breaks replay, and is partial completion arriving as
+a side effect rather than as a decision.
 
 ### One method, and it is the execution boundary
 
 ```go
-// Step is THE ONLY METHOD IN THE DESIGN. Everything else is data crossing it.
+// Step is the only method that PRODUCES anything. Everything else is data crossing it.
 //
 // Nothing executes without asking: a possibility cannot invoke, it can only emit a
 // request and be invoked in turn.
+//
+// Monitor is the delta form of assemble and returns NOTHING — a return value would be
+// a third emission channel outside SELECT / COMMIT. The kernel calls it at group
+// closure, in EMITTED order, never as members land. See kernel.md.
 type Interpreter interface {
     Step(x Expectation, f Frame) Emission
+    Monitor(o *Observation)
 }
 ```
 
@@ -455,12 +489,21 @@ WATCH   a code expectation reading a missing field fails LOUDLY; a model given t
 ### Assemble and project
 
 ```text
-ASSEMBLE   engram state → a frame.       bounded by the ENTITY. HOW MUCH it can take.
+ASSEMBLE   engram state → a frame.       bounded by the ENTITY. HOW MUCH it can take.  FULL.
+MONITOR    observation → frame'.         same bound, same owner.                       DELTA.
 PROJECT    frame → the host's medium.    bounded by the HOST. WHAT FORM it can realize.
 ```
 
 Two operations, two bounds, two owners. Neither is declared — both are learned by trying, and the
 return records what was *actually* done rather than what was claimed possible.
+
+```text
+THE INVARIANT   assemble(frame) == assemble(frame₀) + monitor*
+
+                if they can diverge, the entity holds something the kernel cannot rebuild and
+                statelessness is gone in practice. it also gives recovery for free: a host dying
+                mid-invocation is a full re-assemble elsewhere. BUILD BOTH AND COMPARE.
+```
 
 **`assemble`, not `select`** — the emission `select` is invocation; this is internal frame assembly
 at another level, and the set already tracks one naming collision it failed to fix in time.
@@ -544,6 +587,12 @@ type Possibility struct {
     Observations []*Observation // the parameters
     Returned     []*Observation // what previous groups handed back
     Selected     bool           // has it forfeited origination
+
+    // PROVISIONAL. Notices that a referent behind a handle already in frame has
+    // moved. Buffered to the same boundary as Monitor, so there is ONE boundary
+    // rather than two. Dies with the kernel — a referent that moved is still moved,
+    // so the next assemble re-reads it. See kernel.md.
+    impulses []*Observation
 }
 
 // Frame is what a POSSIBILITY sees. An entity is handed it to interpret; the
@@ -666,6 +715,26 @@ graph    applies that record as writes. the witness, and the only thing with pol
 If an interpreter performed the write it could omit it, which is the self-reporting defect the
 honest-witness argument exists to prevent. v4's kernel wrote nothing; this one keeps that by moving
 the policy out rather than by having none to move.
+
+**Three roles, one per layer:**
+
+```text
+POSSIBILITY   emits COMMIT.               AUTHORS.
+KERNEL        checks scope + ownership.   AUTHORIZES.
+HOST / OS     the storage class.          PERFORMS.
+```
+
+Which survives only because storage is a driver *beneath* the kernel. If the kernel held the store,
+*writes nothing* would be a policy of restraint rather than an incapacity.
+
+**At the graph boundary, authorization is arithmetic on the frame**: `SCOPE` — was this ID in the
+emitter's frame — on both forms, and `OWNERSHIP` — is this engram's parent the writer — on commit.
+No policy, nothing to configure.
+
+**At the world boundary it is not.** The frame bounds what a possibility can *say*; it bounds nothing
+about what a spawned process *does*. Host class calls are authorized by **grants**, which enter at the
+root of a chain and only ever narrow on the way down — the shape `Entities()` already has, with a
+different alphabet. Deferred, and the gap is real rather than covered. See [kernel.md](kernel.md).
 
 ---
 

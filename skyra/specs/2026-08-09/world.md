@@ -244,6 +244,11 @@ projection *looks* entity-shaped and isn't.
 a different level, and the set already tracks one naming collision it failed to fix in time. The old
 lineage's *assembly walk* was exactly this operation.
 
+**Assemble has a delta form.** `monitor` folds one observation into an already-assembled context
+rather than rebuilding it, which is how the frame stays current without shipping whole on every step.
+Same bound, same owner, and it is held to producing the identical result —
+[kernel.md](kernel.md).
+
 ### Projection must fail loudly
 
 The single implementation requirement everything here rests on:

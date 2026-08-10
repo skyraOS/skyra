@@ -55,6 +55,11 @@ this implementation.
 **Storing events rather than counts keeps it approachable**, because set membership survives. That is
 a foundation for counterfactual methods, not a solution.
 
+**Not to be confused with the in-flight kind**, which is closed on purpose: group members can learn
+nothing about each other while running, because that state is kernel-side and unaddressable. This
+one is about credit assignment across a composition *after the fact*, and it stays open —
+[kernel.md](kernel.md).
+
 ## 4 · Variation has one source, and the terminus has none
 
 Competition selects among alternatives; it cannot run on a population of one. The only things that
@@ -116,18 +121,41 @@ existed to prevent in the older lineage.
 Named here so the demand is recognized when it arrives, rather than partial completion being
 smuggled in as a flag without a case behind it.
 
-## 9 · Who may select create
+## 9 · Grants, and the world boundary
+
+Scope and ownership authorize **graph** writes completely and **world** effects not at all. A frame
+bounds what a possibility can say; it bounds nothing about what a spawned process does.
+
+The shape is settled — authority enters at the root of a chain and narrows monotonically, the same
+object `Entities()` already is. What is undecided:
+
+```text
+WHERE CHECKED     per driver call · realized once at spawn · both.
+WHAT IS NAMED     resources (/work/**) · capabilities (fs:write) · both.
+CONTENT OR        the port precedent says content by default. this may be the exception, since
+STRUCTURE         CREDIT MUST NEVER READ IT.
+```
+
+**And the constraint that decides the vocabulary:** a grant the platform layer cannot realize is a
+declaration. If the kernel checks it and then spawns something the OS does not confine, the grant
+described nothing and the record reads as bounded — the silent-success class again. So the alphabet
+is bounded by what a restricted user, a sandbox profile or a namespace actually enforces.
+
+Deferred. Nothing needs it before the first build has world effects at all, and `introspect:self` is
+the first grant the design genuinely requires.
+
+## 10 · Who may select create
 
 Create is licensed by discover's rejection. Whether that is enforced by scoping — create simply not
 being nameable outside discover's frame — or by something else, is undecided.
 
-## 10 · What produce is now
+## 11 · What produce is now
 
 Nothing registers on invocation, and creation is reached by name through select. `produce` may not
 survive as a peer to `discover` at all — what is left of it is the write at return, which the parent
 performs.
 
-## 11 · Does "possibility" survive as a word
+## 12 · Does "possibility" survive as a word
 
 If the structure is identical to an expectation, the word may only be marking *whose* it is and
 whether it is visible — a perspective label, not a type. The signature may never need it.
@@ -181,4 +209,35 @@ whether it is visible — a perspective label, not a type. The signature may nev
 
 08-09  THE KERNEL FORK                supersede by version. v4 stays, the direction is v5.
                                                                             → README.md
+
+08-09  WHERE ACTIVE WORK LIVES        the kernel, entirely. the graph holds nothing that is
+                                      HAPPENING. it is what makes "the kernel writes nothing"
+                                      and mint-on-closure true, and crash recovery unnecessary.
+                                                                            → kernel.md
+
+08-09  WHO PERFORMS A WRITE           three roles: the possibility AUTHORS, the kernel
+                                      AUTHORIZES, the OS PERFORMS. the middle claim survives
+                                      only because storage is a driver BENEATH the kernel.
+                                                                            → kernel.md
+
+08-09  KEEPING AN ENTITY'S            MONITOR — the delta form of assemble, a subscription whose
+       CONTEXT CURRENT                lifetime is the possibility's. void, fires at group
+                                      closure in emitted order, never reaches a leaf. held to
+                                      assemble(f) == assemble(f₀) + monitor*.
+                                                                            → kernel.md
+
+08-09  WHERE AN IMPULSE LANDS         monitor. the observation never changes — a REFERENT moved.
+                                      it may only concern something already in frame, and must
+                                      reach history when the invocation commits. PROVISIONAL.
+                                                                            → kernel.md
+
+08-09  MAY ANYTHING SEE LIVE          yes, bounded by the SUBTREE — down, never up, never
+       STATE                          sideways. an earlier claim that introspection must not be
+                                      addressable at all named a mechanism where the property
+                                      was elsewhere.                        → kernel.md
+
+08-09  IS THE GLOBAL KERNEL A         no. it holds EXECUTION TOPOLOGY and reads no content, makes
+       LOCALITY VIOLATION             no judgement, writes no credit. locality was about
+                                      judgement; knowing the shape of live chains is not knowing
+                                      their order.                          → kernel.md
 ```
