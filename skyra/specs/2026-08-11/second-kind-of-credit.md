@@ -96,54 +96,58 @@ collapse into the rejected tag.
 
 Taken because a decision was needed to move, and it is narrower than it first looked.
 
-### The walk lands correctly, and the earlier warning was imprecise
+### The original is UNREACHABLE, not merely uncredited
 
-An earlier draft of this doc said carrying observations forward makes *credit flow backward*. That
-overstated it. Following the walk:
-
-```text
-inv := engramFor(c.Producer).ByReturn[c.ID]
-```
-
-`c.Producer` is the engram that **produced** the observation — a child. So the acceptance lands on
-that child's own history, **never on the copied engram**. The copied engram earns its standing from
-its own parent, and the original earns nothing.
-
-And the child genuinely produced the data that was cited. **That is `credit follows data`, working.**
-
-### Which bounds the decision to one case
+An earlier draft of this doc warned that carrying observations forward makes *credit flow backward*.
+**That hazard does not exist**, and the reason is structural rather than a matter of degree.
 
 ```text
-IN-CHAIN REFINEMENT   the observations were produced HERE, in THIS span, by children that
-                      really ran. carrying them forward is correct.
+human ─▶ A ─▶ B          B returns obs1, obs2. they are A's.
 
-COPY FROM DISCOVERY   the observations were produced in someone else's chain, possibly long
-                      ago. carrying them forward would append acceptances to a tree this chain
-                      never ran in, and populate a stranger's hop profile from a span it was
-                      never part of.
+copy A ──▶ A′            A′ carries obs1, obs2.
+A′ creates C, passes both, C returns, A′ returns, the human commits.
 ```
 
-**The set already separates these**, so the decision does not reach the second:
+The walk descends `Cites` and resolves `engramFor(c.Producer)`. Every observation in that chain was
+produced by **A′**, **B**, or **C**. None was produced by **A**.
 
-> `interfaces.md` — **FIND** — search the index, **COPY AN EXPECTATION IN** → a local engram.
+> **A produced no observation in this chain, so no citation anywhere names it as a producer, so the
+> walk has no edge into it. It is not part of the chain and cannot be reached.**
 
-Discovery copies an *expectation*. Not history, not observations. That stays true.
+Not *credit lands elsewhere* — **the question cannot arise.** Which is the same property that bounds
+the walk everywhere else: it follows constituents, and constituents are instances.
 
-### It also answers how deep a copy goes: not deep
+### Copy depth
 
-Same observations, **same children**. A copy is shallow, and being shallow is what makes credit land
-on the producer rather than on a duplicate with no `ByReturn` entry.
+**In-chain refinement is shallow.** Same observations, same children. `A′` and `A` name one `B`, and
+that is fine because `A` is superseded — it never closes, so it never mints, so two engrams naming
+one child is transient and evaporates at closure.
 
-The one-parent invariant survives, but only because of `open-until-commit.md`: the superseded
-original **never closes, so never mints**, so two engrams naming one child is transient and
-evaporates at closure.
+> **This decision depends on `open-until-commit.md`. If possibilities ever close on return again, a
+> copy leaves two PERSISTED parents sharing a child, and locality stops being structural.**
 
-> **This decision is safe because of that one. If possibilities ever close on return again, a copy
-> leaves two persisted parents sharing a child, and locality stops being structural.**
+**Discovery copies the whole subtree**, which is a different depth for the same word.
+
+```text
+REFINEMENT   copy the engram. share the children.        the original is superseded.
+DISCOVERY    copy the engram AND everything below it.    the original stays live elsewhere.
+```
+
+The one detail that follows and is not settled: a carried observation holds `Producer`, and if a
+deep copy leaves that pointing at the **original** child, the walk exits the copied subtree into
+someone else's tree. Either the copy re-points producers into the copies — which is minting new
+observations by another name — or the boundary needs stating. See *still not decided*.
 
 ## Still NOT decided
 
 ```text
+PRODUCER ACROSS A DEEP COPY       discovery copies a subtree. do carried observations keep
+                                  Producer pointing at the ORIGINAL children, or is it
+                                  re-pointed into the copies? the first lets a walk leave the
+                                  copied subtree; the second is minting new observations under
+                                  another name. REFINEMENT DOES NOT HIT THIS — it shares
+                                  children rather than copying them.
+
 WHERE THE BACK POINTER LIVES      on the engram · on the observation · both · nowhere
 
 WHAT IT AGGREGATES OVER           one mount · a principal · the whole graph
