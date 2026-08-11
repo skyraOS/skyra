@@ -10,6 +10,35 @@ reference them instead of re-deriving. Things move out of here into a real doc w
 [open-until-commit.md](open-until-commit.md). The authority material went to
 [roots-and-admission.md](roots-and-admission.md). What is below is what is still loose.*
 
+## Raised and not yet discussed — copy/edit
+
+```text
+HOW DEEP DOES A COPY GO
+   "its children are not new, those are the same." if that is literal, two parents hold
+   one child engram and the invariant that makes locality structural is gone —
+   interfaces.md: "an engram lives inside exactly ONE parent's map… A never writes into
+   B stops needing an argument, there is no shared B."
+   copy-on-write on children fixes it (share until invoked, split on first write).
+   AND THE COST ARGUMENT DOES NOT COVER THIS: "duplication is nearly free" was argued
+   about EXPECTATIONS, which are immutable strings. copying a subtree WITH HISTORY is a
+   different order of thing, and it is now on the hot path — every edit.
+
+UNREACHABLE = THE FAILURE RECORD
+   a normal system collects unreachable objects. here nothing is collected, and what
+   drops out of the reachable set is exactly what did not survive editing.
+   reachability becomes the success signal and the orphans are the material.
+
+AN EDIT IS THE ONLY AUTHORED NEGATIVE
+   → moved to second-kind-of-credit.md as the sibling signal. both are visible only
+     from OUTSIDE a chain, which is what makes them one problem.
+
+IS EDIT JUST create WITH A PARENT
+   discover.md's `create` authors an expectation; copy-and-edit authors one too. if they
+   are the same operation with different provenance that is one name and a field. the
+   only candidate difference: create starts with an EMPTY causal skeleton, edit starts
+   with an inherited one — and that skeleton is what the credit walk descends.
+```
+
 ## Live tensions
 
 ```text
