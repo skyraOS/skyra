@@ -11,7 +11,7 @@ whiteboard and noise in a spec. What it kept: the **rejected alternatives**, one
 line each with the reason — because those stop rediscovery, and several of them were rediscovered
 more than once already.
 
-## Nothing here is built
+## Nothing here was built
 
 ```text
 2026-08-06   the spec for what RUNS.  v4. Perturb/Observe. still live for the code that exists.
@@ -21,6 +21,15 @@ more than once already.
 `2026-08-06` could mark `kernel.md` **BUILT** because it matched running code line for line. **No doc
 in this set can say that.** Every one is SPEC or below, and six confident documents should not be
 allowed to imply otherwise.
+
+**On 2026-08-11 it was built** — `skyra-dna-v5`, twelve packages, driven by a real model. The docs
+above are left exactly as they were written, because what they got wrong is only legible against what
+they said. [build.md](build.md) is the report, and it is the only doc in the set with evidence
+behind it.
+
+> **The substrate holds. Nothing makes it start.** Credit accumulates, hop profiles appear at range,
+> and selection measurably improves with no weights. What is missing is any mechanism that makes a
+> capable entity decompose rather than answer — and every mechanism here is downstream of that.
 
 The fork is resolved by the convention this repository already uses: `skyra-dna-v4` stays and runs;
 the new direction takes `skyra-dna-v5`. Nothing is deleted and nothing is migrated.
@@ -59,6 +68,7 @@ given that action, what is the next EXPECTATION
 | [interfaces](interfaces.md) | the implementation shape for `skyra-dna-v5`. types, emissions, the frame. | **PROPOSAL** |
 | [traversal](traversal.md) | what `Perturb`/`Observe` was carrying, and what pays for each item now. | **CHECKLIST** |
 | [questions](questions.md) | decisions nobody has made, ordered by how much rests on them. | **LIVE** |
+| [build](build.md) | what happened when it was built and run. what held, what broke, what the docs have to decide. | **BUILT** |
 
 ## What the set claims
 
