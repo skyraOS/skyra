@@ -93,14 +93,14 @@ type Entity struct {                                      // ADDED
 }
 ```
 
-> **`Index` is the honest-witness split, as a type.** The package holds no `*graph.Graph`, so
-> `Apply`, `Mint`-into-index and `Disperse` are **absent rather than restrained**. A possibility that
-> selects the runtime entity cannot reach the write path, which is the one thing that split exists to
-> prevent.
+> **An entity is not handed a graph.** The package holds no `*graph.Graph`, so `Apply`,
+> `Mint`-into-index and `Disperse` are absent from it. An entity emits; the kernel drives; the graph
+> writes. Nothing here is hidden from anything — an entity holding the graph would simply have
+> stopped being an entity.
 >
-> **One honest gap:** the graph is passed in *as* an `Index`, so a type assertion would defeat it. It
-> is a boundary at the declaration site, not an airtight one. Wrapping the graph in a struct that
-> does not embed it closes that.
+> **One gap:** the graph is passed in *as* an `Index`, so a type assertion would recover it. That is
+> a boundary at the declaration site, not an airtight one, and wrapping the graph in a struct that
+> does not embed it closes it. Code hygiene, not a design property.
 
 **An engram is not an inference call.** This entity mans `discover`, `by-index`, `by-recency` and
 `create`, and only the last reaches a model. Measured: 23 + 6 = 29 invocations with zero inference.
