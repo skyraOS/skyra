@@ -49,10 +49,6 @@ introspect    reads the KERNEL    what is HAPPENING   roots · heads · ancestry
 `kernel.md` already specifies this — *"a system engram manned by the runtime entity, the same
 exemption discover and create already hold"* — and the build made it a method instead.
 
-**It costs no inference.** The entity decides whether anything infers, and the runtime entity is
-code: 29 of 32 system-engram invocations in the run made zero model calls. An engram is a function
-call plus a history append.
-
 The read-only `Index` interface already built for `discover` generalizes:
 
 ```go

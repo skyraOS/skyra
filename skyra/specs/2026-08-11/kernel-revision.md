@@ -106,21 +106,6 @@ many system possibilities exist."*
 *internalize* is the better gloss for what it does — the commit is compression, N in and 1 out, and
 the parent making the result its own. "Return" names the direction; "internalize" names the work.
 
-### Against Linux
-
-The syscall analogue is the grammar, and it is **two**:
-
-```text
-UNIX v1 (1971)        ~33 system calls
-Linux 0.01 (1991)      67
-Linux 6.x x86-64      ~350            (table numbers run higher; many unused or reserved)
-
-SKYRA                    2            SELECT · COMMIT
-```
-
-The embedder's side is **one channel**, and it has no Linux analogue worth drawing. What matters
-about it is not its size but that nothing inside the model can reach it.
-
 ---
 
 ## discover and introspect are one kind of thing
@@ -151,38 +136,6 @@ introspect   engram → runtime entity → a READ-ONLY view of the TOPOLOGY (sam
 The `Index` interface the build already has — one method, no way to reach `Apply`, `Mint` or
 `Disperse` — generalizes directly. Neither role can write, and the separation stays a compile error
 rather than a promise.
-
-### An engram is not an inference call
-
-Worth stating flatly, because it is the objection that would otherwise kill this and it is wrong.
-
-**An engram is a durable expectation with a history. WHO MANS IT is a separate question**, and the
-runtime entity is code. `discover.md` says so — *"THE QUERY: an index lookup. code. cheap.
-unchanged… Discovery does not become an inference call on every lookup"* — and the build measured it:
-
-```text
-by-index      invoked 23      pure code. tokenize, score, return.   ZERO model calls
-by-recency    invoked  6      pure code.                            ZERO model calls
-create        invoked  3      the only resolver that reaches a model
-```
-
-Twenty-nine engram invocations that never touched inference. So the cost of making a kernel method an
-engram is **a function call plus a history append** — not a model call, not a round trip, not
-latency.
-
-**Which partly settles `questions.md` §13.** *"Whether the indirection pays for itself on the cheap,
-hot, uninteresting ones"* was left as an implementation question. It does, because there is no
-indirection to pay for: a code-manned engram is the function, wrapped in a record.
-
-The real cost is the record, and it is already named. `questions.md §7` predicts evidential growth
-concentrates in system space, and the run confirmed it — the system engrams are the most-invoked in
-the graph by a wide margin. **That is the tradeoff to watch for introspect: not inference cost, but
-one more of the highest-frequency engrams in the system appending on every call.**
-
-**What does not change:** introspection stays bounded by the subtree. `DOWN, NEVER UP` is what keeps
-a possibility from learning its own reception, and asking about your own descendants is *down*. The
-asker at the root still reaches it out of band, on the channel the ask arrived on — the root is
-whoever asked, so reporting to it is not reaching into the model.
 
 ---
 
@@ -274,77 +227,6 @@ completely different things. Worth checking against `kernel.md`'s grant model be
 
 ---
 
-## What this converged on
-
-Two faces, one of which is never in a frame, is **object-capability** — E, Capsicum, seL4. Worth
-naming, because the model has fifty years of catalogued failure modes and checking them is cheaper
-than rediscovering them.
-
-**It is not public/private, and the difference is the interesting part:**
-
-```text
-PUBLIC / PRIVATE     DECLARED, per-type, static.        protects against MISTAKES.
-                     the author marks a member and       defeated by reflection, because the
-                     the compiler enforces it.           reference exists and is merely hidden.
-
-TWO FACES            NEVER GIVEN, per-frame, and         protects against ADVERSARIES.
-                     narrowing monotonically down a      nothing to reflect on — THE REFERENCE
-                     chain.                              IS NOT THERE.
-```
-
-`grammar.md` already states the object-capability thesis nearly word for word — *"capability is name
-resolution. You can select what you can name; you can name what you were given"* — and the set
-refuses declarations everywhere, so `private` was never available as a move. Nothing marks the
-privileged face; it simply is never a name anyone holds.
-
-**Arriving here is evidence rather than embarrassment.** The starting constraint was *"the citation
-signal must be ungameable from inside"* — a credit-assignment requirement with nothing to do with
-security — and it produced the same structure. That is the set's own standard for a real result:
-*the third independent arrival at directory versus file*.
-
-### Three catalogued failure modes, checked
-
-```text
-CONFUSED DEPUTY      SOLVED, INDEPENDENTLY. the canonical ocap bug — a privileged party acting
-                     for a less privileged one using its OWN authority. kernel.md already has the
-                     textbook fix and derived it sideways: "a kernel-rooted chain runs under the
-                     grants of the chain that provoked it, and can never exceed them."
-
-AMBIENT AUTHORITY    PRESENT, AND DELIBERATE. ocap forbids it outright; this design has two.
-                     `discover` is nameable in EVERY frame, which is what stops the bootstrap
-                     regress. `here` is an axiom, because you cannot derive the thing you are
-                     standing on. Both are load-bearing and neither is an accident — but they
-                     should be NAMED as ambient rather than reading as free, because ambient
-                     authority is where ocap systems break.
-
-REVOCATION           A REAL HOLE, and it currently has no home in questions.md.
-```
-
-### Revocation, which the design does not have
-
-`credit.md` answers the question and answers a different one:
-
-> **Pruning is behavioural, not structural.** Append-only forbids deletion, so nothing is removed —
-> the selection simply stops being made.
-
-**That is correct for credit and insufficient as a capability story.** A child engram formed on
-citation sits in its parent's map permanently and stays permanently nameable. Starvation means
-nobody *chooses* it; nothing stops it being *invoked*.
-
-```text
-FOR CREDIT       a bad child is starved. correct, and it is the whole correction mechanism.
-FOR CAPABILITY   a compromised entity is still in frame, still resolvable, still invocable by
-                 anything that already holds the name. there is no way to take it back.
-```
-
-Append-only means there structurally cannot be a revocation without a new mechanism, and every other
-constraint in this set is an incapacity rather than an operation — so "add a revoke" is the wrong
-shape on its face. Whether the answer is that reach should be **leased rather than given**, or that
-compromise is simply outside the threat model, is not decided.
-
-Recorded rather than solved. It is the one place the ocap convergence turned up something the set has
-not already answered somewhere.
-
 ---
 
 ## Ingress is root access
@@ -435,18 +317,6 @@ Both belong in a facility **beside** the kernel that is handed events rather tha
 
 ---
 
-## What this costs, measured
-
-```text
-v4 kernel                     220 code lines
-v5 kernel                     540 code lines
-v5 loop + authorization       245 code lines   ← the comparable part. PARITY.
-```
-
-The growth is not the loop. It is **staging and materialization** at 106 lines — which `kernel.md`
-predicted exactly: *"staging is the first mechanism that makes the kernel hold a view of the world…
-it is real machinery, and it is the largest thing this doc adds."*
-
 ---
 
 ## Unchanged, and stated so nobody reopens it
@@ -489,10 +359,6 @@ INTROSPECT AS A          it is the same kind of thing as discover — the system
 KERNEL METHOD            — and kernel.md already says it should be a system engram manned by the
                          runtime entity. the build got this wrong, not the spec.
 
-"AN ENGRAM MEANS A        no. an engram is a durable expectation with a history; the ENTITY decides
-MODEL CALL"              whether anything infers. 29 of the 32 system-engram invocations in the run
-                         were pure code. the cost is a history append, not a round trip.
-
 COLLAPSING THE RUNTIME   the NOUNS collapse — one identity, two faces. the reference boundary does
 ENTITY INTO THE KERNEL   not. a possibility that can select the privileged face can influence what
                          is recorded about itself, which is the one safety property in the design.
@@ -504,9 +370,6 @@ INSIDE DISCOVERY         either the kernel feeds a possibility upward informatio
 
 A THIRD CHANNEL FOR      "not that one, it is above you" wants somewhere to go and there is
 THE KERNEL'S REFUSAL     nowhere. adding one ends the claim that only two forms parse.
-
-COMPARING THE EMBEDDER   they are not syscalls. the syscall analogue is the GRAMMAR, and it is two.
-SIDE TO SYSCALLS
 
 A DASHBOARD BUILT        kernel.md warns this will be tempting the first time someone wants one. it
 OUT OF ENGRAMS           stays tempting. operational questions are out of band, permanently.
@@ -548,11 +411,6 @@ THE TWO FACES AS A       the pattern generalizes past the kernel and probably wa
 DOC OF ITS OWN           rather than a section here. it touches world.md (the grader), discover.md
                          (the runtime), kernel.md (the human in both roles) and the grant model.
                          recorded here because it arose here.
-
-WHAT introspect COSTS    not inference — it is code. but it joins discover as one of the
-                         highest-frequency engrams in the graph, and questions.md §7 already says
-                         system space is where evidential growth breaks first if it breaks. worth
-                         measuring before it is hot.
 
 WHETHER Ask SURVIVES     a convenience composition. it earns its keep or it goes.
 
