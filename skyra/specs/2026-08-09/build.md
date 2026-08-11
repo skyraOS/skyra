@@ -3,7 +3,11 @@
 **Date:** 2026-08-11
 **Status: BUILT.** `skyra-dna-v5` exists, runs, and has been driven by a model.
 
-> **The substrate holds. Nothing makes it start.**
+> **The substrate holds. The harness that tested it did not.**
+
+*Revised 2026-08-11 after review. The first draft's headline finding — that nothing in the design
+produces decomposition — is withdrawn: the tasks were all things a model already knows, so routing
+was never necessary and nothing about it was measured. See* ***What this run did not test****.*
 
 ---
 
@@ -29,6 +33,47 @@ ids · content · graph · grammar · frame · entity · entity/{codex,runtime,s
 
 **Read the code before the findings.** Every claim below is anchored to a test that asserts it or a
 trace that shows it, and both are in the tree.
+
+---
+
+## What this run did not test, and why
+
+**Two errors in the harness. They are recorded first because they invalidate part of what follows,
+and reading the findings without them would be misleading.**
+
+```text
+THE TASKS WERE WRONG   all five asks — summarize a write-ahead log, explain a bloom filter,
+                       multiply 17×23, name Python and Go's test runner and formatter — are
+                       NATIVE MODEL KNOWLEDGE. a model answers them from weights.
+
+                       so nothing about decomposition was tested. an entity one-shotting a task
+                       it already knows is CORRECT, not a defect, and "why did it not decompose"
+                       was never a fair question to ask of it. it had nothing to decompose FOR.
+
+THE MODEL WAS PUT      the harness told codex it was "the OUTERMOST possibility in a chain."
+AT THE ROOT            that collapses two roles world.md keeps apart. THE ROOT IS THE ASKER —
+                       the human — and "you cannot invoke the thing that will judge your
+                       return." a model at the root is grader and interpreter at once.
+
+                       which is also why acceptance here was computed from the chain's own
+                       output. that is not a discovery about the design. it is what the harness
+                       was built to do.
+```
+
+**What a real test needs.** Asks the model *cannot* answer from weights, so routing is the only path
+that closes, and **a human at the root**, so acceptance is a second instrument rather than the same
+one read twice.
+
+```text
+UNAFFECTED   everything under WHAT HELD. those are the deterministic substrate tests — hand-seeded
+             possibilities, scripted bodies, NO MODEL ANYWHERE. task choice cannot touch them.
+
+NOT TESTED   §1 decomposition, §1's termination half, and the cardinality result. all three are
+             consequences of asking a model to route around knowledge it already had.
+
+STANDS       §3 · §4 · §5 · §6 · §7 · §9 · §10 — structural, and would read the same on any task
+             set. §2 is real but arose in a thin index and wants re-running.
+```
 
 ---
 
@@ -94,13 +139,18 @@ strongest structural result in the set: the property is not verified, it is unav
 
 Ordered by how much rests on them.
 
-### 1 · Nothing produces decomposition
+### 1 · Decomposition — NOT TESTED. The questions were wrong.
 
-**The largest finding, and it is not a bug — it is a missing mechanism.**
+**This was first written up as the largest finding in the set. It is not a finding, and why it is not
+is worth more than the claim was.**
 
 Run the five asks with a bare root expectation and a capable model, and the model answers every one
 of them directly. The root emits `<commit>{...}</commit>` on its first step. It never selects, so it
 is a **leaf**, and a leaf originating freely is entirely legal.
+
+> **Because every ask was something the model already knew.** Summarizing a write-ahead log does not
+> need a possibility discovered for it. There was nothing to route to that the entity did not already
+> contain, so declining to route was correct, and the experiment measured nothing.
 
 ```text
 WHAT HAPPENS   the root one-shots the ask.
@@ -109,37 +159,35 @@ WHAT FOLLOWS   discover is never invoked. create never runs. no engram is formed
                THE ENTIRE LEARNING APPARATUS IS INERT, and nothing is wrong.
 ```
 
-Every mechanism in this set is downstream of selection. *Selection is the skill. Selection happens at
-the call site. Selection is the correction mechanism. All learning is topological.* And **nothing
-anywhere creates pressure on an entity to select rather than answer.**
-
-The design assumes decomposition and has no mechanism that causes it. That assumption is invisible in
-the spec set because it is never stated — it sits underneath every doc as the thing they all take for
-granted.
-
-`possibilities.md` comes closest: *"It cannot perform work except by creating a possibility and
-handing it over."* That is true of an orchestrator and false of a leaf, and **which one a possibility
-is, is decided by the possibility.** A capable entity will choose leaf every time, because answering
-is cheaper than routing and nothing rewards routing.
-
-The build worked around it by putting the pressure in the root's expectation — legitimate, since an
-expectation is content — and that is what all the model results below are measured under. But the
-workaround is a hand-written instruction, which means:
-
-> **The one behaviour the whole design needs is currently supplied by asking nicely.**
-
 ```text
-WHAT IT IS NOT   this is not "the model is lazy." it is not a prompt problem. one-shotting is
-                 the CORRECT reading of the rules as written, and a leaf is a first-class kind.
+WHAT WAS SHOWN   an entity that can answer a need from its own priors will answer it. that is not
+                 a defect and it is not news.
 
-WHAT IT NEEDS    either a cost on origination that makes routing pay, or an admission that
-                 decomposition is externally imposed rather than emergent. the second is
-                 honest and much smaller than the set currently implies.
+WHAT WAS NOT     whether an entity FACED WITH SOMETHING IT CANNOT DO reaches for discover. that
+SHOWN            is the actual question, and no ask in this run posed it.
 ```
 
-#### And nothing produces termination either
+The run then supplied the routing pressure by hand, in the root's expectation. Legitimate — an
+expectation is content — but it means every model result below was produced *under an instruction to
+route*, which is a different experiment from watching whether routing emerges.
 
-The same hole, from the other side, and it showed up once the pressure to decompose was supplied.
+**The question is still open and now has a shape.** It needs asks with no native answer:
+
+```text
+read THIS file and report what is in it       the weights do not contain it
+run THIS command and use its actual output    the weights cannot produce it
+write something, then read it back            requires state across invocations
+answer something past the training cutoff     the weights are stale by construction
+```
+
+Under those, *did it decompose* becomes a real question, because one-shotting is no longer available.
+Until then nothing here says anything about it either way.
+
+#### The termination half — same confound
+
+Recorded because the behaviour is worth remembering, not because it concluded anything. It showed up
+only once the routing pressure had been supplied by hand, on a task the entity could have answered
+directly, so what it demonstrates is unclear.
 
 A root selected `discover`, got a good engram, invoked it, and received **a correct answer to its
 actual need**. It then declined to commit — re-invoking the same child with an extra argument, going
@@ -293,6 +341,12 @@ Note what *does* work, which sharpens it: `by-index` shows `invoked 23 · cited 
 because `discover` is an orchestrator and commits by **naming** its resolver's return — a real
 citation, in a commit. **The resolvers earn credit and the thing that chose among them cannot.**
 
+**Flagged for the same pass:** discovery is currently a pure lexical index walk, and it should not be.
+It wants to be **a search AND a model call** — the search narrows the index, and the model decides
+whether to *carry over* an existing expectation or *create* a new one. That also gives the
+constructed claim `discover.md` asks for — *"there is nothing here that does X"* — a place to come
+from, which a ranker can never produce. Not built; direction recorded.
+
 ```text
 THE FIX IS A CHOICE, NOT A PATCH
 
@@ -398,6 +452,15 @@ is the useful part, because each one is a place the spec reads as complete and i
 
 Note carefully what this is not: it is not credit. The exclusion is scoped to one discovery, does not
 walk, and lands on nobody's record. *Descending a rejection* remains refused.
+
+> **DIRECTION, recorded not built.** Rejection wants a **short-term memory**, held for the life of
+> the asking rather than in the graph, and discovery should run **with the rejections as a
+> parameter**. That names what the four repairs below were each groping at separately: there is no
+> rejection type, no durable record, and nothing descends — only a set of "not these," handed to the
+> next discovery and discarded when the ask closes.
+>
+> It sits naturally beside the discovery change above: a search bounded by the rejections, then a
+> model call deciding carry-over versus create.
 
 **With all three, the ladder ran end to end for the first time** — by-index missed, by-recency
 missed, `create` grew a new possibility, and the chain was accepted. That is `discover.md`'s cost
@@ -627,7 +690,16 @@ is missing, except it is the same model that produced the error one level down. 
 is no structural reason it must, and the design does not claim there is: `world.md`'s *"you cannot
 invoke the thing that will judge your return"* constrains the relationship, not the competence.
 
-### Cardinality > 1 was never once emitted
+### Cardinality > 1 was never once emitted — but NOT TESTED
+
+**Confounded by the same task error.** Ask 4 was *"for both Python and Go: name the standard test
+runner and the standard formatter"* — which a model answers in one breath from weights. It was built
+to invite a group and instead invited a one-shot, so the absence of groups says nothing about whether
+cardinality is reachable.
+
+The count is recorded because the number is worth having as a baseline, not because it concludes
+anything. A real test needs two halves that each require the world — two files to read, two commands
+to run — where neither can be answered without an invocation.
 
 Across every run, counting the response half of every trace:
 
@@ -687,7 +759,7 @@ The set's rule is that a question leaves that doc when it is answered. Nothing t
 ```text
 §1   NOTHING HAS BEEN BUILT       ANSWERED. it is built and it has run. the substrate claims hold;
                                   see What Held. this question closes and the ones it was blocking
-                                  are now askable.
+                                  are now askable — with the harness corrected first.
 
 §2   THE UNATTRIBUTED TERM        UNCHANGED, and now concrete: `create` reaches a model to author
                                   an expectation, and that expression appears in no citation. it is
@@ -716,8 +788,9 @@ The set's rule is that a question leaves that doc when it is answered. Nothing t
                                   run was a leaf. if leaves do all the work, "leaves learn nothing"
                                   means the system learns only about ROUTING.
 
-§9   THE GROUP BARRIER            UNTESTED, and cannot be tested yet — cardinality > 1 was never
-                                  emitted in 432 selects.
+§9   THE GROUP BARRIER            UNTESTED. cardinality > 1 was never emitted in 432 selects, but
+                                  the ask meant to provoke it was answerable from weights, so this
+                                  is a bad measurement rather than a result.
 
 §10  GRANTS                       UNBUILT. staging works and is gated by nothing.
 
@@ -736,14 +809,18 @@ signal, and reach has no upward bound.
 ## What to build next
 
 ```text
-1  DECIDE §1             is decomposition emergent or imposed? every other number here is
-                         downstream of the answer, and the set currently implies "emergent"
-                         without saying so.
+0  FIX THE HARNESS       asks the model cannot answer from weights, and a HUMAN AT THE ROOT.
+                         nothing about decomposition, termination or cardinality can be measured
+                         until both are true, and three of the write-ups above are void for
+                         exactly that reason.
 
-2  A SECOND INSTRUMENT   §2 has no defence inside the design. the smallest honest experiment is
-                         one ask whose answer is checkable by something that is not the model —
-                         then watch whether the credit record and the checker ever disagree, and
-                         how long it takes.
+1  RE-ASK §1             is decomposition emergent or imposed? still open, still the question
+                         everything else is downstream of — and now askable, which it was not.
+
+2  A SECOND INSTRUMENT   §2 has no defence inside the design, and the run could not test it
+                         honestly because the root was a model reading its own subtree's output.
+                         with a human at the root: does the credit record ever disagree with the
+                         person, and how long does it take.
 
 3  CARDINALITY > 1       never exercised by a real interpreter. until it is, the concurrency
    AGAINST A MODEL       claim and the group barrier are both untested.
@@ -766,16 +843,20 @@ crash semantics are unavailable rather than verified — which is stronger. With
 graph grows real structure and three of five asks close: discover misses, create authors, the work
 runs, the root catches a wrong answer, refinement excludes it, and new structure gets built.
 
-**What does not work is everything around it.** The design has no mechanism that makes a capable
-entity decompose, no signal that tells one when to stop, no defence against two natural-language
-artifacts that never made contact, and no accumulating record of what a chain has already tried. The
-first two are missing mechanisms, the third is a missing instrument, and the fourth is a handful of
-missing sentences.
+**What is genuinely broken is smaller than the first draft of this doc claimed.** `discover` cannot
+earn credit — two documents contradict each other and the numbers print it. A chain could rediscover
+itself. The refinement ladder needs a rejection memory it does not have. Those are real, structural,
+and independent of what was asked.
 
-> **Six confident documents were right about the part that is hard to get right, and silent about
-> the part that turns out to be load-bearing.**
+**What was claimed and is not established:** that nothing produces decomposition, that nothing
+produces termination, that cardinality is unreachable. All three came from asking a model to route
+around things it already knew, with the model sitting in the human's chair at the root. They are open
+questions, not results.
 
-The hard part — credit assignment without weights, topological learning, eviction safety falling out
-of where information lives rather than being engineered — is correct, and correct in a way that
-survives a real model doing unhelpful things to it. The part nobody wrote down is that **all of it is
-downstream of a possibility choosing to select**, and nothing in this set causes that.
+> **The hard part is right.** Credit assignment without weights, topological learning, eviction
+> safety falling out of where information lives rather than being engineered — all of it survives a
+> real model doing unhelpful things to it.
+
+The lesson from the run is less about the design than about testing it: **a substrate for routing
+work cannot be measured on work that needs no routing.** Every confounded finding here traces back to
+that one mistake, and the corrected experiment is cheap.

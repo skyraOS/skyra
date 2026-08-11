@@ -27,9 +27,13 @@ above are left exactly as they were written, because what they got wrong is only
 they said. [build.md](build.md) is the report, and it is the only doc in the set with evidence
 behind it.
 
-> **The substrate holds. Nothing makes it start.** Credit accumulates, hop profiles appear at range,
-> and selection measurably improves with no weights. What is missing is any mechanism that makes a
-> capable entity decompose rather than answer — and every mechanism here is downstream of that.
+> **The substrate holds.** Credit accumulates, hop profiles appear at range, and selection measurably
+> improves with no weights. What is genuinely broken is narrower: `discover` cannot earn credit under
+> the rules as written, a chain could rediscover itself, and refinement has no memory of what it
+> already rejected.
+>
+> **Decomposition was not tested.** Every ask in the run was something the model already knew, so
+> routing was never necessary — a bad measurement, not a result.
 
 The fork is resolved by the convention this repository already uses: `skyra-dna-v4` stays and runs;
 the new direction takes `skyra-dna-v5`. Nothing is deleted and nothing is migrated.
@@ -68,7 +72,7 @@ given that action, what is the next EXPECTATION
 | [interfaces](interfaces.md) | the implementation shape for `skyra-dna-v5`. types, emissions, the frame. | **PROPOSAL** |
 | [traversal](traversal.md) | what `Perturb`/`Observe` was carrying, and what pays for each item now. | **CHECKLIST** |
 | [questions](questions.md) | decisions nobody has made, ordered by how much rests on them. | **LIVE** |
-| [build](build.md) | what happened when it was built and run. what held, what broke, what the docs have to decide. | **BUILT** |
+| [build](build.md) | what happened when it was built and run. what held, what broke, what was measured badly. | **BUILT** |
 
 ## What the set claims
 
