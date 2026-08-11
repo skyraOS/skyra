@@ -71,15 +71,64 @@ NEVER SELECTED   a LEAF. atomic, one-shot. ORIGINATES an observation.
 HAS SELECTED     an ORCHESTRATOR. may only name or combine what came back. PERMANENTLY.
 ```
 
-**Permanent is necessary, not tidy.** If a possibility could originate *after* orchestrating, nothing
-could distinguish content that came from its children from content invented at the end, and *cannot
-originate, only combine* would collapse.
+> **Originate only where it could not be mistaken for composition.**
+
+That is the whole rule, and stating it by its **harm** rather than by position explains the two
+things position cannot:
+
+**Why the forfeit fires at the first select.** Before selecting, everything a possibility commits is
+unambiguously invented — there is no child material it could be confused with. The instant it
+selects, its commit could be either. The rule fires exactly when ambiguity becomes possible.
+
+**Why it is permanent.** Once children have returned, the ambiguity never goes away. A *one more
+origination* exemption would reintroduce it retroactively for everything that already came back.
+
+So the rule is not protecting against invention. It is protecting against **invention disguised as
+derivation** — which is why a leaf inventing freely is fine and an orchestrator inventing one field
+is not.
 
 Kind is derived from composition and never declared — the third independent arrival at directory
 versus file.
 
 **Origination bottoms out in an entity's judgement, or in code.** Which is what makes the entity
 definition load-bearing rather than descriptive.
+
+### Ingress is not origination
+
+Two acts wear the word *create*, and only one of them is governed by the rule above:
+
+```text
+INGRESS   an observation ENTERING the tree from outside.  originated BY DEFINITION.
+COMMIT    an observation LEAVING a possibility upward.    originated iff it never selected.
+```
+
+A root does not originate a commit. It performs **ingress** — it puts material into the tree, and
+asking whether an inbound observation is originated or composed is a category error, because no
+possibility produced it. `Producer` is empty precisely because there is no act of production inside
+the system to describe.
+
+So *no parent* and *no child* are not matched ends of a tree. **One is a channel; the other is a rule
+about a channel.** When a root commits it follows the ordinary rule like anything else — it selected,
+so it names.
+
+```text
+LEAF ORIGINATION   Producer = the leaf engram.        Cites empty.
+A CROSSING         Producer = the engram I invoked.   Cites empty.
+INGRESS            Producer EMPTY.                    Cites empty.
+```
+
+Discriminated by absence rather than by a tag, which is the form this set wants — but an
+implementation reading empty-`Cites` as one case will get it wrong.
+
+### The cost, which is nameable rather than necessary
+
+If the harm is disguise, anything making origination **visible inside a composition** would be
+legitimate — and there is no such form. An orchestrator cannot say *here are my children's results,
+plus this note that is mine*. It must spawn a leaf to say it.
+
+That may be right; it is what keeps a composer selectable and gradeable. But it is a cost paid for a
+reason now nameable, not a structural necessity, and the *spawn a leaf to add a sentence* tax will
+feel absurd the first time someone hits it.
 
 ## Composition
 

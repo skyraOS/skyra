@@ -112,6 +112,25 @@ Linux has `read()` as a syscall rather than *spawn a reader* for exactly this re
 and starting a process are not the same kind of operation, and one interface treating them alike
 will be routed around immediately.
 
+### The test for which side of the line something is on
+
+Not what effect it has — **whether anything interprets**:
+
+```text
+A DRIVER CALL   reaches MECHANISM.      semantics fixed, hand-written, reviewed. the only
+                                        variable is the argument.
+
+AN ENTITY       reaches an INTERPRETER. behaviour authored elsewhere. can be wrong, can be
+                                        learned about, can be starved.
+```
+
+Which settles a question that keeps recurring: **a kernel-authorized read and an external API call
+are not the same kind of thing.** The filesystem does not interpret a path — it is mechanism, so it
+is a driver. A remote service interprets your request; the behaviour on the far side is authored by
+someone else, and no amount of reviewing your own code makes it trustworthy.
+
+> **An external API is an entity, not a capability class.**
+
 ### Network is not a class
 
 It is **transport** — how anything remote is reached, not something the kernel invokes.
@@ -122,7 +141,38 @@ reaching host B    transport. beneath everything, not beside it.
 ```
 
 Made a class, it absorbs both, and the kernel starts making network calls that are really
-invocations wearing a different hat.
+invocations wearing a different hat. The interpretation test says the same thing from the other
+direction — the temptation arrives as *HTTP is common enough to be a primitive*, and its commonness
+is a fact about transport, which is already beneath everything.
+
+### Spawn is the boundary crossing itself
+
+Every other driver op is trusted end to end. This one is not:
+
+```text
+THE CALL      TRUSTED.     fixed semantics, kernel code.
+THE PAYLOAD   UNTRUSTED.   the process does whatever it wants.
+```
+
+**A trusted primitive whose entire purpose is releasing something untrusted** — which is why it is
+the first class, and why it carries the risk the others do not. It is also where grants are hardest:
+a grant on `read` is checkable at the call, and a grant on `spawn` is not, because nothing can
+inspect what a process will do. Confinement must be realized by the platform layer or the grant
+describes nothing.
+
+### Two axes, and they are not one axis
+
+```text
+                    │ NO ESCAPE   │ WORLD EFFECT
+────────────────────┼─────────────┼────────────────────────────────────────
+TRUSTED BEHAVIOUR   │ read        │ write — what STAGING exists for
+────────────────────┼─────────────┼────────────────────────────────────────
+UNTRUSTED BEHAVIOUR │      —      │ spawn · an external API. UNBOUNDED.
+```
+
+**The empty cell is the point.** There is no untrusted-but-harmless call: if something interprets, it
+can act, so interpretation and escape arrive together. That is why the trust line and the effect line
+run nearly parallel and keep being mistaken for one line.
 
 ### What to instantiate
 
@@ -392,4 +442,9 @@ OF AGENTS                place for that answer to live and a second place for it
 
 POSSIBILITY AS GROUND    a hidden real capability that advertisement and expectation both
 TRUTH                    approximate. unfalsifiable by construction.
+
+AN API CAPABILITY        HTTP as a primitive because it is common. commonness is a fact about
+CLASS                    TRANSPORT, which is already beneath everything. a remote service
+                         INTERPRETS, so it is an entity — the same test that keeps a filesystem
+                         read a driver call.
 ```

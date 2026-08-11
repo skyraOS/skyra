@@ -148,6 +148,12 @@ is unexpressible rather than forbidden, which is the form this design wants.
 **Any caller is an ingress channel.** A human, a webhook, a file watcher — structurally identical.
 Nothing is special about the human except position.
 
+**Which is also the hole**, and it is worth naming beside the claim rather than elsewhere: a root
+originates freely, holds the chain's grants, is the grader, and is where staged effects materialize.
+Opening one is the maximum-privilege operation in the design, and nothing gates it. That is a
+different mechanism from grants — they bound what a chain may *do*; this bounds who may *start* one.
+See [questions.md](questions.md) §5.
+
 ## Refinement grows the asker, not the answerer
 
 When a returned observation is not good enough, the possibility does **not** rewrite its own

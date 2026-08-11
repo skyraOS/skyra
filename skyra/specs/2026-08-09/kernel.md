@@ -557,7 +557,7 @@ model are interchangeable as interpreters* — and the grader rule survives lite
 kernel invokes the permission and the kernel is not below anything. But it is the first place the two
 roles meet inside one chain, and it deserves a toy run before it is trusted.
 
-**A chain waiting on a human is the group barrier's worst case.** `questions.md §8` names a
+**A chain waiting on a human is the group barrier's worst case.** `questions.md §9` names a
 long-running spawn as the demand that will force partial completion. Escalation is that demand
 arriving earlier and from a different direction.
 

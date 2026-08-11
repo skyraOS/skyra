@@ -79,7 +79,39 @@ starvation. Use does not kill a bad implementation; use is the positive signal, 
 
 This is Toy 1's *blindness ≠ independence* arriving at the credit layer.
 
-## 5 · History must not become a cache
+## 5 · Nothing gates ingress
+
+`discover.md` says *any caller is an ingress channel — a human, a webhook, a file watcher,
+structurally identical. Nothing is special about the human except position.* That is elegant, and it
+is exactly the hole: **anything that can reach the runtime can open a root.**
+
+Which matters more than it would in an ordinary system, because of where a root sits:
+
+```text
+A ROOT ORIGINATES FREELY   ingress is originated by definition. no citation constrains it.
+A ROOT HOLDS THE GRANTS    authority enters the system here and nowhere else.
+A ROOT IS THE GRADER       acceptance is citation, and nothing above it can reject.
+A ROOT MATERIALIZES        staged world effects land when it accepts.
+```
+
+Opening a root is therefore the maximum-privilege operation in the design, and there is no
+gate on it.
+
+**It is not the same mechanism as grants.** Grants bound what a chain may *do* once running. This
+bounds who may *start or feed* one — a different question, at a different boundary, and the two must
+not be collapsed into one word.
+
+**And re-entry is the sharper half.** A root may inject new observations into a chain already in
+flight — *no, redder* — which is ingress into running work rather than at its start. Whether that is
+the same authority as opening a root, whether anything but the original asker may do it, and what it
+means for replay, are all open.
+
+```text
+WATCH   the first build has NO INGRESS, so this cannot be discovered by running it. it will be
+        discovered by the first thing that puts a socket in front of the runtime.
+```
+
+## 6 · History must not become a cache
 
 A child engram carries the return it cited, which makes reading a stored answer instead of invoking
 trivially available. That is the stored present the design refuses.
@@ -87,7 +119,7 @@ trivially available. That is the stored present the design refuses.
 The rule is written. **A structural form of it — one that makes the substitution unexpressible rather
 than forbidden — has not been found**, and every other constraint in this set is structural.
 
-## 6 · Evidential bloat, concentrated in system space
+## 7 · Evidential bloat, concentrated in system space
 
 Structural growth is filtered: nothing attaches unless the return cited it. The record channel has no
 such filter, and history is now one record per invocation with nothing collapsing at write time.
@@ -101,14 +133,14 @@ So this stops being a general worry and becomes a specific one: **system-space e
 this breaks first, if it breaks.** Which also makes it cheap to measure — watch two engrams, not the
 whole graph.
 
-## 7 · Leaves learn nothing
+## 8 · Leaves learn nothing
 
 Selection learns; synthesis does not. Selection is meaningless at a leaf, so **a leaf is as good as
 the model's priors on the day it was created, permanently.**
 
 Whether that is acceptable depends on how much work leaves do, which nobody has estimated.
 
-## 8 · The group barrier, and what will force partial completion
+## 9 · The group barrier, and what will force partial completion
 
 An invocation group awaits every member. One slow or trapped member delays the next selection even
 if the others have returned enough to continue. That is accepted deliberately for the smaller
@@ -125,7 +157,7 @@ controls. `kernel.md`'s permission model makes this the common case rather than 
 Named here so the demand is recognized when it arrives, rather than partial completion being
 smuggled in as a flag without a case behind it.
 
-## 9 · Grants, and the world boundary
+## 10 · Grants, and the world boundary
 
 Scope and ownership authorize **graph** writes completely and **world** effects not at all. A frame
 bounds what a possibility can say; it bounds nothing about what a spawned process does.
@@ -164,18 +196,18 @@ when two concurrent group members stage conflicting writes to one path.
 That last one has no answer yet. Cardinality > 1 means siblings run together, siblings cannot see
 each other, and nothing prevents both writing `/work/x`.
 
-## 10 · Who may select create
+## 11 · Who may select create
 
 Create is licensed by discover's rejection. Whether that is enforced by scoping — create simply not
 being nameable outside discover's frame — or by something else, is undecided.
 
-## 11 · What produce is now
+## 12 · What produce is now
 
 Nothing registers on invocation, and creation is reached by name through select. `produce` may not
 survive as a peer to `discover` at all — what is left of it is the write at return, which the parent
 performs.
 
-## 12 · Should every kernel method be an engram
+## 13 · Should every kernel method be an engram
 
 The rule adopted is that they are — a permission is an engram, its approval is a possibility, and the
 kernel realizes them the ordinary way. It buys competition among approval strategies and costs a
@@ -185,7 +217,7 @@ special channel.
 may simply be better as methods. The rule stands until something built says otherwise, which makes
 this an implementation question rather than a design one.
 
-## 13 · Does "possibility" survive as a word
+## 14 · Does "possibility" survive as a word
 
 If the structure is identical to an expectation, the word may only be marking *whose* it is and
 whether it is visible — a perspective label, not a type. The signature may never need it.
@@ -298,6 +330,22 @@ whether it is visible — a perspective label, not a type. The signature may nev
 
 08-09  WHAT MAKES AN ENGRAM           its name being in the KERNEL'S FRAME. scoping, not a flag
        KERNEL-CALLABLE                — a flag would be a declaration.       → kernel.md
+
+08-09  WHY ORIGINATION IS             so it cannot be MISTAKEN FOR COMPOSITION. stating the rule
+       FORFEITED                      by its harm explains what position cannot: the forfeit
+                                      fires at the first select, and is permanent because
+                                      ambiguity never goes away.        → possibilities.md
+
+08-09  IS A ROOT AN EXCEPTION         no — ingress is not origination. two acts wore one word.
+       TO THE ORIGINATION RULE        an inbound observation has an EMPTY PRODUCER because no
+                                      possibility produced it; a root's own commit follows the
+                                      ordinary rule.                    → possibilities.md
+
+08-09  DRIVER CALL OR ENTITY          whether anything INTERPRETS. a driver reaches mechanism
+                                      with fixed reviewed semantics; an entity reaches an
+                                      interpreter. so a filesystem read is a driver call and an
+                                      external API is an ENTITY, never a class.
+                                                                            → world.md
 
 08-09  DOES A KERNEL ROOT BREAK       no, under two rules: a kernel root is DERIVATIVE and dies
        "SYSTEM SPACE IS NEVER         with the chain that provoked it, and it can never exceed

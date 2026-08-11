@@ -159,12 +159,24 @@ type Observation struct {
 
     // WHICH ENGRAM returned this — a specific child of a specific parent, which is
     // exactly the precision the walk needs.
+    //
+    // EMPTY means INGRESS: no invocation produced this, it entered the tree from
+    // outside. Producer is what separates the three empty-Cites cases below.
     Producer EngramID
 
     // DERIVED from Content: every Ref appearing in it. Cached, rebuildable.
     // NEVER declared — see below.
     //
-    // EMPTY means it ORIGINATED — an entity's judgement at a leaf, or a crossing.
+    // EMPTY means it originated. THREE CASES, and an implementation that reads
+    // empty-Cites as one of them will get it wrong:
+    //
+    //   LEAF ORIGINATION   Producer = the leaf engram.       Cites empty.
+    //   A CROSSING         Producer = the engram I invoked.  Cites empty.
+    //   INGRESS            Producer EMPTY.                   Cites empty.
+    //
+    // Discriminated by absence rather than by a tag, which is the form this set
+    // wants. The walk terminates on the third with no special case: nothing to
+    // descend into.
     Cites []ObservationID
 }
 
@@ -300,6 +312,11 @@ type Entity struct{ ID EntityID }
 //
 // Constitutive rather than declared: something with no execution class is not a host, it
 // is a device we cannot use.
+//
+// EVERYTHING HERE IS BELOW THE TRUST LINE. The test for what belongs is whether
+// anything INTERPRETS: a driver reaches MECHANISM with fixed, reviewed semantics; an
+// entity reaches an INTERPRETER whose behaviour is authored elsewhere. So a filesystem
+// read is a driver call and an external API is an ENTITY — never a class. See world.md.
 type Host interface {
     ID() HostID
     Execution() ExecutionOps   // spawn. the only class instantiated now.
@@ -307,6 +324,11 @@ type Host interface {
     // display · audio: the projection substrate. NOT NAMED YET.
 }
 
+// Spawn IS THE TRUST BOUNDARY, not merely a call across it. The call is trusted —
+// fixed semantics, kernel code. The payload is not: the process does whatever it
+// wants. Every other driver op is trusted end to end; this one exists to release
+// something untrusted, which is why grants on it cannot be checked at the call site
+// and must be REALIZED by the platform layer instead.
 type ExecutionOps interface {
     Spawn(x Expectation, f Frame) (Handle, Streams, error)
 }
@@ -604,9 +626,15 @@ NEVER SELECTED   a LEAF. atomic, one-shot. ORIGINATES an observation.
 HAS SELECTED     an ORCHESTRATOR. may only name or combine what came back. PERMANENTLY.
 ```
 
-**Permanent is necessary, not tidy.** If a possibility could originate *after* orchestrating, nothing
-could distinguish content that came from its children from content invented at the end, and *cannot
-originate, only combine* would collapse.
+> **Originate only where it could not be mistaken for composition.**
+
+Which explains what position cannot: the forfeit fires **at the first select**, because that is when
+ambiguity becomes possible, and it is **permanent**, because ambiguity never goes away once children
+have returned. The rule guards against invention *disguised as derivation*, not against invention.
+
+**Ingress is not governed by it.** An observation entering the tree from outside is originated by
+definition — no possibility produced it — so a root does not originate a commit, it performs ingress.
+See `possibilities.md`.
 
 Kind is derived from composition and never declared — the third independent arrival at directory
 versus file.
