@@ -147,6 +147,83 @@ line, unchanged.
 
 ---
 
+## Authority lives on the mount, never on the entity
+
+An entity has **no owner**. Exactly-one-owner would make an interpreter exclusive — if I hold
+authority over an AI, my sister cannot use it — which is absurd for a thing whose whole purpose is
+being invoked by many parties.
+
+> **The same entity, mounted twice, is two permission sets with no relationship between them.**
+
+Which is the AWS shape again: a role is not owned by a user; a user *assumes* it with a policy
+attached to that assumption.
+
+**And it makes the confused deputy unrepresentable rather than fixed.** The canonical bug is C
+invoking B to reach authority C does not hold. Here B has no ambient authority at all — it has
+whatever the mount C invoked it *through* carries. There is no "B's own authority" for C to borrow.
+
+### A mount is three things
+
+```text
+A BINDING            name → engram.              what you can NAME.
+A GRANT SET          read · write · spawn.       what you can DO.
+A MEMORY PROVISION   "you may accumulate HERE."  where your durable writes LAND.
+```
+
+The two permission categories fall on that seam and are why they are one vocabulary rather than two:
+
+```text
+DURABLE     where may you accumulate.   the graph boundary.
+EPHEMERAL   read · write · spawn.       the world boundary.
+```
+
+### Commit is a request, not a bar
+
+You may write into memory you do not own. **The authority is in the commit**, and a commit into
+another entity's memory is a request to its owner.
+
+```text
+COVERED BY A GRANT   commit:<engram or subtree> was provisioned.   write.
+NOT COVERED          ask the owner. deny → an ORDINARY FAILED INVOCATION, recorded on the
+                     invoker's engram, and the invoker's selection learns from it.
+```
+
+The graph boundary and the world boundary now escalate through the same mechanism. They were two
+authorizations with two characters; they become one with two alphabets.
+
+**The build already holds the place for this.** `authorize.go`'s `ownership()` is a documented no-op:
+*"held structurally rather than checked… if engrams ever become shareable, this stops being free and
+must become real."* Shareable memory is exactly what a mount is.
+
+**And denial does not stop an entity learning.** Learning *about* an entity lives on its parent's
+engram, which it can never reach — `DOWN, NEVER UP`. Withholding commit authority stops an entity
+accumulating its own selection history over its own children. It does not make it a pure function,
+and it does not make its failures invisible. *It plays by the owner's rules.*
+
+### Invoking a tool versus invoking a party
+
+```text
+INVOKE AN ENGRAM   a TOOL. runs under the CALLER'S authority, in the caller's provision.
+                   your work, their instrument.
+
+INVOKE AN ENTITY   a CROSSING. switches to that entity's own mount and provision.
+                   their work, delivered to you.
+```
+
+> **Autonomy inside the provision. Accountability at the boundary.**
+
+An entity can do what it likes within what it was provisioned, and still has to deliver back into the
+shared space — where the owner's commit decides whether any of it becomes durable there.
+
+### The index is shared; the tree is owned
+
+Ownership happens on **selection**, not on existence. Discovery searches across what is visible;
+citation is what makes a copy yours.
+
+So a memory provision bounds **where your copies land**, not what you can see. Which leaves *here*
+still needing a shape — region, quota, subtree — and it is the one object in this model that has
+none.
+
 ## Revocation is unmounting
 
 `kernel-revision.md` lists revocation as the one hole with no home. The split closes most of it.
