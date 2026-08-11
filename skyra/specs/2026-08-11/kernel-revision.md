@@ -536,7 +536,13 @@ REVOCATION               reach is given and never taken back. starvation is beha
                          anything already holding its name. append-only forbids deletion, and
                          every other constraint here is an incapacity rather than an operation, so
                          "add a revoke" is the wrong shape. LEASED REACH, or compromise is out of
-                         the threat model. not decided, and it has no home in questions.md.
+                         the threat model.
+                         → MOSTLY ANSWERED by roots-and-admission.md: append-only forbids deleting
+                         an ENGRAM and says nothing about a BINDING. granted reach is a mount and
+                         a mount is runtime configuration, so UNMOUNTING IS REVOCATION. earned
+                         reach stays permanent, correctly — revoking it would erase the
+                         principal's own memory. what remains is the lease TERM, which is the
+                         chain, and a chain may run for an hour.
 
 THE TWO FACES AS A       the pattern generalizes past the kernel and probably wants its own doc
 DOC OF ITS OWN           rather than a section here. it touches world.md (the grader), discover.md

@@ -115,6 +115,12 @@ WATCH   the first build has NO INGRESS, so this cannot be discovered by running 
         discovered by the first thing that puts a socket in front of the runtime.
 ```
 
+**A proposed answer, 2026-08-11.** If a root is a **namespace** rather than an engram, ingress stops
+being an unscoped select and becomes one resolved against what is mounted — the same scope check as
+every other select. The gate is then **provisioning at admission**, and the maximum-privilege problem
+becomes *do not mount much*. See `2026-08-11/roots-and-admission.md`. Two moments remain, and they
+must not merge: **whether you may open a root**, then **as whom**.
+
 ## 6 · History must not become a cache
 
 A child engram carries the return it cited, which makes reading a stored answer instead of invoking
