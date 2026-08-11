@@ -148,6 +148,15 @@ PRODUCER ACROSS A DEEP COPY       discovery copies a subtree. do carried observa
                                   another name. REFINEMENT DOES NOT HIT THIS — it shares
                                   children rather than copying them.
 
+                                  AND IT IS NOT ONLY A CORRECTNESS QUESTION. the runtime is
+                                  DISTRIBUTED — one runtime spanning devices, entities global,
+                                  search global, and probably a graph per device. so keeping the
+                                  original Producer can mean the credit walk leaves the local
+                                  graph: over the wire, or into a dangling ID that stops
+                                  silently. re-pointing keeps it local at the cost the decision
+                                  avoided. NOT BEING CALLED NOW — recorded so the distribution
+                                  half is present when it is.
+
 WHERE THE BACK POINTER LIVES      on the engram · on the observation · both · nowhere
 
 WHAT IT AGGREGATES OVER           one mount · a principal · the whole graph

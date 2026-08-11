@@ -35,6 +35,23 @@ All three dissolve if a root is a **namespace** rather than a memory.
 
 ---
 
+## The rule
+
+Everything below compresses to three sentences:
+
+> **A namespace cannot be invoked.**
+> **A root can only be provisioned from a namespace.**
+> **You run under the grants of the root your namespace gave you, and nothing in a chain can widen
+> that.**
+
+The second is stated as a **provenance** rather than a prohibition, and that is deliberate. *A root
+cannot be invoked* would be a rule, and also slightly false — a root **is** opened, at ingress. Saying
+where roots come from makes unreachability-from-inside a consequence: the only way to make one is
+somewhere no chain can stand. Safe by incapacity, not by restraint.
+
+The third is `world.md`'s *you cannot invoke your own grader*, one layer up. Reaching another root is
+done **from that root's namespace, by whoever holds it** — which is ingress, and never selection.
+
 ## What a root is
 
 ```text
