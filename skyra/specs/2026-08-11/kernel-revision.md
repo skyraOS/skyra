@@ -137,17 +137,45 @@ why they should be **reached the same way**. `kernel.md` already says so and the
 > **TO A POSSIBILITY** — a system engram manned by the runtime entity, the same exemption discover
 > and create already hold, answering ONLY about its own subtree.
 
-The build made `introspect` a kernel method instead. **Make it an engram.** The symmetry then goes
-all the way down, including the honest-witness split:
+The build made `introspect` a kernel method instead. **Make it a kernel engram** — an engram whose
+entity reads kernel state rather than graph state. The symmetry then goes all the way down, including
+the honest-witness split:
 
 ```text
-discover     engram → runtime entity → a READ-ONLY view of the graph    (built: the Index interface)
-introspect   engram → runtime entity → a READ-ONLY view of the topology (same shape, not built)
+discover     engram → runtime entity → a READ-ONLY view of the GRAPH    (built: the Index interface)
+introspect   engram → runtime entity → a READ-ONLY view of the TOPOLOGY (same shape, not built)
 ```
 
 The `Index` interface the build already has — one method, no way to reach `Apply`, `Mint` or
 `Disperse` — generalizes directly. Neither role can write, and the separation stays a compile error
 rather than a promise.
+
+### An engram is not an inference call
+
+Worth stating flatly, because it is the objection that would otherwise kill this and it is wrong.
+
+**An engram is a durable expectation with a history. WHO MANS IT is a separate question**, and the
+runtime entity is code. `discover.md` says so — *"THE QUERY: an index lookup. code. cheap.
+unchanged… Discovery does not become an inference call on every lookup"* — and the build measured it:
+
+```text
+by-index      invoked 23      pure code. tokenize, score, return.   ZERO model calls
+by-recency    invoked  6      pure code.                            ZERO model calls
+create        invoked  3      the only resolver that reaches a model
+```
+
+Twenty-nine engram invocations that never touched inference. So the cost of making a kernel method an
+engram is **a function call plus a history append** — not a model call, not a round trip, not
+latency.
+
+**Which partly settles `questions.md` §13.** *"Whether the indirection pays for itself on the cheap,
+hot, uninteresting ones"* was left as an implementation question. It does, because there is no
+indirection to pay for: a code-manned engram is the function, wrapped in a record.
+
+The real cost is the record, and it is already named. `questions.md §7` predicts evidential growth
+concentrates in system space, and the run confirmed it — the system engrams are the most-invoked in
+the graph by a wide margin. **That is the tradeoff to watch for introspect: not inference cost, but
+one more of the highest-frequency engrams in the system appending on every call.**
 
 **What does not change:** introspection stays bounded by the subtree. `DOWN, NEVER UP` is what keeps
 a possibility from learning its own reception, and asking about your own descendants is *down*. The
@@ -298,6 +326,10 @@ INTROSPECT AS A          it is the same kind of thing as discover — the system
 KERNEL METHOD            — and kernel.md already says it should be a system engram manned by the
                          runtime entity. the build got this wrong, not the spec.
 
+"AN ENGRAM MEANS A        no. an engram is a durable expectation with a history; the ENTITY decides
+MODEL CALL"              whether anything infers. 29 of the 32 system-engram invocations in the run
+                         were pure code. the cost is a history append, not a round trip.
+
 FILTERING ANCESTORS      discovery is a possibility and cannot see ancestry. doing it there means
 INSIDE DISCOVERY         either the kernel feeds a possibility upward information or a possibility
                          looks up. both break something load-bearing.
@@ -328,8 +360,13 @@ GATING INGRESS           the one thing genuinely outside the forms, and it is un
 
 GRANTS                   the world boundary is entirely open. staging works and nothing checks it.
                          `introspect:self` is still the first grant the design needs — and with
-                         introspect as an engram, it is the first NAME to gate rather than the first
-                         method.
+                         introspect as a kernel engram, it is the first NAME to gate rather than the
+                         first method.
+
+WHAT introspect COSTS    not inference — it is code. but it joins discover as one of the
+                         highest-frequency engrams in the graph, and questions.md §7 already says
+                         system space is where evidential growth breaks first if it breaks. worth
+                         measuring before it is hot.
 
 WHETHER Ask SURVIVES     a convenience composition. it earns its keep or it goes.
 
