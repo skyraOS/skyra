@@ -11,6 +11,18 @@ spec is `2026-08-06`. This is the `v5` direction.
 > transaction model, permissions as engrams, the trust boundary, and the origination rule restated by
 > its harm. Roughly half of what is below postdates it.
 
+> **CONTINUED IN [`2026-08-11-the-first-build-and-the-surface-collapse`](2026-08-11-the-first-build-and-the-surface-collapse.md),
+> later the same day.** This document ends by describing what the first build should be. It was then
+> built and driven by a model. **Nothing here is superseded** — the vocabulary, the mechanisms and
+> the document map are all still correct — but three things below are now settled by evidence rather
+> than argument, and should be read with the continuation beside them:
+>
+> - **`Status: WORKING. Nothing is built.`** is out of date. `skyra-dna-v5` exists and has run.
+> - **The central bet** — *all learning is topological* — is described below as argued and never
+>   observed. It has now been observed.
+> - **The kernel surface** described in §3 is larger than what the build needed. `Drive` is a
+>   select and `Accept` is a commit; there is no control plane.
+
 ---
 
 ## What the system is trying to be
