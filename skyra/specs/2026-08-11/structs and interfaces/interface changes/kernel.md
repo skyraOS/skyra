@@ -1,4 +1,4 @@
-# 01 · The Kernel Surface
+# Kernel
 
 **Date:** 2026-08-11
 **Status: CHANGE PROPOSAL.** Code only — signatures, types, and what to delete.
@@ -86,4 +86,4 @@ kernel/kernel.go   9 Run.Logf calls
 ```
 
 `shortExpr` reads `Expectation.Expression` and `oneLine` reads `Observation.Content`. They are the
-only places the kernel reads content. Replaced by the sink in [02](02-the-entity-boundary.md).
+only places the kernel reads content. Replaced by the sink in [entity.md](entity.md).

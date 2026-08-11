@@ -1,4 +1,4 @@
-# 02 · The Entity Boundary
+# Entity
 
 **Date:** 2026-08-11
 **Status: CHANGE PROPOSAL.** Code only — signatures, types, and what to delete.
@@ -70,7 +70,7 @@ type Events interface {
 
 Nil-safe, as `trace.Run` already is, so the substrate tests pass nothing and nothing traces. All
 rendering and truncation moves behind this interface, which is what lets the 34 lines in
-[01](01-kernel-surface.md) be deleted.
+[kernel.md](kernel.md) be deleted.
 
 `span` on every method is the correlation key the current trace lacks — concurrent possibilities on
 one engram are indistinguishable without it.
