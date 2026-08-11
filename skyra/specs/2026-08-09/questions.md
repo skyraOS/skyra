@@ -7,6 +7,10 @@ answered, and the answer goes to the doc that owns it.
 
 Ordered by how much rests on them.
 
+*§15 added 2026-08-11, from the first build. Nothing else in this doc has been edited — the
+dispositions the build proposes for §1–§13 are in [build.md](build.md), so acting on them stays a
+decision rather than a side effect.*
+
 ---
 
 ## 1 · Nothing has been built, and nothing has been run
@@ -221,6 +225,86 @@ this an implementation question rather than a design one.
 
 If the structure is identical to an expectation, the word may only be marking *whose* it is and
 whether it is visible — a perspective label, not a type. The signature may never need it.
+
+## 15 · Credit sees only one of the two ways something is used
+
+*Belongs beside §2 by weight. Numbered last so the references in `build.md`, `kernel.md` and
+`discover.md` stay valid — the ordering rule loses to not editing docs that were left as written.*
+
+An observation can be used two ways, and only one of them earns anything.
+
+```text
+USED TO NAME       a select's cite. what made the invocation POSSIBLE.     EARNS NOTHING.
+USED TO COMPOSE    a reference in the commit. what the answer was BUILT    earns credit.
+                   from.
+```
+
+So **anything whose entire job is to make an invocation possible has a record showing it never
+contributed.** Measured on the first real run:
+
+```text
+eng-0001  system:discover
+     invoked 7 · cited 0 · hops map[]
+```
+
+Seven invocations, every one producing the name the next selection used. The record of a useless
+engram, belonging to the engram without which nothing in the chain could have been invoked.
+
+**Two documents contradict each other**, and a third saw it coming:
+
+```text
+discover.md   "the select CITES THAT OBSERVATION, so discover earns credit exactly when its
+               answer was used, through the mechanism that already exists. NO SPECIAL CASE."
+
+credit.md     "Which makes `Cite` a GROUPING KEY ONLY, carrying no credit of its own."
+
+grammar.md    "An observation that supplied the NAME is never bound as an argument and never
+               composed, so without a citation it falls through as unused — and that is the
+               observation that made the invocation possible at all. `cite` FIXES IT in the
+               grammar rather than in the metric."
+```
+
+`grammar.md` identifies the exact failure and believes `cite` repairs it. `credit.md` then makes
+`cite` carry nothing, and the repair is undone one document later without either noticing.
+
+### What it breaks
+
+```text
+COMPETITION AMONG        the entire payoff of making discovery an engram rather than a function.
+DISCOVER ENGRAMS         discover.md rests on it. it cannot run on a signal pinned at zero —
+                         selection moves AWAY from whichever strategy is working, because none
+                         can ever show a positive.
+
+COMPETITION AMONG        kernel.md reuses the identical argument for permissions: "three engrams
+APPROVAL STRATEGIES      for one need, selection moves between them." same defect, not yet built.
+
+ANY FUTURE JUDGE         a judge that picks among candidates carries REACH, not data. EngramRef is
+                         deliberately not a Ref, so the walk cannot descend through it and the
+                         choice is invisible.
+```
+
+**It is not about `discover`.** It is about any possibility whose contribution is a **name** rather
+than **data** — and reach and credit travel on separate channels by design, so the whole class is
+invisible at once.
+
+### The fix is a choice, not a patch
+
+```text
+EITHER   a select's cite carries credit, and credit.md's "grouping key only" is wrong. but then
+         SELECTION CREDIT STOPS BEING EXACT, which is the one place the design has sibling
+         blindness solved — a select member cites ONE observation, and that arity is the whole
+         reason credit on selections is exact rather than clever.
+
+OR       naming and composing are TWO CONSUMPTIONS and both count. possibilities.md ALREADY SAYS
+         THIS — "two consumptions, and both count. An observation used in a select shaped an
+         INVOCATION; one used in the commit entered the COMPOSITION" — but only for `used/seen`,
+         never for the child-forming threshold and never for the walk.
+```
+
+The second is smaller, and the set already contains half of it. What is undecided is whether a
+name-consumption should form a **child** (probably not — `discover` would become a permanent child
+of everything that ever searched, which is the reason the two thresholds were split) or only earn an
+**acceptance** on the walk (probably yes, and it costs one more traversal rule).
 
 ---
 
