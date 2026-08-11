@@ -89,36 +89,67 @@ collapse into the rejected tag.
 
 ---
 
-## What is NOT decided
+## DECIDED, 2026-08-11 — what a copy mints
+
+> **A copy mints a NEW ENGRAM and carries the ORIGINAL observations forward.** New invocation
+> records referencing the same observation objects. Nothing else is minted.
+
+Taken because a decision was needed to move, and it is narrower than it first looked.
+
+### The walk lands correctly, and the earlier warning was imprecise
+
+An earlier draft of this doc said carrying observations forward makes *credit flow backward*. That
+overstated it. Following the walk:
 
 ```text
-MINT NEW OBSERVATIONS ON A COPY   ·   MINT A NEW ENGRAM ONLY   ·   BOTH
+inv := engramFor(c.Producer).ByReturn[c.ID]
+```
 
+`c.Producer` is the engram that **produced** the observation — a child. So the acceptance lands on
+that child's own history, **never on the copied engram**. The copied engram earns its standing from
+its own parent, and the original earns nothing.
+
+And the child genuinely produced the data that was cited. **That is `credit follows data`, working.**
+
+### Which bounds the decision to one case
+
+```text
+IN-CHAIN REFINEMENT   the observations were produced HERE, in THIS span, by children that
+                      really ran. carrying them forward is correct.
+
+COPY FROM DISCOVERY   the observations were produced in someone else's chain, possibly long
+                      ago. carrying them forward would append acceptances to a tree this chain
+                      never ran in, and populate a stranger's hop profile from a span it was
+                      never part of.
+```
+
+**The set already separates these**, so the decision does not reach the second:
+
+> `interfaces.md` — **FIND** — search the index, **COPY AN EXPECTATION IN** → a local engram.
+
+Discovery copies an *expectation*. Not history, not observations. That stays true.
+
+### It also answers how deep a copy goes: not deep
+
+Same observations, **same children**. A copy is shallow, and being shallow is what makes credit land
+on the producer rather than on a duplicate with no `ByReturn` entry.
+
+The one-parent invariant survives, but only because of `open-until-commit.md`: the superseded
+original **never closes, so never mints**, so two engrams naming one child is transient and
+evaporates at closure.
+
+> **This decision is safe because of that one. If possibilities ever close on return again, a copy
+> leaves two persisted parents sharing a child, and locality stops being structural.**
+
+## Still NOT decided
+
+```text
 WHERE THE BACK POINTER LIVES      on the engram · on the observation · both · nowhere
 
 WHAT IT AGGREGATES OVER           one mount · a principal · the whole graph
 
 WHO MAY READ IT                   reflection, agreed. WHAT reflection is, not agreed.
 ```
-
-### And the mechanism is downstream of the category, which is why this is parked
-
-Not a matter of taste. Keeping one observation identity across copies means its `Producer` still
-names the **original** engram — so the credit walk from a copy descends into the original's tree and
-appends an acceptance there.
-
-```text
-CARRY THE OBSERVATION FORWARD   → identity is preserved for free, and CREDIT FLOWS BACKWARD.
-                                  edit becomes inheritance, through the observation instead of
-                                  through the invocation. the laundering the rule was written
-                                  to prevent, arriving by another door.
-
-MINT A NEW OBSERVATION          → credit stays local, and the link is gone unless something
-                                  records it. that something must be INVISIBLE TO THE WALK, or
-                                  it is the first case again.
-```
-
-Answering *what do we mint* first would have silently picked an answer to *what are we preserving*.
 
 ---
 
@@ -138,6 +169,26 @@ REMOVED   a parent looked at it and took it out.   AUTHORED. NOT AN ABSENCE.
 
 Both signals share the property that makes them one problem: **neither is visible from inside a
 chain.** Whatever reads them runs over the whole graph, after the fact, and it is not selection.
+
+### And the copy decision costs this signal
+
+A superseded original never closes, so it never mints, so **it evaporates at closure and the removed
+branch is gone.** The authored negative — the thing that makes this signal worth more than an absence
+— is exactly what the transaction model discards.
+
+```text
+TO KEEP THE SIGNAL      something superseded must persist despite not closing, which contradicts
+                        mint-on-closure — the rule that makes the index safe to discover from,
+                        because nothing in it is a promise.
+
+TO KEEP THE RULE        the strongest negative signal in the system is destroyed at the moment
+                        it is created.
+```
+
+Unresolved, and it is the sharpest tension the copy decision introduces. A candidate that is *not*
+being adopted here: persist superseded engrams somewhere that discovery cannot see — which is the
+shape `MintRoot` already uses for roots, so the mechanism exists. It is not adopted because nothing
+yet reads it, and the admission rule applies.
 
 That is the case for a reflection pass existing at all — and this doc is not the place that argues
 for one. Recorded because if it is ever built, these two are what it would have to work with, and

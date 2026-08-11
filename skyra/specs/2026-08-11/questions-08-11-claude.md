@@ -13,7 +13,7 @@ reference them instead of re-deriving. Things move out of here into a real doc w
 ## Raised and not yet discussed — copy/edit
 
 ```text
-HOW DEEP DOES A COPY GO
+HOW DEEP DOES A COPY GO   → DECIDED: not deep. same children. see second-kind-of-credit.md
    "its children are not new, those are the same." if that is literal, two parents hold
    one child engram and the invariant that makes locality structural is gone —
    interfaces.md: "an engram lives inside exactly ONE parent's map… A never writes into
