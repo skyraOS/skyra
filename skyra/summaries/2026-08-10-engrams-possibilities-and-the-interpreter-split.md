@@ -3,12 +3,17 @@
 **Date:** 2026-08-10
 **Scope:** The `specs/2026-08-09` set, promoted from the `08-08` whiteboard and worked through to an
 implementation proposal.
-**Status:** WORKING. **Nothing is built.** The live implementation is still `skyra-dna-v4`, whose
-spec is `2026-08-06`. This is the `v5` direction.
+**Status: SUPERSEDED.** Nothing is built.
+
+> **Superseded by [`2026-08-11-the-kernel-boundary-and-the-transaction-model`](2026-08-11-the-kernel-boundary-and-the-transaction-model.md).**
+> The vocabulary here is still correct — nothing was renamed under it — so this remains readable.
+> What it lacks is roughly half the current design: the kernel's active/durable split, monitor,
+> impulses, the chain as a transaction, permissions as engrams, the trust boundary and the
+> interpretation test, and the origination rule restated by its harm. Read the newer one.
 
 > **Supersedes [`2026-08-08-select-return-and-the-possibility-model`](2026-08-08-select-return-and-the-possibility-model.md).**
 > That summary's vocabulary is obsolete — `possibility` meant the durable thing, `return` meant the
-> value up, entities were places. All three changed. Read this one.
+> value up, entities were places. All three changed.
 
 ---
 
