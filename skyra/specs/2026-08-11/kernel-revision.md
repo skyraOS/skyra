@@ -5,6 +5,8 @@
 Nothing here is a new mechanism. Every item is a removal.
 
 > **There is no control plane. There is one channel, two forms, and two reflexive names.**
+>
+> **And every entity has two faces. Only one of them is ever in a frame.**
 
 ---
 
@@ -184,6 +186,94 @@ whoever asked, so reporting to it is not reaching into the model.
 
 ---
 
+## Every entity has two faces
+
+The runtime/kernel split is not special. It is one instance of a rule the set already states three
+times, in three documents, without noticing it is the same rule.
+
+```text
+ENTITY      SELECTABLE FACE                      PRIVILEGED FACE
+──────────────────────────────────────────────────────────────────────────────────────────
+runtime     mans discover · introspect ·         THE KERNEL. pairs, drives, applies writes.
+            create. emits like anything else.
+
+human       an interpreter, invoked DOWN.        THE GRADER AT THE ROOT. ingress, grants,
+            "ask Michael to find a utensil."     acceptance, materialization.
+
+a model     interprets an expectation.           ITS ADAPTER. spawns, holds credentials,
+            emits SELECT or COMMIT.              reaches the platform layer.
+```
+
+Each document states its own row and stops there:
+
+```text
+discover.md   "AS KERNEL, not selectable. AS ENTITY, selectable. Same software, two roles;
+               the separation is the whole safety story."
+
+world.md      "The root's caller never passes ITSELF down, so it is not in any frame beneath
+               it, so nothing below can name it."
+
+kernel.md     "the human occupies both roles in one chain… it is the first place the two roles
+               meet inside one chain, and it deserves a toy run before it is trusted."
+```
+
+**It is not the first place. It is every place.** The human is the case that got noticed because a
+human is visibly one being wearing two hats; the runtime is the same shape and reads as plumbing.
+
+### One identity, two capability sets
+
+Collapse the nouns. There is no "kernel" and "runtime entity" as separate things, and there is no
+"the human as grader" and "the human as interpreter" as separate parties. There is **one identity
+with a selectable face and a privileged face.**
+
+What must not collapse is the boundary between the faces, and the reason is the same in every row:
+
+> **A possibility that can select the privileged face can influence what is recorded about itself.**
+
+That is the self-reporting defect the honest-witness argument exists to prevent, and it is the only
+safety property in the design.
+
+### And it is enforced by the mechanism that enforces everything else
+
+Not by a rule. **The privileged face is never in any frame.**
+
+`world.md` already derives this for the human — *"the grader is unreachable because nobody put it in
+scope, not because anything forbids it"* — and it is `grammar.md`'s capability-is-scoping applied to
+the entity rather than to an observation:
+
+```text
+YOU CAN NAME AN ENTITY'S     it was placed in your Entities() reach. delegation.
+SELECTABLE FACE
+
+YOU CANNOT NAME ITS          it was never placed in anyone's frame. there is nothing to forbid.
+PRIVILEGED FACE
+```
+
+So this adds no mechanism. It renames two things as one and points out that the incapacity was
+already there.
+
+**In the build it is a reference boundary rather than a frame boundary**, one layer down, and that is
+worth being precise about:
+
+```text
+kernel.Kernel     holds *graph.Graph    → Apply · Mint · Disperse · MintRoot
+runtime.Entity    holds Index           → Engrams(). one method. read-only.
+```
+
+The runtime package contains no `*graph.Graph`, so the write path is **absent rather than
+restrained**. One honest gap: the graph is passed in *as* an `Index`, so a type assertion would
+defeat it. It is a boundary at the declaration site, not an airtight one. Wrapping the graph in a
+struct that does not embed it closes that, and should, if anything is going to lean on it.
+
+### What this implies for grants
+
+Not settled here, but the connection is too clean to leave unrecorded: **grants gate privileged
+faces.** The world boundary is precisely where an entity's privileged face touches something, which
+is why `fs:write:/work/**` and `introspect:self` feel like the same kind of object despite naming
+completely different things. Worth checking against `kernel.md`'s grant model before it is built.
+
+---
+
 ## Ingress is root access
 
 It is the one thing that is genuinely outside the two forms, and it should be named for what it is.
@@ -330,6 +420,11 @@ KERNEL METHOD            — and kernel.md already says it should be a system en
 MODEL CALL"              whether anything infers. 29 of the 32 system-engram invocations in the run
                          were pure code. the cost is a history append, not a round trip.
 
+COLLAPSING THE RUNTIME   the NOUNS collapse — one identity, two faces. the reference boundary does
+ENTITY INTO THE KERNEL   not. a possibility that can select the privileged face can influence what
+                         is recorded about itself, which is the one safety property in the design.
+                         same software, two faces; the separation is the whole safety story.
+
 FILTERING ANCESTORS      discovery is a possibility and cannot see ancestry. doing it there means
 INSIDE DISCOVERY         either the kernel feeds a possibility upward information or a possibility
                          looks up. both break something load-bearing.
@@ -362,6 +457,11 @@ GRANTS                   the world boundary is entirely open. staging works and 
                          `introspect:self` is still the first grant the design needs — and with
                          introspect as a kernel engram, it is the first NAME to gate rather than the
                          first method.
+
+THE TWO FACES AS A       the pattern generalizes past the kernel and probably wants its own doc
+DOC OF ITS OWN           rather than a section here. it touches world.md (the grader), discover.md
+                         (the runtime), kernel.md (the human in both roles) and the grant model.
+                         recorded here because it arose here.
 
 WHAT introspect COSTS    not inference — it is code. but it joins discover as one of the
                          highest-frequency engrams in the graph, and questions.md §7 already says
