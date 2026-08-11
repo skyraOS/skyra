@@ -274,6 +274,79 @@ completely different things. Worth checking against `kernel.md`'s grant model be
 
 ---
 
+## What this converged on
+
+Two faces, one of which is never in a frame, is **object-capability** — E, Capsicum, seL4. Worth
+naming, because the model has fifty years of catalogued failure modes and checking them is cheaper
+than rediscovering them.
+
+**It is not public/private, and the difference is the interesting part:**
+
+```text
+PUBLIC / PRIVATE     DECLARED, per-type, static.        protects against MISTAKES.
+                     the author marks a member and       defeated by reflection, because the
+                     the compiler enforces it.           reference exists and is merely hidden.
+
+TWO FACES            NEVER GIVEN, per-frame, and         protects against ADVERSARIES.
+                     narrowing monotonically down a      nothing to reflect on — THE REFERENCE
+                     chain.                              IS NOT THERE.
+```
+
+`grammar.md` already states the object-capability thesis nearly word for word — *"capability is name
+resolution. You can select what you can name; you can name what you were given"* — and the set
+refuses declarations everywhere, so `private` was never available as a move. Nothing marks the
+privileged face; it simply is never a name anyone holds.
+
+**Arriving here is evidence rather than embarrassment.** The starting constraint was *"the citation
+signal must be ungameable from inside"* — a credit-assignment requirement with nothing to do with
+security — and it produced the same structure. That is the set's own standard for a real result:
+*the third independent arrival at directory versus file*.
+
+### Three catalogued failure modes, checked
+
+```text
+CONFUSED DEPUTY      SOLVED, INDEPENDENTLY. the canonical ocap bug — a privileged party acting
+                     for a less privileged one using its OWN authority. kernel.md already has the
+                     textbook fix and derived it sideways: "a kernel-rooted chain runs under the
+                     grants of the chain that provoked it, and can never exceed them."
+
+AMBIENT AUTHORITY    PRESENT, AND DELIBERATE. ocap forbids it outright; this design has two.
+                     `discover` is nameable in EVERY frame, which is what stops the bootstrap
+                     regress. `here` is an axiom, because you cannot derive the thing you are
+                     standing on. Both are load-bearing and neither is an accident — but they
+                     should be NAMED as ambient rather than reading as free, because ambient
+                     authority is where ocap systems break.
+
+REVOCATION           A REAL HOLE, and it currently has no home in questions.md.
+```
+
+### Revocation, which the design does not have
+
+`credit.md` answers the question and answers a different one:
+
+> **Pruning is behavioural, not structural.** Append-only forbids deletion, so nothing is removed —
+> the selection simply stops being made.
+
+**That is correct for credit and insufficient as a capability story.** A child engram formed on
+citation sits in its parent's map permanently and stays permanently nameable. Starvation means
+nobody *chooses* it; nothing stops it being *invoked*.
+
+```text
+FOR CREDIT       a bad child is starved. correct, and it is the whole correction mechanism.
+FOR CAPABILITY   a compromised entity is still in frame, still resolvable, still invocable by
+                 anything that already holds the name. there is no way to take it back.
+```
+
+Append-only means there structurally cannot be a revocation without a new mechanism, and every other
+constraint in this set is an incapacity rather than an operation — so "add a revoke" is the wrong
+shape on its face. Whether the answer is that reach should be **leased rather than given**, or that
+compromise is simply outside the threat model, is not decided.
+
+Recorded rather than solved. It is the one place the ocap convergence turned up something the set has
+not already answered somewhere.
+
+---
+
 ## Ingress is root access
 
 It is the one thing that is genuinely outside the two forms, and it should be named for what it is.
@@ -457,6 +530,13 @@ GRANTS                   the world boundary is entirely open. staging works and 
                          `introspect:self` is still the first grant the design needs — and with
                          introspect as a kernel engram, it is the first NAME to gate rather than the
                          first method.
+
+REVOCATION               reach is given and never taken back. starvation is behavioural and does
+                         not remove a capability, so a compromised entity stays invocable by
+                         anything already holding its name. append-only forbids deletion, and
+                         every other constraint here is an incapacity rather than an operation, so
+                         "add a revoke" is the wrong shape. LEASED REACH, or compromise is out of
+                         the threat model. not decided, and it has no home in questions.md.
 
 THE TWO FACES AS A       the pattern generalizes past the kernel and probably wants its own doc
 DOC OF ITS OWN           rather than a section here. it touches world.md (the grader), discover.md
