@@ -1,168 +1,89 @@
 # 01 · The Kernel Surface
 
 **Date:** 2026-08-11
-**Status: CHANGE.** What is called on the kernel. Distilled from `../../kernel-revision.md`.
+**Status: CHANGE PROPOSAL.** Code only — signatures, types, and what to delete.
 
-> **Seven of nine methods go. What is left is one channel; everything else was already the grammar.**
-
----
-
-## The change
-
-```go
-// BEFORE — what the build exported
-Ask · Ingress · Drive · Accept · Reject · rootFor · Hold · Introspect · Spiral
-
-// AFTER
-Ingress(c Content) *Observation      // a CHANNEL. the only thing outside the two forms.
-```
-
-Everything else is either one of the two forms with an external caller, or a name.
-
-```text
-Drive       IS A SELECT.    cardinality 1, depth 0, no parent. in the build, Drive and a select
-                            member call the identical function — kernel.go:173 and kernel.go:330.
-
-Accept      IS A COMMIT.    citing.        credit.md: "the human is simply the outermost parent,
-Reject      IS A COMMIT.    not citing.    running the same operation with a different surface."
-
-                            materialization already follows citation, so cite → effects land and
-                            don't-cite → effects discard-and-record. No branch to write.
-
-Ask         A COMPOSITION.  ingress + open a root + drive. written for a test rig.
-rootFor     INTERNAL.       finding the engram for a recurring ask.
-Spiral      A READ.         user-rooted vs kernel-rooted counts. that is introspection.
-Hold        A LEAK.         exists only because mint-on-closure needs somewhere to park an engram
-                            with identity that has not run. a detail of a RULE, exported.
-Introspect  BECOMES A NAME. see below.
-```
-
-## introspect becomes a kernel engram
-
-An engram whose entity reads **kernel** state rather than **graph** state.
-
-```text
-discover      reads the GRAPH     what HAPPENED       engrams · entities · observations · hosts
-introspect    reads the KERNEL    what is HAPPENING   roots · heads · ancestry · bindings
-```
-
-`kernel.md` already specifies this — *"a system engram manned by the runtime entity, the same
-exemption discover and create already hold"* — and the build made it a method instead.
-
-The read-only `Index` interface already built for `discover` generalizes:
-
-```go
-type Index interface{ Engrams() []*graph.Engram }        // built, for discover
-type Topology interface{ Heads(SpanID) int; ... }        // same shape, for introspect
-```
-
-Bounded by the subtree, unchanged. Never upward, never sideways.
-
-## Ingress is the one thing left, and it is root access
-
-Since `Drive` is a select, **ingress plus drive is an unscoped select** — the root's engram is in
-nobody's frame, so there is nothing to check it against. That is why it is the maximum-privilege
-operation and why nothing gates it (`questions.md §5`).
+**Why:** [`../../semantics/kernel-revision.md`](../../semantics/kernel-revision.md)
 
 ---
 
-## Struct changes that go with it
+## Methods
+
+```go
+// REMOVE
+func (k *Kernel) Ask(ask string, ent ids.EntityID, in []*graph.Observation) (*Root, *graph.Observation, error)
+func (k *Kernel) Drive(r *Root, ent ids.EntityID, in []*graph.Observation) (*graph.Observation, error)
+func (k *Kernel) Accept(r *Root, o *graph.Observation) error
+func (k *Kernel) Reject(r *Root, why string)
+func (k *Kernel) Introspect(from ids.SpanID) (heads int, ok bool)
+func (k *Kernel) Spiral() (user, kernelRooted int)
+func (k *Kernel) Hold(e *graph.Engram)
+func (k *Kernel) rootFor(ask string) *graph.Engram          // unexported; delete with Ask
+
+// KEEP — the only method left
+func (k *Kernel) Ingress(c content.Content) *graph.Observation
+```
+
+`Drive`, `Accept` and `Reject` are the two forms with an external caller, so they are emitted rather
+than called. `Introspect` becomes a name — see below.
+
+## Types
 
 ```go
 // kernel.Possibility
-+ Ancestry []ids.EngramID     // reach may not go upward
++ Ancestry []ids.EngramID
 
 // kernel.Kernel
-- unminted map[ids.EngramID]*graph.Engram   // the type-level trace of the Hold leak
-- Run      *trace.Run                       // see 02
+- unminted map[ids.EngramID]*graph.Engram
+- Run      *trace.Run
 
 // graph.Graph
-+ roots map[ids.EngramID]*Engram   // held APART from what discovery searches
++ roots map[ids.EngramID]*Engram
+
+// graph — new methods for the above
++ func (g *Graph) MintRoot(e *Engram)
++ func (g *Graph) Roots() []*Engram
+  func (g *Graph) Engrams() []*Engram      // now returns capabilities only, never roots
+  func (g *Graph) Engram(id) (*Engram, bool)  // resolves across BOTH maps, for the walk
 ```
 
-**`Ancestry`** — mint-on-closure plus discovery-walks-the-index means a chain can be handed reach to
-its own ancestor. Observed: `by-index` returned the root as the resolution of the root's own need,
-recursing to the depth bound. Only the kernel holds ancestry, and refusing a binding is execution
-topology — no content read, no judgement.
+## New interface, mirroring `runtime.Index`
 
-**`roots`** — the ancestry check is necessary and not sufficient. The kernel can *refuse* a binding
-but cannot *redirect* the search: a possibility may never look up, and the grammar has no third
-channel to carry "not that one, it is above you." So the cut moves upstream — **a root is an ask, not
-a capability.** It persists, is reused when the same ask recurs, owns its children, and is not a
-search result.
+```go
+// entity/runtime
+type Index interface {                       // exists
+    Engrams() []*graph.Engram
+}
 
-> Mint-on-closure reads as one rule and has **two call sites** — the kernel's commit path and the end
-> of an ask. Closing only one leaves roots in the index.
+type Topology interface {                    // ADD — what introspect reads
+    Heads(from ids.SpanID) int
+    Depth(from ids.SpanID) int
+    Rooted() (user, kernel int)
+}
+```
 
-**Root reuse** — not a field, but a behaviour that has to be stated. All learning is topological and
-topology accumulates on a *parent's* children; a fresh root per ask means the outermost possibility
-arrives with an empty child map every time. Measured: 8/8 wrong choices before, moved after 5 with
-reuse.
+`introspect` is then a system engram like `discover`, manned by the runtime entity, and the
+`system:introspect` expression joins the constants in `entity/runtime`.
 
-## What the kernel stops holding
+## Behaviour required, not expressible as a signature
 
 ```text
-34 LINES OF FORMATTING   indent · shortExpr · oneLine. shortExpr reads Expectation.Expression and
-                         oneLine reads Observation.Content, both to truncate for a log. THE ONLY
-                         PLACE THE KERNEL READS CONTENT.
+ROOT REUSE            an ask that recurs resolves to the existing root engram rather than minting
+                      a new one.
 
-9 TRACE CALLS + A        threaded through the loop.
-*trace.Run FIELD
+MINT-ON-CLOSURE HAS   the kernel's commit path AND the end of an ask. a root must go to MintRoot
+TWO CALL SITES        at both, or it lands back in the discoverable index.
+
+REACH MAY NOT GO      when folding a returned EngramRef into a frame, refuse any engram already in
+UPWARD                the possibility's Ancestry.
 ```
 
-Resolved by `02-the-entity-boundary.md`: once the crossing is kernel-held and opaque, formatting has
-nowhere to live but a sink that is handed events.
-
----
-
-## Unchanged
+## Code to delete
 
 ```text
-THE SPLIT            the kernel holds everything happening; the graph holds only what happened.
-CRASH SEMANTICS      nothing to test — no path writes durably outside a commit.
-NO SEMANTICS         execution topology only, once the formatting above is gone.
-TWO AUTHORIZATIONS   scope and ownership at the graph boundary. grants at the world boundary are
-                     STILL NOT BUILT — Root.Grants is declared in interfaces.md and absent here.
+kernel/kernel.go   indent · shortExpr · oneLine                        34 lines
+kernel/kernel.go   9 Run.Logf calls
 ```
 
-## Rejected
-
-```text
-COLLAPSING ACCEPT AND    both are commits. the difference is whether a reference is carried and
-REJECT TO A BOOLEAN      everything downstream falls out of that. a flag names a branch that does
-                         not exist.
-
-EXPORTING Hold           if a surface needs it, the RULE is wrong, not the surface.
-
-FILTERING ANCESTORS      discovery is a possibility and cannot see ancestry. doing it there means
-INSIDE DISCOVERY         the kernel feeds a possibility upward information, or a possibility looks
-                         up. both break something load-bearing.
-
-A THIRD CHANNEL FOR      adding one ends the claim that only two forms parse.
-THE KERNEL'S REFUSAL
-
-INTROSPECT AS A          same kind of thing as discover, and kernel.md already says engram.
-KERNEL METHOD
-```
-
-## Open
-
-```text
-GRANTS               the world boundary is ungated. staging works and nothing checks it.
-                     introspect:self is the first grant the design needs — and with introspect a
-                     name, it is the first NAME to gate rather than the first method.
-
-WHO MAY OPEN A ROOT  Ingress is maximum-privilege and has no gate.
-
-WHETHER Ask SURVIVES a convenience composition. it earns its keep or it goes.
-
-THE ROOTLESS COMMIT  if Accept IS a commit it has nowhere to land — "the outermost parent" has no
-                     engram, so nothing owns the root's Cited bool. either the human gets an
-                     engram and acceptance is literally an ordinary commit, or it stays kernel-side
-                     and the uniformity is approximate. THE LAST THING BETWEEN THIS AND ONE
-                     VOCABULARY.
-
-WHAT introspect      not inference. but it joins discover as one of the highest-frequency engrams,
-COSTS                and questions.md §7 says system space is where evidential growth breaks
-                     first.
-```
+`shortExpr` reads `Expectation.Expression` and `oneLine` reads `Observation.Content`. They are the
+only places the kernel reads content. Replaced by the sink in [02](02-the-entity-boundary.md).
