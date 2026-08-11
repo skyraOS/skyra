@@ -342,10 +342,51 @@ because `discover` is an orchestrator and commits by **naming** its resolver's r
 citation, in a commit. **The resolvers earn credit and the thing that chose among them cannot.**
 
 **Flagged for the same pass:** discovery is currently a pure lexical index walk, and it should not be.
-It wants to be **a search AND a model call** — the search narrows the index, and the model decides
-whether to *carry over* an existing expectation or *create* a new one. That also gives the
-constructed claim `discover.md` asks for — *"there is nothing here that does X"* — a place to come
-from, which a ranker can never produce. Not built; direction recorded.
+It wants to be **a search AND a judge** — the search narrows the index, and the judge decides whether
+to *carry over* an existing expectation or *create* a new one. That also gives the constructed claim
+`discover.md` asks for — *"there is nothing here that does X"* — a place to come from, which a ranker
+can never produce.
+
+**And that is not a discovery-specific design.** `possibilities.md` already names the shape:
+
+```text
+GATHER      the sequence of selects.     SELECTION is the skill.
+SYNTHESIZE  the terminal composition.    SYNTHESIS is the skill.
+```
+
+Search **is** gather. Judge **is** synthesize. So "search + judge" is just the generic internal-node
+shape applied to discovery, and `discover.md` frames discover-as-an-orchestrator as a choice when it
+is really only what any non-leaf already is.
+
+Which makes the change smaller than it sounds. It is not *adding a model call to discovery* — it is
+**choosing a different entity to man the synthesize half**, which the design already permits per
+invocation.
+
+**The judge is another child, not a call inside the adapter.** The build puts both halves in the
+runtime entity, so the judge is code — `len(reach) > 0`. Fixing that by having the runtime entity
+reach a model internally would bury an inference call in an adapter, which is §2 of the questions
+list arriving again. Make it a child:
+
+```text
+discover
+  ├─ by-index          code.   candidates
+  ├─ by-recency        code.   candidates
+  ├─ judge             MODEL.  carry over, or create
+  └─ create            model.  authors
+```
+
+Then the judge is selectable, gradeable and competitive like everything else, and its model call is a
+real invocation with a real record rather than something hidden one layer down.
+
+> **One wrinkle to settle before it is built: reach and credit travel separately.** `EngramRef` is
+> deliberately not a `Ref`, so it never enters `Cites` and the walk cannot descend through it. A
+> judge that picks candidate 2 over candidate 1 is therefore **invisible to credit** — its return
+> carries reach but no data flow. For a judge to earn or lose anything, its return must carry a `Ref`
+> to the observation that offered the candidate *alongside* the `EngramRef`. Otherwise it inherits
+> the exact defect described above: the thing making the decision has a record showing it never
+> contributed.
+
+Not built; direction recorded.
 
 ```text
 THE FIX IS A CHOICE, NOT A PATCH
