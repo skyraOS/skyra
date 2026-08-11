@@ -660,3 +660,48 @@ func TestMonitorFiresInEmittedOrder(t *testing.T) {
 			who(captured.Seen[0]), who(captured.Seen[1]))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 10 · A root is an ask, not a capability
+// ---------------------------------------------------------------------------
+
+func TestARootIsNotDiscoverable(t *testing.T) {
+	// Mint-on-closure and "discovery walks the index" compose, as written, into a
+	// system where a chain can rediscover itself: a root's expectation IS the ask,
+	// so it is the best lexical match for its own chain's need.
+	//
+	// This asserts the cut. It is a REGRESSION TEST for a real defect that
+	// survived one fix: mint-on-closure has TWO call sites — the kernel's commit
+	// path and the end of Ask — and closing only the second left roots in the
+	// index for two more runs.
+	table := scripted.Table{
+		"find me something": selectOne("worker"),
+		"w":                 leaf(content.Content{"ok": content.Bool(true)}),
+	}
+	r := newRig(t, table, map[string]string{"worker": "w"})
+	root, _ := r.ask(t, "find me something", content.Content{"need": content.Str("x")})
+
+	for _, e := range r.G.Engrams() {
+		if e.ID == root.Engram.ID {
+			t.Fatal("the root is in the DISCOVERABLE index — a chain can rediscover itself")
+		}
+	}
+
+	// It still persists, is still reachable by ID for the credit walk, and still
+	// owns its children. It is simply not a search result.
+	if _, ok := r.G.Engram(root.Engram.ID); !ok {
+		t.Error("the root did not persist at all — it closed, so it must")
+	}
+	if len(root.Engram.Engrams) == 0 {
+		t.Error("the root lost its children")
+	}
+
+	// And the same ask reuses it, which is what lets the top of a chain learn.
+	root2, _ := r.ask(t, "find me something", content.Content{"need": content.Str("y")})
+	if root2.Engram.ID != root.Engram.ID {
+		t.Error("the same ask minted a second root — the top of the chain cannot learn")
+	}
+	if n := len(r.kids["worker"].History); n != 2 {
+		t.Errorf("want 2 invocations accumulated across asks, got %d", n)
+	}
+}

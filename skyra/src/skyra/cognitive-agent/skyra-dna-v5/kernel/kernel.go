@@ -445,7 +445,18 @@ func (k *Kernel) commit(r *Root, p *Possibility, c grammar.Commit) (*graph.Obser
 
 	// MINT ON CLOSURE. It persists because it closed — which is what makes the
 	// index safe to discover from: nothing in it is a promise.
-	k.G.Mint(p.Engram)
+	//
+	// A ROOT PERSISTS WITHOUT BECOMING DISCOVERABLE. It is an ask, not a
+	// capability — see graph.roots. Note that this is the SECOND path into the
+	// index, and the first attempt at the fix only closed the other one: Ask
+	// routed the root correctly and this line put it back, so by-index went on
+	// proposing the root for two more runs. Mint-on-closure is written in the set
+	// as one rule, and it turns out to have two call sites.
+	if p.Engram == r.Engram {
+		k.G.MintRoot(p.Engram)
+	} else {
+		k.G.Mint(p.Engram)
+	}
 
 	// The kernel hands the record over. THE GRAPH APPLIES IT. If an interpreter
 	// performed the write it could omit it; if the kernel did, "writes nothing"

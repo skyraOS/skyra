@@ -116,11 +116,28 @@ func (e *Entity) Step(x graph.Expectation, f frame.Frame) (grammar.Emission, err
 //	BEFORE   a rule. asserted, unfalsifiable.
 //	NOW      a strategy. embodied, and BEATEN BY A BETTER ONE if it is wrong.
 func (e *Entity) discover(f frame.Frame) (grammar.Emission, error) {
-	need := f.Observations()
-	if len(need) == 0 {
+	given := f.Observations()
+	if len(given) == 0 {
 		return nil, fmt.Errorf("discover invoked with nothing to resolve")
 	}
-	cite := need[0].ID
+	cite := given[0].ID
+
+	// Forward EVERYTHING down to the resolver, not just the need.
+	//
+	// FOUND BY RUNNING IT, twice — the caller passed the failure back exactly as
+	// asked, and discover dropped it on the floor, forwarding only its first
+	// argument. by-index went on returning the same wrong engram and the chain
+	// livelocked anyway.
+	//
+	// The same shape as the finding it was meant to fix: THE INFORMATION EXISTED
+	// AND NOTHING ROUTED IT. An orchestrator that narrows what it hands down is
+	// making a judgement about relevance, and here it made the wrong one silently.
+	// A possibility may pass a subset — that is scoping, and it is legitimate —
+	// but a resolver cannot exclude what it never saw.
+	all := make([]ids.ObservationID, 0, len(given))
+	for _, o := range given {
+		all = append(all, o.ID)
+	}
 
 	rets := f.Returned()
 
@@ -130,7 +147,7 @@ func (e *Entity) discover(f frame.Frame) (grammar.Emission, error) {
 			Engram:       "by-index",
 			Cite:         cite,
 			Entity:       e.ID,
-			Observations: []ids.ObservationID{cite},
+			Observations: all,
 		}}}, nil
 	}
 
@@ -146,7 +163,7 @@ func (e *Entity) discover(f frame.Frame) (grammar.Emission, error) {
 			Engram:       "by-recency",
 			Cite:         cite,
 			Entity:       e.ID,
-			Observations: []ids.ObservationID{cite},
+			Observations: all,
 		}}}, nil
 	}
 
@@ -156,7 +173,7 @@ func (e *Entity) discover(f frame.Frame) (grammar.Emission, error) {
 			Engram:       "create",
 			Cite:         cite,
 			Entity:       e.ID,
-			Observations: []ids.ObservationID{cite},
+			Observations: all,
 		}}}, nil
 	}
 
@@ -323,8 +340,25 @@ func (e *Entity) create(f frame.Frame) (grammar.Emission, error) {
 func rejected(f frame.Frame) map[ids.EngramID]bool {
 	out := map[ids.EngramID]bool{}
 	for _, o := range f.Observations() {
+		// THE WORK THAT FAILED. Its producer is the engram that did it.
 		if o.Producer != "" {
 			out[o.Producer] = true
+		}
+		// THE SUGGESTION THAT FAILED. A discover result names its engram in a
+		// reach, and its OWN producer is discover — which is not the thing to
+		// exclude.
+		//
+		// FOUND BY RUNNING IT, third time on the same mechanism. "Pass back what
+		// failed" is AMBIGUOUS, and the run took the other reading: a caller that
+		// dislikes a suggestion hands back the suggestion, never having invoked
+		// anything. Those are two different observations with two different
+		// producers, and only one of them names the engram to skip.
+		//
+		// Both readings are legitimate — "I tried it and it was wrong" and "I do
+		// not want that one" — so both are honoured. discover.md's sentence covers
+		// neither explicitly.
+		for _, er := range o.Content.Reach() {
+			out[er.ID] = true
 		}
 	}
 	return out
