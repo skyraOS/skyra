@@ -121,3 +121,45 @@ IDENTIFIES THE      IOPlatformSerialNumber  factory-issued. present before the m
 MACHINE             IOPlatformUUID          v5, read from IOKit's platform expert
                     kern.uuid               v3, deterministic
 ```
+
+## E7 · There is no single universal identifier field
+
+The mechanism differs on every platform, and on some devices there is nothing to read.
+
+```text
+macOS      IOPlatformSerialNumber           IOKit. factory-issued.          ← verified here
+           IOPlatformUUID
+Linux      /sys/class/dmi/id/product_uuid   DMI/SMBIOS. ROOT-ONLY on modern kernels.
+           /etc/machine-id                  systemd. generated at INSTALL, not hardware.
+           /proc/cpuinfo Serial             Raspberry Pi only.
+Windows    Win32_ComputerSystemProduct.UUID SMBIOS, via WMI
+           HKLM\…\Cryptography\MachineGuid   generated at install
+FreeBSD    kern.hostuuid
+Android    no stable hardware ID available to apps
+iOS        identifierForVendor — per-vendor, resets on uninstall
+no-OS      whatever the chip carries, if anything
+```
+
+Five distinct reasons it does not unify:
+
+```text
+DIFFERENT MECHANISM      IOKit · DMI · registry · sysctl · WMI. no common call, so the platform
+                         layer needs a per-OS implementation regardless.
+
+OFTEN PRIVILEGED         Linux's product_uuid requires root. a non-root runtime cannot read the
+                         one field that is actually hardware.
+
+DELIBERATELY WITHHELD    Apple removed UDID access in 2013; Android's ANDROID_ID has been
+                         per-app-per-install since Oreo. POLICY, not oversight.
+
+ABSENT ON SOME HARDWARE  ARM SBCs typically have no DMI at all.
+
+CLONES COLLIDE           a VM image or container copied N times carries N identical
+                         install-time identifiers unless something regenerates them.
+```
+
+And one that is specific to this design: `terminology.md` admits *"physical hardware addressed over
+a network — **including devices with no OS**."* Those have no field to read at all.
+
+*The macOS reads are verified on this machine. Everything below that line is NOT verified here —
+Docker's daemon was not running, so no Linux was available to check.*
