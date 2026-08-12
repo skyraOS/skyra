@@ -50,7 +50,9 @@ DO NOT INTRODUCE   any new lifecycle or authority type. if you encounter the ide
                    `Session` `Branch` `Chain` `Draft` `Grant` `Ceiling` `Namespace` anywhere,
                    they belong to work that is NOT in this order.
 DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.Reject,
-                   kernel.Ingress, kernel.Hold, kernel.Spiral, kernel.Introspect.
+OR RENAME          kernel.Ingress, kernel.Hold, kernel.Spiral, kernel.Introspect.
+                   these exist in the code today and stay exactly as they are. some are
+                   destined to change; NONE of that is in this order.
 ```
 
 **Changing how an entity is called is in scope. Changing when possibilities live and die is not.**
