@@ -44,13 +44,13 @@ POSSIBILITY   ephemeral. one opening of an engram.
 TREE          ephemeral. ALL live work under one namespace. one per mounted namespace, and it
               holds what a sign-in provisions — grants and reach, once, not per ask.
 
-BRANCH        ephemeral. ONE ASK, keyed by span. the transaction boundary: staged effects live
-              here and materialize at acceptance.
+BRANCH        A POSITION, NOT A TYPE. a possibility with no parent — one ask. keyed by span,
+              and the transaction boundary: staged effects are partitioned by that span and
+              materialize at acceptance.
 
-              A BRANCH IS TOP-LEVEL ONLY. its interior is possibilities, which nest. branches
-              do not nest — what looks like a branching branch is possibilities branching.
-              staged effects force the distinction: accepting one ask must neither land nor
-              discard another's writes, so the staged set is partitioned per ask.
+              A BRANCH IS A POSSIBILITY. what looks like a branching branch is possibilities
+              nesting, which is the only nesting there is. accepting one ask must neither land
+              nor discard another's writes — and that needs a KEY on the tree, not a struct.
 ```
 
 ```text
@@ -60,6 +60,11 @@ RETIRED   "ROOT". it implied a special node and was not one. every wrong turn �
 
 RETIRED   "CHAIN" AS A TYPE. still fine as ordinary prose for a line of work; it is not the
           name of the object.
+
+NOTE      FOUR WORDS ARE POSITIONS AND NONE IS A TYPE — leaf, orchestrator, head, branch.
+          leaf and orchestrator derive from whether a possibility has selected; head from
+          whether it is executing; branch from whether it has a parent. `kind is derived from
+          composition and never declared` applies to all four.
 ```
 
 ## Head

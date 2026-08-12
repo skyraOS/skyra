@@ -113,14 +113,12 @@ what looked like new machinery is machinery that already exists.
       Entity    ids.EntityID         // who is manning it
       Grants    []Grant              // provisioned at sign-in. ONE per tree.
       Reach     []ids.EntityID
-      Branches  map[ids.SpanID]*Branch
-  }
 
-+ type Branch struct {               // ONE ASK. the transaction boundary.
-      Span   ids.SpanID
-      Top    *Possibility            // the interior. possibilities nest; BRANCHES DO NOT.
-      staged []*Effect               // per ask — accepting one must neither land nor discard
-  }                                  // another's writes. this is what forces Branch to exist.
+      Asks   map[ids.SpanID]*Possibility   // top-level possibilities. A BRANCH IS A POSITION,
+      staged map[ids.SpanID][]*Effect      // not a type — a possibility with no parent.
+  }                                        // staged is PARTITIONED BY ASK, because accepting
+                                           // one must neither land nor discard another's
+                                           // writes. that needs a KEY, not a struct.
 
 // graph.Engram — for a namespace only
 + Ceiling []Grant                    // DURABLE. the maximum it may ever be mounted with.
@@ -182,7 +180,7 @@ authorization is NOT BUILT AT ALL.*
 
 ```go
 // kernel/authorize.go
-+ func authorizeEffect(b *Branch, e *Effect) error  // grants. the second authorization.
++ func authorizeEffect(t *Tree, ask ids.SpanID, e *Effect) error   // the second authorization
 + func authorizeGrants(parent, handed []Grant) error // a select may only NARROW
   func ownership(rec *graph.Record) error           // becomes REAL once memory is shared
 ```

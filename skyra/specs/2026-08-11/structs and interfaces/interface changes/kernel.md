@@ -66,9 +66,10 @@ required**, which is what keeps the rack flat.
   func (g *Graph) Engram(id) (*Engram, bool)  // resolves across BOTH maps, for the walk
 ```
 
-**`Tree` and `Branch` replace `Root`**, and the full shape is in
+**`Tree` replaces `Root`**, and the full shape is in
 [`type-surface-proposals`](../../semantics/type-surface-proposals.md) `A4`. A tree is all live work
-under one namespace; a branch is one ask and is the transaction boundary.
+under one namespace. **A branch is not a type** — it is a possibility with no parent, and staged
+effects are partitioned by its span on the tree.
 
 ## New interface, mirroring `runtime.Index`
 
