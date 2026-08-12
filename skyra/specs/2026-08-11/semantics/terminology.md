@@ -41,15 +41,48 @@ ENGRAM        durable.   an expectation with a history accumulating around it. o
 
 POSSIBILITY   ephemeral. one opening of an engram.
 
-CHAIN         ephemeral. live work under a namespace, keyed by SPAN. the transaction boundary —
-              staged effects live here and materialize at acceptance.
+TREE          ephemeral. ALL live work under one namespace. one per mounted namespace, and it
+              holds what a sign-in provisions — grants and reach, once, not per ask.
+
+BRANCH        ephemeral. ONE ASK, keyed by span. the transaction boundary: staged effects live
+              here and materialize at acceptance.
+
+              A BRANCH IS TOP-LEVEL ONLY. its interior is possibilities, which nest. branches
+              do not nest — what looks like a branching branch is possibilities branching.
+              staged effects force the distinction: accepting one ask must neither land nor
+              discard another's writes, so the staged set is partitioned per ask.
 ```
 
 ```text
 RETIRED   "ROOT". it implied a special node and was not one. every wrong turn — root-as-engram,
           root-as-namespace, root-as-hinge — came from that implication. what it named is a
-          CHAIN, and the kernel already holds per-span state for it.
+          BRANCH, and the kernel already holds per-span state for it.
+
+RETIRED   "CHAIN" AS A TYPE. still fine as ordinary prose for a line of work; it is not the
+          name of the object.
 ```
+
+## Head
+
+```text
+HEAD      a LEAF of the live tree — a possibility that is executing rather than waiting.
+          DERIVED BY WALKING, never counted.
+
+              head  ==  no live children  AND  no return under the current draft
+```
+
+Three node states, all inferable from structure, so no state field is needed:
+
+```text
+EXECUTING   inside Step, no live children.        A HEAD.
+WAITING     children are live.                    not a head.
+RETURNED    committed and still live, re-drivable. not a head until re-driven.
+```
+
+**A counter cannot express this.** `kernel.go` increments on entering `open()` and decrements on
+leaving, so a depth-five chain with one leaf running reports five — four of which are ancestors
+sitting in `runGroup`. That is not a frontier, and it makes *a stalled head* indistinguishable from
+*a parent legitimately waiting*, which is the eviction decision the number exists for.
 
 ## Who and where
 
@@ -78,13 +111,51 @@ SCOPE         what may be NAMED. the graph boundary. pure name resolution, and t
 ```
 
 ```text
-RETIRED   "MOUNT". it was five existing mechanisms under one word — a child engram placed by
-          provisioning · ambient names placed at boot · grants on the chain · entity reach ·
-          copy. none of them needed a new type.
+CEILING       the maximum grants a namespace may ever be mounted with. DURABLE, written onto
+              the namespace engram by whoever provisioned it. boot writes admin's; admin writes
+              everyone else's.
+
+MOUNT         A KERNEL METHOD. bring an entity, a namespace engram and a policy together and
+              hold them — the key on the rack. it is what makes a namespace workable, and
+              it is the ONLY exported kernel method.
+
+              Mount(entity, namespace, grants) → Tree      requires grants ⊆ ceiling
+              Unmount(namespace)                           sign out. the key is ejected.
+
+THE RACK      the kernel's flat map of mounted namespaces. ADMIN IS A ROW ON IT, not a level
+              above it.
+```
+
+**Mount is not the pairing that opens a possibility.** That pairing is internal and stays
+unexported. Mount attaches a *namespace*; opening attaches an *engram*.
+
+**The rack is flat because lineage and activity are different questions.**
+
+```text
+PROVISIONING LINEAGE   admin provisioned my namespace.   DURABLE. what happened.
+THE RACK               who is signed in right now.        EPHEMERAL. what is happening.
+```
+
+If the rack mirrored the lineage, my namespace being active would require admin's to be active —
+admin signs out and I am logged out with them, which is wrong the same way `root` not being logged in
+does not stop you using your account. **What makes admin special is not a position on the rack. It is
+that its ceiling was written by boot rather than by another namespace.**
+
+And that is why the ceiling has to be durable: `Mount` reads it and compares, so **no live admin is
+needed to authorize a sign-in.**
+
+```text
+RETIRED   "MOUNT" AS A NOUN — a name binding inside a namespace. that was five existing
+          mechanisms under one word: a child engram placed by provisioning · ambient names
+          placed at boot · grants on the branch · entity reach · copy. none needed a new type.
 
           And grants-on-the-reference was specifically wrong: EFFECTS HAPPEN AT LEAVES, so
-          authority attached to a name at the top bounds nothing. grants bound the CHAIN,
-          because the chain is what connects a leaf to an authority.
+          authority attached to a name at the top bounds nothing. Grants bound the BRANCH,
+          because a branch is what connects a leaf to an authority.
+
+RETIRED   "INGRESS" AS A METHOD. it described a model where the method minted an inbound
+          observation; it no longer does — the payload is an argument to the select that
+          follows. MOUNT is the same method named for what it does.
 ```
 
 ## The forms and the names

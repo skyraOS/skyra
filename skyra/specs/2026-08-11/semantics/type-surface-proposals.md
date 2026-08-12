@@ -22,14 +22,23 @@ do not hold*.
 
 ```go
 // kernel.Kernel
-- heads map[ids.SpanID]int              // A COUNT. the live tree is unrepresentable.
-+ // the Chain holds the tree; heads is derived by walking it.
+- heads map[ids.SpanID]int              // A COUNT, and it counts the wrong thing — see below.
 
 // kernel.Possibility
 + Children  []*Possibility              // the LIVE tree. Pending holds *graph.Engram, which is
                                         // the durable child, not the live opening.
 + Draft     graph.Expectation           // what it is working under NOW.
++ Returned  *graph.Observation          // nil = has not committed under the current draft.
 + Revisions int                         // how many times the parent restated it.
+```
+
+**Heads become derived, and the counter was wrong for its stated purpose.** It increments on entering
+`open()` and decrements on leaving, so a depth-five chain with one leaf running reports five — four
+of which are ancestors sitting in `runGroup`. A *stalled head* is therefore indistinguishable from
+*a parent legitimately waiting*, which is the eviction decision the number exists for.
+
+```text
+head  ==  no live children  AND  Returned == nil
 ```
 
 **`Draft` is the load-bearing one.** `Engram.Expectation` is durable and immutable; a possibility
@@ -48,7 +57,7 @@ the kernel already has.
 + func (g *Graph) Close(rs []*Record)   // one call, the whole chain, then Disperse ONCE
 ```
 
-`Record` is per-possibility and applied immediately. It has to accumulate on the `Chain` and land in
+`Record` is per-possibility and applied immediately. It has to accumulate on the `Branch` and land in
 one go, or *every durable write is caused by the root's commit* is false in code.
 
 **And `Possibility.Selected` changes meaning.** The forfeit is expectation-scoped now, so a revision
@@ -95,15 +104,26 @@ what looked like new machinery is machinery that already exists.
 // graph — a namespace is an ENGRAM. no new type, one new population.
 + namespaces map[ids.EngramID]*Engram    // held apart from the index, like roots are today
 
-// kernel — per-chain state, keyed by span. what "Root" was actually naming.
+// kernel — THE RACK. flat, keyed by the namespace engram. admin is a row on it.
 - type Root struct{ … Engram *graph.Engram … }
-+ type Chain struct {
-      Span      ids.SpanID
-      Namespace *graph.Engram      // the principal's top engram
-      Grants    []Grant            // what this chain may DO
-      Reach     []ids.EntityID     // which entities it may NAME
-      staged    []*Effect
++ mounted map[ids.EngramID]*Tree
+
++ type Tree struct {                 // all live work under one namespace
+      Namespace *graph.Engram
+      Entity    ids.EntityID         // who is manning it
+      Grants    []Grant              // provisioned at sign-in. ONE per tree.
+      Reach     []ids.EntityID
+      Branches  map[ids.SpanID]*Branch
   }
+
++ type Branch struct {               // ONE ASK. the transaction boundary.
+      Span   ids.SpanID
+      Top    *Possibility            // the interior. possibilities nest; BRANCHES DO NOT.
+      staged []*Effect               // per ask — accepting one must neither land nor discard
+  }                                  // another's writes. this is what forces Branch to exist.
+
+// graph.Engram — for a namespace only
++ Ceiling []Grant                    // DURABLE. the maximum it may ever be mounted with.
 
 // kernel.Kernel
 - Builtin map[string]*graph.Engram        // one global mount table for every principal
@@ -161,7 +181,7 @@ authorization is NOT BUILT AT ALL.*
 
 ```go
 // kernel/authorize.go
-+ func authorizeEffect(c *Chain, e *Effect) error   // grants. the second authorization.
++ func authorizeEffect(b *Branch, e *Effect) error  // grants. the second authorization.
 + func authorizeGrants(parent, handed []Grant) error // a select may only NARROW
   func ownership(rec *graph.Record) error           // becomes REAL once memory is shared
 ```
@@ -188,7 +208,7 @@ Boot's whole job, and it should stay this short:
 ```text
 1  mint the system engrams — discover · introspect · authenticate · provision · create
 2  register the entities that man them
-3  mint the ADMIN NAMESPACE, place those engrams as its children, and hold its grants
+3  mint the ADMIN NAMESPACE, place those engrams as its children, and WRITE ITS CEILING
 ```
 
 `Select` and `Commit` are **not services** — they are forms, parsed and never initialized. The
@@ -291,13 +311,15 @@ Correct under `kernel-revision` — it is the one channel. But it cannot stay as
 // NOW
 func (k *Kernel) Ingress(c content.Content) *graph.Observation
 
-// NEEDED — allocation only. no content; the payload is an argument to the select that follows.
-func (k *Kernel) Ingress(ns *graph.Engram, grants []Grant, from *Chain) (*Chain, error)
+// NEEDED — it is MOUNT. attach a namespace to the rack; no content, because the payload is an
+// argument to the select that follows.
+func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Tree, error)
+func (k *Kernel) Unmount(ns ids.EngramID)
 ```
 
-`from` is the chain that provisioned this access, and it is what the one kernel check reads: **the
-issuer must already hold at least what it issues.** Arithmetic, no semantics — the `setuid`
-analogue, where the kernel never learns who anyone is.
+The one kernel check is `grants ⊆ ns.Ceiling` — arithmetic, no semantics, and **no live admin
+required**, which is what keeps the rack flat. `Ingress` described a model where the method minted an
+inbound observation; it no longer does.
 
 **That is the gate `questions.md §5` is missing.** `01` predates every document that says so.
 
