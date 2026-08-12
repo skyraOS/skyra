@@ -40,14 +40,18 @@ func (p *Partition) Used() int {
 //
 // Within a partition, the DIFF is the informative object — not the returns.
 // `480 → 500` is the signal; two absolute numbers are not.
-func (p *Partition) Diffs() []Diff {
-	var out []Diff
+//
+// That claim is one METHOD, not a type. What came back is what a caller wants —
+// range over it and read the fields — and an exported type for it is a shape
+// something would eventually store, alongside the history it is derived from.
+func (p *Partition) Diffs() []diff {
+	var out []diff
 	for i := 1; i < len(p.Invs); i++ {
 		a, b := p.Invs[i-1].Return, p.Invs[i].Return
 		if a == nil || b == nil {
 			continue
 		}
-		d := Diff{From: a.ID, To: b.ID, Fields: map[string][2]string{}}
+		d := diff{From: a.ID, To: b.ID, Fields: map[string][2]string{}}
 		for k, bv := range b.Content {
 			av, had := a.Content[k]
 			if !had {
@@ -65,7 +69,9 @@ func (p *Partition) Diffs() []Diff {
 	return out
 }
 
-type Diff struct {
+// diff is what Diffs hands back. Unexported: a caller ranges over the slice and
+// reads the fields, and cannot name the type in order to hold one.
+type diff struct {
 	From, To ids.ObservationID
 	Fields   map[string][2]string
 }
