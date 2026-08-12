@@ -174,6 +174,20 @@ func (r *Root) Materialize(g *graph.Graph, accepted *graph.Observation, h host.H
 				return fmt.Errorf("host %s implements no storage class", h.ID())
 			}
 			if err := s.Write(e.Path, e.Body); err != nil {
+				// REACHED, ATTEMPTED, REFUSED BY THE DRIVER. Disposed like
+				// anything else: an effect that was asked for and did not
+				// happen is a reportable fact, and the rule is that EVERY
+				// staged effect ends in a state something can name. Left
+				// undisposed it fell into the fourth state nothing records —
+				// which is the whole of what a lost write looks like from
+				// outside.
+				e.Disposition = Failed
+				g.RecordDiscard(graph.Discard{
+					Span:   r.Span,
+					Engram: e.Engram,
+					Detail: fmt.Sprintf("%s %s (%d bytes) — the driver refused the write: %v",
+						e.Class, e.Path, len(e.Body), err),
+				})
 				if firstErr == nil {
 					firstErr = err
 				}
