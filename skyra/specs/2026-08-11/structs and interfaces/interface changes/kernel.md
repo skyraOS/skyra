@@ -1,6 +1,6 @@
 # Kernel
 
-**Date:** 2026-08-11
+**Date:** 2026-08-11 · revised 2026-08-12
 **Status: CHANGE PROPOSAL.** Code only — signatures, types, and what to delete.
 
 **Why:** [`../../semantics/kernel-revision.md`](../../semantics/kernel-revision.md) ·
@@ -9,6 +9,9 @@
 
 > **Revised 2026-08-11, later.** `Ingress` is now `Mount`, and `Topology` lost `Rooted()`. Read
 > `terminology.md` first — **ROOT** is retired throughout, and what it named is a **BRANCH**.
+>
+> **Revised 2026-08-12.** A section added on WHERE, which is not vestigial in the code — it is
+> absent. Nothing routes, and three things would have to exist before anything could.
 
 ---
 
@@ -115,6 +118,87 @@ HEADS ARE DERIVED     walk the live tree. a head is a leaf with no live children
 
 REACH MAY NOT GO      when folding a returned EngramRef into a frame, refuse any engram already in
 UPWARD                the possibility's Ancestry.
+```
+
+## WHERE does not exist
+
+Not "partly built" and not "vestigial". There is no host resolution anywhere in the tree.
+
+```go
+type Registry struct {
+    interpreters map[ids.EntityID]func() Interpreter   // NO HOST. anywhere.
+}
+
+type Kernel struct {
+    Host host.Host        // ONE host. a field, not a table. no method takes a HostID.
+}
+
+type Member struct {
+    Host ids.HostID       // written by the grammar. NEVER READ — checked every reference.
+}
+
+Invocation.Host = k.Host.ID()   // hardcoded to the single local host on every invocation.
+```
+
+`world.md` says *"you invoke an entity, not a host; delivery picks a host on the way out."* There is
+no way out to pick on. `Registry.Open(id)` hands back an interpreter with zero host involvement.
+
+Three things are missing, in dependency order:
+
+```text
+1  AN ENTITY → HOSTS TABLE    which hosts can reach entity e, plus capacity. a REGISTRY FACT —
+                              runtime state, rebuildable from configuration, never durable.
+                              routing reads (entity, capacity) and NOTHING ELSE, or it is
+                              reading semantics.
+
+2  RESIDENCY, PER ENTITY      where the implementation IS, which is independent of reachability:
+                              a remote host can REACH salesdb@mac-A over the network and cannot
+                              BE where the data is. affinity is this, not a reachability count.
+                              needs 1 to mean anything.
+
+3  Spawn AS A PLACE           see below.
+```
+
+## `Spawn` names a medium, twice
+
+```go
+// CODE
+Spawn(argv []string, dir string) (Handle, error)
+
+// interfaces.md
+Spawn(x Expectation, f Frame) (Handle, Streams, error)
+```
+
+`argv`/`dir` is Unix command-line vocabulary inside a capability class — the same leak as
+`host.Handle` carrying `Stdout · Stderr · Exit`, which `C4` removed. The return was cut and the
+parameters were left.
+
+And the spec's version carries the **work**, which is one layer too clever if spawn means *give me a
+place*: the work is the engram, and the engram is virtual.
+
+```go
++ Spawn() (Handle, error)     // "somewhere to do work." no argv, no expectation, no frame.
+```
+
+Any argument describing the work drags semantics below the boundary with it.
+
+```text
+NOT SETTLED — FROM THE 08-12 CONVERSATION, RECORDED SO IT IS NOT DECIDED BY ACCIDENT
+
+THE CUT           engrams = work that can be done VIRTUALLY. host APIs = work that CANNOT.
+                  a syscall cannot be separated from the machine it is on, so it cannot be an
+                  engram: Invocation.Host is RECORDED, NOT KEYED, so anything whose answer
+                  depends on the machine is under-specified by construction and the fold has no
+                  slot for what makes it differ.
+
+WHAT FOLLOWS      a host would be REACH + SPAWN, and StorageOps would not be on it. Two messages
+                  gave read/write opposite homes — first "an entity is its read(), write()", then
+                  "host APIs = work that cannot be done virtually". WHICH STANDS IS NOT DECIDED,
+                  and it decides whether host.StorageOps survives at all.
+
+WHAT DOES NOT     engrams stop at the entity. `salesdb@mac-A` is an entity — it interprets — and
+CHANGE EITHER WAY the syscalls inside it never surface as engrams. The instruction is virtual;
+                  the read is bound.
 ```
 
 ## Code to delete
