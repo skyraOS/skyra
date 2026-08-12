@@ -1,9 +1,11 @@
-# Evidence
+# WHERE — Evidence
 
-**Status: OBSERVATION.** Measured on `Michael's MacBook Pro (2)`, 2026-08-12. Commands and their
-output. **No conclusions** — what these mean for the design is [`outcomes/`](outcomes/).
+**Status: OBSERVATION.** Measurements bearing on **WHERE**. Commands and their output. **No
+conclusions** — what these mean is [`../outcomes/Where-outcomes.md`](../outcomes/Where-outcomes.md).
 
-Sections are numbered so decisions can cite them.
+**Scope:** which machine work runs on, and how a machine knows which one it is.
+
+Sections are numbered within this document and cited as **Where E1**, **Where E2**, …
 
 ---
 

@@ -7,16 +7,25 @@ entity/host seam actually falls.
 example.md    THE WALKTHROUGH. one ask, traced step by step until the information runs out.
               poses the problem. draws no conclusions.
 
-evidence.md   OBSERVATION. commands and their output, numbered E1..E6 so decisions can cite them.
+evidence/     OBSERVATION, one document per question. commands and their output.
               no conclusions either.
 
 outcomes/     DECISIONS, one document per question. WRITTEN BY MICHAEL ONLY.
-                Where-outcomes.md   which machine work runs on
-                What-outcomes.md    the work itself
-                How-outcomes.md     below the kernel boundary
-                Why-outcomes.md     what prompted an invocation
-                When-outcomes.md    ordering and time
 ```
+
+```text
+              WHERE   which machine work runs on, and how a machine knows which one it is
+              WHAT    the work itself — the expectation, and the observations bound to it
+              HOW     what happens below the kernel boundary — spawn, syscalls, the platform
+              WHY     what prompted an invocation — the parent, and the citation
+              WHEN    ordering and time — the tick, and what can be sequenced against what
+```
+
+Each question has a **pair**: `evidence/<Q>-evidence.md` measures, `outcomes/<Q>-outcomes.md`
+decides, and the outcome cites the evidence rather than restating it.
+
+**Citations are scoped to their document.** Sections are numbered `E1`, `E2`, … within each
+evidence file and cited as **Where E2**, **How E1**, so numbers never collide across questions.
 
 > **Rule for this directory:** nothing in `outcomes/` is mine to fill in. Proposals go in the chat
 > log and land there only when Michael puts them there. The example and the evidence may be
