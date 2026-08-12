@@ -21,6 +21,92 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// D1 · a naming commit carries ALL the reach it was handed
+// ---------------------------------------------------------------------------
+
+func TestNamingCommitCarriesEveryReach(t *testing.T) {
+	// A resolver hands back two names. Its parent is an orchestrator, so it can
+	// only NAME what came back — and the naming commit is where reach used to be
+	// silently narrowed to one, because every EngramRef was written to the same
+	// content key.
+	//
+	// Delegation is the only way these two names can be reached: they are minted
+	// into the index but are NOT builtin, so nothing puts them in a frame except
+	// a child handing them back.
+	g := graph.New()
+	reg := entity.NewRegistry()
+
+	var resolved []string
+
+	table := scripted.Table{
+		"top": func(f frame.Frame, step int) (grammar.Emission, error) {
+			if step == 0 {
+				in := f.Observations()[0]
+				return grammar.Select{Members: []grammar.Member{{
+					Engram: "middle", Cite: in.ID, Entity: ent,
+					Observations: []ids.ObservationID{in.ID},
+				}}}, nil
+			}
+			// The frame AFTER the group closed. Both delegated names must be
+			// nameable here, or a capability was lost in transit.
+			for _, n := range []string{"alpha", "beta"} {
+				if _, ok := f.Resolve(n); ok {
+					resolved = append(resolved, n)
+				}
+			}
+			return commitNaming(f)
+		},
+		// An ORCHESTRATOR: it selects, so it may only name what came back. The
+		// reach it passes up is the reach its child returned.
+		"middle": func(f frame.Frame, step int) (grammar.Emission, error) {
+			if step == 0 {
+				in := f.Observations()[0]
+				return grammar.Select{Members: []grammar.Member{{
+					Engram: "resolver", Cite: in.ID, Entity: ent,
+					Observations: []ids.ObservationID{in.ID},
+				}}}, nil
+			}
+			return grammar.Commit{Observed: f.Returned()[0].ID}, nil
+		},
+	}
+
+	reg.Register(ent, scripted.New(table))
+	k := kernel.New(g, reg, &host.Local{Root: t.TempDir()}, nil)
+
+	// The two capabilities. Minted so the kernel can resolve them, and NOT
+	// builtin, so delegation is the only path by which they arrive.
+	alpha := graph.NewEngram(k.IDs.Engram(), graph.Expectation{Expression: "do the first thing"})
+	beta := graph.NewEngram(k.IDs.Engram(), graph.Expectation{Expression: "do the second thing"})
+	g.Mint(alpha)
+	g.Mint(beta)
+
+	table["resolves"] = leaf(content.Content{
+		"found": content.Bool(true),
+		"reach": content.List{
+			content.EngramRef{ID: alpha.ID, Name: "alpha"},
+			content.EngramRef{ID: beta.ID, Name: "beta"},
+		},
+	})
+	resolver := graph.NewEngram(k.IDs.Engram(), graph.Expectation{Expression: "resolves"})
+	middle := graph.NewEngram(k.IDs.Engram(), graph.Expectation{Expression: "middle"})
+	g.Mint(resolver)
+	g.Mint(middle)
+	k.Builtin["resolver"] = resolver
+	k.Builtin["middle"] = middle
+
+	obs := k.Ingress(content.Content{"need": content.Str("two capabilities")})
+	if _, _, err := k.Ask("top", ent, []*graph.Observation{obs}); err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+
+	if len(resolved) != 2 {
+		t.Fatalf("the parent could name %v, want both alpha and beta — "+
+			"a naming commit dropped delegated reach silently", resolved)
+	}
+	t.Logf("both delegated names resolved: %v", resolved)
+}
+
+// ---------------------------------------------------------------------------
 // D2 · a write the driver refuses is still DISPOSED
 // ---------------------------------------------------------------------------
 

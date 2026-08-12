@@ -418,8 +418,22 @@ func (k *Kernel) commit(r *Root, p *Possibility, c grammar.Commit) (*graph.Obser
 		}
 		// Reach passes through a naming commit — otherwise discover could resolve
 		// something and the caller could never name it.
-		for _, er := range named.Content.Reach() {
-			out.Content["reach"] = er
+		//
+		// ALL OF IT PASSES. Reach() returns a slice, and writing each element to
+		// one key handed the caller exactly one — the last, by map iteration
+		// order, which is not even stable. A capability the caller was granted
+		// simply was not there, with no error, which is the failure class this
+		// design refuses everywhere else.
+		//
+		// A List is enough: Reach() walks nested values, so every EngramRef in it
+		// is collected on the receiving side, and runGroup already folds each one
+		// into Delegated.
+		if reach := named.Content.Reach(); len(reach) > 0 {
+			carried := make(content.List, 0, len(reach))
+			for _, er := range reach {
+				carried = append(carried, er)
+			}
+			out.Content["reach"] = carried
 		}
 
 	default:
