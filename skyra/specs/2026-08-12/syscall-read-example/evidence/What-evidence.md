@@ -234,3 +234,64 @@ EXTRA FDs     POSIX passable, and an fd IS a capability handle  ✗ NOT UNIVERSA
 
 *Go's struct and its portability comments verified on this machine. The Win32 signatures, the
 argv parsing behaviour and the case-insensitivity are NOT verified here.*
+
+## E9 · What "program" can be
+
+```text
+POSIX      a native binary  OR  a #! script            the KERNEL handles both
+WINDOWS    a native .exe                                scripts need the interpreter named
+                                                        explicitly, or a registry association
+```
+
+**On POSIX the kernel resolves the shebang itself — no shell is involved.** Demonstrated by
+`fork()` + `execv()` directly, with nothing else in the process:
+
+```console
+$ file hello.py
+Python script text executable, ASCII text          ← NOT a binary
+
+$ head -c 2 hello.py | xxd
+00000000: 2321                                     ← "#!"
+
+$ python3 -c "
+  pid = os.fork()
+  if pid == 0: os.execv('hello.py', ['hello.py'])   # raw execve. no /bin/sh.
+  os.waitpid(pid, 0)"
+I am a SCRIPT, exec'd with no shell involved
+```
+
+The kernel reads the first two bytes, finds `#!`, and execs the interpreter named on that line
+instead. `/usr/bin/env python3` in this case.
+
+**And what fails shows the boundary from the other side:**
+
+```console
+os.execv('cd', …)                → No such file or directory   a shell BUILTIN. not a file.
+os.execv('/bin/ls | grep x', …)  → No such file or directory   a shell EXPRESSION. the pipe
+                                                                is syntax, not a path.
+```
+
+So a program is **a path, not a command line.** Anything carrying pipes, redirects, globs, `&&`,
+variable expansion or builtins is shell language and requires a shell to be spawned to interpret it.
+
+```text
+SAFE EVERYWHERE   program = a path to a NATIVE EXECUTABLE
+POSIX ONLY        a #! script also works, and the kernel resolves the interpreter
+NOWHERE           a command line
+```
+
+**One path can satisfy two `machine` values.** Also observed here:
+
+```console
+$ file /bin/sh
+Mach-O universal binary with 2 architectures:
+  [x86_64: Mach-O 64-bit executable x86_64]
+  [arm64e: Mach-O 64-bit executable arm64e]
+```
+
+A fat binary carries several architectures and the kernel selects the slice. Bears on **decision 1**:
+`machine` identifies the ABI a process will run under, and a single program file may satisfy more
+than one of them.
+
+*The shebang execve, the magic bytes, the two failures and the universal binary are all verified on
+this machine. The Windows behaviour is NOT verified here.*
