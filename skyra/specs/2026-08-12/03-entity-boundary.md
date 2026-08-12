@@ -69,8 +69,14 @@ type Interpreter interface {
 
 // Opaque. The kernel holds them and cannot look inside. Each adapter defines its own
 // unexported implementation.
-type Rendering interface{ isRendering() }
-type Delivery  interface{ isDelivery()  }
+type Rendering interface {
+    isRendering()
+    // The kernel must compare assemble(frame) against assemble(frame₀)+monitor* and cannot
+    // look inside. The ADAPTER compares its own renderings and hands back a bool — no
+    // content crosses, and the invariant stops being self-reported.
+    Equal(other Rendering) bool
+}
+type Delivery interface{ isDelivery() }
 
 type Raw string   // the entity's response, unparsed.
 ```
@@ -171,9 +177,10 @@ kind of reach.
 Summary(name string) (graph.Summary, bool)
 ```
 
-Give `View` something structural instead — the child engram with `Cites` stripped, which is the
-requirement `View` actually has — and let `entity/codex/assemble.go` build whatever prose shape it
-wants from that, locally.
+**The decision, so this is not one you have to make:** `View.Summary(name)` becomes
+`View.Child(name) (*graph.Engram, bool)` returning the child engram **with `Cites` stripped**. That
+is the requirement `View` actually has. `entity/codex/assemble.go` builds whatever prose shape it
+wants from that, locally, and may move the old `Summary` struct in verbatim to do it.
 
 ```text
 THE REQUIREMENT ON View, UNCHANGED:  an entity must not be able to reach

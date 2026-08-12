@@ -1,12 +1,41 @@
 # Overnight Build Order
 
 **Date:** 2026-08-11
-**Status: PLAN.** Execution order for `skyra-dna-v5`, derived from the 08-11 set. Not a spec — every
-decision here was made somewhere else, and this says what order to apply them in and how to know each
-one landed.
+**Status: SUPERSEDED.** Reviewed and ruled on 2026-08-12.
 
-> **Two things will waste the night if they are not read first: one blocking contradiction, and one
-> ordering trap where a removal that looks independent is not.**
+> **The executable version is [`../2026-08-12/`](../2026-08-12/README.md), which is self-contained by
+> design — an agent working this order must not read this directory.**
+>
+> Three findings here were better than what 08-12 had and were adopted into it:
+>
+> ```text
+> THE C7 TRAP        removing Ingress's G.Store is not subtractive, and the failure is SILENT —
+>                    runGroup's `if o, ok := …; ok` swallows the miss and the child is invoked
+>                    with nothing. plus two more readers: Deref's fold, and Disperse.
+> DEFECTS FIRST      so the two real bugs land even if everything after stalls.
+> RULE 0             refuse-and-stop, with the undecided list enumerated.
+> ```
+>
+> Three were overruled or corrected:
+>
+> ```text
+> PHASE 2 IS OUT     "Phase 2 is the night" — no. eviction under stay-open has NO ANSWER in any
+>                    document, and the phase itself says substrate fixtures will break and must
+>                    be RESTRUCTURED. that asks an unsupervised agent to rebuild the only
+>                    evidence the central bet holds, where a wrongly-restructured fixture still
+>                    passes and the evidence is silently gone.
+> C5 IS A HAZARD     entity.Entity was never implemented, so there is nothing to remove — and
+>                    the only `type Entity struct` in the tree is entity/runtime.Entity, a real
+>                    implementation. "51 → 46" would have an agent deleting the wrong thing.
+> PHASE 3 IS DEAD    Copy is only exercised by refinement, which is Phase 2. buildable, but dead
+> CODE WITHOUT 2     code overnight.
+> ```
+>
+> **And the BLOCKER it found was real and is now closed at its source.** `open-until-commit`'s
+> open item said a revision must not restore origination; `type-surface-proposals A2` said it
+> does. A2 stands: **the parent revises, not the possibility**, and `possibilities.md` already
+> rejects self-modifying synthesis by name — a parent revising is the external pressure that
+> rejection says is missing. Only the party the rule protects can waive it.
 
 ---
 

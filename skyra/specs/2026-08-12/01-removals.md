@@ -2,6 +2,11 @@
 
 **Status: WORK ORDER.** Three types that are unused, or built past what anything needs.
 
+> **There is no `C5`, and if you find one written down elsewhere, ignore it.** It named
+> `entity.Entity` — a one-field `struct{ ID EntityID }` that was proposed and **never implemented**.
+> The only `type Entity struct` in the tree is `entity/runtime.Entity`, which is a real
+> implementation and **must not be touched**. Three types are removed here, not five.
+
 > One commit per item. `go test ./...` green before each. If a test must change, STOP and record it
 > in `stops.md`.
 

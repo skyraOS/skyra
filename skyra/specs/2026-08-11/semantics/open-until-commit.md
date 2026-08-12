@@ -229,10 +229,14 @@ WHEN DOES A POSSIBILITY    if nothing closes until the root, what evicts a subtr
 STOP BEING RE-DRIVABLE     finished and will never be revised? the kernel holds it all. a
                            stalled head is detectable; a DONE head is not.
 
-WHAT A REVISION COSTS      changing an expectation mid-flight invalidates nothing already
-                           returned — that is the point — but a possibility that has selected
-                           has forfeited origination. does a revision restore it? IT MUST NOT,
-                           or the forfeit is escapable by revising.
+WHAT A REVISION COSTS      RESOLVED 2026-08-11 — a revision DOES restore origination, and the
+  → RESOLVED               forfeit is scoped to the EXPECTATION rather than to the possibility.
+                           the objection was that the forfeit would be escapable by revising.
+                           It is not, because THE PARENT REVISES, NOT THE POSSIBILITY —
+                           possibilities.md already rejects SELF-MODIFYING SYNTHESIS by name,
+                           and a parent revising is the external pressure that rejection says is
+                           missing. Only the party the rule protects can waive it.
+                           see type-surface-proposals A2.
 
 DOES THE ROOT'S COMMIT     the root is a namespace, not an engram (roots-and-admission.md), so
 HAVE A HOME                "the root commits" needs a subject. the principal commits INTO the

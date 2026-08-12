@@ -41,14 +41,37 @@ DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.
 
 ## The work
 
-| doc | items | risk |
-|---|---|---|
-| [01-removals](01-removals.md) | `C2` `C3` `C4` — three unused or over-built types | low |
-| [02-defects](02-defects.md) | `D1` `D2` `B1` — two live bugs and the shape that permitted one | low |
-| [03-entity-boundary](03-entity-boundary.md) | `E1` `E2` `E3` `C1` — the interpreter split, the trace sink | **the big one** |
+| order | doc | items | risk |
+|---|---|---|---|
+| 1st | [02-defects](02-defects.md) | `B1` `D1` `D2` — two live bugs and the shape that permitted one | low |
+| 2nd | [01-removals](01-removals.md) | `C2` `C3` `C4` — three unused or over-built types | low |
+| 3rd | [03-entity-boundary](03-entity-boundary.md) | `E1` `E2` `E3` `C1` — the interpreter split, the trace sink | **the big one** |
 
-Do them in that order. `03` is last **on purpose**: it is the only item whose diff will be large, so
-if it goes badly it can be dropped without losing `01` and `02`.
+**Defects first**, so the two real bugs land even if everything after stalls. `03` is last **on
+purpose**: it is the only item whose diff will be large, so if it goes badly it can be dropped
+without losing the rest.
+
+## One trap, and it is why two obvious removals are not here
+
+Removing the `G.Store` calls in `Ingress` and `runGroup` looks purely subtractive. It is not, and the
+failure is **silent**:
+
+```go
+kernel.go:319   for _, id := range m.Observations {
+                    if o, ok := k.G.Observation(id); ok {   // ← a miss is SWALLOWED
+                        args = append(args, o)
+                    }
+                }
+```
+
+A member passing an ingress observation would get an **empty args list**, so the child is invoked
+with nothing and nothing reports it. Two more readers break the same way: `graph.Deref` — the
+same-question fold dereferences `Ref`s, and an unresolvable one fingerprints as unique, which is the
+exact failure the fold exists to prevent — and `Disperse`, which resolves each cite before checking
+`Producer`, so the walk silently shortens.
+
+All three are fine once observations live on the branch until closure. **That is loop work and it is
+not in this order.**
 
 ## Where to work
 
