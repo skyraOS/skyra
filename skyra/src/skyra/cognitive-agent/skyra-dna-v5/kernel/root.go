@@ -44,6 +44,40 @@ type Root struct {
 	staged []*Effect
 }
 
+// Disposition is what became of a staged effect. EVERY STAGED EFFECT HAS
+// EXACTLY ONE, and that is the whole reason it is an enum.
+//
+//	Staged      held, not performed. the initial state.
+//	Landed      the driver wrote it.
+//	Discarded   the credit walk never reached it, or the chain was rejected. RECORDED.
+//	Failed      reached, attempted, the driver errored. RECORDED.
+//
+// Two booleans expressed four combinations, two of them meaningless (both true)
+// and one of them — NEITHER — the exact state a failed write fell into
+// unnoticed. One field cannot hold a state nothing can name.
+type Disposition int
+
+const (
+	Staged Disposition = iota
+	Landed
+	Discarded
+	Failed
+)
+
+func (d Disposition) String() string {
+	switch d {
+	case Staged:
+		return "staged"
+	case Landed:
+		return "landed"
+	case Discarded:
+		return "discarded"
+	case Failed:
+		return "failed"
+	}
+	return "unknown"
+}
+
 // Effect is a world effect that has been ASKED FOR and not performed.
 //
 //	STORAGE          stage the EFFECT.   an overlay — B reads back what A wrote.
@@ -62,8 +96,8 @@ type Effect struct {
 	Body   []byte
 	Handle string
 
-	Landed    bool
-	Discarded bool
+	// What became of it. Staged until something disposes of it.
+	Disposition Disposition
 }
 
 // Stage holds an effect rather than performing it, and hands back the handle a
@@ -125,7 +159,7 @@ func (r *Root) Materialize(g *graph.Graph, accepted *graph.Observation, h host.H
 	var firstErr error
 	for _, e := range r.staged {
 		if !reached[e.Engram] {
-			e.Discarded = true
+			e.Disposition = Discarded
 			g.RecordDiscard(graph.Discard{
 				Span:   r.Span,
 				Engram: e.Engram,
@@ -145,7 +179,7 @@ func (r *Root) Materialize(g *graph.Graph, accepted *graph.Observation, h host.H
 				}
 				continue
 			}
-			e.Landed = true
+			e.Disposition = Landed
 		default:
 			if firstErr == nil {
 				firstErr = fmt.Errorf("no driver for staged class %q", e.Class)
@@ -161,10 +195,10 @@ func (r *Root) Discard(g *graph.Graph, why string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, e := range r.staged {
-		if e.Landed || e.Discarded {
+		if e.Disposition != Staged {
 			continue
 		}
-		e.Discarded = true
+		e.Disposition = Discarded
 		g.RecordDiscard(graph.Discard{
 			Span:   r.Span,
 			Engram: e.Engram,
