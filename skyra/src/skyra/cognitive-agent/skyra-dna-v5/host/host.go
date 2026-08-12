@@ -62,12 +62,16 @@ type StorageOps interface {
 
 // Handle is what spawn hands back. PORTS ARE RETURNED, NEVER SPECIFIED: how to
 // reach the thing is inside it, and the caller never learns what a port is.
+//
+// AN OPAQUE REFERENCE AND THE HOST IT IS VALID ON. Nothing else. It carried
+// Stdout, Stderr and Exit, which is a SHELL'S SHAPE leaking into a class
+// interface — a guess nobody was forced to make, on the one surface selection
+// cannot correct later, in a method that has never run. A process's output is
+// not part of what a handle IS; it is part of what some future execution driver
+// returns beside one.
 type Handle struct {
-	Host   ids.HostID
-	Ref    string
-	Stdout string
-	Stderr string
-	Exit   int
+	Host ids.HostID
+	Ref  string
 }
 
 // ---------------------------------------------------------------------------
