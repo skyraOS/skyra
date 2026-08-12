@@ -115,28 +115,6 @@ func (e *Engram) Partitions(d content.Deref) []*Partition {
 	return out
 }
 
-// UsedSeen is the compression ratio, folded over a whole engram's history.
-//
-// SEEN is parameters plus every child's return; USED is cited by ANY emission —
-// a select or the commit. Both consumptions count: an observation used in a
-// select shaped an INVOCATION, one used in the commit entered the COMPOSITION.
-// Counting only the second would punish exactly the observations that made
-// invocation possible, which is what creates pressure to smuggle scaffolding into
-// the synthesis.
-//
-// LOW DOES NOT MEAN BAD. It means a lot was looked at to conclude a little —
-// a bad query, an over-provisioned frame, OR legitimate exploration that
-// discarded correctly. A gauge, not a verdict, and it means something only
-// differentially.
-type UsedSeen struct{ Used, Seen int }
-
-func (u UsedSeen) Ratio() float64 {
-	if u.Seen == 0 {
-		return 0
-	}
-	return float64(u.Used) / float64(u.Seen)
-}
-
 // Summary is a read-time view of what a possibility sees on one child.
 //
 //	here is what I have used, what it said, when it worked, and when it did not.
