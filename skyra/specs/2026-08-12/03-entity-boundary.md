@@ -71,9 +71,8 @@ type Interpreter interface {
 // unexported implementation.
 type Rendering interface {
     isRendering()
-    // The kernel must compare assemble(frame) against assemble(frame₀)+monitor* and cannot
-    // look inside. The ADAPTER compares its own renderings and hands back a bool — no
-    // content crosses, and the invariant stops being self-reported.
+    // Comparing two opaque things needs a predicate from whoever owns them. The kernel
+    // supplies BOTH SIDES and chooses WHEN — see "how the invariant gets checked".
     Equal(other Rendering) bool
 }
 type Delivery interface{ isDelivery() }
@@ -84,6 +83,58 @@ type Raw string   // the entity's response, unparsed.
 **Marshalling stays entity-side.** *Marshalling is what interpreting is* — a model's assemble builds
 a prompt, python's builds stdin and argv, a human's builds a message. What moves is **who calls it**,
 and therefore who holds the result.
+
+### What `Monitor` is for under this interface
+
+Stated because the split changes it, and an implementation will otherwise keep the old meaning and
+get stuck.
+
+```text
+BEFORE   the entity built its own context and Monitor kept it current. Step read that context.
+
+AFTER    THE KERNEL ASSEMBLES ON EVERY STEP and hands the result down. Step reads what it was
+         given. Monitor is what lets the NEXT Assemble be cheap — the adapter folds the
+         observation in so it does not have to rebuild from nothing.
+```
+
+That is what the design already says it is: *"Monitor is an optimization over reconstructible state,
+or it is a liability."* Nothing here decides that; it implements it.
+
+**The loop does not change.** `Assemble` is already called once per step today, inside the adapter.
+It is the same call at the same frequency, moved out.
+
+### How the invariant gets checked
+
+The kernel holds one `Rendering` per step. To compare it against anything it needs a second one, and
+`Monitor` returns nothing — so the second one comes from **a second interpreter**.
+
+```text
+THE REGISTRY ALREADY HANDS OUT A FRESH INTERPRETER PER POSSIBILITY — it stores
+`func() Interpreter`, so constructing another costs nothing structural.
+
+  I₁   the live interpreter. has been fed Monitor(o) for every return.
+       Assemble(x, f_now)  →  R_delta        the cheap path
+
+  I₂   a FRESH interpreter. has been fed nothing.
+       Assemble(x, f_now)  →  R_full         the reference path
+
+  R_delta.Equal(R_full)
+```
+
+Both sides are objects **the kernel constructed, from inputs the kernel chose, at a moment the kernel
+picked.** That is what makes it not a self-report. The entity supplies only the equality predicate,
+and it must, because only the entity knows what its own rendering means.
+
+```text
+RESIDUAL, STATED HONESTLY   a broken adapter can return true from Equal. There is no way around
+                            that and it is not what the item is fixing. What is fixed is that the
+                            entity no longer chooses WHAT is compared or WHEN — which is what it
+                            does today, holding base, delta and Divergent itself.
+
+WHEN TO RUN IT              it is a check, not the loop. Behind a flag, or in tests only. A second
+                            full assemble per step is not free, and for a model adapter it is not
+                            free at all.
+```
 
 ---
 
@@ -152,8 +203,10 @@ only two places the kernel reads content**, and they exist only because the kern
 something readable in a log and had no other channel. All rendering and truncation moves behind
 `Events`.
 
-`trace.Run` itself is fine and stays — it becomes an implementation of `Events`. Its placement was
-the problem, not the package.
+**`trace.Run` needs a new surface, not just a new home.** Its current methods are `Logf`, `Step` and
+`Write`, none of which match `Events` — so it gains the five `Events` methods and the old three are
+deleted with their callers. The package is fine and the placement was the problem; the *surface* is
+work, and calling it "stays" understates it.
 
 ---
 
@@ -191,6 +244,11 @@ concluded, not what it was told" stops holding.
 **This is bundled here** because `assemble.go` is being rewritten for `E1` regardless, and doing it
 separately would mean writing the intermediate state twice.
 
+```text
+SUPERSEDES C3's CALL SITE   assemble.go:146 reads `d.Fields` off Partition.Diffs(). 01 leaves that
+                            call site alone precisely so it is fixed once, here, in the rewrite.
+```
+
 ---
 
 ## Order and stopping
@@ -212,4 +270,8 @@ STOP IF   the Rendering/Delivery split forces a decision about what a human adap
 
 STOP IF   removing Summary from View requires deciding what else View should expose. The
           requirement is only that Cites is stripped. Anything beyond that is a design call.
+
+STOP IF   the invariant check seems to need a method that exposes the delta rendering. It does
+          not — see "how the invariant gets checked". Adding one to Interpreter is inventing
+          scope, and it is the exit an implementation will reach for.
 ```

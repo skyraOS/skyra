@@ -58,8 +58,22 @@ shape.
 it is one method rather than a type. If a caller needs the pairs, return them inline.
 
 ```text
-CHECK   Partition.Diffs() may be unreferenced outside graph/. If so, this is a pure internal
-        change and the diff is small.
+IT HAS TWO CALLERS, both checked:
+
+  entity/codex/assemble.go:146   for _, d := range p.Diffs() { … d.Fields … }
+                                 LEAVE THIS CALL SITE ALONE. assemble.go is rewritten wholesale
+                                 in 03/C1, and fixing it here means writing an intermediate
+                                 state that is thrown away. Keep Diffs() returning something
+                                 range-able with the same fields until then.
+
+  kernel/terminus_test.go:71     if d := parts[0].Diffs(); len(d) != 0
+                                 takes len() only, so it survives any return-type change.
+                                 NOT A TEST-MUST-CHANGE STOP.
+
+SO THE MINIMAL C3 IS   remove the exported `Diff` type and return an unexported or inline shape
+                       that keeps `.Fields` range-able. If that cannot be done without editing
+                       assemble.go, DEFER C3 INTO 03 and record it — the two items collide and
+                       03 wins.
 ```
 
 ---

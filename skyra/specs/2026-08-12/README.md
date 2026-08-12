@@ -52,7 +52,10 @@ DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.
 ```
 
 **Changing how an entity is called is in scope. Changing when possibilities live and die is not.**
-`03` touches `kernel.go` at the call sites of the interpreter and nowhere else.
+
+`03` touches `kernel.go` in exactly two ways: the interpreter call sites, and the deletion of the
+log helpers and their calls, which are spread through `open`, `commit` and `runGroup`. **No control
+flow changes** — every `return`, every branch, and every lifetime stays as it is.
 
 ## The work
 
@@ -60,6 +63,9 @@ DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.
 |---|---|---|---|
 | 1st | [02-defects](02-defects.md) | `B1` `D1` `D2` — two live bugs and the shape that permitted one | low |
 | 2nd | [01-removals](01-removals.md) | `C2` `C3` `C4` — three unused or over-built types | low |
+
+`C3` and `03`'s `C1` touch the same file. `01` says how to keep them apart, and if they cannot be,
+`03` wins and `C3` is deferred into it.
 | 3rd | [03-entity-boundary](03-entity-boundary.md) | `E1` `E2` `E3` `C1` — the interpreter split, the trace sink | **the big one** |
 
 **Defects first**, so the two real bugs land even if everything after stalls. `03` is last **on
