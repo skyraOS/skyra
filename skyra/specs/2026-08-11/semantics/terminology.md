@@ -84,6 +84,41 @@ leaving, so a depth-five chain with one leaf running reports five — four of wh
 sitting in `runGroup`. That is not a frontier, and it makes *a stalled head* indistinguishable from
 *a parent legitimately waiting*, which is the eviction decision the number exists for.
 
+### What introspect does with them
+
+**One descent, two filters.** It is a TREE, not a stack — cardinality > 1 means several heads at
+once, so the answer is a set.
+
+```text
+STOP DESCENDING       no live children.
+"WHAT AM I DOING"     those leaves with Returned == nil.   THE HEADS.
+"WHAT HAS THIS DONE"  those leaves with Returned != nil.   finished, still live, revisable.
+```
+
+The second question did not exist before `open-until-commit`, because returning meant dying.
+
+**Topology only.** The kernel may report where things are, never what they mean:
+
+```go
+type Head struct {
+    Span   ids.SpanID
+    Engram ids.EngramID     // AN ID. never the expectation.
+    Entity ids.EntityID
+    Host   ids.HostID
+    Depth  int
+    Since  time.Duration    // time in Step. this is what makes STALLED detectable.
+}
+```
+
+The caller dereferences the engram against **their own graph**, which they may read because it is
+their namespace. Same move as `Producer` being a field so `ObservationID` stays opaque: **the kernel
+hands back handles and the reader resolves them.** It is also the fix for the two live `NO SEMANTICS`
+breaches — `shortExpr` and `oneLine` exist because the kernel wanted to say something readable and
+had no other way.
+
+**And the subtree bound is structural, not enforced.** Descending can only reach descendants, so
+`DOWN, NEVER UP` is a fact about which way the pointers point rather than a rule anyone checks.
+
 ## Who and where
 
 ```text

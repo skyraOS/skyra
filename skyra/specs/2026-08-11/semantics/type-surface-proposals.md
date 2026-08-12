@@ -334,10 +334,24 @@ type Topology interface {
 ```
 
 `kernel-revision` argues introspection is **bounded by the subtree** — down never up, never sideways.
-`Rooted()` is a global count with no bound available, and it is `Spiral` surviving under a new name.
+`Rooted()` is a global count with **no node to start from**, and it is `Spiral` surviving under a new
+name.
 
-Either it is not introspection and belongs to whatever reads the spiral out of band, or the subtree
-bound is not absolute. Both are decisions; neither has been made.
+The bound is not a rule to enforce: descending can only reach descendants, so it is a fact about
+which way the pointers point. Which makes the shape concrete:
+
+```go
++ type Topology interface {
+      Heads(from ids.SpanID) []Head      // leaves with Returned == nil
+      Done(from ids.SpanID)  []Head      // leaves with Returned != nil
+  }
+- Rooted() (user, kernel int)            // global. no `from`. not introspection.
+```
+
+`Head` carries span, engram **ID**, entity, host, depth and time-in-Step — **topology, never
+content.** The caller dereferences the engram against their own graph. That is also what retires
+`shortExpr` and `oneLine`: they exist because the kernel wanted to say something readable and had no
+other channel.
 
 ---
 
