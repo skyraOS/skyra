@@ -30,7 +30,7 @@ func (k *Kernel) rootFor(ask string) *graph.Engram          // unexported; delet
 - func (k *Kernel) Ingress(c content.Content) *graph.Observation
 
 // KEEP — the only exported methods. attach a namespace to the rack, and detach it.
-+ func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Tree, error)
++ func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Session, error)
 + func (k *Kernel) Unmount(ns ids.EngramID)
 ```
 
@@ -51,7 +51,7 @@ required**, which is what keeps the rack flat.
 - Run      *trace.Run
 - roots    map[ids.SpanID]*Root
 - heads    map[ids.SpanID]int              // counts live FRAMES, not the frontier
-+ mounted  map[ids.EngramID]*Tree          // THE RACK. flat, keyed by namespace. admin is a row.
++ mounted  map[ids.EngramID]*Session          // THE RACK. flat, keyed by namespace. admin is a row.
 
 // graph.Graph
 + namespaces map[ids.EngramID]*Engram      // held apart from the index, as roots are today
@@ -66,10 +66,10 @@ required**, which is what keeps the rack flat.
   func (g *Graph) Engram(id) (*Engram, bool)  // resolves across BOTH maps, for the walk
 ```
 
-**`Tree` replaces `Root`**, and the full shape is in
-[`type-surface-proposals`](../../semantics/type-surface-proposals.md) `A4`. A tree is all live work
+**`Session` replaces `Root`**, and the full shape is in
+[`type-surface-proposals`](../../semantics/type-surface-proposals.md) `A4`. A session is all live work
 under one namespace. **A branch is not a type** — it is a possibility with no parent, and staged
-effects are partitioned by its span on the tree.
+effects are partitioned by its span on the session.
 
 ## New interface, mirroring `runtime.Index`
 

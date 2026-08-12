@@ -47,7 +47,7 @@ The loop is being rewritten separately and by hand. Three unmade design decision
 DO NOT CHANGE   when a possibility dies. commit still closes it.
 DO NOT CHANGE   when durable writes happen. graph.Apply is still called from the commit path.
 DO NOT INTRODUCE   any new lifecycle or authority type. if you encounter the identifiers
-                   `Tree` `Branch` `Chain` `Draft` `Grant` `Ceiling` `Namespace` anywhere,
+                   `Session` `Branch` `Chain` `Draft` `Grant` `Ceiling` `Namespace` anywhere,
                    they belong to work that is NOT in this order.
 DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.Reject,
                    kernel.Ingress, kernel.Hold, kernel.Spiral, kernel.Introspect.

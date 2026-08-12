@@ -41,8 +41,10 @@ ENGRAM        durable.   an expectation with a history accumulating around it. o
 
 POSSIBILITY   ephemeral. one opening of an engram.
 
-TREE          ephemeral. ALL live work under one namespace. one per mounted namespace, and it
+SESSION       ephemeral. ALL live work under one namespace. one per mounted namespace, and it
               holds what a sign-in provisions — grants and reach, once, not per ask.
+              created by Mount, ejected by Unmount. its asks are top-level possibilities,
+              keyed by span, and staged effects are partitioned by the same key.
 
 BRANCH        A POSITION, NOT A TYPE. a possibility with no parent — one ask. keyed by span,
               and the transaction boundary: staged effects are partitioned by that span and
@@ -60,6 +62,11 @@ RETIRED   "ROOT". it implied a special node and was not one. every wrong turn �
 
 RETIRED   "CHAIN" AS A TYPE. still fine as ordinary prose for a line of work; it is not the
           name of the object.
+
+RETIRED   "TREE" AS A TYPE. it named a shape the object stopped having the moment BRANCH
+          stopped being one: its contents are a map of independent asks, and each of THOSE is
+          a tree. the container holds several. it is a SESSION — what sign-in creates and
+          sign-out ejects.
 
 NOTE      FOUR WORDS ARE POSITIONS AND NONE IS A TYPE — leaf, orchestrator, head, branch.
           leaf and orchestrator derive from whether a possibility has selected; head from
@@ -159,7 +166,7 @@ MOUNT         A KERNEL METHOD. bring an entity, a namespace engram and a policy 
               hold them — the key on the rack. it is what makes a namespace workable, and
               it is the ONLY exported kernel method.
 
-              Mount(entity, namespace, grants) → Tree      requires grants ⊆ ceiling
+              Mount(entity, namespace, grants) → Session   requires grants ⊆ ceiling
               Unmount(namespace)                           sign out. the key is ejected.
 
 THE RACK      the kernel's flat map of mounted namespaces. ADMIN IS A ROW ON IT, not a level

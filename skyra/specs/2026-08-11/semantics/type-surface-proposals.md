@@ -106,12 +106,12 @@ what looked like new machinery is machinery that already exists.
 
 // kernel — THE RACK. flat, keyed by the namespace engram. admin is a row on it.
 - type Root struct{ … Engram *graph.Engram … }
-+ mounted map[ids.EngramID]*Tree
++ mounted map[ids.EngramID]*Session
 
-+ type Tree struct {                 // all live work under one namespace
++ type Session struct {                 // all live work under one namespace. ONE PER SIGN-IN.
       Namespace *graph.Engram
       Entity    ids.EntityID         // who is manning it
-      Grants    []Grant              // provisioned at sign-in. ONE per tree.
+      Grants    []Grant              // provisioned at sign-in. ONE per session.
       Reach     []ids.EntityID
 
       Asks   map[ids.SpanID]*Possibility   // top-level possibilities. A BRANCH IS A POSITION,
@@ -180,7 +180,7 @@ authorization is NOT BUILT AT ALL.*
 
 ```go
 // kernel/authorize.go
-+ func authorizeEffect(t *Tree, ask ids.SpanID, e *Effect) error   // the second authorization
++ func authorizeEffect(t *Session, ask ids.SpanID, e *Effect) error   // the second authorization
 + func authorizeGrants(parent, handed []Grant) error // a select may only NARROW
   func ownership(rec *graph.Record) error           // becomes REAL once memory is shared
 ```
@@ -312,7 +312,7 @@ func (k *Kernel) Ingress(c content.Content) *graph.Observation
 
 // NEEDED — it is MOUNT. attach a namespace to the rack; no content, because the payload is an
 // argument to the select that follows.
-func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Tree, error)
+func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Session, error)
 func (k *Kernel) Unmount(ns ids.EngramID)
 ```
 
