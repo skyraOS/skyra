@@ -16,11 +16,12 @@ outcomes/     DECISIONS, one document per question. WRITTEN BY MICHAEL ONLY.
 ```
 
 ```text
-WHERE   "Where am I executed?"    which machine, and how it is identified
-WHAT    "What am I?"              my expectation, and the observations bound to me
-HOW     "How am I executed?"      spawn, the program, and the interface available where I land
-WHY     "Why was I invoked?"      the parent, and the citation
-WHEN    "When am I executed?"     my tick, and what I can be sequenced against
+WHERE   "Where am I executed?"     which machine, and how it is identified
+WHO     "Who is interpreting me?"  the entity, and how it is reached
+WHAT    "What am I?"               my expectation, and the observations bound to me
+HOW     "How am I executed?"       spawn, the program, and the interface available where I land
+WHY     "Why was I invoked?"       the parent, and the citation
+WHEN    "When am I executed?"      my tick, and what I can be sequenced against
 ```
 
 Each question has a **pair**: `evidence/<Q>-evidence.md` measures, `outcomes/<Q>-outcomes.md`
