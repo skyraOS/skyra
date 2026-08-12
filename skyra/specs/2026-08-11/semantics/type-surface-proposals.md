@@ -23,7 +23,7 @@ do not hold*.
 ```go
 // kernel.Kernel
 - heads map[ids.SpanID]int              // A COUNT. the live tree is unrepresentable.
-+ // Root holds the tree; heads is derived by walking it.
++ // the Chain holds the tree; heads is derived by walking it.
 
 // kernel.Possibility
 + Children  []*Possibility              // the LIVE tree. Pending holds *graph.Engram, which is
@@ -48,7 +48,7 @@ the kernel already has.
 + func (g *Graph) Close(rs []*Record)   // one call, the whole chain, then Disperse ONCE
 ```
 
-`Record` is per-possibility and applied immediately. It has to accumulate on the `Root` and land in
+`Record` is per-possibility and applied immediately. It has to accumulate on the `Chain` and land in
 one go, or *every durable write is caused by the root's commit* is false in code.
 
 **And `Possibility.Selected` changes meaning.** The forfeit is expectation-scoped now, so a revision
@@ -82,56 +82,78 @@ SAME observation objects             not re-minted. the decision of 2026-08-11.
 the type surface is exactly where an undecided thing gets decided by accident.
 
 ### A4 · The permission model — nothing exists
-**From:** `roots-and-admission.md`. Not one type in the tree.
+**From:** `roots-and-admission.md`, as revised by `terminology.md`. Not one type in the tree.
+
+**Much smaller than an earlier draft of this doc proposed.** A namespace is an **engram**, so most of
+what looked like new machinery is machinery that already exists.
 
 ```go
 // ids
 + PrincipalID string
++ type Grant string        // prefix form. fs:read:/p/** · spawn:<bin> · introspect:self
 
-// a new package — namespace
-+ type Namespace struct {
-      Principal ids.PrincipalID
-      Mounts    map[string]*Mount
-  }
-+ type Mount struct {
-      Name   string
-      Engram *graph.Engram
-      Grants []Grant
-      Source MountSource
-  }
-+ type MountSource int          // Ambient · Granted · Inherited
-+ type Grant string             // prefix form. fs:read:/p/** · spawn:<bin> · introspect:self
-+ type Resolver interface {
-      Resolve(name string) (*graph.Engram, bool)
-      Names() []string
-  }
+// graph — a namespace is an ENGRAM. no new type, one new population.
++ namespaces map[ids.EngramID]*Engram    // held apart from the index, like roots are today
 
-// kernel.Root
-- Engram *graph.Engram          // roots-and-admission: A ROOT IS A NAMESPACE
-+ NS     *namespace.Namespace
-+ Grants []Grant                // interfaces.md declares this. it was never built.
+// kernel — per-chain state, keyed by span. what "Root" was actually naming.
+- type Root struct{ … Engram *graph.Engram … }
++ type Chain struct {
+      Span      ids.SpanID
+      Namespace *graph.Engram      // the principal's top engram
+      Grants    []Grant            // what this chain may DO
+      Reach     []ids.EntityID     // which entities it may NAME
+      staged    []*Effect
+  }
 
 // kernel.Kernel
-- Builtin map[string]*graph.Engram    // one global mount table
+- Builtin map[string]*graph.Engram        // one global mount table for every principal
 // frame.Live
 - Builtin map[string]*graph.Engram
-+ Mounts  Resolver                    // per principal
 ```
 
-**And a behaviour change, not just a rename.** `frame.Live` resolves *children → delegated →
-builtin*. `roots-and-admission` requires:
+`Builtin` goes with nothing replacing it: **ambient names are children of each namespace, placed at
+boot.** `discover` nameable in every frame becomes `discover` being a child everyone has.
+
+**And the select provisions.** This is the mechanism that replaces mounts entirely:
+
+```go
+// grammar.Member
++ Grants []Grant     // handed to this child. DEFAULT IS NOTHING.
++ Reach  []ids.EntityID
+```
 
 ```text
-1  DELEGATED   this invocation only.
-2  MOUNTS      granted.
-3  CHILDREN    earned.
+DEFAULT = EVERYTHING I HOLD   inheritance with extra syntax. the act would be decorative.
+DEFAULT = NOTHING             least privilege by construction. a child needing fs:read must be
+                              given it; a parent that forgets sees a loud failure it learns from.
 ```
 
-Earned entries shadowing mounts is **PATH hijacking** — a principal authors its own `write` and
-everything provisioned for it routes through structure it wrote.
+Under-granting is self-correcting — the child fails, it is recorded, selection learns. Over-granting
+is bounded by your own ceiling, which is the object-capability guarantee. So *nothing* is safe and
+its failure mode is cheap.
 
-**No `Provision` field is proposed**, because *what a memory provision is* still has no shape and a
-field would be inventing one.
+**`kernel.go:173` is the live bug this closes.** `Drive` passes `k.Reg.Known()` as the chain's reach
+— every principal can name every registered entity. Reach comes from provisioning, never from the
+registry, which becomes what it should have been: how the kernel *reaches* an entity it was already
+authorized to name.
+
+### What A4 no longer proposes
+
+```text
+GONE   namespace.Mount · MountSource · Resolver-with-origin · three-place resolution order ·
+       mounts-shadow-earned · an Origin return on frame.Resolve · a Provision field
+
+WHY    mount was five existing mechanisms under one word — a child placed by provisioning ·
+       ambient names placed at boot · grants on the chain · entity reach · copy.
+
+       and grants-on-the-reference was specifically wrong: EFFECTS HAPPEN AT LEAVES, so
+       authority attached to a name at the top bounds nothing unless every intermediate
+       re-narrows it. grants bound the CHAIN. Root.Grants was always the right home.
+
+       PATH hijacking dissolves with mounts — one child map, no shadowing order to get wrong.
+       the collision moves to provisioning time, where "who may write into my namespace" is
+       already answered by commit-is-a-request.
+```
 
 ### A5 · The world boundary has no check
 **From:** `roots-and-admission.md`, and `kernel-revision.md` already says it: *the second
@@ -139,15 +161,48 @@ authorization is NOT BUILT AT ALL.*
 
 ```go
 // kernel/authorize.go
-+ func authorizeEffect(r *Root, e *Effect) error    // grants. the second authorization.
++ func authorizeEffect(c *Chain, e *Effect) error   // grants. the second authorization.
++ func authorizeGrants(parent, handed []Grant) error // a select may only NARROW
   func ownership(rec *graph.Record) error           // becomes REAL once memory is shared
 ```
 
-`Root.Stage` holds an effect with no authorization anywhere on the path. `ownership()` is the
+`Stage` holds an effect with no authorization anywhere on the path.
+
+**`authorizeGrants` is the whole of the ocap guarantee** and it is one subset check. Everything else
+in the model rests on it holding: boot provisions admin, admin provisions namespaces, a select
+provisions its children, and none of the three can widen. `ownership()` is the
 documented no-op written to hold this place — *"if engrams ever become shareable, this stops being
 free and must become real."* A mount is shareable memory.
 
 ---
+
+### A6 · Boot has no method
+**From:** the admission bootstrap.
+
+```go
++ func (k *Kernel) Boot(cfg Config) (*graph.Engram, error)   // returns the ADMIN namespace
+```
+
+Boot's whole job, and it should stay this short:
+
+```text
+1  mint the system engrams — discover · introspect · authenticate · provision · create
+2  register the entities that man them
+3  mint the ADMIN NAMESPACE, place those engrams as its children, and hold its grants
+```
+
+`Select` and `Commit` are **not services** — they are forms, parsed and never initialized. The
+distinction matters because a boot that initializes "the two forms" will grow into a second
+configuration language.
+
+> **Boot holds the admin namespace's grants. That is the axiom, and it should be one line.**
+
+Same shape as `here` and as `discover` being nameable everywhere: the thing you cannot derive because
+you are standing on it. `interfaces.md` already has its ancestor — *the runtime must know how to
+reach at least one entity that can author an expectation* — and this grows it by exactly one clause.
+
+Everything else provisions downward from there: admin provisions namespaces, a namespace's chain
+provisions its children, and `authorizeGrants` is what makes each step narrow.
 
 ## B · Existing types that are wrong
 
@@ -230,15 +285,21 @@ mismatch` recorded separately without either noticing the other.
 
 ### D1 · `01` keeps `Ingress` with its current signature
 
-Correct under `kernel-revision` — it is the one channel. But `roots-and-admission` makes ingress **a
-select resolved against the root's namespace**, so it cannot stay:
+Correct under `kernel-revision` — it is the one channel. But it cannot stay as written:
 
 ```go
+// NOW
 func (k *Kernel) Ingress(c content.Content) *graph.Observation
+
+// NEEDED — allocation only. no content; the payload is an argument to the select that follows.
+func (k *Kernel) Ingress(ns *graph.Engram, grants []Grant, from *Chain) (*Chain, error)
 ```
 
-It needs the principal and the profile, and **that is the gate `questions.md §5` is missing.** `01`
-was written before `roots-and-admission` existed.
+`from` is the chain that provisioned this access, and it is what the one kernel check reads: **the
+issuer must already hold at least what it issues.** Arithmetic, no semantics — the `setuid`
+analogue, where the kernel never learns who anyone is.
+
+**That is the gate `questions.md §5` is missing.** `01` predates every document that says so.
 
 ### D2 · `01`'s `Topology.Rooted()` cannot be subtree-bounded
 
@@ -280,9 +341,13 @@ NO ESCALATION TYPE          a grant miss escalates by opening a KERNEL-ROOTED ch
 
 ```text
 A1 · A2   the loop. everything else in A sits on them.
-A4 · A5   the boundary. nothing about it is built and nothing about it is checked.
+A4 · A5   the boundary. nothing about it is built and nothing about it is checked, and A5's
+          subset check is the whole ocap guarantee in one function.
 A3        one function, and the contract is the whole of it.
 B1 · B2   two defects, both structural rather than stylistic.
 C         seven removals, none blocked by a decision.
 D         two questions to answer before 01 is applied.
+
+Read `terminology.md` first. It retires ROOT and MOUNT, and both appear throughout the docs this
+one cross-references.
 ```
