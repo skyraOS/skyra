@@ -24,6 +24,21 @@ changes to `skyra-dna-v5`.
 4  DO NOT INVENT SCOPE. No item here is an invitation to improve something nearby.
 ```
 
+**Rule 3, made concrete.** The design set has open questions. None of them is reachable from this
+order — that is what the fence below is for — so rather than list questions you should not be near,
+here is the test:
+
+```text
+STOP IF YOU FIND YOURSELF DECIDING ANYTHING ABOUT
+
+   how long a possibility lives · when a durable write happens · what is staged and when it
+   materializes · who may do what · what an engram copy carries · what any signal is FOR
+
+Every one of those is an open design question somewhere, and an item in this order that seems to
+require one is an item written wrong. RECORD IT. A wrong decision here is worse than an
+unfinished item, because it will be made differently later and the code will encode the wrong one.
+```
+
 ## What must not be touched
 
 The loop is being rewritten separately and by hand. Three unmade design decisions sit inside it.
