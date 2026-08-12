@@ -3,6 +3,8 @@
 **Status: WORKING.** A single worked example, traced against the code, used to find where the
 entity/host seam actually falls.
 
+**Everything here is asked from the ENGRAM's perspective** — not the host's, not the model's.
+
 ```text
 example.md    THE WALKTHROUGH. one ask, traced step by step until the information runs out.
               poses the problem. draws no conclusions.
@@ -14,11 +16,11 @@ outcomes/     DECISIONS, one document per question. WRITTEN BY MICHAEL ONLY.
 ```
 
 ```text
-              WHERE   which machine work runs on, and how a machine knows which one it is
-              WHAT    the work itself — the expectation, and the observations bound to it
-              HOW     what happens below the kernel boundary — spawn, syscalls, the platform
-              WHY     what prompted an invocation — the parent, and the citation
-              WHEN    ordering and time — the tick, and what can be sequenced against what
+WHERE   "Where am I executed?"    which machine, and how it is identified
+WHAT    "What am I?"              my expectation, and the observations bound to me
+HOW     "How am I executed?"      spawn, the program, and the interface available where I land
+WHY     "Why was I invoked?"      the parent, and the citation
+WHEN    "When am I executed?"     my tick, and what I can be sequenced against
 ```
 
 Each question has a **pair**: `evidence/<Q>-evidence.md` measures, `outcomes/<Q>-outcomes.md`

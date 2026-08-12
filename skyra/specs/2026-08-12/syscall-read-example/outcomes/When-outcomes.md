@@ -3,7 +3,9 @@
 **Status: MICHAEL ONLY.** Decisions about **WHEN**, taken from [`../example.md`](../example.md), on
 the evidence in [`../evidence/When-evidence.md`](../evidence/When-evidence.md).
 
-**Scope:** ordering and time — the tick, and what can be sequenced against what.
+**The question, from the engram's perspective:** *When am I executed?*
+
+**Scope:** when am I executed — my tick, and what I can be sequenced against.
 
 ---
 

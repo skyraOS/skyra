@@ -3,7 +3,9 @@
 **Status: OBSERVATION.** Measurements bearing on **WHERE**. Commands and their output. **No
 conclusions** — what these mean is [`../outcomes/Where-outcomes.md`](../outcomes/Where-outcomes.md).
 
-**Scope:** which machine work runs on, and how a machine knows which one it is.
+**The question, from the engram's perspective:** *Where am I executed?*
+
+**Scope:** where am I executed — which machine, and how it is identified.
 
 Sections are numbered within this document and cited as **Where E1**, **Where E2**, …
 

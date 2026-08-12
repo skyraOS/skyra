@@ -3,7 +3,9 @@
 **Status: OBSERVATION.** Measurements bearing on **WHEN**. Commands and their output. **No
 conclusions** — what these mean is [`../outcomes/When-outcomes.md`](../outcomes/When-outcomes.md).
 
-**Scope:** ordering and time — the tick, and what can be sequenced against what.
+**The question, from the engram's perspective:** *When am I executed?*
+
+**Scope:** when am I executed — my tick, and what I can be sequenced against.
 
 Sections are numbered within this document and cited as **When E1**, **When E2**, …
 
