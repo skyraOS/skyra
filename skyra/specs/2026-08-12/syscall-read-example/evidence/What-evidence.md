@@ -9,9 +9,32 @@ Sections are numbered within this document and cited as **What E1**, **What E2**
 
 ---
 
-## E1 · `uname(2)` is the call, and `struct utsname` is what it returns
+## E1 · The fields, and what actually provides them
 
-One syscall, POSIX-mandated, present on every Unix. The syscall interface describes itself.
+`struct utsname` is POSIX and the fields are present on every Unix. **How you get them is not
+uniform, and on Darwin it is not a syscall.**
+
+```console
+$ grep -i uname $SDK/usr/include/sys/syscall.h
+(no matches — there is no SYS_uname in Darwin's table)
+
+$ man -w uname     /usr/share/man/man1/uname.1
+$ man 3 uname      UNAME(3)   Library Functions Manual      ← SECTION 3, not 2
+
+$ grep -E "SYS_.*sysctl" …/syscall.h
+#define SYS_sysctl        202
+#define SYS_sysctlbyname  274
+```
+
+```text
+DARWIN   uname is a LIBC FUNCTION over sysctl. the syscalls underneath are sysctl(2), and every
+         field has a sysctl equivalent — kern.ostype · kern.osrelease · hw.machine.
+
+LINUX    uname IS a syscall — #63 on x86_64, sys_newuname. man 2 uname.
+```
+
+*An earlier version of this section said "one syscall, POSIX-mandated" and cited `uname(2)`. That is
+true on Linux and false on Darwin, which is the platform everything else here was measured on.*
 
 ```c
 // MacOSX.sdk/usr/include/sys/utsname.h
@@ -108,3 +131,38 @@ AVAILABILITY                    per-process, not per-machine.
 The triple says which interface to expect. It does not certify that every call in it will succeed.
 
 *NOT verified here.*
+
+## E7 · How stable the mechanism is
+
+**The struct is frozen. The values are not, and their format is not standardized.**
+
+```text
+THE STRUCT      unchanged since SVr4/4.4BSD. five char arrays. it does not move.
+
+FIELD WIDTH     _SYS_NAMELEN 256 on macOS · __NEW_UTS_LEN 64 on Linux.
+                same struct, different widths. harmless — the binary form is never shared.
+
+THE VALUES      change every release. that is what a version is.
+
+THE FORMAT      no common grammar:
+                  macOS     Darwin    24.6.0              arm64
+                  Ubuntu    Linux     6.8.0-45-generic    aarch64
+                  FreeBSD   FreeBSD   14.0-RELEASE        arm64
+```
+
+Two consequences:
+
+```text
+arm64 AND aarch64 ARE     the same ISA under two names. `sysname` already differs, so a key does
+THE SAME ISA              not collide — but any normalization needs the mapping.
+
+EQUALITY IS SAFE,         comparing two triples for SAMENESS is reliable. extracting "is this
+PARSING IS NOT            newer than" is not, across platforms.
+```
+
+**And the values are self-reported.** On Linux, `setarch --uname-2.6` and `personality()` make
+`uname` return whatever they are told to, and containers do this routinely. Adequate for a key that
+history hangs on; not a security claim.
+
+*Field widths and the Darwin values verified here. The Linux and FreeBSD values, and the spoofing
+mechanisms, are not.*
