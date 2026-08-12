@@ -166,3 +166,71 @@ history hangs on; not a security claim.
 
 *Field widths and the Darwin values verified here. The Linux and FreeBSD values, and the spoofing
 mechanisms, are not.*
+
+## E8 · Which spawn parameters overlap across every OS
+
+The same operation, as each platform actually declares it:
+
+```c
+// POSIX
+int execve(const char *path, char *const argv[], char *const envp[]);
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char *const argv[], char *const envp[]);
+
+// Win32
+BOOL CreateProcessW(LPCWSTR lpApplicationName, LPWSTR lpCommandLine, …,
+                    LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+                    LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);
+```
+
+Go's `os/exec` is the same problem solved by people who had to ship it on every OS, and it draws
+the line explicitly:
+
+```go
+type Cmd struct {
+    Path   string        // PORTABLE
+    Args   []string
+    Env    []string
+    Dir    string
+    Stdin  io.Reader
+    Stdout io.Writer
+    Stderr io.Writer
+
+    ExtraFiles  []*os.File           // "ExtraFiles is not supported on Windows."
+    SysProcAttr *syscall.SysProcAttr // "This is only used on <os>." — the per-OS escape hatch
+}
+```
+
+Parameter by parameter:
+
+```text
+PROGRAM       POSIX path · Win32 lpApplicationName              ✓ CLEANLY UNIVERSAL
+
+HANDLE BACK   POSIX pid_t · Win32 PROCESS_INFORMATION           ✓ CLEANLY UNIVERSAL
+
+ARGUMENTS     POSIX char *const argv[]  — A VECTOR              ~ concept universal,
+              Win32 lpCommandLine       — ONE STRING              REPRESENTATION IS NOT.
+              the callee re-parses, and the rules differ between CRT versions and
+              CommandLineToArgvW. A VECTOR DOES NOT ROUND-TRIP.
+
+ENVIRONMENT   POSIX char *const envp[]  — KEY=VALUE array       ~ concept universal.
+              Win32 a double-null block                           Windows names are
+                                                                  CASE-INSENSITIVE; POSIX's
+                                                                  are not.
+
+WORKING DIR   POSIX NOT A PARAMETER — chdir between fork and    ~ asymmetric. implementable
+                    exec. addchdir_np is literally _np,           everywhere, native nowhere
+                    "non-portable"                                on POSIX.
+              Win32 lpCurrentDirectory
+
+3 STREAMS     POSIX fds 0/1/2, inherited                        ~ concept universal,
+              Win32 STARTUPINFO.hStdInput/hStdOutput/hStdError    mechanism differs
+
+EXTRA FDs     POSIX passable, and an fd IS a capability handle  ✗ NOT UNIVERSAL. Go excludes
+              Win32 no equivalent                                 it by name.
+```
+
+*Go's struct and its portability comments verified on this machine. The Win32 signatures, the
+argv parsing behaviour and the case-insensitivity are NOT verified here.*

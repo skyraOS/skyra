@@ -30,3 +30,23 @@ EVIDENCE   What E1   uname(2), struct utsname, and the two fields discarded
            What E5   what differs by ABI while the contract holds
            What E6   what the triple does not certify
 ```
+
+## 2 · What each host offers — `spawn(program) → handle`
+
+**Decided 2026-08-12.**
+
+Of everything a spawn call takes on any platform, exactly two elements are cleanly universal: **the
+program to run**, and **a handle back** identifying what was created.
+
+```text
+spawn(program) → handle
+```
+
+Everything else is a concept that survives with a lossy or asymmetric implementation — arguments do
+not round-trip as a vector on Windows, environment names differ in case sensitivity, the working
+directory is not a POSIX spawn parameter at all, and extra file descriptors are not universal in any
+form.
+
+```text
+EVIDENCE   What E8   the three declarations side by side, and Go's portable / not-portable line
+```
