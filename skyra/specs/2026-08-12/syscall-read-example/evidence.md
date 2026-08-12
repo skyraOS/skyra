@@ -1,7 +1,7 @@
 # Evidence
 
 **Status: OBSERVATION.** Measured on `Michael's MacBook Pro (2)`, 2026-08-12. Commands and their
-output. **No conclusions** — what these mean for the design is [`outcomes.md`](outcomes.md).
+output. **No conclusions** — what these mean for the design is [`outcomes/`](outcomes/).
 
 Sections are numbered so decisions can cite them.
 

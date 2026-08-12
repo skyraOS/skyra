@@ -1,7 +1,9 @@
-# Outcomes
+# WHERE — Outcomes
 
-**Status: MICHAEL ONLY.** Decisions taken from [`example.md`](example.md), on the evidence in
-[`evidence.md`](evidence.md).
+**Status: MICHAEL ONLY.** Decisions about **WHERE**, taken from [`../example.md`](../example.md), on
+the evidence in [`../evidence.md`](../evidence.md).
+
+**Scope:** which machine work runs on, and how a machine knows which one it is.
 
 ---
 
