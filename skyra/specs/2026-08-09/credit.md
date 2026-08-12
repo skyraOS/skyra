@@ -6,6 +6,16 @@ claim: that topological learning is sufficient.
 
 > **Errors stay local. Acceptance walks down by hops. Everything lands on an engram.**
 
+
+> **REVISED BY `2026-08-11`.** Two things below no longer hold, and the whole set carries them:
+>
+> ```text
+> COMMIT DOES NOT CLOSE   a possibility returns and stays live. only the ROOT's commit — CLOSURE
+>                         — is durable. see semantics/open-until-commit.md.
+> ROOT IS RETIRED         what it named is a BRANCH. a namespace is an ENGRAM.
+>                         see semantics/terminology.md, which is authoritative on words.
+> ```
+
 ---
 
 ## The write

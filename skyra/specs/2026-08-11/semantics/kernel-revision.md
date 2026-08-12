@@ -237,8 +237,12 @@ THE SPLIT              the kernel holds everything happening; the graph holds on
                        than aspirational — and it is now also what tells discover and introspect
                        apart.
 
-CRASH SEMANTICS        never tested BECAUSE THERE IS NOTHING TO TEST. no path writes durably outside
-                       a commit, so the property is unavailable rather than verified.
+CRASH SEMANTICS        never tested. CLAIMED unavailable-rather-than-verified, and THE CLAIM IS
+                       FALSE AS WRITTEN: Ingress and runGroup both call G.Store directly, outside
+                       any commit. it holds for the RECORD channel and not for the OBSERVATION
+                       store. conversation-runtime-mismatch row 1 records the same code as a
+                       deliberate choice — one behaviour, two readings, neither aware of the other
+                       until 2026-08-11.
 
 TWO AUTHORIZATIONS     scope and ownership at the graph boundary; grants at the world boundary. the
                        first is built and is arithmetic. the second is NOT BUILT AT ALL.

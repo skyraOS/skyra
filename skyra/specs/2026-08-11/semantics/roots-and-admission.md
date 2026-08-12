@@ -1,12 +1,22 @@
 # Roots, Namespaces, and Admission
 
 **Date:** 2026-08-11
-**Status: PROPOSAL.** Revises what `2026-08-09` and `kernel-revision.md` call a root. Nothing here is
-built.
+**Status: SUPERSEDED IN PART.** Revises what `2026-08-09` and `kernel-revision.md` call a root.
+Nothing here is built.
 
-> **A root is not an engram. An engram is durable memory; a root is permissioned access.**
+> **SUPERSEDED, 2026-08-11 later, by [`terminology.md`](terminology.md), which is authoritative on
+> words.** Two things this document is built on were retired after it:
 >
-> **It is `/` — a place to resolve names from, and permission to resolve them.**
+> ```text
+> ROOT      retired. what it named is a BRANCH — one ask, keyed by span, the transaction
+>           boundary. a namespace is an ENGRAM, and a TREE is all live work under one.
+> MOUNT     retired AS A NOUN. it survives as a KERNEL METHOD: attach a namespace to the rack.
+> ```
+>
+> Sections marked **RETIRED** or **REVISED** carry the correction inline. Everything else stands.
+
+> **A namespace is durable memory; access to it is not. The confusion this document exists to fix
+> was calling both of them a root.**
 
 ---
 
@@ -40,27 +50,30 @@ All three dissolve if a root is a **namespace** rather than a memory.
 Everything below compresses to three sentences:
 
 > **A namespace cannot be invoked.**
-> **A root can only be provisioned from a namespace.**
-> **You run under the grants of the root your namespace gave you, and nothing in a chain can widen
-> that.**
+> **A namespace can only be provisioned from a namespace, and boot provisions the first.**
+> **When you ask another entity to do something you provision their access from the access given to
+> you, and nothing can widen it.**
 
-The second is stated as a **provenance** rather than a prohibition, and that is deliberate. *A root
-cannot be invoked* would be a rule, and also slightly false — a root **is** opened, at ingress. Saying
-where roots come from makes unreachability-from-inside a consequence: the only way to make one is
-somewhere no chain can stand. Safe by incapacity, not by restraint.
+The second is stated as a **provenance** rather than a prohibition, and that is deliberate. *A
+namespace cannot be reached from inside* would be a rule; saying where namespaces come from makes
+unreachability a consequence — the only way to make one is somewhere no branch can stand. Safe by
+incapacity, not by restraint.
 
-The third is `world.md`'s *you cannot invoke your own grader*, one layer up. Reaching another root is
-done **from that root's namespace, by whoever holds it** — which is ingress, and never selection.
+The third is `world.md`'s *you cannot invoke your own grader*, one layer up.
 
-## What a root is
+*(An earlier version of the middle sentence said **a root can only be provisioned from a namespace**.
+Roots are retired; provisioning runs namespace → namespace, with boot as the axiom.)*
+
+## What a namespace is
 
 ```text
-AN ENGRAM   an expectation + the history of invoking it.   SELECTED.
-A ROOT      a namespace + an identity.                     SIGNED INTO.
+AN ENGRAM     an expectation + the history of invoking it.   SELECTED.
+A NAMESPACE   an engram nobody can name.                     SIGNED INTO.
 ```
 
-Nothing selects a root, nothing interprets it, and it originates nothing. It is where naming
-*starts*.
+Nothing selects a namespace, nothing interprets it, and it originates nothing. It is where naming
+*starts* — and it is durable, which is the half this document originally got wrong by calling the
+whole thing a root.
 
 **The code half-implements this already** and calls it something else:
 
@@ -70,7 +83,8 @@ Nothing selects a root, nothing interprets it, and it originates nothing. It is 
 Builtin map[string]*graph.Engram
 ```
 
-That is a mount table. It exists, it is per-kernel, and it should be per-principal.
+That is one global name table, and it should be per-namespace: **ambient names are children every
+namespace is given at boot.**
 
 ### The sign-in engram
 
@@ -83,108 +97,57 @@ child map and no history of its own.
 
 Which also answers the 8-out-of-8 measurement without a rule: the outermost parent is an engram like
 any other, so topology accumulates on it, and it persists between sign-ins the way a home directory
-does. `rootFor`'s scan-by-expression disappears — reuse is a mount, not a match.
+does. `rootFor`'s scan-by-expression disappears — you are signed in, so it is already yours.
 
 ---
 
-## Profiles and mounts
+## Profiles, mounts and resolution order — RETIRED
+
+This section proposed `Mount`, `MountSource`, `Resolver`, a three-place resolution order, and
+*mounts shadow earned entries*. **All of it is gone**, and the argument is in
+[`terminology.md`](terminology.md):
 
 ```text
-A PROFILE   WHO IS THIS.       an identity context. an entity may hold several.
-A MOUNT     WHAT THEY CAN DO.  a name bound to reach, carrying the authority to use it.
+MOUNT-AS-A-NOUN WAS FIVE     a child engram placed by provisioning · ambient names placed at boot ·
+EXISTING MECHANISMS          grants on the branch · entity reach · copy.
+
+GRANTS-ON-THE-REFERENCE      EFFECTS HAPPEN AT LEAVES, so authority attached to a name at the top
+WAS SPECIFICALLY WRONG       bounds nothing unless every intermediate re-narrows it. grants bound
+                             the BRANCH, because a branch is what connects a leaf to an authority.
+
+PATH HIJACKING DISSOLVED     one child map, no shadowing order. the collision moves to provisioning
+                             time, where "who may write into my namespace" is already answered by
+                             commit-is-a-request.
 ```
 
-The AWS analogy is exact rather than loose: one identity, several named profiles, one selected per
-session. The same human as themselves and as an admin. `sudo`, `assume-role`.
+**`MOUNT` survives as a kernel method** — attach a namespace to the rack — which is a different
+operation and is defined in `terminology.md`.
 
-```go
-// A Profile is a named authority context. Sign-in picks one; the ENTITY does not
-// change.
-type Profile struct {
-    Name   string
-    Mounts map[string]*Mount
-}
 
-// A Mount binds a name to reach the principal did not earn, WITH the authority to
-// use it.
-//
-// RUNTIME CONFIGURATION, not graph structure — which is what makes unmounting
-// possible at all. world.md: configuration is "volatile, mutable, rebuildable, and
-// it belongs to the runtime."
-type Mount struct {
-    Name   string
-    Engram *graph.Engram   // an ordinary engram. children and history come free.
-    Grants []Grant
-    Source MountSource     // Ambient · Granted · Inherited
-}
-
-// Resolver is what a frame consumes. No way to reach Mounts or Grants — the same
-// shape as the Index interface the runtime entity already holds, and for the same
-// reason: the write path should be ABSENT, not restrained.
-type Resolver interface {
-    Resolve(name string) (*graph.Engram, bool)
-    Names() []string
-}
-```
-
-### Grants belong on the mount, and that is a fork
-
-```text
-ACL     a name, and SEPARATELY a table of what may be done with it.
-OCAP    THE REFERENCE CARRIES THE AUTHORITY. holding it is being permitted.
-```
-
-`grammar.md` already states the second nearly word for word — *capability is name resolution; you can
-select what you can name; you can name what you were given* — and `kernel-revision.md` records the
-convergence on object-capability explicitly.
-
-**Splitting grants off the binding is the move back to ACLs**, and it reintroduces the question ocap
-exists to delete: *given that you can name it, may you use it?* Mounting `write` with
-`fs:write:/work/**` is attenuating a specific reference, which is the ocap primitive.
-
----
-
-## Resolution order
-
-```text
-1  DELEGATED   this invocation only. reach handed back by something I CHOSE to invoke.
-2  MOUNTS      granted.
-3  ENGRAMS     earned.
-```
-
-> **Mounts shadow earned entries, never the reverse.**
-
-If an accumulated engram named `write` could shadow a mounted `write`, a principal authors its own
-`write` and everything provisioned for it silently routes through structure it wrote. That is **PATH
-hijacking** — the best-known failure of exactly this design — and the ordering is the whole fix.
-
-Delegation sitting above both is safe because delegated reach came from something the possibility
-chose to invoke, and it dies with the invocation. That is `grammar.md`'s delegation-versus-injection
-line, unchanged.
-
----
-
-## Authority lives on the mount, never on the entity
+## Authority lives on the branch, never on the entity
 
 An entity has **no owner**. Exactly-one-owner would make an interpreter exclusive — if I hold
 authority over an AI, my sister cannot use it — which is absurd for a thing whose whole purpose is
 being invoked by many parties.
 
-> **The same entity, mounted twice, is two permission sets with no relationship between them.**
+> **The same entity, invoked from two branches, is two permission sets with no relationship between
+> them.**
 
 Which is the AWS shape again: a role is not owned by a user; a user *assumes* it with a policy
 attached to that assumption.
 
 **And it makes the confused deputy unrepresentable rather than fixed.** The canonical bug is C
 invoking B to reach authority C does not hold. Here B has no ambient authority at all — it has
-whatever the mount C invoked it *through* carries. There is no "B's own authority" for C to borrow.
+whatever the **branch that invoked it** carries. There is no "B's own authority" for C to borrow.
 
-### A mount is three things
+### What a branch carries — REVISED
+
+This section said *a mount is three things*. With mounts retired, the three live on the branch:
 
 ```text
-A BINDING            name → engram.              what you can NAME.
-A GRANT SET          read · write · spawn.       what you can DO.
-A MEMORY PROVISION   "you may accumulate HERE."  where your durable writes LAND.
+NAMES        resolved in frame.          what you can NAME.     the graph boundary.
+GRANTS       read · write · spawn.       what you can DO.       the world boundary.
+PROVISION    "you may accumulate HERE."  where writes LAND.     still has no shape — see Open.
 ```
 
 The two permission categories fall on that seam and are why they are one vocabulary rather than two:
@@ -210,21 +173,24 @@ authorizations with two characters; they become one with two alphabets.
 
 **The build already holds the place for this.** `authorize.go`'s `ownership()` is a documented no-op:
 *"held structurally rather than checked… if engrams ever become shareable, this stops being free and
-must become real."* Shareable memory is exactly what a mount is.
+must become real."* Shareable memory is exactly what provisioning creates.
 
 **And denial does not stop an entity learning.** Learning *about* an entity lives on its parent's
 engram, which it can never reach — `DOWN, NEVER UP`. Withholding commit authority stops an entity
 accumulating its own selection history over its own children. It does not make it a pure function,
 and it does not make its failures invisible. *It plays by the owner's rules.*
 
-### Invoking a tool versus invoking a party
+### Invoking a tool versus invoking a party — REVISED
+
+This section said invoking an entity is a **crossing that switches provision**. **Within a runtime it
+does not**, and that was the confused-deputy hole described as a feature.
 
 ```text
-INVOKE AN ENGRAM   a TOOL. runs under the CALLER'S authority, in the caller's provision.
-                   your work, their instrument.
+WITHIN A RUNTIME   authority NEVER MOVES. a branch runs under the grants and in the provision of
+                   whatever provoked it, whether it names an engram or an entity.
 
-INVOKE AN ENTITY   a CROSSING. switches to that entity's own mount and provision.
-                   their work, delivered to you.
+ACROSS RUNTIMES    a real crossing, and not a mechanism — two branches, a local stub on each
+                   side, each kernel enforcing its own. nothing is shared to widen.
 ```
 
 > **Autonomy inside the provision. Accountability at the boundary.**
@@ -241,40 +207,40 @@ So a memory provision bounds **where your copies land**, not what you can see. W
 still needing a shape — region, quota, subtree — and it is the one object in this model that has
 none.
 
-## Revocation is unmounting
+## Revocation — REVISED
 
-`kernel-revision.md` lists revocation as the one hole with no home. The split closes most of it.
+This section said *revocation is unmounting*. With mounts gone:
 
-```text
-GRANTED REACH   a mount. RUNTIME CONFIGURATION. removable, because the binding was never durable.
-EARNED REACH    a child formed on citation. NOT removable — and revoking it would be erasing the
-                principal's own memory, which is not what anyone wanted.
-```
+> **Revocation is provisioning the next tree with less.**
 
-Append-only forbids deleting an **engram**. It says nothing about a **binding**.
+A name stays in your namespace — it is your memory and erasing it would be erasing what you learned —
+and it simply cannot do anything you are no longer granted, because grants live on the branch and are
+re-issued at every mount.
 
-And entity reach was already runtime — `k.Reg.Known()` flowing into `p.Reach` — so dropping an entity
-from the registry revokes it for new chains while in-flight chains keep what they hold until they
-end. **That is leasing, and it arrives without anyone adding a lease.**
+What survives unchanged is the split underneath: **granted reach is ephemeral and earned reach is
+durable**, so append-only forbids deleting an engram and says nothing about what a branch may do with
+it. Entity reach was already runtime state, so dropping an entity revokes it for new branches while
+in-flight ones keep what they hold until they end — **leasing, arriving without anyone adding a
+lease.**
 
----
 
-## Ingress is an ordinary scoped select
+## Entering is an ordinary scoped select
 
 ```text
 BEFORE   ingress + drive = an UNSCOPED select. maximum privilege, and nothing to check against.
-AFTER    ingress = a select resolved against the root's namespace. the same scope check as
-         every other select, no exception, no new mechanism.
+AFTER    you are MOUNTED into a namespace, and a select resolves against it. the same scope
+         check as every other select, no exception, no new mechanism.
 ```
 
 So `questions.md §5`'s missing gate is **provisioning**, and the maximum-privilege problem becomes
-*do not mount much*. That is `world.md`'s own line arriving where it was needed: *a capability
+*do not provision much*. That is `world.md`'s own line arriving where it was needed: *a capability
 granted **once, at admission**, being exercised.*
 
 ### And it separates system space from user space
 
 ```text
-SYSTEM SPACE   ambient mounts. discover · create · introspect. present in every namespace.
+SYSTEM SPACE   ambient names. discover · create · introspect. children every namespace is
+               given at boot.
 USER SPACE     entries that accumulated. per principal.
 ```
 
@@ -353,8 +319,8 @@ The usual regress: to run the sign-in engram you need a root, and to get a root 
 Answered the way `discover` answered it — something is given.
 
 ```text
-THE ADMISSION PROFILE   holds the union of what it may issue, and ONE mount: the
-                        authentication engram. it can authenticate and nothing else.
+THE ADMISSION NAMESPACE holds the union of what it may issue, and ONE child: the authentication
+                        engram. it can authenticate and nothing else.
 ```
 
 Deliberately the narrowest useful namespace in the system.
@@ -382,7 +348,7 @@ inverts the one relationship the whole pressure model rests on.
 1  the admission chain runs under the admission profile.
 2  it COMMITS AN OBSERVATION CARRYING A PROFILE. an ordinary commit. nothing new.
 3  the admission chain CLOSES. records written, staged effects disposed, done.
-4  the channel opens A NEW ROOT under that profile. it has no parent, because roots do not.
+4  the kernel MOUNTS that namespace onto the rack under the issued grants.
 ```
 
 Nothing inside the model produces a root. The channel does, and the channel is already the one thing
@@ -419,21 +385,22 @@ METHOD                   linux does not do it either; authentication is userspac
 GRANTS IN A SEPARATE     the ACL model. it reintroduces "given that you can name it, may you use
 TABLE                    it," which is the question object-capability exists to delete.
 
-EARNED ENTRIES           PATH hijacking. a principal authors `write` and everything provisioned
-SHADOWING MOUNTS         for it routes through structure it wrote.
+EARNED ENTRIES           RETIRED WITH MOUNTS. one child map, so there is no shadowing order to
+SHADOWING MOUNTS         get wrong; the collision moves to provisioning time.
 
 MINIMAL-AND-GRANT        monotonic narrowing forbids widening, so an issuer must already hold what
 ADMISSION                it issues. privileged-and-drop is forced, not stylistic.
 
-A PARALLEL CHILD MAP     the mounted engram already has Engrams and History. a namespace holding
-ON THE NAMESPACE         its own duplicates the engram machinery one level up.
+A PARALLEL CHILD MAP     a namespace IS an engram, so it already has Engrams and History.
+ON THE NAMESPACE         holding its own duplicates the engram machinery one level up.
 
-Mount() / Unmount() AS   provisioning IS admission, and admission is the gate §5 is missing. an
-NAMESPACE OPERATIONS     operation anything inside can reach is not a gate.
+PROVISIONING REACHABLE   provisioning IS admission, and admission is the gate §5 is missing. an
+FROM INSIDE A BRANCH     operation anything inside can reach is not a gate. Mount and Unmount are
+                         KERNEL methods, called from outside.
 
 AN EXPECTATION FIELD     someone will read the struct and say "that is an engram with a nil
-LEFT NIL ON A ROOT       field." role is the distinction; do not leave the field inviting the
-                         question.
+LEFT NIL                 field." a namespace IS an engram; it simply has no expectation anyone
+                         can name.
 
 exec / TAIL CALLS        collapsing a pass-through intermediary deletes the hop that records it
                          was used. the overhead is the instrument.
@@ -455,15 +422,15 @@ LEARNING                 separate structure and neither learns from the other. c
                          privacy, possibly very wasteful. world.md's "duplication is nearly free"
                          was argued about EXPECTATIONS, which never improve — histories do.
 
-MAY YOU SIGN IN AT ALL   two moments that must not merge: whether you may open a root, then as
-                         whom. the first cannot live in a mount, because it is what hands you the
-                         mount table.
+MAY YOU BE MOUNTED       two moments that must not merge: whether you may be mounted at all, then
+AT ALL                   under what grants. the first cannot live in a grant, because it is what
+                         hands you the grants.
 
-DOES AN AGENT GET        a root is what an entity has when it can INITIATE; interpreters never
-A ROOT                   need one. so a scheduled agent or a daemon gets one and it should be
-                         thin — which is now inspectable, because a thin profile is a small
-                         mount table.
+DOES AN AGENT GET        a namespace is what an entity has when it can INITIATE; interpreters
+A NAMESPACE              never need one. so a scheduled agent or a daemon gets one and it should
+                         be thin — which is inspectable, because a thin namespace is a small
+                         child map.
 
-WHAT UNMOUNTING DOES     an in-flight chain holds what it holds until it ends. that is leasing,
-MID-CHAIN                and the lease term is the chain — which may be an hour.
+WHAT UNMOUNTING DOES     an in-flight branch holds what it holds until it ends. that is leasing,
+MID-BRANCH               and the lease term is the branch — which may be an hour.
 ```

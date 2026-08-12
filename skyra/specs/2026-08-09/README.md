@@ -124,6 +124,13 @@ Toy 5   attention must not seal itself         LOCALIZED, NOT PREVENTED
 unresolved* — not the first. It is not handled; three separate breaks collapsed into one precondition,
 which `discover.md` then made unexpressible.
 
+## Revised by 2026-08-11
+
+`2026-08-11/` revises this set against the build. **Six documents here carry banners** because two of
+their claims no longer hold: *commit closes the possibility*, and *root*. Read
+`2026-08-11/README.md` for the doc table and the precedence rule, and
+`2026-08-11/semantics/terminology.md` first — it is authoritative on words.
+
 ## Still the live reasoning
 
 `2026-07-27` — trust, actions, workers, dynamics, and the five toys. `2026-08-06` — the kernel as

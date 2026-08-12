@@ -11,6 +11,16 @@ the **bill** — what the two methods were carrying, and what pays for each item
 and that set's `kernel.md`. This set now has a `kernel.md` of its own and they are not the same
 document.
 
+
+> **REVISED BY `2026-08-11`.** Two things below no longer hold, and the whole set carries them:
+>
+> ```text
+> COMMIT DOES NOT CLOSE   a possibility returns and stays live. only the ROOT's commit — CLOSURE
+>                         — is durable. see semantics/open-until-commit.md.
+> ROOT IS RETIRED         what it named is a BRANCH. a namespace is an ENGRAM.
+>                         see semantics/terminology.md, which is authoritative on words.
+> ```
+
 ---
 
 ## The question, and what answered it

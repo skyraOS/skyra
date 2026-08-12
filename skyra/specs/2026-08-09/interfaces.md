@@ -6,6 +6,16 @@ this disagrees with the rest of the set, the set wins until this is settled.
 
 > **The kernel pairs an engram with an entity. That pairing opens a possibility.**
 
+
+> **REVISED BY `2026-08-11`.** Two things below no longer hold, and the whole set carries them:
+>
+> ```text
+> COMMIT DOES NOT CLOSE   a possibility returns and stays live. only the ROOT's commit — CLOSURE
+>                         — is durable. see semantics/open-until-commit.md.
+> ROOT IS RETIRED         what it named is a BRANCH. a namespace is an ENGRAM.
+>                         see semantics/terminology.md, which is authoritative on words.
+> ```
+
 ---
 
 ## Vocabulary
@@ -97,6 +107,10 @@ It also unifies two things that used to be separate mechanisms:
 ```text
 FIND    search the index, COPY an expectation in.   → a local engram
 BUILD   author a new one.                           → a local engram
+
+        NOTE 2026-08-11: "copy" now names three depths. FIND copies an EXPECTATION only.
+        REFINEMENT copies an engram and carries its observations, sharing children.
+        DISCOVERY copies a whole subtree. see 2026-08-11/semantics/second-kind-of-credit.md.
 ```
 
 Same outcome; they differ only in where the expectation came from.

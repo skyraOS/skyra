@@ -197,7 +197,8 @@ RETIRED   "INGRESS" AS A METHOD. it described a model where the method minted an
 
 ```text
 SELECT        choose. names one or more engrams, binds observations, PROVISIONS ACCESS.
-COMMIT        internalize. the value up, and the only durable write.
+COMMIT        internalize. hands an observation up. THE POSSIBILITY STAYS LIVE.
+              NOT the durable write — see COMMIT vs CLOSURE below. CLOSURE is.
 
 discover      reads the GRAPH.    what HAPPENED.     engrams · entities · observations · hosts.
 introspect    reads the KERNEL.   what is HAPPENING. chains · heads · ancestry.

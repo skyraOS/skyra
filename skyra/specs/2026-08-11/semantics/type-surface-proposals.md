@@ -168,7 +168,8 @@ WHY    mount was five existing mechanisms under one word — a child placed by p
 
        and grants-on-the-reference was specifically wrong: EFFECTS HAPPEN AT LEAVES, so
        authority attached to a name at the top bounds nothing unless every intermediate
-       re-narrows it. grants bound the CHAIN. Root.Grants was always the right home.
+       re-narrows it. grants bound the BRANCH — which is where kernel.md put them before this
+       doc moved them somewhere worse.
 
        PATH hijacking dissolves with mounts — one child map, no shadowing order to get wrong.
        the collision moves to provisioning time, where "who may write into my namespace" is
