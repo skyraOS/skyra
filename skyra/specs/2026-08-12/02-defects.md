@@ -9,7 +9,7 @@
 
 ## D1 · `commit` silently drops all but one delegated reach
 
-**File:** `kernel/kernel.go:422`, in `commit`, the naming branch.
+**File:** `kernel/kernel.go:422`, in `commit`, the naming case.
 
 ```go
 // Reach passes through a naming commit — otherwise discover could resolve

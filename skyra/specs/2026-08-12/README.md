@@ -46,7 +46,9 @@ The loop is being rewritten separately and by hand. Three unmade design decision
 ```text
 DO NOT CHANGE   when a possibility dies. commit still closes it.
 DO NOT CHANGE   when durable writes happen. graph.Apply is still called from the commit path.
-DO NOT INTRODUCE   Tree · Branch · Chain · Draft · namespaces · grants · Mount · ceilings.
+DO NOT INTRODUCE   any new lifecycle or authority type. if you encounter the identifiers
+                   `Tree` `Branch` `Chain` `Draft` `Grant` `Ceiling` `Namespace` anywhere,
+                   they belong to work that is NOT in this order.
 DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.Reject,
                    kernel.Ingress, kernel.Hold, kernel.Spiral, kernel.Introspect.
 ```
@@ -55,7 +57,7 @@ DO NOT REMOVE      kernel.Root, kernel.Ask, kernel.Drive, kernel.Accept, kernel.
 
 `03` touches `kernel.go` in exactly two ways: the interpreter call sites, and the deletion of the
 log helpers and their calls, which are spread through `open`, `commit` and `runGroup`. **No control
-flow changes** — every `return`, every branch, and every lifetime stays as it is.
+flow changes** — every `return`, every code path, and every lifetime stays as it is.
 
 ## The work
 
@@ -91,15 +93,15 @@ same-question fold dereferences `Ref`s, and an unresolvable one fingerprints as 
 exact failure the fold exists to prevent — and `Disperse`, which resolves each cite before checking
 `Producer`, so the walk silently shortens.
 
-All three are fine once observations live on the branch until closure. **That is loop work and it is
-not in this order.**
+All three are fine once observations live in ephemeral kernel state until a chain closes. **That is
+loop work and it is not in this order.**
 
 ## Before you start
 
 ```text
 CODE          skyra/src/skyra/cognitive-agent/skyra-dna-v5/
 MODULE ROOT   skyra/                    ← run go from here
-BRANCH        git checkout -b overnight-08-12        (off whatever is checked out now)
+GIT BRANCH    git checkout -b overnight-08-12        (off whatever is checked out now)
 
 FIRST CHECK   cd skyra && go build ./... && go test ./...
               it is green right now. if it is not, STOP — something else is wrong and this
@@ -111,7 +113,7 @@ if an item seems to need one, that is a stop, not a reason to go looking.
 
 ## Where to work
 
-**On the existing code, on a branch off the current one.** Not a copy.
+**On the existing code, on a git branch off the current one.** Not a copy.
 
 Every item is an *edit* to code that exists, the fence is *tests stay green*, and that fence needs the
 existing tests to mean anything. A copy would have to be merged back and the merge is where the risk

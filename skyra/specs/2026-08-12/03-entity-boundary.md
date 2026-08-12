@@ -159,7 +159,7 @@ The loop becomes:
 Assemble → Project → Step → Parse → switch on Select | Commit
 ```
 
-with the `Select` and `Commit` branches **unchanged**.
+with the `Select` and `Commit` cases **unchanged**.
 
 ---
 
