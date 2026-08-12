@@ -9,7 +9,7 @@
 
 ## D1 · `commit` silently drops all but one delegated reach
 
-**File:** `kernel/kernel.go`, in `commit`, the naming branch.
+**File:** `kernel/kernel.go:422`, in `commit`, the naming branch.
 
 ```go
 // Reach passes through a naming commit — otherwise discover could resolve
@@ -41,7 +41,7 @@ else. A capability the caller was granted simply is not there, with no error.
 
 ## D2 · `Materialize` leaves a failed write undisposed
 
-**File:** `kernel/root.go`, in `Materialize`.
+**File:** `kernel/root.go:142`, in `Materialize`.
 
 ```go
 if err := s.Write(e.Path, e.Body); err != nil {

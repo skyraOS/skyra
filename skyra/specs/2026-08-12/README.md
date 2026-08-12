@@ -88,6 +88,21 @@ exact failure the fold exists to prevent — and `Disperse`, which resolves each
 All three are fine once observations live on the branch until closure. **That is loop work and it is
 not in this order.**
 
+## Before you start
+
+```text
+CODE          skyra/src/skyra/cognitive-agent/skyra-dna-v5/
+MODULE ROOT   skyra/                    ← run go from here
+BRANCH        git checkout -b overnight-08-12        (off whatever is checked out now)
+
+FIRST CHECK   cd skyra && go build ./... && go test ./...
+              it is green right now. if it is not, STOP — something else is wrong and this
+              order assumes a green tree.
+```
+
+Everything you need is in this directory. **Do not read other spec directories to do this work** —
+if an item seems to need one, that is a stop, not a reason to go looking.
+
 ## Where to work
 
 **On the existing code, on a branch off the current one.** Not a copy.
