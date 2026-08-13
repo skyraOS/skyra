@@ -276,3 +276,47 @@ Each is reached with `socket` + `connect`, not `execve` — you do not spawn the
 something already running.
 
 *All of the above measured on this machine, this session.*
+
+## E10 · The design already places reachability before the possibility opens
+
+Written months before resolution was discussed, and it independently fixes the same boundary:
+
+```text
+world.md    "Projection happens AT DISPATCH, not at return."
+
+              DELIVERY   could this be presented at all?   IMMEDIATE. the possibility never opens.
+              WORK       was the answer any good?          however long it takes.
+
+            "an undeliverable member returns instantly and DOES NOT BLOCK ITS GROUP — you do not
+             wait on a human reading a TV to learn the TV had no speaker."
+
+build.md    "TV with no speaker fails AT DISPATCH."
+
+interfaces  "PROJECTION MUST FAIL LOUDLY — audio to a device with no speaker must ERROR, never
+.md          silently drop. otherwise the invocation 'succeeds', nobody perceived anything, and
+             the record reads as success."
+```
+
+Three properties fall out that resolution would otherwise have had to invent:
+
+```text
+IT FAILS IMMEDIATELY   an exhausted resolver fails on the same clock as a TV with no speaker.
+                       one mechanism, not two.
+
+IT FAILS LOUDLY        silent fallback is the same defect as silent projection — the record
+                       would read as success. That requirement already covers resolution.
+
+IT IS BEFORE THE       "the possibility never opens" — which is exactly where a resolver has to
+POSSIBILITY OPENS      run. The layering in decision 5 and this timing are the same claim,
+                       arrived at from opposite ends.
+```
+
+```text
+PROJECTION FAILURE   the TV has no speaker            → fails at dispatch
+REACH FAILURE        no address for Claude answers    → fails at dispatch
+```
+
+Both are *this could not be delivered*. So decision 5 is not a new subsystem — it is the existing
+dispatch step gaining a resolver.
+
+*Quotations verified against `specs/2026-08-09/{world.md, build.md, interfaces.md}`.*

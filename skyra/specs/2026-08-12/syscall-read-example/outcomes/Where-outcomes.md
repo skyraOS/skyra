@@ -191,3 +191,44 @@ same filesystem namespace and resolve to different transports.
 EVIDENCE   Where E9   the four rows, measured
            Who E4     a path and a network address are both names in a namespace
 ```
+
+## 10 · `reach` and `discover` are learnable engrams owned by the kernel
+
+**Decided 2026-08-12.** The verb is **reach** — not `dispatch`, not `open`, not `dial`.
+
+```text
+DISCOVER   find engrams · entities · observations · hosts
+REACH      get to one
+```
+
+Both are **kernel-owned builtins** — nameable by fixed name, which is what stops the regress
+([decision 6](#6--the-regress-stops-at-a-builtin)) — and both are **engrams**, so they accumulate
+history and improve rather than being maintained
+([decision 5](#5--entity-resolution-sits-below-the-top-level-engram)).
+
+**The vocabulary is the argument.** It is biological, and it already reads:
+
+```text
+Skyra discovered entity x
+Skyra reached entity y
+Skyra reached for entity z and couldn't        → the error message writes itself
+```
+
+That third line is the one that matters: *reached for and couldn't* is a **failure with a subject**,
+and under decision 5 it is also the training signal. The log line and the observation are the same
+event.
+
+```text
+WHY NOT `dispatch`   `dispatch` is already a MOMENT in this design — world.md: "projection happens
+                     AT DISPATCH, not at return." That stays true and is not in competition:
+                     dispatch is WHEN, reach is WHAT YOU DO. See Where E10.
+
+WHY NOT `open` ·     both collide with syscalls that mean something adjacent but different.
+`connect` · `bind`   naming the abstraction after a syscall it is not would mislead whoever
+                     reads the platform layer.
+```
+
+```text
+EVIDENCE   Where E10   the design already places reachability BEFORE the possibility opens
+           Where E9    address and transport, measured
+```
