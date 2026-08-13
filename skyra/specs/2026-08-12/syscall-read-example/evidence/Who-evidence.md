@@ -156,9 +156,39 @@ a spawned curl faults  → nonzero exit status. you keep running.     ✓
 libssl faults          → YOU FAULT. same process.                   ✗
 ```
 
-**And what path and address have in common is that both are NAMES.** Each is a name in a
-namespace, and the namespace is the resolution procedure — which URI notation states outright as a
-scheme (`file://`, `https://`, `unix://`). Since everything here has a name, naming cannot be the
-discriminator; independent existence can.
-
 *Every console block above was run on this machine.*
+
+## E4 · A path and a network address are the same object: a NAME IN A NAMESPACE
+
+Every candidate reached this session was named, and each name belongs to a namespace that **is**
+its resolution procedure:
+
+```text
+/usr/bin/curl                       the FILESYSTEM namespace    → open · execve
+api.anthropic.com:443               DNS + IP + port             → socket · connect
+/tmp/mongodb-27017.sock             the filesystem again        → socket · connect
+/opt/homebrew/…/libssl.3.dylib      the filesystem              → open · mmap
+```
+
+Note that two different namespaces resolve through the filesystem to **different transports** —
+the name alone does not tell you how to reach it; the namespace does.
+
+**URI notation states the namespace outright, as a scheme:**
+
+```text
+file:///usr/bin/curl
+https://api.anthropic.com/v1/messages
+unix:///tmp/mongodb-27017.sock
+```
+
+```text
+THE SCHEME IS THE RESOLUTION PROCEDURE.
+```
+
+This is the same shape the design already uses for authority — `terminology.md` makes NAMESPACE a
+first-class durable object (*"an engram. a principal's top engram. children are what they can
+select"*), and capability is name resolution: you can select what you can name, and you can name
+what you were given.
+
+**And it is why criterion 2 could not be "has an address":** everything here has a name, libraries
+included. Naming is universal, so it discriminates nothing — which is exactly what E3 measured.
