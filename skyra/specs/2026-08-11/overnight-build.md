@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Status: SUPERSEDED.** Reviewed and ruled on 2026-08-12.
 
-> **The executable version is [`../2026-08-12/`](../2026-08-12/README.md), which is self-contained by
+> **The executable version is [`../2026-08-12/overnightBuild/`](../2026-08-12/overnightBuild/README.md), which is self-contained by
 > design — an agent working this order must not read this directory.**
 >
 > Three findings here were better than what 08-12 had and were adopted into it:
