@@ -5,6 +5,27 @@
 [`syscall-read-example/evidence/`](syscall-read-example/evidence/). This file is the map that made
 those easier to find.
 
+## The core mapping
+
+Everything below elaborates this. An engram is not the binary — it is the binary plus what running
+it wrote.
+
+```text
+THE BINARY          →   Expectation        IMMUTABLE. "authored once and re-run."
+PROCESS MEMORY      →   the frame          EPHEMERAL. dies with the opening.
+WHAT IT WRITES      →   History            DURABLE. accumulates across openings.
+                        Observations
+```
+
+> `interfaces.md` — *"Expectations never improve — they are authored once and re-run, and
+> everything that accumulates accumulates **AROUND** them."*
+
+It is also a **check on where state may live**: immutable, ephemeral, or written. State in none of
+those three has nowhere legitimate to be — which is entity criterion 5 (*no back-channel*) arriving
+from the file side.
+
+---
+
 Every parallel below is marked:
 
 ```text
@@ -26,20 +47,9 @@ POSSIBILITY   ephemeral.   ONE OPENING OF an engram.
 `file` / `process` uses the same two words — durable versus ephemeral, and *one opening of*. Written
 into `terminology.md` before the analogy was looked for.
 
-**The mapping is three-way, not one-to-one.** An engram is not the binary — it is the binary plus
-what running it wrote:
-
-```text
-THE BINARY          →   Expectation        IMMUTABLE. "authored once and re-run."
-PROCESS MEMORY      →   the frame          EPHEMERAL. dies with the opening.
-WHAT IT WRITES      →   History            DURABLE. accumulates across openings.
-                        Observations
-```
-
-`interfaces.md` says exactly this and says it first: *"Expectations never improve — they are
-authored once and re-run, and everything that accumulates accumulates **AROUND** them."* A running
-process reading a log another process just appended is the same relationship a possibility has to
-history written since it opened. **Nothing about that is a break.**
+**The mapping is three-way** — see [The core mapping](#the-core-mapping) above. A running process
+reading a log another process just appended is the same relationship a possibility has to history
+written since it opened. **Nothing about that is a break.**
 
 ```text
 WHAT IT BUYS    everything the OS knows about the file/process split: one file, many concurrent
