@@ -69,3 +69,65 @@ off the entity.
 EVIDENCE   Who E2   the five against real entities, and where the boundary falls
            Who E3   why the criterion is not "has an address" — a library has one
 ```
+
+## 3 · You reach an entity through an entity
+
+**Decided 2026-08-12.**
+
+```text
+runtime ──execve──▶ curl ──HTTPS──▶ Claude
+                    entity          entity
+```
+
+`curl` satisfies all five: uniquely versioned, its own process and failure domain, takes an argv it
+parses and acts on, returns bytes, and remembers nothing of you. So reaching Claude went **through**
+an entity.
+
+**This makes "endpoint" recursive rather than special.** Reaching anything may itself pass through
+something reachable, and it holds one level further down — `execve` is reached through the kernel,
+which is the layer trusted by review rather than by history.
+
+```text
+THE COST     composition puts the middle entity in the TRUST PATH. curl can misreport what
+             Claude said; the history blames the outer name either way.
+
+WHAT IT      exec.CommandContext(ctx, "codex", args...) is ONE EntityID covering two entities —
+PREDICTS     the CLI binary and the model it reaches. world.md's "start coarse and split on
+             evidence" makes that the right starting state; this says what the split would be into.
+```
+
+## 4 · Criterion 2 is the only one that requires history
+
+**Decided 2026-08-12.**
+
+```text
+1  UNIQUE                 known at first contact
+3  TAKES AN EXPRESSION    known at first contact — it parses or it does not
+4  RETURNS SOMETHING      known at first contact
+5  NO BACK-CHANNEL        known from two invocations
+
+2  INDEPENDENT EXISTENCE  requires a FAILURE, and requires surviving it.
+```
+
+You cannot establish criterion 2 by asking, or by one successful call. Something has to break while
+you are watching — which is the property the whole system already runs on.
+
+**And it is observable, which makes co-location learnable rather than declared:**
+
+```text
+two entities always fail together   →  they share a failure domain
+two entities fail independently     →  they do not
+```
+
+`world.md`'s *"start coarse and **split on evidence**"* arriving from a new direction — here the
+evidence is failure correlation rather than behavioural difference.
+
+```text
+CAVEAT   failure domains are NESTED, not binary — thread · process · machine · network.
+         mongod is independent of your process and not of your machine. "Independent" is
+         always relative to a level, and this criterion picks the process level.
+
+         A device with no MMU has no local isolation at all, so on such a device there are
+         NO LOCAL ENTITIES — everything local is a library, and the only entities are across
+         the network.
+```

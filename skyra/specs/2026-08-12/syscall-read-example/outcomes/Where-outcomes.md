@@ -103,3 +103,91 @@ registered the entity, not by the entity"* — and it would go stale the moment 
 ```text
 EVIDENCE   Where E8   the design keys on the entity and excludes the host, because reach is plural
 ```
+
+## 5 · Entity resolution sits BELOW the top-level engram
+
+**Decided 2026-08-12.**
+
+```text
+THE TOP LEVEL   establishes WHERE.
+THE KERNEL      resolves WHICH ADDRESS.
+```
+
+An expectation must not name an endpoint. The reason is structural rather than tidy:
+
+> `interfaces.md` — an expectation is *"immutable. Expectations **never improve** — authored once
+> and re-run."*
+
+**Reach inside an expectation strands it the day the endpoint changes.** An engram that says
+*"ask Claude via `api.anthropic.com`"* is wrong the moment a second path exists, and it cannot be
+edited — only replaced. Resolution below the expectation is what keeps expectations survivable.
+
+**Resolvers are modeled as engrams even when deterministic.** Not because they all call a model —
+because an engram accumulates history, earns credit, and is selected among. A hardcoded table would
+be the one component that can never improve, sitting where the world changes fastest.
+
+**Fallback is the learning signal, not error handling.** Each fallback is an observation: *this
+address, this moment, failed; that one worked.* The mechanism generates its own evidence. And it
+only learns where there are ALTERNATIVES — one address can never improve, four can, which is why
+a human (phone · TV · email · Slack) is the interesting case.
+
+```text
+EVIDENCE   Where E9    address and transport, measured — and both ending in an fd
+           Who E3      criterion 2 needs a failure and needs surviving it
+```
+
+## 6 · The regress stops at a builtin
+
+**Decided 2026-08-12.** *"Something resolves you"* immediately raises **which resolver** — and the
+answer is one the kernel knows by fixed name, never by selection. `resolve` sits beside `discover`.
+
+The mechanism is already built and already says so:
+
+```go
+// Builtin names, present in every frame. discover is nameable everywhere — a
+// builtin name, not something you must discover in order to discover. That is
+// what stops the regress.
+Builtin map[string]*graph.Engram
+```
+
+**It is read in `frame.go` and nothing populates it.** The regress-stopper is plumbed and empty.
+
+## 7 · The kernel routes; the resolver ranks
+
+**Decided 2026-08-12.** The kernel invoking a resolver is `Ask`/`Drive`-shaped and legitimate — it
+routes to something that decides. The kernel **ordering addresses itself** is what would break
+*no semantics*. The resolver picks; the kernel carries the answer and records it.
+
+## 8 · `Invocation.Host` records what the resolver chose
+
+**Decided 2026-08-12.**
+
+```go
+Host ids.HostID   // "RECORDED, NOT KEYED"
+```
+
+Written once, at `kernel/kernel.go:369`, as `k.Host.ID()`. **Read nowhere** — grep finds no reader.
+
+Under decision 5 it stops being dead weight: it records the resolver's choice, and the resolver
+reads its own history back. The field's existing comment turns out to have been right for a reason
+nobody had yet — it is not part of the question, it is **the answer to a different one**.
+
+## 9 · Address and transport are two columns
+
+**Decided 2026-08-12.**
+
+```text
+                ADDRESS                        TRANSPORT
+curl            /usr/bin/curl                  fork(2) + execve(59)
+Claude          api.anthropic.com:443          socket(97) + connect(98)
+mongod          /tmp/mongodb-27017.sock        socket(97) + connect(98)
+libssl          /opt/…/libssl.3.dylib          open(5) + mmap(197)
+```
+
+**A name never tells you how to reach it — the namespace does.** Two of those names live in the
+same filesystem namespace and resolve to different transports.
+
+```text
+EVIDENCE   Where E9   the four rows, measured
+           Who E4     a path and a network address are both names in a namespace
+```

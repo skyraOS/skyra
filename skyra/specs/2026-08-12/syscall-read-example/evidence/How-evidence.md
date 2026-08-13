@@ -297,3 +297,43 @@ than one of them.
 
 *The shebang execve, the magic bytes, the two failures and the universal binary are all verified on
 this machine. The Windows behaviour is NOT verified here.*
+
+## E10 · No TLS syscall; and the two transports converge on an fd
+
+```console
+$ grep -icE "SYS_.*(tls|ssl|crypt)" sys/syscall.h
+1
+$ grep -inE "SYS_.*(tls|ssl|crypt)" sys/syscall.h
+529:#define SYS_mremap_encrypted 489        ← memory encryption. unrelated.
+```
+
+**461 syscall numbers, and none of them is TLS.** The handshake is a userspace library reading and
+writing on an ordinary socket.
+
+```console
+$ grep -nE "SYS_(socket|connect|read|write|close)\b" sys/syscall.h
+SYS_read     3      SYS_write    4      SYS_close    6
+SYS_socket  97      SYS_connect 98
+
+$ grep -nE "SYS_(fork|execve|pipe)\b" sys/syscall.h
+SYS_fork     2      SYS_pipe    42      SYS_execve  59
+```
+
+```text
+LOCAL     pipe → fork → execve    →  fd
+REMOTE    socket → connect        →  fd
+                                     ↓  read(3) · write(4) · close(6)
+```
+
+**And `dlopen` produces something else entirely:**
+
+```console
+before dlopen:  pid 19388
+after  dlopen:  pid 19388                 ← same process
+after  fork:    pid 19388 spawned 19389   ← a second process
+```
+
+`execve` and `connect` hand back a handle to a party that is not you. `dlopen` hands back a
+pointer, which is an offset **into** you.
+
+*Verified against the MacOSX.sdk syscall header and run on this machine.*

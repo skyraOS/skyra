@@ -230,3 +230,49 @@ type Registry struct {
 
 *Quotations verified against `specs/2026-08-09/world.md` and `skyra-dna-v5/{graph/types.go,
 host/host.go, entity/entity.go}` on this machine.*
+
+## E9 · Address and transport, measured
+
+Every entity reached this session, as the pair actually executed:
+
+```text
+                ADDRESS                                       TRANSPORT
+curl            /usr/bin/curl                                 fork(2) + execve(59)
+Claude          api.anthropic.com:443                         socket(97) + connect(98)
+mongod          /tmp/mongodb-27017.sock                       socket(97) + connect(98)
+libssl          /opt/homebrew/…/libssl.3.dylib                open(5) + mmap(197)
+```
+
+**A raw connection to Anthropic, with no curl, no shell and no HTTP library:**
+
+```console
+socket fd     3
+connected to  160.79.104.10:443
+local side    10.0.0.22:54060
+```
+
+**LAN and internet are the SAME mechanism** — the calls are identical and only the bytes in the
+`sockaddr` differ:
+
+```console
+LAN gateway  socket()+connect() -> OSError
+internet     socket()+connect() -> fd 4  peer 160.79.104.10
+```
+
+So distance is a property of the connection, not a separate resolution path. "Wifi" is a physical
+layer three levels below anything the runtime sees — the same `connect()` runs over ethernet,
+cellular, or a tunnel.
+
+**Local entities are not all reached by `execve`.** These were live on this machine:
+
+```text
+/tmp/mongodb-27017.sock                    mongod, pid 889, up since 11:07
+/var/run/docker.sock
+/tmp/cc-socks/61290.sock                   this session
+…/com.spotify.client…/SingletonSocket
+```
+
+Each is reached with `socket` + `connect`, not `execve` — you do not spawn them, you attach to
+something already running.
+
+*All of the above measured on this machine, this session.*
