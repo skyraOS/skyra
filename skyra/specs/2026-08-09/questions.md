@@ -110,6 +110,24 @@ flight — *no, redder* — which is ingress into running work rather than at it
 the same authority as opening a root, whether anything but the original asker may do it, and what it
 means for replay, are all open.
 
+**2026-08-13 — the boundary now has a name, which is not the same as having a gate.**
+`specs/2026-08-12/primitives.md` renames this primitive `APPROACH`, and the rename does work
+`ingress` could not:
+
+```text
+IT IS OUTSIDE-IN, AND      the only way anything enters. So the trust boundary and the gate are
+ALWAYS AT A ROOT           THE SAME OBJECT — a gate anywhere else guards a door with no wall.
+                           That does not close this question; it establishes that there is
+                           exactly one place a gate can go.
+
+IT HAS AN OPPOSITE         approach/avoid. "<caller> was avoided" is an EVENT WITH A SUBJECT,
+                           where "ingress did not happen" is an absence nothing records. The
+                           refusal branch is now nameable, which is the precondition for
+                           deciding it.
+```
+
+Still open: **what decides**, and the re-entry half below — both untouched by the naming.
+
 ```text
 WATCH   the first build has NO INGRESS, so this cannot be discovered by running it. it will be
         discovered by the first thing that puts a socket in front of the runtime.

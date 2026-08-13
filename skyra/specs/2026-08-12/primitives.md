@@ -1,14 +1,15 @@
 # Primitives
 
 **Date:** 2026-08-13  
-**Status: WORKING NOTE.** Six kernel-backed primitives. The first five form the execution and
-learning cycle. The sixth observes live execution.
+**Status: WORKING NOTE.** Seven kernel-backed primitives. The first six form the execution and
+learning cycle. The seventh observes live execution.
 
 ---
 
-## The six
+## The seven
 
 ```text
+APPROACH      Should this be let in at all?
 THINK         What behavior might address this need?
 ENGAGE        Choose behavior and bind what it will receive.
 REACH         Resolve and contact the entity that will interpret it.
@@ -27,6 +28,8 @@ kernel opens behavior that performs that interpretation.
 ## The primary cycle
 
 ```text
+APPROACH
+    ↓
 THINK
     ↓
 ENGAGE
@@ -41,7 +44,7 @@ RECOGNIZE
 The cycle may recurse after recognition:
 
 ```text
-think → engage → reach → remember
+approach → think → engage → reach → remember
                          ↓
                      recognize
                          ↓
@@ -55,7 +58,46 @@ execution at any point without deciding what that execution means.
 
 ---
 
-## 1 · Think
+## 1 · Approach
+
+```text
+QUESTION     Should this be let in at all?
+READS        the boundary — who is reaching, and with what.
+RETURNS      an admitted root, or a recorded avoidance.
+```
+
+Approach is **always at a root, and always outside-in**. It is the only way anything enters, which
+puts the trust boundary and the gate on the same object — a gate anywhere else would be guarding a
+door with no wall attached.
+
+```text
+APPROACH     admitted. a root opens, and the observation enters with an empty producer because
+             no possibility produced it.
+AVOID        refused, AND RECORDED. "<caller> was avoided" is an event with a subject, not an
+             absence — the same property that makes "reached for and couldn't" worth having.
+```
+
+This is where the maximum-privilege operation in the design sits, and `questions.md` §5 is the
+record of it being ungated: *a root originates freely, holds the grants, is the grader, and
+materializes.* Naming the boundary does not gate it — but it establishes that there is exactly one
+place a gate can go.
+
+**Approach is recursive, for the same reason reach is.** It applies at every boundary where
+something outside contacts something inside:
+
+```text
+a human       → approaches the runtime
+the runtime   → approaches an entity it composes with
+that entity   → is a whole system from inside, one party from outside
+```
+
+**And it is where bootstrap becomes expressible.** `discover.md` names bootstrap as the
+maximally-nil case — every blank empty. `Engage` cannot express that: it is a parent choosing, and
+the first engagement has no parent. An approach has no parent by construction.
+
+---
+
+## 2 · Think
 
 ```text
 QUESTION     What behavior might address this need?
@@ -75,7 +117,7 @@ candidates. The kernel does not decide which candidate is semantically appropria
 
 ---
 
-## 2 · Engage
+## 3 · Engage
 
 ```text
 QUESTION     Which behavior will run, with which observations and entity?
@@ -101,7 +143,7 @@ The kernel preserves emitted order while allowing the engaged work to execute co
 
 ---
 
-## 3 · Reach
+## 4 · Reach
 
 ```text
 QUESTION     How can this engaged entity be contacted now?
@@ -130,7 +172,7 @@ engagement is a failed invocation, not a possibility silently opened with nowher
 
 ---
 
-## 4 · Remember
+## 5 · Remember
 
 ```text
 QUESTION     What did this invocation produce, and does its parent keep it?
@@ -208,7 +250,7 @@ land; every other staged effect must be explicitly discarded.
 
 ---
 
-## 5 · Recognize
+## 6 · Recognize
 
 ```text
 QUESTION     Have I seen this observation, or something like it, before?
@@ -258,7 +300,7 @@ remains ephemeral unless its chain of remembrance reaches the outer boundary.
 
 ---
 
-## 6 · Orient
+## 7 · Orient
 
 ```text
 QUESTION     Where am I, and what is happening in live execution right now?
@@ -299,6 +341,8 @@ Several apparent operations reduce to these six:
 CREATE       remember provisional behavior into the live frame; retain it only if the outer chain does.
 COMPILE      recognize/translate, execute the candidate, then remember it if retained.
 ACCEPT       renamed Remember.
+INGRESS      renamed Approach — and the rename carries the gate, because approach has an
+             opposite and ingress did not.
 REJECT       close without Remember; ephemeral work evaporates and effects are discarded.
 COMMIT       Remember.
 RESOLVE      the central operation inside Reach.
@@ -326,6 +370,6 @@ GRAPH
 
 In one sentence:
 
-> **Think finds and reasons over possibilities; Engage chooses one; Reach contacts its interpreter;
+> **Approach decides what is let in at all; Think finds and reasons over possibilities; Engage chooses one; Reach contacts its interpreter;
 > Remember brings evidence back and retains its causal path; Recognize connects it to experience;
 > Orient locates the caller in the live structure throughout.**
