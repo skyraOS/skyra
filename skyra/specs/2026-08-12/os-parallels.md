@@ -26,15 +26,37 @@ POSSIBILITY   ephemeral.   ONE OPENING OF an engram.
 `file` / `process` uses the same two words — durable versus ephemeral, and *one opening of*. Written
 into `terminology.md` before the analogy was looked for.
 
-```text
-WHAT IT BUYS    everything the OS knows about the file/process split is available: one file, many
-                concurrent processes; a process outliving the file it came from; permissions on
-                the file versus privileges of the process.
+**The mapping is three-way, not one-to-one.** An engram is not the binary — it is the binary plus
+what running it wrote:
 
-⚠️ WHERE IT     a process image is a COPY — edit the binary mid-run and the running process is
-   BREAKS       unaffected. An engram's history accumulates onto the durable object WHILE
-                possibilities are open. The engram is mutable in a way a file-on-disk is not
-                during exec.
+```text
+THE BINARY          →   Expectation        IMMUTABLE. "authored once and re-run."
+PROCESS MEMORY      →   the frame          EPHEMERAL. dies with the opening.
+WHAT IT WRITES      →   History            DURABLE. accumulates across openings.
+                        Observations
+```
+
+`interfaces.md` says exactly this and says it first: *"Expectations never improve — they are
+authored once and re-run, and everything that accumulates accumulates **AROUND** them."* A running
+process reading a log another process just appended is the same relationship a possibility has to
+history written since it opened. **Nothing about that is a break.**
+
+```text
+WHAT IT BUYS    everything the OS knows about the file/process split: one file, many concurrent
+                processes; a process outliving the file it came from; permissions on the file
+                versus privileges of the process. Plus a check on where state may live — if it
+                is not in the immutable part, the ephemeral part, or the written part, it has
+                nowhere legitimate to be.
+
+⚠️ WHERE IT     UNIX KEEPS THEM AS SEPARATE FILES. /usr/bin/foo and /var/log/foo.log are two
+   BREAKS       objects related only by convention, and nothing stops you deleting one. This
+                design BINDS them into a single durable object, so an engram cannot be
+                separated from its record — which is the point, and is why the file analogy
+                stops being a guide at exactly this seam.
+
+                An earlier version of this section claimed the break was that engrams are
+                mutable where files are not. That was wrong: it mapped the whole engram onto
+                the binary, when only the expectation is binary-shaped.
 ```
 
 ## 2 · The OS has TWO wrappers, and so does this ✅
