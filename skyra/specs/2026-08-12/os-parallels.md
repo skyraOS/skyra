@@ -31,9 +31,18 @@ Every parallel below is marked:
 ```text
 ✅ VERIFIED    measured on a machine, or quoted from both sides
 🔶 PROPOSED    the shape lines up; nothing has tested it
-⚠️  WHERE IT    every analogy has one. Stated, because an analogy without its limit
-   BREAKS      is how you inherit someone else's mistake.
+⚠️  WHERE IT    stated, because an analogy without its limit is how you inherit someone
+   BREAKS      else's mistake.
 ```
+
+> **Read every ⚠️ block with this in mind: AN ANALOGY THAT HOLDS IS A FINDING TOO.**
+>
+> Asking each parallel where it breaks creates pressure to produce one, and that pressure
+> manufactured a false break **twice on parallel 1 alone** — first claiming engrams are mutable
+> where files are not, then claiming Unix keeps a binary and its log apart. Both were the template
+> being satisfied rather than the thing being reported. Both retractions are left in place.
+>
+> Where a section says the analogy holds, that is a result, not an omission.
 
 ---
 
@@ -88,9 +97,8 @@ WHAT IT BUYS    everything the OS knows about the file/process split: one file, 
                 Second: that Unix keeps the binary and its log as two objects — wrong,
                 directories bundle, which is what an engram is.
 
-                The pattern is worth more than either correction: this file asks every parallel
-                to state where it breaks, and the pressure to produce one manufactured a break
-                twice. AN ANALOGY THAT HOLDS IS A FINDING TOO.
+                Both are left in place. The pattern they set is in the legend at the top of
+                this file, because it governs how every ⚠️ block here should be read.
 ```
 
 ## 2 · The OS has TWO wrappers, and so does this ✅
