@@ -263,6 +263,21 @@ So distance is a property of the connection, not a separate resolution path. "Wi
 layer three levels below anything the runtime sees — the same `connect()` runs over ethernet,
 cellular, or a tunnel.
 
+**And this is not a Darwin detail.** Berkeley sockets is the most portable abstraction in
+networking — Windows ported the API rather than inventing one. Go's `net` package is the locally
+checkable version: 224 files, 13 `*_windows.go`, 13 `*_unix.go`, and both platform hooks name the
+same function —
+
+```go
+// net/hook_unix.go
+connectFunc func(int, syscall.Sockaddr) error            = syscall.Connect
+// net/hook_windows.go
+connectFunc func(syscall.Handle, syscall.Sockaddr) error = syscall.Connect
+```
+
+`dialSingle` branches on **address type** (`*TCPAddr`, `*UnixAddr`), not on platform. See
+[`reach-abstraction.md`](../../reach-abstraction.md) for what that costs.
+
 **Local entities are not all reached by `execve`.** These were live on this machine:
 
 ```text
