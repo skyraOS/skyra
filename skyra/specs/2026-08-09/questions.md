@@ -312,6 +312,57 @@ name-consumption should form a **child** (probably not — `discover` would beco
 of everything that ever searched, which is the reason the two thresholds were split) or only earn an
 **acceptance** on the walk (probably yes, and it costs one more traversal rule).
 
+## 16 · Two decompositions of the same territory, and only one can be the surface
+
+*Raised 2026-08-13, from `specs/2026-08-12/primitives.md`. Numbered last for the same reason §15
+was — existing references stay valid.*
+
+Two documents now decompose the act of getting work done, and they do not agree on the shape.
+
+```text
+discover.md          ONE OPERATION, FOUR BLANKS
+
+                     discover(obs, engram, entity, address) — fills whichever are nil
+
+                       engram  nil   WHAT TO DO
+                       entity  nil   WHO DOES IT
+                       address nil   WHERE
+                       obs     nil   WITH WHAT
+
+primitives.md        SIX PHASES
+
+                       THINK · ENGAGE · REACH · REMEMBER · RECOGNIZE · ORIENT
+```
+
+**They overlap rather than conflict.** `discover`'s four blanks map onto `THINK` (what to do),
+`ENGAGE` (who, and with what) and `REACH` (where) — so the six are phases of the one, or the one is
+a unified form the six expose in pieces.
+
+```text
+WHAT THE SIX GAIN     REMEMBER is a genuine advance and does not exist in 08-09 at all: it absorbs
+                      Accept, the credit walk, materialization, and the ephemeral→durable
+                      transition into one recursive operation. Durability stops being a procedure
+                      and becomes a definition — "an unbroken chain of remembrance reaching the
+                      outer boundary."
+
+WHAT THE SIX LOSE     INGRESS. discover.md opens with "All ingress goes through discover, which is
+                      why nothing can be dropped," and names bootstrap as the MAXIMALLY-NIL CASE —
+                      every blank empty. `Engage` cannot express that: it is a parent choosing,
+                      and the first engagement has no parent. primitives.md has no ingress and no
+                      bootstrap case.
+```
+
+**The current position** (Michael, 2026-08-13): the six are the right surface **to expose**, because
+a smaller surface with better context is easier for an entity to use, even if one operation drives
+it underneath. That is a claim about the interface, not about the mechanism — and it leaves the
+mechanism question open.
+
+```text
+STILL UNDECIDED   is `discover` the engine the six are phases of, or a seventh primitive the six
+                  are missing? And wherever it lands, INGRESS AND BOOTSTRAP NEED A HOME — they
+                  are the one thing the six provably cannot express.
+```
+
 ---
 
 ## Answered, and where the answer went

@@ -192,13 +192,13 @@ EVIDENCE   Where E9   the four rows, measured
            Who E4     a path and a network address are both names in a namespace
 ```
 
-## 10 · `reach` and `discover` are learnable engrams owned by the kernel
+## 10 · `reach` and `think` are learnable engrams owned by the kernel
 
-**Decided 2026-08-12.** The verb is **reach** — not `dispatch`, not `open`, not `dial`.
+**Decided 2026-08-12. Amended 2026-08-13** — the second name was wrong. See *What changed* below.
 
 ```text
-DISCOVER   find engrams · entities · observations · hosts
-REACH      get to one
+THINK      what behavior might address this need?
+REACH      resolve and contact the entity that will interpret it
 ```
 
 Both are **kernel-owned builtins** — nameable by fixed name, which is what stops the regress
@@ -206,17 +206,15 @@ Both are **kernel-owned builtins** — nameable by fixed name, which is what sto
 history and improve rather than being maintained
 ([decision 5](#5--entity-resolution-sits-below-the-top-level-engram)).
 
-**The vocabulary is the argument.** It is biological, and it already reads:
+**The verb is `reach`** — not `dispatch`, not `open`, not `dial`:
 
 ```text
-Skyra discovered entity x
 Skyra reached entity y
 Skyra reached for entity z and couldn't        → the error message writes itself
 ```
 
-That third line is the one that matters: *reached for and couldn't* is a **failure with a subject**,
-and under decision 5 it is also the training signal. The log line and the observation are the same
-event.
+*Reached for and couldn't* is a **failure with a subject**, and under decision 5 it is also the
+training signal. The log line and the observation are the same event.
 
 ```text
 WHY NOT `dispatch`   `dispatch` is already a MOMENT in this design — world.md: "projection happens
@@ -227,6 +225,39 @@ WHY NOT `open` ·     both collide with syscalls that mean something adjacent bu
 `connect` · `bind`   naming the abstraction after a syscall it is not would mislead whoever
                      reads the platform layer.
 ```
+
+### What changed, and why
+
+The original read **`DISCOVER — find engrams · entities · observations · hosts`**, argued from a
+log vocabulary that included *"Skyra discovered entity x."* **Both the definition and the argument
+were wrong, and Michael retracted the argument.**
+
+```text
+THE ARGUMENT FAILS   Skyra already met the entity — that is WHY it is in the graph. Finding
+                     something already known is RECALL, not discovery.
+
+THE DEFINITION       "find engrams · entities · observations · hosts" is the LOOKUP reading, and
+CONTRADICTS THE      discover.md rejects it outright:
+SPEC IT NAMED
+                       "Discovery is not a lookup. A flat list is raw material. 'There is nothing
+                        here that does X' is a CONSTRUCTED claim — it requires knowing what was
+                        sought and judging that nothing met it. A function returns a list. ONLY A
+                        POSSIBILITY CAN RETURN A DIAGNOSIS."
+```
+
+So the three separate:
+
+```text
+RECALL      a flat lookup over what is known. mechanical. a HELPER.
+DISCOVER    a diagnosis, and it belongs on NOVELTY — "there is nothing here that does X" is the
+            constructed claim, and it is the signal that something is new.
+THINK       the surface name (primitives.md): search AND reason over what is known, then rank
+            candidates. Recall is a helper inside it.
+```
+
+`discover` is not renamed to `think` — it is a **different operation** that `think` may reach, and
+it is much larger than either. Which decomposition survives is open:
+**`questions.md` §16**.
 
 ```text
 EVIDENCE   Where E10   the design already places reachability BEFORE the possibility opens
