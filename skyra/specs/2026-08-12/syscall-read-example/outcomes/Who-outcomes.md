@@ -5,7 +5,7 @@ the evidence in [`../evidence/Who-evidence.md`](../evidence/Who-evidence.md).
 
 **The question, from the engram's perspective:** *Who am I?*
 
-**Scope:** who is interpreting me — the entity, and how it is reached.
+**Scope:** who is interpreting me — the entity, and what makes it one identity.
 
 ---
 
@@ -26,24 +26,4 @@ entity, and it does not change because the expectation did.
 
 ```text
 EVIDENCE   Who E1   the design's own definition, and the field that is KEYED
-```
-
-## 2 · Hosts have endpoints
-
-**Decided 2026-08-12.**
-
-An entity is reachable more than one way — Claude Opus 5 through the Anthropic API, through
-OpenRouter, through a CLI invocation; an open model through a local inference endpoint. **Those
-endpoints are not the entity's.**
-
-```text
-AN ENTITY   an identity. globally unique. it does not carry where it can be reached.
-A HOST      holds the endpoints.
-```
-
-An entity carrying its own endpoints would be a declaration — *"a declaration is made by whoever
-registered the entity, not by the entity"* — and it would go stale the moment anything moved.
-
-```text
-EVIDENCE   Who E2   the design keys on the entity and excludes the host, because reach is plural
 ```

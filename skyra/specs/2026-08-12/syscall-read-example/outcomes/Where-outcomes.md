@@ -81,5 +81,25 @@ only from another, and nothing about where it is stored constrains where it can 
 ```text
 EVIDENCE   example.md, step 4   "local" has no referent — three candidate machines, and nothing
                                 distinguishing them
-           Who E2               reach is plural, and belongs to hosts
+           Where E8             reach is plural, and belongs to hosts
+```
+
+## 4 · Hosts have endpoints
+
+**Decided 2026-08-12.** Answers the second question of [decision 3](#3--where-is-two-questions-and-they-stay-distinct) — *where is my entity?*
+
+An entity is reachable more than one way — Claude Opus 5 through the Anthropic API, through
+OpenRouter, through a CLI invocation; an open model through a local inference endpoint. **Those
+endpoints are not the entity's.**
+
+```text
+AN ENTITY   an identity. globally unique. it does not carry where it can be reached.
+A HOST      holds the endpoints.
+```
+
+An entity carrying its own endpoints would be a declaration — *"a declaration is made by whoever
+registered the entity, not by the entity"* — and it would go stale the moment anything moved.
+
+```text
+EVIDENCE   Where E8   the design keys on the entity and excludes the host, because reach is plural
 ```
