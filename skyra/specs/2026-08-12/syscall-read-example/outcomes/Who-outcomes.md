@@ -34,7 +34,7 @@ EVIDENCE   Who E1   the design's own definition, and the field that is KEYED
 
 ```text
 1  UNIQUE                 globally.
-2  ≥ 1 UNIQUE ADDRESS     it HAS one; it does not CARRY the list.
+2  INDEPENDENT EXISTENCE  it can fail without taking you with it.
 3  TAKES AN EXPRESSION    polymorphic, and declares nothing about which ones it accepts.
 4  RETURNS SOMETHING      evidence comes back.
 5  NO BACK-CHANNEL        everything it acts on arrived through the expression.
@@ -45,10 +45,20 @@ out by trying — the same posture that dissolved language tags, capacity, modal
 off the entity.
 
 ```text
-2 IS THE BOUNDARY      a linked library takes an expression and is uniquely versioned, but has
-                       NO ADDRESS and dies when its caller dies. Not an entity. This criterion
-                       also absorbs the earlier "exists somewhere" and "could exist somewhere",
-                       which were one criterion counted twice.
+2 IS THE BOUNDARY      an entity has its OWN FAILURE DOMAIN — its own process, or its own
+                       machine. It can crash while you keep running, and you learn about it as
+                       an error rather than as your own death.
+
+                       Reaching it hands back a HANDLE TO SOMETHING THAT IS NOT YOU. A linked
+                       library hands back a pointer, which is an offset INTO you: same pid,
+                       same address space, same crash. Not an entity.
+
+                       This criterion also absorbs the earlier "exists somewhere" and "could
+                       exist somewhere", which were one criterion counted twice.
+
+                       It was first written as "has at least 1 unique address" and that was
+                       WRONG — see Who E3. Every one of these has a name in a namespace,
+                       libraries included, so naming discriminates nothing.
 
 5 IS WHAT "STATELESS"  an entity's SUBSTANCE may be vast — a collection, a set of weights, a
    ACTUALLY MEANT      standard library. What must be nil is its memory OF YOU. The test:
@@ -57,4 +67,5 @@ off the entity.
 
 ```text
 EVIDENCE   Who E2   the five against real entities, and where the boundary falls
+           Who E3   why the criterion is not "has an address" — a library has one
 ```
