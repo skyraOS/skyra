@@ -11,7 +11,7 @@ learning cycle. The seventh observes live execution.
 ```text
 APPROACH      Should this be let in at all?
 THINK         What behavior might address this need?
-ENGAGE        Choose behavior and bind what it will receive.
+DECIDE        Choose behavior and bind what it will receive.
 REACH         Resolve and contact the entity that will interpret it.
 REMEMBER      Receive its result and retain the causal path chosen by its parent.
 RECOGNIZE     Translate what was remembered and match it against prior experience.
@@ -32,7 +32,7 @@ APPROACH
     ↓
 THINK
     ↓
-ENGAGE
+DECIDE
     ↓
 REACH
     ↓
@@ -44,11 +44,11 @@ RECOGNIZE
 The cycle may recurse after recognition:
 
 ```text
-approach → think → engage → reach → remember
+approach → think → decide → reach → remember
                          ↓
                      recognize
                          ↓
-                engage known behavior
+                decide on known behavior
                          ↓
                    reach → remember
 ```
@@ -92,8 +92,8 @@ that entity   → is a whole system from inside, one party from outside
 ```
 
 **And it is where bootstrap becomes expressible.** `discover.md` names bootstrap as the
-maximally-nil case — every blank empty. `Engage` cannot express that: it is a parent choosing, and
-the first engagement has no parent. An approach has no parent by construction.
+maximally-nil case — every blank empty. `Decide` cannot express that: it is a parent choosing, and
+the first decision has no parent. An approach has no parent by construction.
 
 ---
 
@@ -102,7 +102,7 @@ the first engagement has no parent. An approach has no parent by construction.
 ```text
 QUESTION     What behavior might address this need?
 READS        durable graph state — what has happened.
-RETURNS      candidates that may be engaged.
+RETURNS      candidates that may be decided on.
 ```
 
 Thinking searches and reasons over known engrams, entities, observations, or hosts. It is learnable
@@ -117,7 +117,7 @@ candidates. The kernel does not decide which candidate is semantically appropria
 
 ---
 
-## 3 · Engage
+## 3 · Decide
 
 ```text
 QUESTION     Which behavior will run, with which observations and entity?
@@ -125,7 +125,7 @@ READS        the current frame and names in scope.
 RETURNS      one or more authorized invocations.
 ```
 
-Engagement is the choice to open an engram. It binds:
+Deciding is the choice to open an engram, and the choice IS the binding. It binds:
 
 ```text
 ENGRAM       the behavior being opened.
@@ -135,18 +135,23 @@ CITATION     which visible need prompted the choice.
 ACCESS       whatever reach and grants are explicitly provisioned downward.
 ```
 
-Engagement precedes reach. The parent first chooses what and who; the kernel then determines how to
+`Decide` is the grammar's `SELECT` under a kernel-facing name — `grammar.md`: *"Select **is**
+invoke. There is no separate call form, which makes 'selection happens at the call site' literal
+rather than descriptive."* The entity emits a `select`; the primitive it drives is `Decide`. Whether
+two names for one act is worth keeping is open.
+
+The decision precedes reach. The parent first chooses what and who; the kernel then determines how to
 reach that entity.
 
-For a concurrent engagement group, emitted member order is meaningful and completion order is not.
-The kernel preserves emitted order while allowing the engaged work to execute concurrently.
+For a concurrent invocation group, emitted member order is meaningful and completion order is not.
+The kernel preserves emitted order while allowing the decided work to execute concurrently.
 
 ---
 
 ## 4 · Reach
 
 ```text
-QUESTION     How can this engaged entity be contacted now?
+QUESTION     How can this decided entity be contacted now?
 READS        volatile host endpoints and prior reach history.
 RETURNS      a route, delivery, or loud failure.
 ```
@@ -168,7 +173,7 @@ Like `think`, `reach` has a fixed kernel-known name so resolution does not recur
 another unresolved resolver.
 
 Reach happens before the possibility opens. Failure must be immediate and loud: an undeliverable
-engagement is a failed invocation, not a possibility silently opened with nowhere to run.
+decision is a failed invocation, not a possibility silently opened with nowhere to run.
 
 ---
 
@@ -216,7 +221,7 @@ Remember must preserve:
 ```text
 SEQUENCE             order within its possibility.
 CAUSE                which invocation produced it.
-EMITTED POSITION     its place in a concurrent engagement group.
+EMITTED POSITION     its place in a concurrent invocation group.
 PROVENANCE           the typed distinction between data and delegated reach.
 ```
 
@@ -225,7 +230,7 @@ At the outer boundary, `Remember` walks backward from the chosen observation:
 ```text
 chosen observation
         ↓ backward causal walk
-translations · engagements · remembrances · expectations that contributed
+translations · decisions · remembrances · expectations that contributed
         ↓ projection
 durable graph records and materialized reached effects
 ```
@@ -277,7 +282,7 @@ The division is strict:
 ```text
 TRANSLATE     an engram interprets the observation and makes likeness explicit.
 MATCH         the kernel compares explicit keys and retrieves remembered associations.
-DISPATCH      the kernel engages or opens the associated behavior through the ordinary cycle.
+DISPATCH      the kernel opens the associated behavior through the ordinary cycle.
 ```
 
 The kernel may compare exact keys. It may not decide from content that two observations mean the
@@ -370,6 +375,6 @@ GRAPH
 
 In one sentence:
 
-> **Approach decides what is let in at all; Think finds and reasons over possibilities; Engage chooses one; Reach contacts its interpreter;
+> **Approach decides what is let in at all; Think finds and reasons over possibilities; Decide chooses one and binds it; Reach contacts its interpreter;
 > Remember brings evidence back and retains its causal path; Recognize connects it to experience;
 > Orient locates the caller in the live structure throughout.**
