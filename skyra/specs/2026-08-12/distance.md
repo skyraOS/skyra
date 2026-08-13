@@ -67,11 +67,39 @@ DOMAIN         does it fail when I fail. Not measured per-reach — inferred fro
 Three axes, and they do not collapse into a scalar on their own. That is the reason ranking is
 semantic and lives in an engram.
 
-### Measure at reach, not at return
+### Two distances, and they are not the same axis
 
 ```text
-REACH DISTANCE   time to obtain a handle.                    ← this is distance
-WORK DISTANCE    time to obtain an answer.                   ← this is the WORK
+EXECUTION DISTANCE     how costly was it to reach the interpreter?
+CAUSAL DISTANCE        how far did its result travel before being remembered?
+```
+
+The first is spatial and about **cost**. The second is structural and about **reach of influence** —
+and it already exists in the code as the hop profile:
+
+```go
+// {hop1, hop2, hop3}   validated locally AND at range.
+// {hop1, hop2, — }     good nearby, never confirmed further out.
+// {hop1, — , — }       cited by its parent, and nothing else has ever agreed.
+```
+
+**They point in opposite directions.** High execution distance is a cost you would rather not pay.
+High causal distance is evidence you would rather have — a result that travelled three hops before
+being remembered was validated *at range*, not merely by the parent that asked for it.
+
+```text
+EXECUTION   low is good.    it cost little to get there.
+CAUSAL      high is good.   its influence survived a long way from its origin.
+```
+
+They are orthogonal. A local entity can produce a result nobody but its parent ever uses; a remote
+one can produce a result that reaches the outer boundary through four remembrances.
+
+### Measure execution distance at reach, not at return
+
+```text
+REACH        time to obtain a handle.                        ← execution distance
+WORK         time to obtain an answer.                       ← not distance at all
 ```
 
 Reaching Claude takes milliseconds; the inference takes seconds. Conflating them would make a hard
@@ -150,4 +178,9 @@ DOMAIN IS NOT A COST     it is a correlation, and it is the one axis that cannot
 DOES DISTANCE FEED       a fast endpoint is not the right one if it reaches the wrong entity.
 SELECTION, OR ONLY       distance probably ranks addresses WITHIN an already-decided entity,
 RESOLUTION               and never influences which entity is chosen. Unconfirmed.
+
+ONE WORD, TWO AXES       execution and causal distance are both "observable cost of crossing",
+                         and they are measured differently, live in different places, and are
+                         wanted in opposite directions. Whether one word should carry both is
+                         open — but the pair is real either way.
 ```
