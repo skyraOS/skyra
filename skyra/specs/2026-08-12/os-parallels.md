@@ -51,22 +51,46 @@ into `terminology.md` before the analogy was looked for.
 reading a log another process just appended is the same relationship a possibility has to history
 written since it opened. **Nothing about that is a break.**
 
+**An engram is a DIRECTORY, and its path is its name.**
+
+```text
+mynamespace/engramA/engramB          ← the path IS how engramB is reached
+    ├── the expectation              the "binary"
+    ├── the history                  what running it wrote
+    └── engramC/                     a child engram
+```
+
+```go
+// ID is what it IS; the name is how it is REACHED. An engram does not hold
+// its name — that is the parent's map key.
+//
+// An engram lives inside exactly ONE parent's map, so two parents
+// structurally cannot share one.
+```
+
+Single parent means path ↔ engram is **bijective — no hard links** — which is also true of Unix
+directories. And a directory holding a binary alongside its logs is ordinary; a macOS `.app` bundle
+is exactly that, a directory you run.
+
 ```text
 WHAT IT BUYS    everything the OS knows about the file/process split: one file, many concurrent
-                processes; a process outliving the file it came from; permissions on the file
-                versus privileges of the process. Plus a check on where state may live — if it
-                is not in the immutable part, the ephemeral part, or the written part, it has
-                nowhere legitimate to be.
+                processes; a process outliving the file it came from. Plus a check on where
+                state may live — see The core mapping.
 
-⚠️ WHERE IT     UNIX KEEPS THEM AS SEPARATE FILES. /usr/bin/foo and /var/log/foo.log are two
-   BREAKS       objects related only by convention, and nothing stops you deleting one. This
-                design BINDS them into a single durable object, so an engram cannot be
-                separated from its record — which is the point, and is why the file analogy
-                stops being a guide at exactly this seam.
+⚠️ WHERE IT     THE ONLY DIFFERENCE IS APPEND-ONLY. Verified: `Graph` exposes Mint · MintRoot ·
+   BREAKS       Store · RecordDiscard · Apply · Disperse and NO delete; there is no `delete(`
+                in graph or kernel outside tests. A filesystem mutates and unlinks; this one
+                cannot.
 
-                An earlier version of this section claimed the break was that engrams are
-                mutable where files are not. That was wrong: it mapped the whole engram onto
-                the binary, when only the expectation is binary-shaped.
+                TWO EARLIER VERSIONS OF THIS SECTION CLAIMED A DIFFERENT BREAK AND BOTH WERE
+                WRONG. First: that engrams are mutable where files are not — wrong, it mapped
+                the whole engram onto the binary when only the expectation is binary-shaped.
+                Second: that Unix keeps the binary and its log as two objects — wrong,
+                directories bundle, which is what an engram is.
+
+                The pattern is worth more than either correction: this file asks every parallel
+                to state where it breaks, and the pressure to produce one manufactured a break
+                twice. AN ANALOGY THAT HOLDS IS A FINDING TOO.
 ```
 
 ## 2 · The OS has TWO wrappers, and so does this ✅
@@ -278,7 +302,30 @@ REFINEMENT   leaf-ness belongs to the INVOCATION, not the engram. The same expec
              OPENING is.
 ```
 
-## 14 · Executable versus data is a MODE BIT, not a type 🔶
+## 14 · `content.EngramRef` is a symlink 🔶
+
+An engram lives in exactly one parent's map — that is the tree. But `content.EngramRef{ID, Name}`
+references an engram *without* being a parent-child edge:
+
+```text
+THE PARENT'S MAP     the tree. one parent, one path, no hard links.
+content.EngramRef    a reference ACROSS the tree, carried as a value.
+```
+
+Which is what a symlink is: a name that resolves elsewhere, distinct from the directory entry that
+owns the target.
+
+```text
+WHY IT MATTERS   this is the type that carries REACH. `interfaces.md` separates delegation from
+                 injection on exactly this — reach must not travel in the data channel, and only
+                 the type keeps them apart. A symlink handed to something that cannot follow it
+                 is an inert string; handed to something that can, it is authority.
+
+⚠️ UNTESTED      the shape lines up. Whether EngramRef inherits the problems symlinks have —
+                 dangling targets, resolution loops, TOCTOU races — has not been checked.
+```
+
+## 15 · Executable versus data is a MODE BIT, not a type 🔶
 
 ```text
 ENGRAM        an EXECUTABLE file    carries an expression. can be opened and run.
