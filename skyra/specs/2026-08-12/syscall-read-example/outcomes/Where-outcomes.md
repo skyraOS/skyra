@@ -3,9 +3,10 @@
 **Status: MICHAEL ONLY.** Decisions about **WHERE**, taken from [`../example.md`](../example.md), on
 the evidence in [`../evidence/Where-evidence.md`](../evidence/Where-evidence.md).
 
-**The question, from the engram's perspective:** *Where am I executed?*
+**The questions, from the engram's perspective:** *Where am I stored?* and *Where is my entity?*
 
-**Scope:** where am I executed — which machine, and how it is identified.
+**Scope:** where this engram durably lives, and where the entity that interprets it can be
+reached from. Two questions — see decision 3.
 
 ---
 
@@ -58,4 +59,27 @@ THE FALLBACK         a device with no readable hardware fact has nothing to hash
 EVIDENCE   Where E7   there is no single universal field, and five reasons it does not unify
            Where E2   IOPlatformUUID and kern.uuid are already hashes — v5 and v3
            Where E6   what identifies and what does not
+```
+
+## 3 · WHERE is two questions, and they stay distinct
+
+**Decided 2026-08-12.**
+
+```text
+WHERE AM I STORED     which graph holds this engram.        DURABLE. one answer.
+WHERE IS MY ENTITY    which host can reach the entity that  VOLATILE. plural — see decision 2.
+                      will interpret me.
+```
+
+**Both are fundamental, and they are independent.** The walkthrough was built on them differing —
+the runtime on a laptop, the model remote, the file on a server — and it is that independence that
+made *"local"* have no referent at step 4.
+
+Neither answers the other. An engram stored on one machine may be interpreted by an entity reachable
+only from another, and nothing about where it is stored constrains where it can be run.
+
+```text
+EVIDENCE   example.md, step 4   "local" has no referent — three candidate machines, and nothing
+                                distinguishing them
+           Who E2               reach is plural, and belongs to hosts
 ```
