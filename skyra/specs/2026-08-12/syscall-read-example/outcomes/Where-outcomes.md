@@ -136,12 +136,13 @@ EVIDENCE   Where E9    address and transport, measured — and both ending in an
            Who E3      criterion 2 needs a failure and needs surviving it
 ```
 
-## 6 · The regress stops at a builtin
+## 6 · The regress stops at the kernel interface
 
-**Decided 2026-08-12.** *"Something resolves you"* immediately raises **which resolver** — and the
-answer is one the kernel knows by fixed name, never by selection. `resolve` sits beside `discover`.
+**Decided 2026-08-12; revised 2026-08-13.** *"Something resolves you"* immediately raises **which
+resolver**. The regress stops because `Reach` is a fixed method on the kernel interface. Calling it
+does not first require resolving a resolver.
 
-The mechanism is already built and already says so:
+The current runtime contains the older precursor:
 
 ```go
 // Builtin names, present in every frame. discover is nameable everywhere — a
@@ -150,7 +151,9 @@ The mechanism is already built and already says so:
 Builtin map[string]*graph.Engram
 ```
 
-**It is read in `frame.go` and nothing populates it.** The regress-stopper is plumbed and empty.
+`Builtin` is read in `frame.go` and nothing populates it. It reflects the old name-based mechanism;
+the decided surface moves the entry point to the kernel interface. Reach may still invoke learnable
+resolver behavior after entry.
 
 ## 7 · The kernel routes; the resolver ranks
 
@@ -192,7 +195,7 @@ EVIDENCE   Where E9   the four rows, measured
            Who E4     a path and a network address are both names in a namespace
 ```
 
-## 10 · `reach` and `think` are learnable engrams owned by the kernel
+## 10 · `Reach` and `Think` are kernel methods backed by learnable behavior
 
 **Decided 2026-08-12. Amended 2026-08-13** — the second name was wrong. See *What changed* below.
 
@@ -201,10 +204,10 @@ THINK      what behavior might address this need?
 REACH      resolve and contact the entity that will interpret it
 ```
 
-Both are **kernel-owned builtins** — nameable by fixed name, which is what stops the regress
-([decision 6](#6--the-regress-stops-at-a-builtin)) — and both are **engrams**, so they accumulate
-history and improve rather than being maintained
-([decision 5](#5--entity-resolution-sits-below-the-top-level-engram)).
+Both live on the kernel interface, which stops the regress
+([decision 6](#6--the-regress-stops-at-the-kernel-interface)). Each method may open an engram for
+the semantic portion of its work, allowing ranking and interpretation to accumulate history and
+improve without making the method itself a name that must first be resolved.
 
 **The verb is `reach`** — not `dispatch`, not `open`, not `dial`:
 
@@ -251,7 +254,7 @@ So the three separate:
 RECALL      a flat lookup over what is known. mechanical. a HELPER.
 DISCOVER    a diagnosis, and it belongs on NOVELTY — "there is nothing here that does X" is the
             constructed claim, and it is the signal that something is new.
-THINK       the surface name (primitives.md): search AND reason over what is known, then rank
+THINK       the surface name (../../continuation-language/primitives.md): search AND reason over what is known, then rank
             candidates. Recall is a helper inside it.
 ```
 

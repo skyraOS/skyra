@@ -1,6 +1,6 @@
 # 07 · Hosts
 
-**Package:** `host`   ·   62 code lines
+**Package:** `host`
 
 **WHERE it lands.** The Linux device-class model: the kernel calls through a class interface, a
 driver fills it in, and the kernel never knows what is behind it.
@@ -25,11 +25,8 @@ type StorageOps interface {               // SPEC(n) — "storage soon"
 }
 
 type Handle struct {                      // SPEC(n)
-    Host   ids.HostID
-    Ref    string
-    Stdout string
-    Stderr string
-    Exit   int
+    Host ids.HostID
+    Ref  string
 }
 ```
 
@@ -66,11 +63,9 @@ Spawn IS DECLARED AND UNIMPLEMENTED.   `localExec.Spawn` returns "execution clas
                                        world.md says "execution now, storage soon"; the build has
                                        storage and not execution, which is backwards.
 
-Handle CARRIES Stdout · Stderr · Exit  a SHELL's shape, leaking into a class interface. spawn has
-                                       never run, so these five fields are a guess nobody was
-                                       forced to make — exactly what world.md warns about for the
-                                       one hand-designed surface. STRONGEST CANDIDATE FOR CUTTING
-                                       BACK TO {Host, Ref} until something forces more.
+Handle IS {Host, Ref}.                  an opaque reference plus the host on which it is valid.
+                                       Stdout, Stderr and Exit were removed; process output is not
+                                       part of what a handle is.
 ```
 
 **Network is not a class** and is not here, correctly — it is transport, beneath everything. *Fetch

@@ -111,7 +111,7 @@ the same authority as opening a root, whether anything but the original asker ma
 means for replay, are all open.
 
 **2026-08-13 — the boundary now has a name, which is not the same as having a gate.**
-`specs/2026-08-12/primitives.md` renames this primitive `APPROACH`, and the rename does work
+`specs/2026-08-12/continuation-language/primitives.md` renames this primitive `APPROACH`, and the rename does work
 `ingress` could not:
 
 ```text
@@ -332,7 +332,7 @@ of everything that ever searched, which is the reason the two thresholds were sp
 
 ## 16 · Two decompositions of the same territory, and only one can be the surface
 
-*Raised 2026-08-13, from `specs/2026-08-12/primitives.md`. Numbered last for the same reason §15
+*Raised 2026-08-13, from `specs/2026-08-12/continuation-language/primitives.md`. Numbered last for the same reason §15
 was — existing references stay valid.*
 
 Two documents now decompose the act of getting work done, and they do not agree on the shape.

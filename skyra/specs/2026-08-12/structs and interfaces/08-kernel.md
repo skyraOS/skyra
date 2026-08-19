@@ -1,11 +1,12 @@
 # 08 · The Kernel
 
-**Package:** `kernel`   ·   540 code lines (245 load-bearing)
+**Package:** `kernel`
 
 Holds everything that is **happening**. All of it ephemeral, all of it dies with the process.
 
-> See `../kernel-revision.md` for the argument that the *method* surface collapses to one channel and
-> two forms. This document is the *type* surface, which is a different cut.
+> See [`../semantics/the-collapse.md`](../semantics/the-collapse.md) for the older collapse and
+> [`../continuation-language/primitives.md`](../continuation-language/primitives.md) for the newer
+> semantic surface. This document reflects the code that exists, not that proposed surface.
 
 ## The kernel
 
@@ -22,21 +23,24 @@ type Kernel struct {                          // SPEC
     MaxDepth int           // a RUNAWAY is depth or breadth past a bound
     MaxSteps int
 
+    mu       sync.Mutex
     roots    map[ids.SpanID]*Root
-    heads    map[ids.SpanID]int              // the concurrent frontier
+    heads    map[ids.SpanID]int              // actual behavior: active open() calls per span,
+                                             // not the derived concurrent frontier
     unminted map[ids.EngramID]*graph.Engram  // identity without closure
     userRooted, kernelRooted int             // the spiral, made countable
 }
 ```
 
-**Everything below `Builtin` is ephemeral by design.** The kernel dies, it all evaporates, and the
-graph is exactly the set of completed commits — no half-written state, no reconciliation, no recovery
-protocol.
+**Everything below `Builtin` is ephemeral in the current struct.** The graph nevertheless contains
+more than completed commits: ingress and group completion call `Store` directly, closure mints, and
+effect disposal records discards. This is the live runtime, distinct from the proposed outer-
+remembrance append model.
 
 ```text
 FOR REVIEW   `unminted` is the type-level trace of the Hold leak. it exists only because
              mint-on-closure needs somewhere to park an engram that has identity and has not run.
-             kernel-revision.md argues the METHOD should go; the FIELD is the same question.
+             `the-collapse.md` argues the METHOD should go; the FIELD is the same question.
              if a surface needs it, the rule is wrong, not the surface.
 
              `Run` puts a trace handle in the component that is supposed to hold no semantics.
@@ -81,8 +85,17 @@ type Root struct {                            // SPEC
     Engram   *graph.Engram
     Origin   RootOrigin
     Provoker ids.SpanID       // empty only for the maintenance class
+    mu       sync.Mutex
     staged   []*Effect
 }
+
+type Disposition int                         // ADDED
+const (
+    Staged Disposition = iota
+    Landed
+    Discarded
+    Failed
+)
 
 type Effect struct {                          // SPEC(n)
     Engram    ids.EngramID    // materialization follows CITATION — the walk must reach this
@@ -90,8 +103,7 @@ type Effect struct {                          // SPEC(n)
     Path      string
     Body      []byte
     Handle    string
-    Landed    bool
-    Discarded bool
+    Disposition Disposition
 }
 ```
 
@@ -102,10 +114,9 @@ it mean for a child to commit into a parent that later aborts*, and there is no 
 discard**. One traversal, two jobs.
 
 ```text
-FOR REVIEW   Effect has 7 fields for one implemented class. Class is a string, which is the shape
-             of a thing that wants to be an interface once there is a second class. Landed and
-             Discarded are mutually exclusive booleans — a three-state disposition (staged ·
-             landed · discarded) that got two flags.
+FOR REVIEW   Effect has 6 fields for one implemented class. Class is a string, which is the shape
+             of a thing that may want to become an interface once there is a second class.
+             Disposition names all four live outcomes: staged, landed, discarded, and failed.
 
              Grants is ABSENT from Root. interfaces.md declares it. the world boundary is entirely
              ungated: staging works and nothing checks it.
@@ -124,5 +135,6 @@ func (k *Kernel) Spiral() (user, kernelRooted int)
 func (k *Kernel) Hold(e *graph.Engram)
 ```
 
-Seven of these eight should not exist. `../kernel-revision.md` is the argument: `Drive` is a select,
-`Accept` is a commit, `Ask` is a composition, `Spiral` is a read, `Hold` is a leak.
+This is the live legacy surface. The current semantic replacement is described in
+`../continuation-language/primitives.md`; it does not require seven peer methods:
+Approach, Think, Decide, Reach, Remember, Recognize, and Orient.

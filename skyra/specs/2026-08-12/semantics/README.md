@@ -1,10 +1,13 @@
 # Semantics — 2026-08-12
 
-**Status: THE CARRY-OVER.** What the 08-11 semantic layer says that still stands, ported here with
-its status against the 08-12/13 work marked on each document.
+**Status: HISTORICAL CARRY-OVER.** What the 08-11 semantic layer contributed, ported here with its
+status against later 08-12/13 work. Current surface authority lives in
+[`../continuation-language/primitives.md`](../continuation-language/primitives.md) and the
+continuation-language proposals.
 
-> **Nothing in 08-11's semantics was overturned. Five documents carry whole, two carry with their
-> naming superseded, and three were left behind for stated reasons.**
+> **The causal and boundary reasoning largely carried. The seven-peer-method surface did not:
+> seven semantic distinctions remain, but Think is the universal possibility-facing interface and
+> recognition, orientation, and reach-planning are hidden composable behaviors.**
 
 ---
 
@@ -18,7 +21,7 @@ terminology.md            AUTHORITATIVE on vocabulary. Body unchanged; addendum 
 the-crossing.md           UNAFFECTED.  "The kernel must HOLD the crossing. It still may not
                           READ it."                       ← was interface-revision.md
 
-closure.md                CARRIED, RENAMED. Decided the model `primitives.md` now calls
+closure.md                CARRIED, RENAMED. Decided the model `../continuation-language/primitives.md` now calls
                           `Remember`. The decision is 08-11's; only the name is new.
                                                           ← was open-until-commit.md
 
@@ -40,7 +43,7 @@ divergence.md             REWRITTEN for 08-13. The gap is larger and now has a s
 ```text
 08-11                      08-13                 where
 ────────────────────────────────────────────────────────────────────────────────────
-SELECT                  →  DECIDE                ../primitives.md §3
+SELECT                  →  DECIDE                ../continuation-language/primitives.md §3
 COMMIT                  →  REMEMBER              §5 — plus Accept, plus closure
 discover                →  THINK                 §2 — recall is the lookup inside it
 introspect              →  ORIENT                §7 — carried verbatim
@@ -57,18 +60,17 @@ authenticate            →  (nothing)             ← THE HOLE. see terminology
 ## Three things to know before reading any of it
 
 **1 · `Remember` is not new.** `closure.md` decided it on 08-11 — *"closure is the only durable
-write"* — and `primitives.md` renamed it and folded in `Accept`. A critique written on 08-12 called
+write"* — and `../continuation-language/primitives.md` renamed it and folded in `Accept`. A critique written on 08-12 called
 it a change to the design; it is a change to the **code**, which still writes at every commit.
 
 **2 · `authenticate` is the missing gate.** `terminology.md` specified it on 08-11 —
-*reads the WORLD, WHO IS THIS* — `primitives.md` dropped it, and `2026-08-09/questions.md` §5 says
+*reads the WORLD, WHO IS THIS* — `../continuation-language/primitives.md` dropped it, and `2026-08-09/questions.md` §5 says
 nothing gates entry. Those are one hole with two descriptions.
 
-**3 · Forms versus names is unreconciled.** `the-collapse.md` insists `SELECT` and `COMMIT` are the
-grammar and `discover`/`introspect` are *engrams reached by it* — *"the names are not a surface at
-all."* `primitives.md` lists seven peers. If the older reading holds, `THINK` and `ORIENT` are not
-primitives beside `DECIDE`, and the seven are two things wearing one list. This is
-`questions.md` §16 one layer down.
+**3 · Seven meanings, not seven peer methods.** Decide and Remember remain the two causal forms.
+Think is the universal possibility-facing interface. Approach and Reach are directional
+boundaries; recognition, orientation, and reach-planning are specialized behavior hidden from the
+top layer. The older seven-method ruling in this directory is superseded.
 
 ---
 
@@ -96,9 +98,9 @@ the thing was decided.
 The 08-12/13 work that is **not** semantics, and lives one level up:
 
 ```text
-../primitives.md            the seven
-../reach-abstraction.md     what the OS gives reach, and what it drops
-../distance.md              Orient × Endpoint × Experience
-../os-parallels.md          17 parallels, marked verified or proposed
+../continuation-language/primitives.md   the seven
+../reach/reach-abstraction.md            what the OS gives reach, and what it drops
+../energy/distance.md                     Orient × Endpoint × Experience
+../misc/os-parallels.md                  17 parallels, marked verified or proposed
 ../syscall-read-example/    the walkthrough, the evidence, and the decisions
 ```

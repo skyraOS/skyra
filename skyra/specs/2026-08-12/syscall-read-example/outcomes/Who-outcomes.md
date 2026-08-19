@@ -37,7 +37,7 @@ EVIDENCE   Who E1   the design's own definition, and the field that is KEYED
 2  INDEPENDENT EXISTENCE  it can fail without taking you with it.
 3  TAKES AN EXPRESSION    polymorphic, and declares nothing about which ones it accepts.
 4  RETURNS SOMETHING      evidence comes back.
-5  NO BACK-CHANNEL        everything it acts on arrived through the expression.
+5  THROUGH THE HISTORY WITH ITS OBSERVER/PARENT.
 ```
 
 **Nothing in the five is declared.** Each is a property something either has or does not, found
@@ -60,9 +60,8 @@ off the entity.
                        WRONG — see Who E3. Every one of these has a name in a namespace,
                        libraries included, so naming discriminates nothing.
 
-5 IS WHAT "STATELESS"  an entity's SUBSTANCE may be vast — a collection, a set of weights, a
-   ACTUALLY MEANT      standard library. What must be nil is its memory OF YOU. The test:
-                       tear the runtime down and rebuild it — does the entity behave the same?
+5 IS RELATIONAL        an entity's continuity with an observer/parent lives in the history they
+                       accumulate together. It is not a private declaration carried by the entity.
 ```
 
 ```text
@@ -80,8 +79,8 @@ runtime ──execve──▶ curl ──HTTPS──▶ Claude
 ```
 
 `curl` satisfies all five: uniquely versioned, its own process and failure domain, takes an argv it
-parses and acts on, returns bytes, and remembers nothing of you. So reaching Claude went **through**
-an entity.
+parses and acts on, returns bytes, and is known through the history accumulated with its
+observer/parent. So reaching Claude went **through** an entity.
 
 **This makes "endpoint" recursive rather than special.** Reaching anything may itself pass through
 something reachable, and it holds one level further down — `execve` is reached through the kernel,
@@ -96,7 +95,7 @@ PREDICTS     the CLI binary and the model it reaches. world.md's "start coarse a
              evidence" makes that the right starting state; this says what the split would be into.
 ```
 
-## 4 · Criterion 2 is the only one that requires history
+## 4 · What first contact can establish
 
 **Decided 2026-08-12.**
 
@@ -104,7 +103,8 @@ PREDICTS     the CLI binary and the model it reaches. world.md's "start coarse a
 1  UNIQUE                 known at first contact
 3  TAKES AN EXPRESSION    known at first contact — it parses or it does not
 4  RETURNS SOMETHING      known at first contact
-5  NO BACK-CHANNEL        known from two invocations
+5  THROUGH THE HISTORY WITH ITS OBSERVER/PARENT
+                           established as history accumulates between them
 
 2  INDEPENDENT EXISTENCE  requires a FAILURE, and requires surviving it.
 ```

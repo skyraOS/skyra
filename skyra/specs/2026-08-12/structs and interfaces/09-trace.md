@@ -1,17 +1,19 @@
 # 09 · Trace
 
-**Package:** `trace`   ·   77 code lines
+**Package:** `trace`
 
 **Outside the design, and the package comment says so.**
 
 ```go
 type Run struct {                             // ADDED — by admission
     Dir   string
+    mu    sync.Mutex
     main  *os.File
     steps int
 }
 
 func Open(root string) (*Run, error)
+func (r *Run) Close() error
 func (r *Run) Logf(format string, a ...any)
 func (r *Run) Step(engram, ent, kind, prompt, response string) string
 func (r *Run) Write(name, body string)

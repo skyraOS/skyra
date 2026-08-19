@@ -1,6 +1,6 @@
 # 01 · Identity
 
-**Package:** `ids`   ·   26 code lines
+**Package:** `ids`
 
 Everything durable is named by one of five types, and one thing mints all of them.
 

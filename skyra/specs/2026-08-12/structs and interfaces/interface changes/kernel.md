@@ -1,21 +1,63 @@
 # Kernel
 
-**Date:** 2026-08-11 · revised 2026-08-12
-**Status: CHANGE PROPOSAL.** Code only — signatures, types, and what to delete.
+**Date:** 2026-08-11 · revised 2026-08-13
+**Status: REVISED CHANGE PROPOSAL.** The kernel owns a seven-method protocol. The methods have
+different semantic roles, and entities and engrams compose beneath them. See
+[`../../continuation-language/primitives.md`](../../continuation-language/primitives.md).
 
 **Why:** [`../../semantics/the-collapse.md`](../../semantics/the-collapse.md) ·
 [`roots-and-admission`](../../../2026-08-11/semantics/roots-and-admission.md) ·
-[`terminology`](../../semantics/terminology.md)
+[`terminology`](../../semantics/terminology.md) · [`../../continuation-language/primitives.md`](../../continuation-language/primitives.md)
 
 > **Revised 2026-08-11, later.** `Ingress` is now `Mount`, and `Topology` lost `Rooted()`. Read
 > `terminology.md` first — **ROOT** is retired throughout, and what it named is a **BRANCH**.
 >
 > **Revised 2026-08-12.** A section added on WHERE, which is not vestigial in the code — it is
 > absent. Nothing routes, and three things would have to exist before anything could.
+>
+> **Later coherence ruling, revised 2026-08-13.** All seven live as kernel protocol methods, but
+> they do not perform the same kind of work. `Decide` and `Remember` are causal forms; `Think`
+> exposes potential; `Recognize` calls entity and engram composition; `Orient` reports kernel-owned
+> topology. The kernel owns the protocol. Entities and engrams compose under it.
 
 ---
 
 ## Methods
+
+### The seven kernel protocol methods
+
+```go
+(*Kernel).Approach
+(*Kernel).Think
+(*Kernel).Decide
+(*Kernel).Reach
+(*Kernel).Remember
+(*Kernel).Recognize
+(*Kernel).Orient
+```
+
+```text
+APPROACH      should this be let in at all?
+THINK         what behavior might address this need?
+DECIDE        choose behavior and bind what it will receive.
+REACH         resolve and contact the entity that will interpret it.
+REMEMBER      receive its result and retain the causal path chosen by its parent.
+RECOGNIZE     translate what was remembered and match it against prior experience.
+ORIENT        observe where you are and what is happening in live execution.
+```
+
+This is the current protocol direction. Method ownership means the kernel coordinates invocation,
+scope, ordering, causality, and results. It does not mean the kernel interprets entity content.
+`Recognize`, in particular, calls entity and engram methods whose composition supplies the semantic
+judgment.
+
+**Current surface:** use `../../continuation-language/primitives.md` and
+`../../continuation-language/think-interface-proposal.md`. Exact signatures remain proposals.
+
+`Gravitate` is not an eighth method. It is a possible system-scale consequence of remembered work.
+Any boundary crossing involved is performed explicitly through `Reach`.
+
+### Before — the surface this supersedes
 
 ```go
 // REMOVE
@@ -32,13 +74,17 @@ func (k *Kernel) rootFor(ask string) *graph.Engram          // unexported; delet
 // does not: the payload is an argument to the select that follows.
 - func (k *Kernel) Ingress(c content.Content) *graph.Observation
 
-// KEEP — the only exported methods. attach a namespace to the rack, and detach it.
+// EARLIER PROPOSAL — attach a namespace to the rack, and detach it.
+// Superseded as the complete public surface by the seven names above. Mount remains the
+// admission operation inside Approach; this document does not yet settle whether Unmount is
+// likewise absorbed or remains lifecycle plumbing below the seven.
 + func (k *Kernel) Mount(ent ids.EntityID, ns *graph.Engram, grants []Grant) (*Session, error)
 + func (k *Kernel) Unmount(ns ids.EngramID)
 ```
 
-`Drive`, `Accept` and `Reject` are the two forms with an external caller, so they are emitted rather
-than called. `Introspect` becomes a name — see below.
+The earlier collapse still supplies part of the mapping: `Drive` is absorbed by `Decide`; `Accept`
+is absorbed by `Remember`; `Reject` remains as Remember's opposite; `Introspect` is renamed `Orient`;
+discovery's search-and-reason surface is `Think`; and ingress/admission is `Approach`.
 
 `Mount`'s one check is **`grants ⊆ ns.Ceiling`** — arithmetic, no semantics, and **no live admin
 required**, which is what keeps the rack flat.
@@ -102,8 +148,8 @@ start from, and introspection is bounded by the subtree — which is not a rule 
 way the pointers point. It is `Spiral` under a new name and belongs to whatever reads the spiral out
 of band.
 
-`introspect` is then a system engram like `discover`, manned by the runtime entity, and the
-`system:introspect` expression joins the constants in `entity/runtime`.
+`Orient` is the kernel method over this topology. It returns a bounded structural view without
+interpreting what that position means.
 
 ## Behaviour required, not expressible as a signature
 

@@ -1,6 +1,6 @@
 # 05 · The Frame
 
-**Package:** `frame`   ·   107 code lines
+**Package:** `frame`
 
 What a possibility **sees**. Also a budget boundary, since everything in it ships to the entity's
 host on every step.
@@ -72,7 +72,7 @@ whole enforcement of capability-as-scoping.
 
 ## Review notes
 
-`Live` has ten fields and is the widest struct in the tree. Three of them — `Impulses`, `Delegated`,
+`Live` has nine fields. Three of them — `Impulses`, `Delegated`,
 `Builtin` — are each one mechanism, and `Impulses` is provisional and currently always empty.
 
 `View` exists so an entity cannot reach `Invocation.Return.Cites` and traverse into a child's

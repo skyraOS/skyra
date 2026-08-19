@@ -10,9 +10,10 @@
 
 > **CARRIED FORWARD** from `specs/2026-08-11/semantics/open-until-commit.md`.
 >
-> **Status here: CARRIED, RENAMED.** This document decided the model `primitives.md` now calls
-> **`Remember`** — *"Closure is the only durable write. A commit produces an observation; it does
-> not persist anything"*, one write per chain rather than one per possibility. `Remember` is this
+> **Status here: CARRIED, RENAMED.** This document decided the model
+> `../continuation-language/primitives.md` now calls
+> **`Remember`** — *"Closure is the only causal durable append. A commit produces an observation;
+> it does not persist anything"*, one append per chain rather than one per possibility. `Remember` is this
 > plus `Accept`, unified into one recursive operation.
 >
 > **The decision is 08-11's; only the name is new.**
@@ -57,13 +58,14 @@ CLOSE    THE ROOT COMMITTED. materialize · disperse · mint · die.
 Every *commit closes the possibility* line in the set needs auditing against this, including the
 build's loop, which returns from `open()` on commit.
 
-### Which moves the durable write
+### Which moves the durable append
 
-> **Closure is the only durable write. A commit produces an observation; it does not persist
+> **Closure is the only causal durable append. A commit produces an observation; it does not persist
 > anything.**
 
-`credit.md`'s *every durable write in the system is caused by a commit* becomes **caused by the
-root's commit** — one write per chain rather than one per possibility.
+`credit.md`'s *every durable append in the system is caused by a commit* becomes **caused by the
+root's commit** — one causal append per chain rather than one per possibility. The namespace cost
+account may require a distinct append path; that question remains open in `../energy/distance.md`.
 
 And **mint-on-closure was always named for the right event and implemented at the wrong one.** The
 build mints at every commit, which under this vocabulary is minting at *return*. The name has been
@@ -198,7 +200,7 @@ CHAIN IS LIVE FOR THE      context current, so it may be the same context that w
 CHAIN'S DURATION           re-assembled anyway — but nobody has measured either, and a long
                            chain now holds all of it at once.
 
-A LONG CHAIN HOLDS         one durable write per chain means a chain doing an hour of work
+A LONG CHAIN HOLDS         one causal append per chain means a chain doing an hour of work
 EVERYTHING UNTIL THE END   persists nothing for an hour. crash safety is total and progress
                            safety is zero. THIS IS THE REAL TRADE.
 

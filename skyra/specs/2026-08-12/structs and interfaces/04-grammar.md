@@ -1,6 +1,6 @@
 # 04 · The Grammar
 
-**Package:** `grammar`   ·   161 code lines
+**Package:** `grammar`
 
 Two forms. The incapacity is a **parsing** property, not an API property.
 
@@ -64,6 +64,5 @@ thing every member must have.
 entity said something unparseable" from "the entity was unreachable," which matters because the first
 is an ordinary failed invocation and the second is a host problem. Thin, and could be a sentinel.
 
-**Nothing else here is addable to.** This is the package that most directly is the claim, and it is
-21 code lines for the forms plus 140 for the parser — the ratio is right, since the forms are the
-design and the parser is the enforcement.
+**Nothing else here is addable to.** This is the package that most directly embodies the claim: the
+forms are small and the parser supplies the enforcement.

@@ -1,21 +1,24 @@
 # The Kernel, Revised
 
 **Date:** 2026-08-11
-**Status: PROPOSAL.** Revises `2026-08-09/kernel.md` against what the build actually needed.
-Nothing here is a new mechanism. Every item is a removal.
+**Status: HISTORICAL PROPOSAL; CAUSAL REASONING CARRIED, SURFACE SUPERSEDED.** Revises
+`2026-08-09/kernel.md` against what the build needed. The no-control-plane argument and the two
+causal forms remain current. Peer-method claims do not.
 
-> **There is no control plane. There is one channel, two forms, and two reflexive names.**
+> **There is no control plane. Seven semantic distinctions remain; Decide and Remember are the two
+> causal forms. They are not seven peer methods.**
 
 > **CARRIED FORWARD** from `specs/2026-08-11/semantics/kernel-revision.md`.
 >
-> **Status here: REASONING CARRIED, NAMING SUPERSEDED.** The argument stands — there is no control
-> plane, `Drive` is a select, `Accept` is a commit, and the reflexive names are engrams rather than
-> a surface. The five names it lands on were renamed and extended by
-> [`../primitives.md`](../primitives.md); the mapping is in [`README.md`](README.md).
+> **Status here: REASONING CARRIED, SURFACE SUPERSEDED.** The no-control-plane argument stands and
+> `Drive` is absorbed by Decide. The claims that the reflexive names are not a surface and that
+> Accept and Reject are one operation do not stand. The surface was replaced by
+> [`../continuation-language/primitives.md`](../continuation-language/primitives.md); the mapping is in [`README.md`](README.md).
 >
-> **One structural claim did NOT carry.** This document is careful that `SELECT` and `COMMIT` are
-> *forms* and `discover`/`introspect` are *names reached by the forms* — *"the names are not a
-> surface at all."* `primitives.md` lists seven peers, which flattens that. Unreconciled.
+> **Later coherence ruling, 2026-08-13.** The earlier claim that all seven operations are peer
+> kernel methods is superseded by [`../continuation-language/primitives.md`](../continuation-language/primitives.md).
+> Think is the universal possibility-facing interface; recognition, orientation, and
+> reach-planning are hidden behaviors; Approach and Reach remain boundaries around causal work.
 
 ---
 
@@ -31,9 +34,9 @@ Ask · Ingress · Drive · Accept · Reject · rootFor · Hold · Introspect · 
 **Seven of those should not exist.** Not because they were badly written — because they were already
 in the design under other names, and exporting them again made one vocabulary look like two.
 
-The split is unchanged and was the thing that held: the kernel holds everything happening, the graph
-holds only what happened, the kernel writes nothing, crash semantics collapse to nothing. That is not
-reopened here.
+The split is unchanged and was the thing that held: the kernel holds everything happening and the
+graph holds only what happened. At closure the kernel appends the selected causal record; it does not
+author, rewrite, or semantically interpret durable memory.
 
 ---
 
@@ -54,27 +57,24 @@ kernel.go:330   k.open(r, child,    m.Engram, m.Entity, args, …, p.Ancestry, d
 The only difference is who emits it. A possibility emits a select; the embedder emits the same thing
 from outside. There is no second operation.
 
-### Accept is a commit
+### Accept becomes Remember; Reject remains its opposite
 
 `credit.md` already says this and the first draft of this document did not follow it through:
 
 > **The human's synthesis is acceptance. Accepting a change IS citation; rejecting is not-citing.**
 > The human is simply the outermost parent, running the same operation with a different surface.
 
-If that is literal — and it is — then `Accept` and `Reject` are not two operations, and they are not
-one operation with a flag. **They are one commit that either carries a reference or does not.**
+Acceptance is now named `Remember`. Rejection is not an empty Remember and is not a boolean mode on
+Remember. The two are complementary operations: accomplishing one establishes that the other did not
+occur for that candidate causal chain.
 
 ```text
-CITE THE ROOT'S RETURN      the walk reaches the chain     → staged effects LAND
-DO NOT CITE IT              the walk reaches nothing       → staged effects DISCARDED, recorded
+REMEMBER THE RETURN         the walk reaches the chain     → staged effects may LAND
+REJECT THE RETURN           the chain does not survive     → staged effects are DISCARDED
 ```
 
-That is not a branch anyone has to write. It is *materialization follows citation*, already
-specified, applying at the outermost commit like it applies at every other one.
-
-**This retracts the first draft's argument** for keeping the two apart — that `Accept` materializes
-and `Reject` does not. Both are commits; only the presence of a reference differs, and everything
-downstream falls out of that.
+Specifying either outcome defines the complement. Both nevertheless exist on the semantic surface
+because selection for survival and refusal of survival are different acts.
 
 ### And the rest were never operations
 
@@ -93,22 +93,19 @@ Spiral     A READ.         user-rooted versus kernel-rooted counts. that is intr
 
 ---
 
-## The surface, entire
+## The former surface
 
 ```text
-INGRESS       permission to enter the system.                    A CHANNEL.
-
-SELECT        choose.                                            THE TWO FORMS.
-COMMIT        internalize.
-
-discover      find engrams · entities · observations · hosts.    TWO NAMES,
-introspect    what am I doing.                                   reached BY the forms.
+INGRESS       replaced by Approach, which opens a namespace.
+SELECT        replaced by Decide.
+COMMIT        replaced by Remember.
+discover      replaced by Think.
+introspect    replaced by Orient.
 ```
 
-**That is all of it.** One channel, two forms, two names — and the names are not a surface at all,
-because they are engrams selected exactly like anything else. `discover.md` already settles this:
-*"the way `write` is a name you call, not a keyword. The grammar stays at two forms no matter how
-many system possibilities exist."*
+That five-name surface is superseded. The current vocabulary and surface distinction are in
+`../continuation-language/primitives.md`. The seven names retain separate meanings without becoming
+seven peer kernel methods.
 
 **COMMIT, not return.** `interfaces.md` renamed it deliberately: *"in every language a reader knows
 `return` means hand back a value, no side effect, and this one **writes**."* Keep the name. But
@@ -119,27 +116,20 @@ the parent making the result its own. "Return" names the direction; "internalize
 
 ## discover and introspect are one kind of thing
 
-They are both **the system asking about itself**, and they differ only in which half they read —
+Think and Orient are both **the system asking about itself**, and differ in which half they read —
 which is the same split everything else in the design rests on:
 
 ```text
-discover      reads the GRAPH     what HAPPENED       engrams · entities · observations · hosts
-introspect    reads the KERNEL    what is HAPPENING   roots · heads · ancestry · bindings
+THINK         reads the GRAPH     what HAPPENED       engrams · entities · observations · hosts
+ORIENT        reads the KERNEL    what is HAPPENING   branches · heads · ancestry · bindings
 ```
 
-That is why they belong beside each other rather than in different sections of a document, and it is
-why they should be **reached the same way**. `kernel.md` already says so and the build got it wrong:
-
-> **TO A POSSIBILITY** — a system engram manned by the runtime entity, the same exemption discover
-> and create already hold, answering ONLY about its own subtree.
-
-The build made `introspect` a kernel method instead. **Make it a kernel engram** — an engram whose
-entity reads kernel state rather than graph state. The symmetry then goes all the way down, including
-the honest-witness split:
+This was originally expressed as peer kernel methods. In the current model, Think is the exposed
+possibility-facing interface and orientation is behavior it may compose over bounded live topology:
 
 ```text
-discover     engram → runtime entity → a READ-ONLY view of the GRAPH    (built: the Index interface)
-introspect   engram → runtime entity → a READ-ONLY view of the TOPOLOGY (same shape, not built)
+Think               interface → behavior → a READ-ONLY view of bounded material
+Think → orientation hidden behavior → a READ-ONLY view of the TOPOLOGY
 ```
 
 The `Index` interface the build already has — one method, no way to reach `Apply`, `Mint` or
@@ -244,7 +234,7 @@ Both belong in a facility **beside** the kernel that is handed events rather tha
 
 ```text
 THE SPLIT              the kernel holds everything happening; the graph holds only what happened.
-                       it is what makes "the kernel writes nothing" and mint-on-closure true rather
+                       the kernel APPENDS selected occurrences and never rewrites or invents them.
                        than aspirational — and it is now also what tells discover and introspect
                        apart.
 
@@ -269,20 +259,14 @@ NO SEMANTICS           execution topology only. survived, except for the formatt
 A CONTROL PLANE AS A     drive is a select and accept is a commit. exporting them again made one
 THIRD VOCABULARY         vocabulary look like two, and made the surface look four times its size.
 
-COLLAPSING ACCEPT AND    both are commits. the difference is whether a reference is carried, and
-REJECT TO A BOOLEAN      everything downstream already falls out of that. a flag would name a
-                         branch that does not exist.
-
-KEEPING ACCEPT AND       the first draft's argument — that one materializes and the other does not
-REJECT AS TWO METHODS    — was wrong. materialization follows citation, at the outermost commit
-                         exactly as everywhere else.
+COLLAPSING REMEMBER AND  they are opposites, not modes of one method. Remember selects survival;
+REJECT TO A BOOLEAN      Reject establishes non-survival. accomplishing either defines the other.
 
 EXPORTING Hold           parking an unminted engram is a detail of mint-on-closure, not an
                          operation.
 
-INTROSPECT AS A          it is the same kind of thing as discover — the system asking about itself
-KERNEL METHOD            — and kernel.md already says it should be a system engram manned by the
-                         runtime entity. the build got this wrong, not the spec.
+ORIENT AS A PEER         Superseded. Orient remains a distinct semantic behavior beneath Think;
+KERNEL METHOD            the kernel supplies its bounded topology without exposing a peer method.
 
 FILTERING ANCESTORS      discovery is a possibility and cannot see ancestry. doing it there means
 INSIDE DISCOVERY         either the kernel feeds a possibility upward information or a possibility
@@ -310,9 +294,8 @@ GATING INGRESS           the one thing genuinely outside the forms, and it is un
                          grants.
 
 GRANTS                   the world boundary is entirely open. staging works and nothing checks it.
-                         `introspect:self` is still the first grant the design needs — and with
-                         introspect as a kernel engram, it is the first NAME to gate rather than the
-                         first method.
+                         `orient:self` is still the first grant the design needs. Orient is a kernel
+                         method whose returned topology remains authority-bounded.
 
 REVOCATION               reach is given and never taken back. starvation is behavioural and does
                          not remove a capability, so a compromised entity stays invocable by

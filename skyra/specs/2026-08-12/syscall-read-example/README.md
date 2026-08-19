@@ -3,6 +3,13 @@
 **Status: WORKING.** A single worked example, traced against the code, used to find where the
 entity/host seam actually falls.
 
+**Coherence position:** this directory preserves the evidence and Michael's decisions which led to
+the newer model. Its direct syscall and peer-method language is historical where it conflicts with
+[`../continuation-language/primitives.md`](../continuation-language/primitives.md),
+[`../continuation-language/think-interface-proposal.md`](../continuation-language/think-interface-proposal.md),
+or [`../continuation-language/primitives-and-continuation-summary.md`](../continuation-language/primitives-and-continuation-summary.md).
+Nothing in `outcomes/` is rewritten by this coherence pass.
+
 **Everything here is asked from the ENGRAM's perspective** — not the host's, not the model's.
 
 ```text

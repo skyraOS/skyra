@@ -48,7 +48,7 @@ one. Identity discriminates; location does not.
 ## E2 · The five, tested against real entities
 
 ```text
-                      1 unique   2 indep.    3 expression   4 returns   5 no back-channel
+                      1 unique   2 indep.    3 expression   4 returns   5 history with parent
 Claude Opus 5            ✓           ✓            ✓             ✓              ✓
 curl 8.7.1               ✓           ✓            ✓             ✓              ✓
 mongod                   ✓           ✓            ✓             ✓              ✓
@@ -61,8 +61,8 @@ OpenSSL 3.2              ✓           ✗            ✓             ✓       
 **Where each criterion comes from:**
 
 ```text
-1   terminology.md: "registered per runtime; KNOWN ACROSS RUNTIMES BY GOSSIP."
-    anything gossiped must be comparable across runtimes.
+1   terminology.md: "registered per runtime; learned across a boundary only through Reach."
+    anything returned through Reach must be comparable across the participating runtimes.
     world.md: "python3.4 and python3.5 are DIFFERENT ENTITIES, because version changes
     interpretation."
 
@@ -77,13 +77,14 @@ OpenSSL 3.2              ✓           ✗            ✓             ✓       
     world.md: "an entity is THE THING YOU WANT A SINGLE TRACK RECORD OF" — with no return,
     nothing is minted and that record is empty.
 
-5   world.md: "Anything accumulating between invocations is world state and must be CARRIED
-    EXPLICITLY — a session handle, a worktree, a page. If state hides inside an entity, two
-    invocations that look identical give different answers and nothing can see why:
-    `same question` becomes a lie."
+5   world.md: "an entity is THE THING YOU WANT A SINGLE TRACK RECORD OF."
+    That track record is the history accumulated with its observer/parent. The entity's
+    continuity is therefore relational: through that history, not through a declaration the
+    entity makes about itself.
 ```
 
-**Three things were wearing the word "state", and only one of them breaks anything:**
+**No back-channel remains an entity-boundary invariant, but it is not criterion 5.** Three things
+were wearing the word "state", and only one of them breaks that boundary:
 
 ```text
 SUBSTANCE           weights · the collection · the stdlib. constant across your invocations.

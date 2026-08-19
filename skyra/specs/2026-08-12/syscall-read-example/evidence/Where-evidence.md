@@ -276,7 +276,7 @@ connectFunc func(syscall.Handle, syscall.Sockaddr) error = syscall.Connect
 ```
 
 `dialSingle` branches on **address type** (`*TCPAddr`, `*UnixAddr`), not on platform. See
-[`reach-abstraction.md`](../../reach-abstraction.md) for what that costs.
+[`reach-abstraction.md`](../../reach/reach-abstraction.md) for what that costs.
 
 **Local entities are not all reached by `execve`.** These were live on this machine:
 

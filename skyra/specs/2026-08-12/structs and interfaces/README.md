@@ -1,11 +1,9 @@
 # Structs and Interfaces
 
-**Date:** 2026-08-11
-**Status: REVIEW.** The complete type surface of `skyra-dna-v5`, grouped so each interface sits with
-the structs that implement or feed it.
-
-> **51 unique types against the 40 `interfaces.md` sanctions. 16 net new, of which 1 touches the
-> semantic model.**
+**Date:** 2026-08-11 · verified against the runtime 2026-08-13
+**Status: LIVE SNAPSHOT.** The current type surface of `skyra-dna-v5`, grouped so each interface
+sits with the structs that implement or feed it. The source tree is authoritative; the documents in
+`interface changes/` are proposals and are not descriptions of code that already exists.
 
 Every type below carries one of three marks:
 
@@ -35,7 +33,7 @@ ADDED       not in interfaces.md at all. these are what there is to review.
 1  A GENUINE ADDITION TO      EngramRef. it extends content.Value, which is CLOSED so that Cites
    THE SEMANTIC MODEL         can be derived exhaustively. see 02-content.
 
-5  READ-TIME FOLD MACHINERY   Partition · Diff · Summary · UsedSeen · Deref. all derived views,
+4  READ-TIME FOLD MACHINERY   Partition · unexported diff · Summary · Deref. all derived views,
                               nothing durable — and collectively a layer. see 03-graph.
 
 6  PLUMBING THE SPEC          Graph · Minter · Registry · Index · Author · Mint. the notable one
@@ -56,28 +54,25 @@ of interfaces `interfaces.md` declares, and are not counted as additions.
 Ranked by what I would defend least:
 
 ```text
-THE FOLD TYPES     none is wrong and "it is only a read-time view" is exactly the argument that
-                   lets a set of them accumulate until the durable layer has a shadow. five types
-                   to produce four numbers.
+THE FOLD TYPES     `Partition` and `Summary` remain. `diff` is deliberately unexported and
+                   `UsedSeen` no longer exists.
 
 Summary            pure presentation. it exists because something had to render a child set into a
                    prompt, which is a marshalling concern and belongs in the entity adapter.
 
-UsedSeen           two ints and a ratio. a function would do.
-
-Handle             carries Stdout · Stderr · Exit, which is a shell's shape leaking into a class
-                   interface. spawn is unimplemented, so this is a guess nobody has been forced to
-                   make — exactly what world.md warns about for the driver surface.
+Handle             already cut to `{Host, Ref}`. Process output is not part of the handle.
 
 ErrNoEmission      an error type for one message.
 ```
 
 ## Related
 
-`../kernel-revision.md` argues the *surface* down — there is no control plane, `Drive` is a select
-and `Accept` is a commit. This document is the *type* surface, which is a different cut and did not
-shrink with it.
+[`../semantics/the-collapse.md`](../semantics/the-collapse.md) records the earlier surface collapse.
+Its later seven-peer-method ruling is itself superseded by
+[`../continuation-language/primitives.md`](../continuation-language/primitives.md). This directory
+describes the runtime that exists; `interface changes/` preserves proposed replacements and marks
+their current status.
 
-`../conversation-runtime-mismatch.md` records where the runtime and the conversation disagree. Two of
-its rows are about types below: stored error observations (`03-graph`) and reuse-by-pointer versus
-reuse-by-copy (`03-graph`, `Engram`).
+[`../../2026-08-11/semantics/conversation-runtime-mismatch.md`](../../2026-08-11/semantics/conversation-runtime-mismatch.md)
+records where the runtime and the conversation disagreed. Two rows concern stored error observations
+and reuse-by-pointer versus reuse-by-copy.

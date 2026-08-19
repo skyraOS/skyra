@@ -24,12 +24,13 @@ HOST      physical hardware addressed over a network — INCLUDING devices with 
           `here` is the degenerate case: the device you are standing on.
 ```
 
-**A runtime does not span devices.** It reaches them. That is transport, and transport is beneath
-everything.
+**A kernel-backed runtime instance does not span devices.** There is one per device. An execution
+may span devices because that runtime can explicitly `Reach` beyond its device. These are different
+claims: authority remains local while work crosses a boundary.
 
-**Nothing crosses a runtime boundary except gossip** — which runtimes exist, which entities exist.
-Not graphs, not observations, not permissions, not history. No global registry, and nothing holds a
-model of the whole.
+**Nothing crosses a runtime boundary except through `Reach`.** There is no autonomous propagation
+channel and no global registry. Every cross-device observation, request, response, or durable-record
+transfer is an explicit reached relationship with a recorded boundary crossing.
 
 ## Durable and ephemeral
 
@@ -139,7 +140,7 @@ had no other way.
 
 ```text
 ENTITY        WHO interprets. an identity and nothing else — every declaration dissolved.
-              registered per runtime; known across runtimes by gossip.
+              registered per runtime; learned across a boundary only through Reach.
 
 PRINCIPAL     WHO ASKS. holds a namespace. an entity that can INITIATE; interpreters need
               no namespace.
@@ -209,32 +210,33 @@ RETIRED   "INGRESS" AS A METHOD. it described a model where the method minted an
           follows. MOUNT is the same method named for what it does.
 ```
 
-## The forms and the names
+## The seven semantic distinctions
 
 ```text
-SELECT        choose. names one or more engrams, binds observations, PROVISIONS ACCESS.
-COMMIT        internalize. hands an observation up. THE POSSIBILITY STAYS LIVE.
-              NOT the durable write — see COMMIT vs CLOSURE below. CLOSURE is.
-
-discover      reads the GRAPH.    what HAPPENED.     engrams · entities · observations · hosts.
-introspect    reads the KERNEL.   what is HAPPENING. chains · heads · ancestry.
-authenticate  reads the WORLD.    WHO IS THIS. not reflexive, so not a peer of the two above.
-provision     narrows access downward. an engram, invoked from a namespace.
+APPROACH      open a namespace to an outside party.
+THINK         reason over durable graph state.
+DECIDE        choose behavior and bind observations and access. A CAUSAL FORM.
+REACH         establish the only permitted runtime-boundary crossing.
+REMEMBER      append selected causality upward and, at closure, durably. A CAUSAL FORM.
+RECOGNIZE     translate present evidence and connect it to remembered experience.
+ORIENT        observe bounded live kernel topology.
 ```
 
-`discover` and `introspect` are paired because both are **the system asking about itself**, split on
-the same durable/active line as everything else. `authenticate` asks the world and is a third kind,
-closer to `create` — which is also a system engram and also not reflexive.
+These seven words remain semantically distinct, but they are not seven peer methods. Decide and
+Remember are the only two causal forms. Think is the universal possibility-facing interface.
+Approach and Reach are directional boundaries. Recognize and Orient name specialized behaviors
+available beneath Think. Authentication is work performed within Approach; provisioning is part of
+Decide's binding.
 
 ## Words with one meaning that carried two
 
 ```text
 COMMIT        THE EMISSION, which hands an observation up and leaves the possibility live.
-              distinct from CLOSURE, which is the acceptance that ends a chain and is the only
-              durable write. the set used one word for both.
+              distinct from CLOSURE, which is the acceptance that ends a chain and causes the
+              causal durable append. the set used one word for both.
 
-CROSSING      between RUNTIMES: real, and not a mechanism — two chains, a stub on each side,
-              each kernel enforcing its own.
+CROSSING      between RUNTIMES: real, and performed only through Reach. each kernel enforces its
+              own side and the crossing is recorded.
               within a runtime: does not exist. authority never moves.
 
 ORIGINATION   producing content that was not derived. governed by "originate only where it
@@ -246,14 +248,15 @@ ORIGINATION   producing content that was not derived. governed by "originate onl
 ## Deliberately absent
 
 ```text
-NO GLOBAL REGISTRY        gossip carries which runtimes and entities exist. nothing else.
+NO GLOBAL REGISTRY        a runtime knows only locally registered identities and what explicit
+                          Reach operations have made observable to it.
 
 NO GLOBAL GRANT ALPHABET  a grant says nothing about what you may do in another runtime.
                           that runtime's kernel decides, from its own data. two runtimes need
                           never agree on what a grant string means.
 
-NO CONTROL PLANE          drive is a select, accept is a commit. one channel, two forms, and
-                          names reached by the forms.
+NO CONTROL PLANE          the semantic distinctions share one causal substrate; Decide and
+                          Remember are the two causal forms, not a separate administrative plane.
 ```
 
 
@@ -263,7 +266,7 @@ NO CONTROL PLANE          drive is a select, accept is a commit. one channel, tw
 
 ## The forms and the names, renamed
 
-[`../primitives.md`](../primitives.md) renames five of these and adds two. The concepts are
+[`../continuation-language/primitives.md`](../continuation-language/primitives.md) renames five of these and adds two. The concepts are
 unchanged; the words moved.
 
 ```text
@@ -276,8 +279,8 @@ discover              → THINK             search AND reason. RECALL is the fla
 introspect            → ORIENT            "reads the KERNEL, what is HAPPENING" carried verbatim
 provision             → absorbed by DECIDE, which binds "whatever reach and grants are
                         explicitly provisioned downward"
-"INGRESS" (retired    → APPROACH          and approach has an OPPOSITE, which ingress never had:
- here in favour of                        "<caller> was avoided" is an event with a subject
+"INGRESS" (retired    → APPROACH          opens a namespace; avoidance is its refusal outcome.
+ here in favour of                        whether that outcome is durably appended remains open
  MOUNT)
 ─────────────────────────────────────────────────────────────────────────────────────────────
                         REACH             NEW. no 08-11 equivalent.
@@ -285,7 +288,7 @@ provision             → absorbed by DECIDE, which binds "whatever reach and gr
 ```
 
 **`discover`/`introspect` reading the graph against the kernel carried across the rename intact** —
-`primitives.md` states it in the same two lines. That pairing is the most durable thing in this
+`../continuation-language/primitives.md` states it in the same two lines. That pairing is the most durable thing in this
 section.
 
 ## `authenticate` has no successor, and `APPROACH` is where it belongs
@@ -294,7 +297,7 @@ section.
 authenticate  reads the WORLD.  WHO IS THIS. not reflexive, so not a peer of the two above.
 ```
 
-`primitives.md` does not mention it. But `APPROACH` asks *should this be let in at all*, and
+`../continuation-language/primitives.md` does not mention it. But `APPROACH` asks *should this be let in at all*, and
 `questions.md` §5 says nothing gates that — so the missing gate and the unplaced word are the same
 hole:
 
@@ -307,26 +310,21 @@ APPROACH        the primitive. should this be let in?
 The ceiling bounds what an admitted session may *do*. Nothing bounds who may open one. That is
 `authenticate`, and it is specified here and built nowhere.
 
-## `ROOT` was retired here, and 08-12/13 reintroduced it
+## Approach opens a namespace
 
 ```text
 RETIRED   "ROOT". it implied a special node and was not one... what it named is a BRANCH.
 ```
 
-`primitives.md` §1 says *"Approach is always at a root, and always outside-in."* By this document
-that should read **branch** — *a possibility with no parent, one ask, keyed by span, and the
-transaction boundary.*
+Approach does not open a root or a branch. It opens a namespace to an outside party. Once admitted,
+asks inside that namespace may open top-level possibilities; those positions are branches.
 
 ```text
-THE CLAIM IS UNCHANGED    approach is always at a possibility with no parent. That is exactly
-                          what a BRANCH is, and an approach is what creates one.
-
-THE WORD IS WRONG         and it is wrong in the specific way this document warned about — "every
-                          wrong turn came from that implication."
+APPROACH     outside party → namespace
+BRANCH       one top-level possibility inside that admitted namespace
 ```
 
-Not corrected in place, because `2026-08-09/questions.md` §5 is also written in the old vocabulary
-and the two should move together.
+The namespace is the admission boundary; a branch is an execution position. They are not aliases.
 
 ## Untouched and still standing
 

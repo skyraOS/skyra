@@ -47,12 +47,12 @@ None of these closed. The overnight build addressed defects, not semantics.
     UNCHECKED                criterion 2 could not be checked at first contact anyway — it needs
                              a failure and needs surviving it.
 
-11  DISTANCE IS UNMEASURED   distance.md proposes Orient × Endpoint × Experience. Nothing times a
+11  DISTANCE IS UNMEASURED   ../energy/distance.md proposes Orient × Endpoint × Experience. Nothing times a
                              reach. Causal distance is the exception: HopProfile() already
                              computes it.
 
 12  APPROACH HAS NO GATE     and authenticate — specified in terminology.md since 08-11 — has no
-                             successor in primitives.md and no code. See terminology.md's
+                             successor in ../continuation-language/primitives.md and no code. See terminology.md's
                              addendum.
 ```
 
@@ -62,7 +62,7 @@ None of these closed. The overnight build addressed defects, not semantics.
 
 ```text
 CAUSAL DISTANCE   graph/types.go computes HopProfile() — {hop1,hop2,hop3} validated at range —
-                  and distance.md only named it on 08-13. The mechanism preceded the word.
+                  and ../energy/distance.md only named it on 08-13. The mechanism preceded the word.
 ```
 
 Worth noting because it is the only row that runs this direction, and because it is evidence the
@@ -70,20 +70,14 @@ credit design was right about something before there was vocabulary for it.
 
 ---
 
-## Two forks that must close before any of this is buildable
+## One implementation question remains
 
 ```text
-questions.md §16    ONE OPERATION, FOUR BLANKS  vs  SEVEN PHASES. discover(obs, engram, entity,
-                    address) covers THINK, DECIDE and REACH between them. Michael's position is
-                    that the seven are the right SURFACE; the mechanism is undecided.
-
-the-collapse.md     FORMS vs NAMES. SELECT and COMMIT are forms; discover and introspect are
-                    engrams reached by them. primitives.md lists seven peers. If the old reading
-                    holds, THINK and ORIENT are not primitives beside DECIDE at all.
+questions.md §16    The seven-method surface is decided. The implementation still has to determine
+                    how much shared machinery Think, Decide, and Reach use beneath that interface.
 ```
 
-**Both are the same question at different depths**, and neither can be answered by writing more
-specification. They need one build.
+The interface decision no longer depends on that build; only the internal decomposition does.
 
 ---
 

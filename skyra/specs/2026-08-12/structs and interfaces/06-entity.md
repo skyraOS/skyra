@@ -1,6 +1,6 @@
 # 06 · Entities
 
-**Packages:** `entity` (35) · `entity/codex` (302) · `entity/runtime` (258) · `entity/scripted` (28)
+**Packages:** `entity` · `entity/codex` · `entity/runtime` · `entity/scripted`
 
 **WHO interprets.** An entity is an identity and nothing else — every declaration dissolved, because
 a declaration is made by whoever *registered* the entity, not by the entity.
@@ -13,6 +13,8 @@ type Interpreter interface {                              // SPEC
     Monitor(o *graph.Observation)
 }
 ```
+
+> **An engram may invoke neither its direct return nor its interpreter.**
 
 **`Step` is the only method that produces anything.** Everything else is data crossing it. Nothing
 executes without asking: a possibility cannot invoke, it can only emit a request and be invoked in
@@ -90,6 +92,7 @@ type Entity struct {                                      // ADDED
     Auth  Author
     Mint  Mint
     Run   *trace.Run
+    selected bool                         // per-possibility state
 }
 ```
 

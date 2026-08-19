@@ -15,10 +15,11 @@ do not hold*.
 
 > **CARRIED FORWARD** from `specs/2026-08-11/semantics/type-surface-proposals.md`.
 >
-> **Status here: UNAFFECTED**, and still the reading order against the code. The 08-12/08-13 work
-> added semantics — reach, distance, the entity criteria — but changed no type, so every proposal
-> here stands as written. It does not yet cover the seven primitives; see
-> [`divergence.md`](divergence.md).
+> **Later coherence status: PARTIALLY SUPERSEDED.** This remains useful as a gap analysis against
+> the code. Claims which require seven peer kernel methods do not stand. It does not yet cover the
+> Think-centered surface, parent-owned child parsers, or focused failure frames; see
+> [`divergence.md`](divergence.md) and
+> [`../continuation-language/primitives.md`](../continuation-language/primitives.md).
 
 ---
 
@@ -136,8 +137,10 @@ what looked like new machinery is machinery that already exists.
 - Builtin map[string]*graph.Engram
 ```
 
-`Builtin` goes with nothing replacing it: **ambient names are children of each namespace, placed at
-boot.** `discover` nameable in every frame becomes `discover` being a child everyone has.
+`Builtin` still goes with nothing replacing it in the frame. Think is the universal
+possibility-facing interface, so reach-planning and orientation do not require ambient names in
+every namespace. Learnable behavior invoked beneath Think remains causally visible without becoming
+an ambient frame name.
 
 **And the select provisions.** This is the mechanism that replaces mounts entirely:
 
@@ -168,8 +171,8 @@ authorized to name.
 GONE   namespace.Mount · MountSource · Resolver-with-origin · three-place resolution order ·
        mounts-shadow-earned · an Origin return on frame.Resolve · a Provision field
 
-WHY    mount was five existing mechanisms under one word — a child placed by provisioning ·
-       ambient names placed at boot · grants on the chain · entity reach · copy.
+WHY    mount was several existing mechanisms under one word — a child placed by provisioning ·
+       kernel-coordinated behavior · grants on the chain · entity reach · copy.
 
        and grants-on-the-reference was specifically wrong: EFFECTS HAPPEN AT LEAVES, so
        authority attached to a name at the top bounds nothing unless every intermediate
@@ -212,9 +215,10 @@ free and must become real."* A mount is shareable memory.
 Boot's whole job, and it should stay this short:
 
 ```text
-1  mint the system engrams — discover · introspect · authenticate · provision · create
-2  register the entities that man them
-3  mint the ADMIN NAMESPACE, place those engrams as its children, and WRITE ITS CEILING
+1  initialize the kernel coordination required by the seven semantic distinctions and the hidden
+   behaviors available through Think
+2  register the entities that can perform that behavior
+3  mint the ADMIN NAMESPACE and APPEND ITS CEILING
 ```
 
 `Select` and `Commit` are **not services** — they are forms, parsed and never initialized. The

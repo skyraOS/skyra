@@ -1,6 +1,6 @@
 # 02 · Content
 
-**Package:** `content`   ·   260 code lines
+**Package:** `content`
 
 What an observation carries, and the two read-time folds the history partitions by.
 

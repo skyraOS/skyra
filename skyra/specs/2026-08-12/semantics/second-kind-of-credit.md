@@ -11,7 +11,8 @@ exists so the question stops being rediscovered and so the mechanism is not pick
 > **CARRIED FORWARD** from `specs/2026-08-11/semantics/second-kind-of-credit.md`.
 >
 > **Status here: UNAFFECTED.** Its stated dependency — *"this decision depends on
-> `open-until-commit.md`"* — is now carried by `primitives.md`'s `Remember`, which is that
+> `open-until-commit.md`"* — is now carried by `../continuation-language/primitives.md`'s
+> `Remember`, which is that
 > document renamed and unified with `Accept`. The dependency holds; the name moved.
 > See [`closure.md`](closure.md).
 
@@ -155,14 +156,12 @@ PRODUCER ACROSS A DEEP COPY       discovery copies a subtree. do carried observa
                                   another name. REFINEMENT DOES NOT HIT THIS — it shares
                                   children rather than copying them.
 
-                                  AND IT IS NOT ONLY A CORRECTNESS QUESTION. the runtime is
-                                  DISTRIBUTED — one runtime spanning devices, entities global,
-                                  search global, and probably a graph per device. so keeping the
-                                  original Producer can mean the credit walk leaves the local
-                                  graph: over the wire, or into a dangling ID that stops
-                                  silently. re-pointing keeps it local at the cost the decision
-                                  avoided. NOT BEING CALLED NOW — recorded so the distribution
-                                  half is present when it is.
+                                  AND IT IS NOT ONLY A CORRECTNESS QUESTION. one kernel-backed
+                                  runtime instance lives on one device, while an execution may span
+                                  devices through explicit Reach operations. Keeping the original
+                                  Producer can therefore require another Reach to resolve it, or
+                                  encounter a dangling ID that stops silently. Re-pointing keeps it
+                                  local at the cost the decision avoided. NOT BEING CALLED NOW.
 
 WHERE THE BACK POINTER LIVES      on the engram · on the observation · both · nowhere
 
