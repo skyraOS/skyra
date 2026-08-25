@@ -11,7 +11,7 @@ belongs to turns out to say more about it than what it does.
 ```text
 PROTOCOL                     what crosses, and what receives
   MOVE                       custody transfer. TWO CAUSAL FORMS — request and response.
-  APPROACH                   the port a REQUEST arrives at.
+  GREET                   the port a REQUEST arrives at.
   RECOGNIZE                  the port a RESPONSE arrives at.
 
 DISCOVERY                    what makes a MOVE eligible to fire
@@ -43,7 +43,7 @@ MOVE carries a two-valued header, request or response. The set of things that ca
 anywhere is therefore exhaustive at two, and so is **the set of receiving ports.**
 
 ```text
-        REQUEST arrives   →   APPROACH    admits WORK.
+        REQUEST arrives   →   GREET    admits WORK.
         RESPONSE arrives  →   RECOGNIZE   admits a RESULT.
 ```
 
@@ -59,7 +59,7 @@ MOVE would be an unbounded, unrefusable one.
 Both are inbound admission. Both may refuse. They differ only in what they check:
 
 ```text
-APPROACH    "MAY YOU SEND ME WORK?"        checks AUTHORITY.
+GREET    "MAY YOU SEND ME WORK?"        checks AUTHORITY.
 RECOGNIZE   "IS THIS WHAT I ASKED FOR?"    checks CONTRACT, against a frame-resident
                                            expectation at the correlated position.
 ```
@@ -83,14 +83,14 @@ and even `HLT` is an instruction.
 
 So "nothing came back" is never a legal machine state. It is only ever a legal PAYLOAD.
 
-### APPROACH-as-port closes the bootstrap
+### GREET-as-port closes the bootstrap
 
 **A port is not a call.** It exists before anything arrives and does not need a connection in
 order to be arrived at — which is the shape every machine uses to solve this from outside its
 own instruction set: a reset vector, a boot address, a root capability handed in.
 
 ```text
-THE CIRCLE WAS AN ARTEFACT of treating APPROACH as something a possibility INVOKES. It is
+THE CIRCLE WAS AN ARTEFACT of treating GREET as something a possibility INVOKES. It is
 something a possibility IS ARRIVED AT THROUGH.
 ```
 

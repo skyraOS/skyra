@@ -6,22 +6,27 @@ drift. This document is about WHERE the lines are, not how they are built — th
 put underneath them is `implementation.md`, kept separate on purpose. Everything here either
 agrees with the 08-18 set or is named as disagreeing with it.
 
+_Instantiates `the-quadrant.md` — this is the **PRIVILEGE line** (unprivileged ↔ privileged, within system space)._
+
 > **The kernel and the CTU meet at exactly two crossings. That is the entire contract between
 > them, and stating it as exactly two tells you the kernel's whole surface.**
 
 ---
 
-## Three parties, and the line this document draws
+## Four components, and the line this document draws
 
 ```text
 KERNEL    owns the DURABLE GRAPH and the root/lifetime structure. name → meaning.
 CTU       owns the LIVE possibility tree. executes MOVEs within it. one per endpoint.
 FABRIC    transports between CTUs. one instruction — MOVE. reads the envelope, refuses, never
           looks inside.
+DRIVER    abstracts the host OS. routes and normalizes traffic beneath CTU admission; implements
+          durable storage beneath the kernel.
 ```
 
-The 08-18 set already draws CTU↔FABRIC. **The line this document draws is KERNEL↔CTU**, and its
-whole claim is that the line is crossed in exactly two places.
+The port subsystem sits beneath traffic admission, and the filesystem subsystem sits beneath the
+durable crossings. **The line this document draws is KERNEL↔CTU**, and its whole claim is that the
+line is crossed in exactly two places.
 
 ---
 
@@ -36,8 +41,9 @@ REMEMBER   STORE   CTU traps AT ROOT → "commit the cone of this contribution."
                    kernel writes durable storage; the arena tears down. KERNEL STEPS OUT.
 ```
 
-Between those two traps the kernel is not consulted. The CTU builds MOVEs, routes them, resolves
-payloads, and walks up and down the possibility tree with no kernel involvement.
+Between those two traps the kernel is not consulted. The CTU builds MOVEs, resolves payloads, and
+walks up and down the possibility tree; the fabric transports; the driver routes and normalizes
+traffic before CTU admission.
 
 ### Why exactly two — this is a load/store architecture
 
@@ -51,14 +57,47 @@ A load/store (RISC) ISA is *defined* by the rule that only two instruction class
 and everything else is register-to-register. "Exactly two crossings" is the same statement as
 "the kernel/CTU boundary is load/store." That is why it is two and not three — not a count that
 happened to come out small, but the defining property of a tractable machine. It is also what
-lets the contract be stated as a surface: two instructions, and the kernel needs no other door.
+lets the contract be stated as a surface: two instructions, and the kernel needs no other door
+**onto memory.**
+
+### The authority tier is separate — and BOUND writes it
+
+"Exactly two crossings" is a claim about the MEMORY tier (the durable graph). Authority is a
+DIFFERENT tier — the horizon map, CR3-shaped — and BOUND is its write. That splits BOUND in two,
+and only one half can ever be a crossing:
+
+```text
+ATTENUATE   narrow a HELD horizon in-flight, to ride in a MOVE envelope. MUST be local: every MOVE
+            narrows, so if narrowing trapped, every MOVE would enter kernel mode and the
+            MMU-in-hardware property would be gone. NON-CROSSING, and non-negotiable.
+DEFINE      create a NAMED, durable, account-level horizon — reusable over and over.
+```
+
+Two models for DEFINE, and they differ in whether the kernel surface grows. **Model A is the
+current preference; both are recorded.**
+
+```text
+MODEL A   (current) DEFINE is its own privileged authority-tier write — a syscall, doable anytime,
+          independent of arena lifecycle. Horizons are first-class account objects. Kernel surface
+          = two MEMORY crossings + one AUTHORITY write. This does NOT break load/store, which was
+          only ever a memory-tier claim: real ISAs carry load, store, AND privileged
+          control-register writes (MOV CR3) as a separate class. BOUND-define is that class.
+
+MODEL B   a named horizon is just a durable object: it crystallizes at REMEMBER by contributing
+          (like types and contracts) and reloads via ACTIVATE. Kernel surface stays two. Cost: no
+          durable horizon mid-arena — only its ephemeral form until the arena commits, so reuse is
+          across arenas, not on demand within one.
+```
+
+See `horizon-and-root.md`.
 
 ---
 
 ## The non-crossings — what looks like it should cross and does not
 
-The contract only holds if the following are NOT crossings. Three of them are clean. The fourth
-is a seam.
+The contract only holds if the following are NOT crossings. Three were always clean; the fourth
+(BOUND) splits — ATTENUATE is clean, DEFINE is a crossing under Model A. See the authority tier
+above and SEAM 2 below.
 
 ```text
 FABRIC REFUSAL   the fabric reads `horizon` and refuses on every MOVE. This is the MMU checking
@@ -68,11 +107,13 @@ FABRIC REFUSAL   the fabric reads `horizon` and refuses on every MOVE. This is t
 THINK (propose)  proposes names at the frontier. unprivileged, endpoint-run, read-only against a
                  cached view of the namespace. effects nothing. NOT A CROSSING.
 
-RECOGNIZE        checks a return against a FRAME-RESIDENT contract. A register compare over live
-                 state. writes only a causal condition. NOT A CROSSING.
+RECOGNIZE        the CTU checks a normalized return against a FRAME-RESIDENT contract. It operates
+                 over live state and writes only a causal condition. NOT A KERNEL CROSSING.
 
-BOUND            — SEAM 2. the two-crossing contract REQUIRES this to be a non-crossing; the
-                 written 08-18 set files it as a syscall. Unresolved here; see the seams.
+BOUND-ATTENUATE  narrow a HELD horizon in-flight — a local, unprivileged append that cannot widen
+                 by construction. enforcement is the fabric refusal, not a trap. NOT A CROSSING,
+                 and cannot be, or every MOVE would trap. (BOUND-DEFINE, creating a durable named
+                 account horizon, IS a crossing under Model A — see the authority tier above.)
 ```
 
 ---
@@ -167,18 +208,22 @@ SEAM 1 — NO PARTIAL SPILL
                 THIRD crossing and break the contract)? The load-bearing assumption under
                 "exactly two" is: an arena always fits live.
 
-SEAM 2 — BOUND
+SEAM 2 — BOUND  (RESOLVED 2026-08-21, via a DEFINE/ATTENUATE split)
   BOUNDARIES    "exactly two crossings" (BOUND must not cross)  ×  the written 08-18 set
                 (`causal-transition-unit/README.md`: BOUND is "still [a] syscall, because the map
                 lives where the process cannot write it").
-  COLLISION     direct contradiction. If narrowing the horizon edits kernel-held state, every
-                BOUND traps and the contract is three crossings, not two.
-  RESOLVED ONLY IF   horizons are attenuable tokens the endpoint can narrow locally and cannot
-                widen by construction — then narrowing needs no kernel and enforcement is the
-                fabric refusal (a non-crossing). This is doc-vs-doc: the 08-18 pivot to capability
-                passing already picked that branch; the "still a syscall" line is a seccomp
-                leftover that the pivot overturns. Until the token commitment is written down,
-                the boundary is contradictory. See `implementation.md`.
+  COLLISION     a direct contradiction — IF BOUND is one thing. It is two.
+  RESOLVED      BOUND splits. ATTENUATE (narrow a HELD horizon in-flight) MUST be local — every
+                MOVE narrows, so trapping it would put every MOVE in kernel mode and destroy the
+                MMU-in-hardware property. DEFINE (create a named durable account horizon) is where
+                the written "syscall" line was right. The two-crossing claim was always memory-tier;
+                DEFINE writes the AUTHORITY tier (CR3-shaped), a separate privileged axis real ISAs
+                also carry (MOV CR3 beside load/store). So the contradiction was a word doing two
+                jobs, not a real collision.
+  MODELS        A (current preference): DEFINE is an authority-tier syscall, on-demand — kernel
+                surface = two MEMORY crossings + one AUTHORITY write. B: DEFINE crystallizes at
+                REMEMBER by contribution — surface stays two, but no mid-arena durable horizon.
+                Both recorded; see the authority tier above and `horizon-and-root.md`.
 
 SEAM 3 — GLOBAL IDENTITY MEETS LOCAL SATISFACTION
   BOUNDARIES    the namespace makes NAMES converge globally  ×  RECOGNIZE decides SATISFACTION

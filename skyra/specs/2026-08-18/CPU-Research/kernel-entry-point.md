@@ -95,7 +95,7 @@ SHAPE IN SOURCE     A CALL.                     NOT VISIBLE IN THE SOURCE AT ALL
 ```text
 REQUEST ENTRY — the possibility asked
 
-  APPROACH    yes, and A SPECIAL CASE: the requester is not running yet, so it is closer to
+  GREET    yes, and A SPECIAL CASE: the requester is not running yet, so it is closer to
               exec than to a syscall. the only entry with no prior context to return to.
   THINK       yes. asks what is reachable. reachability is bounded by privilege, so the
               question cannot be answered outside the kernel.

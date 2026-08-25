@@ -31,10 +31,12 @@ The computation still has to happen, and something has to be the thing that perf
 So there are two units, and the fabric between them:
 
 ```text
-CTU       EXECUTES. one per endpoint. resolves its own payloads, runs its own body,
-          performs RECOGNIZE on arrival, decides what to retain.
+CTU       EXECUTES. one per endpoint. resolves its own payloads, runs its own body, performs
+          GREET / RECOGNIZE after normalized arrival, decides what contributes.
 FABRIC    TRANSPORTS between CTUs. ONE INSTRUCTION — MOVE. reads the envelope, refuses on
           authority, and never looks inside.
+DRIVER    ROUTES and normalizes traffic beneath the semantic ports. abstracts the host socket
+          system through one APPROACH egress and local / external ingress.
 ```
 
 This is not an invention. Tagged-token dataflow machines are built exactly this way — a
@@ -263,7 +265,7 @@ REMEMBER     → an endpoint act on receipt. Payload business.
 THINK        → PERCEIVE (substrate: what is live) + RANK (semantic: which is best, and always
                was entity work). The seam is why THINK never sorted cleanly.
 ORIENT       → an endpoint reading its own outstanding set.
-APPROACH     → UNPLACED. See below.
+GREET     → UNPLACED. See below.
 ```
 
 ---
@@ -277,6 +279,14 @@ bound.md     resolves `horizon`. larger space + authority → Horizon. CR3-shape
              request entry: seccomp and capability-dropping only ever NARROW and are still
              syscalls, because the map lives where the process cannot write it.
 ```
+
+> **ANNOTATION (2026-08-21):** this "still a syscall" reading was HALF right, and
+> `kernel-ctu-boundary/horizon-and-root.md` §2a splits it. BOUND is two acts. ATTENUATE —
+> narrowing a HELD horizon in-flight for a MOVE envelope — is CTU-local and CANNOT be a syscall,
+> because every MOVE narrows and trapping each would put every MOVE in kernel mode. DEFINE —
+> creating a named, durable, account-level horizon — is where this line was right: it writes the
+> AUTHORITY tier (CR3-shaped), a syscall under the current Model A. So the CR3 instinct here holds
+> for DEFINE and was overreaching for ATTENUATE. See `kernel-ctu-boundary/boundaries.md` SEAM 2.
 
 Each must:
 
@@ -298,7 +308,7 @@ Each must:
 
 ```text
 THE BOOTSTRAP IS         every MOVE needs a live connection from PERCEIVE; PERCEIVE needs a
-CIRCULAR                 Horizon from BOUND; BOUND needs an authority that APPROACH
+CIRCULAR                 Horizon from BOUND; BOUND needs an authority that GREET
                          establishes. Every machine solves this from OUTSIDE the instruction
                          set — a reset vector, a boot address, a root capability handed in.
                          This design will need the equivalent, and "smallest surface" cannot

@@ -10,6 +10,7 @@ OWNERS
   CTU       an endpoint. executes; unprivileged.
   FABRIC    transport between endpoints.
   KERNEL    owns durable storage and name-meaning; privileged.
+  DRIVER    OS-facing routing, ingress, and persistence mechanisms.
   ROOT      a position (a possibility with no parent), not a party.
 ```
 
@@ -20,9 +21,9 @@ OWNERS
 ```text
 MOVE        FABRIC (issued by CTU)   transfers custody of an opaque payload to a target.
                                      request or response. never reads the payload.
-APPROACH    CTU (receiver)           the port a REQUEST arrives at. admits work; checks authority.
-RECOGNIZE   CTU (parent's frame)     the port a RESPONSE arrives at. checks the return against the
-                                     frame-resident contract.
+GREET    CTU (request port)       admits a normalized REQUEST; checks authority.
+RECOGNIZE   CTU (parent's frame)     admits a normalized RESPONSE; checks the return against the
+                                     parent's frame-resident contract.
 ```
 
 ## DISCOVERY

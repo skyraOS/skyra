@@ -1,7 +1,8 @@
 # filesystem-subsystem
 
 **Date:** 2026-08-20
-**Status: SCAFFOLD.** Nothing implemented.
+**Status: THROWAWAY RUNNING.** The mechanism currently lives in the parent `driver.go`: one
+atomically replaced JSON graph file, flushed before REMEMBER returns Success.
 
 > **The filesystem subsystem inside the macOS driver. This is where a cone actually becomes
 > durable, and where all the storage mechanism the kernel refused to know about lives.**

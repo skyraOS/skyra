@@ -185,7 +185,7 @@ That matters beyond classification. **Page tables are installed by the kernel, u
 the process, and checked by hardware on every access without the kernel running.** If Horizon
 is CR3-shaped, that is the first CONSTRUCTIVE answer to the containment hole rather than
 another sighting of it — enforcement performed by the substrate on every access, configured
-once at Approach and never consulted again.
+once at Greet and never consulted again.
 
 It also predicts a shape: narrowing becomes an INSTRUCTION that installs a new map for a
 child, not a field passed on a call.

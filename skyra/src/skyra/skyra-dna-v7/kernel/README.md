@@ -1,7 +1,7 @@
 # kernel
 
 **Date:** 2026-08-20
-**Status: SCAFFOLD.** Nothing implemented.
+**Status: THROWAWAY RUNNING.** See `system.go` and `system_test.go`.
 
 > **The kernel owns the durable graph and the root/lifetime structure. It meets the CTU at
 > exactly two crossings, and configures-and-exits everywhere else.**

@@ -50,6 +50,12 @@ operands:
                                  (request | response), correlation, and the body. ALL OF IT
                                  IS ENDPOINT BUSINESS.
 
+    sys-instruction
+        allowed forms:
+            optional constraint  ENVELOPE — read by the RECEIVING CTU, never the fabric and never
+                                 the entity. ABSENT BY DEFAULT. when present it NARROWS the eligible
+                                 set (placement), ⊆ horizon — it cannot pin beyond authority.
+
 fires when:
     target      resolved         PERCEIVE has produced a live connection
     horizon     resolved         BOUND has produced a capability
@@ -79,6 +85,29 @@ faults:
                                  may retry, repair, or choose again. RECOVERABLE IN PLACE.
     unsolicited response         a response with no outstanding request. protocol violation.
 ```
+
+---
+
+## Two instructions, one per space
+
+A MOVE carries two instructions — one to each side of the trust line — under one authority:
+
+```text
+USER-INSTRUCTION   target + payload.   instructs USER space: which entity, and what to run.
+SYS-INSTRUCTION    sys-instruction.    instructs SYSTEM space: where/how to run in the system block.
+HORIZON            the authority that bounds BOTH. neither instruction may exceed it.
+```
+
+The two spaces each keep ONE private field — a clean mirror across the trust line:
+
+```text
+payload           read ONLY by the ENTITY.  user-space content. OPAQUE to fabric and CTU.
+sys-instruction   read ONLY by the CTU.      system-space instruction. the entity never sees it.
+```
+
+The opacity is not incidental. The payload is opaque BECAUSE user space is untrusted and
+proprietary; the sys-instruction is transparent to the CTU BECAUSE system space is the machine's
+own business. **The envelope/payload split IS the system/user split, at the field level.**
 
 ---
 
@@ -152,7 +181,7 @@ REMEMBER     → an endpoint act on receipt. payload business.
 THINK        → PERCEIVE (substrate: what is live) + RANK (semantic: which is best, and always
                was entity work).
 ORIENT       → an endpoint reading its own outstanding set.
-APPROACH     → UNPLACED. see below.
+GREET     → UNPLACED. see below.
 ```
 
 ---
@@ -160,9 +189,9 @@ APPROACH     → UNPLACED. see below.
 ## Open
 
 ```text
-APPROACH CANNOT BE       every MOVE requires a live connection from PERCEIVE, and PERCEIVE
+GREET CANNOT BE       every MOVE requires a live connection from PERCEIVE, and PERCEIVE
 A MOVE                   requires a Horizon from BOUND, and BOUND requires an authority that
-                         Approach is what establishes. THE BOOTSTRAP IS CIRCULAR and this
+                         Greet is what establishes. THE BOOTSTRAP IS CIRCULAR and this
                          does not close it.
 
 RESOLVED — TWO UNITS     an earlier draft of this item said the CTU had become a fabric and

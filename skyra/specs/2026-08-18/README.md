@@ -14,16 +14,24 @@ every earlier spec directory.
 
 ```text
 1  README.md                 (this file) — what is live, what is dead, and the house rules.
-2  primitive-decomposition/causal-transition-unit/README.md
+2  the-quadrant.md           THE FOUNDATION. system/user × privilege, the four cells, and the one
+                             firm rule (no diagonal). the frame the boundary docs instantiate.
+3  primitive-decomposition/causal-transition-unit/README.md
                              the frame, the decomposition form, and the two units.
-3  primitive-decomposition/causal-transition-unit/primitive.md
+4  primitive-decomposition/causal-transition-unit/primitive.md
                              THE ONE-LINE INDEX. primitive · owner · what it does. If you read
                              only one file, read this one.
-4  primitive-decomposition/causal-transition-unit/primitive-details.md
+5  primitive-decomposition/causal-transition-unit/primitive-details.md
                              THE WORKING DOCUMENT. the same eight in four groups, with the
                              reasoning, the model talk, and the arguments.
-5  continuation-language.md  what a body actually says, and what each surface form desugars to.
-6  carry-forward-from-08-12.md
+6  continuation-language.md  what a body actually says, and what each surface form desugars to.
+7  network/traffic-routing.md one APPROACH egress; local and external ingress; normalization before
+                             GREET / RECOGNIZE; host-kernel routing.
+8  kernel-ctu-boundary/horizon-and-root.md
+                             the token = horizon; the pin, account, and root — and the token as a
+                             SIGNATURE CHAIN, not an unsigned {root, caveats}. (foregrounded here
+                             after a build stubbed it unsigned for being off the path.)
+9  carry-forward-from-08-12.md
                              which of the 104 older documents still hold.
 ```
 
@@ -35,6 +43,9 @@ The full narrative picture — including what was retired and why — is
 ## What is in here
 
 ```text
+the-quadrant.md              WORKING, FOUNDATIONAL. system/user × privilege; the four cells; the
+                             no-diagonal rule. the hub the boundary folders instantiate.
+
 CPU-Research/                RESEARCH. hardware read for its split rather than its speed. This
                              is where the pivot came from, and it is source material, not design.
   cpu-structure.md           four layers; architectural state; why RIP is not assignable.
@@ -55,6 +66,18 @@ sysprompts/
                              primitive list does not.
 
 continuation-language.md     WORKING PROPOSAL. supersedes the 08-12 language document.
+network/
+  traffic-routing.md         WORKING. one logical egress, two ingress paths, custody milestones.
+
+kernel-ctu-boundary/         WORKING. the PRIVILEGE line — the two crossings.
+  boundaries.md              the contract; load/store; BOUND's DEFINE/ATTENUATE split.
+  durable-storage.md         the two crossings as the shared driver abstraction.
+  horizon-and-root.md        token = horizon; the pin, account, and root.
+  implementation.md          content-addressed resolution — one way to fill the boundary.
+entity-ctu-boundary/         WORKING. the TRUST line — CTU ↔ entity execution.
+  decode-and-run.md          the execution interior: decode → schedule → run (the out-of-order
+                             pipeline). scheduler owns where/when; local-vs-distributed is open.
+
 carry-forward-from-08-12.md  ASSESSMENT. 104 documents judged against this model.
 ```
 
@@ -92,8 +115,10 @@ with `Decide` returning a `Realization`, `Possibility` with `ChildBranches`, `Co
 TWO UNITS         the CTU executes, one per endpoint. the FABRIC transports between them.
 ONE TRANSPORT     MOVE. custody transfer. { target, horizon, payload }.
                   target and horizon are ENVELOPE; payload is OPAQUE and never read.
+ONE EGRESS        APPROACH socket. every local CTU submits a resolved connection here; the host routes.
+TWO INGRESSES     local and external. separate trust paths, normalized to one arrival.
 TWO HEADERS       request and response. Which is why there are exactly two receiving ports.
-EIGHT PRIMITIVES  MOVE · APPROACH · RECOGNIZE | THINK · BOUND | ACTIVATE · REMEMBER | ORIENT
+EIGHT PRIMITIVES  MOVE · GREET · RECOGNIZE | THINK · BOUND | ACTIVATE · REMEMBER | ORIENT
 DATAFLOW          a MOVE fires when its operands resolve, not when a pointer reaches it.
                   THE POINTER IS A WATERMARK, NOT A SEQUENCER.
 ORDER             sequence is a DEPENDENCY, not a schedule. `A; B` does not order them.
@@ -142,7 +167,9 @@ CONTRACTS               the named next thread. RECOGNIZE checks against the pare
                         on one undefined object.
 ESCALATION              the 08-12 model was "progressive causal zoom" — a failed return wakes
                         the parent. Bulk teardown removed the mechanism and nothing replaced it.
-                        THE LARGEST GAP IN THE SET.
+                        THE LARGEST GAP IN THE SET. First lead from the mechanism side:
+                        `../2026-08-22/ctu/orient.md` — a stalled subtree shows as a hole in the
+                        propagated ORIENT; the ack-up-the-tree is where "wake the parent" could hang.
 CONTAINMENT             capability passing is the right model; it is not yet a mechanism. This
                         hole has now appeared independently four times.
 BRANCH PREDICTION       D controls how much is speculated, never which. Speculation is cheap on
