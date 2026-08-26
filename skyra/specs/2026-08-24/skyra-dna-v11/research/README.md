@@ -22,6 +22,19 @@ cpu-execution-model.md    RESEARCH.  grounded CPU/OS facts — the CPU runs a lo
 think-act-signature.md    DIRECTION (not confirmed).  a move's signature is co-authored: THINK writes the
                           RUNNABLE half into the BODY (target + reachable + params); ACT settles the
                           PAYLOAD half into the CONTEXT (observation + parent↔child type negotiation).
+think-act-paths.md        DIRECTION (developing).  the system-level split: NEW request → kernel (THINK:
+                          compile + provision + mint); REMEMBERED → CTU direct (ACT). REMEMBER bridges
+                          them; the user holds the capability so the hot path is kernel-free (OAuth+macaroon).
+move-and-the-kernel-barrier.md  EVOLVING.  the CTU owns Move (its entry); entities→ingress→Move→egress;
+                          ingress/egress is the kernel barrier (custody); the in-flight block is the
+                          KERNEL socket table, the possibility holds cut-IDs as fds. frontier derived.
+                          inbound auth is by identity (principal self-auth / foreign policy-gated).
+capability-table-and-horizon.md  CONVERGING.  the kernel owns IDENTITY + the FULL capability table;
+                          it provisions a subset (the HORIZON) to each possibility. the MMU model —
+                          horizon = address space, an unprovisioned reach = a page fault. view, not copy.
+authorization-and-registration.md  IN PROGRESS.  registration (existence) vs authorization (permission-
+                          to-use) as separate axes; patterns to borrow — ocap (the model), macaroons
+                          (the grant format), OAuth2 (the flow), service discovery (registration).
 ```
 
 ## Section 2 · Leaf computation — Starlark
@@ -33,6 +46,13 @@ starlark-computation-and-dataflow.md   RESEARCH (speculative).  separate computa
                                        Starlark as a hermetic COMPUTE leaf and (deferred) graph frontend.
 starlark-frontend-surface.md           RESEARCH (deferred).  what a Starlark graph-authoring frontend
                                        would expose to THINK — inert constructors only. Role 2, parked.
+```
+
+## Section 2.5 · Distributed / coordination pointers
+
+```text
+sip-vs-pstn.md   RESEARCH POINTER.  SIP (smart endpoints, dumb network) vs PSTN (smart network) — Skyra
+                 leans SIP: kernel authorizes + helps find (registrar/proxy), entities coordinate peer-to-peer.
 ```
 
 ## Section 3 · Decisions

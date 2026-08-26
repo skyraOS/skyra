@@ -12,11 +12,13 @@ vs mechanism), D5 (privilege is the trap axis), and `potentials/user-as-privileg
 ```text
 HUMAN    OWNS POLICY. the risk tolerance and the criteria for granting. authors it; is the escalation
          target when policy says "ask." never executes anything.
-KERNEL   EXECUTES the human's policy (mechanically — system-administered). owns the PRIVILEGED
-         SEPARATION HANDLERS (the trap surface). performs the privileged OPERATIONS — MINT / writes —
-         over the CTU registries. NEUTRAL: it holds no policy of its own; it only executes the human's.
-CTU      OWNS EXECUTION. Drive, dispatch, the moves. holds the registries and READS them to dispatch.
-         RAISES a trap on a fault; never decides, never writes a registry, never mints.
+KERNEL   EXECUTES the human's policy (mechanically — system-administered). owns IDENTITY and the FULL
+         capability table (entity + host), plus the PRIVILEGED SEPARATION HANDLERS (the trap surface).
+         PROVISIONS a subset of the table — the HORIZON — to each possibility; performs the MINT.
+         NEUTRAL: holds no policy of its own; it only executes the human's.
+CTU      OWNS EXECUTION. Drive, dispatch, the moves. reads its PROVISIONED VIEW (the horizon) to
+         dispatch — a TLB over the kernel's table. RAISES a trap on a fault (an unprovisioned capability
+         is a page fault); never decides, never writes the table, never mints.
 ```
 
 One line: **the human owns the policy; the kernel executes it and owns the privileged handlers +
@@ -34,8 +36,10 @@ KERNEL → CTU    on grant, the kernel performs the privileged operation (MINT) 
                 control returns; the CTU re-drives and READS the now-updated registry.
 ```
 
-The registry is **CTU-resident state**, but its **write is the kernel's alone**. The CTU reads it to
-dispatch (execution); the kernel writes it to admit (origination). Same read/write split as everywhere.
+The **full capability table is kernel-owned**; the CTU holds a **provisioned view (its horizon)** and
+reads that to dispatch. The kernel writes the table (admit) and provisions the view; a reach beyond the
+view **faults** (a page fault) and the kernel provisions or denies. Same read/write split — the CTU
+reads its view, the kernel writes and provisions. Detail: `research/capability-table-and-horizon.md`.
 
 ---
 
@@ -65,6 +69,7 @@ DIRECT vs AGENT    does the kernel execute the human's policy directly, or consu
                    possibility that holds it? (kernel-with-policy vs a principal the kernel serves.)
 MULTI-USER         whose policy when there are several principals? how does the kernel pick, and can
                    authority be delegated? (D3 anticipated this.)
-REGISTRY CROSS     the registry is CTU-resident but kernel-written — the exact mechanism by which a
-                   kernel operation writes CTU state (and whether that is one CTU or many).
+REGISTRY OWNERSHIP  RESOLVED — the kernel owns the full table; the CTU holds a provisioned VIEW (the
+                   horizon). see research/capability-table-and-horizon.md. remaining: how a kernel
+                   revocation propagates to the live view (view coherence).
 ```
