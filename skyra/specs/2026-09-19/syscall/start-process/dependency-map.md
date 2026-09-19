@@ -36,6 +36,10 @@ flowchart TD
     C --> TRANSPORT[Configure transport]
     C --> SETUP[Configure child process]
 
+    CHILD --> RESOLVE[Runtime resolve-process]
+    RESOLVE --> ID[Process identity from launch context]
+    RESOLVE --> TABLE[Runtime process registry]
+    RESOLVE --> PROFILE[Caller read profile]
     CHILD --> FORK[OS fork or platform creation mechanism]
 
     EXEC --> PATH[path]
@@ -55,6 +59,26 @@ flowchart TD
 
 The executable path, arguments, and transport type come from the proposed Surface
 input. The environment and working-directory policies still need to be defined.
+
+## Runtime process-resolution dependency
+
+`resolve-process` is the runtime syscall Surface's process-table lookup. It runs
+within interpretation and supplies a resolved record/binding to the operation.
+The process identity may be a registered OS PID or runtime process handle.
+
+```mermaid
+flowchart TD
+    F[Runtime fork-process proposal] --> R[Runtime resolve-process]
+    R --> I[Input process identity]
+    R --> T[Runtime process registry]
+    R --> P[Caller read profile]
+    F --> M[Target-side execution mechanism: unresolved]
+```
+
+For ordinary `create-process`, resolution concerns the runtime's launch context;
+macOS `fork()` already identifies its caller implicitly. For a Surface targeting
+another process, lookup alone is insufficient: that process must cooperate to
+fork its own execution state. This map does not imply an OS `fork(pid)` call.
 
 ## Execution order and returned observation
 
@@ -86,4 +110,5 @@ Failures during creation, exec, or transport setup require cleanup and a failure
 outcome rather than a successful observation containing partially usable handles.
 
 See the [create-process contract](create-process.md) and
-[OS capability proposal](../syscalls.md).
+[runtime syscall Surfaces](../skyra-syscall-surface.md) and
+[macOS facilities](../mac-syscall-surface.md).

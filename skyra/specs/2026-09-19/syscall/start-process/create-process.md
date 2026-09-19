@@ -86,4 +86,5 @@ and [Go's os/exec interface](https://pkg.go.dev/os/exec).
 - Define transport setup and subsequent binding so the two do not create duplicate
   pipe owners or receive loops.
 
-See [OS capabilities](../syscalls.md) and the [dependency map](dependency-map.md).
+See [runtime syscall Surfaces](../skyra-syscall-surface.md),
+[macOS facilities](../mac-syscall-surface.md) and the [dependency map](dependency-map.md).
