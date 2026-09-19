@@ -209,40 +209,71 @@ type Request struct {
 	Operations []Operation
 }
 
-// opRecordInvocation records a new invocation continuation. It authorizes nothing.
+// opRecordInvocation records a new invocation continuation. It authorizes nothing;
+// phase is DECIDED by interpret — Running when authorized, Faulted when trapped — so
+// the commit never has to write a phase and then walk it back.
 type opRecordInvocation struct {
 	inv    Invoke
 	target SurfaceID
 	poss   PossibilityID
 	source MoveSource
+	phase  Phase
 }
 
-// opAuthorizeStart is the one-transaction authority gate: check the target against
-// the Possibility's Horizon, resolve the Surface, find-or-mint the execution, and
-// mint the fd. Failure yields a trap (no execution authorized).
+// opAuthorizeStart mints the fd and the dispatch for an invocation interpret has
+// ALREADY authorized. The authority read happens in interpret (the read phase); this
+// op does not re-check — it only mints. Because interpret and commit are one locked
+// turn, check+mint stay atomic without deferring the read into the write phase.
 type opAuthorizeStart struct {
 	inv InvocationID
 }
 
-// opSettleReturn settles a returning invocation: mark it returned, kill its fd,
-// and either produce a root result (ReturnTo empty) or resume the parent with the
-// child observation (ReturnTo set).
-type opSettleReturn struct {
+// opEmitFault collects a corrective Fault Move into the commit result. The writer
+// mints its id; the caller enqueues it through the one door AFTER the lock releases.
+type opEmitFault struct {
+	poss   PossibilityID
+	inv    InvocationID
+	reason string
+}
+
+// opMarkReturned marks an invocation returned, records its result, and kills its fd.
+type opMarkReturned struct {
 	inv InvocationID
 	obs Observation
 }
 
-// opSettleFault settles a faulted invocation: mark it faulted, kill its fd, and
-// either produce a root fault or propagate to the parent.
-type opSettleFault struct {
+// opRootResult records the single root result for a root invocation.
+type opRootResult struct {
+	inv InvocationID
+	obs Observation
+}
+
+// opResumeParent resumes a live parent with a child observation: reuse its fd and
+// dispatch it. Interpret already verified the parent is live; this op only writes.
+type opResumeParent struct {
+	parent InvocationID
+	child  Observation
+}
+
+// opMarkFaulted marks an invocation faulted and kills its fd.
+type opMarkFaulted struct {
+	inv InvocationID
+}
+
+// opRootFault records a root fault result for a root invocation.
+type opRootFault struct {
 	inv    InvocationID
 	reason string
 }
 
 func (opRecordInvocation) operation() {}
 func (opAuthorizeStart) operation()   {}
-func (opSettleReturn) operation()     {}
-func (opSettleFault) operation()      {}
+func (opEmitFault) operation()        {}
+func (opMarkReturned) operation()     {}
+func (opRootResult) operation()       {}
+func (opResumeParent) operation()     {}
+func (opMarkFaulted) operation()      {}
+func (opRootFault) operation()        {}
 
 // ---------------------------------------------------------------------------
 // Execution-plane state access — stateVia(id).

@@ -93,7 +93,13 @@ func (cu *CU) step(move Move) {
 	if err != nil {
 		return // fatal interpret error for this move; records preserved
 	}
+	// All effects happen AFTER the lock released inside InterpretTurn: dispatch the
+	// authorized executions, re-enter any corrective/propagated Moves through the one
+	// door, and deliver root results. The commit itself did none of this.
 	cu.Dispatch(result.authorized)
+	for _, m := range result.enqueue {
+		cu.Interpret(m)
+	}
 	for _, rr := range result.rootResults {
 		cu.deliverRoot(rr)
 	}

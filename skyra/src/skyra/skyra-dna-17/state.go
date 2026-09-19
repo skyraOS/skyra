@@ -52,8 +52,8 @@ type fdEntry struct {
 // StateExecutor is the SOLE canonical writer. All access is serialized by mu; no
 // component receives a map alias. It never calls a driver/transport/Surface/host
 // callback while holding mu — the interpret turn and each emission commit apply
-// pure record operations only, and dispatch/root delivery happen to the caller
-// after the lock is released.
+// pure record operations only, and dispatch/root delivery/re-enqueue happen to the
+// caller after the lock is released.
 type StateExecutor struct {
 	mu sync.Mutex
 
@@ -119,9 +119,10 @@ func (s *StateExecutor) Open(ctx context.Context, request OpenPossibility) error
 
 // InterpretTurn is one turn of the single service: it takes the lock ONCE and runs
 // the handler's read (decide) and the commit inside it, so the snapshot cannot go
-// stale between them. decide is pure and reads only through the restricted view; it
-// returns the branch-free Request the writer then applies. Nothing partial is ever
-// observed, and no driver code runs under the lock.
+// stale between them. decide is pure: it reads only through the restricted view and
+// makes every decision, returning the branch-free Request of DECIDED operations the
+// writer then applies. Nothing partial is ever observed, and no driver code runs
+// under the lock.
 func (s *StateExecutor) InterpretTurn(ctx context.Context, move Move, decide func(readView, Move) (Request, error)) (commitResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,10 +133,14 @@ func (s *StateExecutor) InterpretTurn(ctx context.Context, move Move, decide fun
 	return s.applyLocked(request)
 }
 
-// applyLocked applies a Request's operations in order within one transaction. It
-// assumes mu is held. It mints fds, settles records, and collects the authorized
-// executions and root results for the caller to act on OUTSIDE the lock. Enqueues
-// of re-entrant Moves go through the single door.
+// applyLocked applies a Request's DECIDED operations. It assumes mu is held. Every
+// operation is a pure WRITE: it does not read canonical state to decide an outcome
+// (interpret already decided) and performs no side effects — re-entrant Moves are
+// collected into result.enqueue and enqueued/dispatched by the caller AFTER the lock
+// releases. Because the write phase makes no fallible decision, it cannot partially
+// fail, so no rollback or private working set is needed. The only reads here are
+// mechanical: locating a record just written in this same Request to attach the fd
+// or the settlement.
 func (s *StateExecutor) applyLocked(request Request) (commitResult, error) {
 	var result commitResult
 	for _, op := range request.Operations {
@@ -149,134 +154,62 @@ func (s *StateExecutor) applyLocked(request Request) (commitResult, error) {
 				params:   cloneObservations(o.inv.Params),
 				focus:    cloneCapabilities(o.inv.Focus),
 				returnTo: o.inv.ReturnTo,
-				phase:    PhaseRunning,
+				phase:    o.phase, // decided by interpret: Running (authorized) or Faulted (trapped)
 			}
 		case opAuthorizeStart:
-			if err := s.authorizeStartLocked(o.inv, &result); err != nil {
-				return commitResult{}, err
+			// Already authorized in interpret. Mint the fd and the dispatch — no read
+			// of the Horizon, no authority branch.
+			rec := s.invocations[o.inv]
+			id := s.nextFd
+			s.nextFd++
+			s.fds[id] = &fdEntry{id: id, inv: rec.inv, poss: rec.poss, surface: rec.surface, gen: s.possibilities[rec.poss].Horizon.Generation, live: true}
+			rec.fd = id
+			result.authorized = append(result.authorized, dispatchItem{
+				id:      id,
+				surface: rec.surface,
+				input:   DriverInput{Move: s.buildInvokeMoveLocked(rec)},
+			})
+		case opEmitFault:
+			result.enqueue = append(result.enqueue, Move{
+				Identity:      s.mintMoveIDLocked(),
+				PossibilityID: o.poss,
+				Fault:         &Fault{Invocation: o.inv, Reason: o.reason},
+			})
+		case opMarkReturned:
+			rec := s.invocations[o.inv]
+			rec.phase = PhaseReturned
+			rec.result = cloneObservation(o.obs)
+			s.killFdLocked(rec.fd)
+		case opRootResult:
+			out := cloneObservation(o.obs)
+			result.rootResults = append(result.rootResults, RootResult{Invocation: o.inv, Observation: &out})
+		case opResumeParent:
+			parent := s.invocations[o.parent]
+			parent.waitingOn = ""
+			parent.phase = PhaseRunning
+			child := cloneObservation(o.child)
+			result.authorized = append(result.authorized, dispatchItem{
+				id:      parent.fd,
+				surface: parent.surface,
+				input: DriverInput{
+					Move:        s.buildInvokeMoveLocked(parent),
+					State:       cloneDriverState(parent.driverState),
+					ChildResult: &child,
+				},
+			})
+		case opMarkFaulted:
+			if rec := s.invocations[o.inv]; rec != nil {
+				rec.phase = PhaseFaulted
+				s.killFdLocked(rec.fd)
 			}
-		case opSettleReturn:
-			s.settleReturnLocked(o.inv, o.obs, &result)
-		case opSettleFault:
-			s.settleFaultLocked(o.inv, o.reason, &result)
+		case opRootFault:
+			result.rootResults = append(result.rootResults, RootResult{Invocation: o.inv, Err: errors.New(o.reason)})
 		default:
 			return commitResult{}, fmt.Errorf("unknown operation %T", op)
 		}
 	}
 	s.revision++
 	return result, nil
-}
-
-// authorizeStartLocked is the one-transaction authority gate (possibility invariant
-// 6): check the target against the installed Horizon, resolve the Surface, and mint
-// the fd. On a pre-execution trap (unauthorized / unresolvable / focus exceeds
-// grants) it authorizes nothing and re-enters a corrective Fault Move — the trapped
-// original never executes.
-func (s *StateExecutor) authorizeStartLocked(inv InvocationID, result *commitResult) error {
-	rec := s.invocations[inv]
-	if rec == nil {
-		return fmt.Errorf("authorize: unknown invocation %q", inv)
-	}
-	poss, ok := s.possibilities[rec.poss]
-	if !ok {
-		s.trapLocked(rec, "authorize: unknown possibility")
-		return nil
-	}
-	if _, granted := poss.Horizon.Grants[rec.surface]; !granted {
-		s.trapLocked(rec, fmt.Sprintf("authorize: surface %q not in horizon", rec.surface))
-		return nil
-	}
-	for _, f := range rec.focus {
-		if _, granted := poss.Horizon.Grants[f.Target]; !granted {
-			s.trapLocked(rec, fmt.Sprintf("authorize: focus %q exceeds horizon", f.Target))
-			return nil
-		}
-	}
-	if _, ok := s.surfaces[rec.surface]; !ok {
-		s.trapLocked(rec, fmt.Sprintf("authorize: surface %q not registered", rec.surface))
-		return nil
-	}
-	id := s.nextFd
-	s.nextFd++
-	s.fds[id] = &fdEntry{id: id, inv: rec.inv, poss: rec.poss, surface: rec.surface, gen: poss.Horizon.Generation, live: true}
-	rec.fd = id
-	result.authorized = append(result.authorized, dispatchItem{
-		id:      id,
-		surface: rec.surface,
-		input:   DriverInput{Move: s.buildInvokeMoveLocked(rec)},
-	})
-	return nil
-}
-
-func (s *StateExecutor) trapLocked(rec *invocationRecord, reason string) {
-	rec.phase = PhaseFaulted
-	s.enqueue(Move{
-		Identity:      s.mintMoveIDLocked(),
-		PossibilityID: rec.poss,
-		Fault:         &Fault{Invocation: rec.inv, Reason: reason},
-	})
-}
-
-// settleReturnLocked settles a returning invocation and resolves what its return
-// unblocks — resume is inside interpret. If the invocation answers the root, it
-// produces the single root result; otherwise it resumes the parent in the SAME
-// commit by authorizing a dispatch that carries the child observation.
-func (s *StateExecutor) settleReturnLocked(inv InvocationID, obs Observation, result *commitResult) {
-	rec := s.invocations[inv]
-	if rec == nil || rec.phase == PhaseReturned || rec.phase == PhaseFaulted {
-		return // late/duplicate return; the settlement fence already closed this
-	}
-	rec.phase = PhaseReturned
-	rec.result = cloneObservation(obs)
-	s.killFdLocked(rec.fd)
-
-	if rec.returnTo == "" {
-		out := cloneObservation(obs)
-		result.rootResults = append(result.rootResults, RootResult{Invocation: inv, Observation: &out})
-		return
-	}
-	parent := s.invocations[rec.returnTo]
-	if parent == nil || parent.phase == PhaseReturned || parent.phase == PhaseFaulted {
-		return
-	}
-	// Resume the parent's live execution: reuse its fd, hand it the child result.
-	child := cloneObservation(obs)
-	parent.waitingOn = ""
-	parent.phase = PhaseRunning
-	result.authorized = append(result.authorized, dispatchItem{
-		id:      parent.fd,
-		surface: parent.surface,
-		input: DriverInput{
-			Move:        s.buildInvokeMoveLocked(parent),
-			State:       cloneDriverState(parent.driverState),
-			ChildResult: &child,
-		},
-	})
-}
-
-func (s *StateExecutor) settleFaultLocked(inv InvocationID, reason string, result *commitResult) {
-	rec := s.invocations[inv]
-	if rec == nil {
-		return
-	}
-	if rec.phase != PhaseFaulted {
-		rec.phase = PhaseFaulted
-	}
-	s.killFdLocked(rec.fd)
-	if rec.returnTo == "" {
-		result.rootResults = append(result.rootResults, RootResult{Invocation: inv, Err: errors.New(reason)})
-		return
-	}
-	// Propagate to the parent as a corrective Fault Move (minimal; the two
-	// acceptance paths fault at the root, so parent propagation is lightly tested).
-	parent := s.invocations[rec.returnTo]
-	if parent != nil && parent.phase != PhaseReturned && parent.phase != PhaseFaulted {
-		s.enqueue(Move{
-			Identity:      s.mintMoveIDLocked(),
-			PossibilityID: parent.poss,
-			Fault:         &Fault{Invocation: parent.inv, Reason: "child faulted: " + reason},
-		})
-	}
 }
 
 // stateVia returns the execution-plane profile the Identifier grants. Liveness is
@@ -293,7 +226,8 @@ type executionProfile struct {
 // Commit is one execution-plane transaction: replace the fd invocation's driver
 // state, and either enqueue emitted Moves or record a failure — together. A dead
 // fd rejects the whole thing (the settlement fence: a late emission after a fault
-// cannot enqueue a Return).
+// cannot enqueue a Return). The liveness check IS a legitimate commit-time read: it
+// is the fence, evaluated when the worker calls, and cannot be pre-decided.
 func (e *executionProfile) Commit(ctx context.Context, ec EmissionCommit) (EmissionResult, error) {
 	s := e.state
 	s.mu.Lock()
@@ -409,11 +343,15 @@ type InvocationView struct {
 
 // ---------------------------------------------------------------------------
 // readView — the restricted read profile handed to interpret handlers. It returns
-// detached copies only; handlers hold no alias into canonical state.
+// detached copies only; handlers hold no alias into canonical state. Interpret does
+// ALL reads here (invocation correlation, Horizon authority, surface resolution) so
+// the commit can be pure writes.
 // ---------------------------------------------------------------------------
 
 type readView interface {
 	invocation(InvocationID) (invSnapshot, bool)
+	horizon(PossibilityID) (Horizon, bool)
+	surfaceRegistered(SurfaceID) bool
 }
 
 type invSnapshot struct {
@@ -432,6 +370,19 @@ func (r stateReader) invocation(inv InvocationID) (invSnapshot, bool) {
 		return invSnapshot{}, false
 	}
 	return invSnapshot{inv: rec.inv, poss: rec.poss, surface: rec.surface, returnTo: rec.returnTo, phase: rec.phase}, true
+}
+
+func (r stateReader) horizon(poss PossibilityID) (Horizon, bool) {
+	p, ok := r.s.possibilities[poss] // mu already held
+	if !ok {
+		return Horizon{}, false
+	}
+	return cloneHorizon(p.Horizon), true // detached: the handler holds no alias into canonical state
+}
+
+func (r stateReader) surfaceRegistered(id SurfaceID) bool {
+	_, ok := r.s.surfaces[id] // mu already held
+	return ok
 }
 
 // ---------------------------------------------------------------------------
