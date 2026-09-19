@@ -26,12 +26,12 @@ type EntityID struct{ Value string }
 type HostID struct{ Value string }
 type Address struct{ Value string } // VOLATILE, host-resolved; never stored on the entity.
 
-// Entity is WHO — a userspace identity. It points to its HOME host; the address is resolved by
-// host(entity) at the host, locally (the home-registry / HLR pattern). The human is an Entity too —
-// structurally uniform, special only in authority. (bootstrap/sequence.md A)
+// Entity is WHO — a userspace identity. It is MULTI-HOMED: it points to one or more home hosts, any of
+// which can resolve its address via host(entity) locally (the home-registry / HLR pattern). The human
+// is an Entity too — structurally uniform, special only in authority. (bootstrap/sequence.md A)
 type Entity struct {
-	ID   EntityID
-	Home HostID // the home host that resolves this entity's address
+	ID    EntityID
+	Homes []HostID // the home hosts that can resolve this entity's address; a Target picks one.
 }
 
 type Name struct{ Value string }
@@ -45,21 +45,23 @@ type Target struct {
 
 // ---- capability (macaroon-shaped) = the unit of a horizon --------------------
 
-// Capability is a macaroon: what it authorizes + a chain of NARROWING caveats + an offline-verifiable
-// signature. It IS a grant. The user HOLDS it and PRESENTS it on the hot path; the CTU verifies it
-// offline (no kernel). Minted only by the kernel. (authorization-and-registration; think-act-paths)
+// Capability is FINE-GRAINED and TIMESTAMPED: it authorizes ONE action on ONE target, until ExpiresAt.
+// (Target, Action) is DEFINED by the target's driver (ctu.DriverDecl — permissions live on the drivers).
+// The user HOLDS it and PRESENTS it; verified OFFLINE (sig + not-expired + target/action match) at
+// ingress. Minted only by the kernel. NO CAVEATS — attenuation is by REMOVAL, not narrowing.
 type Capability struct {
-	Target  Target
-	Caveats []Caveat // attenuation — narrows only (Bound).
-	Sig     Signature
+	Target    Target
+	Action    Name  // the fine-grained action, declared by the target's driver. (Target,Action) = one capability.
+	ExpiresAt int64 // offline lease; removal handles the rest.
+	Sig       Signature
 }
 
-type Caveat struct{ Constraint string }
 type Signature struct{ Bytes []byte }
 
-// Horizon is the PROVISIONED VIEW — the capabilities a Context carries. D4: Horizon = []Grant; here a
-// grant is a Capability. It is a view of the kernel's table, carried with the work, not held by the CTU.
-type Horizon struct{ Grants []Capability }
+// Horizon is the PROVISIONED VIEW — the fine-grained capabilities a Context carries (D4: Horizon =
+// []Capability). A view of the kernel's table, carried with the work, not held by the CTU.
+// ATTENUATION IS BY REMOVAL: a child/cut gets a SUBSET — never a narrowed grant. only the kernel widens.
+type Horizon struct{ Capabilities []Capability }
 
 // ---- Body (compiled) vs Context (live) — the CPU split -----------------------
 
@@ -73,16 +75,38 @@ type Body struct {
 
 type BodyID struct{ Value string }
 
-// Context is the live POSSIBILITY: register file + in-flight fds + retirement watermark + the carried
-// horizon. MUTABLE, one per run. The "process." Two runs of one Body = two Contexts.
+// Context is the live POSSIBILITY: register file + the carried horizon + result. MUTABLE, one per run.
+// The "process." It holds NO move state — moves live in the CTU's global WorkList (loose coupling), so a
+// Context is pure data. Its outstanding children (fds) are just the cut subset of Work[Issued] filtered by
+// this Possibility. It is LIVE STATE until REMEMBERed (persisted) — that persist IS its retirement; there
+// is NO per-move watermark. Materialize brings a Context IN, Remember writes it OUT — symmetric. Two runs
+// of one Body = two Contexts.
 type Context struct {
-	Body      *Body
+	ID        PossibilityID
+	Body      BodyID // by CONTENT ADDRESS — the CTU resolves it from its body cache (an i-cache). the wire carries this reference, not the whole graph.
 	Registers map[RegKey]Register
-	InFlight  map[CutID]RegKey // the FD TABLE: cut-ID (an fd) → the register it fills (per-possibility)
-	Retired   int              // retirement watermark
-	Horizon   Horizon          // carried; the provisioned view
+	Horizon   Horizon // carried; the provisioned view — what it CAN reach (Work[Issued] is what it IS reaching)
 	Result    *Observation
-	ReturnTo  *Target // server-side backward pointer (set when this Context is a resident request)
+	ReturnTo  *Route // server-side backward pointer: destination + the parent's fd
+}
+
+// PossibilityID identifies a live Context (a possibility) — used to wire-scope a MoveID.
+type PossibilityID struct{ Value string }
+
+// MoveID identifies a move by the register it WRITES. Each move writes exactly one register and RegKeys
+// are unique (Name, Tag), so Writes IS the move's identity — and its fd, since the response lands in
+// Writes. Scoped by its Possibility for the wire. A cut IS a move; this is its wire token. The WorkList
+// keys on it (it IS the fd); fire-and-forget moves (Return=false) never park in Issued.
+type MoveID struct {
+	Possibility PossibilityID
+	Writes      RegKey
+}
+
+// Route is the server-side backward pointer carried by a request. To locates the caller; Fd identifies
+// the exact parent move whose register the response fills. A child echoes Fd as the response Move.ID.
+type Route struct {
+	To Target
+	Fd MoveID
 }
 
 // ---- moves -------------------------------------------------------------------
@@ -91,39 +115,52 @@ type Context struct {
 // (target + shape); the input/return TYPE is negotiated at ACT. (think-act-signature)
 type MoveTemplate struct {
 	Target   Target
+	Action   Name // the action on the target — checked against the horizon as (Target, Action). driver-declared.
 	Reads    []RegKey
 	Writes   RegKey
 	Contract Contract
 	Return   bool // does this move expect a return? (structural — the block participation switch)
 }
 
-// Move is a live move in a Context — a MoveTemplate plus runtime state.
+// Move is the unit of work AND the unit that crosses the barrier — the old Transfer struct folded in
+// (a move IS the wire form; it already knows its Target and its Writes/fd). It is a MoveTemplate + runtime
+// state + the three WIRE fields (Header/Returned/ReturnTo). Whether it ran locally or is an outstanding
+// cut is NOT a stored flag: an Issued move is in flight — a cut parks in Issued awaiting a Response over
+// the wire, a local call pops within the pass. A move is transferred IN via CTU.Transfer. A Request carries
+// the lean Context seed needed to materialize its live possibility; resident moves read that state from Cache.
 type Move struct {
+	ID       MoveID // {Possibility, Writes} — its identity and its fd (where a Response lands)
 	Template MoveTemplate
 	State    MoveState
-	Site     Site
+	Header   Header       // Request | Response — which leg is crossing
+	Returned *Observation // Response leg: the landed observation (nil on a Request / a resident move)
+	Seed     *Context     // Request leg: Body + Horizon + seed Registers + ReturnTo; nil on a Response
 }
 
+// MoveState — a move's runtime state, and the KEY of the WorkList: a state change IS a move between
+// buckets. There is NO Retired: a done move POPS from the list (out-of-order, no watermark). Retirement
+// is a CONTEXT event (Remember), not a per-move one.
 type MoveState int
 
 const (
-	Waiting MoveState = iota
-	Ready
-	Issued
-	Retired
+	Waiting MoveState = iota // operands not all landed
+	Ready                    // operands satisfied, not yet dispatched — the RUN QUEUE bucket
+	Issued                   // dispatched — running local, or a parked cut awaiting a Response. when its result lands, the move POPS.
 )
 
-// Transfer is the wire form crossing the barrier (ingress/egress). A Request PUSHES a child Context; a
-// Response returns an observation. Capability is the carried horizon the user presents (hot path).
-type Transfer struct {
-	ID         CutID       // the fd
-	Header     Header      // Request | Response
-	Target     Target
-	Capability Capability   // carried horizon; verified offline at the CTU
-	Child      *Context     // Request leg (nil on Response)
-	Returned   *Observation // Response leg (nil on Request)
-	ReturnTo   Target       // Request leg: the return route (server-side backward pointer)
-}
+// WorkList is the CTU's global move work-list, bucketed by STATE across ALL contexts (moves are loosely
+// coupled — MoveID.Possibility says which Context to read/write). A state change is a move between
+// buckets; the Ready bucket is the run queue. Keyed within a bucket by MoveID for O(1) landing. The one
+// Transition core steps this. (ctu: Core.Transition)
+type WorkList map[MoveState]map[MoveID]Move
+
+// Cache is the CTU's resident live possibilities — the RAM tier, keyed by PossibilityID. CTU-owned:
+// Materialize writes into it, a done Context is Remembered out of it, eviction reclaims it. (context map)
+type Cache map[PossibilityID]*Context
+
+// BodyCache is the i-cache: content-addressed compiled bodies. A MISS on a needed BodyID is the page
+// fault that reaches the kernel (ACTIVATE from disk / MINT fresh via THINK).
+type BodyCache map[BodyID]Body
 
 type Header int
 
@@ -153,17 +190,3 @@ type RegKey struct {
 	Tag  Tag
 }
 type Tag struct{ Iter int }
-type CutID struct{ Value string } // an fd
-
-type Site interface{ site() }
-
-type Local struct{}
-
-func (Local) site() {}
-
-type Cut struct {
-	ID     CutID
-	Target Target
-}
-
-func (Cut) site() {}

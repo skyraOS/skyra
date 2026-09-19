@@ -25,6 +25,9 @@ think-act-signature.md    DIRECTION (not confirmed).  a move's signature is co-a
 think-act-paths.md        DIRECTION (developing).  the system-level split: NEW request → kernel (THINK:
                           compile + provision + mint); REMEMBERED → CTU direct (ACT). REMEMBER bridges
                           them; the user holds the capability so the hot path is kernel-free (OAuth+macaroon).
+memory-hierarchy-and-faults.md  CONVERGING.  resolving a possibility: cache (RAM, HOT) → engram disk
+                          (WARM, page-in) → kernel/THINK (COLD, compile). two-fault cascade; cold path =
+                          the deepest fault. the engram disk itself is the next un-combed area.
 move-and-the-kernel-barrier.md  EVOLVING.  the CTU owns Move (its entry); entities→ingress→Move→egress;
                           ingress/egress is the kernel barrier (custody); the in-flight block is the
                           KERNEL socket table, the possibility holds cut-IDs as fds. frontier derived.
