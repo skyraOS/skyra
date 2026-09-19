@@ -13,24 +13,24 @@ import (
 type Surface struct {
 	Identity     uuid.UUID
 	Contracts    []ContractPair
-	Capabilities []*Surface
+	Dependencies []*Surface
 	Driver       Driver
 	State        StateReader
 }
 
 type ContractPair struct {
-	Identity uuid.UUID
-	Input    InputContract
-	Output   OutputContract
+	SurfaceID uuid.UUID
+	Input     InputContract
+	Output    OutputContract
 }
 
 type InputContract struct {
-	SurfaceID    uuid.UUID
+	InputID      uuid.UUID
 	Observations []Observation
 }
 
 type OutputContract struct {
-	SurfaceID   uuid.UUID
+	OutputID    uuid.UUID
 	Observation Observation
 }
 
