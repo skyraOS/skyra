@@ -9,6 +9,20 @@
 // in sibling files (state.go, interpret.go, dispatch.go, cu.go, codex.go,
 // probe.go), per DNA-16's declare-before-implement discipline.
 //
+// Ownership boundaries (who owns what; the rest is off-limits to them):
+//
+//	CU / interpreter    owns the single loop and the one inbound queue — the only
+//	                    door in (Interpret/Submit). Decodes and dispatches; no state.
+//	interpret handlers  own every read and every decision (authority, correlation,
+//	                    resume); emit decided Requests; hold no alias into state.
+//	StateExecutor       owns ALL canonical state — invocation records, the fd table,
+//	                    possibilities/Horizons, id minting. The SOLE writer.
+//	Surface / Driver    own capability and private protocol meaning; native session
+//	                    state lives in the opaque DriverState, never in the loop.
+//	Transport           owns framed byte movement only — no protocol meaning.
+//	fd (Identifier)     IS the execution identity; scope + liveness live in the
+//	                    writer's table, never in the adapter's hand.
+//
 // Provenance / boundary: this is greenfield from the 2026-09-18 specs. It imports
 // NO skyra-dna-16 package. Codex protocol details are cribbed and reimplemented in
 // codex.go and never appear in the core loop or the state contracts below.
@@ -220,12 +234,14 @@ type opRecordInvocation struct {
 	phase  Phase
 }
 
-// opAuthorizeStart mints the fd and the dispatch for an invocation interpret has
-// ALREADY authorized. The authority read happens in interpret (the read phase); this
-// op does not re-check — it only mints. Because interpret and commit are one locked
-// turn, check+mint stay atomic without deferring the read into the write phase.
+// opAuthorizeStart mints the fd for an invocation interpret has ALREADY authorized
+// and dispatches the pre-built invoke Move it carries. Interpret did every read
+// (authority + the fields of the dispatch); commit reads no canonical state — it
+// allocates the fd, stamps the Move's Identity, and binds the fd to the invocation
+// by its (carried) id. gen is the Horizon generation interpret read at authorization.
 type opAuthorizeStart struct {
-	inv InvocationID
+	gen      uint64
+	dispatch Move
 }
 
 // opEmitFault collects a corrective Fault Move into the commit result. The writer
@@ -236,9 +252,12 @@ type opEmitFault struct {
 	reason string
 }
 
-// opMarkReturned marks an invocation returned, records its result, and kills its fd.
+// opMarkReturned marks an invocation returned, records its result, and kills its
+// (carried) fd. The fd was read by interpret, so commit needs no field read — only
+// the keyed write to set phase/result.
 type opMarkReturned struct {
 	inv InvocationID
+	fd  Identifier
 	obs Observation
 }
 
@@ -248,16 +267,21 @@ type opRootResult struct {
 	obs Observation
 }
 
-// opResumeParent resumes a live parent with a child observation: reuse its fd and
-// dispatch it. Interpret already verified the parent is live; this op only writes.
+// opResumeParent resumes a live parent with a child observation, using the pre-built
+// dispatch Move, parent fd, and driver state interpret read from the parent snapshot.
+// Commit reads no canonical state: it stamps the Move's Identity, flips the parent's
+// phase by its (carried) id, and dispatches on the carried fd.
 type opResumeParent struct {
-	parent InvocationID
-	child  Observation
+	parentFd    Identifier
+	dispatch    Move
+	driverState DriverState
+	child       Observation
 }
 
-// opMarkFaulted marks an invocation faulted and kills its fd.
+// opMarkFaulted marks an invocation faulted and kills its (carried) fd.
 type opMarkFaulted struct {
 	inv InvocationID
+	fd  Identifier
 }
 
 // opRootFault records a root fault result for a root invocation.

@@ -119,10 +119,10 @@ func (s *StateExecutor) Open(ctx context.Context, request OpenPossibility) error
 
 // InterpretTurn is one turn of the single service: it takes the lock ONCE and runs
 // the handler's read (decide) and the commit inside it, so the snapshot cannot go
-// stale between them. decide is pure: it reads only through the restricted view and
-// makes every decision, returning the branch-free Request of DECIDED operations the
-// writer then applies. Nothing partial is ever observed, and no driver code runs
-// under the lock.
+// stale between them. decide does EVERY read and decision and builds every output,
+// returning the branch-free Request of DECIDED, self-carrying operations the writer
+// then applies. Nothing partial is ever observed, and no driver code runs under the
+// lock.
 func (s *StateExecutor) InterpretTurn(ctx context.Context, move Move, decide func(readView, Move) (Request, error)) (commitResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -133,14 +133,13 @@ func (s *StateExecutor) InterpretTurn(ctx context.Context, move Move, decide fun
 	return s.applyLocked(request)
 }
 
-// applyLocked applies a Request's DECIDED operations. It assumes mu is held. Every
-// operation is a pure WRITE: it does not read canonical state to decide an outcome
-// (interpret already decided) and performs no side effects — re-entrant Moves are
-// collected into result.enqueue and enqueued/dispatched by the caller AFTER the lock
-// releases. Because the write phase makes no fallible decision, it cannot partially
-// fail, so no rollback or private working set is needed. The only reads here are
-// mechanical: locating a record just written in this same Request to attach the fd
-// or the settlement.
+// applyLocked applies a Request's DECIDED operations. It assumes mu is held. It reads
+// NO canonical state to decide an outcome or to build an output — interpret did all of
+// that and the operations carry their data. The only map accesses here are the writes
+// themselves choosing their address by a key already carried, plus writer-owned id
+// allocation. Because the write phase makes no fallible decision, it cannot partially
+// fail; no rollback or private working set is needed. Re-entrant Moves are collected
+// into result.enqueue and posted by the caller AFTER the lock releases.
 func (s *StateExecutor) applyLocked(request Request) (commitResult, error) {
 	var result commitResult
 	for _, op := range request.Operations {
@@ -157,18 +156,16 @@ func (s *StateExecutor) applyLocked(request Request) (commitResult, error) {
 				phase:    o.phase, // decided by interpret: Running (authorized) or Faulted (trapped)
 			}
 		case opAuthorizeStart:
-			// Already authorized in interpret. Mint the fd and the dispatch — no read
-			// of the Horizon, no authority branch.
-			rec := s.invocations[o.inv]
+			inv := o.dispatch.Invoke.InvocationID
 			id := s.nextFd
 			s.nextFd++
-			s.fds[id] = &fdEntry{id: id, inv: rec.inv, poss: rec.poss, surface: rec.surface, gen: s.possibilities[rec.poss].Horizon.Generation, live: true}
-			rec.fd = id
-			result.authorized = append(result.authorized, dispatchItem{
-				id:      id,
-				surface: rec.surface,
-				input:   DriverInput{Move: s.buildInvokeMoveLocked(rec)},
-			})
+			s.fds[id] = &fdEntry{id: id, inv: inv, poss: o.dispatch.PossibilityID, surface: o.dispatch.Target, gen: o.gen, live: true}
+			if rec := s.invocations[inv]; rec != nil {
+				rec.fd = id // keyed write: bind the fd to the invocation
+			}
+			m := o.dispatch
+			m.Identity = s.mintMoveIDLocked()
+			result.authorized = append(result.authorized, dispatchItem{id: id, surface: m.Target, input: DriverInput{Move: m}})
 		case opEmitFault:
 			result.enqueue = append(result.enqueue, Move{
 				Identity:      s.mintMoveIDLocked(),
@@ -176,32 +173,32 @@ func (s *StateExecutor) applyLocked(request Request) (commitResult, error) {
 				Fault:         &Fault{Invocation: o.inv, Reason: o.reason},
 			})
 		case opMarkReturned:
-			rec := s.invocations[o.inv]
-			rec.phase = PhaseReturned
-			rec.result = cloneObservation(o.obs)
-			s.killFdLocked(rec.fd)
+			if rec := s.invocations[o.inv]; rec != nil {
+				rec.phase = PhaseReturned
+				rec.result = cloneObservation(o.obs)
+			}
+			s.killFdLocked(o.fd)
 		case opRootResult:
 			out := cloneObservation(o.obs)
 			result.rootResults = append(result.rootResults, RootResult{Invocation: o.inv, Observation: &out})
 		case opResumeParent:
-			parent := s.invocations[o.parent]
-			parent.waitingOn = ""
-			parent.phase = PhaseRunning
+			if p := s.invocations[o.dispatch.Invoke.InvocationID]; p != nil {
+				p.waitingOn = ""
+				p.phase = PhaseRunning
+			}
+			m := o.dispatch
+			m.Identity = s.mintMoveIDLocked()
 			child := cloneObservation(o.child)
 			result.authorized = append(result.authorized, dispatchItem{
-				id:      parent.fd,
-				surface: parent.surface,
-				input: DriverInput{
-					Move:        s.buildInvokeMoveLocked(parent),
-					State:       cloneDriverState(parent.driverState),
-					ChildResult: &child,
-				},
+				id:      o.parentFd,
+				surface: m.Target,
+				input:   DriverInput{Move: m, State: cloneDriverState(o.driverState), ChildResult: &child},
 			})
 		case opMarkFaulted:
 			if rec := s.invocations[o.inv]; rec != nil {
 				rec.phase = PhaseFaulted
-				s.killFdLocked(rec.fd)
 			}
+			s.killFdLocked(o.fd)
 		case opRootFault:
 			result.rootResults = append(result.rootResults, RootResult{Invocation: o.inv, Err: errors.New(o.reason)})
 		default:
@@ -289,22 +286,6 @@ func (s *StateExecutor) killFdLocked(id Identifier) {
 	}
 }
 
-func (s *StateExecutor) buildInvokeMoveLocked(rec *invocationRecord) Move {
-	return Move{
-		Identity:      s.mintMoveIDLocked(),
-		PossibilityID: rec.poss,
-		Target:        rec.surface,
-		Source:        MoveSource{SurfaceID: rec.surface, InvocationID: rec.inv},
-		Invoke: &Invoke{
-			InvocationID: rec.inv,
-			Action:       rec.action,
-			Params:       cloneObservations(rec.params),
-			Focus:        cloneCapabilities(rec.focus),
-			ReturnTo:     rec.returnTo,
-		},
-	}
-}
-
 func (s *StateExecutor) mintInvIDLocked() InvocationID {
 	s.nextInv++
 	return InvocationID(fmt.Sprintf("inv-%d", s.nextInv))
@@ -344,8 +325,8 @@ type InvocationView struct {
 // ---------------------------------------------------------------------------
 // readView — the restricted read profile handed to interpret handlers. It returns
 // detached copies only; handlers hold no alias into canonical state. Interpret does
-// ALL reads here (invocation correlation, Horizon authority, surface resolution) so
-// the commit can be pure writes.
+// ALL reads here (invocation correlation and fields, Horizon authority, surface
+// resolution) so the commit can be pure writes.
 // ---------------------------------------------------------------------------
 
 type readView interface {
@@ -354,12 +335,20 @@ type readView interface {
 	surfaceRegistered(SurfaceID) bool
 }
 
+// invSnapshot carries every field a handler needs to build a dispatch or a settlement
+// without the commit re-reading the record: identity, routing, the fd, and the driver
+// state to resume with.
 type invSnapshot struct {
-	inv      InvocationID
-	poss     PossibilityID
-	surface  SurfaceID
-	returnTo InvocationID
-	phase    Phase
+	inv         InvocationID
+	poss        PossibilityID
+	surface     SurfaceID
+	action      string
+	params      []Observation
+	focus       []Capability
+	returnTo    InvocationID
+	driverState DriverState
+	phase       Phase
+	fd          Identifier
 }
 
 type stateReader struct{ s *StateExecutor }
@@ -369,7 +358,18 @@ func (r stateReader) invocation(inv InvocationID) (invSnapshot, bool) {
 	if !ok {
 		return invSnapshot{}, false
 	}
-	return invSnapshot{inv: rec.inv, poss: rec.poss, surface: rec.surface, returnTo: rec.returnTo, phase: rec.phase}, true
+	return invSnapshot{
+		inv:         rec.inv,
+		poss:        rec.poss,
+		surface:     rec.surface,
+		action:      rec.action,
+		params:      cloneObservations(rec.params),
+		focus:       cloneCapabilities(rec.focus),
+		returnTo:    rec.returnTo,
+		driverState: cloneDriverState(rec.driverState),
+		phase:       rec.phase,
+		fd:          rec.fd,
+	}, true
 }
 
 func (r stateReader) horizon(poss PossibilityID) (Horizon, bool) {

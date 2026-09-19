@@ -14,11 +14,11 @@ type EchoSurface struct{}
 
 // probeOutput is the echo/probe normalized wire shape carried in an Emission.Raw.
 type probeOutput struct {
-	Kind   string       `json:"kind"`
-	Target SurfaceID    `json:"target,omitempty"`
-	Action string       `json:"action,omitempty"`
+	Kind   string        `json:"kind"`
+	Target SurfaceID     `json:"target,omitempty"`
+	Action string        `json:"action,omitempty"`
 	Params []Observation `json:"params,omitempty"`
-	Value  *Observation `json:"value,omitempty"`
+	Value  *Observation  `json:"value,omitempty"`
 }
 
 func (EchoSurface) Ingress(ctx context.Context, input DriverInput, output func(Emission, error) error) error {
