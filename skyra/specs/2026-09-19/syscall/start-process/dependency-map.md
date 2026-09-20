@@ -5,6 +5,37 @@ Status: Conceptual dependency map; no implementation changes.
 
 OS means the underlying operating system. Runtime means Skyra's runtime.
 
+## Ensure, attach, or create
+
+The higher-level `ensure-child-process` surface selects reuse, attachment, or
+creation. Arrows here show decision flow. Checks describe distinct observations;
+application responsiveness belongs to a separate application-level health check.
+
+```mermaid
+flowchart TD
+    ENSURE[Runtime ensure-child-process] --> RESOLVE[Resolve existing child association during interpret]
+    RESOLVE --> CHECK[Execute prepared process and transport checks]
+    CHECK --> DECIDE[Egress interpret: select and authorize next action]
+    DECIDE -->|alive, running, connected| REUSE[Return existing handles]
+    DECIDE -->|alive, running, detached| ATTACH[Runtime attach-child-process]
+    ATTACH -->|retained endpoints or supported reconnection| HANDLES[Return attached handles]
+    ATTACH -->|transport unrecoverable| FAIL[Return attachment failure]
+    DECIDE -->|absent or confirmed exited| CREATE[Runtime create-child-process]
+    CREATE --> NEW[Return new child PID and handles after startup succeeds]
+    DECIDE -->|unknown status| UNKNOWN[Report check failure or uncertainty]
+    DECIDE -->|stopped| STOPPED[Stopped-process policy remains unresolved]
+```
+
+A PID alone cannot recover lost pipe endpoints. Initial stdio attachment requires
+retained usable endpoints. An alive but unreachable child is not automatically
+replaced. `resume-child-process`, if introduced, would mean continuing a stopped
+process, rather than attaching communication. Check results can become stale;
+subsequent operations must handle exit and transport failure. Concurrent ensure
+coordination and the concrete OS check mechanism remain to be designed.
+
+See the [surface proposal](proposal.md) for the distinction between process
+liveness, transport usability, and application responsiveness.
+
 ## Runtime dependencies
 
 `create-child-process(parentMoveID, executable, transport)` resolves the intended

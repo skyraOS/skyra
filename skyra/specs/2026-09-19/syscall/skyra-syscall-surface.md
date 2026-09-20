@@ -17,6 +17,8 @@ file descriptor is distinct from a runtime MoveID, RequestID, or resource handle
 
 | Surface / operation | Input | Output |
 |---|---|---|
+| `ensure-child-process` | Existing child association when present and creation specification; exact input shape pending | Reused, attached, or newly created process and transport handles, or failure |
+| `attach-child-process` | Resolved existing child and retained transport endpoints or supported reconnection binding | Existing process and attached transport handles, or attachment failure |
 | `create-child-process` | `parentMoveID`, executable specification (`path`, `args`), and transport type | Child PID, process handle, and transport handle after successful startup, or launch/setup failure |
 | `resolve-runtime-process` | `moveID` | Associated runtime process record/binding, including OS PID, or lookup/authorization failure |
 | `setup-child-pipes` | Prepared transport plan, executed in intended parent | Two pipes for bidirectional stdin/stdout communication |

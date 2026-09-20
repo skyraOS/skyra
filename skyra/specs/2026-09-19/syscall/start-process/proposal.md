@@ -12,6 +12,51 @@ for communication with the runtime. A process can exist without a communication
 transport, but exchanging information with it requires a communication mechanism.
 Inherited streams are an existing connection, not an exception to that rule.
 
+## Higher-level surface: ensure-child-process
+
+`ensure-child-process` sits above creation and attachment. Its requested outcome
+is a running child with a usable transport. It resolves an existing child
+association when present and uses the prepared creation specification when a
+child is absent or confirmed exited.
+
+| Observed condition | Action |
+|---|---|
+| Child alive and transport connected | Reuse the existing process and transport handles. |
+| Child alive, transport detached but recoverable | Call `attach-child-process` and return the attached handles. |
+| Child absent or confirmed exited | Call `create-child-process`. |
+| Child alive, transport cannot be recovered | Return an attachment failure; replacement policy remains to be defined. |
+| Process status unknown | Report the uncertainty/failure; do not assume the child is dead and create a duplicate. |
+
+`attach-child-process` means resuming communication with an existing child. It
+reuses retained endpoints or an explicitly supported reconnection mechanism.
+A PID alone cannot recover pipe endpoints. With the initial stdio transport,
+attachment requires the runtime to retain the usable endpoints; reconnection
+after their loss is not provided by this proposal. Attachment must preserve a
+single owner for reads, writes, closure, and process waiting.
+
+The name `resume-child-process` is reserved for a possible future operation that
+continues a stopped process. Continuing execution and attaching communication
+are separate responsibilities; stopped-process policy remains unresolved.
+
+Keep these checks distinct:
+
+| Check | Meaning |
+|---|---|
+| Process alive | The tracked child has not exited. |
+| Transport usable | Communication endpoints are retained and usable. |
+| Application responsive | The application answers its protocol; checked by an application-specific surface. |
+
+Liveness does not establish readiness or guarantee the process will remain alive.
+A stopped process may still be alive. Ensure success requires the intended
+running state and usable transport, but does not promise application readiness.
+
+Interpret resolves runtime associations and prepares authorized checks. OS checks
+run during execution; their outcomes enter an egress interpretation before the
+runtime selects and commits any follow-up attachment or creation request. No
+canonical-state lookup or branching on canonical state is deferred into commit.
+The check mechanism, exact ensure/attach input shapes, and coordination of
+concurrent ensure calls for the same child remain to be defined.
+
 ## Small contract
 
 This surface replaces the earlier `create-process` proposal. Its input identifies
