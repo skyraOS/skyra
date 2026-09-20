@@ -18,8 +18,10 @@ file descriptor is distinct from a runtime MoveID, RequestID, or resource handle
 | Surface / operation | Input | Output |
 |---|---|---|
 | `create-process` | Executable specification (`path`, `args`) and transport type | Process handle and transport handle, or launch/setup failure |
-| `resolve-process` | Process identity: a runtime process handle or OS PID | A resolved runtime process record/binding, or lookup/authorization failure |
-| `fork-process` | Process identity | Proposed child-process outcome; target-side execution mechanism remains unresolved |
+| `resolve-runtime-process` | `moveID` | Associated runtime process record/binding, including OS PID, or lookup/authorization failure |
+| `create-child-process` | Resolved parent binding, prepared executable and transport plan | Child PID; parent communication endpoints retained by runtime |
+| `setup-child-pipes` | Prepared transport plan, executed in intended parent | Two pipes for bidirectional stdin/stdout communication |
+| `fork-and-configure-child` | Resolved parent execution binding, prepared pipes and child launch plan | Parent retains child PID and communication ends; child configures descriptors and calls `execve` |
 | `bind-local-transport` | Write resource, read resource, receive destination, framing options | Transport handle |
 | `write` | Resolved writable resource and bytes | Byte count / completion or error |
 | `read` | Resolved readable resource and read limits | Bytes, EOF, or error |
@@ -27,40 +29,57 @@ file descriptor is distinct from a runtime MoveID, RequestID, or resource handle
 | `signal-process` | Process identity and selected signal | Signal-delivery outcome |
 | `wait-process` | Process identity | Exit status or wait failure |
 
-`fork-process` is a proposed runtime contract, not a claim that macOS provides
+`fork-and-configure-child` wraps OS `fork()` and the parent/child setup branches.
+The child closes unused descriptors, maps stdin/stdout, and calls `execve`; the
+parent closes its unused ends and retains the child PID and communication ends.
+A returned child PID establishes fork success; executable startup requires separate
+failure detection. See the [dependency map](start-process/dependency-map.md).
+This runtime contract does not claim that macOS provides
 `fork(pid)`. `create-process` retains its small public input shape; resolving its
 launch context can be an internal dependency rather than a new public argument.
 
-## resolve-process — process-table entry point
+## resolve-runtime-process — process-table entry point
 
-`resolve-process` is the runtime's lookup operation for its registered process
-table. It belongs to the interpreter's read profile, before commit and execution.
-It is not a direct query into a writable OS process table.
+`resolve-runtime-process(moveID)` reads runtime state to find the process associated with
+that Move. The caller does not need to know a process handle or OS PID beforehand.
+This replaces the earlier proposal to pass either of those as the lookup input.
+
+It belongs to the interpreter's read profile, before commit and execution. No OS
+syscall is required for this lookup; it is not a query into the OS process table.
 
 Conceptual dependencies:
 
 ```text
-resolve-process
-    process identity supplied by the caller or enclosing launch context
-    runtime process registry
-    caller's permitted read profile
+resolve-runtime-process(moveID)
+    → caller's permitted read profile
+    → runtime state: MoveID-to-process association
+    → associated process record
+    → resolved binding, including OS PID
 ```
 
-Interpret looks up the identity, checks the caller's access and the recorded
+Interpret looks up the MoveID, checks the caller's access and the recorded
 lifecycle, and prepares the binding needed by the consuming operation. The
 returned record is a detached view or opaque binding, not a mutable alias to the
 table. Commit and execution do not repeat the canonical lookup.
 
-For PID input, the runtime needs a registered mapping and a resource-lifetime
-check: the OS can reuse PIDs. Finding an unregistered PID must not silently create
-an authorized runtime handle. How external processes are discovered and registered
-is a separate, unresolved capability. A recorded live state is not a guarantee
-that the process remains alive until an OS operation executes.
+The association must be recorded in runtime state before it can be resolved.
+A new `create-process` Move has no child PID until OS process creation succeeds
+and the outcome is recorded through egress interpret/commit. Resolving the existing
+process used to perform a launch requires the MoveID associated with that process,
+not an assumption that the new creation Move already identifies its future child.
 
-For the proposed runtime `fork-process` Surface:
+A missing association produces a lookup failure rather than inventing a PID or
+implicitly discovering an OS process. Whether one Move can have multiple process
+associations, and how to select among them if so, remains to be defined.
+
+The resolved binding must track the resource lifetime because OS PIDs can be reused.
+A recorded live state does not guarantee that the process remains alive until an
+OS operation executes. External process discovery/registration remains separate.
+
+For the proposed runtime `fork-and-configure-child` Surface:
 
 ```text
-process identity → resolve-process → resolved process record → fork operation
+moveID → resolve-runtime-process → resolved process record → fork operation
 ```
 
 The lookup identifies the intended process; it does not make arbitrary-process

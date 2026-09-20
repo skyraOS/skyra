@@ -1,129 +1,116 @@
 # create-process dependency map
 
 Date: 2026-09-19  
-Status: Conceptual dependency map; concrete Surface boundaries remain under discussion.
+Status: Conceptual dependency map; no implementation changes.
 
 OS means the underlying operating system. Runtime means Skyra's runtime.
 
-## Core relationship
+## Runtime dependencies
 
-`create-process` depends on executable loading through `execve`. In turn,
-`execve` requires `path`, `argv`, and `envp`.
+`create-process(executable, transport)` uses a `create-child-process` operation.
+The child-creation operation resolves the intended parent's existing MoveID,
+prepares two communication pipes in that parent, and calls the runtime wrapper
+`fork-and-configure-child`. The wrapper includes both branches after OS `fork()`.
 
-```mermaid
-flowchart TD
-    C[create-process] --> E[execve]
-    E --> P[path]
-    E --> A[argv]
-    E --> V[envp]
-```
-
-Here, a dependency can be either an operation or required input data. `execve`
-is an OS operation; `path`, `argv`, and `envp` are its input dependencies, not
-themselves syscalls. Arrows point from a dependent to what it requires; they do
-not specify execution order.
-
-## Expanded process and transport dependencies
-
-Exec loads a program into an existing process. To keep the runtime alive,
-`create-process` also needs child-process creation and transport setup. This map
-shows the conceptual fork/exec route; a spawn wrapper may package those operations.
-In this dependency view, `requires` arrows point backward to prerequisites:
-exec requires completed child configuration, configuration requires a created
-child, and fork requires the transport pipes to have been prepared for inheritance.
+These arrows mean **requires**, not execution order.
 
 ```mermaid
 flowchart TD
-    C[create-process] --> EXEC[execve in child]
-    EXEC -->|requires| SETUP[Configure child process]
-    SETUP -->|requires| CHILD[Create child process]
-
-    CHILD --> RESOLVE[Runtime resolve-process]
-    RESOLVE --> ID[Process identity from launch context]
-    RESOLVE --> TABLE[Runtime process registry]
+    CREATE[Runtime create-process] --> CHILD[Runtime create-child-process]
+    CHILD --> RESOLVE[Runtime resolve-runtime-process: moveID]
+    RESOLVE --> ID[Existing parent moveID]
+    RESOLVE --> STATE[Runtime MoveID-to-process association]
     RESOLVE --> PROFILE[Caller read profile]
-    CHILD --> FORK[OS fork or platform creation mechanism]
-    FORK -->|requires| PIPES[Create transport pipes]
-
+    CHILD --> PIPES[Runtime setup-child-pipes]
+    PIPES --> A[OS pipe: parent writes / child reads]
+    PIPES --> B[OS pipe: child writes / parent reads]
+    CHILD --> WRAPPER[Runtime fork-and-configure-child]
+    WRAPPER --> FORK[OS fork: no PID argument]
+    WRAPPER --> PARENT[Parent branch: close unused ends and retain child PID]
+    WRAPPER --> CHILDSETUP[Child branch: configure descriptors]
+    CHILDSETUP --> MAP[Map child read end to stdin and write end to stdout]
+    CHILDSETUP --> CLOSE[Close unused ends and redundant descriptors]
+    CHILDSETUP --> POLICY[Working directory and inheritance policy]
+    WRAPPER --> EXEC[Child branch: OS execve]
     EXEC --> PATH[path]
     EXEC --> ARGV[argv]
     EXEC --> ENVP[envp]
-    ARGV --> NAME[Program name: argv 0]
-    ARGV --> ARGS[Executable arguments]
-    ENVP --> ENV[Runtime-selected environment]
-
-    PIPES --> TYPE[Requested transport type: stdio]
-    SETUP --> MAP[Map child descriptors 0, 1, 2]
-    MAP --> PIPES
-    MAP --> CONTEXT[Child setup context supplied by creation]
-    SETUP --> CWD[Working-directory policy]
-    SETUP --> CLOSE[Close unused endpoints and control inheritance]
 ```
 
-The executable path, arguments, and transport type come from the proposed Surface
-input. The environment and working-directory policies still need to be defined.
-Descriptor mapping uses the newly created child's setup context; it does not
-perform another `resolve-process` lookup or modify a remote process by PID.
+`resolve-runtime-process(moveID)` reads canonical runtime state during interpret
+and supplies the complete resolved binding to the committed execution request.
+Commit and execution do not repeat that lookup. The MoveID identifies an existing
+parent association, not the new Move's as-yet-uncreated child.
 
-## Runtime process-resolution dependency
+**The resolved parent must itself execute pipe creation and OS `fork()`.**
+Resolving a PID does not allow the runtime to fork a different process. When the
+parent is the runtime launcher, the launcher executes these operations directly.
+A different parent requires a cooperating execution mechanism, still unresolved.
 
-`resolve-process` is the runtime syscall Surface's process-table lookup. It runs
-within interpretation and supplies a resolved record/binding to the operation.
-The process identity may be a registered OS PID or runtime process handle.
+The executable supplies `path` and arguments; the runtime prepares `argv` and
+`envp` before execution. Environment and working-directory policies remain to be
+defined. The two pipes cover stdin and stdout; stderr needs an explicit policy
+such as inheritance or a separately drained third pipe.
+
+## Execution order
+
+Solid arrows below show execution order; the parent and child branches run in
+separate processes and are not ordered relative to each other.
 
 ```mermaid
 flowchart TD
-    F[Runtime fork-process proposal] --> R[Runtime resolve-process]
-    R --> I[Input process identity]
-    R --> T[Runtime process registry]
-    R --> P[Caller read profile]
-    F --> M[Target-side execution mechanism: unresolved]
+    I[Interpret: resolve-runtime-process with parent moveID and prepare complete plan]
+    I --> COMMIT[Commit: stamp authorized request]
+    COMMIT --> PIPES[Execute in resolved parent: setup-child-pipes]
+    PIPES --> WRAPPER[Runtime fork-and-configure-child]
+    WRAPPER --> FORK[OS fork]
+
+    FORK -->|returns child PID| PARENT[Parent branch: close child-only pipe ends]
+    PARENT --> RETAIN[Retain parent pipe endpoints and child PID]
+    RETAIN --> RESULT[create-child-process result: child PID]
+    RESULT --> CHECK[Parent establishes executable startup outcome]
+
+    FORK -->|returns 0| CHILD[Child branch: close parent-only pipe ends]
+    CHILD --> MAP[Map retained read end to stdin and write end to stdout]
+    MAP --> CONFIG[Close redundant descriptors and apply launch policies]
+    CONFIG --> EXEC[execve with path, argv, envp]
+    EXEC -->|success: no return| RUN[New executable runs with same child PID]
+    EXEC -->|failure| FAIL[Report startup failure and exit child]
+    FAIL -.-> CHECK
+
+    FORK -->|returns -1| FORKFAIL[Parent: clean up pipes and report failure]
+    CHECK --> EGRESS[Runtime egress interpret and commit: record outcome]
+    FORKFAIL --> EGRESS
+    EGRESS --> OBS[create-process observation: processHandle and transportHandle or failure]
 ```
 
-For ordinary `create-process`, resolution concerns the runtime's launch context;
-macOS `fork()` already identifies its caller implicitly. For a Surface targeting
-another process, lookup alone is insufficient: that process must cooperate to
-fork its own execution state. This map does not imply an OS `fork(pid)` call.
+After `fork()`, both processes continue the launcher code. The return value selects
+the branch: zero in the child, the child PID in the parent, or minus one on failure.
+Each branch closes descriptors in its own table. Closing a descriptor in one
+process does not close the other process's copy.
 
-## Execution order and returned observation
+The child performs setup itself before replacing its program with `execve`.
+Descriptor mapping requires no second process lookup. Descriptors survive exec
+unless marked close-on-exec; the intended stdin and stdout bindings must survive.
 
-Unlike the dependency view above, the solid arrows here point forward in execution
-order. After fork, child setup and parent-side resource handling run in their
-respective processes. Dashed arrows show configuration inputs.
+## Results and startup boundary
 
-```mermaid
-flowchart TD
-    I[Runtime interpret: resolve launch context and prepare plan] --> K[Runtime commit: stamp request]
-    K --> P[Create transport pipes]
-    P --> F[Fork child process]
+`create-child-process` returns the child PID to its caller in the parent. The
+runtime also retains the parent's communication endpoints in private resources;
+the PID alone is not a transport. Receiving the PID establishes **fork success**,
+not successful executable startup.
 
-    F --> CHILD[Child: configure process]
-    CHILD --> MAP[Map pipe endpoints to descriptors 0, 1, 2]
-    MAP --> CWD[Apply working-directory policy]
-    CWD --> CLOSE[Close unused descriptors and apply inheritance policy]
-    CLOSE --> EXEC[execve]
-    PATH[path] -.-> EXEC
-    ARGV[argv] -.-> EXEC
-    ENVP[envp] -.-> EXEC
-    EXEC --> RUN[Executable runs]
+The enclosing `create-process` must detect child setup or `execve` failure before
+reporting a successful launch. The reporting mechanism remains to be selected
+(for example, a launcher-provided startup error channel). Successful `execve`
+does not return to the launcher code in the child. A successful executable launch
+is also distinct from application readiness.
 
-    F --> PARENT[Parent: close child-only endpoints and retain resources]
-    PARENT --> OUTCOME[Parent launcher establishes launch and transport outcome]
-    EXEC -->|launch outcome reported to parent| OUTCOME
-    OUTCOME --> EGRESS[Runtime egress interpret and commit]
-    EGRESS --> RESULT[Return observation: processHandle and transportHandle]
-```
+Creation/setup failures require closing owned endpoints and handling any created
+child. Outcomes return through egress interpret/commit to register the process
+and transport or record failure. The public `create-process` observation retains
+its proposed process handle and transport handle.
 
-The ordering among individual child-configuration actions is illustrative; the
-required boundary is that all child setup completes before `execve`. The launch
-outcome edge is parent-side reporting, not a successful return from `execve`.
-
-A successful `execve` does not return to the child's old program. The parent-side
-launcher reports the creation outcome; the runtime registers the resources and
-returns their handles. A successful launch is not an application readiness check.
-Failures during creation, exec, or transport setup require cleanup and a failure
-outcome rather than a successful observation containing partially usable handles.
-
-See the [create-process contract](create-process.md) and
-[runtime syscall Surfaces](../skyra-syscall-surface.md) and
+See the [create-process contract](create-process.md),
+[runtime syscall Surfaces](../skyra-syscall-surface.md), and
 [macOS facilities](../mac-syscall-surface.md).
