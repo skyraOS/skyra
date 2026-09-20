@@ -66,5 +66,9 @@ Create pipe
 For each resource, ask how it is referenced and which operations it supports
 before trying to unify it with other resource types in the runtime.
 
-Related: [fd table](fd-table.md), [syscalls and fds](syscalls-and-fds.md), and
-[OS syscall reference](../../syscall/os-syscall-reference.md).
+Related: [OS syscall reference](../../syscall/os-syscall-reference.md). The
+descriptor primers this note grew from (`fd-table`, `syscalls-and-fds`) are
+archived at
+[`archive/2026-09-19-fd-research/`](../../../../archive/2026-09-19-fd-research/README.md);
+their load-bearing conclusion is folded into
+[surfaceID-moveID-fd](../../surfaceID-moveID-fd.md).

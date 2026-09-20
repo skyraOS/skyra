@@ -8,9 +8,16 @@ Status: Four top-level Surfaces agreed; detailed contracts and implementation pe
 | Surface | Input | Responsibility |
 |---|---|---|
 | `codex.connect` | Process/transport configuration | Start App Server, open its transport, complete `initialize` → `initialized`, and return a connection handle. |
+| `codex.health` | Connection handle, response timeout | Probe an initialized connection: send a read-only `thread/loaded/list` (`{"limit": 1}`) with a fresh RPC ID, correlate the response, and report responsive / RPC error / transport failure / timeout. |
 | `codex.start` | Connection handle, thread settings, initial input | Call `thread/start`, then `turn/start`; return the thread identity and turn result. |
 | `codex.continue` | Connection handle, thread ID, next input | Resume the thread if necessary, then call `turn/start`; return the turn result. |
 | `codex.fork` | Connection handle, source thread ID, optional fork boundary/settings | Call `thread/fork` to branch conversation history into a new thread; return the new thread identity. |
+
+`codex.health` confirms App Server responsiveness only, not model-provider
+inference availability. Codex 0.154.0 has no dedicated stdio `ping`; the read-only
+`thread/loaded/list` request stands in for one. (Merged from the former
+`codex-surfaces.md`, whose `start-app-server / start-thread / continue-thread /
+check-app-server-health` names are consolidated into the `codex.*` set here.)
 
 ## Dependencies
 
@@ -19,6 +26,9 @@ codex.connect
     process launch / transport connection
     initialize
     initialized
+
+codex.health
+    thread/loaded/list   read-only probe, fresh RPC id
 
 codex.start
     thread/start

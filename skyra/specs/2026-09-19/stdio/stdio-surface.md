@@ -122,4 +122,4 @@ correlation state. The stdio Surface is reusable for other process protocols.
 4. Which framing and buffering defaults should the first implementation use?
 
 See [Surface profiles](../surface.md) and
-[the initial Codex Surfaces](../codex/codex-surfaces.md).
+[Codex integration](../codex/codex-integration.md).

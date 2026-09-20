@@ -153,5 +153,5 @@ retaining pipe ends. See [Cmd.StdoutPipe](https://pkg.go.dev/os/exec#Cmd.StdoutP
 - What are the timeout, cancellation, and process-group policies?
 - How are live resource handles published, retired, and protected against stale use?
 
-Related: [stdio Surface proposal](../studio/stdio-surface.md) and
-[Codex Surfaces](../codex/codex-surfaces.md).
+Related: [stdio Surface proposal](../stdio/stdio-surface.md) and
+[Codex integration](../codex/codex-integration.md).

@@ -65,6 +65,23 @@ themselves distinguish repeated calls by the same parent to the same Surface.
 The relationship between these fields, the MoveID, and a newly allocated fd is
 the next design decision.
 
+## Operation identity is distinct from resource identity
+
+(Folded in from the archived `syscalls-and-fds` research note.)
+
+An operation's identity is not the identity of a resource it creates or uses. An
+OS call illustrates this: `open` creates one descriptor, `pipe` creates two,
+`read`/`write` create none and act on an existing one, and `dup2` adds another
+reference to a resource that already exists. One resource handle participates in
+many operations; one operation can create zero, one, or several handles.
+
+The consequence for the runtime identities above: **a Move or a committed Request
+need not allocate a new resource handle.** MoveID (the operation), RequestID (the
+committed authorization), and any resulting resource handle (fd, process handle,
+transport handle) are separate identities on separate lifetimes, and their
+cardinality is not one-to-one. Do not assume that interpreting a Move mints a
+handle, or that a handle names the Move that created it.
+
 ## Questions to settle
 
 1. What exactly does an fd reference, and what establishes and ends its lifetime?
