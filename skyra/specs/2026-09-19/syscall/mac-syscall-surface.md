@@ -80,4 +80,4 @@ buffers and descriptor tables are OS resources; frame assembly, receive handlers
 and runtime handle mappings belong to the runtime. See
 [Apple's pipe reference](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/pipe.2.html).
 
-Related: [create-process dependency map](start-process/dependency-map.md).
+Related: [create-child-process dependency map](start-process/dependency-map.md).

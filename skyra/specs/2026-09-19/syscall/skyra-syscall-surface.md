@@ -17,9 +17,8 @@ file descriptor is distinct from a runtime MoveID, RequestID, or resource handle
 
 | Surface / operation | Input | Output |
 |---|---|---|
-| `create-process` | Executable specification (`path`, `args`) and transport type | Process handle and transport handle, or launch/setup failure |
+| `create-child-process` | `parentMoveID`, executable specification (`path`, `args`), and transport type | Child PID, process handle, and transport handle after successful startup, or launch/setup failure |
 | `resolve-runtime-process` | `moveID` | Associated runtime process record/binding, including OS PID, or lookup/authorization failure |
-| `create-child-process` | Resolved parent binding, prepared executable and transport plan | Child PID; parent communication endpoints retained by runtime |
 | `setup-child-pipes` | Prepared transport plan, executed in intended parent | Two pipes for bidirectional stdin/stdout communication |
 | `fork-and-configure-child` | Resolved parent execution binding, prepared pipes and child launch plan | Parent retains child PID and communication ends; child configures descriptors and calls `execve` |
 | `bind-local-transport` | Write resource, read resource, receive destination, framing options | Transport handle |
@@ -35,8 +34,9 @@ parent closes its unused ends and retains the child PID and communication ends.
 A returned child PID establishes fork success; executable startup requires separate
 failure detection. See the [dependency map](start-process/dependency-map.md).
 This runtime contract does not claim that macOS provides
-`fork(pid)`. `create-process` retains its small public input shape; resolving its
-launch context can be an internal dependency rather than a new public argument.
+`fork(pid)`. `create-child-process` replaces the earlier `create-process` surface. The
+invocation context may supply `parentMoveID` when the runtime launcher is the
+parent. See the [surface proposal](start-process/proposal.md).
 
 ## resolve-runtime-process — process-table entry point
 
@@ -63,7 +63,7 @@ returned record is a detached view or opaque binding, not a mutable alias to the
 table. Commit and execution do not repeat the canonical lookup.
 
 The association must be recorded in runtime state before it can be resolved.
-A new `create-process` Move has no child PID until OS process creation succeeds
+A new `create-child-process` Move has no child PID until OS process creation succeeds
 and the outcome is recorded through egress interpret/commit. Resolving the existing
 process used to perform a launch requires the MoveID associated with that process,
 not an assumption that the new creation Move already identifies its future child.
@@ -86,7 +86,7 @@ The lookup identifies the intended process; it does not make arbitrary-process
 fork available. OS `fork()` acts on its caller. Forking a selected process's live
 state therefore requires that process to cooperate and invoke fork itself. Creating
 another instance from a saved launch specification is a different operation.
-For ordinary `create-process`, the launcher runs in the runtime process and the
+For ordinary `create-child-process`, the launcher runs in the runtime process and the
 OS already knows its caller; registry resolution is a runtime policy dependency.
 
 ## Where resources live
@@ -120,7 +120,7 @@ child fd 1, and separately drains the pipe fed by child fd 2.
 4. OS outcomes re-enter through an egress profile turn, which records completion,
    failure, or newly created resource bindings.
 
-A committed create-process request authorizes an attempt; it does not mean a process already
+A committed create-child-process request authorizes an attempt; it does not mean a process already
 exists. The process identity and pipes become available after the OS operation
 succeeds. Publication of those results requires a subsequent interpret/commit
 turn. Runtime commit and OS side effects are not one atomic transaction.

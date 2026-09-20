@@ -1,4 +1,4 @@
-# create-process dependency map
+# create-child-process dependency map
 
 Date: 2026-09-19  
 Status: Conceptual dependency map; no implementation changes.
@@ -7,8 +7,8 @@ OS means the underlying operating system. Runtime means Skyra's runtime.
 
 ## Runtime dependencies
 
-`create-process(executable, transport)` uses a `create-child-process` operation.
-The child-creation operation resolves the intended parent's existing MoveID,
+`create-child-process(parentMoveID, executable, transport)` resolves the intended
+parent's existing MoveID,
 prepares two communication pipes in that parent, and calls the runtime wrapper
 `fork-and-configure-child`. The wrapper includes both branches after OS `fork()`.
 
@@ -16,8 +16,7 @@ These arrows mean **requires**, not execution order.
 
 ```mermaid
 flowchart TD
-    CREATE[Runtime create-process] --> CHILD[Runtime create-child-process]
-    CHILD --> RESOLVE[Runtime resolve-runtime-process: moveID]
+    CHILD[Runtime create-child-process] --> RESOLVE[Runtime resolve-runtime-process: moveID]
     RESOLVE --> ID[Existing parent moveID]
     RESOLVE --> STATE[Runtime MoveID-to-process association]
     RESOLVE --> PROFILE[Caller read profile]
@@ -67,7 +66,7 @@ flowchart TD
 
     FORK -->|returns child PID| PARENT[Parent branch: close child-only pipe ends]
     PARENT --> RETAIN[Retain parent pipe endpoints and child PID]
-    RETAIN --> RESULT[create-child-process result: child PID]
+    RETAIN --> RESULT[Internal fork outcome: child PID]
     RESULT --> CHECK[Parent establishes executable startup outcome]
 
     FORK -->|returns 0| CHILD[Child branch: close parent-only pipe ends]
@@ -81,7 +80,7 @@ flowchart TD
     FORK -->|returns -1| FORKFAIL[Parent: clean up pipes and report failure]
     CHECK --> EGRESS[Runtime egress interpret and commit: record outcome]
     FORKFAIL --> EGRESS
-    EGRESS --> OBS[create-process observation: processHandle and transportHandle or failure]
+    EGRESS --> OBS[create-child-process observation: childPID, processHandle, transportHandle or failure]
 ```
 
 After `fork()`, both processes continue the launcher code. The return value selects
@@ -95,12 +94,12 @@ unless marked close-on-exec; the intended stdin and stdout bindings must survive
 
 ## Results and startup boundary
 
-`create-child-process` returns the child PID to its caller in the parent. The
+The fork wrapper supplies the child PID internally to the parent branch. The
 runtime also retains the parent's communication endpoints in private resources;
 the PID alone is not a transport. Receiving the PID establishes **fork success**,
 not successful executable startup.
 
-The enclosing `create-process` must detect child setup or `execve` failure before
+`create-child-process` must detect child setup or `execve` failure before
 reporting a successful launch. The reporting mechanism remains to be selected
 (for example, a launcher-provided startup error channel). Successful `execve`
 does not return to the launcher code in the child. A successful executable launch
@@ -108,9 +107,9 @@ is also distinct from application readiness.
 
 Creation/setup failures require closing owned endpoints and handling any created
 child. Outcomes return through egress interpret/commit to register the process
-and transport or record failure. The public `create-process` observation retains
-its proposed process handle and transport handle.
+and transport or record failure. The public `create-child-process` observation retains
+the child PID, process handle, and transport handle.
 
-See the [create-process contract](create-process.md),
+See the [create-child-process contract](proposal.md),
 [runtime syscall Surfaces](../skyra-syscall-surface.md), and
 [macOS facilities](../mac-syscall-surface.md).
