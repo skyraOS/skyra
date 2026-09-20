@@ -1,7 +1,37 @@
 # Architectural thought: the main loop as Surface composition
 
 Date: 2026-09-19  
-Status: Note to revisit after dependency mapping. Not an implementation decision.
+Status: **Parked.** The phase shape below is real; the collapse it suggests is not
+pursued. Not an implementation decision.
+
+## Disposition (2026-09-19)
+
+The shape is genuine — every turn obeys `interpret → commit → execute → return`,
+the main loop included. Keep that as shared *discipline*. But **do not make
+`step()` a composable Surface.** The loop is where authority lives: it owns
+scheduling, locking, and commit authority. A Surface *consumes* authority; the
+loop *holds* it. Collapsing the two erases the authority-holder / authority-
+consumer boundary (D3) at the most load-bearing point in the system, and invites
+turtles-all-the-way-down (to run a Surface you need the loop; if the loop is a
+Surface, you need a loop to run it — there is always a bottom turtle).
+
+The honest model is a sandwich with two things application code cannot author:
+the **main loop** on top (drives turns, is not a turn) and **syscalls** on the
+bottom (invoked, not authored — see `claude-syscall/syscall-boundary.md`), with
+composable Surfaces in between. This mirrors the receive-loop call in
+`claude-syscall/the-handoff-set.md`: the loop *drives* turns, it is not one.
+
+Two halves of the note below, disposed:
+
+- **"loop as Surface composition"** — parked. Revisit only as shared phase
+  *vocabulary* (a thin privileged driver that calls interpret/commit), never as a
+  collapsed boundary.
+- **"primordial space"** — this is the concrete **root return destination** hole
+  (cf. DNA-17 `rootOnce` and "the root still needs an agreed result
+  destination"). Resolve it as plumbing in return-correlation, not as cosmology
+  here.
+
+The original note is retained below as the record of the observation.
 
 ## Observation
 
