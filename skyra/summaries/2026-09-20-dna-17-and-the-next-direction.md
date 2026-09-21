@@ -1,14 +1,19 @@
 # Skyra: DNA-17 and the next direction
 
-**Date:** 2026-09-20  
+**Date:** 2026-09-21 (updated; originally 2026-09-20)  
 **Reviewed build:** `skyra/src/skyra/skyra-dna-17` at `264ef78`.  
 **Status:** Conceptual and implementation handoff. DNA-17 is the executable
 reference — an *exploratory, throwaway* generation of the 2026-09-18 "collapse,"
 proven only against a fake in-process App Server (no live inference, no real
-`codex` binary, no OS containment, no network). The `specs/2026-09-19` set
-describes the next direction: the runtime→OS **execution handoff** and a revised
-**Surface/Possibility** model. Those specs are proposals, not an implemented
-replacement, and several are explicitly "rejectable."
+`codex` binary, no OS containment, no network). The direction then advanced in
+two moves: `specs/2026-09-19` named the runtime→OS **execution handoff** and a
+revised Surface/Possibility model; `specs/2026-09-20` and `specs/2026-09-21` then
+converged everything onto one model — **mediated actors over a privileged kernel**,
+with **ports** as identity and the **Possibility as a process**. All of it is
+proposal-stage and explicitly "rejectable." **Part III is the current direction;
+Part II is the intermediate layer it builds on.** The single precedence index is
+[`specs/2026-09-21/carry-forward.md`](../specs/2026-09-21/carry-forward.md) — read
+it to know which statement to build against.
 
 ## Executive summary
 
@@ -42,25 +47,32 @@ deviations (fd reused per session not per dispatch; a persistent callback, not
 settlement point (Return settles at interpret; Failure kills the fd at
 emission-commit, then re-enters a Fault).
 
-**Where the specs are aiming next.** `specs/2026-09-19` takes that finding and
-pushes on two fronts:
+**Where the specs went next.** `specs/2026-09-19` took that finding and pushed on
+two fronts — the runtime→OS **execution-handoff seam** (turn a dispatch into a real
+forked Codex process behind a closed syscall set) and a **Surface/Possibility**
+model (explicit interpret/commit profiles, parent-owned child contracts,
+per-Possibility isolation) — with a standing instruction to **fix seven open
+correctness issues first**.
+
+**Then the model converged (Part III).** The 09-20 Possibility investigation and
+the 09-21 consolidation resolve those fronts into one shape:
 
 ```text
-1. The execution-handoff seam   runtime→OS: turn a dispatch into a REAL forked
-                                Codex process with wired pipes. Get the syscall
-                                vocabulary right before filling bodies.
-2. The Surface / Possibility    explicit interpret/commit profiles per Surface,
-   model                        parent-owned child contracts, and per-Possibility
-                                isolation of the invocation graph.
+Mediated actors over a privileged kernel.
+  · Only a Move crosses a pipe.
+  · The loop IS the kernel — sole writer of every actor's inbound port,
+    so authority is delivered by TOPOLOGY, not re-checked per dispatch.
+  · Identity is a PORT (a name the runtime owns), never a PID.
+  · A Possibility IS a process: its port space IS its Horizon; it parents
+    the program, requests spawns (the kernel binds), and confines its children.
+  · The fd table splits: a persistent FRAME STACK + a disposable EXECUTION PORT.
+  · A Move COMPILES (one atomic turn) into an ENGRAM the OS layer dispatches.
 ```
 
-with a standing instruction to **fix seven open correctness issues first**
-(invocation identity, fault scoping, queue deadlock ahead of the rest).
-
-Three architectural dispositions frame the next build: the main loop is **not** a
-composable Surface (authority-holder vs. -consumer boundary); `spawn` is a
-**mechanism, not an address** and a **first-class system operation**; and the
-invocation graph is a **cactus per Possibility** — a sealed forest.
+Three 09-19 dispositions survive into that model unchanged: the main loop is
+**not** a composable Surface (it *holds* authority; a Surface *consumes* it);
+`spawn` is a **kernel mechanism, not an address**; and the invocation graph is a
+**cactus per Possibility** — now literally one process per sealed tree.
 
 ---
 
@@ -202,6 +214,12 @@ transition commits.
   kills the fd at emission-commit (the fence needs it dead before later frames),
   then re-enters a `Fault` so the root result stays uniform.
 
+> **Superseded by Part III.** This finding is the whole reason the fd table splits.
+> `fd`-per-session was `fd` doing two jobs — *logical continuation* and *live
+> execution authority* — at once. Part III separates them (a persistent frame + a
+> per-dispatch execution port), so resume mints a **fresh** port and the
+> session-identity tension disappears.
+
 ## 8. Deliberate deviations & stubs
 
 **Deviations:** string IDs (not `uuid.UUID`, for deterministic tests); the inbound
@@ -238,9 +256,16 @@ the settlement fence; #12 `OpenPossibility` atomicity).
 
 ---
 
-# Part II — The next direction (`specs/2026-09-19`)
+# Part II — The intermediate layer (`specs/2026-09-19`)
 
-The specs aim to replace the in-process fake with a **real runtime→OS execution
+> **Read Part II as the bridge, not the destination.** Its **execution-handoff /
+> syscall** work (§11–§13) still holds and is carried forward wholesale — it is the
+> OS floor Part III's kernel stands on. Its **Surface/Possibility struct** model
+> (§10, the compound `Surface`) is **superseded** by Part III: a Surface becomes a
+> bare addressable endpoint, composition moves to the Engram, and the Possibility
+> becomes a process. Where the two disagree, Part III wins.
+
+These specs aim to replace the in-process fake with a **real runtime→OS execution
 handoff**, and to firm up the **Surface / Possibility / contract** model. Two axes:
 
 ## 10. Explicit interpret/commit phases and Surface profiles
@@ -363,65 +388,213 @@ termination stay the launcher's responsibility.
   (scope `InvocationID` under `PossibilityID`; a fd/Fault can only name a frame in
   its own tree) rather than merely checked.
 
-## 15. Open decisions
+---
 
-1. **The return-out-of-a-Possibility edge.** If trees can't talk, a child
-   Possibility's result reaches its opener through exactly one sanctioned edge — its
-   `rootOnce`, wired write-once at `OpenPossibility` to a single sink in the opener.
-   Gated on: **can a Move open a child Possibility, or only `Submit`?** *(open)*
-2. **Shared process vs. isolation.** A process referenced from two Possibilities is
-   a covert cross-tree edge. Per-possibility spawn (clean, costs a process) vs. a
-   root-level shared process with runtime-demuxed emissions (issues #8/#9). *(open)*
-3. Which runtime operations become leaf Surfaces vs. private driver helpers; who
-   owns process vs. transport shutdown; timeout/cancellation/process-group policy;
-   how live handles are published, retired, and protected from stale use.
-4. Surface profile method signatures; contract selection/correlation via
-   `InputID`/`OutputID`; multi-child dependency tracking (issue #5).
+# Part III — The current direction (`specs/2026-09-20` → `2026-09-21`)
 
-## 16. Immediate work order
+The 09-19 finding pushed the model past "collapse." The 09-20 Possibility
+investigation and the 09-21 consolidation converge on **mediated actors over a
+privileged kernel**. The precedence index is
+[`carry-forward.md`](../specs/2026-09-21/carry-forward.md); the three 09-21 docs
+([`frame-stack-and-execution-ports.md`](../specs/2026-09-21/frame-stack-and-execution-ports.md),
+[`possibility-as-process.md`](../specs/2026-09-21/possibility-as-process.md),
+`carry-forward.md`) state the current contracts.
 
-1. **Fix the three high issues** (#1 invocation identity, #2 fault scoping,
-   #3 queue deadlock), then #4–#7. Prefer the *structural* fixes the cactus/forest
-   model enables (scope `InvocationID` under `PossibilityID`; bind emitted Faults to
-   the emitting fd).
-2. **Land the explicit interpret/commit phase split** (`improvements.md`) and the
-   Surface ingress/egress profile shape (`surface.md`).
-3. **Fold the confirmed syscall dispositions in:** rename `create-child-process` →
-   `spawn-child`, drop the fork-dance surface + `fork(pid)` disclaimers + the
-   standalone stderr question; state `spawn`'s class/phase in
-   `skyra-syscall-surface.md`; keep the lifecycle wrappers deferred.
-4. **Build the real handoff behind the six syscalls** with `os/exec`: spawn Codex,
-   wire the pipes, run the persistent receive pump, and repeat the DNA-17 dynamic-
-   tool and contamination proofs against a **real** `codex app-server` — then layer
-   launch policy/containment (version pin, isolated `CODEX_HOME`, no inherited env).
-5. **Resolve the two open Possibility decisions (§15.1–2)** before generalizing
-   beyond a single runtime-spawned Codex.
+## 15. The spine — mediated actors over a kernel
 
-## 17. Conceptual map
+Only a **Move** crosses a pipe. The loop is the **kernel** — a distinguished actor,
+not a peer — and the **sole writer of every actor's inbound port**, so an
+unauthorized Move *cannot reach* its target: nothing but the loop can put a Move on
+that port. **Authority is delivered by topology, not by a per-hop check** — DNA-17's
+settlement fence generalized. Above the line: Surfaces (own adapter state,
+late-bind their dependencies through mediation). Below the line: the loop,
+StateOwner, the authority checker, the tracer — substrate, statically wired,
+**not** traced. A Move **compiles** (THINK, one atomic turn) into an **Engram** (the
+serialized authorized instruction list) the OS layer dispatches. Two rules keep it
+honest: authorization stays **one atomic compile turn**, never a peer-hop chain
+(preserves the old atomicity, C3); and **control state is substrate, adapter state
+is the actor's** (C8). Topology ops (`spawn`/`bind`/`create_port`/`kill`) are kernel
+ops a process only *requests*, authorized as an **attenuating** subset of what it
+already holds.
+[`mediated-actors-over-a-kernel.md`](../specs/2026-09-20/possibility/claude-input/mediated-actors-over-a-kernel.md),
+[`os-kernel-frame-reconciliation.md`](../specs/2026-09-20/possibility/claude-input/os-kernel-frame-reconciliation.md).
+
+## 16. Ports as identity — and the fd table splits in two
+
+Identity **cannot be a PID** (OS-owned, ephemeral, recycled). It must be a name the
+runtime owns: a **port**, an index in its own table. Three levels: **Port** (stable)
+/ **Binding** (`port → backing`, kernel-owned, rebindable) / **Backing**
+(ephemeral, never the identity). DNA-17's `Identifier` + `fdEntry` (scope/
+generation/liveness in the writer) **is already a port table**, scoped to one
+execution.
+
+The fd table was doing **two jobs** — *logical continuation* and *live execution
+authority* — so it splits:
+
+| Was fused in the fd table | Becomes |
+|---|---|
+| `returnTo`, `waitingOn`, `phase`, `driverState` | **Frame stack** — persistent logical continuation; an arbitrary `map[FrameID]*Frame` for now. Outlives every backing. |
+| the live `fd` + `surface` + liveness | **Execution port** — one disposable request/response handle per **dispatch**; the fence. |
+
+Resume mints a **fresh** port (fd-per-dispatch), so a late emission from the
+pre-resume backing hits its own dead port and is rejected unambiguously —
+DNA-17 issue #8 dissolved.
+[`frame-stack-and-execution-ports.md`](../specs/2026-09-21/frame-stack-and-execution-ports.md).
+
+## 17. The Possibility is a process (port space = Horizon)
+
+The port table is **per-process**, not one global map: a process reaches only what
+is mapped into *its* space — so a process's **port space *is* its Horizon**. That
+collapses five things into one object:
+
+> **Possibility = process = port space = Horizon = cactus root.**
+
+It parents the program, **requests** spawns (the kernel binds, attenuating), and
+confines its children. The payoff: **authority is checked once, at provision/bind
+time; execution against a provisioned port is free** — no per-dispatch check.
+Two guardrails: (1) the Possibility *requests*, the **kernel binds** — if a process
+minted its own ports, confinement would be fiction; (2) the Possibility wears two
+hats at two ranks — its **port space/frames are substrate**, its **running program
+is a backing** (the C4 fix, generalized).
+[`possibility-as-process.md`](../specs/2026-09-21/possibility-as-process.md).
+
+## 18. The fence and revocation merge
+
+Revocation = unmap the port = `kill`. So the settlement fence and the
+authority/revocation check become **one control-plane lookup** — *"is this port
+still mapped and live in its space?"* — answering both "was this revoked" and "is
+this settled." That is the single liveness check `handle-liveness-fence.md` wanted;
+it closes **C11** and DNA-17 issue #3 (Horizon revocation) together and **retires
+the `authGen` generation** (authority is space-membership, not a carried number).
+
+## 19. Same address, sealed backings — the Codex case
+
+Two Possibilities both holding a `codex` port is **not** a cross-tree edge — the
+address is not the resource:
+
+| Layer | Codex reading | Shared? |
+|---|---|---|
+| Port protocol / address | "codex app server" — a *kind* of endpoint | Yes — a type/role, not a resource |
+| Binding | this Possibility's `port → thread` | No — A binds `thread_A`, B binds `thread_B` |
+| Backing | the **thread** — the live stateful cut | No — **the isolation unit** |
+| Provider resource | the app-server **process** hosting many threads | Pooled below the line; addressable by no Possibility |
+
+The **thread** is the confinement unit, not the OS process, so a shared app-server
+is safe *pooling* (open decision D-B dissolves). Two obligations, stated not
+assumed: **kernel-owned thread demux** (promote DNA-17's private `threads` map to
+canonical control state — `two-axes-one-seam`), and a **provider that seals
+threads**.
+
+## 20. Dependency mediation; Surfaces, Engrams, the pipe
+
+**Inject the verb, not the noun.** Hand a Surface the *right to request* a
+dependency (a typed token redeemed at the runtime), never a live handle — a static
+handle *is* "the Surface executes directly," and is the least traceable thing there
+is. **Tracing ⟺ mediation ⟺ late-binding** are one property. The **Profile** is the
+bridge: a compile-time manifest of what a Surface may ask for (static, checkable)
+plus request-time resolution (`Profile request ⊆ Horizon → admit or trap`); it is
+the declared-operation contract (C7). The tracer is **not in the graph** — the trust
+boundary terminates the recursion. Composition-wise: a **Surface** is an
+*addressable executable endpoint* (an int), an **Engram** is the *serialized
+composition* (`codex start-thread` is an Engram, not a Surface), and **anything
+executable runs behind a pipe speaking the Move protocol** — external code need not
+implement a Go in-process interface. Work discovered mid-execution (a Codex tool
+call) is the **normal** path: a Surface emitting a new request against its Profile
+and suspending.
+[`dependency-mediation-and-the-trust-boundary.md`](../specs/2026-09-20/possibility/claude-input/dependency-mediation-and-the-trust-boundary.md),
+[`engrams-surfaces-and-pipe-protocol.md`](../specs/2026-09-20/possibility/engrams-surfaces-and-pipe-protocol.md).
+
+## 21. How the earlier layers land now
+
+| Earlier item | Status under Part III |
+|---|---|
+| DNA-17 finding (fd per session) | **Superseded** — frame/port split; resume mints a fresh port. |
+| Issue #1 (id overwrite) | **Cross-possibility part structural** (scope `InvocationID` under `PossibilityID`); same-namespace duplicate still needs an in-loop check. |
+| Issue #2 (fault scoping) | **Structural** — a Fault resolves only within its own Possibility; emitted Moves bind to the emitting port. |
+| Issue #3 (queue self-enqueue deadlock) | **Still open, still fix-first** — independent of the model. |
+| Issue #5 (single `waitingOn`) | Becomes a dependency set (`waiting []FrameID`); single-child enforced at interpret for now. |
+| 09-19 compound `Surface` struct | **Superseded** — Surface = endpoint; Engram carries composition. |
+| `main-loop-as-surfaces` | **Still parked** — loop holds authority, Surface consumes it. |
+| Syscall boundary / `spawn`-not-fork / handle-liveness / six leaves | **Carried wholesale** — now framed as kernel ops below the confinement line. |
+| Codex `0.154.0` facts (new-thread-per-tool-change, native contamination) | **Carried** — the only empirically-checked content. |
+
+## 22. Open decisions (current)
+
+From `carry-forward.md`'s live list, deduped to what actually gates a build:
+
+1. **Unbound-port semantics** — fault (start here) vs buffer-until-rebind (durable
+   mailbox, later, bounded). Interacts with the supervisor restart window.
+2. **Resource-port generation policy** — bump `gen` on decommission→reassign to a
+   *new logical resource*, not on same-resource supervisor restart. (Execution ports
+   sidestep this — never rebound.)
+3. **Kernel ↔ Possibility process placement** *(new)* — one kernel hosting N
+   Possibility port spaces, vs. a kernel-per-host with Possibilities as real OS
+   children. The two-ranks rule names it but does not pin it to processes.
+4. **The Engram contract** — entry representation, ordering, conditional branches,
+   result binding, whole-list vs successive-ready-portions.
+5. **Read-modify-write atomicity** (C3) and **authority scope of generated Moves**
+   (C2 — loop inspection vs target execution).
+6. **Return-out-of-a-Possibility edge** (D-A) — the one sanctioned `rootOnce` join;
+   and whether a Move can open a child Possibility or only `Submit` can.
+7. **Provider-resource lifetime** — who owns the live session, later notifications,
+   and correlation after a worker exits; is the executable unit a whole Codex turn
+   or each protocol step?
+8. Trap/fault recovery contract; Profile placement/validation; multi-child join.
+
+## 23. Immediate work order (current)
+
+1. **Fix issue #3 (queue self-enqueue deadlock)** — real regardless of model;
+   internal follow-up work must not require the sole consumer to block on its own
+   full queue.
+2. **Split the fd table** against DNA-17: `invocationRecord`/`fdEntry` → `Frame`
+   (arbitrary map) + `portEntry`; make the port table **per-Possibility** (port
+   space = Horizon); retire `authGen` for the "mapped-and-live" lookup. Touch points:
+   `opAuthorizeStart` (mint port), `executionProfile.Commit` (fence by port),
+   `interpretReturn`→resume (mint fresh port).
+3. **Land the interpret/commit phase split** and the **verb-injection Profile**
+   shape (declare the right to ask; resolve at request time against Horizon).
+4. **Build the real handoff behind the six syscalls as kernel ops** with `os/exec`:
+   spawn Codex, wire pipes, run the receive pump, and enforce **kernel-owned thread
+   demux**; repeat the DNA-17 dynamic-tool and contamination proofs against a
+   **real** `codex app-server`; then layer containment (version pin, isolated
+   `CODEX_HOME`, no inherited env).
+5. **Resolve D-A (return-out edge) and kernel↔Possibility placement (§22.3, §22.6)**
+   before generalizing beyond a single runtime-spawned Codex.
+
+## 24. Conceptual map (current direction)
 
 ```text
-                         CU — one door (Interpret / Submit)
-                                    │  one inbound queue
-                                    ▼
-                         interpreter loop (sequential)
-             decode ──▶ handler: read + decide  ── interpret ─┐
-                                                              │ one lock hold
-                         StateExecutor (sole writer) ── commit┘
-             fds table · invocations · possibilities/Horizons · id minting
-                                    │  (lock released)
-              ┌─────────────────────┼──────────────────────────┐
-              ▼                     ▼                            ▼
-         Dispatch              re-enter Moves               deliverRoot
-     one worker per fd        through the door             rootOnce: 1/root
-              │
-     Surface.Ingress + persistent output callback (async, outlives Ingress)
-              │
-     emission ─▶ Egress ─▶ stateVia(fd).Commit ─▶ (dead fd ⇒ rejected: the fence)
+                         KERNEL (the loop) — sole writer of ports; below the line
+                          · compiles Move → Engram in one atomic turn
+                          · owns port tables, bindings, thread demux
+                          · spawn / bind / create_port / kill (requested, attenuating)
+                                    │
+        ┌───────────────────────────┼───────────────────────────┐
+        ▼                           ▼                            ▼
+  Possibility A               Possibility B                Possibility C
+  = process = port space = Horizon = cactus root  ...  (sealed; no cross-edges)
+        │  frame stack (persistent)          each port bound to its OWN backing
+        │  ports mapped in = its authority   (thread_A ≠ thread_B, same address)
+        ▼
+   program (a backing, above the line)
+        │  emits a Move: "I need capability X"
+        ▼
+   request → kernel authorizes ONCE at bind (⊆ Horizon) → maps a port in
+        │  thereafter: execute against the port FREE (authority by topology)
+        ▼
+   dispatch → backing over a pipe → emission → "port still mapped & live?"
+                                                └─ no ⇒ rejected (fence = revocation)
 
-  NEXT: the worker's callback becomes a real receive PUMP over OS pipes; Dispatch's
-  first step for an absent child is a spawn (posix_spawn-shaped) syscall. Each run
-  is a cactus sealed to its Possibility; rootOnce is its floor and (maybe) its one
-  edge back out.
+  Provider processes (e.g. one codex app-server) are POOLED below the line and
+  demuxed by thread → port → Possibility; no Possibility can name them.
+```
+
+### DNA-17 loop as-built (for reference — Part I)
+
+```text
+  CU one door → interpreter loop → InterpretTurn (read+commit, one lock) →
+  Dispatch (worker per fd) → Surface.Ingress + persistent callback →
+  emission → Egress → stateVia(fd).Commit → (dead fd ⇒ rejected: the fence)
 ```
 
 ## Primary references
@@ -456,6 +629,21 @@ termination stay the launcher's responsibility.
   [stdio-surface.md](../specs/2026-09-19/stdio/stdio-surface.md)
 - Dispositions: [main-loop-as-surfaces.md (parked)](../specs/2026-09-19/main-loop-as-surfaces.md),
   [invocation-cactus-and-possibility-isolation.md](../specs/2026-09-19/invocation-cactus-and-possibility-isolation.md)
+
+### The current direction (`specs/2026-09-20` → `2026-09-21`)
+
+- Precedence index: [carry-forward.md](../specs/2026-09-21/carry-forward.md)
+- 09-21 contracts: [frame-stack-and-execution-ports.md](../specs/2026-09-21/frame-stack-and-execution-ports.md),
+  [possibility-as-process.md](../specs/2026-09-21/possibility-as-process.md)
+- The kernel model: [mediated-actors-over-a-kernel.md](../specs/2026-09-20/possibility/claude-input/mediated-actors-over-a-kernel.md),
+  [os-kernel-frame-reconciliation.md](../specs/2026-09-20/possibility/claude-input/os-kernel-frame-reconciliation.md)
+- Ports & mediation: [ports-as-the-location-abstraction.md](../specs/2026-09-20/possibility/claude-input/ports-as-the-location-abstraction.md),
+  [dependency-mediation-and-the-trust-boundary.md](../specs/2026-09-20/possibility/claude-input/dependency-mediation-and-the-trust-boundary.md)
+- Composition & findings: [engrams-surfaces-and-pipe-protocol.md](../specs/2026-09-20/possibility/engrams-surfaces-and-pipe-protocol.md),
+  [authority-namespace-and-execution-context.md](../specs/2026-09-20/possibility/authority-namespace-and-execution-context.md),
+  [loop-owned-authority-and-move-serialization.md](../specs/2026-09-20/possibility/loop-owned-authority-and-move-serialization.md),
+  [consistency-review.md](../specs/2026-09-20/possibility/consistency-review.md),
+  [takeaways.md](../specs/2026-09-20/possibility/takeaways.md)
 
 ### Prior summary
 
