@@ -1,0 +1,13 @@
+{
+  "./root": [
+    "skyra-v1/src/skyra/skyra-dna-19/protocol",
+    "skyra-v1/src/skyra/skyra-dna-19/root/creation",
+    "skyra-v1/src/skyra/skyra-dna-19/root/crosscontext",
+    "skyra-v1/src/skyra/skyra-dna-19/root/parent",
+    "skyra-v1/src/skyra/skyra-dna-19/root"
+  ],
+  "./codex": [
+    "skyra-v1/src/skyra/skyra-dna-19/protocol",
+    "skyra-v1/src/skyra/skyra-dna-19/codex"
+  ]
+}

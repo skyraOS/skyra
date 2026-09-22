@@ -1,0 +1,19 @@
+{
+  "provider": "codex-cli 0.155.1",
+  "authentication": "existing ChatGPT login",
+  "result": "passed",
+  "scenarios": [
+    "handshake and health",
+    "inference",
+    "real echo child and correlated resume",
+    "fork history and independent branch mutation",
+    "tool removal and re-addition with retained transcript",
+    "overlapping independent-parent marker recall",
+    "private provider thread/turn binding evidence"
+  ],
+  "logical_parents": 7,
+  "distinct_provider_threads": 9,
+  "tool_requests": 2,
+  "tool_resumes": 2,
+  "limitations": "Finite observed scenarios; not universal provider sealing, hidden-state migration or OS containment. Live native effects were not induced."
+}

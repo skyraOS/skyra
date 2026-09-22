@@ -1,0 +1,292 @@
+{
+  "protocol": 1,
+  "version": 1,
+  "profiles": [
+    {
+      "operation": "connect",
+      "fields": [
+        {
+          "key": "configuration",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 2048,
+          "values": [
+            "default"
+          ]
+        },
+        {
+          "key": "descriptor",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "connection"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "boot"
+    },
+    {
+      "operation": "health",
+      "fields": [
+        {
+          "key": "connection",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "deadline_ms",
+          "encoding": "uint",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "health"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "connected"
+    },
+    {
+      "operation": "start-thread",
+      "fields": [
+        {
+          "key": "connection",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "text",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 65536
+        },
+        {
+          "key": "tools",
+          "encoding": "tools",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "fresh-parent"
+    },
+    {
+      "operation": "submit-input",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "text",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 65536
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "idle-parent"
+    },
+    {
+      "operation": "fork-thread",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "source",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "fresh-destination-idle-source"
+    },
+    {
+      "operation": "tools-add",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "tools",
+          "encoding": "tools",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "idle-parent"
+    },
+    {
+      "operation": "tools-remove",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "tools",
+          "encoding": "tools",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "idle-parent"
+    },
+    {
+      "operation": "tool-result",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "pending",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 2048
+        },
+        {
+          "key": "text",
+          "encoding": "utf8",
+          "required": true,
+          "max_bytes": 65536
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "bookkeeper-return-only",
+      "continuation": true
+    },
+    {
+      "operation": "end-parent",
+      "fields": [
+        {
+          "key": "parent",
+          "encoding": "parent",
+          "required": true,
+          "max_bytes": 2048
+        }
+      ],
+      "results": [
+        "text"
+      ],
+      "failures": [
+        "invalid",
+        "busy",
+        "provider",
+        "timeout",
+        "contamination",
+        "retired",
+        "unsupported"
+      ],
+      "lifecycle": "idle-parent"
+    }
+  ]
+}

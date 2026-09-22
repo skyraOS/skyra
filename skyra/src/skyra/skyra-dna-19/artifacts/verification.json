@@ -1,0 +1,12 @@
+{
+  "race_test": "passed",
+  "top_level_tests_passed": 31,
+  "vet": "passed",
+  "independent_builds": 4,
+  "demo_events": 319,
+  "live": "passed: handshake, inference, tool calls/resumes, fork, tool-set migration, concurrent parent isolation",
+  "provider_version_schema_checked": "codex-cli 0.155.1",
+  "live_limit": "Finite observed scenarios; not universal provider sealing, hidden-state migration or OS containment. Live native effects were not induced.",
+  "live_provider_threads": 9,
+  "live_logical_parents": 7
+}

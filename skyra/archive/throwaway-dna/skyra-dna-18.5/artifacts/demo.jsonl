@@ -1,0 +1,177 @@
+{"event":1,"owner":"root","context":"root","transition":"startup decoded"}
+{"event":2,"owner":"context","context":"root","transition":"local mapping installed: virtual=0 actual=10 executable=1 generation=1"}
+{"event":3,"owner":"context","context":"root","transition":"local mapping installed: virtual=1 actual=13 executable=2 generation=1"}
+{"event":4,"owner":"context","context":"root","transition":"local mapping installed: virtual=2 actual=11 executable=0 generation=1"}
+{"event":5,"owner":"context","context":"root","transition":"local mapping installed: virtual=3 actual=12 executable=0 generation=1"}
+{"event":6,"owner":"active","context":"root","transition":"context published and ports reserved: [10 11 12 13]"}
+{"event":7,"owner":"launcher","context":"root","transition":"echo started (bootstrap/OS plumbing)"}
+{"event":8,"owner":"port","context":"root","move":1,"transition":"invocation received"}
+{"event":9,"owner":"kernel","context":"root","move":1,"transition":"invocation admitted"}
+{"event":10,"owner":"scheduler","context":"root","move":1,"transition":"move enqueued"}
+{"event":11,"owner":"scheduler","context":"root","move":1,"transition":"context claimed"}
+{"event":12,"owner":"bookkeeper","context":"root","move":1,"frame":1,"transition":"frame recorded"}
+{"event":13,"owner":"context","context":"root","move":1,"frame":1,"transition":"transition committed"}
+{"event":14,"owner":"port","context":"root","move":1,"frame":1,"transition":"invocation sent"}
+{"event":15,"owner":"scheduler","context":"root","move":1,"transition":"claim released"}
+{"event":16,"owner":"port","context":"root","move":1,"frame":1,"transition":"return received"}
+{"event":17,"owner":"kernel","context":"root","move":1,"frame":1,"transition":"return admitted"}
+{"event":18,"owner":"scheduler","context":"root","move":1,"transition":"move enqueued"}
+{"event":19,"owner":"scheduler","context":"root","move":1,"transition":"context claimed"}
+{"event":20,"owner":"bookkeeper","context":"root","move":1,"frame":1,"transition":"frame settled"}
+{"event":21,"owner":"bookkeeper","context":"root","move":1,"transition":"root sink resolved"}
+{"event":22,"owner":"context","context":"root","move":1,"frame":1,"transition":"transition committed"}
+{"event":23,"owner":"root","context":"root","move":1,"frame":1,"transition":"result verified: hello"}
+{"event":24,"owner":"port","context":"root","move":1,"frame":1,"transition":"root result sent"}
+{"event":25,"owner":"scheduler","context":"root","move":1,"transition":"claim released"}
+{"event":26,"owner":"port","context":"root","move":2,"transition":"invocation received"}
+{"event":27,"owner":"kernel","context":"root","move":2,"transition":"invocation admitted"}
+{"event":28,"owner":"scheduler","context":"root","move":2,"transition":"move enqueued"}
+{"event":29,"owner":"scheduler","context":"root","move":2,"transition":"context claimed"}
+{"event":30,"owner":"bookkeeper","context":"root","move":2,"frame":2,"transition":"frame recorded"}
+{"event":31,"owner":"context","context":"root","move":2,"frame":2,"transition":"transition committed"}
+{"event":32,"owner":"port","context":"root","move":2,"frame":2,"transition":"invocation sent"}
+{"event":33,"owner":"scheduler","context":"root","move":2,"transition":"claim released"}
+{"event":34,"owner":"port","context":"root","move":2,"frame":2,"transition":"return received"}
+{"event":35,"owner":"kernel","context":"root","move":2,"frame":2,"transition":"return admitted"}
+{"event":36,"owner":"scheduler","context":"root","move":2,"transition":"move enqueued"}
+{"event":37,"owner":"scheduler","context":"root","move":2,"transition":"context claimed"}
+{"event":38,"owner":"bookkeeper","context":"root","move":2,"frame":2,"transition":"frame settled"}
+{"event":39,"owner":"bookkeeper","context":"root","move":2,"transition":"root sink resolved"}
+{"event":40,"owner":"context","context":"root","move":2,"frame":2,"transition":"transition committed"}
+{"event":41,"owner":"root","context":"root","move":2,"frame":2,"transition":"result verified: again"}
+{"event":42,"owner":"port","context":"root","move":2,"frame":2,"transition":"root result sent"}
+{"event":43,"owner":"scheduler","context":"root","move":2,"transition":"claim released"}
+{"event":44,"owner":"port","context":"root","move":3,"transition":"invocation received"}
+{"event":45,"owner":"kernel","context":"root","move":3,"transition":"invocation admitted"}
+{"event":46,"owner":"scheduler","context":"root","move":3,"transition":"move enqueued"}
+{"event":47,"owner":"scheduler","context":"root","move":3,"transition":"context claimed"}
+{"event":48,"owner":"bookkeeper","context":"root","move":3,"frame":3,"transition":"frame recorded"}
+{"event":49,"owner":"context","context":"root","move":3,"frame":3,"transition":"transition committed"}
+{"event":50,"owner":"port","context":"root","move":3,"frame":3,"transition":"invocation sent"}
+{"event":51,"owner":"scheduler","context":"root","move":3,"transition":"claim released"}
+{"event":52,"owner":"port","context":"root","move":3,"frame":3,"transition":"invocation received"}
+{"event":53,"owner":"kernel","context":"root","move":3,"frame":3,"transition":"invocation admitted"}
+{"event":54,"owner":"scheduler","context":"root","move":3,"transition":"move enqueued"}
+{"event":55,"owner":"scheduler","context":"root","move":3,"transition":"context claimed"}
+{"event":56,"owner":"bookkeeper","context":"root","move":3,"frame":4,"transition":"frame recorded"}
+{"event":57,"owner":"bookkeeper","context":"root","move":3,"frame":3,"transition":"parent yielded waiting for child 4"}
+{"event":58,"owner":"context","context":"root","move":3,"frame":4,"transition":"transition committed"}
+{"event":59,"owner":"port","context":"root","move":3,"frame":4,"transition":"invocation sent"}
+{"event":60,"owner":"scheduler","context":"root","move":3,"transition":"claim released"}
+{"event":61,"owner":"port","context":"root","move":3,"frame":4,"transition":"return received"}
+{"event":62,"owner":"kernel","context":"root","move":3,"frame":4,"transition":"return admitted"}
+{"event":63,"owner":"scheduler","context":"root","move":3,"transition":"move enqueued"}
+{"event":64,"owner":"scheduler","context":"root","move":3,"transition":"context claimed"}
+{"event":65,"owner":"bookkeeper","context":"root","move":3,"frame":4,"transition":"frame settled"}
+{"event":66,"owner":"context","context":"root","move":3,"frame":4,"transition":"transition committed"}
+{"event":67,"owner":"port","context":"root","move":3,"frame":3,"transition":"return received"}
+{"event":68,"owner":"kernel","context":"root","move":3,"frame":3,"transition":"return admitted"}
+{"event":69,"owner":"scheduler","context":"root","move":3,"transition":"move enqueued"}
+{"event":70,"owner":"port","context":"root","move":3,"frame":4,"transition":"parent resumed"}
+{"event":71,"owner":"scheduler","context":"root","move":3,"transition":"claim released"}
+{"event":72,"owner":"scheduler","context":"root","move":3,"transition":"context claimed"}
+{"event":73,"owner":"bookkeeper","context":"root","move":3,"frame":3,"transition":"frame settled"}
+{"event":74,"owner":"bookkeeper","context":"root","move":3,"transition":"root sink resolved"}
+{"event":75,"owner":"context","context":"root","move":3,"frame":3,"transition":"transition committed"}
+{"event":76,"owner":"root","context":"root","move":3,"frame":3,"transition":"result verified: parent:child"}
+{"event":77,"owner":"port","context":"root","move":3,"frame":3,"transition":"root result sent"}
+{"event":78,"owner":"scheduler","context":"root","move":3,"transition":"claim released"}
+{"event":79,"owner":"context","context":"root","transition":"bindings invalidated"}
+{"event":80,"owner":"active","context":"root","transition":"context retired and reservations released"}
+{"event":81,"owner":"launcher","context":"root","transition":"echo reaped"}
+{"event":82,"owner":"root","context":"root","transition":"startup decoded"}
+{"event":83,"owner":"context","context":"root","transition":"local mapping installed: virtual=0 actual=10 executable=1 generation=1"}
+{"event":84,"owner":"context","context":"root","transition":"local mapping installed: virtual=1 actual=13 executable=2 generation=1"}
+{"event":85,"owner":"context","context":"root","transition":"local mapping installed: virtual=2 actual=11 executable=0 generation=1"}
+{"event":86,"owner":"context","context":"root","transition":"local mapping installed: virtual=3 actual=12 executable=0 generation=1"}
+{"event":87,"owner":"active","context":"root","transition":"context published and ports reserved: [10 11 12 13]"}
+{"event":88,"owner":"launcher","context":"root","transition":"echo started (bootstrap/OS plumbing)"}
+{"event":89,"owner":"context","context":"B","transition":"local mapping installed: virtual=0 actual=30 executable=1 generation=1"}
+{"event":90,"owner":"context","context":"B","transition":"local mapping installed: virtual=1 actual=31 executable=0 generation=1"}
+{"event":91,"owner":"context","context":"B","transition":"local mapping installed: virtual=2 actual=32 executable=0 generation=1"}
+{"event":92,"owner":"active","context":"B","transition":"context published and ports reserved: [30 31 32]"}
+{"event":93,"owner":"active","context":"root","transition":"address installed: executable=101 virtual=4 actual=14"}
+{"event":94,"owner":"active","context":"root","transition":"address installed: executable=200 virtual=5 actual=15"}
+{"event":95,"owner":"kernel","context":"B","move":900,"transition":"invocation admitted"}
+{"event":96,"owner":"scheduler","context":"B","move":900,"transition":"move enqueued"}
+{"event":97,"owner":"scheduler","context":"B","move":900,"transition":"context claimed"}
+{"event":98,"owner":"kernel","context":"B","move":900,"transition":"dispatch rejected: executable outside live Horizon"}
+{"event":99,"owner":"scheduler","context":"B","move":900,"transition":"claim released"}
+{"event":100,"owner":"demo","context":"B","move":900,"transition":"loop survived out-of-horizon creation rejection"}
+{"event":101,"owner":"port","context":"root","move":10,"transition":"invocation received"}
+{"event":102,"owner":"kernel","context":"root","move":10,"transition":"invocation admitted"}
+{"event":103,"owner":"scheduler","context":"root","move":10,"transition":"move enqueued"}
+{"event":104,"owner":"scheduler","context":"root","move":10,"transition":"context claimed"}
+{"event":105,"owner":"bookkeeper","context":"root","move":10,"frame":1,"transition":"frame recorded"}
+{"event":106,"owner":"context","context":"root","move":10,"frame":1,"transition":"transition committed"}
+{"event":107,"owner":"port","context":"B","move":1,"transition":"invocation received"}
+{"event":108,"owner":"kernel","context":"B","move":1,"transition":"invocation admitted"}
+{"event":109,"owner":"scheduler","context":"B","move":1,"transition":"move enqueued"}
+{"event":110,"owner":"scheduler","context":"B","move":1,"transition":"context claimed"}
+{"event":111,"owner":"port","context":"root","move":10,"frame":1,"transition":"invocation sent"}
+{"event":112,"owner":"bookkeeper","context":"B","move":1,"frame":1,"transition":"frame recorded"}
+{"event":113,"owner":"context","context":"B","move":1,"frame":1,"transition":"transition committed"}
+{"event":114,"owner":"scheduler","context":"root","move":10,"transition":"claim released"}
+{"event":115,"owner":"port","context":"B","move":1,"frame":1,"transition":"return received"}
+{"event":116,"owner":"kernel","context":"B","move":1,"frame":1,"transition":"return admitted"}
+{"event":117,"owner":"scheduler","context":"B","move":1,"transition":"move enqueued"}
+{"event":118,"owner":"port","context":"B","move":1,"frame":1,"transition":"invocation sent"}
+{"event":119,"owner":"scheduler","context":"B","move":1,"transition":"claim released"}
+{"event":120,"owner":"scheduler","context":"B","move":1,"transition":"context claimed"}
+{"event":121,"owner":"bookkeeper","context":"B","move":1,"frame":1,"transition":"frame settled"}
+{"event":122,"owner":"bookkeeper","context":"B","move":1,"transition":"root sink resolved"}
+{"event":123,"owner":"context","context":"B","move":1,"frame":1,"transition":"transition committed"}
+{"event":124,"owner":"port","context":"root","move":10,"frame":1,"transition":"return received"}
+{"event":125,"owner":"kernel","context":"root","move":10,"frame":1,"transition":"return admitted"}
+{"event":126,"owner":"scheduler","context":"root","move":10,"transition":"move enqueued"}
+{"event":127,"owner":"port","context":"B","move":1,"frame":1,"transition":"root result sent"}
+{"event":128,"owner":"scheduler","context":"root","move":10,"transition":"context claimed"}
+{"event":129,"owner":"bookkeeper","context":"root","move":10,"frame":1,"transition":"frame settled"}
+{"event":130,"owner":"bookkeeper","context":"root","move":10,"transition":"root sink resolved"}
+{"event":131,"owner":"context","context":"root","move":10,"frame":1,"transition":"transition committed"}
+{"event":132,"owner":"scheduler","context":"B","move":1,"transition":"claim released"}
+{"event":133,"owner":"port","context":"root","move":10,"frame":1,"transition":"root result sent"}
+{"event":134,"owner":"scheduler","context":"root","move":10,"transition":"claim released"}
+{"event":135,"owner":"demo","context":"root","move":10,"frame":1,"transition":"cross-context round trip verified"}
+{"event":136,"owner":"port","context":"root","move":11,"transition":"invocation received"}
+{"event":137,"owner":"kernel","context":"root","move":11,"transition":"invocation admitted"}
+{"event":138,"owner":"scheduler","context":"root","move":11,"transition":"move enqueued"}
+{"event":139,"owner":"scheduler","context":"root","move":11,"transition":"context claimed"}
+{"event":140,"owner":"bookkeeper","context":"root","move":11,"frame":2,"transition":"frame recorded"}
+{"event":141,"owner":"context","context":"root","move":11,"frame":2,"transition":"transition committed"}
+{"event":142,"owner":"port","context":"root","move":11,"frame":2,"transition":"invocation sent"}
+{"event":143,"owner":"scheduler","context":"root","move":11,"transition":"claim released"}
+{"event":144,"owner":"active","context":"root","transition":"address installed: executable=1000 virtual=6 actual=40"}
+{"event":145,"owner":"creation","context":"root","transition":"new executable minted: 1000 (echo only)"}
+{"event":146,"owner":"port","context":"root","move":11,"frame":2,"transition":"return received"}
+{"event":147,"owner":"kernel","context":"root","move":11,"frame":2,"transition":"return admitted"}
+{"event":148,"owner":"scheduler","context":"root","move":11,"transition":"move enqueued"}
+{"event":149,"owner":"scheduler","context":"root","move":11,"transition":"context claimed"}
+{"event":150,"owner":"bookkeeper","context":"root","move":11,"frame":2,"transition":"frame settled"}
+{"event":151,"owner":"bookkeeper","context":"root","move":11,"transition":"root sink resolved"}
+{"event":152,"owner":"context","context":"root","move":11,"frame":2,"transition":"transition committed"}
+{"event":153,"owner":"port","context":"root","move":11,"frame":2,"transition":"root result sent"}
+{"event":154,"owner":"scheduler","context":"root","move":11,"transition":"claim released"}
+{"event":155,"owner":"port","context":"root","move":12,"transition":"invocation received"}
+{"event":156,"owner":"kernel","context":"root","move":12,"transition":"invocation admitted"}
+{"event":157,"owner":"scheduler","context":"root","move":12,"transition":"move enqueued"}
+{"event":158,"owner":"scheduler","context":"root","move":12,"transition":"context claimed"}
+{"event":159,"owner":"bookkeeper","context":"root","move":12,"frame":3,"transition":"frame recorded"}
+{"event":160,"owner":"context","context":"root","move":12,"frame":3,"transition":"transition committed"}
+{"event":161,"owner":"port","context":"root","move":12,"frame":3,"transition":"invocation sent"}
+{"event":162,"owner":"scheduler","context":"root","move":12,"transition":"claim released"}
+{"event":163,"owner":"port","context":"root","move":12,"frame":3,"transition":"return received"}
+{"event":164,"owner":"kernel","context":"root","move":12,"frame":3,"transition":"return admitted"}
+{"event":165,"owner":"scheduler","context":"root","move":12,"transition":"move enqueued"}
+{"event":166,"owner":"scheduler","context":"root","move":12,"transition":"context claimed"}
+{"event":167,"owner":"bookkeeper","context":"root","move":12,"frame":3,"transition":"frame settled"}
+{"event":168,"owner":"bookkeeper","context":"root","move":12,"transition":"root sink resolved"}
+{"event":169,"owner":"context","context":"root","move":12,"frame":3,"transition":"transition committed"}
+{"event":170,"owner":"port","context":"root","move":12,"frame":3,"transition":"root result sent"}
+{"event":171,"owner":"scheduler","context":"root","move":12,"transition":"claim released"}
+{"event":172,"owner":"demo","context":"root","move":12,"frame":3,"transition":"authorized creation and new address use verified"}
+{"event":173,"owner":"context","context":"root","transition":"bindings invalidated"}
+{"event":174,"owner":"active","context":"root","transition":"context retired and reservations released"}
+{"event":175,"owner":"context","context":"B","transition":"bindings invalidated"}
+{"event":176,"owner":"active","context":"B","transition":"context retired and reservations released"}
+{"event":177,"owner":"launcher","context":"root","transition":"echo reaped"}
