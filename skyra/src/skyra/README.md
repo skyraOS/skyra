@@ -2,8 +2,10 @@
 
 The permanent base (originating from the DNA-19 increment; the disposable
 generations that led here are in [`../../archive/throwaway-dna/`](../../archive/throwaway-dna/)).
-Next increment (proposed): a root-invokable `user/` executable with a browser
-frontend — see [`../../specs/2026-09-22/frontend.md/proposal.md`](../../specs/2026-09-22/frontend.md/proposal.md).
+Building on it, [`user/`](user/) is a root-invokable external executable that
+serves a browser over WebSocket and drives an agent — the first slice of
+[`../../specs/2026-09-22/frontend.md/proposal.md`](../../specs/2026-09-22/frontend.md/proposal.md)
+(see the "Browser interaction" section below).
 
 The host runtime and peers live under `root/`. `codex/` builds an
 independent executable that exchanges JSON-framed Skyra Moves over stdio and owns
@@ -115,8 +117,40 @@ Fresh experimental schema inventory and hashes are in
 `artifacts/provider-schema.json`. The [official app-server documentation](https://learn.chatgpt.com/docs/app-server)
 describes the initialization and experimental dynamic-tool boundary used here.
 
-## Frontend scaffold
+## Browser interaction (`user/` + `frontend/`)
 
-[frontend/](frontend/README.md) contains the copied v0.5 UI, including its mock
-WebSocket server. It retains the older wire protocol and is not yet wired to
-DNA-19 or a user-parent executable.
+The [`user/`](user/) executable is a root-registered external peer (structurally
+like `codex/`): it selects between framed Moves from the host and browser
+messages from its private WebSocket listener. Root opens a persistent
+interaction U with an `interact` Invoke; each browser message becomes a child
+Invoke to the agent, and the agent's Return resumes U (U stays alive across
+messages and settles only on an explicit close). This first slice drives the
+`echo` agent, so the full loop runs with no provider:
+
+```text
+browser (WS) → user → root → echo → Return → user → browser (WS)
+```
+
+The browser contract (`submit`/`close-interaction` up; `snapshot`/`accepted`/
+`rejected` down) enforces: `accepted` ≠ completion, one pending command per U
+(second is `busy`), a request ledger (idempotent replay, `conflict` on reuse),
+and a fault that retires the anchor. The `frontend/` client speaks this contract.
+
+Run it (build first), then `cd frontend && npm run dev` (its default WS URL is
+`ws://localhost:8080/ws`):
+
+```sh
+go build -o artifacts/root ./root
+go build -o artifacts/user ./user
+go build -o artifacts/echo ./root/echo
+./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
+```
+
+| Evidence | Test |
+|---|---|
+| Full mediated browser→agent loop over a real WebSocket; U terminal Return on close | `root.TestUserBrowserAgentLoop` |
+| accepted≠completion, one-pending `busy`, ledger idempotency/`conflict`, fault retirement, not-ready/close | `user` engine unit tests |
+
+Not yet done (later proposal stages): the persistent-parent/Codex agent in place
+of echo, U-anchored Bookkeeper provisioning with source-frame authority checks,
+a versioned `profiles.json` descriptor, and authenticated activation arguments.

@@ -38,3 +38,4 @@ type Move struct {
 
 const Echo ExecutableID = 1
 const Parent ExecutableID = 2
+const User ExecutableID = 3

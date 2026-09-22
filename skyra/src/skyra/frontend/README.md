@@ -9,13 +9,15 @@ conversation protocol** in
 
 ## Status
 
-- **Done:** the frontend protocol adaptation (proposal stage 3) and a faithful
-  mock `user` server. Typecheck, production build and a deterministic protocol
-  check all pass.
-- **Not done here:** the Go `user` executable itself (proposal stages 1-2) —
-  root boot registration, the WebSocket/HTTP transport, and the U-anchored
-  Bookkeeper conversation. The mock stands in for it. Until it exists the
-  browser talks to `mock/server.mjs`.
+- **Done:** the frontend protocol adaptation (proposal stage 3), a faithful mock
+  `user` server, and the real Go [`../user`](../user) executable (first slice of
+  stages 1-2) — a root-registered external peer with a WebSocket listener that
+  drives the `echo` agent through the host runtime. Typecheck, production build
+  and the deterministic protocol check pass; the Go loop is covered by
+  `root.TestUserBrowserAgentLoop`.
+- **Not done yet:** the Codex agent in place of echo, U-anchored Bookkeeper
+  provisioning with source-frame authority checks, a versioned descriptor, and
+  authenticated activation arguments (later proposal stages).
 
 ## Protocol
 
@@ -46,10 +48,22 @@ Contract rules the UI and mock both honor:
 
 ## Run
 
+Against the mock:
+
 ```bash
 npm install
 npm run mock      # terminal 1 — mock user server on ws://localhost:8080/ws
 npm run dev       # terminal 2 — Next.js dev server
+```
+
+Against the real runtime (build the Go binaries from `..` first):
+
+```bash
+# terminal 1 — from skyra/src/skyra
+go build -o artifacts/root ./root && go build -o artifacts/user ./user && go build -o artifacts/echo ./root/echo
+./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
+# terminal 2
+npm run dev
 ```
 
 ## Verify
