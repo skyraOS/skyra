@@ -1,5 +1,5 @@
-import { RelationStream } from "@/components/RelationStream";
+import { Conversation } from "@/components/Conversation";
 
-export default function StreamPage() {
-  return <RelationStream />;
+export default function Page() {
+  return <Conversation />;
 }

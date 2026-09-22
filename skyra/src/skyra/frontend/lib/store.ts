@@ -1,41 +1,34 @@
 /**
- * Zustand store — v.05 universe state.
+ * Zustand store — DNA-19 user-executable conversation projection.
  *
- * Holds the most recent universe snapshot. The v.05 runtime broadcasts a
- * full UniverseState on every resolve — no deltas. Components derive views
- * via selectors; the store never computes derived state of its own.
+ * Holds the most recent snapshot from the user executable plus lightweight
+ * request acks between snapshots. The store never invents conversation state:
+ * entries and phases come only from snapshots; `accepted`/`rejected` update
+ * the request ledger for immediate feedback. Components derive views via
+ * selectors.
  */
 
 import { create } from "zustand";
 import type {
-  BeingSnapshot,
-  ExchangeSnapshot,
-  ThreadSnapshot,
-  RealityNode,
-  UniverseState,
+  ConversationView,
+  RequestRecord,
 } from "./protocol/types";
 import type { ServerMessageParsed } from "./protocol/schemas";
 import type { ConnectionStatus, WSClient, WSEvent } from "./ws-client";
 
 interface StoreState {
-  // ----- Universe state (rebuilt from every snapshot) -------------------------
-  beings: Record<string, BeingSnapshot>;
-  threads: Record<string, ThreadSnapshot>;
-  exchanges: Record<string, ExchangeSnapshot>;
-  economics: Record<string, number>;
-  realityGraph: RealityNode;
+  // ----- Session projection (rebuilt from snapshots) ------------------------
+  uiIncarnation: string | null;
+  revision: number;
+  conversations: Record<string, ConversationView>;
+  order: string[];
+  requests: Record<string, RequestRecord>;
 
-  // ----- View state (frontend-only, not from runtime) -----------------------
-  /** Which top-level view is active. */
-  view: "user" | "universe";
-  /** The being whose perspective User-present is taken from. */
-  perspectiveBeing: string;
-  /** Selected being for the detail panel. */
-  selectedBeing: string | null;
+  // ----- View state (frontend-only) -----------------------------------------
+  selectedConversation: string | null;
 
   // ----- Connection state ---------------------------------------------------
   status: ConnectionStatus;
-  /** Most recent error surfaced to the UI. */
   lastError: { code: string; message: string; ts: number } | null;
   events: WSEvent[];
   client: WSClient | null;
@@ -45,26 +38,26 @@ interface StoreState {
   ingest: (msg: ServerMessageParsed) => void;
   recordEvent: (e: WSEvent) => void;
   setStatus: (s: ConnectionStatus) => void;
-  setView: (v: "user" | "universe") => void;
-  setPerspectiveBeing: (name: string) => void;
-  selectBeing: (name: string | null) => void;
+  selectConversation: (id: string | null) => void;
   dismissError: () => void;
 }
 
 const EVENTS_WINDOW = 200;
 
-const EMPTY_GRAPH: RealityNode = { id: "universe", type: "Universe", children: [] };
+function indexBy<T>(items: T[], key: (t: T) => string): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const item of items) out[key(item)] = item;
+  return out;
+}
 
 export const useAppStore = create<StoreState>((set) => ({
-  beings: {},
-  threads: {},
-  exchanges: {},
-  economics: {},
-  realityGraph: EMPTY_GRAPH,
+  uiIncarnation: null,
+  revision: -1,
+  conversations: {},
+  order: [],
+  requests: {},
 
-  view: "user",
-  perspectiveBeing: "michael",
-  selectedBeing: null,
+  selectedConversation: null,
 
   status: "idle",
   lastError: null,
@@ -76,22 +69,61 @@ export const useAppStore = create<StoreState>((set) => ({
   ingest: (msg) =>
     set((state) => {
       switch (msg.type) {
-        case "universe": {
-          const u: UniverseState = msg.payload as UniverseState;
+        case "snapshot": {
+          // A new incarnation (process restart) resets; otherwise ignore a
+          // stale/replayed snapshot older than what we already hold.
+          const sameIncarnation = state.uiIncarnation === msg.uiIncarnation;
+          if (sameIncarnation && msg.revision < state.revision) return {};
+
+          const order = msg.conversations.map((c) => c.conversation);
+          const selected =
+            state.selectedConversation &&
+            order.includes(state.selectedConversation)
+              ? state.selectedConversation
+              : order[0] ?? null;
+
           return {
-            beings: indexBy(u.beings, (b) => b.name),
-            threads: indexBy(u.threads, (t) => t.id),
-            exchanges: indexBy(u.exchanges, (e) => e.key),
-            economics: u.economics,
-            realityGraph: u.reality_graph,
+            uiIncarnation: msg.uiIncarnation,
+            revision: msg.revision,
+            conversations: indexBy(msg.conversations, (c) => c.conversation),
+            order,
+            requests: indexBy(msg.requests, (r) => r.requestId),
+            selectedConversation: selected,
           };
         }
 
-        case "impulse": {
-          // Impulse relay — a being spoke. We could surface this as a
-          // notification or activity pulse. For now, no-op; the next
-          // universe snapshot will carry the updated exchange entries.
-          return {};
+        case "accepted": {
+          const prev = state.requests[msg.requestId];
+          // Don't clobber a terminal status a later snapshot may already carry.
+          if (prev && (prev.status === "returned" || prev.status === "failed")) {
+            return {};
+          }
+          return {
+            requests: {
+              ...state.requests,
+              [msg.requestId]: {
+                requestId: msg.requestId,
+                status: "accepted",
+                ts: Date.now(),
+              },
+            },
+          };
+        }
+
+        case "rejected": {
+          return {
+            requests: {
+              ...state.requests,
+              [msg.requestId]: {
+                requestId: msg.requestId,
+                status: "rejected",
+                code: msg.code,
+                message: msg.message,
+                ts: Date.now(),
+              },
+            },
+            lastError: { code: msg.code, message: msg.message, ts: Date.now() },
+          };
         }
 
         default:
@@ -104,11 +136,7 @@ export const useAppStore = create<StoreState>((set) => ({
 
   setStatus: (s) => set({ status: s }),
 
-  setView: (v) => set({ view: v }),
-
-  setPerspectiveBeing: (name) => set({ perspectiveBeing: name }),
-
-  selectBeing: (name) => set({ selectedBeing: name }),
+  selectConversation: (id) => set({ selectedConversation: id }),
 
   dismissError: () => set({ lastError: null }),
 }));
@@ -117,38 +145,13 @@ export const useAppStore = create<StoreState>((set) => ({
 // Selectors
 // ---------------------------------------------------------------------------
 
-export const selectBeings = (s: StoreState) => Object.values(s.beings);
+export const selectConversations = (s: StoreState): ConversationView[] =>
+  s.order.map((id) => s.conversations[id]).filter(Boolean);
 
-export const selectBeing = (name: string) => (s: StoreState) => s.beings[name];
+export const selectActiveConversation = (s: StoreState): ConversationView | null =>
+  s.selectedConversation ? s.conversations[s.selectedConversation] ?? null : null;
 
-export const selectThreads = (s: StoreState) => Object.values(s.threads);
-
-export const selectExchanges = (s: StoreState) => Object.values(s.exchanges);
-
-/** Exchanges the given being participates in. */
-export const selectExchangesFor = (beingName: string) => (s: StoreState) =>
-  Object.values(s.exchanges).filter((e) => e.parties.includes(beingName));
-
-/** Peers of the given being (exchange partners). */
-export const selectPeersOf = (beingName: string) => (s: StoreState) => {
-  const out = new Set<string>();
-  for (const e of Object.values(s.exchanges)) {
-    if (e.parties[0] === beingName) out.add(e.parties[1]);
-    else if (e.parties[1] === beingName) out.add(e.parties[0]);
-  }
-  return Array.from(out);
-};
-
-/** Skyra's status from the being snapshot. */
-export const selectSkyraStatus = (s: StoreState) =>
-  s.beings["skyra"]?.status ?? null;
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-function indexBy<T>(items: T[], key: (t: T) => string): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const item of items) out[key(item)] = item;
-  return out;
-}
+export const selectRequest =
+  (requestId: string | null) =>
+  (s: StoreState): RequestRecord | null =>
+    requestId ? s.requests[requestId] ?? null : null;

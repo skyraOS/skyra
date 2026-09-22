@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppNav } from "@/components/AppNav";
 import { WSBoot } from "@/components/WSBoot";
 
 export const metadata: Metadata = {
-  title: "AI Beings",
-  description: "Render of a Logos/Relations runtime.",
+  title: "Skyra",
+  description: "Browser client for a DNA-19 user-executable interaction.",
 };
 
 export default function RootLayout({
@@ -17,10 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="h-screen overflow-hidden">
         <WSBoot />
-        <div className="flex h-full flex-col">
-          <AppNav />
-          <main className="flex-1 min-h-0">{children}</main>
-        </div>
+        <main className="h-full">{children}</main>
       </body>
     </html>
   );

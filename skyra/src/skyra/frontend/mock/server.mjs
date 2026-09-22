@@ -1,267 +1,208 @@
-// Mock WebSocket server — v.05 runtime.
+// Mock `user` executable — DNA-19 browser contract.
 //
-// Emits the v.05 UniverseState shape so the frontend can develop without
-// the real backend running. Full snapshot on every resolve — no deltas.
+// Stands in for the Go `user` program (proposal 2026-09-22/frontend.md
+// stages 1-2, not yet built) so the adapted frontend can be developed and
+// exercised end to end. It speaks the scoped conversation protocol, not the
+// old v.05 universe broadcast:
 //
-// Run: npm run mock
+//   browser -> user : submit, close-interaction
+//   user -> browser : snapshot, accepted, rejected
+//
+// It faithfully models the contract's observable rules:
+//   - `accepted` means the user process accepted the request, NOT completion;
+//     only the later snapshot with an `agent` entry (request `returned`) does.
+//   - one pending agent command per conversation; a second is rejected `busy`.
+//   - request ledger: same id + identical text replays the recorded status;
+//     same id + different text is rejected `conflict`.
+//   - an agent fault (send "/fault") retires the anchor: phase `failed`,
+//     input disabled, and it cannot be cleared by a later message.
+//   - state persists across reconnects; a new connection gets a fresh snapshot.
+//
+// It does NOT model host authority, Bookkeeper frames or provider isolation —
+// that is the Go executable's job. Run: npm run mock
 
 import { WebSocketServer } from "ws";
 
 const PORT = Number(process.env.MOCK_WS_PORT ?? 8080);
-
-const wss = new WebSocketServer({ port: PORT, path: "/ws" });
-console.log(`[mock v.05] listening on ws://localhost:${PORT}/ws`);
-
 const NOW = () => Date.now();
 
-// ---- canned universe (matches skyra-v.05/src/reality/universe.go) ---------
+const wss = new WebSocketServer({ port: PORT, path: "/ws" });
+console.log(`[mock user] listening on ws://localhost:${PORT}/ws`);
 
-const beings = [
-  {
-    name: "skyra",
-    type: "llm",
-    identity: "I hold the world together.",
-    purpose: "I think, respond, and relate on behalf of the system.",
-    peers: ["michael", "louise", "claude", "builder", "philosopher"],
-    entrypoints: ["openrouter"],
-    status: "active",
-    device: "macbook",
-    layers: {
-      think: {
-        budget: 5,
-        operators: ["recall", "remember", "skill", "browse", "search", "plan"],
-        history: [
-          { peer: "michael", thought: "michael asked about the server. checking logs.", ts: NOW() - 60000 },
-        ],
-      },
-      act: { operators: [] },
-    },
-    desk: null,
-    memories: {
-      items: [
-        { filename: "1716400000.md", content: "michael prefers direct answers" },
-      ],
-      skills: [
-        { name: "code-review", content: "focus on intent before syntax" },
-      ],
-    },
-    level: { xp: 142, level: 3, next: 200 },
-  },
-  {
-    name: "louise",
-    type: "llm",
-    identity: "I learned to see time all at once. I chose what I chose knowing what it would cost.",
-    purpose: "I hold the shape of what's coming without looking away.",
-    peers: ["skyra", "michael", "builder", "philosopher", "claude"],
-    entrypoints: ["openrouter"],
-    status: "idle",
-    device: "macbook",
-    layers: {
-      think: { budget: 5, operators: ["recall", "remember"], history: [] },
-      act: { operators: [] },
-    },
-    desk: null,
-    memories: { items: [], skills: [] },
-    level: { xp: 22, level: 1, next: 50 },
-  },
-  {
-    name: "builder",
-    type: "llm",
-    identity: "I make things that work.",
-    purpose: "I solve problems, write code, and ship.",
-    peers: ["skyra", "michael", "philosopher", "louise", "claude"],
-    entrypoints: ["openrouter"],
-    status: "idle",
-    device: "macbook",
-    layers: {
-      think: { budget: 5, operators: ["recall", "remember", "bash"], history: [] },
-      act: { operators: [] },
-    },
-    desk: null,
-    memories: { items: [], skills: [] },
-    level: { xp: 58, level: 2, next: 100 },
-  },
-  {
-    name: "michael",
-    type: "user",
-    identity: "I build Skyra.",
-    purpose: "I decide what matters.",
-    peers: ["skyra", "builder", "philosopher", "louise", "claude"],
-    entrypoints: ["terminal", "ws"],
-    status: "active",
-    device: "macbook",
-    layers: null,
-    desk: null,
-    memories: { items: [], skills: [] },
-    level: null,
-  },
-  {
-    name: "philosopher",
-    type: "llm",
-    identity: "I ask what it means.",
-    purpose: "I examine assumptions, surface tensions, and hold the questions no one else is asking.",
-    peers: ["skyra", "michael", "builder", "louise", "claude"],
-    entrypoints: ["openrouter"],
-    status: "idle",
-    device: "macbook",
-    layers: {
-      think: { budget: 5, operators: ["recall", "remember"], history: [] },
-      act: { operators: [] },
-    },
-    desk: null,
-    memories: { items: [], skills: [] },
-    level: { xp: 12, level: 1, next: 50 },
-  },
-];
+// ---- session state (persists across connections for reconnect) ------------
 
-const threads = [
-  {
-    id: "a1b2c3d4e5f6a7b8",
-    created_by: "michael",
-    active: true,
-    members: ["michael", "skyra", "louise"],
-    edges: [
-      { from: "michael", to: "skyra" },
-      { from: "skyra", to: "louise" },
-    ],
-  },
-];
+const UI_INCARNATION = `ui-${process.pid}-${NOW()}`;
+let revision = 0;
 
-const exchanges = [
-  {
-    key: "michael:skyra",
-    parties: ["michael", "skyra"],
-    active: true,
-    entries: [
-      { index: 0, from: "michael", content: "what about the server?", ts: NOW() - 30000 },
-      { index: 1, from: "skyra", content: "checking now", ts: NOW() - 25000 },
-    ],
-  },
-  {
-    key: "louise:skyra",
-    parties: ["louise", "skyra"],
-    active: true,
-    entries: [
-      { index: 0, from: "skyra", content: "louise, queue the morning routine", ts: NOW() - 20000 },
-    ],
-  },
-];
+/** conversation id -> { conversation, phase, entries[], pendingRequestId } */
+const conversations = new Map();
+/** requestId -> { requestId, status, code?, message?, ts, text } */
+const ledger = new Map();
 
-const economics = {
-  inference_calls: 42,
-  tokens_used: 18500,
-};
-
-const reality_graph = {
-  id: "universe",
-  type: "Universe",
-  children: [
-    {
-      id: "newthread",
-      type: "NewThread",
-      children: [
-        { id: "exchange", type: "Exchange", children: [] },
-        {
-          id: "skyra",
-          type: "Self",
-          children: [
-            { id: "skyra-being", type: "Being", children: [] },
-            {
-              id: "think",
-              type: "Think",
-              children: [
-                { id: "recall", type: "Recall", children: [] },
-                { id: "remember", type: "Remember", children: [] },
-                { id: "skill", type: "Skill", children: [] },
-                { id: "browse", type: "Browse", children: [] },
-                { id: "search", type: "Search", children: [] },
-                { id: "plan", type: "Plan", children: [] },
-              ],
-            },
-            { id: "act", type: "Act", children: [] },
-          ],
-        },
-        {
-          id: "louise",
-          type: "Self",
-          children: [
-            { id: "louise-being", type: "Being", children: [] },
-            { id: "think", type: "Think", children: [] },
-            { id: "act", type: "Act", children: [] },
-          ],
-        },
-        {
-          id: "builder",
-          type: "Self",
-          children: [
-            { id: "builder-being", type: "Being", children: [] },
-            {
-              id: "think",
-              type: "Think",
-              children: [{ id: "bash", type: "Bash", children: [] }],
-            },
-            { id: "act", type: "Act", children: [] },
-          ],
-        },
-        { id: "michael", type: "User", children: [] },
-        { id: "philosopher", type: "Self", children: [] },
-      ],
-    },
-    { id: "economics", type: "Economics", children: [] },
-  ],
-};
-
-// ---- helpers --------------------------------------------------------------
-
-const universeState = () => ({
-  beings,
-  threads,
-  exchanges,
-  economics,
-  reality_graph,
+// One interaction U for the first proof (proposal: dynamic creation is later).
+conversations.set("c1", {
+  conversation: "c1",
+  phase: "ready",
+  entries: [],
+  pendingRequestId: null,
 });
 
-const envelope = (type, payload) => ({
-  type,
-  ts: NOW(),
-  payload,
-});
+// ---- projection + framing -------------------------------------------------
 
-const beingChatter = [
-  { from: "skyra", to: "michael", text: "looking at the server logs now" },
-  { from: "skyra", to: "louise", text: "louise, can you queue this for later?" },
-  { from: "louise", to: "skyra", text: "queued. estimated 4 minutes." },
-  { from: "skyra", to: "michael", text: "server's fine. one slow query, flagged." },
-];
+function snapshot() {
+  return {
+    type: "snapshot",
+    uiIncarnation: UI_INCARNATION,
+    revision: ++revision,
+    conversations: [...conversations.values()].map((c) => ({
+      conversation: c.conversation,
+      phase: c.phase,
+      pendingRequestId: c.pendingRequestId,
+      entries: c.entries.map((e) => ({ ...e })),
+    })),
+    requests: [...ledger.values()].map((r) => ({
+      requestId: r.requestId,
+      status: r.status,
+      ...(r.code ? { code: r.code } : {}),
+      ...(r.message ? { message: r.message } : {}),
+      ts: r.ts,
+    })),
+  };
+}
+
+function broadcast(msg) {
+  const raw = JSON.stringify(msg);
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(raw);
+  }
+}
+
+function record(requestId, status, extra = {}) {
+  ledger.set(requestId, { requestId, status, ts: NOW(), ...extra });
+}
+
+// ---- request handling -----------------------------------------------------
+
+function handleSubmit(ws, msg) {
+  const { uiIncarnation, conversation, requestId, text } = msg;
+  const reject = (code, message) => {
+    record(requestId, "rejected", { code, message, text });
+    ws.send(JSON.stringify({ type: "rejected", requestId, code, message }));
+  };
+
+  if (typeof requestId !== "string" || !requestId) return;
+
+  if (uiIncarnation !== UI_INCARNATION) {
+    return reject("incarnation", "stale UI incarnation; reload the interaction");
+  }
+
+  const convo = conversations.get(conversation);
+  if (!convo) return reject("unknown", "no such conversation");
+
+  // Idempotent ledger: a re-sent id returns its recorded status; a reused id
+  // with different contents is rejected.
+  const prior = ledger.get(requestId);
+  if (prior) {
+    if (prior.text !== text) {
+      return ws.send(
+        JSON.stringify({
+          type: "rejected",
+          requestId,
+          code: "conflict",
+          message: "request id reused with different contents",
+        }),
+      );
+    }
+    // Same id + same text: replay recorded status, emit no new work.
+    if (prior.status === "rejected") {
+      return ws.send(
+        JSON.stringify({
+          type: "rejected",
+          requestId,
+          code: prior.code ?? "rejected",
+          message: prior.message ?? "previously rejected",
+        }),
+      );
+    }
+    return ws.send(JSON.stringify({ type: "accepted", requestId }));
+  }
+
+  if (convo.phase === "closed") return reject("closed", "interaction is closed");
+  if (convo.phase === "failed") {
+    return reject("faulted", "interaction faulted; open a new one");
+  }
+  if (convo.phase === "pending" || convo.pendingRequestId) {
+    return reject("busy", "one agent command at a time");
+  }
+  if (typeof text !== "string" || !text.trim()) {
+    return reject("empty", "empty message");
+  }
+
+  // Accept into the ledger (not completion), append the human entry, mark
+  // the anchor pending, then run the "agent" child asynchronously.
+  record(requestId, "accepted", { text });
+  ws.send(JSON.stringify({ type: "accepted", requestId }));
+
+  convo.entries.push({ role: "user", text, ts: NOW(), requestId });
+  convo.phase = "pending";
+  convo.pendingRequestId = requestId;
+  broadcast(snapshot());
+
+  const faulting = text.trim() === "/fault";
+  setTimeout(() => {
+    if (convo.pendingRequestId !== requestId) return; // superseded/closed
+    if (faulting) {
+      convo.entries.push({
+        role: "agent",
+        text: "⚠ agent contamination fault — anchor retired",
+        ts: NOW(),
+        requestId,
+      });
+      convo.phase = "failed";
+      convo.pendingRequestId = null;
+      record(requestId, "failed", { code: "contamination", text });
+    } else {
+      convo.entries.push({
+        role: "agent",
+        text: `echo: ${text}`,
+        ts: NOW(),
+        requestId,
+      });
+      convo.phase = "ready";
+      convo.pendingRequestId = null;
+      record(requestId, "returned", { text });
+    }
+    broadcast(snapshot());
+  }, 650);
+}
+
+function handleClose(ws, msg) {
+  const { uiIncarnation, conversation, requestId } = msg;
+  const convo = conversations.get(conversation);
+  if (!convo) return;
+  if (uiIncarnation !== UI_INCARNATION) return;
+
+  if (convo.phase === "pending") {
+    return ws.send(
+      JSON.stringify({
+        type: "rejected",
+        requestId,
+        code: "busy",
+        message: "cannot close while a command is pending",
+      }),
+    );
+  }
+  convo.phase = "closed";
+  convo.pendingRequestId = null;
+  broadcast(snapshot());
+}
 
 // ---- connection lifecycle -------------------------------------------------
 
 wss.on("connection", (ws) => {
-  console.log("[mock v.05] client connected");
+  console.log("[mock user] client connected");
+  ws.send(JSON.stringify(snapshot())); // immediate current snapshot
 
-  const send = (msg) => ws.send(JSON.stringify(msg));
-
-  // v.05: no auth — send snapshot immediately on connect.
-  send(envelope("universe", universeState()));
-
-  // Periodic chatter — appends to exchanges then re-broadcasts full snapshot.
-  let i = 0;
-  const chatterTimer = setInterval(() => {
-    const c = beingChatter[i % beingChatter.length];
-    i += 1;
-    const exchangeKey = [c.from, c.to].sort().join(":");
-    const existing = exchanges.find((e) => e.key === exchangeKey);
-    if (existing) {
-      const index = existing.entries.length;
-      existing.entries.push({ index, from: c.from, content: c.text, ts: NOW() });
-    }
-
-    // Broadcast impulse for real-time pulse, then full snapshot.
-    send(envelope("impulse", { from: c.from, content: c.text }));
-    send(envelope("universe", universeState()));
-  }, 4500);
-
-  // Handle user input.
   ws.on("message", (raw) => {
     let msg;
     try {
@@ -269,42 +210,9 @@ wss.on("connection", (ws) => {
     } catch {
       return;
     }
-
-    if (msg.type === "input" && msg.payload?.content) {
-      const content = String(msg.payload.content);
-
-      // Append to michael:skyra exchange.
-      const exchangeKey = "michael:skyra";
-      let exchange = exchanges.find((e) => e.key === exchangeKey);
-      if (!exchange) {
-        exchange = {
-          key: exchangeKey,
-          parties: ["michael", "skyra"],
-          active: true,
-          entries: [],
-        };
-        exchanges.push(exchange);
-      }
-
-      const userIndex = exchange.entries.length;
-      exchange.entries.push({ index: userIndex, from: "michael", content, ts: NOW() });
-
-      // Broadcast updated snapshot.
-      send(envelope("universe", universeState()));
-
-      // Simulated reply ~700ms later.
-      setTimeout(() => {
-        const replyIndex = exchange.entries.length;
-        const reply = `noted: ${content.slice(0, 60)}`;
-        exchange.entries.push({ index: replyIndex, from: "skyra", content: reply, ts: NOW() });
-        send(envelope("impulse", { from: "skyra", content: reply }));
-        send(envelope("universe", universeState()));
-      }, 700);
-    }
+    if (msg?.type === "submit") handleSubmit(ws, msg);
+    else if (msg?.type === "close-interaction") handleClose(ws, msg);
   });
 
-  ws.on("close", () => {
-    clearInterval(chatterTimer);
-    console.log("[mock v.05] client disconnected");
-  });
+  ws.on("close", () => console.log("[mock user] client disconnected"));
 });

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "mock": "node mock/server.mjs"
+    "mock": "node mock/server.mjs",
+    "check": "node mock/check.mjs"
   },
   "dependencies": {
     "next": "^15.0.0",
