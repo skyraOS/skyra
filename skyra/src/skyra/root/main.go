@@ -163,6 +163,12 @@ func main() {
 			}
 			return userDemo(userConfig{Binary: os.Args[2], Echo: os.Args[3], Addr: addr}, os.Stdout)
 		}
+		if len(os.Args) >= 8 && os.Args[1] == "user-codex-demo" {
+			return userCodexDemo(userCodexConfig{
+				UserBinary: os.Args[2], CodexBinary: os.Args[3], Descriptor: os.Args[4],
+				Provider: os.Args[5], Echo: os.Args[6], Addr: os.Args[7], ProviderArgs: os.Args[8:],
+			}, os.Stdout)
+		}
 		return runDemos(ctx, os.Args[1:], os.Stdout)
 	}
 	if err := run(); err != nil {

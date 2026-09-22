@@ -10,14 +10,15 @@ conversation protocol** in
 ## Status
 
 - **Done:** the frontend protocol adaptation (proposal stage 3), a faithful mock
-  `user` server, and the real Go [`../user`](../user) executable (first slice of
-  stages 1-2) — a root-registered external peer with a WebSocket listener that
-  drives the `echo` agent through the host runtime. Typecheck, production build
-  and the deterministic protocol check pass; the Go loop is covered by
-  `root.TestUserBrowserAgentLoop`.
-- **Not done yet:** the Codex agent in place of echo, U-anchored Bookkeeper
-  provisioning with source-frame authority checks, a versioned descriptor, and
-  authenticated activation arguments (later proposal stages).
+  `user` server, and the real Go [`../user`](../user) executable — a
+  root-registered external peer with a WebSocket listener that drives an agent
+  through the host runtime. The agent is selectable: `echo` (no provider) or the
+  real `codex` (a browser message drives a Codex thread through the isolation
+  fence). Typecheck, production build and the protocol check pass; the Go loops
+  are covered by `root.TestUserBrowserAgentLoop` and `root.TestUserCodexBrowserLoop`.
+- **Not done yet:** U-anchored Bookkeeper provisioning as first-class
+  runtime-filled activation arguments, a versioned `user` descriptor, and an
+  opt-in live run against the real Codex app-server.
 
 ## Protocol
 
@@ -62,6 +63,10 @@ Against the real runtime (build the Go binaries from `..` first):
 # terminal 1 — from skyra/src/skyra
 go build -o artifacts/root ./root && go build -o artifacts/user ./user && go build -o artifacts/echo ./root/echo
 ./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
+# ...or drive the real Codex agent (fake provider for a deterministic dev loop):
+#   go build -o artifacts/codex ./codex && go build -o artifacts/fake-provider ./codex/testdata/fake-provider
+#   ./artifacts/root user-codex-demo ./artifacts/user ./artifacts/codex ./codex/profiles.json \
+#     ./artifacts/fake-provider ./artifacts/echo 127.0.0.1:8080
 # terminal 2
 npm run dev
 ```

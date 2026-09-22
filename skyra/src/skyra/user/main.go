@@ -28,6 +28,8 @@ func serve(in *os.File, out *os.File, listenAddr string) error {
 
 	var uframe p.FrameID
 	var ctx p.ContextID
+	var cfg = agentConfig{Agent: "echo"}
+	var started bool // whether the Codex thread has been started for U
 	var seq uint64 = 1000
 	emit := func(m p.Move) error { seq++; m.Identity = seq; return enc.Encode(m) }
 	push := func(msgs []any) {
@@ -65,6 +67,7 @@ func serve(in *os.File, out *os.File, listenAddr string) error {
 					continue
 				}
 				uframe, ctx = m.Invoke.Frame, m.Context
+				cfg = decodeAgentConfig(m.Invoke.Args[1].Bytes)
 				eng.activate()
 				b.send(eng.snapshot())
 			case m.Return != nil:
@@ -91,7 +94,7 @@ func serve(in *os.File, out *os.File, listenAddr string) error {
 				out, child := eng.submit(msg)
 				push(out)
 				if child != nil && uframe != 0 {
-					if err := emit(childInvoke(ctx, uframe, eng.conversation, child)); err != nil {
+					if err := emit(agentInvoke(ctx, uframe, eng.conversation, cfg, &started, child)); err != nil {
 						return err
 					}
 				}
@@ -118,12 +121,31 @@ func serve(in *os.File, out *os.File, listenAddr string) error {
 	}
 }
 
-func childInvoke(ctx p.ContextID, uframe p.FrameID, conversation string, child *childRequest) p.Move {
+// agentInvoke builds the child Invoke that carries a human message to the agent.
+// For echo it is a one-shot echo call; for Codex it is the persistent
+// conversation — the first message starts the thread, later ones submit input
+// on the same host-minted parent. The isolation, contamination fence and
+// tool-child routing are the runtime's and Codex's, unchanged.
+func agentInvoke(ctx p.ContextID, uframe p.FrameID, conversation string, cfg agentConfig, started *bool, child *childRequest) p.Move {
+	target, args := p.Echo, p.Arguments("echo", child.text)
+	if cfg.Agent == "codex" {
+		target = p.Codex
+		tools := cfg.Tools
+		if tools == "" {
+			tools = "[]"
+		}
+		if *started {
+			args = p.Args("submit-input", "parent", cfg.Parent, "text", child.text)
+		} else {
+			args = p.Args("start-thread", "connection", cfg.Connection, "parent", cfg.Parent, "text", child.text, "tools", tools)
+			*started = true
+		}
+	}
 	return p.Move{
 		Context: ctx,
 		Source:  uframe,
-		Target:  p.Echo,
-		Invoke:  &p.Invoke{Args: p.Arguments("echo", child.text)},
+		Target:  target,
+		Invoke:  &p.Invoke{Args: args},
 		State:   encodeContinuation(continuation{Conversation: conversation, RequestID: child.requestID}),
 	}
 }

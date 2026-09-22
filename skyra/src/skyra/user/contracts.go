@@ -84,3 +84,26 @@ func decodeContinuation(b []byte) (continuation, error) {
 	err := json.Unmarshal(b, &c)
 	return c, err
 }
+
+// agentConfig is the trusted provisioning the host packs into the `interact`
+// activation: which agent U drives and, for Codex, the opaque connection and
+// the authenticated parent reference the host minted for this interaction. The
+// user relays these verbatim; it never mints or forges them. An empty text
+// selects the default echo agent.
+type agentConfig struct {
+	Agent      string `json:"agent"` // "echo" | "codex"
+	Connection string `json:"connection,omitempty"`
+	Parent     string `json:"parent,omitempty"`
+	Tools      string `json:"tools,omitempty"` // JSON array, e.g. ["echo"]
+}
+
+func decodeAgentConfig(b []byte) agentConfig {
+	cfg := agentConfig{Agent: "echo"}
+	if len(b) > 0 {
+		_ = json.Unmarshal(b, &cfg)
+	}
+	if cfg.Agent == "" {
+		cfg.Agent = "echo"
+	}
+	return cfg
+}

@@ -136,21 +136,42 @@ The browser contract (`submit`/`close-interaction` up; `snapshot`/`accepted`/
 (second is `busy`), a request ledger (idempotent replay, `conflict` on reuse),
 and a fault that retires the anchor. The `frontend/` client speaks this contract.
 
-Run it (build first), then `cd frontend && npm run dev` (its default WS URL is
-`ws://localhost:8080/ws`):
+The agent is selectable. With `echo` the loop runs with no provider. With
+`codex` a browser message drives a real Codex conversation through the isolation
+fence — the host connects Codex and mints U's parent, and the user relays each
+message (`start-thread`, then `submit-input`) without minting or forging either;
+Codex's tool-child routing and contamination fence are unchanged:
+
+```text
+browser (WS) → user → root → codex → provider
+                        \→ echo (Codex's tool child)
+```
+
+Run the echo stack, or the codex stack with the deterministic fake provider,
+then `cd frontend && npm run dev` (default WS URL `ws://localhost:8080/ws`):
 
 ```sh
 go build -o artifacts/root ./root
 go build -o artifacts/user ./user
 go build -o artifacts/echo ./root/echo
+go build -o artifacts/codex ./codex
+go build -o artifacts/fake-provider ./codex/testdata/fake-provider
+
+# echo agent (no provider):
 ./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
+
+# codex agent (fake provider; swap in the real codex app-server for a live model):
+./artifacts/root user-codex-demo ./artifacts/user ./artifacts/codex \
+  ./codex/profiles.json ./artifacts/fake-provider ./artifacts/echo 127.0.0.1:8080
 ```
 
 | Evidence | Test |
 |---|---|
-| Full mediated browser→agent loop over a real WebSocket; U terminal Return on close | `root.TestUserBrowserAgentLoop` |
+| Full mediated browser→echo loop over a real WebSocket; U terminal Return on close | `root.TestUserBrowserAgentLoop` |
+| Browser message drives a real Codex thread (start-thread then submit-input) through the fence | `root.TestUserCodexBrowserLoop` |
 | accepted≠completion, one-pending `busy`, ledger idempotency/`conflict`, fault retirement, not-ready/close | `user` engine unit tests |
 
-Not yet done (later proposal stages): the persistent-parent/Codex agent in place
-of echo, U-anchored Bookkeeper provisioning with source-frame authority checks,
-a versioned `profiles.json` descriptor, and authenticated activation arguments.
+Not yet done: U-anchored Bookkeeper provisioning as first-class runtime-filled
+activation arguments (here the trusted host packs the minted connection/parent
+into the `interact` args), a versioned `user` `profiles.json` descriptor, and an
+opt-in live run against the real Codex app-server.
