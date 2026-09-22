@@ -8,8 +8,8 @@ import (
 	"net"
 	"os/exec"
 
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
-	"skyra-v1/src/skyra/skyra-dna-19/root/parent"
+	p "skyra-v1/src/skyra/protocol"
+	"skyra-v1/src/skyra/root/parent"
 )
 
 func bind(connection io.ReadWriteCloser, owner p.ContextID, actual uint64, target p.ExecutableID, generation uint64, external bool) *endpoint {

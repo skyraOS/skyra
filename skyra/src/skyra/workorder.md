@@ -21,22 +21,22 @@ repository Go module; do not add a nested module. No sockets are required.
 
 ## Sources and precedence
 
-- Accepted direction: [Codex registration proposal](../../../specs/2026-09-21/proposal/codex-registration.md),
+- Accepted direction: [Codex registration proposal](../../specs/2026-09-21/proposal/codex-registration.md),
   especially external-process separation, profile registration, thread isolation
   and contamination fencing.
 - Baseline: [DNA-18.5](../skyra-dna-18.5/README.md), its implementation,
   [decisions](../skyra-dna-18.5/DECISIONS.md), tests and captured evidence.
-- Contracts: [shared proposal](../../../specs/2026-09-21/proposal/proposal.go),
+- Contracts: [shared proposal](../../specs/2026-09-21/proposal/proposal.go),
   particularly Executable / ArgContract / OutputContract / FaultContract.
-- Capability inventory: [Codex integration](../../../specs/2026-09-19/codex/codex-integration.md).
+- Capability inventory: [Codex integration](../../specs/2026-09-19/codex/codex-integration.md).
   Preserve the behavior; historical provider-version observations require fresh
   verification against the implementation environment.
 - Identity/lifecycle evidence: [DNA-16 work order](../skyra-dna-16/workorder.md),
   [DNA-17 Codex implementation](../skyra-dna-17/codex.go),
   [acceptance tests](../skyra-dna-17/codex_accept_test.go) and
   [findings](../skyra-dna-17/DECISIONS.md).
-- Isolation background: [possibility-as-process](../../../specs/2026-09-21/possibility-as-process.md)
-  and [persistent parent](../../../specs/2026-09-19/persistent-parent-and-separate-pools.md).
+- Isolation background: [possibility-as-process](../../specs/2026-09-21/possibility-as-process.md)
+  and [persistent parent](../../specs/2026-09-19/persistent-parent-and-separate-pools.md).
 
 The accepted external-binary boundary takes precedence over the older in-process
 Driver/HostCommand interfaces and the earlier host-kernel demux placement. Preserve

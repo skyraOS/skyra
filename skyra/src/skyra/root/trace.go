@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
+	p "skyra-v1/src/skyra/protocol"
 )
 
 func (t *Trace) record(owner string, id p.ContextID, move uint64, frame p.FrameID, transition string) {

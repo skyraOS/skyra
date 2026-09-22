@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
+	p "skyra-v1/src/skyra/protocol"
 )
 
 type Bootstrap struct {

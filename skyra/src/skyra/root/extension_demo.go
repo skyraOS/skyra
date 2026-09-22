@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
-	"skyra-v1/src/skyra/skyra-dna-19/root/creation"
+	p "skyra-v1/src/skyra/protocol"
+	"skyra-v1/src/skyra/root/creation"
 	"strconv"
 )
 

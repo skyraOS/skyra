@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
+	p "skyra-v1/src/skyra/protocol"
 	"strconv"
 )
 

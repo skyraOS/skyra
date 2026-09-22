@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
+	p "skyra-v1/src/skyra/protocol"
 )
 
 func TestProcessDemoAndLifecycle(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	p "skyra-v1/src/skyra/skyra-dna-19/protocol"
-	"skyra-v1/src/skyra/skyra-dna-19/root/creation"
-	"skyra-v1/src/skyra/skyra-dna-19/root/crosscontext"
+	p "skyra-v1/src/skyra/protocol"
+	"skyra-v1/src/skyra/root/creation"
+	"skyra-v1/src/skyra/root/crosscontext"
 )
 
 // grantPolicy names authority that the launcher permits this context to grant.
