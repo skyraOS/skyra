@@ -1,4 +1,4 @@
-package main
+package boot_test
 
 import (
 	"bytes"
@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"skyra-v1/src/skyra/root/boot"
+	"skyra-v1/src/skyra/root/trace"
 )
 
 // End-to-end proof that a browser message drives a real Codex thread through
@@ -20,18 +23,18 @@ import (
 // resumes U with the model result. Uses the deterministic fake provider.
 func TestUserCodexBrowserLoop(t *testing.T) {
 	dir := t.TempDir()
-	c := userCodexConfig{
+	c := boot.UserCodexConfig{
 		UserBinary:  filepath.Join(dir, "user"),
 		CodexBinary: filepath.Join(dir, "codex"),
 		Echo:        filepath.Join(dir, "echo"),
 		Provider:    filepath.Join(dir, "provider"),
-		Descriptor:  "../codex/profiles.json",
+		Descriptor:  "../../codex/profiles.json",
 	}
 	for _, b := range []struct{ path, pkg string }{
-		{c.UserBinary, "../user"},
-		{c.CodexBinary, "../codex"},
-		{c.Echo, "./echo"},
-		{c.Provider, "../codex/testdata/fake-provider"},
+		{c.UserBinary, "../../user"},
+		{c.CodexBinary, "../../codex"},
+		{c.Echo, "../echo"},
+		{c.Provider, "../../codex/testdata/fake-provider"},
 	} {
 		cmd := exec.CommandContext(guard(t), "go", "build", "-race", "-o", b.path, b.pkg)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -42,12 +45,11 @@ func TestUserCodexBrowserLoop(t *testing.T) {
 	var diag bytes.Buffer
 	c.Stderr = &diag
 	ctx := guard(t)
-	trace := &Trace{}
-	r, err := bootUserCodex(ctx, c, trace)
+	r, err := boot.UserCodex(ctx, c, &trace.Trace{})
 	must(t, err)
-	defer r.close()
+	defer r.Close()
 
-	ws := dialWS(t, r.addr)
+	ws := dialWS(t, r.Addr)
 	defer ws.close()
 
 	// Wait for U to open.
@@ -90,9 +92,9 @@ func TestUserCodexBrowserLoop(t *testing.T) {
 		"type": "close-interaction", "uiIncarnation": incarnation,
 		"conversation": conversation, "requestId": "close",
 	})
-	term, err := r.awaitClose(ctx)
+	term, err := r.AwaitClose(ctx)
 	must(t, err)
-	if term.Identity != r.interactID || term.Return == nil || string(term.Return.Observation.Bytes) != "interaction-closed" {
+	if term.Identity != r.InteractID || term.Return == nil || string(term.Return.Observation.Bytes) != "interaction-closed" {
 		t.Fatalf("bad terminal U return: %+v", term)
 	}
 }

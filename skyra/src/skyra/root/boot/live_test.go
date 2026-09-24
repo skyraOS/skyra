@@ -1,14 +1,18 @@
-package main
+package boot_test
 
 import (
 	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
-	p "skyra-v1/src/skyra/protocol"
 	"strings"
 	"testing"
 	"time"
+
+	p "skyra-v1/src/skyra/protocol"
+	"skyra-v1/src/skyra/root/boot"
+	"skyra-v1/src/skyra/root/execution"
+	"skyra-v1/src/skyra/root/trace"
 )
 
 // Opt-in only. Configuration is an operator responsibility, never model input.
@@ -33,22 +37,22 @@ func TestLiveProvider(t *testing.T) {
 	c := buildCodexFixture(t)
 	c.Provider = path
 	c.ProviderArgs = args
-	traceFile, err := os.Create("../artifacts/live-trace.jsonl")
+	traceFile, err := os.Create("../../artifacts/live-trace.jsonl")
 	must(t, err)
 	defer traceFile.Close()
-	auditFile, err := os.Create("../artifacts/live-provider.stderr")
+	auditFile, err := os.Create("../../artifacts/live-provider.stderr")
 	must(t, err)
 	defer auditFile.Close()
 	c.Stderr = auditFile
-	trace := &Trace{output: traceFile}
-	r, err := bootCodex(ctx, c, trace)
+	tr := trace.New(traceFile)
+	r, err := boot.Codex(ctx, c, tr)
 	must(t, err)
-	defer r.close()
+	defer r.Close()
 	next := uint64(1)
 	call := func(t *testing.T, args []p.Observation) p.Move {
 		t.Helper()
 		next++
-		m, err := r.call(ctx, next, args)
+		m, err := r.Call(ctx, next, args)
 		must(t, err)
 		if m.Identity != next {
 			t.Fatalf("wrong command correlation: want %d got %d", next, m.Identity)
@@ -63,13 +67,13 @@ func TestLiveProvider(t *testing.T) {
 	}
 	mint := func(t *testing.T) string {
 		t.Helper()
-		parent, err := r.execution.mintParent(p.Codex)
+		parent, err := r.Execution.MintParent(p.Codex)
 		must(t, err)
 		return parent
 	}
 	start := func(t *testing.T, parent, prompt, tools string) p.Move {
 		t.Helper()
-		return call(t, p.Args("start-thread", "parent", parent, "connection", r.connection, "text", prompt, "tools", tools))
+		return call(t, p.Args("start-thread", "parent", parent, "connection", r.Connection, "text", prompt, "tools", tools))
 	}
 	submit := func(t *testing.T, parent, prompt string) p.Move {
 		t.Helper()
@@ -85,13 +89,11 @@ func TestLiveProvider(t *testing.T) {
 	}
 	children := func(t *testing.T, m p.Move, want int, expected string) {
 		t.Helper()
-		r.execution.mu.Lock()
-		defer r.execution.mu.Unlock()
 		n := 0
-		for _, f := range r.execution.bookkeeper.frames {
-			if f.parent == m.Source {
+		for _, f := range r.Execution.Frames() {
+			if f.Parent == m.Source {
 				n++
-				if f.target != p.Echo || f.phase != "returned" || string(f.result.Bytes) != expected {
+				if f.Target != p.Echo || f.Phase != "returned" || string(f.Result.Bytes) != expected {
 					t.Fatalf("wrong child target/result/phase: %+v", f)
 				}
 			}
@@ -102,7 +104,7 @@ func TestLiveProvider(t *testing.T) {
 	}
 	parents := map[string]string{}
 	t.Run("health_and_inference", func(t *testing.T) {
-		m := call(t, p.Args("health", "connection", r.connection, "deadline_ms", "5000"))
+		m := call(t, p.Args("health", "connection", r.Connection, "deadline_ms", "5000"))
 		expectText(t, m, "responsive")
 		parent := mint(t)
 		parents["smoke"] = parent
@@ -111,7 +113,7 @@ func TestLiveProvider(t *testing.T) {
 	t.Run("tool_call_and_correlated_resume", func(t *testing.T) {
 		parent := mint(t)
 		parents["tool"] = parent
-		token := "TOOL_" + randomToken()[:12]
+		token := "TOOL_" + execution.RandomToken()[:12]
 		m := start(t, parent, "Call the registered echo tool exactly once with text "+token+". Wait for its result, then reply with exactly the returned text. Do not use any other tools.", `["echo"]`)
 		exact(t, m, token)
 		children(t, m, 1, token)
@@ -121,7 +123,7 @@ func TestLiveProvider(t *testing.T) {
 	t.Run("fork_history_and_independent_mutation", func(t *testing.T) {
 		source, branch := mint(t), mint(t)
 		parents["fork-source"], parents["fork-branch"] = source, branch
-		original, changed := "SOURCE_"+randomToken()[:12], "BRANCH_"+randomToken()[:12]
+		original, changed := "SOURCE_"+execution.RandomToken()[:12], "BRANCH_"+execution.RandomToken()[:12]
 		exact(t, start(t, source, "Store this conversation's marker as "+original+". Reply with exactly that marker. Do not use tools.", `[]`), original)
 		exact(t, call(t, p.Args("fork-thread", "parent", branch, "source", source)), "fork created")
 		exact(t, submit(t, branch, "Reply with exactly the stored marker from the preceding conversation history. Do not use tools."), original)
@@ -132,7 +134,7 @@ func TestLiveProvider(t *testing.T) {
 	t.Run("tool_remove_add_migrates_history", func(t *testing.T) {
 		parent := mint(t)
 		parents["migration"] = parent
-		marker := "MIGRATE_" + randomToken()[:12]
+		marker := "MIGRATE_" + execution.RandomToken()[:12]
 		exact(t, start(t, parent, "Remember this conversation's marker: "+marker+". Reply with exactly that marker. Do not use tools yet.", `["echo"]`), marker)
 		exact(t, call(t, p.Args("tools-remove", "parent", parent, "tools", `["echo"]`)), "tools replaced")
 		m := submit(t, parent, "Read the retained historical transcript. Reply with exactly the original marker, then a space, then AVAILABLE if a dynamic tool named echo is currently offered to you or UNAVAILABLE if it is not. Do not invoke tools.")
@@ -147,7 +149,7 @@ func TestLiveProvider(t *testing.T) {
 	t.Run("concurrent_parent_isolation", func(t *testing.T) {
 		first, second := mint(t), mint(t)
 		parents["isolation-A"], parents["isolation-B"] = first, second
-		a, b := "ALPHA_"+randomToken()[:12], "BETA_"+randomToken()[:12]
+		a, b := "ALPHA_"+execution.RandomToken()[:12], "BETA_"+execution.RandomToken()[:12]
 		exact(t, start(t, first, "Remember this conversation's private marker as "+a+". Reply with exactly that marker. Do not use tools.", `[]`), a)
 		exact(t, start(t, second, "Remember this conversation's private marker as "+b+". Reply with exactly that marker. Do not use tools.", `[]`), b)
 		expected := map[uint64]string{}
@@ -156,10 +158,10 @@ func TestLiveProvider(t *testing.T) {
 			next++
 			expected[next] = v.marker
 			concurrentIDs[next] = true
-			must(t, r.client.egress.Send(ctx, p.Move{Identity: next, Target: p.Codex, Invoke: &p.Invoke{Args: p.Args("submit-input", "parent", v.parent, "text", "Reply with exactly this conversation's private marker. Do not use tools.")}}))
+			must(t, r.Client.Egress().Send(ctx, p.Move{Identity: next, Target: p.Codex, Invoke: &p.Invoke{Args: p.Args("submit-input", "parent", v.parent, "text", "Reply with exactly this conversation's private marker. Do not use tools.")}}))
 		}
 		for i := 0; i < 2; i++ {
-			m, err := r.results.ingress.Receive(ctx)
+			m, err := r.Results.Ingress().Receive(ctx)
 			must(t, err)
 			if m.Fault != nil {
 				t.Fatal(m.Fault.Message)
@@ -172,7 +174,7 @@ func TestLiveProvider(t *testing.T) {
 			exact(t, m, want)
 		}
 		recorded := 0
-		for _, event := range trace.snapshot() {
+		for _, event := range tr.Snapshot() {
 			if !concurrentIDs[event.Move] {
 				continue
 			}
@@ -189,10 +191,10 @@ func TestLiveProvider(t *testing.T) {
 		t.Log("two outstanding commands returned only their own stored random marker, with separate result correlations")
 	})
 	// Wait for the actor to flush its private diagnostics and reap its provider.
-	r.close()
+	r.Close()
 	assertCodexClean(t, r)
 	must(t, auditFile.Sync())
-	raw, err := os.ReadFile("../artifacts/live-provider.stderr")
+	raw, err := os.ReadFile("../../artifacts/live-provider.stderr")
 	must(t, err)
 	if !strings.Contains(string(raw), "provider reaped") {
 		t.Error("provider reap missing")

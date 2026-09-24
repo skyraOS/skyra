@@ -13,6 +13,20 @@ its private app-server process, conversations, event demultiplexing and effect
 contamination fence. Shared `protocol/` contains wire vocabulary and declarative
 validation only. No nested module or additional dependency is introduced.
 
+`root/` is split into one package per owner. Imports run one way, from boot
+down to trace:
+
+| Package | Owns |
+|---|---|
+| `root/boot` | Bringing a system up and tearing it down: startup decoding, peer processes, registration, publication, parent-key provisioning, reaping |
+| `root/kernel` | The main loop: ingress readers, admission, the Scheduler and dispatch (`kernel/kerneltest` is its test fixture) |
+| `root/state` | What exists: Memory (registered executables) and Active (published contexts and reserved ports) |
+| `root/execution` | One context's authority and progress: Horizon, Bookkeeper frames, conversations, commit and realize |
+| `root/extension` | Runtime growth: delegation to a new context, bridging, bounded creation |
+| `root/ports` | Wires: bindings, framed Move endpoints and helper processes |
+| `root/trace` | The ordered transition record |
+| `root/demos` | Scripted scenarios that drive a booted system; `root/main.go` only picks one |
+
 From this directory:
 
 ```sh
@@ -52,7 +66,7 @@ requires `operation=health`, the opaque `connection` returned by connect, and
 admitted contracts. Memory retains the complete registered descriptor. The binding
 still checks its narrower grant set on every dispatch. `tool-result` is declared
 as continuation-only: only Bookkeeper's correlated child Return can activate it.
-Trusted host provisioning calls `mintParent`; caller-supplied bare IDs do not mint
+Trusted host provisioning calls `ExecutionContext.MintParent`; caller-supplied bare IDs do not mint
 or authenticate conversations. `end-parent` explicitly retires an idle parent.
 
 | Evidence | Tests |

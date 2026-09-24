@@ -1,4 +1,4 @@
-package main
+package execution
 
 import (
 	"crypto/hmac"
@@ -8,16 +8,18 @@ import (
 	"encoding/json"
 	"fmt"
 	p "skyra-v1/src/skyra/protocol"
+	"skyra-v1/src/skyra/root/ports"
 )
 
 type conversation struct {
 	ref           p.ParentRef
-	binding       *binding
+	binding       *ports.Binding
 	live, started bool
 	busy          p.FrameID
 }
 
-func randomToken() string {
+// RandomToken returns 32 random bytes as hex, for parent keys and namespaces.
+func RandomToken() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
@@ -31,7 +33,18 @@ func signParent(r p.ParentRef, key []byte) string {
 	h.Write(raw)
 	return hex.EncodeToString(h.Sum(nil))
 }
-func (e *ExecutionContext) mintParent(target p.ExecutableID) (string, error) {
+
+// ProvisionParentAuthority gives trusted host provisioning the key and namespace
+// that parent references are signed with. It is set before publication.
+func (e *ExecutionContext) ProvisionParentAuthority(key []byte, namespace string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.bookkeeper.key = key
+	e.bookkeeper.namespace = namespace
+}
+
+// MintParent is trusted host provisioning; caller-supplied bare IDs never mint.
+func (e *ExecutionContext) MintParent(target p.ExecutableID) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	m, err := e.resolve(target)
@@ -46,9 +59,9 @@ func (e *ExecutionContext) mintParent(target p.ExecutableID) (string, error) {
 		b.parents = map[p.FrameID]*conversation{}
 	}
 	b.next++
-	r := p.ParentRef{Namespace: b.namespace, Owner: e.identity, Sequence: b.next, Generation: m.endpoint.binding.generation}
+	r := p.ParentRef{Namespace: b.namespace, Owner: e.identity, Sequence: b.next, Generation: m.endpoint.Binding().Generation()}
 	r.Token = signParent(r, b.key)
-	b.parents[r.Sequence] = &conversation{ref: r, binding: m.endpoint.binding, live: true}
+	b.parents[r.Sequence] = &conversation{ref: r, binding: m.endpoint.Binding(), live: true}
 	raw, _ := json.Marshal(r)
 	return string(raw), nil
 }
@@ -58,7 +71,7 @@ func (c ArgContract) check(args []p.Observation) error {
 	}
 	return p.CheckArguments(args, c.Operation)
 }
-func (e *ExecutionContext) parentReference(raw string, binding *binding) (*conversation, error) {
+func (e *ExecutionContext) parentReference(raw string, binding *ports.Binding) (*conversation, error) {
 	var r p.ParentRef
 	if p.StrictJSON([]byte(raw), &r) != nil {
 		return nil, fmt.Errorf("invalid parent")
@@ -84,7 +97,7 @@ func (e *ExecutionContext) authorizeConversation(m p.Move, entry *mapping) (p.Fr
 	if op == "connect" || op == "health" {
 		return 0, nil
 	}
-	c, err := e.parentReference(values["parent"], entry.endpoint.binding)
+	c, err := e.parentReference(values["parent"], entry.endpoint.Binding())
 	if err != nil {
 		return 0, err
 	}
@@ -93,7 +106,7 @@ func (e *ExecutionContext) authorizeConversation(m p.Move, entry *mapping) (p.Fr
 		return 0, fmt.Errorf("parent lifecycle mismatch")
 	}
 	if op == "fork-thread" {
-		source, err := e.parentReference(values["source"], entry.endpoint.binding)
+		source, err := e.parentReference(values["source"], entry.endpoint.Binding())
 		if err != nil || source == c || !source.started {
 			return 0, fmt.Errorf("unauthorized fork source")
 		}
@@ -134,7 +147,9 @@ func (e *ExecutionContext) Capabilities(id p.ExecutableID) ([]p.Profile, error) 
 	_ = json.Unmarshal(raw, &detached)
 	return detached, nil
 }
-func definition(d p.Descriptor, grants map[string]bool) Executable {
+
+// Definition builds the Codex executable from its descriptor, narrowed to grants.
+func Definition(d p.Descriptor, grants map[string]bool) Executable {
 	e := Executable{ID: p.Codex}
 	for _, profile := range d.Profiles {
 		if grants == nil || grants[profile.Operation] {

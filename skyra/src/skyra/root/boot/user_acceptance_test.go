@@ -1,4 +1,4 @@
-package main
+package boot_test
 
 import (
 	"bufio"
@@ -13,6 +13,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"skyra-v1/src/skyra/root/boot"
+	"skyra-v1/src/skyra/root/trace"
 )
 
 // End-to-end proof of the mediated loop with no provider:
@@ -22,11 +25,11 @@ import (
 // It builds the real user and echo binaries, boots them under root, drives a
 // real WebSocket session, and asserts the agent answer flows back through the
 // host and U's single terminal Return settles on close.
-func buildUserFixture(t *testing.T) userConfig {
+func buildUserFixture(t *testing.T) boot.UserConfig {
 	t.Helper()
 	dir := t.TempDir()
-	c := userConfig{Binary: filepath.Join(dir, "user"), Echo: filepath.Join(dir, "echo")}
-	for _, b := range []struct{ path, pkg string }{{c.Binary, "../user"}, {c.Echo, "./echo"}} {
+	c := boot.UserConfig{Binary: filepath.Join(dir, "user"), Echo: filepath.Join(dir, "echo")}
+	for _, b := range []struct{ path, pkg string }{{c.Binary, "../../user"}, {c.Echo, "../echo"}} {
 		cmd := exec.CommandContext(guard(t), "go", "build", "-race", "-o", b.path, b.pkg)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build %s: %v %s", b.pkg, err, out)
@@ -40,12 +43,11 @@ func TestUserBrowserAgentLoop(t *testing.T) {
 	var diag bytes.Buffer
 	c.Stderr = &diag
 	ctx := guard(t)
-	trace := &Trace{}
-	r, err := bootUser(ctx, c, trace)
+	r, err := boot.User(ctx, c, &trace.Trace{})
 	must(t, err)
-	defer r.close()
+	defer r.Close()
 
-	ws := dialWS(t, r.addr)
+	ws := dialWS(t, r.Addr)
 	defer ws.close()
 
 	// Wait for U to open (a snapshot carrying the conversation).
@@ -111,9 +113,9 @@ func TestUserBrowserAgentLoop(t *testing.T) {
 		"type": "close-interaction", "uiIncarnation": incarnation,
 		"conversation": conversation, "requestId": "close",
 	})
-	term, err := r.awaitClose(ctx)
+	term, err := r.AwaitClose(ctx)
 	must(t, err)
-	if term.Identity != r.interactID || term.Return == nil || string(term.Return.Observation.Bytes) != "interaction-closed" {
+	if term.Identity != r.InteractID || term.Return == nil || string(term.Return.Observation.Bytes) != "interaction-closed" {
 		t.Fatalf("bad terminal U return: %+v", term)
 	}
 }
