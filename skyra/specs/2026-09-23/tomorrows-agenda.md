@@ -1,7 +1,8 @@
 # Tomorrow's agenda: semantics first
 
 Date: 2026-09-25 (for the next session)  
-Status: agenda. Produces `transitions.md`.
+Status: agenda. Produces `transitions.md`. Revised after
+[`thoughts/14`](stateless-controller/thoughts/14-interpreted-not-stated.md).
 
 ## The governing question
 
@@ -9,6 +10,26 @@ Status: agenda. Produces `transitions.md`.
 
 Not: "What sequence of handlers should we call?" Handlers, reductions and I/O
 buckets come **after** the semantics, and exist only to make them true.
+
+## What thought 14 changed
+
+States are **derived, not stated.** An emitter supplies only operands (which
+capability, what payload). The runtime derives the state with one pure function,
+`interpret(state, output)`. That simplifies this agenda:
+
+| Before | Now |
+|---|---|
+| Five transitions, each with its own validity | **One function, `interpret`**. Each transition's validity is the predicate under which `interpret` yields it. Defining `interpret` is most of the transition semantics |
+| Invoke and Return as separate transitions | **Return is `invoke(reply, payload)`**. They share validity, the contract check and durability. Return differs only in that `reply` is single use and it discharges a dependency instead of opening one |
+| "Who initiates, who claims?" per transition | **One answer for all:** the initiator is always some output, the claimer is always the runtime |
+| Input contracts and return contracts defined separately | **The reply capability's input contract is the return contract.** Defining the input contract defines both |
+| Invalid cases include forged control flow | **Unrepresentable.** The emitter cannot express "I return", "I fault", or a return to someone other than its parent. Invalid cases are now about **operands**: unparseable, out of reach, fits no contract, ambiguous |
+| An enforcement entry per derivation | **One mechanism for every derivation:** `interpret` is pure and deterministic, and replay proves it |
+
+**Names are notation.** A state is a predicate over system state (stack,
+memory, Horizon, output). The names are labels, like bound variables in a
+program. A state is real only if it passes the checklist: a derivation rule,
+invariants, and enforcement.
 
 ## Keep these distinct
 
@@ -22,38 +43,83 @@ buckets come **after** the semantics, and exist only to make them true.
 **Rule:** a semantic rule never claims something the machine does not enforce.
 Every invariant has an enforcement entry, or is marked **not enforced yet**.
 
-## The transitions
+## Order
 
-1. **Invoke**
-2. **Return**
-3. **Interrupt**
-4. **Fault**
-5. **Resolve**: resolve → invoke when the last dependency is discharged. This is
-   where the join completes, the completion hash forms, and an interrupt resumes.
+1. **Define the input contract**: JSON types, and the fit rule. This also
+   defines the return contract (the reply capability's input contract).
+2. **Define `interpret`** as a total, pure function over (state, output). This
+   is the validity section for every transition at once.
+3. **Define the reply capability's lifecycle**: issued at release, single use,
+   transferable for tail calls, invoked by the runtime to deliver a fault.
+4. **Fill in the rest of the checklist per transition**: meaning, cardinality,
+   durability, nondeterminism, invalid operands, enforcement. In order: **Invoke**
+   (including its reply case, which is Return), then **Fault**, **Interrupt**,
+   **Resolve**.
+5. **Cross-layer check** against the existing mechanisms (custody, handlers,
+   [`io-buckets.md`](io-buckets.md)).
 
-## The checklist, for each transition, in order
+## 1. The input contract
 
-### 1. Validity
+Settle, with examples:
 
-- What must already be true before this transition is legal?
-- What inputs does it consume? Include **which memory root** it reads, if it
-  checks contracts.
-- **Who initiates it, and who claims it?** These are always different parties,
-  because the emitter is never the checker. State both.
+- A contract is a JSON-types schema (see
+  [`durable-storage.md`](durable-storage.md)): `object` with `fields` and
+  `required`, `array` with `items`, `string`, `number`, `bool`, `null`.
+- **Fit** is structural, pure and deterministic. Unknown fields do not fit.
+- What an input contract is attached to: a Potential (by name, or by content
+  hash?).
+- The reply capability's input contract is the return contract of the input
+  contract that produced it.
 
-### 2. Meaning
+## 2. `interpret`
+
+Draft, to confirm or correct:
+
+```text
+interpret(state, output):
+  no output                                        → fault (custody)
+  not parseable                                    → fault (malformed move)
+  names a capability not in reach                  → fault (horizon)
+  names a capability in reach, or none (→ reply):
+      payload fits that capability's input contract   → invoke, or return if it is reply
+      fits nothing known                              → interrupt (novelty)
+      fits more than one contract                     → interrupt (novelty): ask, never guess
+  a reachable Potential with no input contract     → interrupt (procedure)
+```
+
+Questions to settle:
+
+- **The addressing format**: how a continuation's output names a capability,
+  and how `reply` is written explicitly. Unaddressed output defaults to `reply`.
+- **What "state" contains** exactly: the Horizon (reach, reply), the open
+  dependencies, the memory root and its entries.
+- Where the authority fault fits: a continuation that cannot fulfil its contract
+  under its Horizon.
+
+## 3. The reply capability
+
+- **Issued** at release, as part of the child's Horizon.
+- **Single use**: one `O_EXCL` claim on the parent's slot.
+- **Default target** for unaddressed output: the least authority available.
+- **Transferable** for tail calls. Question: does the invoker lose its own reply
+  at that moment?
+- **Invoked by the runtime** to deliver a fault on the instance's behalf.
+
+## 4. The checklist, per transition
+
+### Meaning
 
 - What semantic fact becomes true when it succeeds?
 - What does it mean for it to be complete?
 - What authority is **created, narrowed, preserved, transferred or terminated**?
 
-### 3. Cardinality
+### Cardinality
 
 - How many times may it occur for the same frame, slot, dependency or Potential?
 - What must be unique?
 - Which transitions are mutually exclusive?
 
-### 4. Durability
+### Durability
 
 - What facts must be durable before it can be considered complete?
 - What durable evidence proves the semantic postcondition occurred (the
@@ -61,168 +127,135 @@ Every invariant has an enforcement entry, or is marked **not enforced yet**.
 - If the process crashes immediately afterwards, **can the machine determine the
   one legal next state?**
 
-### 5. Nondeterminism
+### Nondeterminism
 
 - Which inputs are nondeterministic (model output, time, randomness)?
 - Where is each recorded before it is used, so replay reproduces the transition?
 
-### 6. Invalid executions
+### Invalid operands
 
-- In what states is it illegal?
+- Which operands must `interpret` refuse, and as which fault or interrupt?
 - What malformed or contradictory histories must be impossible?
-- Does an invalid case become a Fault, an Interrupt, a rejection, or something
-  else?
 
-### 7. Enforcement
+### Enforcement
 
-For every invariant above:
+For every invariant:
 
 - What concrete mechanism enforces it?
-- Which layer is it: **semantic, storage, capability or OS**?
-- Is it **prevented** (the violation cannot happen) or only **detected** (caught
-  afterwards, for example by replay)? DNA-19's lesson: detection is not
+- Which layer: **semantic, storage, capability or OS**?
+- **Prevented** or only **detected** (for example by replay)? Detection is not
   prevention.
-- If nothing enforces it, mark it **not enforced yet**.
+- If nothing enforces it: **not enforced yet**.
 
-## Vocabulary discipline
+## Starting drafts
 
-Keep these terms separate, and use each for one thing only.
+What we already believe. Drafts to confirm or correct, not decisions.
+
+### Invoke (including Return, its reply case)
+
+- **Derived when:** the output names a capability in reach (or none, meaning
+  `reply`), and the payload fits that capability's input contract, under the
+  memory root read.
+- **Meaning:**
+  - *Ordinary capability:* a new Potential exists and the invoker opens one
+    dependency for it. Authority is **narrowed**: the child's Horizon is a subset
+    of the invoker's, issued only by the parent, and includes a fresh `reply`.
+  - *Reply:* the parent's dependency is discharged with the payload. The
+    instance's authority **terminates**.
+- **Cardinality:** one dependency per ordinary invoke. At most one reply per
+  instance, ever (single use). A reply and a fault are mutually exclusive for the
+  same slot.
+- **Durability:** the record (with its derived state) and, for an ordinary invoke,
+  the opened dependency, in one commit. For a reply, the slot claim. Witnesses:
+  the child's verified stamp and released Horizon; or the slot file naming this
+  record.
+- **Join rule:** a reply is derived only when the instance has no open
+  dependencies. A reply with open dependencies cannot be formed (a discharge hash
+  is missing).
+- **Nondeterminism:** payloads may come from model output; recorded as the intake
+  input before use.
+- **Invalid operands:** out of reach (horizon fault); unparseable (malformed move
+  fault); no fitting contract (novelty interrupt); ambiguous fit (novelty
+  interrupt).
+
+### Fault
+
+- **Derived when:** the runtime **proves** something broke: custody, malformed
+  move, horizon, or authority.
+- **Meaning:** the runtime invokes the instance's `reply` on its behalf, with a
+  fault payload naming the kind and the cause. The owner's dependency is
+  discharged with the fault. Authority **terminates**.
+- **Cardinality:** at most one of reply or fault per slot.
+- **Durability:** the fault record and the slot claim. Witness: the slot file
+  names the fault record.
+- **Invalid:** a fault with no cause recorded; a fault that cancels siblings
+  (wait for all). A target cannot emit a fault at all.
+
+### Interrupt
+
+- **Derived when:** memory lacks what `interpret` needed: a return contract
+  (novelty), or an input contract for a reachable Potential (procedure).
+- **Meaning:** the Potential goes back to resolve, with one more open dependency
+  (the LLM's answer). The original slot stays open. Authority is **preserved**.
+- **Cardinality:** several per Potential are possible. Never discharges the
+  original slot.
+- **Durability:** the interrupt record and the new dependency; later, the learned
+  contract and a new memory root. Witness: the new dependency exists and is open.
+- **Nondeterminism:** the LLM's answer, recorded as the intake input of the step
+  that receives it.
+- **Invalid:** an interrupt that discharges the original slot; one that widens
+  authority (that is an authority fault, to the parent).
+
+### Resolve
+
+- **Derived when:** the stack shows every dependency of the Potential discharged,
+  and the fan-in claim is won.
+- **Meaning:** the Potential enters a state of invoke with its holes filled;
+  custody is taken. Authority is **preserved**.
+- **Cardinality:** exactly once per wait. The fan-in claim is the uniqueness
+  point.
+- **Durability:** the completion record, carrying every discharge hash (the
+  bottom-up Merkle link). Witness: the completion record and the fan-in claim.
+- **Invalid:** resolving with any dependency open (cannot be formed); two
+  resolves of the same Potential.
+
+## Vocabulary
+
+Names are notation; the semantics are what matter. Use each term for one thing.
 
 | Term | Means |
 |---|---|
-| **Transition** | Invoke, Return, Interrupt, Fault or Resolve |
+| **Transition** | a derived state change: invoke (with its reply case), fault, interrupt, resolve |
 | **Transition instance** | one bounded occurrence of a transition |
+| **`interpret`** | the pure function that derives a transition from (state, output) |
+| **Operands** | what an emitter supplies: which capability (optional), and a payload |
+| **Reply capability** | the single-use handle to the parent's slot; invoking it is a return |
 | **Potential** | a declared address to an executable |
-| **Frame** | *to define:* the durable node for one invocation (its directory, its slots). Decide how it relates to Potential |
+| **Frame** | *to define:* the durable node for one invocation (its directory, its slots) |
 | **Continuation** | a durable description of how suspended work resumes |
 | **Dependency** | outstanding work required before a Potential may resolve |
-| **Discharge** | closes a dependency. Replaces "settle", which the code still uses |
+| **Discharge** | closes a dependency (replaces "settle", which the code still uses) |
 | **Terminate** | ends authority. Never "discharge" |
 | **Complete** | a transition instance has its completion witness |
-| **Authority** | what the computation may do: its Horizon |
-| **Horizon** | a frame's authority: surface, reach, and the node fd |
-| **Reach** | the surfaces a Horizon may invoke |
+| **Authority / Horizon** | what a frame may do: surface, reach (including `reply`), and the node fd |
+| **Reach** | the capabilities a Horizon may invoke |
 | **Release** | the parent issuing a child's Horizon |
 | **Custody** | who currently owns responsibility for the Move |
 | **Stamp** | the hash of a committed record; the receipt for custody |
 | **Effect / reduction** | a lower-level operation used to realize a transition |
 | **Handler** | a fixed executor of effects; makes no semantic decisions |
 
-## Cross-layer check
-
-- For each semantic rule: **what concrete runtime or OS mechanism makes it true?**
-- For each runtime mechanism: **which semantic invariant does it exist to
-  enforce?**
-
-Anything with no semantic justification is a candidate for removal. Anything
-with no enforcement mechanism is a gap.
-
-## Order
-
-1. **Invoke** first. Its validity section forces the definition of the **input
-   contract**, the most load-bearing undefined term.
-2. **Return** and **Fault**: most of the material is in [`faults.md`](faults.md)
-   and [`thoughts/13`](stateless-controller/thoughts/13-dependencies.md).
-3. **Interrupt**: novelty and procedure.
-4. **Resolve**: the join, the completion hash, resuming an interrupt.
-5. **Then the cross-layer check**, against the existing mechanisms (custody,
-   handlers, [`io-buckets.md`](io-buckets.md)).
-
-## Starting drafts
-
-What we already believe, per transition. Everything here is a draft to confirm
-or correct, not a decision.
-
-### 1. Invoke
-
-- **Validity:** the invoker holds custody; the target is in its reach; an input
-  contract exists for the target, and the arguments fit it. Initiated by the
-  invoker's target (it emits the Invoke); claimed by the successor at intake.
-- **Meaning:** a new Potential exists; the invoker opens one dependency for it.
-  Authority is **narrowed**: the child's Horizon is a subset of the invoker's,
-  issued only by the parent.
-- **Cardinality:** one dependency per invoke; one child frame per dependency.
-- **Durability:** the Invoke record and the opened dependency, in one commit.
-  Witness: the child's stamp, verified, and its Horizon released.
-- **Nondeterminism:** the arguments may come from model output; recorded as the
-  intake input before use.
-- **Invalid:** invoking outside reach (horizon fault); arguments that do not
-  parse (malformed move fault); no input contract for a reachable target
-  (procedure interrupt); a child running with no slot waiting for it; a child
-  Horizon wider than its parent's.
-- **Forces:** what exactly an input contract is (target plus JSON-types args
-  schema?) and what "fit" admits.
-
-### 2. Return
-
-- **Validity:** the Move is in a state of invoke; all its own dependencies are
-  discharged (join rule); the value fits a return contract for its input contract,
-  under the memory root it read. Initiated by the target; claimed by the
-  successor.
-- **Meaning:** the owner's dependency is discharged with the value. The child's
-  authority **terminates**.
-- **Cardinality:** at most one of Return or Fault per slot, ever. Mutually
-  exclusive with Fault.
-- **Durability:** the Return record; the slot claim. Witness: the slot file names
-  this record.
-- **Invalid:** returning with open dependencies; a second discharge of the same
-  slot; a value with no fitting return contract (novelty interrupt, not a
-  return).
-
-### 3. Interrupt
-
-- **Validity:** durable memory lacks something the step needs (a return contract,
-  or an input contract for a reachable Potential), at the memory root read.
-- **Meaning:** the Potential goes back to resolve with one more open dependency
-  (the LLM's answer). The original slot stays open. Authority is **preserved**.
-- **Cardinality:** several per Potential are possible (for example a novelty
-  interrupt, then a procedure interrupt). Never discharges the original slot.
-- **Durability:** the interrupt record and the new dependency; later, the learned
-  contract and a new memory root. Witness: the new dependency exists and is open.
-- **Nondeterminism:** the LLM's answer, recorded as the intake input of the step
-  that receives it.
-- **Invalid:** an interrupt that discharges the original slot; one that widens
-  authority (that is an authority fault, to the parent); resolving without
-  recording what was learned.
-
-### 4. Fault
-
-- **Validity:** the runtime **proves** something broke: custody, malformed move,
-  horizon, or authority. Claimed by whoever observed it (the custody holder, or
-  the successor at intake).
-- **Meaning:** the owner's dependency is discharged with the fault. Authority
-  **terminates**.
-- **Cardinality:** at most one of Return or Fault per slot. Mutually exclusive
-  with Return.
-- **Durability:** the fault record, naming its kind and its cause; the slot
-  claim. Witness: the slot file names the fault record.
-- **Invalid:** a fault that is only a target's claim (a target's failure is a
-  return); a fault with no cause recorded; a fault that cancels siblings (wait
-  for all).
-
-### 5. Resolve
-
-- **Validity:** every dependency of the Potential is discharged; the fan-in claim
-  is won. Inputs: the discharged values or faults, and the continuation.
-- **Meaning:** the Potential enters a state of invoke with its holes filled;
-  custody is taken. Authority is **preserved**.
-- **Cardinality:** exactly once per Potential per wait. The fan-in claim is the
-  uniqueness point.
-- **Durability:** the completion record, carrying every discharge hash (the
-  bottom-up Merkle link). Witness: the completion record and the fan-in claim.
-- **Invalid:** resolving with any dependency open (it cannot be formed: a hash is
-  missing); two resolves of the same Potential.
-
 ## Done when
 
-- All five transitions have the checklist filled in.
-- Semantic postconditions and completion witnesses are separated.
-- Ownership (who initiates, who claims) and multiplicity are explicit.
+- The input contract, and so the return contract, is defined concretely.
+- `interpret` is written as a total, pure function, with the addressing format
+  and the contents of "state" settled.
+- The reply capability's lifecycle is defined.
+- Every transition has the checklist filled in, with postconditions and
+  completion witnesses separated.
 - Every invariant has an enforcement mechanism, its layer, and prevented or
   detected, or is marked **not enforced yet**.
-- The input contract is defined concretely.
 - Crash behaviour is defined at every transition boundary.
-- The vocabulary table has no term used for two things, and "frame" is defined.
-- There is a list of mechanisms that justify no semantic invariant.
-- There is a list of semantic invariants that currently have no enforcement
-  mechanism.
+- "Frame" is defined, and no term is used for two things.
+- There is a list of mechanisms that justify no semantic invariant, and a list of
+  invariants that currently have no enforcement.
