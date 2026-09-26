@@ -128,6 +128,55 @@ between handlers, in `step`. That rule is what fixes where the handlers split.
 | invoke | `fault` | `Kill?` · `Store(fault)` · `Settle(fault)` | — |
 | resolve | — | (no handler yet: holes are not in the minimal shape) | — |
 
+**The primitives and their owners**
+
+Every primitive that appears in the handler table above, with the bucket and
+package that owns it. A handler calls only these, and each belongs to exactly
+one owner.
+
+| Primitive | Owner (bucket) | Package | Used by handlers | Where it is today |
+|---|---|---|---|---|
+| `Store(kind, bytes)` (input, record, fault) | Bookkeeping | `tree` | `acceptCustody`, `fault` | `tree.Put`, `tree.Commit` ✓ |
+| `Load(stamp)` | Bookkeeping | `tree` | `startSuccessor` | `tree.Load` ✓ |
+| `OpenFrame(stamp)` | Bookkeeping | `tree` | `release` | `tree.OpenFrame` ✓ |
+| `Settle(result)` | Bookkeeping | `tree` | `settle`, `fault` | `tree.Settle` ✓ |
+| `Send(msg, fd?)` (stamp, under, horizon + node) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor`, `release` | `handshake.Send` ✓ |
+| `Await(kind)` (horizon, stamp) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor` | `handshake.Recv` ✓ |
+| `Verify(binary)` | Execute | `execute` (new) | `apply` | inline in `instance.run` ✗ |
+| `Start(target, profile)` | Execute, on top of Process | `execute` (new) | `apply` | inline in `instance.run` (`sandbox-exec`) ✗ |
+| `Start(skyra, stdin, fd3)` | Process (with Transport: data for stdin) | `process` (new) | `startSuccessor` | inline in `instance.spawn` ✗ |
+| `Wait` (read one line of stdout, wait for exit) | Process (with Transport: data for stdout) | `process` (new) | `apply` | inline in `instance.run` ✗ |
+| `Kill(handle)` | Process | `process` (new) | `fault` | `child.Process.Kill` in `Drive` ✗ |
+| `ReleaseProcess(handle)` | Process | `process` (new) | `release` | `child.Process.Release` in `Drive` ✗ |
+
+By owner:
+
+| Owner | Primitives | Home today |
+|---|---|---|
+| Bookkeeping (`tree`) | `Store`, `Load`, `OpenFrame`, `Settle` | complete ✓ |
+| Transport: control (`handshake`) | `Send`, `Await` | complete ✓ |
+| Process (`process`, new) | `Start(skyra, …)`, `Wait`, `Kill`, `ReleaseProcess` | none: scattered through `instance` |
+| Execute (`execute`, new) | `Verify`, `Start(target, profile)` | none: inline in `instance.run` |
+| Transport: data | stdin and stdout, carried inside `Start` and `Wait` | no primitives of its own |
+
+What the table shows:
+
+1. **Two owners are already whole.** Every bookkeeping and control primitive
+   already lives in its own package. The work is in Process and Execute, whose
+   primitives are all inline in `instance` today.
+2. **`Start` appears twice with different owners.** Starting a target is
+   Execute (a verified binary under a rendered profile). Starting a successor is
+   plain Process (stdin plus fd 3, no profile). They share one underlying
+   Process `Start`, and Execute adds `Verify` and the profile on top.
+3. **Transport: data has no primitives of its own.** It only rides inside
+   Process `Start` (stdin) and `Wait` (stdout). That answers open question 3 below
+   in favour of folding it into Process, unless a later need gives it its own
+   primitives.
+4. **One primitive is hidden.** `Start(skyra, stdin, fd3)` also creates the
+   control socketpair (`handshake.Pair`) before starting the process. That is a
+   control primitive, `Pair`, missing from the handler table. It should be listed
+   in `startSuccessor` explicitly: `Pair · Start(skyra, stdin, fd3) · …`.
+
 **Each state's program is a sequence of handler names**, with `step` deciding
 between them:
 
@@ -153,6 +202,44 @@ What lines up:
    should be renamed, for example `supervisorFault`, so the two do not blur.
 5. **Resolve has no row.** It will need at least one new handler (wait for holes,
    then claim custody) before it can join the table.
+
+## Settle, dependencies and the join rule
+
+Agreed 2026-09-23. Full reasoning in
+[`thoughts/13-dependencies.md`](stateless-controller/thoughts/13-dependencies.md).
+
+**Join rule.** All of a parent's children must settle before the parent
+resumes. How it resumes (return, fault, or more invokes) is decided by the
+parent's continuation as its own next reduction, not at the join. Wait for all,
+not fail fast: an early fault still waits for its siblings, because fail-fast
+needs cancellation, which does not exist yet.
+
+**Settle produces an event.** Today settle is a dead end: `drive` writes
+`result`, exits, and boot polls for it. Instead:
+
+```text
+settle handler:  Claim(slot) · Read(parent's open dependencies)  →  Settled{frame, filled, pending}
+step:            pending empty → Claim(fan-in marker) → the winner resolves the parent's continuation
+                 still pending → Exit
+```
+
+The settle handler becomes a claim followed by a read, and it returns an event
+like every other waiting handler. The fan-in claim is one more claim on the tree.
+
+**Dependencies are the unit.** An Invoke opens them (one slot per child). A
+Return or a Fault discharges exactly one (a fault is a discharge that carries a
+fault instead of a value). Resolve is the moment the last one is discharged.
+Slots are written in the Invoke's own commit.
+
+Changes this implies for the tables above:
+
+| Where | Change |
+|---|---|
+| Handler table, `settle` | `Claim(slot)` · `Read(open dependencies)` → returns `Settled` (today: returns nothing) |
+| Handler table, new row | `resolveParent`: `Claim(fan-in)` · build the continuation with its holes filled → hand off like any emission |
+| Primitives table | `Settle` is a tree **claim**. Add a tree **read** of a frame's open slots, and the fan-in **claim** |
+| Events | new `Settled{frame, filled, pending}` |
+| Boot | the polling loop goes away. Frame 0's continuation is resolved by the settle of frame 1 |
 
 ## Proposed homes
 
