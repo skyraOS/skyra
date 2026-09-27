@@ -3,7 +3,10 @@
 //
 //	parent → child   Horizon   the Horizon the bytes were emitted under
 //	child  → parent  StampMsg  hash of the child's committed record
-//	parent → child   Horizon   the child's own Horizon (+ the node fd): the release
+//	parent → child   Horizon   the child's own Horizon, plus its frame stack: the release
+//
+// The frame stack is the call stack as capabilities: one directory fd per
+// frame, from the frame this Horizon's reply discharges down to the operator's.
 package handshake
 
 import (
@@ -24,6 +27,16 @@ func Pair() (*net.UnixConn, *os.File, error) {
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_DGRAM, 0)
 	if err != nil {
 		return nil, nil, err
+	}
+	// macOS caps a unix datagram at net.local.dgram.maxdgram (2 KiB) unless the
+	// socket's buffers are raised. A Horizon carries contracts and the
+	// continuations waiting on it, so give it room.
+	for _, fd := range fds {
+		for _, opt := range []int{syscall.SO_SNDBUF, syscall.SO_RCVBUF} {
+			if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, opt, maxMessage); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 	c, err := Conn(os.NewFile(uintptr(fds[0]), "handshake"))
 	if err != nil {
@@ -46,24 +59,33 @@ func Conn(f *os.File) (*net.UnixConn, error) {
 	return uc, nil
 }
 
-// Send writes one message, optionally carrying one fd.
-func Send(c *net.UnixConn, v any, fd *os.File) error {
+const (
+	maxMessage = 1 << 20
+	maxFDs     = 64
+)
+
+// Send writes one message, with any fds.
+func Send(c *net.UnixConn, v any, fds ...*os.File) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
 	var oob []byte
-	if fd != nil {
-		oob = syscall.UnixRights(int(fd.Fd()))
+	if len(fds) > 0 {
+		raw := make([]int, len(fds))
+		for i, f := range fds {
+			raw[i] = int(f.Fd())
+		}
+		oob = syscall.UnixRights(raw...)
 	}
 	_, _, err = c.WriteMsgUnix(b, oob, nil)
 	return err
 }
 
-// Recv reads one message, and the fd that came with it, if any.
-func Recv(c *net.UnixConn, v any) (*os.File, error) {
-	buf := make([]byte, 2048)
-	oob := make([]byte, syscall.CmsgSpace(4))
+// Recv reads one message, and the fds that came with it, in order.
+func Recv(c *net.UnixConn, v any) ([]*os.File, error) {
+	buf := make([]byte, maxMessage)
+	oob := make([]byte, syscall.CmsgSpace(4*maxFDs))
 	n, oobn, _, _, err := c.ReadMsgUnix(buf, oob)
 	if err != nil {
 		return nil, err
@@ -81,9 +103,13 @@ func Recv(c *net.UnixConn, v any) (*os.File, error) {
 	if err != nil || len(msgs) != 1 {
 		return nil, errors.New("bad control message")
 	}
-	fds, err := syscall.ParseUnixRights(&msgs[0])
-	if err != nil || len(fds) != 1 {
-		return nil, errors.New("expected exactly one fd")
+	raw, err := syscall.ParseUnixRights(&msgs[0])
+	if err != nil {
+		return nil, err
 	}
-	return os.NewFile(uintptr(fds[0]), "node"), nil
+	files := make([]*os.File, len(raw))
+	for i, fd := range raw {
+		files[i] = os.NewFile(uintptr(fd), "frame")
+	}
+	return files, nil
 }

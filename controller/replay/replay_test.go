@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,7 @@ func buildLineage(t *testing.T, root string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := horizon.Horizon{Stamp: g0, Reach: map[string]horizon.Surface{"echo": echoS}}
+	h := horizon.Horizon{Stamp: g0, Reach: map[string]horizon.Surface{"echo": echoS}, Frame: g0}
 	var head string
 	for _, in := range []string{
 		`{"to":"echo","payload":{"text":"hi"}}`,
@@ -118,5 +119,81 @@ func TestReplayDerivesSupervisorFaults(t *testing.T) {
 	f, _ := tree.Commit(root, forged)
 	if _, err := Replay(root, f); err == nil {
 		t.Fatal("replay accepted a supervisor fault whose cause is not its observation")
+	}
+}
+
+var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Output: echoS.Output, Reach: []string{"echo"}}
+
+// commitStep stores an input and commits the record derived from it.
+func commitStep(t *testing.T, root string, in []byte, r record.Record) string {
+	t.Helper()
+	if _, err := tree.Put(root, "inputs", in); err != nil {
+		t.Fatal(err)
+	}
+	s, err := tree.Commit(root, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// buildContinuation commits the agent's lineage as the runtime would:
+// operator → agent → echo → echo's reply → resolve agent → agent's reply →
+// resolve operator. It returns the head and the stamps along the way.
+func buildContinuation(t *testing.T, root string) (head, echoReply, agentReply string) {
+	t.Helper()
+	for _, d := range []string{"records", "inputs"} {
+		os.MkdirAll(filepath.Join(root, d), 0o755)
+	}
+	reach := map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	g0, _ := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach})
+	h := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+
+	emit := func(under horizon.Horizon, out string) (string, horizon.Horizon) {
+		r := intakeRecord(under, out)
+		s := commitStep(t, root, []byte(out), r)
+		next, err := machine.Narrow(under, r, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s, next
+	}
+	resolve := func(discharged horizon.Horizon, discharge string) (string, horizon.Horizon) {
+		w := discharged.Resume
+		obs, _ := json.Marshal(machine.Observation{Frame: w.Frame, Round: w.Stamp, Discharges: []string{discharge}})
+		r, _ := machine.Resolved(discharge, obs)
+		s := commitStep(t, root, obs, r)
+		resumed := *w
+		resumed.Stamp = s
+		return s, resumed
+	}
+
+	_, agent := emit(h, `{"to":"agent","payload":{"text":"hi"}}`)
+	_, echo := emit(agent, `{"to":"echo","payload":{"text":"hi"}}`)
+	echoReply, done := emit(echo, `hi`)
+	_, agent = resolve(done, echoReply)
+	agentReply, done = emit(agent, `echo said "hi"`)
+	head, _ = resolve(done, agentReply)
+	return head, echoReply, agentReply
+}
+
+func TestReplayThroughResolves(t *testing.T) {
+	root := t.TempDir()
+	head, _, _ := buildContinuation(t, root)
+	if n, err := Replay(root, head); err != nil || n != 7 {
+		t.Fatalf("replay = %d, %v; want 7 records", n, err)
+	}
+}
+
+// A resolve that claims to resume a frame that was not waiting is caught,
+// even though it hashes correctly.
+func TestReplayCatchesForgedResolve(t *testing.T) {
+	root := t.TempDir()
+	_, echoReply, _ := buildContinuation(t, root)
+	obs, _ := json.Marshal(machine.Observation{Frame: "someone-else", Round: "someone-else", Discharges: []string{echoReply}})
+	r, _ := machine.Resolved(echoReply, obs)
+	forged := commitStep(t, root, obs, r)
+	if _, err := Replay(root, forged); err == nil || !strings.Contains(err.Error(), "was not waiting") {
+		t.Fatalf("replay accepted a resolve of a frame that was not waiting: %v", err)
 	}
 }

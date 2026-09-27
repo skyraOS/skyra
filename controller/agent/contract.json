@@ -1,0 +1,9 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["text"],
+    "fields": {"text": {"type": "string"}}
+  },
+  "output": {"type": "string"},
+  "reach": ["echo"]
+}

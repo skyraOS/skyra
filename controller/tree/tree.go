@@ -1,6 +1,14 @@
 // Package tree owns .skyra/ on disk: content-addressed objects (records and
-// the inputs they point at) and frame directories with their write-once
-// results. It is the only package that reads or writes .skyra/ files.
+// the inputs they point at) and frame directories. It is the only package that
+// reads or writes .skyra/ files.
+//
+//	frames/<F>/result                 write-once: the record that discharged F's slot
+//	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before the child ran
+//	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
+//
+// A round is the stamp F's continuation emitted under: F itself, then each
+// resolve record. Every write inside a frame goes through its directory fd,
+// never a path.
 package tree
 
 import (
@@ -126,6 +134,79 @@ func Settle(node *os.File, stamp string) error {
 		return err
 	}
 	return node.Sync()
+}
+
+// OpenDep opens a slot for a child in a frame, through the frame's fd, before
+// the child is released: a child never runs without a slot waiting for it.
+func OpenDep(frame *os.File, round, child string) error {
+	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
+		return err
+	}
+	dir := filepath.Join("deps", round)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(dir, child), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
+	if err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := syncDir(dir); err != nil {
+		return err
+	}
+	return frame.Sync()
+}
+
+// Children lists the slots a round opened in a frame, sorted, read through the
+// frame's fd.
+func Children(frame *os.File, round string) ([]string, error) {
+	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join("deps", round))
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names, nil // ReadDir sorts by name
+}
+
+// Claim is the fan-in claim: of every sibling that finds a round fully
+// discharged, exactly one creates the claim (O_EXCL) and resolves the frame.
+func Claim(frame *os.File, round, stamp string) (bool, error) {
+	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
+		return false, err
+	}
+	f, err := os.OpenFile("resolved-"+round, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
+	if errors.Is(err, os.ErrExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err := f.WriteString(stamp); err != nil {
+		f.Close()
+		return false, err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return false, err
+	}
+	if err := f.Close(); err != nil {
+		return false, err
+	}
+	return true, frame.Sync()
+}
+
+// Resolved reads a round's fan-in claim, if it has been won.
+func Resolved(root, frame, round string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(root, "frames", frame, "resolved-"+round))
+	return string(b), err
 }
 
 func syncDir(dir string) error {

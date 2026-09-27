@@ -25,17 +25,32 @@ func (s Surface) Leaf() bool { return len(s.Reach) == 0 }
 
 // Horizon is everything a step knows besides the bytes. It is the release
 // (D6): the child's authority, sent by the parent after it verifies the child's
-// commit. The data travels as JSON. The frame's node travels beside it as an
-// fd over SCM_RIGHTS, and that fd is the capability.
+// commit. The data travels as JSON. The frame stack travels beside it as
+// directory fds over SCM_RIGHTS, and those fds are the capability.
 //
 // Reach is the registry as this frame sees it: the surfaces its emissions may
 // invoke. There is no global registry lookup. Genesis holds the root reach,
 // and every child's reach is a subset of its parent's.
+//
+// Every Horizon also holds reply: the right to discharge Frame's slot, once.
+// Resume is the continuation waiting on that slot, as it was when it emitted:
+// its Stamp is the round that opened the slot. The operator's Horizon has no
+// Resume.
 type Horizon struct {
-	Stamp   string             `json:"stamp"`             // this frame's commit; the predecessor of whatever is emitted under it
-	Surface *Surface           `json:"surface,omitempty"` // what this frame runs
+	Stamp   string             `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
+	Surface *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
 	Reach   map[string]Surface `json:"reach"`             // what emissions under this Horizon may invoke
-	Settles string             `json:"settles,omitempty"` // set when the frame settles a parent frame
+	Frame   string             `json:"frame"`             // the frame whose slot this Horizon's reply discharges
+	Resume  *Horizon           `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
+}
+
+// Depth is the number of frames in the stack that travels with this Horizon.
+func (h Horizon) Depth() int {
+	n := 1
+	for r := h.Resume; r != nil; r = r.Resume {
+		n++
+	}
+	return n
 }
 
 // Names lists what the Horizon reaches, sorted.

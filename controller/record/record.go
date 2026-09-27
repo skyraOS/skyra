@@ -40,7 +40,8 @@ type FaultInfo struct {
 
 // Record is what a step commits. It is stored under its own hash, and that
 // hash is the stamp. Everything but Predecessor and Input is derived from
-// them; replay derives it again and must get the same bytes.
+// them; replay derives it again and must get the same bytes. Predecessor is
+// the custody chain: the record whose holder committed this one.
 type Record struct {
 	Predecessor string                     `json:"predecessor"`          // the stamp of the Horizon it was emitted under; "" only for genesis
 	Input       string                     `json:"input"`                // sha256 of the exact bytes observed
@@ -48,6 +49,9 @@ type Record struct {
 	To          string                     `json:"to,omitempty"`         // invoke: the capability
 	Payload     json.RawMessage            `json:"payload,omitempty"`    // invoke: its input; return: the value. Canonical JSON
 	Fault       *FaultInfo                 `json:"fault,omitempty"`      // fault: kind and cause
+	Frame       string                     `json:"frame,omitempty"`      // resolve: the frame that resumes
+	Round       string                     `json:"round,omitempty"`      // resolve: the round whose slots are all discharged
+	Deps        []string                   `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
 	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
 	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
@@ -87,6 +91,8 @@ func Describe(r Record) string {
 		return fmt.Sprintf("invoke %s %s", r.To, r.Payload)
 	case Return:
 		return fmt.Sprintf("return %s", r.Payload)
+	case Resolve:
+		return fmt.Sprintf("resolve %s: %d of %d slots discharged", Short(r.Frame), len(r.Deps), len(r.Deps))
 	case Fault:
 		by := "derived at intake"
 		if r.Supervisor {

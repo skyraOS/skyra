@@ -37,7 +37,7 @@ func main() {
 		}
 		var real string
 		if real, err = realDir(*root); err == nil {
-			err = boot.Run(real, *reg, *to, json.RawMessage(*payload))
+			_, err = boot.Run(real, *reg, *to, json.RawMessage(*payload))
 		}
 	case "instance":
 		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())

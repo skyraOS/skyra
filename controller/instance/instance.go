@@ -47,7 +47,11 @@ func Run(root string) error {
 // Drive is the loop: feed an event to machine.Step, perform the effects it
 // returns, and turn the result into the next event. Every decision is made in
 // Step. Drive only does I/O.
-func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e machine.Event) (machine.Instance, error) {
+//
+// stack is the frame stack this instance holds: stack[0] is the frame its
+// reply discharges, stack[1] the frame of the continuation waiting on it, and
+// so on down to the operator's frame.
+func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, e machine.Event) (machine.Instance, error) {
 	var (
 		down  *net.UnixConn // handshake with the successor
 		child *exec.Cmd
@@ -55,6 +59,9 @@ func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e m
 	defer func() {
 		if down != nil {
 			down.Close()
+		}
+		for _, f := range stack {
+			f.Close()
 		}
 	}()
 	for e != nil {
@@ -72,26 +79,27 @@ func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e m
 				if err != nil {
 					return s, err
 				}
-				if x.R.Supervisor {
+				switch {
+				case x.R.Supervisor:
 					trace.Logf("fault    %s: %s (committed %s)", x.R.Fault.Kind, x.R.Fault.Cause, record.Short(stamp))
-				} else {
+				case x.R.State == record.Resolve:
+					trace.Logf("gather   every slot of %s discharged: committed resolve %s", record.Short(x.R.Frame), record.Short(stamp))
+				default:
 					trace.Who = "inst " + record.Short(stamp)
 					trace.Logf("intake   committed %s  %s", record.Short(stamp), record.Describe(x.R))
 				}
 			case machine.SendStamp:
-				if err := handshake.Send(up, handshake.StampMsg{Stamp: x.Stamp}, nil); err != nil {
+				if err := handshake.Send(up, handshake.StampMsg{Stamp: x.Stamp}); err != nil {
 					return s, err
 				}
 				var h horizon.Horizon
-				n, err := handshake.Recv(up, &h)
+				files, err := handshake.Recv(up, &h)
 				if err != nil {
 					return s, fmt.Errorf("no Horizon, cannot execute: %w", err)
 				}
-				if node = n; node != nil {
-					defer node.Close()
-				}
-				trace.Logf("release  Horizon received (reach %v)", h.Names())
-				e = machine.Released{Self: h, Node: node != nil}
+				stack = files
+				trace.Logf("release  Horizon received (reach %v, %d frames)", h.Names(), len(files))
+				e = machine.Released{Self: h, Frames: len(files)}
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
 				e = run(x)
@@ -103,26 +111,47 @@ func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e m
 			case machine.KillSuccessor:
 				trace.Logf("handoff  killing successor")
 				child.Process.Kill()
+			case machine.OpenDep:
+				if err := tree.OpenDep(stack[0], x.Round, x.Child); err != nil {
+					return s, err
+				}
 			case machine.SendHorizon:
-				childNode := node
+				frames := stack
 				if x.NewFrame {
 					f, err := tree.OpenFrame(root, x.Child.Stamp)
 					if err != nil {
 						return s, err
 					}
 					defer f.Close()
-					childNode = f
+					frames = append([]*os.File{f}, stack...)
 				}
-				if err := handshake.Send(down, x.Child, childNode); err != nil {
+				if err := handshake.Send(down, x.Child, frames...); err != nil {
 					return s, err
 				}
 				trace.Logf("handoff  verified and released %s, custody passed, exiting", record.Short(x.Child.Stamp))
 				child.Process.Release() // D2: the parent does not wait on the child
 			case machine.Settle:
-				trace.Logf("release  settles the parent frame: result → %s", record.Short(x.Result))
-				if err := tree.Settle(node, x.Result); err != nil {
+				trace.Logf("settle   discharges the slot of %s: result → %s", record.Short(s.Self.Frame), record.Short(x.Result))
+				if err := tree.Settle(stack[0], x.Result); err != nil {
 					return s, err
 				}
+			case machine.GatherWaiter:
+				var err error
+				if e, err = gather(root, stack[1], *s.Self.Resume); err != nil {
+					return s, err
+				}
+			case machine.TryClaim:
+				won, err := tree.Claim(stack[1], x.Round, x.Stamp)
+				if err != nil {
+					return s, err
+				}
+				if won {
+					trace.Logf("claim    won: resumes %s", record.Short(s.Self.Resume.Frame))
+				}
+				e = machine.Claimed{Won: won}
+			case machine.Pop:
+				stack[0].Close()
+				stack = stack[1:]
 			case machine.Exit:
 				if x.Err != "" {
 					return s, errors.New(x.Err)
@@ -132,6 +161,52 @@ func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e m
 		}
 	}
 	return s, errors.New("step stopped without exiting")
+}
+
+// gather reads what a waiting continuation waits on: its frame's record and
+// every round it opened, following resolve records back from the latest round
+// to the frame itself. Every record is loaded by stamp and refused unless it
+// hashes to it. Discharges are read from each child's frame.
+func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event, error) {
+	f, err := tree.Load(root, waiter.Frame)
+	if err != nil {
+		return nil, err
+	}
+	var rounds []machine.Round
+	for round := waiter.Stamp; ; {
+		children, err := tree.Children(frame, round)
+		if err != nil {
+			return nil, err
+		}
+		r := machine.Round{Stamp: round}
+		for _, c := range children {
+			inv, err := tree.Load(root, c)
+			if err != nil {
+				return nil, err
+			}
+			child := machine.Child{Stamp: c, Invoke: inv}
+			if result, err := tree.Result(root, c); err == nil {
+				d, err := tree.Load(root, result)
+				if err != nil {
+					return nil, err
+				}
+				child.Result, child.Discharge = result, &d
+			}
+			r.Children = append(r.Children, child)
+		}
+		rounds = append([]machine.Round{r}, rounds...)
+		if round == waiter.Frame {
+			return machine.Settled{Frame: f, Rounds: rounds}, nil
+		}
+		prev, err := tree.Load(root, round)
+		if err != nil {
+			return nil, err
+		}
+		if prev.State != record.Resolve || prev.Frame != waiter.Frame {
+			return nil, fmt.Errorf("round %s is not a resolve of frame %s", record.Short(round), record.Short(waiter.Frame))
+		}
+		round = prev.Round
+	}
 }
 
 // run performs a Run effect: check the binary's content hash, run it under
@@ -182,7 +257,7 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 		return nil, nil, nil, err
 	}
 	childEnd.Close()
-	if err := handshake.Send(down, x.Under, nil); err != nil {
+	if err := handshake.Send(down, x.Under); err != nil {
 		return nil, nil, nil, err
 	}
 	var st handshake.StampMsg

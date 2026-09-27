@@ -1,11 +1,16 @@
 // Package boot is the operator's process: it writes genesis, then runs as an
-// instance whose target (the operator) has just emitted the seed Move.
+// instance whose target (the operator) has just emitted the seed. The
+// operator's frame is the first dependent: boot waits on it, and the instance
+// that resolves it is what wakes boot.
 package boot
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"syscall"
 	"time"
 
 	"skyra/controller/horizon"
@@ -18,30 +23,36 @@ import (
 	"skyra/controller/tree"
 )
 
+// Outcome is how the operator's seed ended: the record that discharged its
+// slot, and the head the lineage is replayed from.
+type Outcome struct {
+	Head      string
+	Discharge record.Record
+}
+
 // Run boots: genesis from the operator's registry, then the operator emits
 // the seed (addressed to a capability in the root reach), then boot waits for
-// the lineage to settle, prints it, and replays it.
-func Run(root, registryFile, to string, payload json.RawMessage) error {
+// its frame to resolve, prints the lineage, and replays it.
+func Run(root, registryFile, to string, payload json.RawMessage) (Outcome, error) {
 	if err := tree.Init(root); err != nil {
-		return err
+		return Outcome{}, err
 	}
 	reach, err := registry.Load(registryFile)
 	if err != nil {
-		return err
+		return Outcome{}, err
 	}
 
 	// Genesis: the root Horizon's reach comes from the operator.
 	reachBytes, _ := json.Marshal(reach)
 	g0, err := tree.Commit(root, record.Record{Input: record.Sum(reachBytes), State: record.Invoke, Reach: reach}) // frame 0: the operator's, in invoke
 	if err != nil {
-		return err
+		return Outcome{}, err
 	}
 	node0, err := tree.OpenFrame(root, g0)
 	if err != nil {
-		return err
+		return Outcome{}, err
 	}
-	defer node0.Close()
-	h0 := horizon.Horizon{Stamp: g0, Reach: reach}
+	h0 := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
 	trace.Logf("genesis  committed %s  root reach %v", record.Short(g0), h0.Names())
 
 	// Boot is an instance whose target is the operator: it is already live
@@ -49,49 +60,85 @@ func Run(root, registryFile, to string, payload json.RawMessage) error {
 	// seed is operands like any other output; intake derives its state.
 	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	s0 := machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, Stamp: g0, Self: h0}
-	s0, err = instance.Drive(root, nil, node0, s0, machine.Emitted{Out: seed})
-	if err != nil {
-		return err
+	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Emitted{Out: seed}); err != nil {
+		return Outcome{}, err
 	}
-	s1 := s0.Child // "" if boot faulted frame 0 itself
 
-	// The operator waits for the lineage to settle. An accepted seed settles
-	// frame 1. A rejected seed settles frame 0.
-	result, err := waitResult(root, s1, g0)
+	// The operator's frame is discharged in one of two ways: the seed was
+	// refused (its fault discharges frame 0's slot), or it ran and its reply
+	// resolved frame 0's round.
+	head, err := wait(root, g0)
 	if err != nil {
-		return err
+		return Outcome{}, err
 	}
 	fmt.Println()
 	fmt.Println("lineage (newest first):")
-	for s := result; s != ""; {
+	for s := head; s != ""; {
 		r, err := tree.Load(root, s)
 		if err != nil {
-			return err
+			return Outcome{}, err
 		}
 		fmt.Printf("  %s  %s\n", record.Short(s), record.Describe(r))
 		s = r.Predecessor
 	}
-
-	n, err := replay.Replay(root, result)
+	n, err := replay.Replay(root, head)
 	if err != nil {
-		return fmt.Errorf("replay: %w", err)
+		return Outcome{}, fmt.Errorf("replay: %w", err)
 	}
 	fmt.Printf("replay: %d records re-derived from genesis by step, byte-identical\n", n)
-	return nil
+
+	out := Outcome{Head: head}
+	h, _ := tree.Load(root, head)
+	out.Discharge = h
+	if h.State == record.Resolve {
+		if out.Discharge, err = tree.Load(root, h.Deps[0]); err != nil {
+			return Outcome{}, err
+		}
+	}
+	switch out.Discharge.State {
+	case record.Return:
+		fmt.Printf("answer: %s\n", out.Discharge.Payload)
+	case record.Fault:
+		fmt.Printf("answer: fault (%s): %s\n", out.Discharge.Fault.Kind, out.Discharge.Fault.Cause)
+	}
+	return out, nil
 }
 
-func waitResult(root string, frames ...string) (string, error) {
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, f := range frames {
-			if f == "" {
-				continue
-			}
-			if r, err := tree.Result(root, f); err == nil {
-				return r, nil
-			}
-		}
-		time.Sleep(5 * time.Millisecond)
+// wait blocks until the operator's frame is discharged, woken by the
+// filesystem (kqueue) whenever an entry is added to the frame's directory:
+// either its result, or the fan-in claim of its round.
+func wait(root, g0 string) (string, error) {
+	dir, err := os.Open(filepath.Join(root, "frames", g0))
+	if err != nil {
+		return "", err
 	}
-	return "", errors.New("lineage did not settle")
+	defer dir.Close()
+	kq, err := syscall.Kqueue()
+	if err != nil {
+		return "", err
+	}
+	defer syscall.Close(kq)
+	watch := syscall.Kevent_t{Ident: uint64(dir.Fd()), Filter: syscall.EVFILT_VNODE,
+		Flags: syscall.EV_ADD | syscall.EV_CLEAR, Fflags: syscall.NOTE_WRITE}
+	if _, err := syscall.Kevent(kq, []syscall.Kevent_t{watch}, nil, nil); err != nil {
+		return "", err
+	}
+	deadline := time.Now().Add(5 * time.Minute)
+	for {
+		if s, err := tree.Resolved(root, g0, g0); err == nil {
+			return s, nil
+		}
+		if s, err := tree.Result(root, g0); err == nil {
+			return s, nil
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return "", errors.New("the operator's frame was not discharged")
+		}
+		ts := syscall.NsecToTimespec(left.Nanoseconds())
+		events := make([]syscall.Kevent_t, 1)
+		if _, err := syscall.Kevent(kq, nil, events, &ts); err != nil && err != syscall.EINTR {
+			return "", err
+		}
+	}
 }
