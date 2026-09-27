@@ -11,3 +11,9 @@ skyra-v05
 # runtime debug logs
 skyra-v.1/logs/
 logs/
+
+# DNA-19 build outputs (rebuilt by demo.sh)
+src/skyra/artifacts/root
+src/skyra/artifacts/codex
+src/skyra/artifacts/echo
+src/skyra/artifacts/fake-provider
