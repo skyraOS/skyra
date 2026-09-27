@@ -10,9 +10,9 @@ die() { printf '\033[1;31minstall:\033[0m %s\n' "$*" >&2; exit 1; }
 command -v go >/dev/null || die "Go 1.25+ is required: brew install go"
 command -v npm >/dev/null || die "Node 20+ is required: brew install node"
 
-if [ ! -d "$ROOT/history/dna19/frontend/node_modules" ]; then
+if [ ! -d "$ROOT/frontend/node_modules" ]; then
   say "installing frontend dependencies (about a minute)"
-  (cd "$ROOT/history/dna19/frontend" && npm ci --no-audit --no-fund)
+  (cd "$ROOT/frontend" && npm ci --no-audit --no-fund)
 fi
 
 say "building"

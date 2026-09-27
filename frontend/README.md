@@ -1,24 +1,15 @@
-# Skyra frontend — DNA-19 user-executable client
+# Skyra frontend
 
-Browser client for a single authenticated interaction (U) served by the
-DNA-19 `user` executable. Adapted from the copied v0.5 scaffold (which spoke
-the `input`/`universe`/`impulse` full-universe protocol) to the **scoped
-conversation protocol** in
-[`../../../specs/2026-09-22/frontend.md/proposal.md`](../../specs/2026-09-22/frontend.md/proposal.md)
-§"Browser contract and reconnect".
+The browser client. `skyra` runs it against the **stateless controller**: the
+webhost ([`../controller/webhost`](../controller/webhost/)) serves it, holds
+every conversation waiting on you, and lists each conversation's history,
+derived from its records. `skyra dna19` runs it against DNA-19's `user` peer
+([`../history/dna19/user`](../history/dna19/user/)), where it started.
 
-## Status
-
-- **Done:** the frontend protocol adaptation (proposal stage 3), a faithful mock
-  `user` server, and the real Go [`../user`](../user) executable — a
-  root-registered external peer with a WebSocket listener that drives an agent
-  through the host runtime. The agent is selectable: `echo` (no provider) or the
-  real `codex` (a browser message drives a Codex thread through the isolation
-  fence). Typecheck, production build and the protocol check pass; the Go loops
-  are covered by `root.TestUserBrowserAgentLoop` and `root.TestUserCodexBrowserLoop`.
-- **Not done yet:** U-anchored Bookkeeper provisioning as first-class
-  runtime-filled activation arguments, a versioned `user` descriptor, and an
-  opt-in live run against the real Codex app-server.
+Both speak the same browser protocol, originally specified in
+[`history/specs/2026-09-22/frontend.md/proposal.md`](../history/specs/2026-09-22/frontend.md/proposal.md)
+§"Browser contract and reconnect". The controller adds one message,
+`open-conversation`, behind the sidebar's **+ new**.
 
 ## Protocol
 
@@ -50,7 +41,7 @@ Contract rules the UI and mock both honor:
 ## Run
 
 The easy way: `skyra` from the repo root starts the runtime and this UI together
-(see [`startup-doc.md`](../../../startup-doc.md)). Manually:
+(see [`startup-doc.md`](../startup-doc.md)). Manually:
 
 Against the mock:
 

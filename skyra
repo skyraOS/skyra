@@ -71,7 +71,7 @@ dna19() {
     provider=$(command -v codex) || die "codex is not installed. Try 'skyra dna19 --fake', or see startup-doc.md"
     codex login status >/dev/null 2>&1 || die "codex is not logged in. Run 'codex login', or try 'skyra dna19 --fake'"
   fi
-  [ -d "$DNA/frontend/node_modules" ] || die "frontend dependencies missing. Run ./install.sh"
+  [ -d "$ROOT/frontend/node_modules" ] || die "frontend dependencies missing. Run ./install.sh"
   port_free "$WS_PORT" || die "port $WS_PORT is in use (set SKYRA_WS_PORT, or stop the other process)"
   port_free "$UI_PORT" || die "port $UI_PORT is in use (set SKYRA_UI_PORT, or stop the other process)"
 
@@ -97,7 +97,7 @@ dna19() {
   esac
   runtime_pid=$!
 
-  (cd "$DNA/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") \
+  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") \
     >"$BUILD/ui.log" 2>&1 &
   ui_pid=$!
 
@@ -190,7 +190,7 @@ chat() {
     --fake) mode=fake ;;
     *) die "unknown chat mode '$1' (use --fake)" ;;
   esac
-  [ -d "$DNA/frontend/node_modules" ] || die "frontend dependencies missing. Run ./install.sh"
+  [ -d "$ROOT/frontend/node_modules" ] || die "frontend dependencies missing. Run ./install.sh"
   port_free "$WS_PORT" || die "port $WS_PORT is in use (set SKYRA_WS_PORT, or stop the other process)"
   port_free "$UI_PORT" || die "port $UI_PORT is in use (set SKYRA_UI_PORT, or stop the other process)"
   say "building"
@@ -213,7 +213,7 @@ chat() {
   nohup "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" &
   web_pid=$!
-  (cd "$DNA/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") >"$BUILD/ui.log" 2>&1 &
+  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") >"$BUILD/ui.log" 2>&1 &
   ui_pid=$!
 
   local url=http://localhost:$UI_PORT i
@@ -251,7 +251,7 @@ doctor() {
   v=$(go env GOVERSION 2>/dev/null || true)
   check "Go >= 1.25 (${v:-none})" '[ -n "$v" ] && [ "$(printf "%s\n" go1.25 "$v" | sort -V | head -1)" = go1.25 ]' "install Go 1.25+: brew install go"
   check "node and npm" 'command -v node && command -v npm' "install Node 20+: brew install node"
-  check "frontend dependencies" '[ -d "$DNA/frontend/node_modules" ]' "run ./install.sh"
+  check "frontend dependencies" '[ -d "$ROOT/frontend/node_modules" ]' "run ./install.sh"
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
   warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"

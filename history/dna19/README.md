@@ -153,7 +153,7 @@ browser (WS) → user → root → echo → Return → user → browser (WS)
 The browser contract (`submit`/`close-interaction` up; `snapshot`/`accepted`/
 `rejected` down) enforces: `accepted` ≠ completion, one pending command per U
 (second is `busy`), a request ledger (idempotent replay, `conflict` on reuse),
-and a fault that retires the anchor. The `frontend/` client speaks this contract.
+and a fault that retires the anchor. The [`frontend/`](../../frontend/) client (now at the repo root, shared with the controller) speaks this contract.
 
 The agent is selectable. With `echo` the loop runs with no provider. With
 `codex` a browser message drives a real Codex conversation through the isolation
@@ -167,7 +167,7 @@ browser (WS) → user → root → codex → provider
 ```
 
 Run the echo stack, or the codex stack with the deterministic fake provider,
-then `cd frontend && npm run dev` (default WS URL `ws://localhost:8080/ws`):
+then `cd ../../frontend && npm run dev` (default WS URL `ws://localhost:8080/ws`):
 
 ```sh
 go build -o artifacts/root ./root
