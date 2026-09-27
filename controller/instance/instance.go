@@ -73,7 +73,7 @@ func Drive(root string, up *net.UnixConn, node *os.File, s machine.Instance, e m
 					return s, err
 				}
 				if x.R.Supervisor {
-					trace.Logf("fault    %s (committed %s)", x.R.Reason, record.Short(stamp))
+					trace.Logf("fault    %s: %s (committed %s)", x.R.Fault.Kind, x.R.Fault.Cause, record.Short(stamp))
 				} else {
 					trace.Who = "inst " + record.Short(stamp)
 					trace.Logf("intake   committed %s  %s", record.Short(stamp), record.Describe(x.R))

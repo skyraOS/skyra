@@ -1,6 +1,6 @@
-// Package record owns the record: what intake commits, its canonical encoding,
-// and the content address (stamp) derived from it. It is pure: storing and
-// loading records belongs to package tree.
+// Package record owns the record: what a step commits, its canonical
+// encoding, and the content address (stamp) derived from it. It is pure:
+// storing and loading records belongs to package tree.
 package record
 
 import (
@@ -10,19 +10,46 @@ import (
 	"fmt"
 
 	"skyra/controller/horizon"
-	"skyra/controller/move"
 )
 
-// Record is what intake commits. It is stored under its own hash, and that
-// hash is the stamp.
+// State is the state the system is in at a record, named by the test "the
+// system is in a state of ___" (D9). The runtime derives it; no emitter can
+// state it (thought 14).
+type State string
+
+const (
+	Resolve State = "resolve" // every dependency of a frame is discharged; its continuation resumes
+	Invoke  State = "invoke"  // a capability in reach, with a payload that fits its input contract
+	Return  State = "return"  // the reply capability, with a payload that fits the return contract
+	Fault   State = "fault"   // the runtime proved something broke
+)
+
+// Fault kinds (design/faults.md). A target cannot emit a fault; only the
+// runtime derives one.
+const (
+	Malformed = "malformed" // the output cannot be read as operands
+	Horizon   = "horizon"   // it names a capability outside its Horizon
+	Contract  = "contract"  // the payload does not fit the capability's input contract
+	Custody   = "custody"   // the protocol broke: no output, a dead successor, a failed stamp
+)
+
+type FaultInfo struct {
+	Kind  string `json:"kind"`
+	Cause string `json:"cause"`
+}
+
+// Record is what a step commits. It is stored under its own hash, and that
+// hash is the stamp. Everything but Predecessor and Input is derived from
+// them; replay derives it again and must get the same bytes.
 type Record struct {
-	Predecessor string                     `json:"predecessor"`          // the parent's stamp; "" only for genesis
-	Input       string                     `json:"input"`                // sha256 of the exact bytes received
-	State       move.State                 `json:"state"`                // resolve | invoke | return | fault (D9)
-	Move        *move.Move                 `json:"move,omitempty"`       // the interpreted Move, when accepted
-	Reason      string                     `json:"reason,omitempty"`     // why, when intake or a supervisor faulted it
+	Predecessor string                     `json:"predecessor"`          // the stamp of the Horizon it was emitted under; "" only for genesis
+	Input       string                     `json:"input"`                // sha256 of the exact bytes observed
+	State       State                      `json:"state"`                // derived
+	To          string                     `json:"to,omitempty"`         // invoke: the capability
+	Payload     json.RawMessage            `json:"payload,omitempty"`    // invoke: its input; return: the value. Canonical JSON
+	Fault       *FaultInfo                 `json:"fault,omitempty"`      // fault: kind and cause
 	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
-	Supervisor  bool                       `json:"supervisor,omitempty"` // committed by a supervisor, not produced by intake
+	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
 
 // Sum is the content address of any bytes.
@@ -56,19 +83,16 @@ func Describe(r Record) string {
 		return "genesis"
 	}
 	switch r.State {
-	case move.StateInvoke:
-		return fmt.Sprintf("invoke %s %v", r.Move.Invoke.Target, r.Move.Invoke.Args)
-	case move.StateReturn:
-		return fmt.Sprintf("return %q", r.Move.Return.Value)
-	case move.StateFault:
-		switch {
-		case r.Supervisor:
-			return "fault (supervisor): " + r.Reason
-		case r.Move == nil:
-			return "fault (rejected at intake): " + r.Reason
-		default:
-			return "fault (emitted): " + r.Move.Fault.Reason
+	case Invoke:
+		return fmt.Sprintf("invoke %s %s", r.To, r.Payload)
+	case Return:
+		return fmt.Sprintf("return %s", r.Payload)
+	case Fault:
+		by := "derived at intake"
+		if r.Supervisor {
+			by = "observed by the supervisor"
 		}
+		return fmt.Sprintf("fault (%s, %s): %s", r.Fault.Kind, by, r.Fault.Cause)
 	}
 	return string(r.State)
 }

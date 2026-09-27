@@ -1,19 +1,27 @@
 // Package horizon owns authority: what a frame runs, what it may reach, and
-// the OS sandbox that authority renders to. It imports nothing from this module.
+// the OS sandbox that authority renders to. It imports only package contract.
 package horizon
 
 import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"skyra/controller/contract"
 )
 
-// Surface is a registered executable: what may run, pinned by content hash.
+// Surface is a registered executable: what may run, pinned by content hash,
+// with the contracts the runtime checks its input and its reply against.
 type Surface struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-	Leaf   bool   `json:"leaf"`
+	Path   string           `json:"path"`
+	SHA256 string           `json:"sha256"`
+	Input  *contract.Schema `json:"input"`           // what invoking it must fit
+	Output *contract.Schema `json:"output"`          // what its reply must fit: the reply capability's input contract
+	Reach  []string         `json:"reach,omitempty"` // what it may be granted, if its parent holds it. Empty: a leaf
 }
+
+// Leaf reports whether the surface can only reply.
+func (s Surface) Leaf() bool { return len(s.Reach) == 0 }
 
 // Horizon is everything a step knows besides the bytes. It is the release
 // (D6): the child's authority, sent by the parent after it verifies the child's

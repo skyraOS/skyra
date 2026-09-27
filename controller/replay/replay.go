@@ -1,5 +1,6 @@
 // Package replay re-derives a lineage from genesis using machine.Step, and
-// checks every record against what Step would produce. Nothing is re-executed.
+// checks every record, supervisor faults included, against what Step would
+// derive from its stored input. Nothing is re-executed.
 package replay
 
 import (
@@ -8,7 +9,6 @@ import (
 
 	"skyra/controller/horizon"
 	"skyra/controller/machine"
-	"skyra/controller/move"
 	"skyra/controller/record"
 	"skyra/controller/tree"
 )
@@ -43,20 +43,23 @@ func Replay(root, head string) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if rec.Supervisor {
-			// Not produced by intake. It is only allowed to be a plain fault.
-			if rec.State != move.StateFault || rec.Move != nil {
-				return 0, fmt.Errorf("supervisor record %s is not a plain fault", record.Short(stamp))
-			}
-			continue
-		}
 		in, err := tree.Get(root, "inputs", rec.Input)
 		if err != nil {
 			return 0, err
 		}
-		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: in})
-		if record.Stamp(machine.Committed(effs)) != stamp {
-			return 0, fmt.Errorf("record %s is not what step produces from its input", record.Short(stamp))
+		var derived record.Record
+		if rec.Supervisor {
+			// A supervisor's fault: derived from what it observed.
+			derived = machine.Observed(rec.Predecessor, in)
+		} else {
+			_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: in})
+			derived = machine.Committed(effs)
+		}
+		if record.Stamp(derived) != stamp {
+			return 0, fmt.Errorf("record %s is not what step derives from its input", record.Short(stamp))
+		}
+		if rec.Supervisor {
+			break // it settled the frame it was committed for; nothing follows it
 		}
 		if h, err = machine.Narrow(h, rec, stamp); err != nil {
 			return 0, err

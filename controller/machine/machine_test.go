@@ -9,15 +9,20 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/contract"
 	"skyra/controller/horizon"
-	"skyra/controller/move"
 	"skyra/controller/record"
 )
 
 var (
-	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Leaf: true}
-	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Leaf: false}
+	text   = &contract.Schema{Type: "string"}
+	echoIn = &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": text}}
+	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn, Output: text}
+	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Output: text, Reach: []string{"echo"}}
 	both   = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	// Horizons as the emitter holds them: the operator (no surface), and a leaf.
+	operator = horizon.Horizon{Stamp: "g0", Reach: both}
+	leaf     = horizon.Horizon{Stamp: "r1", Surface: &echoS, Reach: map[string]horizon.Surface{}}
 )
 
 // intakeRecord runs the Intake phase and returns what it commits.
@@ -26,32 +31,42 @@ func intakeRecord(h horizon.Horizon, in string) record.Record {
 	return Committed(effs)
 }
 
-func TestIntake(t *testing.T) {
-	root := horizon.Horizon{Stamp: "g0", Reach: both}
-	leaf := horizon.Horizon{Stamp: "r1", Reach: map[string]horizon.Surface{}}
+// The emitter supplies operands; interpret derives the state.
+func TestInterpret(t *testing.T) {
+	numeric := leaf
+	numeric.Surface = &horizon.Surface{Path: "/bin/n", Input: echoIn, Output: &contract.Schema{Type: "number"}}
 	cases := []struct {
-		name   string
-		under  horizon.Horizon
-		in     string
-		state  move.State
-		reason string // substring, for faults decided at intake
+		name    string
+		under   horizon.Horizon
+		in      string
+		state   record.State
+		to      string // invoke: the capability
+		payload string // invoke or return: the canonical payload
+		kind    string // fault: its kind
+		cause   string // fault: a substring of its cause
 	}{
-		{"invoke in reach", root, `{"invoke":{"target":"echo","args":{"text":"hi"}}}`, move.StateInvoke, ""},
-		{"return", leaf, `{"return":{"value":"hi"}}`, move.StateReturn, ""},
-		{"emitted fault", leaf, `{"fault":{"reason":"boom"}}`, move.StateFault, ""},
-		{"leaf invokes", leaf, `{"invoke":{"target":"echo","args":{}}}`, move.StateFault, "a leaf may only return"},
-		{"target out of reach", root, `{"invoke":{"target":"ghost","args":{}}}`, move.StateFault, "not in reach"},
-		{"unknown field", root, `{"return":{"value":"hi","extra":1}}`, move.StateFault, "unknown field"},
-		{"two variants", root, `{"return":{"value":"a"},"fault":{"reason":"b"}}`, move.StateFault, "exactly one"},
-		{"no variant", root, `{}`, move.StateFault, "exactly one"},
-		{"garbage", root, `not json`, move.StateFault, "invalid"},
+		{"addressed, in reach, fits", operator, `{"to":"echo","payload":{"text":"hi"}}`, record.Invoke, "echo", `{"text":"hi"}`, "", ""},
+		{"unaddressed text is a reply", leaf, `hello`, record.Return, "", `"hello"`, "", ""},
+		{"explicit reply", leaf, `{"to":"reply","payload":"hi"}`, record.Return, "", `"hi"`, "", ""},
+		{"unaddressed JSON is still just text", leaf, `{"text":"hi"}`, record.Return, "", `"{\"text\":\"hi\"}"`, "", ""},
+		{"a leaf addresses a capability", leaf, `{"to":"echo","payload":{"text":"x"}}`, record.Fault, "", "", record.Horizon, `"echo" is not in reach`},
+		{"out of reach", operator, `{"to":"ghost","payload":{}}`, record.Fault, "", "", record.Horizon, "not in reach"},
+		{"the operator has no reply", operator, `hello`, record.Fault, "", "", record.Horizon, "operator holds no reply"},
+		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", "", record.Contract, `unknown field "txt"`},
+		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", "", record.Contract, `missing required field "text"`},
+		{"reply does not fit", numeric, `hello`, record.Fault, "", "", record.Contract, "reply: want a number"},
+		{"address without payload", operator, `{"to":"echo"}`, record.Fault, "", "", record.Malformed, "exactly"},
+		{"address with extra fields", operator, `{"to":"echo","payload":{},"x":1}`, record.Fault, "", "", record.Malformed, "exactly"},
+		{"address is not a name", operator, `{"to":7,"payload":{}}`, record.Fault, "", "", record.Malformed, "exactly"},
+		{"no output", leaf, ``, record.Fault, "", "", record.Custody, "no output"},
+		{"not text", leaf, "\xff\xfe", record.Fault, "", "", record.Malformed, "UTF-8"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s, effs := Step(Instance{Phase: Intake}, Received{Under: c.under, In: []byte(c.in)})
 			r := Committed(effs)
 			if s.Phase != Release || s.Stamp != record.Stamp(r) || s.State != r.State {
-				t.Fatalf("intake must decide the state, commit, stamp and wait for the release: %+v", s)
+				t.Fatalf("intake must derive the state, commit, stamp and wait for the release: %+v", s)
 			}
 			if !reflect.DeepEqual(effs, []Effect{StoreInput{[]byte(c.in)}, Commit{r}, SendStamp{s.Stamp}}) {
 				t.Fatalf("intake effects: %#v", effs)
@@ -59,11 +74,11 @@ func TestIntake(t *testing.T) {
 			if r.Predecessor != c.under.Stamp || r.Input != record.Sum([]byte(c.in)) {
 				t.Fatalf("record does not bind predecessor and input: %+v", r)
 			}
-			if r.State != c.state {
-				t.Fatalf("state %q, want %q (reason %q)", r.State, c.state, r.Reason)
+			if r.State != c.state || r.To != c.to || string(r.Payload) != c.payload {
+				t.Fatalf("got %s to=%q payload=%s fault=%+v; want %s to=%q payload=%s", r.State, r.To, r.Payload, r.Fault, c.state, c.to, c.payload)
 			}
-			if c.reason != "" && !strings.Contains(r.Reason, c.reason) {
-				t.Fatalf("reason %q, want it to mention %q", r.Reason, c.reason)
+			if c.kind != "" && (r.Fault == nil || r.Fault.Kind != c.kind || !strings.Contains(r.Fault.Cause, c.cause)) {
+				t.Fatalf("fault %+v, want %s mentioning %q", r.Fault, c.kind, c.cause)
 			}
 		})
 	}
@@ -73,20 +88,20 @@ func TestIntake(t *testing.T) {
 // invoke and settles the parent for a return or a fault.
 func TestStateIsTheTopLevelBranch(t *testing.T) {
 	for _, c := range []struct {
+		under horizon.Horizon
 		in    string
-		state move.State
+		state record.State
 		first Effect // the first effect after the release
 	}{
-		{`{"invoke":{"target":"echo","args":{}}}`, move.StateInvoke, Run{}},
-		{`{"return":{"value":"x"}}`, move.StateReturn, Settle{}},
-		{`{"fault":{"reason":"x"}}`, move.StateFault, Settle{}},
-		{`{"invoke":{"target":"ghost","args":{}}}`, move.StateFault, Settle{}}, // rejected at intake
+		{operator, `{"to":"echo","payload":{"text":"x"}}`, record.Invoke, Run{}},
+		{leaf, `x`, record.Return, Settle{}},
+		{operator, `{"to":"ghost","payload":{}}`, record.Fault, Settle{}},
 	} {
-		s, _ := Step(Instance{Phase: Intake}, Received{Under: horizon.Horizon{Stamp: "p", Reach: both}, In: []byte(c.in)})
+		s, _ := Step(Instance{Phase: Intake}, Received{Under: c.under, In: []byte(c.in)})
 		if s.State != c.state {
 			t.Fatalf("%s: state %s, want %s", c.in, s.State, c.state)
 		}
-		self := horizon.Horizon{Stamp: s.Stamp, Surface: &echoS, Reach: map[string]horizon.Surface{}, Settles: "p"}
+		self := horizon.Horizon{Stamp: s.Stamp, Surface: &echoS, Reach: map[string]horizon.Surface{}, Settles: c.under.Stamp}
 		_, effs := Step(s, Released{Self: self, Node: true})
 		if reflect.TypeOf(effs[0]) != reflect.TypeOf(c.first) {
 			t.Fatalf("%s (%s): first effect %T, want %T", c.in, c.state, effs[0], c.first)
@@ -94,7 +109,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 	}
 
 	// A terminal state never executes, even if an event for Execute arrives.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: horizon.Horizon{Stamp: "p"}, In: []byte(`{"return":{"value":"x"}}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`x`)})
 	s.Phase = Execute
 	_, effs := Step(s, Emitted{Out: []byte("x")})
 	if x, ok := effs[0].(Exit); !ok || x.Err == "" {
@@ -103,10 +118,9 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 }
 
 func TestStepIsDeterministic(t *testing.T) {
-	under := horizon.Horizon{Stamp: "g0", Reach: both}
-	in := `{"invoke":{"target":"echo","args":{"b":"2","a":"1"}}}`
-	a, _ := record.Encode(intakeRecord(under, in))
-	b, _ := record.Encode(intakeRecord(under, in))
+	in := `{"payload":{"text":"hi"},"to":"echo"}`
+	a, _ := record.Encode(intakeRecord(operator, in))
+	b, _ := record.Encode(intakeRecord(operator, in))
 	if string(a) != string(b) {
 		t.Fatalf("step is not byte-identical across runs:\n%s\n%s", a, b)
 	}
@@ -117,7 +131,7 @@ func TestStepIsDeterministic(t *testing.T) {
 func awaiting(t *testing.T) Instance {
 	t.Helper()
 	s, _ := Step(Instance{Floor: "/state/.skyra", Phase: Intake},
-		Received{Under: horizon.Horizon{Stamp: "g0", Reach: both}, In: []byte(`{"invoke":{"target":"echo","args":{"text":"hi"}}}`)})
+		Received{Under: operator, In: []byte(`{"to":"echo","payload":{"text":"hi"}}`)})
 	return s
 }
 
@@ -129,7 +143,7 @@ func TestReleaseStartsExecution(t *testing.T) {
 		t.Fatalf("phase %s, effects %#v", s.Phase, effs)
 	}
 	run := effs[0].(Run)
-	if run.Surface != echoS || string(run.Stdin) != `{"text":"hi"}` {
+	if !reflect.DeepEqual(run.Surface, echoS) || string(run.Stdin) != `{"text":"hi"}` {
 		t.Fatalf("must run exactly the committed surface with the committed args: %#v", run)
 	}
 	if !strings.Contains(run.Profile, `(deny file-read* file-write* (subpath "/state/.skyra"))`) {
@@ -151,7 +165,7 @@ func TestReleaseRefusals(t *testing.T) {
 }
 
 func TestReleaseToSettle(t *testing.T) {
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: horizon.Horizon{Stamp: "r1"}, In: []byte(`{"return":{"value":"x"}}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`x`)})
 	s, effs := Step(s, Released{Self: horizon.Horizon{Stamp: s.Stamp, Settles: "r1"}, Node: true})
 	if !reflect.DeepEqual(effs, []Effect{Settle{s.Stamp}, Exit{}}) {
 		t.Fatalf("a settling release writes the result and exits: %#v", effs)
@@ -169,18 +183,22 @@ func executing(t *testing.T) Instance {
 func TestSilentTargetFaults(t *testing.T) {
 	s := executing(t)
 	_, effs := Step(s, Emitted{})
-	f := effs[0].(Commit).R
-	if !f.Supervisor || f.State != move.StateFault || f.Predecessor != s.Stamp || !strings.Contains(f.Reason, "without emitting") {
+	obs := effs[0].(StoreInput).In
+	f := effs[1].(Commit).R
+	if !f.Supervisor || f.State != record.Fault || f.Fault.Kind != record.Custody || f.Predecessor != s.Stamp || !strings.Contains(f.Fault.Cause, "without emitting") {
 		t.Fatalf("supervisor fault: %+v", f)
 	}
-	if !reflect.DeepEqual(effs[1:], []Effect{Settle{record.Stamp(f)}, Exit{}}) {
+	if f.Input != record.Sum(obs) || record.Stamp(Observed(s.Stamp, obs)) != record.Stamp(f) {
+		t.Fatal("a supervisor fault must be derivable from its stored observation")
+	}
+	if !reflect.DeepEqual(effs[2:], []Effect{Settle{record.Stamp(f)}, Exit{}}) {
 		t.Fatalf("the fault settles this instance's own frame: %#v", effs)
 	}
 }
 
 func TestHandoff(t *testing.T) {
 	s := executing(t)
-	out := []byte(`{"return":{"value":"hi"}}`)
+	out := []byte(`hi`)
 	s, effs := Step(s, Emitted{Out: out})
 	if !reflect.DeepEqual(effs, []Effect{Spawn{Under: s.Self, Out: out}}) {
 		t.Fatalf("the emission goes to a successor, uninterpreted: %#v", effs)
@@ -200,13 +218,13 @@ func TestHandoff(t *testing.T) {
 
 func TestHandoffRefusals(t *testing.T) {
 	s := executing(t)
-	out := []byte(`{"return":{"value":"hi"}}`)
+	out := []byte(`hi`)
 	s, _ = Step(s, Emitted{Out: out})
 	good := intakeRecord(s.Self, string(out))
 
 	wrongParent := good
 	wrongParent.Predecessor = "someone-else"
-	wrongBytes := intakeRecord(s.Self, `{"return":{"value":"other"}}`)
+	wrongBytes := intakeRecord(s.Self, `other`)
 
 	for name, ev := range map[string]Stamped{
 		"no record":     {Stamp: "nothing"},
@@ -243,28 +261,27 @@ func TestOutOfPhase(t *testing.T) {
 }
 
 func TestNarrow(t *testing.T) {
-	parent := horizon.Horizon{Stamp: "g0", Reach: both}
 	invoke := func(under horizon.Horizon, target string) record.Record {
-		return intakeRecord(under, `{"invoke":{"target":"`+target+`","args":{}}}`)
+		return intakeRecord(under, `{"to":"`+target+`","payload":{"text":"x"}}`)
 	}
 
-	h, err := Narrow(parent, invoke(parent, "echo"), "r1")
+	h, err := Narrow(operator, invoke(operator, "echo"), "r1")
 	if err != nil || len(h.Reach) != 0 || h.Surface.Path != echoS.Path {
 		t.Fatalf("a leaf must get its surface and nothing in reach: %+v %v", h, err)
 	}
 
-	h, err = Narrow(parent, invoke(parent, "agent"), "r1")
-	if err != nil || len(h.Reach) != 2 {
-		t.Fatalf("a non-leaf reaches at most what its parent reaches: %+v %v", h, err)
+	h, err = Narrow(operator, invoke(operator, "agent"), "r1")
+	if err != nil || len(h.Reach) != 1 || !reflect.DeepEqual(h.Reach["echo"], echoS) {
+		t.Fatalf("a non-leaf is granted what it asks for and its parent holds: %+v %v", h, err)
 	}
 
 	narrower := horizon.Horizon{Stamp: "g0", Reach: map[string]horizon.Surface{"agent": agentS}}
 	h, err = Narrow(narrower, invoke(narrower, "agent"), "r1")
-	if err != nil || len(h.Reach) != 1 || h.Reach["agent"] != agentS {
-		t.Fatalf("a horizon.Horizon must never widen: %+v %v", h, err)
+	if err != nil || len(h.Reach) != 0 {
+		t.Fatalf("a Horizon must never widen: asked for echo, the parent does not hold it: %+v %v", h, err)
 	}
 
-	forged := record.Record{State: move.StateInvoke, Move: &move.Move{Invoke: &move.Invoke{Target: "agent"}}}
+	forged := record.Record{State: record.Invoke, To: "agent"}
 	if _, err := Narrow(horizon.Horizon{Stamp: "r1", Reach: map[string]horizon.Surface{}}, forged, "r2"); err == nil {
 		t.Fatal("narrow granted a target outside the parent's reach")
 	}
@@ -274,10 +291,10 @@ func TestNarrow(t *testing.T) {
 // non-I/O packages and the pure packages of this module.
 func TestMachineIsPure(t *testing.T) {
 	allowed := map[string]bool{
-		"encoding/json": true, "errors": true, "fmt": true, "maps": true,
-		"skyra/controller/horizon": true,
-		"skyra/controller/move":    true,
-		"skyra/controller/record":  true,
+		"errors": true, "fmt": true, "unicode/utf8": true,
+		"skyra/controller/contract": true,
+		"skyra/controller/horizon":  true,
+		"skyra/controller/record":   true,
 	}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {

@@ -6,39 +6,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"skyra/controller/horizon"
 	"skyra/controller/instance"
 	"skyra/controller/machine"
-	"skyra/controller/move"
 	"skyra/controller/record"
+	"skyra/controller/registry"
 	"skyra/controller/replay"
 	"skyra/controller/trace"
 	"skyra/controller/tree"
 )
 
-// Run boots to echo: genesis, the seed Move, then waits for the lineage to
-// settle, prints it, and replays it.
-func Run(root, echoPath string, args map[string]string) error {
+// Run boots: genesis from the operator's registry, then the operator emits
+// the seed (addressed to a capability in the root reach), then boot waits for
+// the lineage to settle, prints it, and replays it.
+func Run(root, registryFile, to string, payload json.RawMessage) error {
 	if err := tree.Init(root); err != nil {
 		return err
 	}
-	echoPath, err := filepath.Abs(echoPath)
-	if err != nil {
-		return err
-	}
-	bin, err := os.ReadFile(echoPath)
+	reach, err := registry.Load(registryFile)
 	if err != nil {
 		return err
 	}
 
 	// Genesis: the root Horizon's reach comes from the operator.
-	reach := map[string]horizon.Surface{"echo": {Path: echoPath, SHA256: record.Sum(bin), Leaf: true}}
 	reachBytes, _ := json.Marshal(reach)
-	g0, err := tree.Commit(root, record.Record{Input: record.Sum(reachBytes), State: move.StateInvoke, Reach: reach}) // frame 0: the operator's, in invoke
+	g0, err := tree.Commit(root, record.Record{Input: record.Sum(reachBytes), State: record.Invoke, Reach: reach}) // frame 0: the operator's, in invoke
 	if err != nil {
 		return err
 	}
@@ -48,12 +42,13 @@ func Run(root, echoPath string, args map[string]string) error {
 	}
 	defer node0.Close()
 	h0 := horizon.Horizon{Stamp: g0, Reach: reach}
-	trace.Logf("genesis  committed %s  root reach %v (echo is a leaf)", record.Short(g0), h0.Names())
+	trace.Logf("genesis  committed %s  root reach %v", record.Short(g0), h0.Names())
 
 	// Boot is an instance whose target is the operator: it is already live
-	// under the root Horizon, and its target has just emitted the seed Move.
-	seed, _ := json.Marshal(move.Move{Invoke: &move.Invoke{Target: "echo", Args: args}})
-	s0 := machine.Instance{Floor: root, State: move.StateInvoke, Phase: machine.Execute, Stamp: g0, Self: h0}
+	// under the root Horizon, and its target has just emitted the seed. The
+	// seed is operands like any other output; intake derives its state.
+	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
+	s0 := machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, Stamp: g0, Self: h0}
 	s0, err = instance.Drive(root, nil, node0, s0, machine.Emitted{Out: seed})
 	if err != nil {
 		return err

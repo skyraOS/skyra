@@ -2,8 +2,9 @@
 //
 //	Step(state, event) → (state, effects)
 //
-// The top-level decision is the Move's state (D9). Intake decides it, and
-// each state is its own sequence of phases:
+// The top-level decision is the state (D9). Intake derives it from the
+// emitter's operands (thought 14), and each state is its own sequence of
+// phases:
 //
 //	intake ─┬─ invoke → release → execute → handoff   in custody: run the target, hand off its output
 //	        ├─ return → release → settle parent        terminal
@@ -12,9 +13,9 @@
 //
 // The four phases:
 //
-//  1. Intake   receive bytes, parse them as a Move, check them against the
-//     Horizon they were emitted under, commit a content-addressed
-//     record. The record's sha256 is the stamp.
+//  1. Intake   receive bytes, interpret them as operands against the Horizon
+//     they were emitted under, derive the state, commit a
+//     content-addressed record. The record's sha256 is the stamp.
 //  2. Release  the parent checks the stamp and sends the Horizon: which program
 //     this instance runs, and which targets it may call (Reach).
 //  3. Execute  run the target inside a Seatbelt sandbox rendered from the
@@ -33,20 +34,19 @@
 package machine
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
+	"unicode/utf8"
 
+	"skyra/controller/contract"
 	"skyra/controller/horizon"
-	"skyra/controller/move"
 	"skyra/controller/record"
 )
 
 // Instance is the state of one instance as it moves through its phases.
 type Instance struct {
 	Floor string          // the .skyra path every rendered sandbox denies
-	State move.State      // the Move's state, decided at intake: the top-level branch
+	State record.State    // the state intake derived: the top-level branch
 	Phase Phase           // the phase whose event this instance is waiting for
 	Under horizon.Horizon // the Horizon the input was emitted under
 	R     record.Record   // what intake committed
@@ -137,7 +137,7 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		return stop(s, e)
 	}
 	switch s.State {
-	case move.StateInvoke:
+	case record.Invoke:
 		switch ev := e.(type) {
 		case Released:
 			if s.Phase == Release {
@@ -152,11 +152,11 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 				return handoff(s, ev)
 			}
 		}
-	case move.StateReturn, move.StateFault:
+	case record.Return, record.Fault:
 		if ev, ok := e.(Released); ok && s.Phase == Release {
 			return settleParent(s, ev)
 		}
-	case move.StateResolve:
+	case record.Resolve:
 		return s, []Effect{Exit{"resolve (holes) is not in the minimal shape"}}
 	}
 	return stop(s, e)
@@ -170,34 +170,72 @@ func stop(s Instance, e Event) (Instance, []Effect) {
 	return s, []Effect{Exit{msg}}
 }
 
-// 1. Intake: parse the bytes as a Move, check them against the Horizon they
-// were emitted under, decide the Move's state, and commit a record. A rejected
-// Move is still committed, in a state of fault: a stamp means custody, not
-// approval.
+// 1. Intake: interpret the bytes as operands against the Horizon they were
+// emitted under, derive the state, and commit a record. A refused output is
+// still committed, in a state of fault: a stamp means custody, not approval.
 func intake(s Instance, e Received) (Instance, []Effect) {
-	r := record.Record{Predecessor: e.Under.Stamp, Input: record.Sum(e.In)}
-	if m, err := interpret(e.Under, e.In); err != nil {
-		r.State, r.Reason = move.StateFault, err.Error()
-	} else {
-		r.State, r.Move = move.StateOf(m), &m
-	}
+	r := interpret(e.Under, e.In)
+	r.Predecessor, r.Input = e.Under.Stamp, record.Sum(e.In)
 	s.Under, s.R, s.Stamp, s.State, s.Phase = e.Under, r, record.Stamp(r), r.State, Release
 	return s, []Effect{StoreInput{e.In}, Commit{r}, SendStamp{s.Stamp}}
 }
 
-// interpret is intake's authorization: the bytes must parse as exactly one
-// Move, and an Invoke must name a surface the Horizon reaches.
-func interpret(h horizon.Horizon, in []byte) (move.Move, error) {
-	m, err := move.Parse(in)
-	if err != nil {
-		return move.Move{}, err
+// interpret derives the state from the emitter's operands (thought 14). An
+// emitter supplies only which capability (optionally) and a payload:
+//
+//	{"to": "<capability>", "payload": <JSON>}   addressed
+//	anything else                               unaddressed: its text is the payload for reply
+//
+// It never says whether that is a call or a return. The runtime derives it:
+//
+//	names a capability in reach, payload fits its input contract   → invoke
+//	names reply, or nothing, payload fits the return contract      → return
+//	not readable as operands                                       → fault (malformed)
+//	names a capability outside the Horizon                         → fault (horizon)
+//	payload does not fit the contract of what it names             → fault (contract)
+//
+// It is total and pure, so replay derives the same state again.
+func interpret(h horizon.Horizon, out []byte) record.Record {
+	if len(out) == 0 {
+		return faulted(record.Custody, "no output")
 	}
-	if m.Invoke != nil {
-		if _, ok := h.Reach[m.Invoke.Target]; !ok {
-			return move.Move{}, fmt.Errorf("invoke of %q is not in reach (a leaf may only return)", m.Invoke.Target)
+	if !utf8.Valid(out) {
+		return faulted(record.Malformed, "output is not UTF-8 text")
+	}
+	to, payload := "reply", any(string(out))
+	if v, err := contract.Decode(out); err == nil {
+		if o, ok := v.(map[string]any); ok {
+			if _, addressed := o["to"]; addressed {
+				name, ok := o["to"].(string)
+				p, hasPayload := o["payload"]
+				if !ok || !hasPayload || len(o) != 2 {
+					return faulted(record.Malformed, `addressed output must be exactly {"to": <capability>, "payload": <JSON>}`)
+				}
+				to, payload = name, p
+			}
 		}
 	}
-	return m, nil
+	if to == "reply" {
+		if h.Surface == nil {
+			return faulted(record.Horizon, "the operator holds no reply")
+		}
+		if err := contract.Fits(h.Surface.Output, payload); err != nil {
+			return faulted(record.Contract, "reply: "+err.Error())
+		}
+		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
+	}
+	target, ok := h.Reach[to]
+	if !ok {
+		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to))
+	}
+	if err := contract.Fits(target.Input, payload); err != nil {
+		return faulted(record.Contract, to+": "+err.Error())
+	}
+	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
+}
+
+func faulted(kind, cause string) record.Record {
+	return record.Record{State: record.Fault, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
 }
 
 // accept is the child's half of Release, for every state: the Horizon must be
@@ -216,9 +254,8 @@ func release(s Instance, e Released) (Instance, []Effect) {
 		s.Phase = Done
 		return s, []Effect{Exit{err.Error()}}
 	}
-	args, _ := json.Marshal(s.R.Move.Invoke.Args)
 	s.Self, s.Phase = e.Self, Execute
-	return s, []Effect{Run{Surface: *e.Self.Surface, Stdin: args, Profile: horizon.Render(e.Self, s.Floor)}}
+	return s, []Effect{Run{Surface: *e.Self.Surface, Stdin: s.R.Payload, Profile: horizon.Render(e.Self, s.Floor)}}
 }
 
 // 2. Release, return or fault: accept the Horizon, whose node is the parent's
@@ -260,7 +297,7 @@ func handoff(s Instance, e Stamped) (Instance, []Effect) {
 		return killAndFault(s, err.Error())
 	}
 	s.Child, s.Phase = e.Stamp, Done
-	return s, []Effect{SendHorizon{Child: child, NewFrame: e.R.State == move.StateInvoke}, Exit{}}
+	return s, []Effect{SendHorizon{Child: child, NewFrame: e.R.State == record.Invoke}, Exit{}}
 }
 
 // issueRelease is the parent's half of Release: check the successor's stamp,
@@ -288,33 +325,45 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 }
 
 // Narrow computes the child's Horizon from the parent's and the child's
-// record. The child's reach is always a subset of the parent's.
+// record. The child is granted what its surface asks for, and only if the
+// parent holds it: its reach is always a subset of the parent's.
 func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
 	switch r.State {
-	case move.StateReturn, move.StateFault:
+	case record.Return, record.Fault:
 		// Terminal: the child settles the parent's frame, and reaches nothing.
 		return horizon.Horizon{Stamp: stamp, Reach: map[string]horizon.Surface{}, Settles: parent.Stamp}, nil
-	case move.StateInvoke:
+	case record.Invoke:
 	default:
-		return horizon.Horizon{}, fmt.Errorf("no Horizon for a Move in a state of %s", r.State)
+		return horizon.Horizon{}, fmt.Errorf("no Horizon for a record in a state of %s", r.State)
 	}
-	s, ok := parent.Reach[r.Move.Invoke.Target]
+	s, ok := parent.Reach[r.To]
 	if !ok {
-		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.Move.Invoke.Target)
+		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
 	reach := map[string]horizon.Surface{}
-	if !s.Leaf {
-		reach = maps.Clone(parent.Reach) // at most the parent's
+	for _, name := range s.Reach {
+		if granted, ok := parent.Reach[name]; ok {
+			reach[name] = granted
+		}
 	}
 	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: reach}, nil
 }
 
 // fault is the "maybe commit": this instance still holds custody, so it
-// commits a fault and settles its own frame with it.
-func fault(s Instance, reason string) (Instance, []Effect) {
-	r := record.Record{Predecessor: s.Stamp, Input: record.Sum(nil), State: move.StateFault, Reason: reason, Supervisor: true}
+// records what it observed and settles its own frame with the fault that
+// observation derives.
+func fault(s Instance, observed string) (Instance, []Effect) {
+	obs := []byte(observed)
+	r := Observed(s.Stamp, obs)
 	s.Phase = Done
-	return s, []Effect{Commit{r}, Settle{record.Stamp(r)}, Exit{}}
+	return s, []Effect{StoreInput{obs}, Commit{r}, Settle{record.Stamp(r)}, Exit{}}
+}
+
+// Observed derives a supervisor's fault record from what it observed. The
+// observation is stored as the record's input, so replay derives it again.
+func Observed(stamp string, observation []byte) record.Record {
+	return record.Record{Predecessor: stamp, Input: record.Sum(observation), State: record.Fault,
+		Fault: &record.FaultInfo{Kind: record.Custody, Cause: string(observation)}, Supervisor: true}
 }
 
 func killAndFault(s Instance, reason string) (Instance, []Effect) {

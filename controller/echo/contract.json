@@ -1,0 +1,12 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["text"],
+    "fields": {
+      "text": {"type": "string"},
+      "probe": {"type": "string"},
+      "misbehave": {"type": "string"}
+    }
+  },
+  "output": {"type": "string"}
+}

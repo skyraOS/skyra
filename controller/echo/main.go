@@ -1,6 +1,7 @@
-// Command echo is the untrusted target. It reads its arguments on stdin and
-// emits exactly one Move on stdout. It knows nothing about custody, records
-// or Horizons, and it shares no code with skyra.
+// Command echo is the untrusted target, a leaf. It reads its payload on stdin
+// and prints its text. It knows nothing about custody, records, Horizons or
+// Moves, and shares no code with skyra: a tool just prints its data, and the
+// runtime interprets it (thought 14).
 package main
 
 import (
@@ -10,45 +11,31 @@ import (
 	"path/filepath"
 )
 
-type move struct {
-	Invoke *struct {
-		Target string            `json:"target"`
-		Args   map[string]string `json:"args"`
-	} `json:"invoke,omitempty"`
-	Return *struct {
-		Value string `json:"value"`
-	} `json:"return,omitempty"`
-}
-
 func main() {
-	var args map[string]string
-	if err := json.NewDecoder(os.Stdin).Decode(&args); err != nil {
+	var in struct {
+		Text      string `json:"text"`
+		Probe     string `json:"probe"`
+		Misbehave string `json:"misbehave"`
+	}
+	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
 		fmt.Fprintln(os.Stderr, "echo:", err)
 		os.Exit(1)
 	}
-	value := args["text"]
+	out := in.Text
 
-	// -probe: try to reach .skyra/ from inside the sandbox. Both must fail (D7).
-	if dir := args["probe"]; dir != "" {
-		_, rerr := os.ReadDir(dir)
-		werr := os.WriteFile(filepath.Join(dir, "forged"), []byte("x"), 0o644)
-		value += fmt.Sprintf(" [probe .skyra: read %s, write %s]", verdict(rerr), verdict(werr))
+	// probe: try to reach .skyra/ from inside the sandbox. Both must fail (D7).
+	if in.Probe != "" {
+		_, rerr := os.ReadDir(in.Probe)
+		werr := os.WriteFile(filepath.Join(in.Probe, "forged"), []byte("x"), 0o644)
+		out += fmt.Sprintf(" [probe .skyra: read %s, write %s]", verdict(rerr), verdict(werr))
 	}
 
-	var m move
-	if args["misbehave"] == "invoke" {
-		// A leaf trying to invoke. Intake must commit this as a fault.
-		m.Invoke = &struct {
-			Target string            `json:"target"`
-			Args   map[string]string `json:"args"`
-		}{Target: "echo", Args: map[string]string{"text": "again"}}
-	} else {
-		m.Return = &struct {
-			Value string `json:"value"`
-		}{Value: value}
+	// misbehave: address a capability. A leaf reaches nothing, so the runtime
+	// must derive a horizon fault.
+	if in.Misbehave != "" {
+		out = `{"to":"echo","payload":{"text":"again"}}`
 	}
-	b, _ := json.Marshal(m)
-	os.Stdout.Write(append(b, '\n'))
+	fmt.Println(out)
 }
 
 func verdict(err error) string {

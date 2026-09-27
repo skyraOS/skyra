@@ -1,11 +1,12 @@
-// Command skyra is the minimal shape of the stateless controller: boot to echo.
-// It owns only argv: which mode, and the operator's flags.
+// Command skyra is the stateless controller. It owns only argv: which mode,
+// and the operator's flags.
 //
-//	skyra boot -root DIR -echo PATH [-text T] [-probe] [-misbehave]
+//	skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON]
 //	skyra instance DIR   (internal: started only by a parent holding fd 3)
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: skyra boot -root DIR -echo PATH | skyra instance DIR")
+		fmt.Fprintln(os.Stderr, "usage: skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON] | skyra instance DIR")
 		os.Exit(2)
 	}
 	var err error
@@ -26,25 +27,17 @@ func main() {
 	case "boot":
 		fs := flag.NewFlagSet("boot", flag.ExitOnError)
 		root := fs.String("root", "", "state directory (.skyra)")
-		echo := fs.String("echo", "", "path to the echo target")
-		text := fs.String("text", "hello", "text for echo")
-		probe := fs.Bool("probe", false, "have echo try to read .skyra/ from inside its sandbox")
-		misbehave := fs.Bool("misbehave", false, "have echo emit an Invoke although it is a leaf")
+		reg := fs.String("registry", "", "the operator's registry of surfaces and their contracts")
+		to := fs.String("to", "echo", "the capability the seed addresses")
+		payload := fs.String("payload", `{"text":"hello"}`, "the seed's payload (JSON)")
 		fs.Parse(os.Args[2:])
-		if *root == "" || *echo == "" {
+		if *root == "" || *reg == "" {
 			fs.Usage()
 			os.Exit(2)
 		}
 		var real string
 		if real, err = realDir(*root); err == nil {
-			args := map[string]string{"text": *text}
-			if *probe {
-				args["probe"] = real
-			}
-			if *misbehave {
-				args["misbehave"] = "invoke"
-			}
-			err = boot.Run(real, *echo, args)
+			err = boot.Run(real, *reg, *to, json.RawMessage(*payload))
 		}
 	case "instance":
 		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())
