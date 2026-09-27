@@ -198,7 +198,10 @@ func run() (string, error) {
 				if m.Params.Turn.Status != "completed" || final == "" || calls != len(c.Steps) {
 					return "", fmt.Errorf("turn ended %q with %d of %d tool calls answered", m.Params.Turn.Status, calls, len(c.Steps))
 				}
-				return final, nil
+				// The runtime reads one line: address the reply, so newlines
+				// survive JSON-escaped and text that looks like JSON stays a reply.
+				out, _ := json.Marshal(map[string]any{"to": "reply", "payload": final})
+				return string(out), nil
 			}
 		}
 		from = next

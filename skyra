@@ -134,8 +134,13 @@ codex_host() {
   local mode=$1 sock=$STATE/codex-$1.sock pid=$STATE/codex-$1.pid actor
   mkdir -p "$STATE"
   if [ -S "$sock" ] && [ -f "$pid" ] && kill -0 "$(cat "$pid")" 2>/dev/null; then
-    echo "$sock"
-    return
+    # The host outlives its actor: reuse it only if the actor still runs under it.
+    if pgrep -P "$(cat "$pid")" >/dev/null; then
+      echo "$sock"
+      return
+    fi
+    say "the Codex actor under the $mode host exited; restarting the host" >&2
+    kill "$(cat "$pid")" 2>/dev/null || true
   fi
   if [ "$mode" = real ]; then
     actor=$(command -v codex) || die "codex is not installed. Try '--fake', or see startup-doc.md"
