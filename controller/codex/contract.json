@@ -2,7 +2,10 @@
   "input": {
     "type": "object",
     "required": ["text"],
-    "fields": {"text": {"type": "string"}}
+    "fields": {
+      "text": {"type": "string"},
+      "conversation": {"type": "string"}
+    }
   },
   "output": {"type": "string"},
   "reach": ["echo"]

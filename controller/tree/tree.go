@@ -109,31 +109,54 @@ func Result(root, frame string) (string, error) {
 	return string(b), err
 }
 
-// Settle writes a frame's result exactly once (O_EXCL). It writes only
-// through the node fd it was handed, never through a path.
+// Settle writes a frame's result exactly once. It writes only through the
+// node fd it was handed, never through a path.
 func Settle(node *os.File, stamp string) error {
 	if node == nil {
 		return errors.New("no node to settle")
 	}
-	if err := syscall.Fchdir(int(node.Fd())); err != nil {
-		return err
-	}
-	f, err := os.OpenFile("result", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
+	won, err := writeOnce(node, "result", stamp)
 	if err != nil {
-		return fmt.Errorf("frame already settled: %w", err)
-	}
-	if _, err := f.WriteString(stamp); err != nil {
-		f.Close()
 		return err
+	}
+	if !won {
+		return errors.New("frame already settled")
+	}
+	return nil
+}
+
+// writeOnce creates name in a frame with its whole content, exactly once. The
+// content is written to a temporary file and synced first, then linked into
+// place: link fails if the name exists (exclusive), and a reader never sees
+// the file empty or half written.
+func writeOnce(frame *os.File, name, content string) (bool, error) {
+	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
+		return false, err
+	}
+	tmp := fmt.Sprintf(".tmp-%s-%d", name, os.Getpid())
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o444)
+	if err != nil {
+		return false, err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		return false, err
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
-		return err
+		return false, err
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return false, err
 	}
-	return node.Sync()
+	defer os.Remove(tmp)
+	if err := os.Link(tmp, name); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, frame.Sync()
 }
 
 // OpenDep opens a slot for a child in a frame, through the frame's fd, before
@@ -177,30 +200,9 @@ func Children(frame *os.File, round string) ([]string, error) {
 }
 
 // Claim is the fan-in claim: of every sibling that finds a round fully
-// discharged, exactly one creates the claim (O_EXCL) and resolves the frame.
+// discharged, exactly one creates the claim and resolves the frame.
 func Claim(frame *os.File, round, stamp string) (bool, error) {
-	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
-		return false, err
-	}
-	f, err := os.OpenFile("resolved-"+round, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
-	if errors.Is(err, os.ErrExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if _, err := f.WriteString(stamp); err != nil {
-		f.Close()
-		return false, err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return false, err
-	}
-	if err := f.Close(); err != nil {
-		return false, err
-	}
-	return true, frame.Sync()
+	return writeOnce(frame, "resolved-"+round, stamp)
 }
 
 // Resolved reads a round's fan-in claim, if it has been won.

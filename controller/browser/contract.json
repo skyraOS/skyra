@@ -1,0 +1,18 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["conversation", "transcript"],
+    "fields": {
+      "conversation": {"type": "string"},
+      "transcript": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["role", "text"],
+          "fields": {"role": {"type": "string"}, "text": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "output": {"type": "string"}
+}

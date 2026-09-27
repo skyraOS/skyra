@@ -423,3 +423,28 @@ func TestMachineIsPure(t *testing.T) {
 		}
 	}
 }
+
+// An async surface is parked with its host instead of run: the host takes
+// custody, and a refusal leaves custody here, as a fault on this frame.
+func TestAsyncSurfaceParks(t *testing.T) {
+	browserS := horizon.Surface{Host: "/tmp/park.sock", Input: echoIn, Output: text}
+	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"browser": browserS}}
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: root, In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
+	s, effs := released(s, selfOf(t, s))
+	if s.Phase != Execute || !reflect.DeepEqual(effs, []Effect{Park{Host: "/tmp/park.sock", Payload: []byte(`{"text":"show me"}`)}}) {
+		t.Fatalf("an async invoke parks with its host, in Execute: %s %#v", s.Phase, effs)
+	}
+	if _, effs := Step(s, Parked{}); !reflect.DeepEqual(effs, []Effect{Exit{}}) {
+		t.Fatalf("custody taken: the instance exits: %#v", effs)
+	}
+	_, effs = Step(s, Parked{Err: "no host"})
+	if f := effs[1].(Commit).R; f.Fault.Kind != record.Custody || !strings.Contains(f.Fault.Cause, "no host") {
+		t.Fatalf("custody refused: the instance faults its own frame: %#v", effs)
+	}
+
+	// The host resumes it in Execute with the event: an ordinary handoff.
+	s, effs = Step(s, Emitted{Out: []byte(`{"to":"reply","payload":"hi"}`)})
+	if _, ok := effs[0].(Spawn); !ok {
+		t.Fatalf("a resumed instance hands the event off like any output: %#v", effs)
+	}
+}

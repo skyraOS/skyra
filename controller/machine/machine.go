@@ -100,7 +100,8 @@ type Settled struct { // → Gather: the waiting frame's record and every round 
 	Frame  record.Record
 	Rounds []Round
 }
-type Claimed struct{ Won bool } // → Claim: whether this instance won the fan-in claim
+type Claimed struct{ Won bool }  // → Claim: whether this instance won the fan-in claim
+type Parked struct{ Err string } // → Execute (async): whether the host took custody of the frame
 
 // Round is one emission of a continuation and the slots it opened.
 type Round struct {
@@ -122,6 +123,7 @@ func (Emitted) event()  {}
 func (Stamped) event()  {}
 func (Settled) event()  {}
 func (Claimed) event()  {}
+func (Parked) event()   {}
 
 // Effects are what Step asks the shell to do, in order. SendStamp, Run,
 // Spawn, GatherWaiter and TryClaim each end with the shell waiting for the
@@ -151,6 +153,10 @@ type Settle struct{ Result string }         // discharge this instance's frame's
 type GatherWaiter struct{}                  // read the waiting frame's rounds, then wait for Settled
 type TryClaim struct{ Round, Stamp string } // the fan-in claim on the waiting frame, then wait for Claimed
 type Pop struct{}                           // drop the discharged frame: the resumed continuation holds the rest
+type Park struct {                          // hand this instance, its payload and its frame stack to an actor host, then wait for Parked
+	Host    string
+	Payload []byte
+}
 type Exit struct{ Err string }
 
 func (StoreInput) effect()    {}
@@ -165,6 +171,7 @@ func (Settle) effect()        {}
 func (GatherWaiter) effect()  {}
 func (TryClaim) effect()      {}
 func (Pop) effect()           {}
+func (Park) effect()          {}
 func (Exit) effect()          {}
 
 // Step is the decision tree. Intake comes first, because intake is where the
@@ -187,6 +194,10 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Emitted:
 			if s.Phase == Execute {
 				return execute(s, ev)
+			}
+		case Parked:
+			if s.Phase == Execute && s.Self.Surface != nil && s.Self.Surface.Host != "" {
+				return parked(s, ev)
 			}
 		case Stamped:
 			if s.Phase == Handoff {
@@ -309,11 +320,26 @@ func release(s Instance, e Released) (Instance, []Effect) {
 		return s, []Effect{Exit{err.Error()}}
 	}
 	s.Self, s.Phase = e.Self, Execute
+	if e.Self.Surface.Host != "" {
+		// An async surface: nothing runs here. The host takes custody and
+		// resumes this instance, in Execute, with the event as the output.
+		return s, []Effect{Park{Host: e.Self.Surface.Host, Payload: s.R.Payload}}
+	}
 	stdin := []byte(s.R.Payload)
 	if !e.Self.Surface.Leaf() {
 		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
 	}
 	return s, []Effect{runOf(e.Self, stdin, s.Floor)}
+}
+
+// parked: the host holds custody now, so this instance exits. If it refused,
+// this instance still holds custody and faults its own frame.
+func parked(s Instance, e Parked) (Instance, []Effect) {
+	if e.Err != "" {
+		return fault(s, "host refused custody: "+e.Err)
+	}
+	s.Phase = Done
+	return s, []Effect{Exit{}}
 }
 
 // 3. Execute: the target ran exactly the committed surface, under a sandbox

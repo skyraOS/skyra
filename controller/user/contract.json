@@ -1,0 +1,9 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["conversation"],
+    "fields": {"conversation": {"type": "string"}}
+  },
+  "output": {"type": "string"},
+  "reach": ["codex", "browser", "echo"]
+}

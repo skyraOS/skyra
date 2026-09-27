@@ -20,6 +20,7 @@ import (
 	"skyra/controller/handshake"
 	"skyra/controller/horizon"
 	"skyra/controller/machine"
+	"skyra/controller/park"
 	"skyra/controller/record"
 	"skyra/controller/trace"
 	"skyra/controller/tree"
@@ -149,6 +150,12 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					trace.Logf("claim    won: resumes %s", record.Short(s.Self.Resume.Frame))
 				}
 				e = machine.Claimed{Won: won}
+			case machine.Park:
+				trace.Logf("park     custody passes to the host at %s; waiting on an outside event", x.Host)
+				e = machine.Parked{}
+				if err := park.Send(x.Host, park.Frame{Root: root, Instance: s, Payload: x.Payload, Files: stack}); err != nil {
+					e = machine.Parked{Err: err.Error()}
+				}
 			case machine.Pop:
 				stack[0].Close()
 				stack = stack[1:]

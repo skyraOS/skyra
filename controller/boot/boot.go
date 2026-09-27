@@ -33,7 +33,7 @@ type Outcome struct {
 // Run boots: genesis from the operator's registry, then the operator emits
 // the seed (addressed to a capability in the root reach), then boot waits for
 // its frame to resolve, prints the lineage, and replays it.
-func Run(root, registryFile, to string, payload json.RawMessage) (Outcome, error) {
+func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (Outcome, error) {
 	if err := tree.Init(root); err != nil {
 		return Outcome{}, err
 	}
@@ -62,6 +62,11 @@ func Run(root, registryFile, to string, payload json.RawMessage) (Outcome, error
 	s0 := machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, Stamp: g0, Self: h0}
 	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Emitted{Out: seed}); err != nil {
 		return Outcome{}, err
+	}
+
+	if detach {
+		fmt.Printf("seeded %s; state: %s\n", record.Short(g0), root)
+		return Outcome{}, nil
 	}
 
 	// The operator's frame is discharged in one of two ways: the seed was
@@ -141,4 +146,27 @@ func wait(root, g0 string) (string, error) {
 			return "", err
 		}
 	}
+}
+
+// Head finds a finished lineage's head in a state directory: the operator's
+// frame, discharged either by its result or by the resolve that won its claim.
+func Head(root string) (string, error) {
+	frames, err := os.ReadDir(filepath.Join(root, "frames"))
+	if err != nil {
+		return "", err
+	}
+	for _, f := range frames {
+		r, err := tree.Load(root, f.Name())
+		if err != nil || r.Predecessor != "" {
+			continue // not genesis
+		}
+		if s, err := tree.Resolved(root, f.Name(), f.Name()); err == nil {
+			return s, nil
+		}
+		if s, err := tree.Result(root, f.Name()); err == nil {
+			return s, nil
+		}
+		return "", errors.New("the lineage has not finished: the operator's frame is still waiting")
+	}
+	return "", errors.New("no genesis frame")
 }

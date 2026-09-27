@@ -22,6 +22,7 @@ type Entry struct {
 	Path     string   `json:"path"`
 	Contract string   `json:"contract"`
 	Connect  []string `json:"connect,omitempty"` // unix sockets it may reach: an adapter's actor host
+	Host     string   `json:"host,omitempty"`    // async (next/16): served by the actor host on this socket; no binary
 }
 
 // Declared is what a surface's contract file says about it.
@@ -53,6 +54,13 @@ func Load(file string) (map[string]horizon.Surface, error) {
 		}
 		if err := d.Output.Check(); err != nil {
 			return nil, fmt.Errorf("%s output contract: %w", name, err)
+		}
+		if e.Host != "" {
+			if e.Path != "" || len(e.Connect) > 0 {
+				return nil, fmt.Errorf("%s: an async surface has a host, not a binary", name)
+			}
+			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input, Output: d.Output, Reach: d.Reach}
+			continue
 		}
 		path, err := filepath.Abs(resolve(dir, e.Path))
 		if err != nil {

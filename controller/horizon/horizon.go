@@ -21,6 +21,10 @@ type Surface struct {
 	// Connect lists the unix sockets it may connect to: an adapter reaching
 	// its actor host (next/15). The operator's registry grants them.
 	Connect []string `json:"connect,omitempty"`
+	// Host, when set, makes the surface async (next/16): its invocations are
+	// parked with the actor host on this socket, which holds custody until an
+	// outside event completes them. There is no binary to run.
+	Host string `json:"host,omitempty"`
 }
 
 // Leaf reports whether the surface can only reply.

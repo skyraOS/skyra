@@ -41,7 +41,8 @@ type schema struct {
 type continuation struct {
 	Frame string `json:"frame"`
 	Input struct {
-		Text string `json:"text"`
+		Text         string `json:"text"`
+		Conversation string `json:"conversation"` // optional: turns of one conversation share a Codex thread
 	} `json:"input"`
 	Tools map[string]*schema `json:"tools"`
 	Steps []struct {
@@ -88,9 +89,13 @@ func run() (string, error) {
 		return "", err
 	}
 
-	// The thread: one per frame. Only the dynamic tools in reach, and a
-	// read-only sandbox with no network and no approvals.
+	// The thread: one per conversation, or per frame when there is none, so
+	// Codex keeps its memory across a conversation's turns. Only the dynamic
+	// tools in reach, and a read-only sandbox with no network and no approvals.
 	threadID := c.Frame + ":thread"
+	if c.Input.Conversation != "" {
+		threadID = "conversation:" + c.Input.Conversation + ":thread"
+	}
 	seq, err = h.deliver(threadID, request(threadID, "thread/start", map[string]any{
 		"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": dynamicTools(c.Tools),
 		"developerInstructions": "Only the registered dynamic tools may perform effects."}))

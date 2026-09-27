@@ -111,4 +111,10 @@ export interface CloseInteractionMessage {
   requestId: string;
 }
 
-export type ClientMessage = SubmitMessage | CloseInteractionMessage;
+/** Ask the host to start a new conversation (the operator seeds it). */
+export interface OpenConversationMessage {
+  type: "open-conversation";
+  requestId: string;
+}
+
+export type ClientMessage = SubmitMessage | CloseInteractionMessage | OpenConversationMessage;
