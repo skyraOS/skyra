@@ -1,5 +1,9 @@
 # Summary: the stateless controller, where it stands
 
+> **Snapshot of 2026-09-25**, from before the repo was flattened: paths and some
+> items (the nested-Seatbelt spike, now retired) are out of date. The
+> [root README](../README.md) is the current overview.
+
 Date: 2026-09-25, updated 2026-09-26  
 Status: a map of this directory. It separates what is built, what is agreed on
 paper, and what is still being explored. Every section links to the document

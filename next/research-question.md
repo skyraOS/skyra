@@ -103,7 +103,7 @@ Reusing an established suite makes the containment numbers credible. Candidates
 
 | When | Deliverable |
 |---|---|
-| **Late September** | Transition semantics for the authority model (invoke, return, fault, narrowing), with each invariant mapped to the mechanism that enforces it. **Nested Seatbelt spike:** confirm Codex still works, and its own tool sandbox fails closed, inside our profile |
+| **Late September** | Transition semantics for the authority model (invoke, return, fault, narrowing), with each invariant mapped to the mechanism that enforces it. (The nested-Seatbelt spike is retired: under thought 14, Codex's tool calls run as separate leaves after its step exits, so Codex never sandboxes anything) |
 | **October** | A real continuation: Codex under a Horizon-rendered sandbox, calling leaf tools; horizon and authority faults routed to the parent |
 | **November** | Audit and replay: hash-linked lineage, deterministic replay. Baseline harness and task set |
 | **December** | The evaluation: overhead, capability, friction, containment on the adversarial suite. Writeup |

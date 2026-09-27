@@ -1,4 +1,4 @@
-kk# The Potential
+# The Potential
 
 Date: 2026-09-23  
 Status: agreed 2026-09-23 (D9). Follows [10](10-the-move-is-the-state.md).
