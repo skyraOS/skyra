@@ -16,6 +16,7 @@ go test ./...               # the machine's transitions, its purity, and replay,
 
 - [Profiles become input contracts](improvements/01-profiles-become-input-contracts.md)
 - [No silent refusals: a fault-tolerant async boundary](improvements/02-no-silent-refusals.md)
+- [A conversation is an invocation: logs, history and isolation](improvements/03-conversation-is-an-invocation.md)
 
 ## Packages
 
