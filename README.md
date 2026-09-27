@@ -27,12 +27,16 @@ Invariants 1 and 2 are built and shown below. Invariant 3 is the rule the
 controller is being brought under this week; replay already re-derives every
 record byte for byte, and [the remaining gaps](#where-we-are) are listed.
 
-## Run it (60 seconds, macOS, Go 1.25)
+## Run it (macOS, Go 1.25+, Node 20+)
 
 ```sh
-./controller/run.sh           # three scenarios, each ending in a replay check
-go test ./controller/...      # the transitions, the purity check, replay: no processes
+./install.sh      # once: dependencies, build, puts `skyra` on your PATH
+skyra demo        # the stateless controller: three scenarios, each ending in a replay check
+skyra             # DNA-19: chat with real Codex in the browser, through the capability fence
+skyra test        # every test
 ```
+
+Full setup, every command and troubleshooting: [`startup-doc.md`](startup-doc.md).
 
 Each scenario proves one thing. Trimmed real output:
 
@@ -165,7 +169,9 @@ Three pieces that are well defined and unowned:
 ## Layout
 
 ```text
-controller/   the working prototype: ./run.sh
+skyra         the one command (installed by install.sh); `skyra help`
+startup-doc.md  setup, commands, troubleshooting: kept current
+controller/   the working prototype: skyra demo
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
 history/      DNA-19 and the earlier specs, kept for reference

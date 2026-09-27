@@ -1,10 +1,15 @@
-# Skyra runtime
+# DNA-19: the long-running runtime
 
-The permanent base (originating from the DNA-19 increment; the disposable
-generations that led here are in `../../archive/throwaway-dna/`).
+> **Quick start:** from the repo root, run `skyra` (Codex in the browser),
+> `skyra chat --fake` (no model) or `skyra test`. See
+> [`startup-doc.md`](../../startup-doc.md). The commands below are the manual
+> equivalents, run from this directory.
+
+The permanent base of the DNA series (the disposable generations that led here
+are at the git tag `pre-cleanup`).
 Building on it, [`user/`](user/) is a root-invokable external executable that
 serves a browser over WebSocket and drives an agent — the first slice of
-[`../../specs/2026-09-22/frontend.md/proposal.md`](../specs/2026-09-22/frontend.md/proposal.md)
+[`history/specs/2026-09-22/frontend.md/proposal.md`](../specs/2026-09-22/frontend.md/proposal.md)
 (see the "Browser interaction" section below).
 
 The host runtime and peers live under `root/`. `codex/` builds an

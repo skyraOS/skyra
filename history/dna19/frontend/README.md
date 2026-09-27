@@ -49,6 +49,9 @@ Contract rules the UI and mock both honor:
 
 ## Run
 
+The easy way: `skyra` from the repo root starts the runtime and this UI together
+(see [`startup-doc.md`](../../../startup-doc.md)). Manually:
+
 Against the mock:
 
 ```bash
@@ -60,7 +63,7 @@ npm run dev       # terminal 2 — Next.js dev server
 Against the real runtime (build the Go binaries from `..` first):
 
 ```bash
-# terminal 1 — from skyra/src/skyra
+# terminal 1 — from history/dna19
 go build -o artifacts/root ./root && go build -o artifacts/user ./user && go build -o artifacts/echo ./root/echo
 ./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
 # ...or drive the real Codex agent (fake provider for a deterministic dev loop):
