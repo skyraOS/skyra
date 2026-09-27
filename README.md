@@ -13,7 +13,8 @@ whatever log they chose to write. If one is prompt-injected, everything the
 user can reach is in its blast radius. And with five agents running, nobody
 can say what each one **cannot** touch.
 
-Skyra's principal is the **bounded, auditable agent**, not the process.
+Skyra's principal is the **bounded, auditable agent**, not the process. The
+full argument, from the five pains that drove it: [`grips-and-invariants.md`](grips-and-invariants.md).
 
 ## Three invariants
 
@@ -196,6 +197,7 @@ Three pieces that are well defined and unowned:
 ```text
 skyra         the one command (installed by install.sh); `skyra help`
 startup-doc.md  setup, commands, troubleshooting: kept current
+grips-and-invariants.md  why: the five pains, and the invariants they force
 controller/   the stateless controller: skyra, skyra demo, skyra ask
 frontend/     the browser UI: served by the controller's webhost (and by DNA-19)
 design/       the controller's spec (D1–D9) and the notes that led to it
