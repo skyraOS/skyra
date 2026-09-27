@@ -1,8 +1,0 @@
-# Voice shard baseline runtime dependencies (validated 2026-03-11)
-sounddevice==0.5.3
-openwakeword==0.6.0
-webrtcvad-wheels==2.0.14
-faster-whisper==1.2.1
-piper-tts==1.4.1
-websockets==16.0; python_version >= "3.10"
-websockets==15.0.1; python_version < "3.10"

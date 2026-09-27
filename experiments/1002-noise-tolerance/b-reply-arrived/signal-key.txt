@@ -1,2 +1,0 @@
-SIGNAL cells (the load-bearing ones — should be grouped): [8 21 34 47 56 60]
-ENTITY DECOY noise cells (mention 'michael' but irrelevant — should be ignored): [6 15 32 57]

@@ -1,7 +1,0 @@
-export type { AnchorSet } from "./anchor-set"
-export type { RetainedArtifact } from "./retained-artifact"
-export type { RetainedArtifactBase, RetainedArtifactKind } from "./retained-artifact-base"
-export type { RetainedSalience } from "./retained-salience"
-export type { RetainedTension } from "./retained-tension"
-export type { RetainedTrace } from "./retained-trace"
-export type { RetainedUnderstanding } from "./retained-understanding"
