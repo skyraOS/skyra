@@ -9,13 +9,21 @@ import (
 	"fmt"
 	p "skyra/history/dna19/protocol"
 	"skyra/history/dna19/root/ports"
+	"strings"
 )
 
+// conversation is a minted handle. Only its revocation is stored: whether it
+// is busy or started is derived from the frames that used it.
 type conversation struct {
-	ref           p.ParentRef
-	binding       *ports.Binding
-	live, started bool
-	busy          p.FrameID
+	ref     p.ParentRef
+	binding *ports.Binding
+	live    bool
+}
+
+// handleUse records a handle an operation was handed and what it required.
+type handleUse struct {
+	sequence p.FrameID
+	need     string
 }
 
 // RandomToken returns 32 random bytes as hex, for parent keys and namespaces.
@@ -71,6 +79,9 @@ func (c ArgContract) check(args []p.Observation) error {
 	}
 	return p.CheckArguments(args, c.Operation)
 }
+
+// parentReference is the handshake: the presented bytes must be a handle this
+// context minted for this binding, and not revoked.
 func (e *ExecutionContext) parentReference(raw string, binding *ports.Binding) (*conversation, error) {
 	var r p.ParentRef
 	if p.StrictJSON([]byte(raw), &r) != nil {
@@ -80,38 +91,95 @@ func (e *ExecutionContext) parentReference(raw string, binding *ports.Binding) (
 	if c == nil || !c.live || c.ref != r || c.binding != binding || r.Owner != e.identity {
 		return nil, fmt.Errorf("unauthorized or retired parent")
 	}
-	if c.busy != 0 {
-		return nil, fmt.Errorf("busy parent")
-	}
 	return c, nil
 }
-func (e *ExecutionContext) authorizeConversation(m p.Move, entry *mapping) (p.FrameID, error) {
-	if m.Target != p.Codex {
-		return 0, nil
-	}
-	values := map[string]string{}
-	for _, a := range m.Invoke.Args {
-		values[a.Key] = string(a.Bytes)
-	}
-	op := values["operation"]
-	if op == "connect" || op == "health" {
-		return 0, nil
-	}
-	c, err := e.parentReference(values["parent"], entry.endpoint.Binding())
-	if err != nil {
-		return 0, err
-	}
-	fresh := op == "start-thread" || op == "fork-thread"
-	if fresh == c.started {
-		return 0, fmt.Errorf("parent lifecycle mismatch")
-	}
-	if op == "fork-thread" {
-		source, err := e.parentReference(values["source"], entry.endpoint.Binding())
-		if err != nil || source == c || !source.started {
-			return 0, fmt.Errorf("unauthorized fork source")
+
+// busyFrame derives the open frame holding a handle, or 0.
+func (b *Bookkeeper) busyFrame(sequence p.FrameID) p.FrameID {
+	for _, f := range b.frames {
+		if f.phase == "running" || f.phase == "waiting" {
+			for _, u := range f.handles {
+				if u.sequence == sequence {
+					return f.id
+				}
+			}
 		}
 	}
-	return c.ref.Sequence, nil
+	return 0
+}
+
+// started derives whether any operation on a handle has returned.
+func (b *Bookkeeper) started(sequence p.FrameID) bool {
+	for _, f := range b.frames {
+		if f.phase == "returned" {
+			for _, u := range f.handles {
+				if u.sequence == sequence {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// authorizeHandles checks every handle an Invoke presents against what its
+// profile declares. It knows no target and no operation names: the
+// requirements are contract data, and the state they read is derived.
+func (e *ExecutionContext) authorizeHandles(profile *p.Profile, args []p.Observation, binding *ports.Binding) ([]handleUse, error) {
+	if profile == nil {
+		return nil, nil
+	}
+	values := map[string]string{}
+	for _, a := range args {
+		values[a.Key] = string(a.Bytes)
+	}
+	var uses []handleUse
+	for _, field := range profile.Fields {
+		raw, present := values[field.Key]
+		if field.Encoding != "parent" || !present {
+			continue
+		}
+		c, err := e.parentReference(raw, binding)
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range uses {
+			if u.sequence == c.ref.Sequence {
+				return nil, fmt.Errorf("one handle presented twice")
+			}
+		}
+		if e.bookkeeper.busyFrame(c.ref.Sequence) != 0 {
+			return nil, fmt.Errorf("busy parent")
+		}
+		if started := e.bookkeeper.started(c.ref.Sequence); started == (field.Handle == "fresh") {
+			return nil, fmt.Errorf("parent lifecycle mismatch")
+		}
+		uses = append(uses, handleUse{sequence: c.ref.Sequence, need: field.Handle})
+	}
+	return uses, nil
+}
+
+// settleHandles applies what a settled operation does to its handles: a
+// Return on an "end" handle, or a failure the profile does not retain,
+// revokes it. A borrowed handle is never revoked by the borrower.
+func (b *Bookkeeper) settleHandles(f *frame, fault *p.Fault) {
+	for _, u := range f.handles {
+		if u.need == "borrowed" {
+			continue
+		}
+		retire := fault == nil && u.need == "end"
+		if fault != nil {
+			retire = true
+			for _, code := range f.profile.Retains {
+				if strings.HasPrefix(fault.Message, code+":") {
+					retire = false
+				}
+			}
+		}
+		if retire {
+			b.parents[u.sequence].live = false
+		}
+	}
 }
 func (b *Bookkeeper) invalidateDescendants(id p.FrameID) {
 	f := b.frames[id]

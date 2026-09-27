@@ -34,7 +34,7 @@ func (e *ExecutionContext) Parents() map[p.FrameID]ParentView {
 	defer e.mu.Unlock()
 	result := make(map[p.FrameID]ParentView, len(e.bookkeeper.parents))
 	for id, c := range e.bookkeeper.parents {
-		result[id] = ParentView{Live: c.live, Busy: c.busy}
+		result[id] = ParentView{Live: c.live, Busy: e.bookkeeper.busyFrame(id)}
 	}
 	return result
 }

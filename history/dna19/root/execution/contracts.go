@@ -58,19 +58,18 @@ type Bookkeeper struct {
 	bottom    *frame
 }
 type frame struct {
-	forkSource   p.FrameID
-	conversation p.FrameID
-	profile      *p.Profile
-	operation    string
-	id           p.FrameID
-	request      uint64
-	parent       p.FrameID
-	waiting      p.FrameID
-	phase        string
-	target       p.ExecutableID
-	binding      *ports.Binding
-	state        []byte
-	result       p.Observation
+	handles   []handleUse
+	profile   *p.Profile
+	operation string
+	id        p.FrameID
+	request   uint64
+	parent    p.FrameID
+	waiting   p.FrameID
+	phase     string
+	target    p.ExecutableID
+	binding   *ports.Binding
+	state     []byte
+	result    p.Observation
 }
 
 // runtimeFailure marks broken runtime invariants before a transport send.

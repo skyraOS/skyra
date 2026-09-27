@@ -3,6 +3,7 @@ package boot_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -103,6 +104,68 @@ func TestCodexProcessAcceptance(t *testing.T) {
 		assertCodexClean(t, r)
 		if !strings.Contains(diagnostics.String(), "provider reaped") {
 			t.Fatal("provider not reaped", diagnostics.String())
+		}
+	})
+	// The runtime checks handles against what each profile declares, reading
+	// derived state; it names no operation. Each refusal happens before the
+	// provider sees anything.
+	t.Run("handle requirements come from the contract", func(t *testing.T) {
+		ctx := guard(t)
+		tr := &trace.Trace{}
+		r, err := boot.Codex(ctx, c, tr)
+		must(t, err)
+		defer r.Close()
+		a, err := r.Execution.MintParent(p.Codex)
+		must(t, err)
+		b, err := r.Execution.MintParent(p.Codex)
+		must(t, err)
+		unused, err := r.Execution.MintParent(p.Codex)
+		must(t, err)
+		id := uint64(1)
+		call := func(args []p.Observation) (p.Move, error) { id++; return r.Call(ctx, id, args) }
+		// A refused external call is dropped and traced, not answered: send it,
+		// then wait for the refusal, with its reason, to appear in the trace.
+		refuse := func(reason string, args []p.Observation) {
+			t.Helper()
+			id++
+			must(t, r.Client.Egress().Send(ctx, p.Move{Identity: id, Target: p.Codex, Invoke: &p.Invoke{Args: args}}))
+			for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+				for _, e := range tr.Snapshot() {
+					if e.Move == id && strings.Contains(e.Transition, "rejected") {
+						if !strings.Contains(e.Transition, reason) {
+							t.Fatalf("move %d refused for the wrong reason: %s (want %q)", id, e.Transition, reason)
+						}
+						return
+					}
+				}
+			}
+			t.Fatalf("move %d was not refused (want %q)", id, reason)
+		}
+		ok := func(args []p.Observation, want string) {
+			t.Helper()
+			m, err := call(args)
+			must(t, err)
+			expectText(t, m, want)
+		}
+		refuse("parent lifecycle mismatch", p.Args("submit-input", "parent", a, "text", "early"))
+		var forged p.ParentRef
+		must(t, json.Unmarshal([]byte(unused), &forged))
+		forged.Token = strings.Repeat("0", len(forged.Token))
+		raw, _ := json.Marshal(forged)
+		refuse("unauthorized or retired parent", p.Args("start-thread", "connection", r.Connection, "parent", string(raw), "text", "x", "tools", `[]`))
+		ok(p.Args("start-thread", "connection", r.Connection, "parent", a, "text", "one", "tools", `[]`), "one")
+		refuse("parent lifecycle mismatch", p.Args("start-thread", "connection", r.Connection, "parent", a, "text", "again", "tools", `[]`))
+		refuse("parent lifecycle mismatch", p.Args("fork-thread", "parent", b, "source", unused)) // a borrowed source must be started
+		refuse("one handle presented twice", p.Args("fork-thread", "parent", b, "source", b))
+		ok(p.Args("fork-thread", "parent", b, "source", a), "fork created")
+		ok(p.Args("submit-input", "parent", a, "text", "source still live"), "source still live")
+		ok(p.Args("end-parent", "parent", b), "parent retired")
+		refuse("unauthorized or retired parent", p.Args("submit-input", "parent", b, "text", "after end"))
+		must(t, r.Kernel.Scheduler().WaitIdle(ctx, "root"))
+		for _, v := range r.Execution.Parents() {
+			if v.Busy != 0 {
+				t.Fatal("a handle is still busy with nothing running")
+			}
 		}
 	})
 	t.Run("interleaved independent parents and echo progress", func(t *testing.T) {

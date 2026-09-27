@@ -130,7 +130,6 @@ func (e *ExecutionContext) Invalidate() {
 	e.live = false
 	for _, c := range e.bookkeeper.parents {
 		c.live = false
-		c.busy = 0
 	}
 	for _, f := range e.bookkeeper.frames {
 		if f.phase == "running" || f.phase == "waiting" {
@@ -354,31 +353,19 @@ func (e *ExecutionContext) commit(work Work) (p.Move, *ports.Egress, p.FrameID, 
 		if !valid {
 			return fail(fmt.Errorf("argument contract rejected"))
 		}
-		parentID, err := e.authorizeConversation(m, entry)
+		var selected ArgContract
+		for _, c := range entry.executable.Contracts {
+			if c.check(m.Invoke.Args) == nil {
+				selected = c
+				break
+			}
+		}
+		handles, err := e.authorizeHandles(selected.Profile, m.Invoke.Args, entry.endpoint.Binding())
 		if err != nil {
 			return fail(err)
 		}
 		f := b.record(m, entry.endpoint.Binding(), work.Source.External())
-		f.conversation = parentID
-		for _, c := range entry.executable.Contracts {
-			if c.check(m.Invoke.Args) == nil {
-				f.profile = c.Profile
-				f.operation = c.Operation
-				break
-			}
-		}
-		if parentID != 0 {
-			b.parents[parentID].busy = f.id
-			if f.operation == "fork-thread" {
-				for _, arg := range m.Invoke.Args {
-					if arg.Key == "source" {
-						c, _ := e.parentReference(string(arg.Bytes), entry.endpoint.Binding())
-						f.forkSource = c.ref.Sequence
-						c.busy = f.id
-					}
-				}
-			}
-		}
+		f.profile, f.operation, f.handles = selected.Profile, selected.Operation, handles
 		frameID = f.id
 		out = m.Clone()
 		out.Source, out.State = 0, nil
@@ -431,18 +418,7 @@ func (e *ExecutionContext) commit(work Work) (p.Move, *ports.Egress, p.FrameID, 
 		if m.Fault != nil {
 			b.invalidateDescendants(f.id)
 		}
-		if f.forkSource != 0 {
-			b.parents[f.forkSource].busy = 0
-		}
-		if f.conversation != 0 {
-			c := b.parents[f.conversation]
-			c.busy = 0
-			if (m.Fault != nil && !strings.HasPrefix(m.Fault.Message, "unsupported:") && !strings.HasPrefix(m.Fault.Message, "invalid:")) || f.operation == "end-parent" {
-				c.live = false
-			} else if m.Return != nil {
-				c.started = true
-			}
-		}
+		b.settleHandles(f, m.Fault)
 		f.phase = "returned"
 		if m.Return != nil {
 			f.result = m.Clone().Return.Observation

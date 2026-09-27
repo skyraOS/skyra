@@ -78,7 +78,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "fresh"
         },
         {
           "key": "text",
@@ -105,7 +106,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "fresh-parent"
+      "lifecycle": "fresh-parent",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "submit-input",
@@ -114,7 +119,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "started"
         },
         {
           "key": "text",
@@ -135,7 +141,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "idle-parent"
+      "lifecycle": "idle-parent",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "fork-thread",
@@ -144,13 +154,15 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "fresh"
         },
         {
           "key": "source",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "borrowed"
         }
       ],
       "results": [
@@ -165,7 +177,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "fresh-destination-idle-source"
+      "lifecycle": "fresh-destination-idle-source",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "tools-add",
@@ -174,7 +190,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "started"
         },
         {
           "key": "tools",
@@ -195,7 +212,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "idle-parent"
+      "lifecycle": "idle-parent",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "tools-remove",
@@ -204,7 +225,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "started"
         },
         {
           "key": "tools",
@@ -225,7 +247,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "idle-parent"
+      "lifecycle": "idle-parent",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "tool-result",
@@ -234,7 +260,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "started"
         },
         {
           "key": "pending",
@@ -262,7 +289,11 @@
         "unsupported"
       ],
       "lifecycle": "bookkeeper-return-only",
-      "continuation": true
+      "continuation": true,
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     },
     {
       "operation": "end-parent",
@@ -271,7 +302,8 @@
           "key": "parent",
           "encoding": "parent",
           "required": true,
-          "max_bytes": 2048
+          "max_bytes": 2048,
+          "handle": "end"
         }
       ],
       "results": [
@@ -286,7 +318,11 @@
         "retired",
         "unsupported"
       ],
-      "lifecycle": "idle-parent"
+      "lifecycle": "idle-parent",
+      "retains": [
+        "unsupported",
+        "invalid"
+      ]
     }
   ]
 }

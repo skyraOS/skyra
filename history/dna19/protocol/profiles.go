@@ -24,6 +24,12 @@ type Field struct {
 	Required bool     `json:"required"`
 	MaxBytes int      `json:"max_bytes"`
 	Values   []string `json:"values,omitempty"`
+	// Handle is required on "parent"-encoded fields: what the operation needs
+	// of the handle it is handed. "fresh": never returned on; "started":
+	// returned on at least once; "end": started, and retired when the
+	// operation returns; "borrowed": started, held only while the operation
+	// runs, and never retired by it.
+	Handle string `json:"handle,omitempty"`
 }
 type Profile struct {
 	Operation    string   `json:"operation"`
@@ -32,6 +38,9 @@ type Profile struct {
 	Failures     []string `json:"failures"`
 	Continuation bool     `json:"continuation,omitempty"`
 	Lifecycle    string   `json:"lifecycle"`
+	// Retains lists the failure codes after which the operation's handles stay
+	// live. Every other failure retires them.
+	Retains []string `json:"retains,omitempty"`
 }
 type Descriptor struct {
 	Protocol int       `json:"protocol"`
@@ -74,6 +83,21 @@ func LoadDescriptor(raw []byte) (Descriptor, error) {
 			case "utf8", "parent", "uint", "tools":
 			default:
 				return d, fmt.Errorf("unknown encoding")
+			}
+			switch {
+			case f.Encoding == "parent" && (f.Handle == "fresh" || f.Handle == "started" || f.Handle == "end" || f.Handle == "borrowed"):
+			case f.Encoding != "parent" && f.Handle == "":
+			default:
+				return d, fmt.Errorf("malformed handle requirement")
+			}
+		}
+		for _, code := range p.Retains {
+			declared := false
+			for _, failure := range p.Failures {
+				declared = declared || failure == code
+			}
+			if !declared {
+				return d, fmt.Errorf("retained failure is not declared")
 			}
 		}
 	}
