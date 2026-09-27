@@ -10,6 +10,13 @@ touch or import DNA-19.
 go test ./...               # the machine's transitions, its purity, and replay, with no processes
 ```
 
+## Improvements to carry forward
+
+[`improvements/`](improvements/): lessons from DNA-19 for the next version.
+
+- [Profiles become input contracts](improvements/01-profiles-become-input-contracts.md)
+- [No silent refusals: a fault-tolerant async boundary](improvements/02-no-silent-refusals.md)
+
 ## Packages
 
 One directory per owner. Imports only run downward, and `machine` is pure:
