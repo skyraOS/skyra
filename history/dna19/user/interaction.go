@@ -161,8 +161,10 @@ func (e *engine) snapshot() snapshotMessage {
 		p := e.pending
 		pending = &p
 	}
-	entries := append([]entry(nil), e.entries...)
-	var convos []conversationView
+	// Empty lists encode as [], never null: the browser's schema requires arrays
+	// and drops any snapshot that does not match.
+	entries := append([]entry{}, e.entries...)
+	convos := []conversationView{}
 	if e.ready {
 		convos = []conversationView{{
 			Conversation:     e.conversation,

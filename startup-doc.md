@@ -82,6 +82,7 @@ conversation with a `contamination:` fault. Restart `skyra` to get a new one.
 | `port 8080 is in use` / `port 3000 is in use` | stop the other process, or `SKYRA_WS_PORT=8090 SKYRA_UI_PORT=3001 skyra` |
 | `codex is not logged in` | `codex login`, or use `skyra chat --fake` |
 | the first message fails with `contamination:` | a newer Codex emits an event the fence doesn't know. Run `skyra live` to see which; the allowlist is in `history/dna19/codex/events.go` |
+| the UI says `open` but stays on "waiting for the interaction to open…" | the UI is dropping the server's snapshots as invalid. Open the browser console and look for `schema_invalid` drops: the server and `frontend/lib/protocol/schemas.ts` disagree (fixed 2026-09-26 for empty lists sent as `null`) |
 | the UI loads but never connects | the runtime isn't up: check the terminal for an error above the trace |
 | the UI fails to start | read `build/ui.log`; rerun `./install.sh` to reinstall the npm dependencies |
 | anything else | `skyra doctor` |

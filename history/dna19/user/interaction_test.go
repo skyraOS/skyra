@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func find[T any](t *testing.T, out []any) (T, bool) {
 	t.Helper()
@@ -118,4 +122,20 @@ func TestCloseAndNotReady(t *testing.T) {
 		t.Fatal("must not close while pending")
 	}
 	mustReject(t, out, "busy")
+}
+
+// The browser's schema requires arrays; a nil slice encodes as null and the
+// whole snapshot is dropped, leaving the UI waiting forever.
+func TestSnapshotEncodesEmptyListsAsArrays(t *testing.T) {
+	for name, e := range map[string]*engine{"not ready": newEngine("ui-test"), "ready, no entries": newReady()} {
+		b, err := json.Marshal(e.snapshot())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{`"conversations":null`, `"entries":null`, `"requests":null`} {
+			if strings.Contains(string(b), key) {
+				t.Fatalf("%s: %s in %s", name, key, b)
+			}
+		}
+	}
 }
