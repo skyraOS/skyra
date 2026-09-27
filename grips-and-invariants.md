@@ -21,7 +21,7 @@ ignore there, a log someone chose to write. None of them is an edge in the
 graph that actually runs. Coupling them to execution is the contribution.
 Claiming less makes the claim truer.
 
-## Five grips, three invariants
+## Six grips, three invariants
 
 | # | Grip: the observed failure | Invariant it forces |
 |---|---|---|
@@ -30,6 +30,7 @@ Claiming less makes the claim truer.
 | 3 | **The plan is not first class.** Plan mode is a checklist the model can silently skip. A failed plan should be an event, not a line quietly dropped | **II. Every action is a typed claim; deviation is a fault** |
 | 4 | **Shell access is velocity bought with ambient authority.** One `rm -rf` from disaster, and no legible record of what ran or why | **III. Authority is one list that only narrows, enforced by the OS; provenance is structural** |
 | 5 | **Five agents cannot be watched by hand.** Reading all the code is impossible at scale, and losing fine-grained control is fine. But you must keep a high-level view of what each agent is doing and, above all, what it *cannot* touch | III |
+| 6 | **Tool acceptance fatigue.** Every effect asks: allow this command, this tool, this file? Nobody reads the fortieth prompt. People approve by reflex, then switch to full auto, and the prompts become ambient authority. An agent that writes its own tools makes it worse: every new tool is new code to approve | III, and the approval moves: **the human grants the Horizon once; anything built inside it, agent-written tools included, runs without asking** |
 
 ## The invariants, made concrete
 
@@ -81,7 +82,9 @@ the system runs, not a log bolted on after.
   record, and replay re-derives every one of them from its stored input:
   truth is derived, not stored.
 - **Not built:** preventing (not only detecting) what Codex runs natively
-  inside its own sandbox.
+  inside its own sandbox. Self-extension: an agent registering a tool it wrote
+  as a leaf under a narrower Horizon, and running it without approval. Today
+  the registry is read once, at genesis.
 
 ## The loop that couples all three
 

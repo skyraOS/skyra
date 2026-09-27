@@ -1,20 +1,28 @@
 # Skyra
 
-**An agent runtime where authority is bounded by construction and enforced by
-the OS, not reported by the agent.**
+**Agents that extend themselves without asking. The human approves the
+boundary once, not every tool; the OS enforces it.**
 
 ## The problem
 
-Operating systems assume one trusted actor per user: the process, owned by a
-human. That assumption no longer holds. A user now runs several semi-autonomous
-agents at once, each with a shell, the whole workspace and the network. Their
-sandbox is something they **report** about themselves, and the audit trail is
-whatever log they chose to write. If one is prompt-injected, everything the
-user can reach is in its blast radius. And with five agents running, nobody
-can say what each one **cannot** touch.
+Today's coding agents ask before they act: *allow this command? this tool?
+this file?* Every prompt is cheap on its own, and together they are the
+failure. People stop reading them, click yes, and then switch on full-auto
+mode, which trades the prompts for ambient authority: a shell, the whole
+workspace and the network, inside a sandbox the agent **reports** about
+itself. That is **tool acceptance fatigue**, and self-extension makes it
+worse: an agent that writes its own tools produces a stream of new code, and
+each piece wants its own approval.
+
+Skyra moves the approval. The human grants a **Horizon** once: an explicit
+set of what an agent may invoke. Everything after that, including tools and
+procedures the agent builds for itself, runs **without approval**, because
+nothing can be created with more authority than its creator holds, and the OS
+enforces the boundary on every invocation. Asking the human is reserved for
+the one case that needs them: reaching past the Horizon.
 
 Skyra's principal is the **bounded, auditable agent**, not the process. The
-full argument, from the five pains that drove it: [`grips-and-invariants.md`](grips-and-invariants.md).
+full argument, from the pains that drove it: [`grips-and-invariants.md`](grips-and-invariants.md).
 
 ## Three invariants
 
@@ -82,6 +90,13 @@ There is no long-running server. One `skyra` binary runs **once per step**,
 then exits. All durable state is a content-addressed, hash-chained record tree
 in `.skyra/`.
 
+Why no server: **crash semantics.** A long-running controller could enforce the
+same invariants, but then its memory is state a crash can lose or leave half
+applied, and recovery has to reconcile it with what is on disk. Here each step
+is read, authorize, one atomic write, execute. A crash before the write means
+nothing happened; after it, the intent is recorded and is faulted or resumed on
+restore. There is never live state to recover, only the tree.
+
 ```text
  INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
            reply with its stamp (a hash)
@@ -142,6 +157,8 @@ handles, and puts every decision in one replayable function.
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls (passing `reply` on), fan-out of several children at once | the slots support it; nothing emits it yet |
+| Self-extension: an agent registers a tool it wrote, as a leaf under a narrower Horizon, and runs it with no approval | **not built**; the registry is fixed at genesis ([`registry.go`](controller/registry/registry.go)) |
+| Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`design/faults.md`](design/faults.md)) | designed, not built |
 | Codex's native execution | detected and faulted, not yet prevented |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
@@ -155,6 +172,9 @@ never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
 under its own generated sandbox. What comes next:
 
+- **Self-extension.** An agent writes a tool, registers it as a leaf whose
+  Horizon is a subset of its own, and calls it with no human in the loop; the
+  same tool reaching further is a fault. This is the demo the thesis needs.
 - **Faults that route by kind, within a turn.** A horizon fault goes back to
   the agent as an observation; an authority fault escalates to the user, who
   holds the authority and can grant it.
@@ -164,13 +184,14 @@ under its own generated sandbox. What comes next:
 
 **The research question** ([`next/research-question.md`](next/research-question.md)):
 
-> Can an agent runtime whose authority is object-capability based, and enforced
-> by the OS, match a conventional agent runtime on cost and capability, while
-> providing strictly stronger containment?
+> Can human approval move from every action to one grant of a Horizon, so an
+> agent extends itself without asking, while matching a conventional runtime on
+> cost and task success and containing strictly more?
 
-Baseline: the same Codex model with its native sandbox. Measured on overhead,
-task success, *friction* (authority faults per task), and containment against
-an adversarial suite such as AgentDojo.
+Baseline: the same Codex model in its own approval modes (ask on request, and
+full auto). Measured on **human interruptions per task**, task success,
+overhead, the number of agent-built tools that run with zero approvals, and
+containment of those tools and of the agent against an adversarial suite.
 
 | When | Work |
 |---|---|
@@ -181,15 +202,18 @@ an adversarial suite such as AgentDojo.
 
 ## Where you'd come in
 
-Three pieces that are well defined and unowned:
+Four pieces that are well defined and unowned:
 
-1. **The evaluation.** Task set, adversarial suite (AgentDojo or our own), and
+1. **The evaluation.** Task set, interruption counting against Codex's
+   approval modes, adversarial suite (AgentDojo or our own), and
    how strong the baseline should be. The open questions are listed at the end
    of the [research question](next/research-question.md).
 2. **Fault routing and restore** on the controller: the design is in
    [`controller/improvements/`](controller/improvements/) and
    [`next/16`](next/16-ingress.md).
-3. **Preventing Codex's native execution**, in the Codex adapter
+3. **Self-extension**: runtime registration of an agent-built leaf, narrowed
+   from its creator's Horizon (today the registry is read once, at genesis).
+4. **Preventing Codex's native execution**, in the Codex adapter
    ([`controller/codex/`](controller/codex/)), where every Codex semantic lives.
 
 ## Layout
@@ -197,7 +221,7 @@ Three pieces that are well defined and unowned:
 ```text
 skyra         the one command (installed by install.sh); `skyra help`
 startup-doc.md  setup, commands, troubleshooting: kept current
-grips-and-invariants.md  why: the five pains, and the invariants they force
+grips-and-invariants.md  why: the six pains, and the invariants they force
 controller/   the stateless controller: skyra, skyra demo, skyra ask
 frontend/     the browser UI: served by the controller's webhost (and by DNA-19)
 design/       the controller's spec (D1–D9) and the notes that led to it
