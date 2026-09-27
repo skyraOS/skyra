@@ -1,14 +1,186 @@
-# Minimal shape: boot to echo
+# The stateless controller
 
-Date: 2026-09-23  
-Status: runnable demo of the [stateless controller](../design/proposal.md)
-at its smallest. Standard library only; macOS (uses `sandbox-exec`). It does not
-touch or import DNA-19.
+Date: 2026-09-27  
+Status: runnable. Standard library only; macOS (uses `sandbox-exec`). It does
+not import DNA-19 (it only borrows DNA-19's fake Codex binary for a test).
+The design is in [`../design/`](../design/) and [`../next/`](../next/).
 
 ```sh
-./run.sh                    # boot to echo, three scenarios, each ending in a replay check
-go test ./...               # the machine's transitions, its purity, and replay, with no processes
+./run.sh                  # every scenario, each ending in a replay check
+go test ./...             # the machine's transitions, its purity, and replay, with no processes
+skyra ask "TEXT"          # from anywhere: real Codex through the controller (see ../startup-doc.md)
 ```
+
+One `skyra` binary runs **once per step**, then exits. Every decision is made
+by one pure function; all durable state is a content-addressed, hash-chained
+record tree in `.skyra/`.
+
+## What it does now
+
+| | Built | Where |
+|---|---|---|
+| **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": capability, "payload": JSON}` or plain text, and `interpret` derives invoke, return or a typed fault (`malformed`, `horizon`, `contract`, `custody`) | `machine.interpret` |
+| **Input contracts** | Every surface declares an input contract and a return contract (the `reply` capability's input contract), and what it may be granted. Fit is strict | `contract/`, `*/contract.json` |
+| **Authority only narrows** | A child is granted what its surface asks for, and only if its parent holds it. The sandbox is rendered from the Horizon; `.skyra/` is always denied | `machine.Narrow`, `horizon.Render` |
+| **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
+| **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
+| **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
+| **Adapters** | A dumb, long-lived actor host in front of each async entity, and a stateless adapter step that owns the entity's semantics | `host/`, `codex/` |
+| **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask` |
+
+## Packages
+
+One directory per owner. Imports only run downward, and `machine` is pure:
+`TestMachineIsPure` fails if it imports anything that touches the OS, the tree
+or the network.
+
+| Package | Owns | Pure? |
+|---|---|---|
+| [`contract`](contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads | yes |
+| [`horizon`](horizon/) | Authority: `Surface` (contracts, grants, sockets), `Horizon` (reach, the frame its reply discharges, the continuation waiting on it), `Render` (the Seatbelt profile) | yes |
+| [`record`](record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` | yes |
+| [`machine`](machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, resolve. **Pure, enforced** | yes |
+| [`registry`](registry/) | The operator's registry: surfaces, binaries (pinned by hash), contracts | no |
+| [`tree`](tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` | no |
+| [`handshake`](handshake/) | The parent ↔ successor socket: messages plus the frame stack as fds | no |
+| [`instance`](instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions | no |
+| [`replay`](replay/) | Re-derives a lineage from genesis with the machine | reads only |
+| [`boot`](boot/) | The operator: genesis, the seed, then waits for its frame (kqueue) | no |
+| [`skyra`](skyra/) | The command: argv and flags only | — |
+| [`echo`](echo/) | An untrusted leaf. Prints its text | — |
+| [`agent`](agent/) | A fake continuation: calls echo, then replies with what it said | — |
+| [`host`](host/) | The universal actor host: owns an actor's connection, a durable inbox, delivery by id. Decides nothing | — |
+| [`codex`](codex/) | The Codex adapter step: every Codex semantic, stateless | — |
+
+The targets (`echo`, `agent`, `codex`) share no code with skyra.
+
+## The step
+
+```go
+func Step(s Instance, e Event) (Instance, []Effect)
+```
+
+`Step` makes every decision; `instance.Drive` performs effects and reports what
+happened as the next event. The state, derived at intake, picks the program:
+
+```text
+intake ─┬─ invoke  → release → execute → handoff              run the target; hand off its output
+        ├─ return  → release → settle → gather → claim ─┐     discharge the slot, then maybe resume the waiter
+        └─ fault   → release → settle → gather → claim ─┤
+                                                        └─ resolve → execute → handoff   the waiter, resumed
+```
+
+| Phase | Event in | Effects out |
+|---|---|---|
+| Intake | `Received`: the bytes, and the Horizon they were emitted under | `StoreInput`, `Commit`, `SendStamp` |
+| Release | `Released`: the Horizon, and the number of frame fds that came with it | invoke: `Run`. Return or fault: `Settle`, then `GatherWaiter` (or `Exit` if only the operator waits) |
+| Execute | `Emitted`: the target's one line | `Spawn`; a silent or failed target: a supervisor fault, which discharges this frame's slot |
+| Handoff | `Stamped`: the successor's stamp and record | invoke: `OpenDep`, `SendHorizon` (new frame). Return or fault: `SendHorizon` (same stack). Then `Exit` |
+| Gather | `Settled`: the waiting frame's record and every round it opened | a slot still open: `Exit`. All discharged: `StoreInput`, `Commit` (resolve), `TryClaim` |
+| Claim | `Claimed` | lost: `Exit`. Won: `Pop`, `Run` (the waiting continuation, resumed in this instance) |
+
+### Operands, and what `interpret` derives
+
+```text
+{"to": "<capability>", "payload": <JSON>}   addressed
+anything else                               unaddressed: its text is the payload for reply
+
+names a capability in reach, payload fits its input contract   → invoke
+names reply, or nothing, payload fits the return contract      → return
+not readable as operands                                       → fault (malformed)
+names a capability outside the Horizon                         → fault (horizon)
+payload does not fit the contract of what it names             → fault (contract)
+```
+
+A leaf's output is always a reply: tools just print their data.
+
+### A continuation's input
+
+A continuation (a surface with something in its reach) reads everything it
+knows on stdin, and keeps nothing between runs:
+
+```json
+{"frame": "<its frame>", "input": {"text": "hello"},
+ "tools": {"echo": {"type": "object", "required": ["text"], "fields": {"text": {"type": "string"}}}},
+ "steps": [{"to": "echo", "payload": {"text": "hello"}, "state": "return", "value": "hello"}]}
+```
+
+`tools` is exactly its reach: what it is shown is what it may invoke.
+
+## What happens: a continuation calls a tool
+
+```text
+boot                      agent (frame R1)              echo (frame R2)            echo's reply
+commit genesis G0
+emit {"to":"agent",…}  ─▶ INTAKE invoke agent R1
+open slot G0/deps/G0/R1
+release [R1, G0]       ─▶ EXECUTE agent: {"to":"echo",…}
+                          INTAKE (successor) invoke echo R2
+                          open slot R1/deps/R1/R2
+                          release [R2, R1, G0]     ─▶ EXECUTE echo: hello
+                                                      handoff ────────────────▶ INTAKE return "hello" R3
+                                                                                SETTLE R2/result = R3
+                                                                                GATHER R1's round: all discharged
+                                                                                commit resolve R4 (deps: R3)
+                                                                                CLAIM R1/resolved-R1: won
+                                                                                EXECUTE agent, resumed: echo said "hello"
+                                                                                ... reply R5 settles R1, resolve R6 of G0
+boot wakes (kqueue on G0), prints the lineage, replays it: 7 records, byte-identical
+```
+
+## State on disk
+
+```text
+.skyra/
+  records/<sha256>                  every record, content-addressed
+  inputs/<sha256>                   the exact bytes each record was derived from
+  frames/<F>/result                 write-once: what discharged F's slot
+  frames/<F>/deps/<round>/<child>   a slot F opened in a round, before the child ran
+  frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
+```
+
+## Adapters: the actor host and the Codex adapter step
+
+The runtime knows no actor ([next/15](../next/15-adapters.md)).
+
+- **`host`** is long-lived and dumb. It owns the actor's stdio, writes every
+  line the actor prints to a durable inbox, and delivers lines at most once per
+  id. Contracts: `deliver`, `read`, `status`, `ping`, over a unix socket.
+- **`codex`** is a continuation, registered like any surface, granted exactly
+  one socket. Each run rebuilds the turn from the inbox; its delivery ids come
+  from its frame, so a resumed step re-derives what the previous step did. A
+  Codex tool call becomes addressed output; a native item or request becomes an
+  address outside the Horizon, which the runtime derives as a horizon fault.
+
+## Decisions, and where they live
+
+| Decision | Code |
+|---|---|
+| D1 the emitter is never the checker | `intake` interprets before any `Run`; `execute` passes output on uninterpreted |
+| D2 custody; the parent exits after release | `handoff` releases only after `issueRelease` passes; `drive` releases the child and exits |
+| D3 the stamp is a pointer | `record.Stamp`; `tree.Load` refuses a record that does not hash to its stamp; `checkSuccessor` |
+| D5 one commit per handoff | only intake, a supervisor fault, and a resolve commit |
+| D6 the release is the Horizon plus fds | `SendHorizon`: Horizon JSON plus the frame stack over `SCM_RIGHTS`; every write in a frame goes through its fd |
+| D7 the sandbox is rendered from the Horizon; `.skyra/` always denied | `horizon.Render(self, floor)`; the floor is a parameter, not a Horizon field |
+| D8 leaves | a surface with an empty reach: its output is always a reply |
+| D9 states, derived (thought 14) | `interpret`; the record stores the derived state, and replay derives it again |
+| Join rule (thought 13) | `gather`: no resolve while a slot is open; the resolve names every discharge |
+
+## Known gaps
+
+- **Records store derived fields** (`state`, `to`, `payload`, `fault`). They
+  are kept as a commitment that replay checks, not as a source of truth.
+- **`drive` still checks the surface hash** before running; it should report
+  the observed hash for `step` to decide.
+- **Faults end the invocation.** A horizon fault goes to the waiter as a
+  discharge, but the Codex conversation does not continue; routing it back to
+  the agent as an observation is [improvement 03](improvements/03-conversation-is-an-invocation.md).
+- **One output per step**, so one child per round: fan-out is supported by the
+  slots and the claim, but nothing emits two children yet.
+- **Conversations** span one turn: no conversation log or multi-turn thread yet.
+- **Restore after a crash**, streaming, and the host's own restart are not built.
+- **Codex's native execution is detected, not prevented**: the command may
+  already have run in Codex's own read-only sandbox (next/15, open).
 
 ## Improvements to carry forward
 
@@ -17,178 +189,3 @@ go test ./...               # the machine's transitions, its purity, and replay,
 - [Profiles become input contracts](improvements/01-profiles-become-input-contracts.md)
 - [No silent refusals: a fault-tolerant async boundary](improvements/02-no-silent-refusals.md)
 - [A conversation is an invocation: logs, history and isolation](improvements/03-conversation-is-an-invocation.md)
-
-## Packages
-
-One directory per owner. Imports only run downward, and `machine` is pure:
-`TestMachineIsPure` fails if it imports anything that touches the OS, the tree
-or the network.
-
-| Package | Owns | Imports (this module) |
-|---|---|---|
-| [`move`](move/) | The wire: the three Move variants, `Parse`, and the states a Move can be in | none |
-| [`horizon`](horizon/) | Authority: `Surface`, `Horizon`, and `Render` (the Seatbelt profile the Horizon renders to) | none |
-| [`record`](record/) | The record: its fields, canonical `Encode`, `Stamp`, `Sum`. Pure | move, horizon |
-| [`machine`](machine/) | The decision tree: `Step`, the four phases, `Narrow`. **Pure** | move, horizon, record |
-| [`tree`](tree/) | `.skyra/` on disk: `Put`/`Get`, `Commit`/`Load`, frame dirs, write-once `Settle`. The only package that touches `.skyra/` | record |
-| [`handshake`](handshake/) | The parent↔successor socket: messages plus fd passing | none |
-| [`trace`](trace/) | Log lines on stderr | none |
-| [`replay`](replay/) | Re-deriving a lineage with `machine.Step` from recorded inputs | machine, tree, record, horizon, move |
-| [`instance`](instance/) | The shell: `Drive` performs effects and turns outcomes into events. Owns the target and successor processes. Makes no decisions | machine, tree, handshake, record, horizon, trace |
-| [`boot`](boot/) | The operator: genesis, then an instance whose target emitted the seed | instance, machine, tree, replay, … |
-| [`skyra`](skyra/) | The command: argv and flags only | boot, instance, trace |
-| [`echo`](echo/) | The untrusted target. Shares no code with skyra | none |
-
-```text
-skyra → boot → instance ─┬→ machine → record → move, horizon      (pure)
-            ↘ replay ───┘   tree → record
-                            handshake, trace
-```
-
-## The step function
-
-[`machine/machine.go`](machine/machine.go) is the whole machine. An instance is a pure
-state machine:
-
-```go
-func step(s Instance, e Event) (Instance, []Effect)
-```
-
-The step makes every decision: what to commit, what to run and under which
-sandbox, whether a successor's stamp checks out, what Horizon to release, and
-when to fault. The shell, [`instance.Drive`](instance/instance.go), performs the effects and
-reports what happened as the next event. It holds all the I/O and makes no
-decisions.
-
-**The top-level decision is the Move's state** (D9). Intake decides it and
-writes it into the record. Each state is its own sequence of phases:
-
-```text
-intake ─┬─ invoke → release → execute → handoff   in custody: run the target, hand off its output
-        ├─ return → release → settle parent        terminal
-        ├─ fault  → release → settle parent        terminal (emitted, rejected at intake, or by a supervisor)
-        └─ resolve                                 holes; not in the minimal shape
-```
-
-`step` checks for intake first, then switches on `s.State`, then on the phase.
-`narrow` switches on the record's state too. A record carries `state`, not an
-accepted/fault verdict: a rejected Move is simply in a state of fault.
-
-Each phase is its own pure function:
-
-| Phase | Function | Event in | Effects out |
-|---|---|---|---|
-| 1. Intake | `intake` | `Received{Under, In}`: the bytes, and the Horizon they were emitted under | `StoreInput`, `Commit{R}`, `SendStamp`, then wait |
-| 2. Release | invoke: `release`. Return or fault: `settleParent`. The parent issues it with `issueRelease` | `Released{Self, Node}`: the Horizon, plus a node fd | invoke: `Run{Surface, Stdin, Profile}`, then wait. Return or fault: `Settle`, `Exit` |
-| 3. Execute | `execute` | `Emitted{Out}`: the target's one line | `Spawn{Under, Out}`, then wait. Silent or failed target: a supervisor fault |
-| 4. Handoff | `handoff` | `Stamped{Stamp, R}`: the successor's stamp, and the record the tree holds under it | `issueRelease` passes: `SendHorizon{Child}`, `Exit`. Otherwise: `KillSuccessor` and a supervisor fault |
-
-Handoff ends by issuing the successor's Release, so one instance's Handoff
-overlaps the next instance's Intake and Release. Release is the one phase with
-two halves: the parent issues it (`issueRelease`: check the stamp, `narrow` the
-Horizon) and the child accepts it (`release`).
-
-A supervisor fault is `Commit{fault}`, `Settle{fault}`, `Exit`: the instance
-still holds custody, so it records the failure and settles its own frame with
-it.
-
-The bytes and the Horizon are the only inputs from outside. Everything a step
-knows besides the bytes is in the Horizon:
-
-```go
-type Horizon struct {
-	Stamp   string             // this frame's commit; the predecessor of whatever is emitted under it
-	Surface *Surface           // what this frame runs
-	Reach   map[string]Surface // what emissions under this Horizon may invoke
-	Settles string             // set when the frame settles a parent frame
-}
-```
-
-`Reach` is the registry as this frame sees it. There is no global registry
-lookup. Genesis holds the root reach, and every child's reach is a subset of its
-parent's (`narrow`). A leaf's reach is empty.
-
-**Boot is an instance too.** It commits genesis, then enters `step` in the
-Execute phase under the root Horizon, as if its target (the operator) had
-just emitted the seed Move. From there it runs the same handoff transitions as
-every instance.
-
-**Replay.** `Step` is pure, so a lineage replays. [`replay.Replay`](replay/replay.go)
-walks from genesis, loads each record's recorded input, re-derives the Horizon
-it was emitted under, feeds `Received` to `step`, and requires the committed
-record to hash to the recorded stamp. Nothing is re-executed. Boot runs it at
-the end of every scenario. The tests show that it rejects a correctly hashed
-record that `step` would never have produced, and a tampered input.
-
-## What happens
-
-```text
-boot (operator)                 instance 1 (frame 1)                 instance 2
-───────────────                 ────────────────────                 ──────────
-commit genesis G0
-  (root reach: echo,
-   a leaf)
-step(Execute, Emitted{seed})  ─▶ INTAKE interpret, commit R1
-                            ◀─ stamp R1
-verify R1, narrow → H1
-release H1 + node fd ───────▶  live
-(operator waits for the         EXECUTE render sandbox from H1,
- lineage to settle)                     run echo, frame + hash its one line
-                                HANDOFF spawn ─────────────────────▶ INTAKE  interpret, commit R2 (return)
-                                        ◀──────────────────── stamp R2
-                                        verify R2, narrow → H2 (settles frame 1)
-                                        release H2 + frame 1's node fd ──▶ live
-                                        exit                          SETTLE  write frames/R1/result = R2 (O_EXCL)
-```
-
-`run.sh` runs three scenarios:
-
-| Scenario | Shows |
-|---|---|
-| `echo hello` | The whole chain: genesis → invoke → return, each committed, stamped, verified and released |
-| `-probe` | Echo tries to read and write `.skyra/` from inside its sandbox. Both are denied (D7). A control run without the sandbox shows both allowed |
-| `-misbehave` | Echo, a leaf, emits an Invoke. Intake still commits and stamps it, but as a fault ("a stamp is custody, not approval"), and the fault settles frame 1 |
-
-## Where each decision lives in the code
-
-| Decision | Code |
-|---|---|
-| The step | `machine.Step`: every transition. `instance.Drive` performs effects and returns events |
-| D1 interpret, then spawn; emitter ≠ checker | `intake` interprets and commits before any `Run`. `execute` passes the target's bytes to `Spawn` uninterpreted, and the next instance's `intake` interprets them |
-| D2 custody; the parent exits after release | `handoff` releases only after `issueRelease` passes (`checkSuccessor`, then `narrow`). `drive` then calls `cmd.Process.Release()` and exits |
-| D3 the stamp is a pointer | `stampOf` hashes the record. `drive` loads the successor's record by stamp (refused unless it hashes to it), and `checkSuccessor` checks `input` and `predecessor` |
-| D4 phases | `intake` → `release` → `execute` → `handoff` in `machine/machine.go`, one function each |
-| D5 one commit per handoff | Only `intake` emits `Commit`, plus `fault` on the failure path. `SendHorizon` writes nothing to disk |
-| D6 the release is the Horizon | The `SendHorizon` effect: Horizon JSON plus a directory fd via `SCM_RIGHTS`. `Released` without a node, or for another commit, stops the instance. `settle` writes only through the fd (`Fchdir`) |
-| D7 sandbox rendered from the Horizon; `.skyra/` always denied | `release` puts `render(Self, Floor)` in the `Run` effect: deny default, allow the surface, and a floor that denies `.skyra/`, which is not a Horizon field |
-| D8 leaves | `narrow` gives a leaf an empty `Reach`. `interpret` faults an Invoke whose target is not in reach |
-| D9 states | `move.State`, decided by `intake` and stored in every record. `machine.Step` and `machine.Narrow` switch on it. A frame's state is the state of the record its `result` points to (written once, `O_EXCL`) |
-
-## State on disk
-
-```text
-.skyra/
-  records/<sha256>          genesis, R1 (invoke), R2 (return): immutable, content-addressed
-  inputs/<sha256>           the exact bytes each intake received; record.input points here
-  frames/<G0>/              frame 0's node
-  frames/<R1>/result        → R2's stamp; created once
-```
-
-## Deliberately left out
-
-- **Holes, resolve and fan-in.** Every Move here is fully resolved.
-- **Non-leaves, adapters and actors.** Echo is the only target.
-- **The Horizon's `os` section.** The profile allows all reads except
-  `.skyra/`, and nothing else is writable. A real `render` would allow only
-  what `h.os` lists.
-- **The opcode in argv.** The instance reads the variant from the Move itself.
-- **Restore.** A killed instance leaves an invoke record with no result, but no
-  restore pass exists yet to fault it.
-- **Streaming.** The target emits one line, and the instance reads only that.
-- **Supervisor faults are not replayed.** A record a supervisor commits (target
-  died, successor died) is marked `supervisor` and is not a `step` output.
-  Replay only checks that it is a plain fault.
-- **The profile hash in the record.** `render` is pure, so the profile can be
-  derived again from the chain.
-- **Directory fsync** is issued, but plain `F_FULLFSYNC` versus `fsync` is not
-  a choice here.

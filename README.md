@@ -23,17 +23,19 @@ Skyra's principal is the **bounded, auditable agent**, not the process.
 | **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a **Horizon**: an explicit set of what it may invoke. A child's Horizon is always a subset of its parent's. The macOS sandbox profile is *generated from the Horizon* for each invocation, and the runtime's own state is always denied. |
 | **3** | **Truth is derived, not stored.** | Only observations are stored: the bytes received, what a target emitted. Everything else is re-derived by one pure function, so replaying the record chain from genesis *is* the definition of correctness. |
 
-Invariants 1 and 2 are built and shown below. Invariant 3 is the rule the
-controller is being brought under this week; replay already re-derives every
-record byte for byte, and [the remaining gaps](#where-we-are) are listed.
+All three are built and shown below. For invariant 3, replay re-derives every
+record from its stored input (intake, supervisor faults and resolves alike);
+[the remaining gaps](#where-we-are) are listed.
 
 ## Run it (macOS, Go 1.25+, Node 20+)
 
 ```sh
 ./install.sh      # once: dependencies, build, puts `skyra` on your PATH
-skyra demo        # the stateless controller: three scenarios, each ending in a replay check
-skyra             # DNA-19: chat with real Codex in the browser, through the capability fence
+skyra demo        # the stateless controller: every scenario, each ending in a replay check
+skyra ask "Call the echo tool with the text hi, then tell me what it returned."
+                  # real Codex, through the stateless controller
 skyra test        # every test
+skyra             # DNA-19, the predecessor: chat with Codex in the browser
 ```
 
 Full setup, every command and troubleshooting: [`startup-doc.md`](startup-doc.md).
@@ -41,25 +43,38 @@ Full setup, every command and troubleshooting: [`startup-doc.md`](startup-doc.md
 Each scenario proves one thing. Trimmed real output:
 
 ```text
-══ echo hello ══                                          the whole chain works
-[boot]          genesis  committed c9d93d05  root reach [echo] (echo is a leaf)
-[inst 0f83a401] intake   committed 0f83a401  invoke echo map[text:hello]
-[boot]          handoff  verified and released 0f83a401, custody passed, exiting
-[inst 0f83a401] execute  echo under rendered sandbox
-[inst 08540ab1] intake   committed 08540ab1  return "hello"
-[inst 08540ab1] release  settles the parent frame: result → 08540ab1
-replay: 3 records re-derived from genesis by step, byte-identical      ← invariant 3
+══ agent: a continuation calls echo, waits, resumes ══     the core loop
+[inst 8828b46b] intake   committed 8828b46b  invoke agent {"text":"hello"}
+[inst 4b7d45a7] intake   committed 4b7d45a7  invoke echo {"text":"hello"}     ← derived from {"to":"echo",…}
+[inst 2ae3f9ec] intake   committed 2ae3f9ec  return "hello"                    ← echo just printed: hello
+[inst 2ae3f9ec] settle   discharges the slot of 4b7d45a7
+[inst 2ae3f9ec] gather   every slot of 8828b46b discharged: committed resolve 9a3d13e2
+[inst 2ae3f9ec] claim    won: resumes 8828b46b
+[inst d976dcfb] intake   committed d976dcfb  return "echo said \"hello\""
+replay: 7 records re-derived from genesis by step, byte-identical      ← invariant 3
 
 ══ echo probes .skyra/ from inside ══                     ← invariant 2
-[inst af537c89] intake   committed af537c89  return "hello [probe .skyra: read denied, write denied]"
+  return "hello [probe .skyra: read denied, write denied]"
 
-══ echo (a leaf) tries to invoke ══                       ← invariant 1
-[inst 9a46f242] intake   committed 9a46f242  fault (rejected at intake):
-                         invoke of "echo" is not in reach (a leaf may only return)
+══ echo (a leaf) addresses echo ══                        ← invariant 1
+  fault (horizon, derived at intake): "echo" is not in reach
+
+══ payload breaks echo's contract ══                      ← invariant 1
+  fault (contract, derived at intake): echo: unknown field "txt"
+
+══ codex (fake) runs a native command: fenced ══
+  fault (horizon, derived at intake): "native.commandExecution" is not in reach
 ```
 
-The misbehaving leaf is still committed and stamped, **as a fault**:
-a stamp means custody, not approval.
+No target ever says "invoke", "return" or "fault". It prints operands, and
+the runtime derives the state. A refused output is still committed and
+stamped, **as a fault**: a stamp means custody, not approval.
+
+With real Codex (`skyra ask`), the same thing happens against the live model:
+Codex asks for `echo`, the runtime derives an invoke, echo runs as its own
+sandboxed leaf, and a fresh adapter step answers Codex's pending tool call.
+Asking it to run `ls` is derived as a horizon fault on
+`native.commandExecution`.
 
 ## How a step works
 
@@ -68,11 +83,15 @@ then exits. All durable state is a content-addressed, hash-chained record tree
 in `.skyra/`.
 
 ```text
- INTAKE    receive unchecked bytes, interpret them, commit a record, reply with its stamp (a hash)
+ INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
+           reply with its stamp (a hash)
  RELEASE   the parent reads the record back, checks it hashes to the stamp, narrows the Horizon,
-           and passes {Horizon + a directory fd} over a Unix socket (SCM_RIGHTS). The fd is the capability
+           and passes {Horizon + the frame stack as directory fds} over a Unix socket (SCM_RIGHTS)
  EXECUTE   run the target under a Seatbelt profile rendered from that Horizon. Its output is not parsed here
- HANDOFF   spawn a successor with the raw output; exit only once the successor has stamped it
+ HANDOFF   spawn a successor with the raw output; open a slot if it is an invoke; exit once it has stamped
+ SETTLE    a return or fault discharges the slot it answers, once
+ GATHER    if every slot the waiting continuation opened is discharged, commit a resolve naming them all,
+ CLAIM     and exactly one sibling resumes that continuation, in the same instance
 ```
 
 - **Every decision** lives in one pure function, `machine.Step(state, event) →
@@ -80,11 +99,14 @@ in `.skyra/`.
   the OS.
 - **All I/O** lives in `instance.Drive`, which performs effects and decides
   nothing.
-- **Custody:** at every moment each Move is held by exactly one live process or
-  one durable commit. A parent exits only after its successor has stamped.
+- **Custody:** at every moment each piece of work is held by exactly one live
+  process or one durable commit. A parent exits only after its successor has
+  stamped.
+- **Continuations are stateless.** An agent reads its input, the tools it may
+  invoke, and every step it has taken, and prints one output.
 - **No secrets anywhere.** A stamp is a hash, verified by reading the tree.
 
-The code is about 1,700 lines of Go, standard library only, 15 tests. Start
+The code is about 3,400 lines of Go, standard library only, 23 tests. Start
 with [`controller/machine/machine.go`](controller/machine/machine.go); the
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
@@ -110,32 +132,35 @@ handles, and puts every decision in one replayable function.
 
 | | Status |
 |---|---|
-| The step protocol: intake, release, execute, handoff | **built**, tested |
+| The step protocol, custody handoff, content-addressed records | **built**, tested |
 | Horizons that only narrow; sandbox rendered per invocation; `.skyra/` denied | **built**; reads and writes denied from inside |
-| Content-addressed records, custody handoff, byte-identical replay | **built** |
-| Live Codex integration, tool calls, fork, migration | **built in DNA-19**; not yet ported |
-| A non-leaf: a continuation that invokes a tool, waits, and resumes | design agreed, not built |
-| Derived states and the `reply` capability ([next](next/)) | design agreed, not built |
-| Invariant 3 everywhere: records still store some derived fields, and the shell still makes two checks the pure step should make | known gaps, next up |
+| Operators derived from operands; input contracts; typed faults (thought 14) | **built** |
+| Dependencies and resolve: a continuation invokes, waits, resumes (thought 13) | **built**; boot waits on a real resolve, not a poll |
+| Replay derives every record, supervisor faults and resolves included | **built** |
+| Adapters: a dumb actor host and a stateless Codex adapter step (next/15) | **built**; real Codex works through it |
+| Faults routed by kind back to the agent, so a conversation continues | designed ([improvements](controller/improvements/)), not built |
+| Conversations: multi-turn, with a log and history per conversation | designed, not built |
+| Tail calls (passing `reply` on), fan-out of several children at once | the slots support it; nothing emits it yet |
+| Codex's native execution | detected and faulted, not yet prevented |
+| Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
 The design behind what's built is in [`design/`](design/), in the order it was
 reasoned out.
 
 ## Where we're going: capability
 
-The next step turns the controller into an object-capability runtime
-([`next/`](next/)):
+The core of the capability model is now running ([`next/`](next/)): the model
+never emits a control operator, only operands; the runtime derives the state;
+a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
+under its own generated sandbox. What comes next:
 
-- **The model never emits a control operator.** It supplies only operands:
-  which capability (optional) and a payload. The runtime *derives* whether that
-  is an invoke, a return, a fault or an interrupt. The model cannot forge
-  control flow.
-- **Return is invoking a single-use `reply` capability** handed down by the
-  parent. Returns are exactly-once by construction, a leaf's output is always a
-  reply (tools just print their data), and passing your `reply` on is a free
-  tail call.
-- **A Codex tool call becomes plain output**, interpreted as an invoke of a leaf
-  that runs under *its own* generated sandbox after the Codex step has exited.
+- **Faults that route by kind.** A horizon fault goes back to the agent as an
+  observation, so the conversation continues; an authority fault escalates to
+  the user, who holds the authority.
+- **Conversations as invocations.** Each conversation is one lineage, with its
+  own log and history, isolated by its Horizon, under the user's authority.
+- **Prevention, not detection,** of Codex's native execution.
+- **The evaluation** against Codex's native sandbox.
 
 **The research question** ([`next/research-question.md`](next/research-question.md)):
 
@@ -149,8 +174,8 @@ an adversarial suite such as AgentDojo.
 
 | When | Work |
 |---|---|
-| late September | semantics: contracts, `interpret`, the `reply` lifecycle |
-| October | a real continuation: Codex calling leaf tools under generated sandboxes |
+| late September | semantics: contracts, `interpret`, dependencies and resolve (**done**) |
+| October | a real continuation: Codex calling leaf tools under generated sandboxes (**first version done**); fault routing, conversations |
 | November | audit and replay; the baseline harness and task set |
 | December | evaluation and writeup |
 
@@ -161,17 +186,17 @@ Three pieces that are well defined and unowned:
 1. **The evaluation.** Task set, adversarial suite (AgentDojo or our own), and
    how strong the baseline should be. The open questions are listed at the end
    of the [research question](next/research-question.md).
-2. **The Codex adapter.** Port DNA-19's hard-won Codex knowledge onto the
-   stateless controller, with tool calls as derived invokes.
-3. **The semantics.** Write `interpret` as a total, pure function, and define
-   input contracts ([agenda](next/agenda.md)).
+2. **Conversations and fault routing** on the controller: the design is in
+   [`controller/improvements/`](controller/improvements/).
+3. **Preventing Codex's native execution**, in the Codex adapter
+   ([`controller/codex/`](controller/codex/)), where every Codex semantic lives.
 
 ## Layout
 
 ```text
 skyra         the one command (installed by install.sh); `skyra help`
 startup-doc.md  setup, commands, troubleshooting: kept current
-controller/   the working prototype: skyra demo
+controller/   the stateless controller: skyra demo, skyra ask
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
 history/      DNA-19 and the earlier specs, kept for reference

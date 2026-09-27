@@ -3,10 +3,15 @@
 Everything needed to get Skyra running on a fresh machine. **Keep this current:**
 when anything about setup changes, update this file in the same commit.
 
-**Last verified: 2026-09-26** on macOS 15.6 (Apple Silicon), Go 1.25.0,
+**Last verified: 2026-09-27** on macOS 15.6 (Apple Silicon), Go 1.25.0,
 Node 26.0.0, Codex CLI 0.157.1:
 
 - `./install.sh` and `skyra doctor` pass.
+- `skyra demo`: all 7 scenarios end in `byte-identical`, including fake Codex
+  through the actor host.
+- `skyra ask` with real Codex: an echo tool call ran as its own sandboxed leaf
+  and resumed the turn; asking it to run `ls` was derived as a horizon fault; a
+  second ask reused the same actor host.
 - `skyra` with real Codex: a browser message made Codex call the `echo` tool,
   which ran as a separate host process and resumed on the same turn.
 - `skyra chat --fake`, `skyra demo` and `skyra test` all pass.
@@ -42,16 +47,18 @@ prints an `export PATH=…` line, add that to `~/.zshrc` and open a new terminal
 skyra
 ```
 
-This builds, starts DNA-19 with real Codex, starts the UI, and opens
+This starts DNA-19, the predecessor: it builds, starts DNA-19 with real Codex, starts the UI, and opens
 http://localhost:3000. The terminal shows the runtime's trace: every Move
 admitted, committed and routed. Ctrl-C stops everything.
 
 | Command | Does |
 |---|---|
-| `skyra` | chat with Codex in the browser, through DNA-19's capability fence |
+| `skyra ask "TEXT"` | **the stateless controller with real Codex**: TEXT goes to the Codex adapter, through the actor host. Prints the lineage, the replay check and the answer |
+| `skyra stop` | stop the Codex actor host that `ask` starts once and leaves running |
+| `skyra` | DNA-19, the predecessor: chat with Codex in the browser, through its capability fence |
 | `skyra chat --fake` | the same against a deterministic fake Codex: no model, no login |
 | `skyra chat --echo` | the same with the echo agent: no Codex at all |
-| `skyra demo` | **the stateless controller**: three scenarios (the full chain, the sandbox probe, a misbehaving leaf), each ending in a replay check |
+| `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
 | `skyra test` | every Go test, for the controller and DNA-19 |
 | `skyra live` | DNA-19's live suite against your installed Codex (about a minute; rewrites the evidence in `history/dna19/artifacts/`) |
 | `skyra doctor` | check prerequisites and ports |
@@ -59,7 +66,19 @@ admitted, committed and routed. Ctrl-C stops everything.
 
 `skyra` always rebuilds first, so after a `git pull` just run it again.
 
-## 4. What to try in the chat
+### The stateless controller with real Codex
+
+```sh
+skyra ask "Call the echo tool with the text hi, then tell me what it returned."
+skyra ask "Run the ls command and tell me what it says."    # derived as a horizon fault
+skyra stop
+```
+
+`ask` starts the actor host in front of `codex app-server` the first time
+(`~/.skyra/codex.sock`, log in `~/.skyra/codex-host.log`) and leaves it
+running; each run's state is kept under `~/.skyra/runs/`.
+
+## 4. What to try in the DNA-19 chat
 
 - **"Call the echo tool with the text hi, then tell me what it returned."**
   Watch the trace: the tool call leaves Codex as a Move, the host runs `echo`
@@ -85,6 +104,8 @@ conversation with a `contamination:` fault. Restart `skyra` to get a new one.
 | the UI says `open` but stays on "waiting for the interaction to open…" | the UI is dropping the server's snapshots as invalid. Open the browser console and look for `schema_invalid` drops: the server and `frontend/lib/protocol/schemas.ts` disagree (fixed 2026-09-26 for empty lists sent as `null`) |
 | the UI loads but never connects | the runtime isn't up: check the terminal for an error above the trace |
 | the UI fails to start | read `build/ui.log`; rerun `./install.sh` to reinstall the npm dependencies |
+| `skyra ask` fails with `the actor host did not start` | read `~/.skyra/codex-host.log`; `skyra stop`, then ask again |
+| `skyra ask` ends in a custody fault naming the adapter | the Codex adapter's last stderr line is the cause; `skyra stop` restarts the host on the next ask |
 | anything else | `skyra doctor` |
 
 ## 6. Keeping this current
@@ -92,7 +113,7 @@ conversation with a `contamination:` fault. Restart `skyra` to get a new one.
 Before telling anyone to run this:
 
 1. `git pull`, then `skyra doctor` and `skyra test`.
-2. `skyra demo`: all three scenarios end in `byte-identical`.
-3. `skyra chat --fake`, then `skyra`: send the echo prompt above.
+2. `skyra demo`: every scenario ends in `byte-identical`.
+3. `skyra ask` with the echo prompt above; then `skyra chat --fake` and `skyra`.
 4. If Codex was upgraded: `skyra live`, then update the versions and date in
    **Last verified** above.

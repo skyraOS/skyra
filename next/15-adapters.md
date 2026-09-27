@@ -74,8 +74,13 @@ display-only effect that never becomes state, or never.
 
 ## Build order
 
-1. `interpret` and the input contract.
+1. `interpret` and the input contract. **Done** (`ca46aab`).
 2. The first non-leaf, with a fake continuation: dependencies and resolve in
-   `step`.
+   `step`. **Done** (`8757d85`).
 3. The actor host, with DNA-19's deterministic fake provider behind it.
-4. Real Codex behind the same host.
+   **Done** (`cc438a9`).
+4. Real Codex behind the same host. **Done** (`c0ea2ad`): `skyra ask`.
+
+Still open from this note: preventing native execution (it is detected and
+faulted today), resuming a provider thread after the host restarts, and the
+host's own restart from its durable inbox.
