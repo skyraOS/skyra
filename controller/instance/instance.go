@@ -219,11 +219,13 @@ func run(x machine.Run) machine.Event {
 	if record.Sum(bin) != x.Surface.SHA256 {
 		return machine.Emitted{Err: "surface binary does not match its registered hash"}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Surface.Path)
 	cmd.Stdin = bytes.NewReader(x.Stdin)
-	cmd.Stderr = os.Stderr
+	cmd.Env = x.Env
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return machine.Emitted{Err: err.Error()}
@@ -234,6 +236,12 @@ func run(x machine.Run) machine.Event {
 	line, _ := bufio.NewReader(out).ReadBytes('\n')
 	_ = cmd.Wait()
 	emission := bytes.TrimSuffix(line, []byte("\n"))
+	if len(emission) == 0 {
+		// What the target said on the way out is the observation.
+		if lines := bytes.Split(bytes.TrimSpace(stderr.Bytes()), []byte("\n")); len(lines[len(lines)-1]) > 0 {
+			return machine.Emitted{Err: "target exited without emitting: " + string(lines[len(lines)-1])}
+		}
+	}
 	trace.Logf("execute  target emitted %d bytes (sha256 %s)", len(emission), record.Short(record.Sum(emission)))
 	return machine.Emitted{Out: emission}
 }

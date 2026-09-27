@@ -135,6 +135,7 @@ type Run struct {                     // then wait for Emitted
 	Surface horizon.Surface
 	Stdin   []byte
 	Profile string
+	Env     []string // the target's whole environment: nothing is inherited
 }
 type Spawn struct { // start the successor, forward the bytes, then wait for Stamped
 	Under horizon.Horizon
@@ -310,9 +311,9 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	s.Self, s.Phase = e.Self, Execute
 	stdin := []byte(s.R.Payload)
 	if !e.Self.Surface.Leaf() {
-		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Steps: []StepView{}})
+		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
 	}
-	return s, []Effect{Run{Surface: *e.Self.Surface, Stdin: stdin, Profile: horizon.Render(e.Self, s.Floor)}}
+	return s, []Effect{runOf(e.Self, stdin, s.Floor)}
 }
 
 // 3. Execute: the target ran exactly the committed surface, under a sandbox
@@ -439,7 +440,7 @@ func gather(s Instance, e Settled) (Instance, []Effect) {
 	}
 	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results})
 	r, _ := Resolved(s.Stamp, obs)
-	s.Held, s.Next, s.Phase = r, continuation(e), Claim
+	s.Held, s.Next, s.Phase = r, continuation(e, tools(*waiter)), Claim
 	return s, []Effect{StoreInput{obs}, Commit{r}, TryClaim{Round: round.Stamp, Stamp: record.Stamp(r)}}
 }
 
@@ -457,7 +458,7 @@ func claim(s Instance, e Claimed) (Instance, []Effect) {
 		return s, []Effect{Exit{}}
 	}
 	s.State, s.R, s.Stamp, s.Self, s.Phase = record.Resolve, s.Held, resumed.Stamp, resumed, Execute
-	return s, []Effect{Pop{}, Run{Surface: *resumed.Surface, Stdin: s.Next, Profile: horizon.Render(resumed, s.Floor)}}
+	return s, []Effect{Pop{}, runOf(resumed, s.Next, s.Floor)}
 }
 
 // Observation is what a resolve observed: the round whose slots are all
@@ -479,13 +480,35 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 		Frame: o.Frame, Round: o.Round, Deps: o.Discharges}, nil
 }
 
+// runOf is the Run effect for a Horizon: its surface, under the sandbox the
+// Horizon renders to, with an environment that names only the sockets its
+// surface was granted.
+func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
+	env := []string{"PATH=/usr/bin:/bin"}
+	for _, sock := range h.Surface.Connect {
+		env = append(env, "SKYRA_CONNECT="+sock)
+	}
+	return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
+}
+
+// tools is what a continuation is shown: the input contract of everything in
+// its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
+func tools(h horizon.Horizon) map[string]*contract.Schema {
+	t := map[string]*contract.Schema{}
+	for name, s := range h.Reach {
+		t[name] = s.Input
+	}
+	return t
+}
+
 // Continuation is what a continuation reads on stdin: the frame it runs in,
-// the payload it was invoked with, and every step it has taken, with what came
-// back. It is stateless: everything it knows is here.
+// the payload it was invoked with, the tools it may invoke, and every step it
+// has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Frame string          `json:"frame"`
-	Input json.RawMessage `json:"input"`
-	Steps []StepView      `json:"steps"`
+	Frame string                      `json:"frame"`
+	Input json.RawMessage             `json:"input"`
+	Tools map[string]*contract.Schema `json:"tools"`
+	Steps []StepView                  `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -498,8 +521,8 @@ type StepView struct {
 	Fault   *record.FaultInfo `json:"fault,omitempty"`
 }
 
-func continuation(e Settled) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Steps: []StepView{}}
+func continuation(e Settled, tools map[string]*contract.Schema) []byte {
+	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools, Steps: []StepView{}}
 	for _, round := range e.Rounds {
 		for _, child := range round.Children {
 			c.Steps = append(c.Steps, StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,

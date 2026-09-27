@@ -40,11 +40,13 @@ the runtime can rely on for any async entity:
 | Contract | Returns |
 |---|---|
 | `deliver(id, payload)` | accepted, keyed by id. Delivering the same id twice is a no-op; the same id with a different payload is a `conflict` |
-| `status(id)` | `pending`, or the recorded outcome for that id |
+| `read(from, wait)` | every inbox event from a position on, waiting up to `wait` for the first: how an adapter step observes the actor |
+| `status(id)` | whether an id was delivered, and the inbox position it was delivered at |
 | `ping` | liveness, as a timestamped observation |
 
-- **Retry is `deliver` again with the same id.** The host dedups it; if the
-  inbox already holds an outcome, that is the answer. Blind retry cannot be
+- **Retry is `deliver` again with the same id.** The host dedups it and
+  returns the first delivery's inbox position, so the step reads the outcome
+  from there. Blind retry cannot be
   expressed: re-sending a Codex turn would mean a second turn, a second cost
   and a different answer.
 - **Time is an observation.** A deadline passing is an event `step` turns into

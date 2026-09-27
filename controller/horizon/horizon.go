@@ -18,6 +18,9 @@ type Surface struct {
 	Input  *contract.Schema `json:"input"`           // what invoking it must fit
 	Output *contract.Schema `json:"output"`          // what its reply must fit: the reply capability's input contract
 	Reach  []string         `json:"reach,omitempty"` // what it may be granted, if its parent holds it. Empty: a leaf
+	// Connect lists the unix sockets it may connect to: an adapter reaching
+	// its actor host (next/15). The operator's registry grants them.
+	Connect []string `json:"connect,omitempty"`
 }
 
 // Leaf reports whether the surface can only reply.
@@ -72,6 +75,9 @@ func Render(h Horizon, floor string) string {
 	b.WriteString("(version 1)\n(deny default)\n")
 	fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", h.Surface.Path)
 	b.WriteString("(allow file-read*)\n(allow sysctl-read)\n(allow mach-lookup)\n")
+	for _, sock := range h.Surface.Connect {
+		fmt.Fprintf(&b, "(allow network-outbound (remote unix-socket (path-literal %q)))\n", sock)
+	}
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
 	return b.String()
 }

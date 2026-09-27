@@ -18,8 +18,9 @@ import (
 
 // Entry is one surface in the registry file. Paths are relative to the file.
 type Entry struct {
-	Path     string `json:"path"`
-	Contract string `json:"contract"`
+	Path     string   `json:"path"`
+	Contract string   `json:"contract"`
+	Connect  []string `json:"connect,omitempty"` // unix sockets it may reach: an adapter's actor host
 }
 
 // Declared is what a surface's contract file says about it.
@@ -60,7 +61,7 @@ func Load(file string) (map[string]horizon.Surface, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Output: d.Output, Reach: d.Reach}
+		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Output: d.Output, Reach: d.Reach, Connect: e.Connect}
 	}
 	for name, s := range reach {
 		for _, want := range s.Reach {
