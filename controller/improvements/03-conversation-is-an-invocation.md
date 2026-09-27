@@ -1,7 +1,10 @@
 # A conversation is an invocation: logs, history and isolation
 
 Date: 2026-09-26  
-Status: direction agreed, not built. Follows from DNA-19's browser path
+Status: mostly built on the controller (next/16, `d27f4c5`): conversations
+are lineages with their history listed, the user side is Codex's parent, and a
+fault in a turn no longer ends the conversation. Not built: routing a horizon
+fault back into the same Codex turn, and continuing after the host restarts. Follows from DNA-19's browser path
 (`history/dna19/user/`) and the Codex actor's private thread ids.
 
 ## The claim

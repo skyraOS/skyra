@@ -6,6 +6,11 @@ when anything about setup changes, update this file in the same commit.
 **Last verified: 2026-09-27** on macOS 15.6 (Apple Silicon), Go 1.25.0,
 Node 26.0.0, Codex CLI 0.157.1:
 
+- `skyra` (the controller chat): a two-turn conversation with real Codex;
+  Codex remembered turn one in turn two; closed, then replayed (22 records,
+  byte-identical). `skyra chat --fake`: a tool call, a fenced native command
+  shown as a turn with the conversation going on, then close.
+
 - `./install.sh` and `skyra doctor` pass.
 - `skyra demo`: all 7 scenarios end in `byte-identical`, including fake Codex
   through the actor host.
@@ -47,17 +52,20 @@ prints an `export PATH=…` line, add that to `~/.zshrc` and open a new terminal
 skyra
 ```
 
-This starts DNA-19, the predecessor: it builds, starts DNA-19 with real Codex, starts the UI, and opens
-http://localhost:3000. The terminal shows the runtime's trace: every Move
-admitted, committed and routed. Ctrl-C stops everything.
+This builds the stateless controller, starts the Codex actor host (once; it
+keeps running), starts the browser host and the UI, and opens
+http://localhost:3000. Press **+ new** to start a conversation. The terminal
+shows the runtime's trace: every record committed, every park and resume.
+Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 
 | Command | Does |
 |---|---|
-| `skyra ask "TEXT"` | **the stateless controller with real Codex**: TEXT goes to the Codex adapter, through the actor host. Prints the lineage, the replay check and the answer |
-| `skyra stop` | stop the Codex actor host that `ask` starts once and leaves running |
-| `skyra` | DNA-19, the predecessor: chat with Codex in the browser, through its capability fence |
-| `skyra chat --fake` | the same against a deterministic fake Codex: no model, no login |
-| `skyra chat --echo` | the same with the echo agent: no Codex at all |
+| `skyra` | **chat with real Codex in the browser, through the stateless controller.** Every conversation is saved as its lineage and listed with its history |
+| `skyra chat --fake` | the same, against a deterministic fake Codex: no model, no login |
+| `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
+| `skyra replay DIR` | re-derive a finished conversation or run from its records |
+| `skyra stop` | stop the Codex actor hosts that `skyra` and `ask` leave running |
+| `skyra dna19` | DNA-19, the predecessor: its browser chat through its capability fence (`--fake`, `--echo`) |
 | `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
 | `skyra test` | every Go test, for the controller and DNA-19 |
 | `skyra live` | DNA-19's live suite against your installed Codex (about a minute; rewrites the evidence in `history/dna19/artifacts/`) |
@@ -66,7 +74,7 @@ admitted, committed and routed. Ctrl-C stops everything.
 
 `skyra` always rebuilds first, so after a `git pull` just run it again.
 
-### The stateless controller with real Codex
+### One question, from the terminal
 
 ```sh
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
@@ -74,24 +82,30 @@ skyra ask "Run the ls command and tell me what it says."    # derived as a horiz
 skyra stop
 ```
 
-`ask` starts the actor host in front of `codex app-server` the first time
-(`~/.skyra/codex.sock`, log in `~/.skyra/codex-host.log`) and leaves it
-running; each run's state is kept under `~/.skyra/runs/`.
+Actor hosts, logs and state live in `~/.skyra/`: `codex-real.sock` and
+`codex-real-host.log` for the Codex host, `conversations/` for chats (one
+`.skyra` per conversation), `runs/` for `ask`.
 
-## 4. What to try in the DNA-19 chat
+## 4. What to try in a conversation
 
 - **"Call the echo tool with the text hi, then tell me what it returned."**
-  Watch the trace: the tool call leaves Codex as a Move, the host runs `echo`
-  as a separate process, and the result resumes Codex on the same turn.
-- Ordinary questions work: it's a normal Codex conversation.
-- Type `/fault` to see the fault path: the conversation is retired and cannot
-  be revived.
+  Codex asks for `echo`; the runtime derives an invoke, runs echo as its own
+  sandboxed leaf, and a fresh adapter step answers Codex's pending call.
+- **Then: "What did the echo tool return a moment ago?"** One Codex thread per
+  conversation, so it remembers.
+- **"Run the ls command and tell me what it says."** Codex tries its native
+  shell; the runtime derives a horizon fault, shows it as a turn, and the
+  conversation goes on.
+- **close**, then pick the conversation from the sidebar: its history is
+  derived from its records. `skyra replay ~/.skyra/conversations/<id>/.skyra`
+  re-derives every record.
 
-**What it cannot do, by design.** Every Codex thread starts read-only, with no
-network, `approvalPolicy=never`, and exactly one tool, `echo`. It cannot edit
-files or run commands. If Codex tries anything outside that vocabulary (a shell
-command, an approval request, an unknown event), the fence retires the whole
-conversation with a `contamination:` fault. Restart `skyra` to get a new one.
+**What it cannot do, by design.** Codex's threads are read-only, with no
+network, `approvalPolicy=never`, and exactly the tools the user side holds
+(`echo`). Anything native it tries is a horizon fault.
+
+DNA-19's chat is still there as `skyra dna19`; its fence retires the whole
+conversation on any native attempt.
 
 ## 5. Troubleshooting
 
@@ -100,12 +114,13 @@ conversation with a `contamination:` fault. Restart `skyra` to get a new one.
 | `skyra: command not found` | open a new terminal; or add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc`; or run `./skyra` from the repo |
 | `port 8080 is in use` / `port 3000 is in use` | stop the other process, or `SKYRA_WS_PORT=8090 SKYRA_UI_PORT=3001 skyra` |
 | `codex is not logged in` | `codex login`, or use `skyra chat --fake` |
-| the first message fails with `contamination:` | a newer Codex emits an event the fence doesn't know. Run `skyra live` to see which; the allowlist is in `history/dna19/codex/events.go` |
+| a turn shows `⚠ the agent faulted (custody)` | the Codex adapter's last stderr line is the cause; `skyra stop`, then run `skyra` again |
+| `skyra dna19`: the first message fails with `contamination:` | a newer Codex emits an event DNA-19's fence doesn't know. Run `skyra live` to see which; the allowlist is in `history/dna19/codex/events.go` |
 | the UI says `open` but stays on "waiting for the interaction to open…" | the UI is dropping the server's snapshots as invalid. Open the browser console and look for `schema_invalid` drops: the server and `frontend/lib/protocol/schemas.ts` disagree (fixed 2026-09-26 for empty lists sent as `null`) |
-| the UI loads but never connects | the runtime isn't up: check the terminal for an error above the trace |
+| the UI loads but never connects | the browser host isn't up: check the terminal for an error above the trace |
+| a conversation stays grey after a restart | expected: its waiting frame lived in the browser host that stopped. It is viewable, and replayable, but cannot continue yet |
 | the UI fails to start | read `build/ui.log`; rerun `./install.sh` to reinstall the npm dependencies |
-| `skyra ask` fails with `the actor host did not start` | read `~/.skyra/codex-host.log`; `skyra stop`, then ask again |
-| `skyra ask` ends in a custody fault naming the adapter | the Codex adapter's last stderr line is the cause; `skyra stop` restarts the host on the next ask |
+| `the Codex actor host did not start` | read `~/.skyra/codex-real-host.log`; `skyra stop`, then try again |
 | anything else | `skyra doctor` |
 
 ## 6. Keeping this current
@@ -114,6 +129,6 @@ Before telling anyone to run this:
 
 1. `git pull`, then `skyra doctor` and `skyra test`.
 2. `skyra demo`: every scenario ends in `byte-identical`.
-3. `skyra ask` with the echo prompt above; then `skyra chat --fake` and `skyra`.
+3. `skyra chat --fake`, then `skyra`: the conversation prompts above; then `skyra ask`.
 4. If Codex was upgraded: `skyra live`, then update the versions and date in
    **Last verified** above.

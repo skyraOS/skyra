@@ -1,7 +1,7 @@
 # Ingress: an async invocation, parked with its adapter
 
 Date: 2026-09-27  
-Status: agreed, being built. Follows [15](15-adapters.md) and
+Status: agreed and built (`d27f4c5`): `skyra` runs it. Follows [15](15-adapters.md) and
 [`controller/improvements/03`](../controller/improvements/03-conversation-is-an-invocation.md).
 
 ## The problem

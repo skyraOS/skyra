@@ -31,11 +31,10 @@ record from its stored input (intake, supervisor faults and resolves alike);
 
 ```sh
 ./install.sh      # once: dependencies, build, puts `skyra` on your PATH
-skyra demo        # the stateless controller: every scenario, each ending in a replay check
+skyra             # chat with real Codex in the browser, through the stateless controller
+skyra demo        # every scenario, each ending in a replay check
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
-                  # real Codex, through the stateless controller
 skyra test        # every test
-skyra             # DNA-19, the predecessor: chat with Codex in the browser
 ```
 
 Full setup, every command and troubleshooting: [`startup-doc.md`](startup-doc.md).
@@ -138,8 +137,9 @@ handles, and puts every decision in one replayable function.
 | Dependencies and resolve: a continuation invokes, waits, resumes (thought 13) | **built**; boot waits on a real resolve, not a poll |
 | Replay derives every record, supervisor faults and resolves included | **built** |
 | Adapters: a dumb actor host and a stateless Codex adapter step (next/15) | **built**; real Codex works through it |
-| Faults routed by kind back to the agent, so a conversation continues | designed ([improvements](controller/improvements/)), not built |
-| Conversations: multi-turn, with a log and history per conversation | designed, not built |
+| Ingress: an outside event resumes a frame parked with its host (next/16) | **built** |
+| Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
+| A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls (passing `reply` on), fan-out of several children at once | the slots support it; nothing emits it yet |
 | Codex's native execution | detected and faulted, not yet prevented |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
@@ -154,11 +154,10 @@ never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
 under its own generated sandbox. What comes next:
 
-- **Faults that route by kind.** A horizon fault goes back to the agent as an
-  observation, so the conversation continues; an authority fault escalates to
-  the user, who holds the authority.
-- **Conversations as invocations.** Each conversation is one lineage, with its
-  own log and history, isolated by its Horizon, under the user's authority.
+- **Faults that route by kind, within a turn.** A horizon fault goes back to
+  the agent as an observation; an authority fault escalates to the user, who
+  holds the authority and can grant it.
+- **Restore:** a conversation whose host stopped continues from its lineage.
 - **Prevention, not detection,** of Codex's native execution.
 - **The evaluation** against Codex's native sandbox.
 
@@ -186,8 +185,9 @@ Three pieces that are well defined and unowned:
 1. **The evaluation.** Task set, adversarial suite (AgentDojo or our own), and
    how strong the baseline should be. The open questions are listed at the end
    of the [research question](next/research-question.md).
-2. **Conversations and fault routing** on the controller: the design is in
-   [`controller/improvements/`](controller/improvements/).
+2. **Fault routing and restore** on the controller: the design is in
+   [`controller/improvements/`](controller/improvements/) and
+   [`next/16`](next/16-ingress.md).
 3. **Preventing Codex's native execution**, in the Codex adapter
    ([`controller/codex/`](controller/codex/)), where every Codex semantic lives.
 
@@ -196,7 +196,7 @@ Three pieces that are well defined and unowned:
 ```text
 skyra         the one command (installed by install.sh); `skyra help`
 startup-doc.md  setup, commands, troubleshooting: kept current
-controller/   the stateless controller: skyra demo, skyra ask
+controller/   the stateless controller: skyra, skyra demo, skyra ask
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
 history/      DNA-19 and the earlier specs, kept for reference

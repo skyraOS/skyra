@@ -8,7 +8,9 @@ The design is in [`../design/`](../design/) and [`../next/`](../next/).
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
 go test ./...             # the machine's transitions, its purity, and replay, with no processes
-skyra ask "TEXT"          # from anywhere: real Codex through the controller (see ../startup-doc.md)
+skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
+skyra ask "TEXT"          # one question to real Codex, printed with its lineage
+skyra replay DIR          # re-derive any finished conversation or run from its records
 ```
 
 One `skyra` binary runs **once per step**, then exits. Every decision is made
@@ -26,7 +28,9 @@ record tree in `.skyra/`.
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
 | **Adapters** | A dumb, long-lived actor host in front of each async entity, and a stateless adapter step that owns the entity's semantics | `host/`, `codex/` |
-| **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask` |
+| **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask`, `skyra` |
+| **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds custody (the frame stack) until an outside event arrives, then resumes it; the successor checks the event like any output | `machine.parked`, `park/`, `skyra resume` |
+| **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `user/`, `webhost/` |
 
 ## Packages
 
@@ -50,7 +54,11 @@ or the network.
 | [`echo`](echo/) | An untrusted leaf. Prints its text | — |
 | [`agent`](agent/) | A fake continuation: calls echo, then replies with what it said | — |
 | [`host`](host/) | The universal actor host: owns an actor's connection, a durable inbox, delivery by id. Decides nothing | — |
-| [`codex`](codex/) | The Codex adapter step: every Codex semantic, stateless | — |
+| [`codex`](codex/) | The Codex adapter step: every Codex semantic, stateless; one Codex thread per conversation | — |
+| [`park`](park/) | Parking a frame with a host, and resuming it | no |
+| [`user`](user/) | The user's side of a conversation: a continuation whose steps are the transcript | — |
+| [`browser`](browser/) | The browser's contract: an async surface, served by the webhost | — |
+| [`webhost`](webhost/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records | — |
 
 The targets (`echo`, `agent`, `codex`) share no code with skyra.
 
@@ -172,12 +180,15 @@ The runtime knows no actor ([next/15](../next/15-adapters.md)).
   are kept as a commitment that replay checks, not as a source of truth.
 - **`drive` still checks the surface hash** before running; it should report
   the observed hash for `step` to decide.
-- **Faults end the invocation.** A horizon fault goes to the waiter as a
-  discharge, but the Codex conversation does not continue; routing it back to
-  the agent as an observation is [improvement 03](improvements/03-conversation-is-an-invocation.md).
+- **A fault ends the Codex turn it happened in.** The conversation goes on
+  (the user side shows it), but Codex itself is not told within the turn;
+  routing a horizon fault back into the same turn as an observation is still
+  [improvement 03](improvements/03-conversation-is-an-invocation.md).
+- **Parked frames live in the webhost's memory.** fds cannot be written to
+  disk: if the webhost stops, a waiting conversation stays viewable but cannot
+  continue until restore exists.
 - **One output per step**, so one child per round: fan-out is supported by the
   slots and the claim, but nothing emits two children yet.
-- **Conversations** span one turn: no conversation log or multi-turn thread yet.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
 - **Codex's native execution is detected, not prevented**: the command may
   already have run in Codex's own read-only sandbox (next/15, open).

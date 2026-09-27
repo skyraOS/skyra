@@ -9,6 +9,10 @@ Where the controller goes after the prototype. Agreed on paper, not built.
 2. **[`research-question.md`](research-question.md)**: the question, the
    metrics, the baseline, the September–December plan, and the open questions
    to decide together.
-3. **[`agenda.md`](agenda.md)**: the immediate work. Define input contracts,
+3. **[`15-adapters.md`](15-adapters.md)**: the dumb actor host and the
+   stateless adapter step. Built.
+4. **[`16-ingress.md`](16-ingress.md)**: ingress by parking a frame with its
+   host; conversations on the controller. Built.
+5. **[`agenda.md`](agenda.md)**: the immediate work. Define input contracts,
    write `interpret` as a total pure function, define `reply`'s lifecycle, and
    fill in the checklist for every transition.
