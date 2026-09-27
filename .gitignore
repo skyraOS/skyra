@@ -21,3 +21,4 @@ worktrees/
 
 # compiled validate binary
 skyra-v.1/validate-v2
+.DS_Store
