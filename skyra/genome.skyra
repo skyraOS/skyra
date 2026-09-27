@@ -1,8 +1,0 @@
-device ~name macbook ~type macos
-
-component ~name terminal ~type stdin ~device macbook
-component ~name ws ~type websocket ~port 8080 ~device macbook
-component ~name openrouter ~type llm ~model anthropic/claude-sonnet-4-5 ~device macbook
-
-being ~type llm ~bind episodic,action,goal,motivation,emotion,working_memory ~devices macbook ~entrypoints openrouter
-being ~type user ~bind episodic,action,working_memory ~devices macbook ~entrypoints terminal,ws
