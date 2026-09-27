@@ -16,7 +16,8 @@ import (
 	"skyra/controller/record"
 )
 
-// Entry is one surface in the registry file. Paths are relative to the file.
+// Entry is one surface in the registry file. Relative paths are relative to
+// the file.
 type Entry struct {
 	Path     string   `json:"path"`
 	Contract string   `json:"contract"`
@@ -44,7 +45,7 @@ func Load(file string) (map[string]horizon.Surface, error) {
 			return nil, fmt.Errorf("registry: %q is reserved", name)
 		}
 		var d Declared
-		if err := strict(filepath.Join(dir, e.Contract), &d); err != nil {
+		if err := strict(resolve(dir, e.Contract), &d); err != nil {
 			return nil, fmt.Errorf("%s contract: %w", name, err)
 		}
 		if err := d.Input.Check(); err != nil {
@@ -53,7 +54,7 @@ func Load(file string) (map[string]horizon.Surface, error) {
 		if err := d.Output.Check(); err != nil {
 			return nil, fmt.Errorf("%s output contract: %w", name, err)
 		}
-		path, err := filepath.Abs(filepath.Join(dir, e.Path))
+		path, err := filepath.Abs(resolve(dir, e.Path))
 		if err != nil {
 			return nil, err
 		}
@@ -81,4 +82,11 @@ func strict(file string, v any) error {
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	return d.Decode(v)
+}
+
+func resolve(dir, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(dir, p)
 }

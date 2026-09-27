@@ -1,7 +1,7 @@
 // Command skyra is the stateless controller. It owns only argv: which mode,
 // and the operator's flags.
 //
-//	skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON]
+//	skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON | -text TEXT]
 //	skyra instance DIR   (internal: started only by a parent holding fd 3)
 package main
 
@@ -30,7 +30,12 @@ func main() {
 		reg := fs.String("registry", "", "the operator's registry of surfaces and their contracts")
 		to := fs.String("to", "echo", "the capability the seed addresses")
 		payload := fs.String("payload", `{"text":"hello"}`, "the seed's payload (JSON)")
+		text := fs.String("text", "", "shorthand for -payload '{\"text\": TEXT}'")
 		fs.Parse(os.Args[2:])
+		if *text != "" {
+			b, _ := json.Marshal(map[string]string{"text": *text})
+			*payload = string(b)
+		}
 		if *root == "" || *reg == "" {
 			fs.Usage()
 			os.Exit(2)

@@ -24,7 +24,10 @@ usage: skyra [command]
   (none)        chat with Codex in the browser, through DNA-19's capability fence
   chat --fake   the same, against a deterministic fake Codex (no model, no login)
   chat --echo   the same, with the echo agent (no Codex at all)
-  demo          the stateless controller: three scenarios, each ending in a replay check
+  ask "TEXT"    the stateless controller with real Codex: TEXT goes to the Codex adapter,
+                through the actor host; prints the lineage, the replay check and the answer
+  stop          stop the Codex actor host that 'ask' leaves running
+  demo          the stateless controller: every scenario, each ending in a replay check
   test          every Go test (controller and DNA-19)
   live          DNA-19's live suite against your installed Codex (about a minute)
   doctor        check prerequisites
@@ -109,6 +112,61 @@ chat() {
   while kill -0 "$runtime_pid" 2>/dev/null && kill -0 "$ui_pid" 2>/dev/null; do sleep 1; done
 }
 
+# The stateless controller with real Codex. The actor host is long-lived by
+# design (next/15): 'ask' starts it once and leaves it running; 'stop' ends it.
+STATE=$HOME/.skyra
+HOST_SOCK=$STATE/codex.sock
+HOST_PID=$STATE/codex-host.pid
+
+controller_build() {
+  mkdir -p "$BUILD/controller"
+  cd "$ROOT"
+  local t
+  for t in skyra echo agent codex host; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
+}
+
+host_running() { [ -S "$HOST_SOCK" ] && [ -f "$HOST_PID" ] && kill -0 "$(cat "$HOST_PID")" 2>/dev/null; }
+
+ask() {
+  [ $# -gt 0 ] || die 'usage: skyra ask "TEXT"'
+  command -v codex >/dev/null || die "codex is not installed; see startup-doc.md"
+  codex login status >/dev/null 2>&1 || die "codex is not logged in: run 'codex login'"
+  say "building"
+  controller_build
+  mkdir -p "$STATE/runs"
+  if ! host_running; then
+    say "starting the Codex actor host ($HOST_SOCK)"
+    rm -f "$HOST_SOCK"
+    nohup "$BUILD/controller/host" -sock "$HOST_SOCK" -state "$STATE/codex-host" -- "$(command -v codex)" app-server \
+      >>"$STATE/codex-host.log" 2>&1 &
+    echo $! >"$HOST_PID"
+    local i
+    for i in $(seq 1 100); do [ -S "$HOST_SOCK" ] && break; sleep 0.1; done
+    host_running || die "the actor host did not start (see $STATE/codex-host.log)"
+  fi
+  cat >"$BUILD/controller/registry.json" <<JSON
+{
+  "echo":  {"path": "echo",  "contract": "$ROOT/controller/echo/contract.json"},
+  "codex": {"path": "codex", "contract": "$ROOT/controller/codex/contract.json", "connect": ["$HOST_SOCK"]}
+}
+JSON
+  local run
+  run=$STATE/runs/$(date +%Y%m%d-%H%M%S)-$$/.skyra
+  mkdir -p "$run"
+  "$BUILD/controller/skyra" boot -root "$run" -registry "$BUILD/controller/registry.json" -to codex -text "$*"
+  say "state: $run"
+}
+
+stop_host() {
+  if host_running; then
+    kill_tree "$(cat "$HOST_PID")"
+    say "stopped the Codex actor host"
+  else
+    say "no actor host running"
+  fi
+  rm -f "$HOST_PID" "$HOST_SOCK"
+}
+
 doctor() {
   local ok=1 v
   check() { if eval "$2" >/dev/null 2>&1; then printf '  ok    %s\n' "$1"; else printf '  FAIL  %s: %s\n' "$1" "$3"; ok=0; fi; }
@@ -142,6 +200,8 @@ live() {
 case ${1:-} in
   "")            chat codex ;;
   chat)          chat "${2:-codex}" ;;
+  ask)           shift; ask "$@" ;;
+  stop)          stop_host ;;
   demo)          exec "$ROOT/controller/run.sh" ;;
   test)          cd "$ROOT" && exec go test -count=1 ./controller/... ./history/dna19/... ;;
   live)          live ;;
