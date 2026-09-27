@@ -47,10 +47,29 @@ message's.
 The runtime already knows each instance's parent, from the custody chain. So:
 
 - output sent to **a capability in reach** is an **invoke**;
-- output sent to **the parent** is a **return**.
+- output sent to **the parent** (through `reply`; see the refinement below) is a
+  **return**.
 
 The LLM chooses only *which capability* and *what payload*. It never knows or
 claims whether that is a call or a return.
+
+### Refinement: the reply's slot, not the parent
+
+State the return rule as **"the target is the slot this instance's `reply`
+names"**, not "the target is the parent". The runtime still derives it from the
+custody chain; the difference is what it compares against.
+
+- **Tail calls.** Once `reply` has been passed on, its holder returns to its
+  *grandparent's* slot, not its own parent. Comparing the target with the parent
+  gets this wrong. Following `reply` gets it right.
+- **The parent stays opaque.** The emitter never needs to know who its parent
+  is. It addresses `reply`, or leaves the output unaddressed, and the runtime
+  resolves where that goes. If it could name its parent, part of the tree's
+  structure would appear in the frame, and parent identity would become an
+  operand the emitter chooses.
+
+Both forms derive the return from protocol rules. Only the `reply` form still
+holds once capabilities are passed on.
 
 ## Return is invoking the reply capability
 
