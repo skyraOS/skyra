@@ -1,24 +1,19 @@
-.venv/
-__pycache__/
-*.pyc
+# Local environment
 .env
-skyra/voice/audit.log.jsonl
-NeuroNote/
-
-# Frontend
-frontend/
-!skyra/src/skyra/frontend/
-node_modules/
-dist/
-.next/
-
-# Skyra v.1 — compiled experiment binaries (cmd/ is the source)
-skyra-v.1/phase1-ab
-skyra-v.1/phase2-accumulate
-
-# git worktree checkouts
+.venv/
+.DS_Store
+.claude/settings.local.json
 worktrees/
 
-# compiled validate binary
-skyra-v.1/validate-v2
-.DS_Store
+# Build outputs
+controller/bin/
+history/dna19/artifacts/root
+history/dna19/artifacts/codex
+history/dna19/artifacts/echo
+history/dna19/artifacts/fake-provider
+
+# Frontend dependencies (history/dna19/frontend)
+node_modules/
+.next/
+dist/
+*.log
