@@ -6,6 +6,7 @@
  * shown read-only, as the host derived them from their records.
  */
 
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore, selectConversations } from "@/lib/store";
 import type { ConversationPhase } from "@/lib/protocol/types";
 
@@ -17,7 +18,7 @@ const DOT: Record<ConversationPhase, string> = {
 };
 
 export function Sidebar() {
-  const conversations = useAppStore(selectConversations);
+  const conversations = useAppStore(useShallow(selectConversations));
   const selected = useAppStore((s) => s.selectedConversation);
   const select = useAppStore((s) => s.selectConversation);
   const client = useAppStore((s) => s.client);
