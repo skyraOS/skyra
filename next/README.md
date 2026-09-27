@@ -13,6 +13,9 @@ Where the controller goes after the prototype. Agreed on paper, not built.
    stateless adapter step. Built.
 4. **[`16-ingress.md`](16-ingress.md)**: ingress by parking a frame with its
    host; conversations on the controller. Built.
-5. **[`agenda.md`](agenda.md)**: the immediate work. Define input contracts,
+5. **[`17-app-server-custody.md`](17-app-server-custody.md)**: the Codex
+   app-server as a registered actor under Seatbelt; Codex asks, never
+   executes. Draft.
+6. **[`agenda.md`](agenda.md)**: the immediate work. Define input contracts,
    write `interpret` as a total pure function, define `reply`'s lifecycle, and
    fill in the checklist for every transition.
