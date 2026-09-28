@@ -102,7 +102,14 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	}
 	switch out.Discharge.State {
 	case record.Return:
-		fmt.Printf("answer: %s\n", out.Discharge.Payload)
+		var answer struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(out.Discharge.Payload, &answer) == nil && answer.Text != "" {
+			fmt.Printf("answer: %s\n", answer.Text)
+		} else {
+			fmt.Printf("answer: %s\n", out.Discharge.Payload)
+		}
 	case record.Fault:
 		fmt.Printf("answer: fault (%s): %s\n", out.Discharge.Fault.Kind, out.Discharge.Fault.Cause)
 	}

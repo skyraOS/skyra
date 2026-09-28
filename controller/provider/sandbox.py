@@ -1,7 +1,4 @@
-"""Codex provider launch grants, verified on macOS 15.6 / Codex 0.157.1.
-
-Outbound IP access remains broad; this is not an egress boundary.
-"""
+"""Codex provider launch grants, verified on macOS 15.6 / Codex 0.157.1."""
 import json
 from pathlib import Path
 import shutil
@@ -17,7 +14,7 @@ def native_binary():
     return matches[0].resolve()
 
 
-def render(binary, home, scratch, work, auth):
+def render(binary, home, scratch, work, auth, proxy_port=None):
     # Operator bootstrap grants, not yet derived from Horizon fields. Network
     # remains broadly available for inference; egress restriction is separate.
     rules = ["(version 1)", "(deny default)", "(allow process-fork)",
@@ -51,7 +48,14 @@ def render(binary, home, scratch, work, auth):
                     "com.apple.system.opendirectoryd.libinfo", "com.apple.SystemConfiguration.configd",
                     "com.apple.networkd", "com.apple.SecurityServer"]:
         rules.append(f"(allow mach-lookup (global-name {json.dumps(service)}))")
-    rules.extend(['(allow network-outbound (remote ip "*:*"))',
-                  '(allow network-outbound (control-name "com.apple.netsrc"))',
-                  '(allow network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))'])
+    if proxy_port is None:
+        # Existing probe callers exercise the historical profile. Production
+        # launches always supply a proxy port and cannot fall back to this.
+        rules.extend(['(allow network-outbound (remote ip "*:*"))',
+                      '(allow network-outbound (control-name "com.apple.netsrc"))',
+                      '(allow network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))'])
+    else:
+        if not isinstance(proxy_port, int) or not 1 <= proxy_port <= 65535:
+            raise ValueError('invalid egress proxy port')
+        rules.append(f'(allow network-outbound (remote ip "localhost:{proxy_port}"))')
     return "\n".join(rules) + "\n"

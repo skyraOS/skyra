@@ -23,7 +23,7 @@ record tree in `.skyra/`.
 |---|---|---|
 | **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": capability, "payload": JSON}` or plain text, and `interpret` derives invoke, return or a typed fault (`malformed`, `horizon`, `contract`, `custody`) | `machine.interpret` |
 | **Input contracts** | Every surface declares an input contract and a return contract (the `reply` capability's input contract), and what it may be granted. Fit is strict | `contract/`, `*/contract.json` |
-| **Authority only narrows** | A child is granted what its surface asks for, and only if its parent holds it. The sandbox is rendered from the Horizon; `.skyra/` is always denied | `machine.Narrow`, `horizon.Render` |
+| **Authority only narrows** | A child is granted only surfaces its parent holds. A registry entry can attenuate a child's file, process, Mach and socket grants; `Narrow` checks each grant against the parent's reachable ceiling. The tool sandbox is rendered from those grants; `.skyra/` is always denied | `machine.Narrow`, `horizon.Render` |
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
@@ -63,6 +63,22 @@ or the network.
 | [`webhost`](webhost/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records | — |
 
 The targets (`echo`, `agent`, `codex`) share no code with skyra.
+
+### Tool authority in the registry
+
+An executable registry entry may declare `authority.read`, `write` and `exec`
+as `{ "path": "...", "scope": "literal" | "subpath" }` entries, plus
+`authority.mach` service names and `authority.connect` Unix socket paths.
+Paths are resolved at registry load, before genesis commits the surfaces.
+An optional `delegate` map limits the direct authority passed to a named tool
+in the surface's `reach`. If omitted, the tool's registered ceiling is passed.
+The caller does not gain its tool's direct OS permissions. Legacy top-level
+`connect` entries are folded into `authority.connect` on load.
+
+Tool profiles grant only their own binary, fixed system loader reads, and
+declared resources. An OS test checks that a file outside `read` is denied and
+the same file is readable when granted. The real Codex app-server still uses
+the separate provider profile described under known gaps.
 
 ## The step
 
@@ -198,6 +214,10 @@ prohibits applying Seatbelt profiles.
 - **One output per step**, so one child per round: fan-out is supported by the
   slots and the claim, but nothing emits two children yet.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
+- **The resident Codex actor is not in a Horizon.** Its existing provider
+  profile is separate operator bootstrap policy, and outbound IP access is
+  broad. Spec 18's resident process and connection custody are needed before
+  the runtime can launch it from a committed actor grant.
 - **Codex's native execution is detected, not prevented**: the command may
   already have run in Codex's own read-only sandbox (next/15, open).
 

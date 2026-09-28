@@ -44,6 +44,15 @@ passes without a code-mode helper executable grant. The adapter rejects
 unregistered tool names before they can be emitted as runtime operations.
 This is verified for Codex 0.157.1 and guarded against unvalidated upgrades.
 
+Tool-authority follow-up (2026-09-28): registered executable surfaces now
+carry explicit file, process, Mach and Unix-socket grants. `horizon.Render`
+no longer gives every tool blanket file reads or Mach lookup. Registry load
+resolves paths, and `machine.Narrow` checks optional per-edge attenuations
+against the parent's reachable tool ceiling. An OS test checks granted and
+ungranted file reads; the controller demo and real-provider integration pass.
+The provider itself still uses a separate profile with broad outbound IP
+access. Its `HOME` now points to its isolated `CODEX_HOME`.
+
 ## How to read the reasons
 
 | Reason | Meaning |
@@ -59,12 +68,12 @@ This is verified for Codex 0.157.1 and guarded against unvalidated upgrades.
 | Item | State in the code | Reason |
 |---|---|---|
 | Step 0 checks against Codex 0.157.1 (binary path, `environments: []`, `model_catalog_json`, `web_search = "disabled"` under full access, auth store, `turn/interrupt`, egress through `HTTPS_PROXY`, item types, requirements layer) | native binary, isolated file login, live dynamic tool, read-only thread policy and null requirements tested in the appserver probe; `environments: []` accepted but returned as null | **Partially verified**. Catalog, full-access configuration, auth refresh, interrupt, proxy and exhaustive item types remain unverified |
-| New `Surface` fields `Exec`, `Read`, `Write`, `Mach`, `Egress` | `horizon.Surface` has `Path`, `SHA256`, contracts, `Reach`, `Connect`, `Host` only | **Blocked** on step 0's lists (the system reads and mach services a program needs) and on the open `Narrow` rule |
-| `Render` from those fields; the two existing holes (`(allow file-read*)`, `(allow mach-lookup)` for every surface) | `horizon.Render` still writes both | **Blocked** as above. Changing it changes every leaf's sandbox at once, so it waits for a correct list rather than a guess |
-| The system-reads constant beside the floor | absent | **Blocked** on step 0 |
-| Canonical, containment-based path comparison in `Narrow` | `Narrow` copies the reach entry; there are no path fields to compare | **Blocked** on the new fields and the open `Narrow` rule |
+| New `Surface` fields `Exec`, `Read`, `Write`, `Mach`, `Egress` | direct grants are in `Surface.Authority`: `Exec`, `Read`, `Write`, `Mach`, `Connect`. `Egress` is absent | **Partially implemented**. Host allowlisting waits on the proxy and resident actor |
+| `Render` from those fields; the two existing holes (`(allow file-read*)`, `(allow mach-lookup)` for every surface) | tool profiles render explicit grants; both blanket grants are removed | **Implemented for executable surfaces**. The provider profile remains separate |
+| The system-reads constant beside the floor | fixed loader-read list in `horizon.Render`; OS read test and demo pass on this macOS version | **Partially verified**. More OS versions need checking |
+| Canonical, containment-based path comparison in `Narrow` | registry resolves paths; `Narrow` checks optional child grant limits against the reachable ceiling by path component | **Implemented for registered surfaces**. Dynamic registration is not built |
 | The actor as a registry entry with a ceiling (not a bare `Connect` socket) | `bin/registry-codex.json` still names a socket through `Connect` | **Blocked** on 18's capabilities and resident target |
-| One `CODEX_HOME` per process, `config.toml` read-only, `HOME`/`TMPDIR` inside granted paths | new launches isolate CODEX_HOME/TMPDIR and protect config; HOME is unchanged but reads are restricted | **No resident-mode blocker** for isolating today's host. Per-thread homes still depend on per-thread launch |
+| One `CODEX_HOME` per process, `config.toml` read-only, `HOME`/`TMPDIR` inside granted paths | new launches isolate CODEX_HOME, HOME and TMPDIR and protect config | **No resident-mode blocker** for isolating today's host. Per-thread homes still depend on per-thread launch |
 | Auth: an API key in the environment, or one shared `auth.json` granted by `literal` | the user's own login | **Unverified** (concurrent refresh, how `auth.json` is written) and **Blocked** on the per-process home |
 | Step 3 tool removal: the `--disable` list, `environments: []`, `model_catalog_json`, `web_search = "disabled"`, `image_generation` off | `thread/start` sends `environments: []` and retains read-only/never; the launcher disables unrelated integrations and web search with direct tool mode and no code-mode helper | **Partially implemented**. Flags do not prove native-tool removal; `model_catalog_json` remains **Unverified** |
 | Step 4: the app-server's Seatbelt profile | new real-provider launches require the shared tested profile through `controller/provider`; file/exec denials and inference are tested | **Partially implemented**. Egress restriction, auth refresh and authority-derived rendering remain; no resident-mode blocker |

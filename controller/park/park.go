@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"syscall"
 
+	"skyra/controller/custody"
 	"skyra/controller/machine"
 )
 
@@ -102,9 +103,14 @@ func Receive(c *net.UnixConn) (Frame, error) {
 			f.Files = append(f.Files, os.NewFile(uintptr(fd), "frame"))
 		}
 	}
-	if len(f.Files) != f.Instance.Self.Depth() {
+	depth := f.Instance.Self.Depth()
+	if len(f.Files) != depth+len(f.Instance.Resources) {
 		f.Close()
-		return Frame{}, fmt.Errorf("parked with %d frames, its Horizon needs %d", len(f.Files), f.Instance.Self.Depth())
+		return Frame{}, fmt.Errorf("parked with %d descriptors, its Horizon needs %d frames and %d resources", len(f.Files), depth, len(f.Instance.Resources))
+	}
+	if err := custody.Validate(f.Instance.Resources, f.Files[depth:]); err != nil {
+		f.Close()
+		return Frame{}, err
 	}
 	return f, nil
 }

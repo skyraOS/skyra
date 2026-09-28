@@ -51,17 +51,18 @@ import (
 
 // Instance is the state of one instance as it moves through its phases.
 type Instance struct {
-	Floor string          // the .skyra path every rendered sandbox denies
-	State record.State    // the state intake derived: the top-level branch
-	Phase Phase           // the phase whose event this instance is waiting for
-	Under horizon.Horizon // the Horizon the input was emitted under
-	R     record.Record   // what this instance committed last
-	Stamp string          // hash of R
-	Self  horizon.Horizon // this instance's own Horizon, once released
-	Out   []byte          // the target's emission, while it is handed off
-	Child string          // the successor's stamp, once verified and released
-	Next  []byte          // a resumed continuation's input, while the claim is decided
-	Held  record.Record   // the resolve record, while the claim is decided
+	Floor     string             // the .skyra path every rendered sandbox denies
+	State     record.State       // the state intake derived: the top-level branch
+	Phase     Phase              // the phase whose event this instance is waiting for
+	Under     horizon.Horizon    // the Horizon the input was emitted under
+	R         record.Record      // what this instance committed last
+	Stamp     string             // hash of R
+	Self      horizon.Horizon    // this instance's own Horizon, once released
+	Out       []byte             // the target's emission, while it is handed off
+	Child     string             // the successor's stamp, once verified and released
+	Next      []byte             // a resumed continuation's input, while the claim is decided
+	Held      record.Record      // the resolve record, while the claim is decided
+	Resources []horizon.Resource // non-frame descriptors carried beside the stack
 }
 
 type Phase string
@@ -84,12 +85,18 @@ type Received struct { // → Intake: the bytes, and the Horizon they were emitt
 	In    []byte
 }
 type Released struct { // → Release: this instance's Horizon, and how many frame fds came with it
-	Self   horizon.Horizon
-	Frames int
+	Self      horizon.Horizon
+	Frames    int
+	Resources []horizon.Resource
 }
 type Emitted struct { // → Execute: the target's one emission (empty: it exited without one)
 	Out []byte
 	Err string
+}
+type Started struct { // → Execute: a resident and its connection entered custody
+	Out      []byte
+	Resource horizon.Resource
+	Err      string
 }
 type Stamped struct { // → Handoff: the successor's stamp, and the record the tree holds under it (nil: none)
 	Stamp string
@@ -120,6 +127,7 @@ type Child struct {
 func (Received) event() {}
 func (Released) event() {}
 func (Emitted) event()  {}
+func (Started) event()  {}
 func (Stamped) event()  {}
 func (Settled) event()  {}
 func (Claimed) event()  {}
@@ -134,10 +142,17 @@ type StoreInput struct{ In []byte }   // record the exact input bytes before usi
 type Commit struct{ R record.Record } // durable write: temp, flush, rename, flush directory
 type SendStamp struct{ Stamp string } // then wait for Released
 type Run struct {                     // then wait for Emitted
-	Surface horizon.Surface
-	Stdin   []byte
-	Profile string
-	Env     []string // the target's whole environment: nothing is inherited
+	Surface         horizon.Surface
+	Stdin           []byte
+	Profile         string
+	Env             []string // the target's whole environment: nothing is inherited
+	ConnectionOwner string   // optional: pass this owner's connection as fd 3
+}
+type StartResident struct {
+	Run     Run
+	Owner   string
+	Horizon horizon.Horizon
+	Floor   string
 }
 type Spawn struct { // start the successor, forward the bytes, then wait for Stamped
 	Under horizon.Horizon
@@ -163,6 +178,7 @@ func (StoreInput) effect()    {}
 func (Commit) effect()        {}
 func (SendStamp) effect()     {}
 func (Run) effect()           {}
+func (StartResident) effect() {}
 func (Spawn) effect()         {}
 func (KillSuccessor) effect() {}
 func (OpenDep) effect()       {}
@@ -194,6 +210,14 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Emitted:
 			if s.Phase == Execute {
 				return execute(s, ev)
+			}
+		case Started:
+			if s.Phase == Execute && s.Self.Surface != nil && s.Self.Surface.Resident {
+				if ev.Err != "" {
+					return fault(s, ev.Err)
+				}
+				s.Resources = append(s.Resources, ev.Resource)
+				return execute(s, Emitted{Out: ev.Out})
 			}
 		case Parked:
 			if s.Phase == Execute && s.Self.Surface != nil && s.Self.Surface.Host != "" {
@@ -308,6 +332,9 @@ func accept(s Instance, e Released) error {
 	if e.Frames != e.Self.Depth() {
 		return fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, e.Self.Depth())
 	}
+	if len(e.Resources) > 64-e.Frames {
+		return errors.New("too many custody resources")
+	}
 	return nil
 }
 
@@ -320,6 +347,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 		return s, []Effect{Exit{err.Error()}}
 	}
 	s.Self, s.Phase = e.Self, Execute
+	s.Resources = append([]horizon.Resource(nil), e.Resources...)
 	if e.Self.Surface.Host != "" {
 		// An async surface: nothing runs here. The host takes custody and
 		// resumes this instance, in Execute, with the event as the output.
@@ -328,6 +356,13 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	stdin := []byte(s.R.Payload)
 	if !e.Self.Surface.Leaf() {
 		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
+	}
+	if e.Self.Surface.Resident {
+		owner := resourceOwner(e.Self)
+		if owner == "" {
+			return fault(s, "resident has no owning frame")
+		}
+		return s, []Effect{StartResident{Run: runOf(e.Self, stdin, s.Floor), Owner: owner, Horizon: e.Self, Floor: s.Floor}}
 	}
 	return s, []Effect{runOf(e.Self, stdin, s.Floor)}
 }
@@ -418,6 +453,12 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 	reach := map[string]horizon.Surface{}
 	for _, name := range s.Reach {
 		if granted, ok := parent.Reach[name]; ok {
+			if limit, narrowed := s.Delegate[name]; narrowed {
+				if !granted.Authority.Allows(limit) {
+					return horizon.Horizon{}, fmt.Errorf("%q delegates authority outside %q's grant", r.To, name)
+				}
+				granted.Authority = limit
+			}
 			reach[name] = granted
 		}
 	}
@@ -434,6 +475,7 @@ func settle(s Instance, e Released) (Instance, []Effect) {
 		return s, []Effect{Exit{err.Error()}}
 	}
 	s.Self = e.Self
+	s.Resources = append([]horizon.Resource(nil), e.Resources...)
 	return discharged(s, Settle{s.Stamp})
 }
 
@@ -511,10 +553,28 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 // surface was granted.
 func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	env := []string{"PATH=/usr/bin:/bin"}
-	for _, sock := range h.Surface.Connect {
+	for _, sock := range h.Surface.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}
-	return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
+	r := Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
+	if h.Surface.Connection {
+		r.ConnectionOwner = resourceOwner(h)
+	}
+	return r
+}
+
+func resourceOwner(h horizon.Horizon) string {
+	depth := h.Surface.ResourceOwnerDepth
+	if depth == 0 {
+		depth = 1
+	}
+	for i := 0; i < depth; i++ {
+		if h.Resume == nil {
+			return ""
+		}
+		h = *h.Resume
+	}
+	return h.Frame
 }
 
 // tools is what a continuation is shown: the input contract of everything in

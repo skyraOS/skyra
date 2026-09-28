@@ -19,3 +19,6 @@ Where the controller goes after the prototype. Agreed on paper, not built.
 6. **[`agenda.md`](agenda.md)**: the immediate work. Define input contracts,
    write `interpret` as a total pure function, define `reply`'s lifecycle, and
    fill in the checklist for every transition.
+7. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
+   travel by hash. Nodes may author them for child invocations; continuations
+   pass child observations on return instead of authoring a replacement result.

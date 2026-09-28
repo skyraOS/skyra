@@ -109,7 +109,7 @@ func resume(root string) error {
 	if err := json.NewDecoder(os.Stdin).Decode(&r); err != nil {
 		return err
 	}
-	stack := handshake.Inherited(3, r.Instance.Self.Depth())
+	stack := handshake.Inherited(3, r.Instance.Self.Depth()+len(r.Instance.Resources))
 	trace.Who = "resume " + record.Short(r.Instance.Stamp)
 	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
 	_, err := instance.Drive(root, nil, stack, r.Instance, machine.Emitted{Out: []byte(r.Out)})

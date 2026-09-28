@@ -74,6 +74,8 @@ Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 |---|---|
 | `skyra` | **chat with real Codex in the browser, through the stateless controller.** Every conversation is saved as its lineage and listed with its history |
 | `skyra chat --fake` | the same, against a deterministic fake Codex: no model, no login |
+| `skyra tui` | a fresh terminal session backed by the conversation protocol, without starting Next.js ([keys and layout](tui/README.md)) |
+| `skyra tui --fake` | terminal UI with the deterministic provider |
 | `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |
 | `skyra stop` | stop the Codex actor hosts that `skyra` and `ask` leave running |
@@ -132,6 +134,7 @@ the new tool surface.
 **Provider isolation.** New `skyra` and `skyra ask` launches require an external
 macOS Seatbelt profile, with isolated configuration and scratch space. Shell
 execution and file access outside the granted paths are blocked by the OS.
+`HOME`, `CODEX_HOME` and `TMPDIR` point into that isolated provider run.
 The adapter interrupts native attempts and confirms that the affected turn
 has ended before emitting the horizon fault. An unconfirmed interruption
 produces a custody fault instead. Threads retain `readOnly`/`never` policy.

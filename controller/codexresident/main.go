@@ -1,0 +1,327 @@
+// Command codexresident is a stateless app-server adapter. Every exchange and
+// its observation arrives through the continuation; it owns no descriptor.
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+)
+
+type schema struct {
+	Type     string             `json:"type"`
+	Fields   map[string]*schema `json:"fields"`
+	Required []string           `json:"required"`
+	Items    *schema            `json:"items"`
+}
+type step struct {
+	To      string                        `json:"to"`
+	Payload json.RawMessage               `json:"payload"`
+	State   string                        `json:"state"`
+	Value   json.RawMessage               `json:"value"`
+	Fault   *struct{ Kind, Cause string } `json:"fault"`
+}
+type continuation struct {
+	Frame string                                                   `json:"frame"`
+	Input struct{ Text, Conversation, Thread, Incarnation string } `json:"input"`
+	Tools map[string]*schema                                       `json:"tools"`
+	Steps []step                                                   `json:"steps"`
+}
+type observation struct {
+	Lines                   []string `json:"lines"`
+	Partial, Delivery, Read string
+	PeerEOF                 bool   `json:"peer_eof"`
+	Error                   string `json:"error"`
+}
+type message struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+	Result json.RawMessage `json:"result"`
+	Error  json.RawMessage `json:"error"`
+	Params struct {
+		ThreadID, TurnID, Tool string
+		Arguments              json.RawMessage             `json:"arguments"`
+		Item                   struct{ Type, Text string } `json:"item"`
+		Turn                   struct{ ID, Status string } `json:"turn"`
+	} `json:"params"`
+}
+type derived struct {
+	Incarnation, Thread, Turn, Final, Violation, Partial             string
+	Initialized, SentInitialize, SentThread, SentTurn, SentInterrupt bool
+	Terminal                                                         string
+	Pending                                                          []message
+	Answered                                                         map[string]bool
+	Echo                                                             []step
+	Errors                                                           []string
+}
+
+func main() {
+	var c continuation
+	if err := json.NewDecoder(os.Stdin).Decode(&c); err != nil {
+		fail(err)
+	}
+	out, err := decide(c)
+	if err != nil {
+		fail(err)
+	}
+	fmt.Println(out)
+}
+func fail(err error) { fmt.Fprintln(os.Stderr, "codexresident:", err); os.Exit(1) }
+func emit(to string, payload any) string {
+	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
+	return string(b)
+}
+func rpc(id, method string, params any) string {
+	b, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+	return string(b)
+}
+func ioCall(inc, op string, deliver []string, prefix string) string {
+	if deliver == nil {
+		deliver = []string{}
+	}
+	return emit("codex.exchange", map[string]any{"incarnation": inc, "op": op, "deliver": deliver, "wait_ms": 30000, "prefix": prefix})
+}
+func id(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	return string(raw)
+}
+func decide(c continuation) (string, error) {
+	if c.Frame == "" {
+		return "", errors.New("no frame")
+	}
+	if len(c.Steps) > 2000 {
+		return "", errors.New("turn exceeded operation limit")
+	}
+	d := derived{Incarnation: c.Input.Incarnation, Thread: c.Input.Thread, Answered: map[string]bool{}}
+	if d.Incarnation == "" {
+		d.Thread = ""
+	}
+	for _, s := range c.Steps {
+		if s.Fault != nil && s.To != "echo" {
+			return "", fmt.Errorf("%s fault (%s): %s", s.To, s.Fault.Kind, s.Fault.Cause)
+		}
+		if s.State != "return" && s.To != "echo" {
+			return "", fmt.Errorf("%s ended in %s", s.To, s.State)
+		}
+		switch s.To {
+		case "codex.start":
+			var started struct {
+				Incarnation string `json:"incarnation"`
+			}
+			if err := json.Unmarshal(s.Value, &started); err != nil || started.Incarnation == "" {
+				return "", errors.New("start did not return an incarnation")
+			}
+			d.Incarnation, d.Thread = started.Incarnation, ""
+		case "echo":
+			d.Echo = append(d.Echo, s)
+		case "codex.exchange":
+			var q struct {
+				Deliver []string `json:"deliver"`
+			}
+			var o observation
+			if err := json.Unmarshal(s.Payload, &q); err != nil {
+				return "", err
+			}
+			if err := json.Unmarshal(s.Value, &o); err != nil {
+				return "", err
+			}
+			for _, line := range q.Deliver {
+				var m message
+				if json.Unmarshal([]byte(line), &m) != nil {
+					return "", errors.New("recorded delivery is malformed")
+				}
+				switch m.Method {
+				case "initialize":
+					d.SentInitialize = true
+				case "thread/start":
+					d.SentThread = true
+				case "turn/start":
+					d.SentTurn = true
+				case "turn/interrupt":
+					d.SentInterrupt = true
+				}
+				if m.Method == "" && len(m.ID) > 0 && len(m.Result) > 0 {
+					d.Answered[id(m.ID)] = true
+				}
+			}
+			if o.PeerEOF {
+				return "", errors.New("resident process closed during the turn")
+			}
+			if o.Delivery == "unknown" {
+				return "", errors.New("delivery may have reached Codex; refusing to retry")
+			}
+			if o.Error != "" && !strings.Contains(o.Error, "timed out") && !strings.Contains(o.Error, "deadline exceeded") {
+				return "", fmt.Errorf("exchange: %s", o.Error)
+			}
+			d.Partial = o.Partial
+			for _, line := range o.Lines {
+				var m message
+				if json.Unmarshal([]byte(line), &m) != nil {
+					return "", errors.New("Codex emitted malformed JSON-RPC")
+				}
+				if len(m.Error) > 0 && string(m.Error) != "null" {
+					return "", fmt.Errorf("Codex RPC error: %s", m.Error)
+				}
+				switch id(m.ID) {
+				case c.Frame + ":initialize":
+					if len(m.Result) > 0 {
+						d.Initialized = true
+					}
+				case c.Frame + ":thread":
+					if len(m.Result) > 0 {
+						var r struct {
+							Thread         struct{ ID string } `json:"thread"`
+							ApprovalPolicy string              `json:"approvalPolicy"`
+							Sandbox        struct {
+								Type    string
+								Network bool `json:"networkAccess"`
+							} `json:"sandbox"`
+						}
+						if json.Unmarshal(m.Result, &r) != nil || r.Thread.ID == "" || r.ApprovalPolicy != "never" || r.Sandbox.Type != "readOnly" || r.Sandbox.Network {
+							return "", errors.New("thread/start returned unsafe policy")
+						}
+						d.Thread = r.Thread.ID
+					}
+				case c.Frame + ":turn":
+					if len(m.Result) > 0 {
+						var r struct {
+							Turn struct{ ID string } `json:"turn"`
+						}
+						if json.Unmarshal(m.Result, &r) != nil || r.Turn.ID == "" {
+							return "", errors.New("turn/start returned no turn")
+						}
+						d.Turn = r.Turn.ID
+					}
+				}
+				if m.Method == "" || m.Params.ThreadID != "" && d.Thread != "" && m.Params.ThreadID != d.Thread || m.Params.TurnID != "" && d.Turn != "" && m.Params.TurnID != d.Turn {
+					continue
+				}
+				switch m.Method {
+				case "item/tool/call":
+					if m.Params.Tool != "echo" || c.Tools["echo"] == nil {
+						d.Violation = "dynamicTool." + m.Params.Tool
+					} else {
+						d.Pending = append(d.Pending, m)
+					}
+				case "item/started", "item/completed":
+					switch m.Params.Item.Type {
+					case "agentMessage":
+						if m.Method == "item/completed" {
+							d.Final = m.Params.Item.Text
+						}
+					case "userMessage", "reasoning", "plan", "dynamicToolCall":
+					default:
+						d.Violation = m.Params.Item.Type
+					}
+				case "turn/completed":
+					if d.Turn == "" || m.Params.Turn.ID == d.Turn {
+						d.Terminal = m.Params.Turn.Status
+					}
+				case "turn/started":
+				case "":
+				default: // notifications without authority have no effect
+				}
+			}
+		default:
+			return "", fmt.Errorf("unexpected step %s", s.To)
+		}
+	}
+	if d.Incarnation == "" {
+		return emit("codex.start", map[string]any{}), nil
+	}
+	if !d.SentInitialize && d.Thread == "" {
+		return ioCall(d.Incarnation, "exchange", []string{rpc(c.Frame+":initialize", "initialize", map[string]any{"clientInfo": map[string]string{"name": "skyra", "version": "1"}, "capabilities": map[string]bool{"experimentalApi": true}})}, d.Partial), nil
+	}
+	if !d.Initialized && d.Thread == "" {
+		return ioCall(d.Incarnation, "exchange", nil, d.Partial), nil
+	}
+	if !d.SentThread && d.Thread == "" {
+		tools := []any{}
+		if echo := c.Tools["echo"]; echo != nil {
+			tools = append(tools, map[string]any{"name": "echo", "description": "Skyra echo", "inputSchema": jsonSchema(echo)})
+		}
+		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
+		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": tools, "developerInstructions": "Only registered dynamic tools may perform effects."})
+		return ioCall(d.Incarnation, "exchange", []string{string(initialized), start}, d.Partial), nil
+	}
+	if d.Thread == "" {
+		return ioCall(d.Incarnation, "exchange", nil, d.Partial), nil
+	}
+	if !d.SentTurn {
+		return ioCall(d.Incarnation, "exchange", []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": []any{map[string]string{"type": "text", "text": c.Input.Text}}})}, d.Partial), nil
+	}
+	if d.Turn == "" {
+		return ioCall(d.Incarnation, "exchange", nil, d.Partial), nil
+	}
+	if d.Violation != "" {
+		if !d.SentInterrupt {
+			return ioCall(d.Incarnation, "exchange", []string{rpc(c.Frame+":interrupt", "turn/interrupt", map[string]string{"threadId": d.Thread, "turnId": d.Turn})}, d.Partial), nil
+		}
+		if d.Terminal == "" {
+			return ioCall(d.Incarnation, "exchange", nil, d.Partial), nil
+		}
+		return emit("native."+d.Violation, map[string]any{}), nil
+	}
+	for i, call := range d.Pending {
+		if d.Answered[id(call.ID)] {
+			continue
+		}
+		if i >= len(d.Echo) {
+			args := call.Params.Arguments
+			if len(args) == 0 {
+				args = json.RawMessage(`{}`)
+			}
+			return emit("echo", args), nil
+		}
+		result := toolResult(call.ID, d.Echo[i])
+		line, _ := json.Marshal(result)
+		return ioCall(d.Incarnation, "exchange", []string{string(line)}, d.Partial), nil
+	}
+	if d.Terminal != "" {
+		if d.Terminal != "completed" || d.Final == "" {
+			return "", fmt.Errorf("turn ended %s without an answer", d.Terminal)
+		}
+		return emit("reply", map[string]string{"text": d.Final, "thread": d.Thread, "incarnation": d.Incarnation}), nil
+	}
+	return ioCall(d.Incarnation, "exchange", nil, d.Partial), nil
+}
+
+func toolResult(id json.RawMessage, s step) map[string]any {
+	text, success := string(s.Value), s.State == "return"
+	var v string
+	if json.Unmarshal(s.Value, &v) == nil {
+		text = v
+	}
+	if s.Fault != nil {
+		text = fmt.Sprintf("fault (%s): %s", s.Fault.Kind, s.Fault.Cause)
+	}
+	return map[string]any{"id": id, "result": map[string]any{"success": success, "contentItems": []any{map[string]string{"type": "inputText", "text": text}}}}
+}
+func jsonSchema(s *schema) map[string]any {
+	if s == nil {
+		return map[string]any{}
+	}
+	switch s.Type {
+	case "object":
+		p := map[string]any{}
+		for k, v := range s.Fields {
+			p[k] = jsonSchema(v)
+		}
+		r := s.Required
+		if r == nil {
+			r = []string{}
+		}
+		return map[string]any{"type": "object", "properties": p, "required": r, "additionalProperties": false}
+	case "array":
+		return map[string]any{"type": "array", "items": jsonSchema(s.Items)}
+	case "bool":
+		return map[string]any{"type": "boolean"}
+	default:
+		return map[string]any{"type": s.Type}
+	}
+}

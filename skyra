@@ -24,10 +24,12 @@ usage: skyra [command]
   (none)        chat with Codex in the browser, through the stateless controller:
                 every conversation is a lineage, saved and listed with its history
   chat --fake   the same, against a deterministic fake Codex (no model, no login)
+  tui           chat with Codex in the terminal, using the same conversations
+  tui --fake    the terminal UI against the deterministic fake Codex
   ask "TEXT"    one question to real Codex through the controller; prints the lineage,
                 the replay check and the answer
   replay DIR    re-derive a finished conversation or run from its records
-  stop          stop the Codex actor hosts that chat and ask leave running
+  stop          stop any actor hosts left by an older Skyra version
   dna19         DNA-19, the predecessor: chat in the browser through its capability fence
                 (dna19 --fake: a fake Codex; dna19 --echo: the echo agent)
   demo          the stateless controller: every scenario, each ending in a replay check
@@ -115,96 +117,68 @@ dna19() {
   while kill -0 "$runtime_pid" 2>/dev/null && kill -0 "$ui_pid" 2>/dev/null; do sleep 1; done
 }
 
-# The stateless controller. Its actor hosts are long-lived by design
-# (next/15): chat and ask start them once and leave them running; stop ends
-# them. A real Codex and a fake one each get their own host.
+# The controller holds one resident Codex connection per conversation. The
+# webhost holds it while that conversation waits on the human.
 STATE=${SKYRA_STATE:-$HOME/.skyra}
 
 controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  for t in skyra echo agent codex host user webhost; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
+  for t in skyra echo agent codexresident codexio user webhost; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
   go build -o "$BUILD/controller/fake-codex" ./history/dna19/codex/testdata/fake-provider
+  go build -o "$BUILD/tui" ./tui
 }
 
-# codex_host MODE: make sure the Codex actor host for MODE (real|fake) runs;
-# prints its socket.
-codex_host() {
-  local mode=$1 prepared host_pid
-  # A new namespace cannot silently reuse the old unsandboxed host.
-  [ "$mode" != real ] || mode=real-direct-v2
-  local sock=$STATE/codex-$mode.sock pid=$STATE/codex-$mode.pid
-  mkdir -p "$STATE"
-  if [ -S "$sock" ] && [ -f "$pid" ] && kill -0 "$(cat "$pid")" 2>/dev/null; then
-    # The host outlives its actor: reuse it only if the actor still runs under it.
-    if pgrep -P "$(cat "$pid")" >/dev/null; then
-      if [ "$mode" = real-direct-v2 ]; then
-        python3 "$ROOT/controller/provider/launch.py" --ready "$sock" || die "provider readiness failed; see $STATE/codex-$mode-host.log"
-      fi
-      echo "$sock"
-      return
-    fi
-    say "the Codex actor under the $mode host exited; restarting the host" >&2
-    kill "$(cat "$pid")" 2>/dev/null || true
-  fi
-  if [ "$mode" = real-direct-v2 ]; then
-    command -v python3 >/dev/null || die "python3 is required for the sandboxed provider launcher"
-    prepared=$(python3 "$ROOT/controller/provider/launch.py" --prepare "$STATE/providers") || die "provider sandbox preparation failed"
-    set -- python3 "$ROOT/controller/provider/launch.py" --launch "$prepared"
-  else
-    set -- "$BUILD/controller/fake-codex"
-  fi
-  rm -f "$sock"
-  nohup "$BUILD/controller/host" -sock "$sock" -state "$STATE/codex-$mode-host" -- "$@" >>"$STATE/codex-$mode-host.log" 2>&1 &
-  host_pid=$!
-  echo "$host_pid" >"$pid"
-  local i
-  for i in $(seq 1 100); do [ -S "$sock" ] && break; sleep 0.1; done
-  [ -S "$sock" ] || die "the Codex actor host did not start (see $STATE/codex-$mode-host.log)"
-  if [ "$mode" = real-direct-v2 ]; then
-    if ! python3 "$ROOT/controller/provider/launch.py" --ready "$sock"; then
-      kill_tree "$host_pid"
-      rm -f "$pid" "$sock"
-      die "sandboxed provider failed startup (see $STATE/codex-$mode-host.log)"
-    fi
-  fi
-  echo "$sock"
-}
-
-follow_provider_log() {
-  local mode=$1
-  [ "$mode" != real ] || mode=real-direct-v2
-  mkdir -p "$STATE"
-  touch "$STATE/codex-$mode-host.log"
-  # The provider outlives this terminal, so retain its file and attach a
-  # terminal-local reader. Recent context also covers reused hosts.
-  tail -n 10 -F "$STATE/codex-$mode-host.log" >&2 &
-  provider_log_pid=$!
-}
-
-# registry CODEX_SOCK PARK_SOCK: the operator's registry for the controller.
+# registry MODE PARK_SOCK OWNER_DEPTH: the operator's registry. The resource
+# owner is the operator for ask, and the user frame for chat/tui.
 registry() {
-  cat >"$BUILD/controller/registry.json" <<JSON
-{
-  "echo":    {"path": "echo",  "contract": "$ROOT/controller/echo/contract.json"},
-  "codex":   {"path": "codex", "contract": "$ROOT/controller/codex/contract.json", "connect": ["$1"]},
-  "user":    {"path": "user",  "contract": "$ROOT/controller/user/contract.json"},
-  "browser": {"host": "$2",    "contract": "$ROOT/controller/browser/contract.json"}
+  local mode=$1 park=$2 depth=$3 file="$BUILD/controller/registry-$1-$3.json"
+  SKYRA_REGISTRY_ROOT="$ROOT" SKYRA_REGISTRY_BUILD="$BUILD/controller" \
+    SKYRA_REGISTRY_MODE="$mode" SKYRA_REGISTRY_PARK="$park" \
+    SKYRA_REGISTRY_DEPTH="$depth" SKYRA_REGISTRY_FILE="$file" python3 - <<'PY'
+import json, os, sys
+from pathlib import Path
+root=Path(os.environ['SKYRA_REGISTRY_ROOT'])
+build=Path(os.environ['SKYRA_REGISTRY_BUILD'])
+sys.path.insert(0,str(root/'controller/provider'))
+from launch import FEATURES, verified_version
+from sandbox import native_binary
+mode=os.environ['SKYRA_REGISTRY_MODE']
+depth=int(os.environ['SKYRA_REGISTRY_DEPTH'])
+if mode=='real':
+    binary=native_binary().resolve(strict=True)
+    verified_version(binary)
+    args=[]
+    for feature in FEATURES: args.extend(['--disable',feature])
+    args.extend(['--enable','skip_host_skill_discovery','app-server','--listen','stdio://'])
+    start={'path':str(binary),'resident_profile':'darwin-appserver-v1',
+           'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
+           'proxy_path':str(root/'controller/provider/proxy.py'),'args':args}
+else:
+    start={'path':str(build/'fake-codex')}
+start.update({'contract':str(root/'controller/codexio/start-contract.json'),
+              'resident':True,'resource_owner_depth':depth})
+registry={
+ 'echo':{'path':str(build/'echo'),'contract':str(root/'controller/echo/contract.json')},
+ 'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codexresident/contract.json')},
+ 'codex.start':start,
+ 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+                   'connection':True,'resource_owner_depth':depth},
+ 'user':{'path':str(build/'user'),'contract':str(root/'controller/user/contract.json')},
+ 'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/browser/contract.json')}
 }
-JSON
-  echo "$BUILD/controller/registry.json"
+Path(os.environ['SKYRA_REGISTRY_FILE']).write_text(json.dumps(registry,sort_keys=True))
+PY
+  echo "$file"
 }
 
 ask() {
   [ $# -gt 0 ] || die 'usage: skyra ask "TEXT"'
   say "building"
   controller_build
-  local sock reg run provider_log_pid
-  follow_provider_log real
-  trap "kill $provider_log_pid 2>/dev/null || true" EXIT
-  sock=$(codex_host real)
-  reg=$(registry "$sock" "$STATE/park.sock")
+  local reg run
+  reg=$(registry real "$STATE/park.sock" 1)
   mkdir -p "$STATE/runs"
   run=$STATE/runs/$(date +%Y%m%d-%H%M%S)-$$/.skyra
   mkdir -p "$run"
@@ -228,21 +202,18 @@ chat() {
   say "building"
   controller_build
 
-  local sock reg park=$STATE/park-$mode.sock convs=$STATE/conversations
-  local addr=127.0.0.1:$WS_PORT web_pid ui_pid provider_log_pid
+  local reg park=$STATE/park-$mode.sock convs=$STATE/conversations
+  local addr=127.0.0.1:$WS_PORT web_pid ui_pid
   cleanup() {
     trap - INT TERM EXIT
-    say "stopping (the Codex actor host keeps running; 'skyra stop' ends it)"
+    say "stopping"
     [ -n "${ui_pid:-}" ] && kill_tree "$ui_pid"
     [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
-    [ -n "${provider_log_pid:-}" ] && kill "$provider_log_pid" 2>/dev/null || true
     wait 2>/dev/null || true
   }
   trap cleanup INT TERM EXIT
-  follow_provider_log "$mode"
   [ "$mode" = fake ] && convs=$STATE/conversations-fake
-  sock=$(codex_host "$mode")
-  reg=$(registry "$sock" "$park")
+  reg=$(registry "$mode" "$park" 2)
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" &
   web_pid=$!
@@ -259,6 +230,43 @@ chat() {
   say "codex: $mode   UI: $url   conversations: $convs   runtime trace below   Ctrl-C to stop"
   [ -n "${SKYRA_NO_OPEN:-}" ] || open "$url" 2>/dev/null || true
   while kill -0 "$web_pid" 2>/dev/null && kill -0 "$ui_pid" 2>/dev/null; do sleep 1; done
+}
+
+# tui [--fake]: the same backend and conversation directory as chat, with a
+# terminal client instead of Next.js. Backend logs stay out of the terminal UI.
+tui_chat() {
+  local mode=real
+  case ${1:-} in
+    ""|--codex) ;;
+    --fake) mode=fake ;;
+    *) die "unknown tui mode '$1' (use --fake)" ;;
+  esac
+  [ -t 0 ] && [ -t 1 ] || die "skyra tui needs an interactive terminal"
+  port_free "$WS_PORT" || die "port $WS_PORT is in use (set SKYRA_WS_PORT, or stop the other process)"
+  say "building"
+  controller_build
+
+  local reg park=$STATE/park-$mode.sock convs=$STATE/conversations
+  local addr=127.0.0.1:$WS_PORT web_pid i
+  cleanup() {
+    trap - INT TERM EXIT
+    [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
+  }
+  trap cleanup INT TERM EXIT
+  [ "$mode" = fake ] && convs=$STATE/conversations-fake
+  reg=$(registry "$mode" "$park" 2)
+  mkdir -p "$STATE"
+  "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
+    -registry "$reg" -conversations "$convs" >"$STATE/tui-webhost.log" 2>&1 &
+  web_pid=$!
+  for i in $(seq 1 100); do
+    kill -0 "$web_pid" 2>/dev/null || die "the webhost exited (see $STATE/tui-webhost.log)"
+    [ -S "$park" ] && break
+    sleep 0.1
+  done
+  [ -S "$park" ] || die "the webhost did not start (see $STATE/tui-webhost.log)"
+  "$BUILD/tui" -addr "$addr"
+  cleanup
 }
 
 stop_host() {
@@ -309,6 +317,7 @@ live() {
 case ${1:-} in
   "")            chat ;;
   chat)          chat "${2:-}" ;;
+  tui)           tui_chat "${2:-}" ;;
   dna19)         dna19 "${2:-codex}" ;;
   replay)        [ $# -eq 2 ] || die "usage: skyra replay DIR"; controller_build; exec "$BUILD/controller/skyra" replay "$2" ;;
   ask)           shift; ask "$@" ;;

@@ -51,11 +51,21 @@ func main() {
 
 	transcript := []entry{}
 	said := ""
+	thread, incarnation := "", ""
 	for _, s := range c.Steps {
 		var text string
 		_ = json.Unmarshal(s.Value, &text)
+		if s.To == "codex" && s.Fault == nil {
+			var answer struct{ Text, Thread, Incarnation string }
+			if json.Unmarshal(s.Value, &answer) == nil && answer.Text != "" {
+				text, thread, incarnation = answer.Text, answer.Thread, answer.Incarnation
+			}
+		}
 		switch {
 		case s.Fault != nil:
+			if s.To == "codex" {
+				thread, incarnation = "", ""
+			}
 			who := "the agent"
 			if s.To == "browser" {
 				who = "the browser"
@@ -81,7 +91,7 @@ func main() {
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil && said == "/close":
 		fmt.Println("closed")
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil:
-		emit("codex", map[string]string{"conversation": c.Input.Conversation, "text": said})
+		emit("codex", map[string]string{"conversation": c.Input.Conversation, "text": said, "thread": thread, "incarnation": incarnation})
 	default:
 		emit("browser", map[string]any{"conversation": c.Input.Conversation, "transcript": transcript})
 	}

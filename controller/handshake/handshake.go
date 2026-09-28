@@ -15,10 +15,26 @@ import (
 	"net"
 	"os"
 	"syscall"
+
+	"skyra/controller/custody"
+	"skyra/controller/horizon"
 )
 
 type StampMsg struct {
 	Stamp string `json:"stamp"`
+}
+
+// Release carries the checked Horizon and the manifest for descriptors after
+// its frame stack. The descriptors themselves travel in the same datagram.
+type Release struct {
+	Horizon   horizon.Horizon    `json:"horizon"`
+	Resources []custody.Resource `json:"resources,omitempty"`
+}
+
+// Accepted confirms that the successor installed and checked every custody
+// descriptor. The sender retains its copies until this arrives.
+type Accepted struct {
+	Error string `json:"error,omitempty"`
 }
 
 // Pair creates a datagram socketpair. The parent keeps the conn; the file

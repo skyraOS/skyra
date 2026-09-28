@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,8 +16,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
+	"skyra/controller/custody"
 	"skyra/controller/handshake"
 	"skyra/controller/horizon"
 	"skyra/controller/machine"
@@ -93,17 +96,57 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err := handshake.Send(up, handshake.StampMsg{Stamp: x.Stamp}); err != nil {
 					return s, err
 				}
-				var h horizon.Horizon
-				files, err := handshake.Recv(up, &h)
+				var release handshake.Release
+				files, err := handshake.Recv(up, &release)
 				if err != nil {
 					return s, fmt.Errorf("no Horizon, cannot execute: %w", err)
 				}
+				h := release.Horizon
+				if len(files) != h.Depth()+len(release.Resources) {
+					for _, f := range files {
+						f.Close()
+					}
+					_ = handshake.Send(up, handshake.Accepted{Error: "descriptor count does not match release"})
+					return s, fmt.Errorf("release has %d descriptors; expected %d frames and %d resources", len(files), h.Depth(), len(release.Resources))
+				}
+				if err := custody.Validate(release.Resources, files[h.Depth():]); err != nil {
+					for _, f := range files {
+						f.Close()
+					}
+					_ = handshake.Send(up, handshake.Accepted{Error: err.Error()})
+					return s, err
+				}
 				stack = files
-				trace.Logf("release  Horizon received (reach %v, %d frames)", h.Names(), len(files))
-				e = machine.Released{Self: h, Frames: len(files)}
+				if err := handshake.Send(up, handshake.Accepted{}); err != nil {
+					return s, err
+				}
+				trace.Logf("release  Horizon received (reach %v, %d frames, %d resources)", h.Names(), h.Depth(), len(release.Resources))
+				e = machine.Released{Self: h, Frames: h.Depth(), Resources: release.Resources}
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
-				e = run(x)
+				var conn *os.File
+				if x.ConnectionOwner != "" {
+					var request struct {
+						Incarnation string `json:"incarnation"`
+					}
+					if err := json.Unmarshal(x.Stdin, &request); err != nil || request.Incarnation == "" {
+						e = machine.Emitted{Err: "connection operation needs an incarnation"}
+						break
+					}
+					var err error
+					conn, err = custody.Find(s.Resources, stack[s.Self.Depth():], x.ConnectionOwner, request.Incarnation)
+					if err != nil {
+						e = machine.Emitted{Err: err.Error()}
+						break
+					}
+				}
+				e = run(x, conn)
+			case machine.StartResident:
+				var file *os.File
+				e, file = startResident(x, root)
+				if file != nil {
+					stack = append(stack, file)
+				}
 			case machine.Spawn:
 				var err error
 				if down, child, e, err = spawn(root, x); err != nil {
@@ -126,8 +169,15 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					defer f.Close()
 					frames = append([]*os.File{f}, stack...)
 				}
-				if err := handshake.Send(down, x.Child, frames...); err != nil {
+				if err := handshake.Send(down, handshake.Release{Horizon: x.Child, Resources: s.Resources}, frames...); err != nil {
 					return s, err
+				}
+				var accepted handshake.Accepted
+				if _, err := handshake.Recv(down, &accepted); err != nil {
+					return s, fmt.Errorf("successor did not accept custody: %w", err)
+				}
+				if accepted.Error != "" {
+					return s, fmt.Errorf("successor refused custody: %s", accepted.Error)
 				}
 				trace.Logf("handoff  verified and released %s, custody passed, exiting", record.Short(x.Child.Stamp))
 				child.Process.Release() // D2: the parent does not wait on the child
@@ -218,7 +268,7 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 
 // run performs a Run effect: check the binary's content hash, run it under
 // the rendered profile, and read its one line of output.
-func run(x machine.Run) machine.Event {
+func run(x machine.Run, connection *os.File) machine.Event {
 	bin, err := os.ReadFile(x.Surface.Path)
 	if err != nil {
 		return machine.Emitted{Err: err.Error()}
@@ -231,6 +281,9 @@ func run(x machine.Run) machine.Event {
 	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Surface.Path)
 	cmd.Stdin = bytes.NewReader(x.Stdin)
 	cmd.Env = x.Env
+	if connection != nil {
+		cmd.ExtraFiles = []*os.File{connection}
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	out, err := cmd.StdoutPipe()
@@ -251,6 +304,66 @@ func run(x machine.Run) machine.Event {
 	}
 	trace.Logf("execute  target emitted %d bytes (sha256 %s)", len(emission), record.Short(record.Sum(emission)))
 	return machine.Emitted{Out: emission}
+}
+
+// startResident launches a registered stream target under its Horizon profile.
+// Only the local socket endpoint survives the handoff. The process sees the
+// peer as stdin and stdout, and exits on EOF when custody is dropped.
+func startResident(x machine.StartResident, root string) (machine.Event, *os.File) {
+	bin, err := os.ReadFile(x.Run.Surface.Path)
+	if err != nil {
+		return machine.Started{Err: err.Error()}, nil
+	}
+	if record.Sum(bin) != x.Run.Surface.SHA256 {
+		return machine.Started{Err: "surface binary does not match its registered hash"}, nil
+	}
+	profile, env, work := x.Run.Profile, x.Run.Env, ""
+	var prepared *preparedResident
+	if x.Run.Surface.ResidentProfile != "" {
+		prepared, err = prepareAppserver(x, root)
+		if err != nil {
+			return machine.Started{Err: err.Error()}, nil
+		}
+		profile, env, work = prepared.profile, prepared.env, prepared.work
+	}
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return machine.Started{Err: err.Error()}, nil
+	}
+	for _, fd := range fds {
+		syscall.CloseOnExec(fd)
+	}
+	local := os.NewFile(uintptr(fds[0]), "resident-connection")
+	peer := os.NewFile(uintptr(fds[1]), "resident-peer")
+	defer peer.Close()
+	argv := []string{"-p", profile, x.Run.Surface.Path}
+	if prepared != nil {
+		argv = []string{"-f", filepath.Join(filepath.Dir(prepared.work), "actor.sb"), x.Run.Surface.Path}
+	}
+	argv = append(argv, x.Run.Surface.Args...)
+	cmd := exec.Command("/usr/bin/sandbox-exec", argv...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = peer, peer, os.Stderr
+	cmd.Env, cmd.Dir = env, work
+	if prepared != nil {
+		cmd.ExtraFiles = []*os.File{prepared.watch}
+	}
+	if err := cmd.Start(); err != nil {
+		local.Close()
+		if prepared != nil {
+			prepared.abort()
+		}
+		return machine.Started{Err: err.Error()}, nil
+	}
+	if prepared != nil {
+		prepared.actorStarted()
+	}
+	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
+	resource := custody.Resource{Kind: "connection", Owner: x.Owner, Incarnation: incarnation}
+	out, _ := json.Marshal(map[string]any{"to": "reply", "payload": map[string]any{
+		"pid": cmd.Process.Pid, "incarnation": incarnation,
+		"profile": record.Sum([]byte(profile))}})
+	cmd.Process.Release()
+	return machine.Started{Out: out, Resource: resource}, local
 }
 
 // spawn performs a Spawn effect: start skyra again with the bytes on stdin,

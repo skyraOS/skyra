@@ -397,6 +397,29 @@ func TestNarrow(t *testing.T) {
 	}
 }
 
+func TestNarrowAttenuatesDelegatedToolAuthority(t *testing.T) {
+	full := echoS
+	full.Authority.Read = []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}
+	caller := agentS
+	caller.Delegate = map[string]horizon.Authority{
+		"echo": {Read: []horizon.PathGrant{{Path: "/private/work/one.txt", Scope: "literal"}}},
+	}
+	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"agent": caller, "echo": full}}
+	invoke := intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`)
+	child, err := Narrow(root, invoke, "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(child.Surface.Authority.Read) != 0 || !reflect.DeepEqual(child.Reach["echo"].Authority, caller.Delegate["echo"]) {
+		t.Fatalf("caller must receive only the attenuated echo capability, not echo's direct read grant: %+v", child)
+	}
+	caller.Delegate["echo"] = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/workspace/secret", Scope: "literal"}}}
+	root.Reach["agent"] = caller
+	if _, err := Narrow(root, intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`), "r2"); err == nil {
+		t.Fatal("accepted a delegated path outside the tool ceiling")
+	}
+}
+
 // The machine must stay pure. It may import only the standard library's
 // non-I/O packages and the pure packages of this module.
 func TestMachineIsPure(t *testing.T) {
