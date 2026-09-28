@@ -44,6 +44,10 @@ struct ContentView: View {
         .onChange(of: session.current == nil, initial: true) { _, empty in
             sky.titleOpenTarget = empty ? 1 : 0
         }
+        // Calls launch lights as they appear in the conversation on screen.
+        .onChange(of: session.selected, initial: true) { _, _ in followCalls() }
+        .onChange(of: session.current?.entries) { _, _ in followCalls() }
+        .onPreferenceChange(ReadingColumn.self) { sky.column = $0 }
         .onChange(of: backend.state, initial: true) { _, state in
             switch state {
             case let .ready(url): session.connect(url, token: backend.token)
@@ -69,6 +73,10 @@ struct ContentView: View {
             // Occluded or minimized, the sky stops.
             visible = NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
         }
+    }
+
+    private func followCalls() {
+        sky.calls.follow(session.selected, session.current?.entries ?? [], frame: sky.frame(at: Date()))
     }
 
     @ViewBuilder private var main: some View {

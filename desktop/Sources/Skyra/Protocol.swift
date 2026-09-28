@@ -5,11 +5,28 @@ import Foundation
 // model: a conversation's truth is its lineage in the tree.
 
 struct Entry: Decodable, Equatable {
-    let role: String // "user" or "agent"; anything else renders as the agent's
+    let role: String // "user", "agent" or "call"; anything else renders as the agent's
     let text: String
     let ts: Int
     let requestId: String?
+    let call: Call? // on a "call" entry
     var isUser: Bool { role == "user" }
+}
+
+/// A tool call in the agent's turn, as the webhost reads it from the lineage:
+/// an invoke and what discharged it, or a refused emission that named a tool.
+struct Call: Decodable, Equatable {
+    let to: String
+    let arg: String
+    let state: String // running | returned | fault
+    let result: String?
+    let fault: String? // the fault's kind: horizon, contract, custody, malformed
+    let cause: String?
+    let stamp: String
+    let ms: Int?
+
+    /// A refusal is the Horizon or a contract doing its job; anything else broke.
+    var refused: Bool { state == "fault" && (fault == "horizon" || fault == "contract") }
 }
 
 struct Conversation: Decodable, Equatable, Identifiable {

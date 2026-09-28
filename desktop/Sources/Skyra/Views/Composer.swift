@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The composer sits one open row below the transcript, in a soft glow: teal
-/// when it is ready for a message, a dimmer grey while the agent works or the
-/// backend is offline. Beneath it, the grant the session runs under.
+/// The composer sits one open row below the transcript: a dark field with no
+/// outline, set apart by a soft white light, brighter when it is ready for a
+/// message and fainter while the agent works or the backend is offline.
+/// Beneath it, the grant the session runs under.
 struct Composer: View {
     let backend: Backend
     let session: Session
@@ -43,9 +44,14 @@ struct Composer: View {
             .padding(.leading, 16)
             .padding(.trailing, 10)
             .padding(.vertical, 11)
-            .panel(radius: 14, tint: Theme.userBG, tintOpacity: 0.75)
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(glow.color(ready ? 0.5 : 0.18)))
-            .shadow(color: glow.color(ready ? 0.35 : 0.08), radius: 20)
+            // No outline: a white light around a dark field marks the box,
+            // and the caret marks the place inside it. The light is on the
+            // field alone, so the text does not glow.
+            .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Theme.sky.color)
+                    .shadow(color: Theme.ink.color(ready ? 0.22 : 0.07), radius: 18)
+            }
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {

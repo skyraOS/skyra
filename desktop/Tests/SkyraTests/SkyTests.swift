@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Skyra
 
@@ -82,4 +83,37 @@ func aSatelliteReturnsToItsOrbit(dt: Double) {
     let s = SkySim(size: size, frame: 0, dt: 1.0 / 6)
     s.advance(to: 10_000, pointer: nil)
     #expect(s.frame <= 10_000 && s.frame > 9_989)
+}
+
+private func call(_ stamp: String, _ state: String) -> Entry {
+    let json = #"{"role":"call","text":"read","ts":0,"requestId":null,"call":{"to":"read","arg":"","state":"\#(state)","stamp":"\#(stamp)"}}"#
+    return try! JSONDecoder().decode(Entry.self, from: Data(json.utf8))
+}
+
+@Test func callsLaunchOnlyWhenTheyAppear() {
+    let c = CallLights()
+    c.follow("a", [call("old", "returned")], frame: 0)
+    #expect(c.lights.isEmpty, "a call already on screen launched a light")
+    c.follow("a", [call("old", "returned"), call("new", "running")], frame: 1)
+    #expect(c.lights.count == 1 && c.lights[0].home == nil)
+    #expect(c.busy(2))
+    c.follow("a", [call("old", "returned"), call("new", "returned")], frame: 5)
+    #expect(c.lights[0].home == 5)
+    #expect(!c.busy(1 + CallMotion.out + CallMotion.ride + CallMotion.home + 1))
+    // Switching conversations launches nothing for what is already there.
+    c.follow("b", [call("x", "running")], frame: 30)
+    #expect(c.lights.isEmpty)
+}
+
+@Test func aRefusedCallFliesToTheEdge() {
+    let c = CallLights()
+    c.follow("a", [], frame: 0)
+    c.follow("a", [call("f", "fault")], frame: 0)
+    let light = try! #require(c.lights.first)
+    #expect(light.fault)
+    let arrived = try! #require(light.place(size, CallMotion.outEdge))
+    let edge = onRing(size, 1, light.angle, CallMotion.edge)
+    #expect(arrived.distance(edge) < 1e-9)
+    #expect(light.place(size, CallMotion.outEdge + CallMotion.flare + 1) == nil)
+    #expect(c.busy(CallMotion.outEdge + CallMotion.arc - 1))
 }

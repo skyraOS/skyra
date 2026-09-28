@@ -26,6 +26,9 @@ enum Theme {
     static let dim = RGB(120, 128, 146)
     static let faint = RGB(60, 66, 80)
     static let red = RGB(226, 112, 112)
+    /// A refused call: the Horizon doing its job, not a failure.
+    static let amber = RGB(222, 168, 104)
+    static let callTo = RGB(169, 201, 206)
 
     // The sky.
     static let tealLight = RGB(4, 10, 12)

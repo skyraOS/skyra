@@ -6,6 +6,8 @@ import SwiftUI
 final class SkyModel {
     var pointer: CGPoint? // in the sky's points; nil when outside
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
+    let calls = CallLights()
+    var column: ClosedRange<Double>? // the reading column, in the sky's points: the sky is quieter there
 
     fileprivate let start = Date()
     fileprivate var stars: [Star] = []
@@ -70,10 +72,12 @@ struct SkyView: View {
         // it, and adding to a transparent canvas would paint them dark.
         g.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.sky.color))
         light(&g, size, f, cam)
+        // While a call's light is out, meteors and glints wait.
+        let busy = model.calls.busy(f)
 
         for star in model.stars {
             let p = CGPoint(x: (star.base.x + star.depth * cam.x) * d, y: (star.base.y + star.depth * cam.y) * d)
-            let c = star.color(frame).color
+            let c = star.color(frame, glints: !busy).color
             switch star.kind {
             case .star:
                 let r = star.peak == Theme.starBright ? 1.5 : 1.2
@@ -107,7 +111,7 @@ struct SkyView: View {
                 if let head = tail.first { heads.append(CGPoint(x: head.x * d, y: head.y * d)) }
             }
         }
-        if full, let head = meteor(&g, size, frame) { heads.append(head) }
+        if full, !busy, let head = meteor(&g, size, frame) { heads.append(head) }
 
         if full {
             // The core: one small star, breathing on a thirty-second cycle.
@@ -126,6 +130,23 @@ struct SkyView: View {
             let lc = Theme.labelFloor.lerp(Theme.labelPeak, 0.15 + 0.85 * Sky.sweep(labelAngle, middle))
             g.draw(Text("s k y r a").font(.system(size: 12, design: .monospaced)).foregroundStyle(lc.color),
                    at: label, anchor: .leading)
+
+            drawCalls(&g, dots, f)
+        }
+
+        // The sky is quieter under the words.
+        if let col = model.column, col.upperBound > col.lowerBound {
+            let feather = 40.0
+            let rect = CGRect(x: col.lowerBound - feather, y: 0, width: col.upperBound - col.lowerBound + 2 * feather, height: h)
+            let k = feather / rect.width
+            let stops: [Gradient.Stop] = [
+                .init(color: Theme.sky.color(0), location: 0),
+                .init(color: Theme.sky.color(0.36), location: min(0.5, k * 1.6)),
+                .init(color: Theme.sky.color(0.36), location: max(0.5, 1 - k * 1.6)),
+                .init(color: Theme.sky.color(0), location: 1),
+            ]
+            g.fill(Path(rect), with: .linearGradient(Gradient(stops: stops), startPoint: CGPoint(x: rect.minX, y: 0),
+                                                     endPoint: CGPoint(x: rect.maxX, y: 0)))
         }
 
         // The title: near-sky tones, lit when a satellite or meteor passes.
@@ -138,6 +159,46 @@ struct SkyView: View {
         let (mark, word) = Theme.title(open: model.titleOpen, lit: lit)
         g.draw(Text("✦").font(.system(size: 13)).foregroundStyle(mark), at: t, anchor: .leading)
         g.draw(Text("skyra").font(.system(size: 13, weight: .medium)).foregroundStyle(word), at: CGPoint(x: t.x + 18, y: t.y), anchor: .leading)
+    }
+
+    /// The calls' lights, and the arc where a refused call met the Horizon's edge.
+    private func drawCalls(_ g: inout GraphicsContext, _ dots: Point, _ f: Double) {
+        let d = Sky.dot
+        func at(_ p: Point) -> CGPoint { CGPoint(x: p.x * d, y: p.y * d) }
+        func disc(_ c: CGPoint, _ r: Double, _ color: Color) {
+            g.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(color))
+        }
+        for l in model.calls.lights {
+            let u = f - l.at - CallMotion.outEdge
+            if l.fault, u >= 0, u < CallMotion.arc {
+                let k = u < 2 ? u / 2 : exp(-(u - 2) / 7)
+                let span = 0.42
+                var arc = Path()
+                for (i, a) in stride(from: l.angle - span, through: l.angle + span, by: 0.01).enumerated() {
+                    let p = at(onRing(dots, 1, a, CallMotion.edge))
+                    if i == 0 { arc.move(to: p) } else { arc.addLine(to: p) }
+                }
+                var glow = g
+                glow.addFilter(.blur(radius: 6))
+                glow.stroke(arc, with: .color(Theme.amber.color(0.35 * k)), lineWidth: 5)
+                for i in 0...36 {
+                    let a = l.angle - span + 2 * span * Double(i) / 36
+                    let w = pow(cos((a - l.angle) / span * .pi / 2), 1.5)
+                    disc(at(onRing(dots, 1, a, CallMotion.edge)), 1.3, Theme.sky.lerp(Theme.amber, k * w).color)
+                }
+            }
+            guard let head = l.place(dots, f) else { continue }
+            let alpha = l.fault && u > 0 ? max(0, 1 - u / CallMotion.flare) : 1
+            for i in 1..<8 {
+                if let p = l.place(dots, f - Double(i) * 0.35) {
+                    disc(at(p), 1.2, Theme.tailFloor.lerp(Theme.satellite, pow(0.66, Double(i))).color(alpha))
+                }
+            }
+            let flare = l.fault ? min(1, max(0, u / CallMotion.flare)) : 0
+            let c = Theme.glintPeak.lerp(Theme.amber, flare)
+            disc(at(head), 6, c.color(0.18 * alpha))
+            disc(at(head), 1.8 + flare * 1.4, c.color(alpha))
+        }
     }
 
     /// Two faint lights lift the background: a teal glow breathing on the

@@ -60,3 +60,21 @@ import Testing
     s.askDelete(nil)
     #expect(s.confirmingDelete == "done")
 }
+
+@Test func decodesACallEntry() throws {
+    let raw = """
+    {"type":"snapshot","uiIncarnation":"w","revision":1,"requests":[],
+     "conversations":[{"conversation":"c","phase":"pending","pendingRequestId":null,"entries":[
+       {"role":"user","text":"run ls","ts":0,"requestId":"r"},
+       {"role":"call","text":"native.commandExecution","ts":1,"requestId":null,
+        "call":{"to":"native.commandExecution","arg":"","state":"fault","fault":"horizon",
+                "cause":"\\"native.commandExecution\\" is not in reach","stamp":"2ae3f9ec"}}]}]}
+    """
+    guard case let .snapshot(_, _, convs) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
+        Issue.record("not a snapshot")
+        return
+    }
+    let call = try #require(convs.first?.entries.last?.call)
+    #expect(call.refused && call.to == "native.commandExecution" && call.ms == nil)
+    #expect(convs.first?.entries.first?.call == nil)
+}

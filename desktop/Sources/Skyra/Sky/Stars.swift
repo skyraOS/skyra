@@ -54,15 +54,16 @@ struct Star {
     let phase: Double
     let glintOffset: UInt64
 
-    /// The star's color at frame, breathing between its floor and peak.
-    func color(_ frame: UInt64) -> RGB {
+    /// The star's color at frame, breathing between its floor and peak. A
+    /// glint waits while glints is false.
+    func color(_ frame: UInt64, glints: Bool = true) -> RGB {
         let f = Double(frame)
         let breath = (1 + sin(2 * .pi * f / period + phase)) / 2
         switch kind {
         case .star:
             var glint = 0.0
             let t = (frame &+ glintOffset) % Sky.glintEvery
-            if t < Sky.glintLength { glint = pow(sin(.pi * Double(t) / Double(Sky.glintLength)), 2) }
+            if glints && t < Sky.glintLength { glint = pow(sin(.pi * Double(t) / Double(Sky.glintLength)), 2) }
             return Theme.starFloor.lerp(peak, 0.35 + 0.4 * breath).lerp(Theme.glintPeak, 0.6 * glint)
         case .plus:
             return Theme.starFloor.lerp(Theme.starPeak, 0.3 + 0.35 * breath)
