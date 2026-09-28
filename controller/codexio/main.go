@@ -12,6 +12,7 @@ import (
 	"os"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 type request struct {
@@ -94,20 +95,31 @@ func operate(file *os.File, q request) (o observation) {
 		return
 	}
 	o.Read = "observed"
-	// Each read stops exactly at a newline. A stop drains until EOF; an
-	// exchange returns one line without consuming the next operation's bytes.
-	limit := 1
-	if q.Op == "stop" {
-		limit = 1024
+	// Each read stops exactly at a newline. A stop drains until EOF. An
+	// exchange waits for one line, then takes every further line already
+	// buffered on the socket: it never waits for new output, so it does not
+	// consume bytes written after this operation observed.
+	limit := 1024
+	if q.Op != "stop" {
+		limit = maxBatch
 	}
 	prefix := q.Prefix
 	for i := 0; i < limit; i++ {
+		if i > 0 && q.Op != "stop" {
+			if buffered(file) == 0 {
+				return
+			}
+			// The rest of a line already begun arrives with it; if it does
+			// not, it is carried to the next operation as partial.
+			conn.SetDeadline(time.Now().Add(drainWait))
+		}
 		line, readErr := exactLine(conn, prefix)
 		prefix = ""
 		if readErr != nil {
 			o.Partial = line
 			o.PeerEOF = errors.Is(readErr, io.EOF)
-			if !o.PeerEOF {
+			var timeout net.Error
+			if !o.PeerEOF && !(i > 0 && q.Op != "stop" && errors.As(readErr, &timeout) && timeout.Timeout()) {
 				o.Error = readErr.Error()
 			}
 			return
@@ -118,6 +130,22 @@ func operate(file *os.File, q request) (o observation) {
 		o.Error = "stop drain exceeded 1024 lines"
 	}
 	return
+}
+
+const (
+	maxBatch  = 256                   // lines one exchange may return
+	drainWait = 50 * time.Millisecond // for the rest of a buffered, partly read line
+	fionread  = 0x4004667f            // FIONREAD, _IOR('f', 127, int) in <sys/filio.h>
+)
+
+// buffered reports how many bytes the socket holds unread (FIONREAD).
+func buffered(file *os.File) int {
+	var n int32
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), fionread,uintptr(unsafe.Pointer(&n)))
+	if errno != 0 {
+		return 0
+	}
+	return int(n)
 }
 
 func exactLine(conn net.Conn, prefix string) (string, error) {
