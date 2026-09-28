@@ -117,4 +117,11 @@ export interface OpenConversationMessage {
   requestId: string;
 }
 
-export type ClientMessage = SubmitMessage | CloseInteractionMessage | OpenConversationMessage;
+export interface DeleteConversationMessage {
+  type: "delete-conversation";
+  uiIncarnation: string;
+  conversation: string;
+  requestId: string;
+}
+
+export type ClientMessage = SubmitMessage | CloseInteractionMessage | OpenConversationMessage | DeleteConversationMessage;

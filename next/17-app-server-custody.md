@@ -3,8 +3,12 @@
 Date: 2026-09-27  
 Status: draft spec, revised after review. Follows [15](15-adapters.md) and
 closes its open item "preventing native execution". Nothing here is built.
-Two open items block work: who owns the actor host blocks step 2, and how
-`Narrow` bounds the new fields blocks step 1's tests (see Open).
+[18](18-app-server-spec-improvements.md) replaces this spec's lifecycle and
+communication design: there is no actor host. The runtime launches one
+app-server process per thread, and its connection travels in custody. This
+spec's sandbox, network and native-tool controls apply to every such process.
+One open item blocks work: how `Narrow` bounds the new fields blocks step 1's
+tests (see Open).
 
 ## The problem
 
@@ -65,16 +69,19 @@ fixed at its launch. A running process's profile cannot change. So for an
 actor, H(t+1) is not derived per handoff; it is **checked** against the one
 fixed at launch:
 
-1. The actor's authority is a reach entry in the adapter's Horizon, so
-   `Narrow(H(adapter), deliver-to-actor)` gives a definite H(actor), as for a
-   leaf (step 1).
-2. Its host launches the app-server under `Render(H(actor))` (step 2).
-3. Every adapter step checks that the running actor's profile hash equals
-   `Render(H(actor))`. If they differ, the delivery would be executed under a
-   Horizon it did not derive, and the adapter refuses (step 6).
+1. The actor's registered fields are its ceiling (step 1). Its `start`
+   invocation ([18](18-app-server-spec-improvements.md), section 1) is granted
+   a subset, H(actor), for that one thread.
+2. The runtime launches the app-server itself, as the target of `start`, under
+   `Render(H(actor))`, and records the profile's hash in `start`'s return
+   (step 2).
+3. Every exchange with that process is checked against the incarnation and
+   hash `start` recorded. An exchange aimed at a process whose recorded launch
+   does not match would be executed under a Horizon it did not derive, and the
+   adapter refuses (step 6).
 
-An actor's H(t+1) must therefore be the same at every handoff, and the hash
-check is the proof.
+An actor's H(t+1) is therefore the same at every handoff to that process, and
+the recorded launch is the proof.
 
 ### What Codex may do
 
@@ -113,23 +120,23 @@ human ⇄ browser (parked ingress) ⇄ adapter step (stateless) ⇄ app-server a
   app-server answers the adapter; the adapter answers the human.
 - The app-server is a **registered actor**: the runtime launches it, under a
   profile the runtime renders from the registry. Not the `skyra` shell script.
-- Seatbelt applies to the **app-server, not the host**. The host is runtime
-  code: it decides nothing, but it must write its inbox and delivery log and
-  serve its socket, which the app-server must never do. So the runtime starts
-  the host unsandboxed, like `skyra` itself, and the host launches the
-  app-server with `sandbox-exec` under the profile the runtime rendered. The
-  profile is inherited by anything the app-server spawns, for the whole of its
-  execution. (One profile per process tree: the host cannot sandbox itself and
-  then narrow the actor.)
-- Who "the runtime" is here is open: the controller has no long-lived process
-  today, only per-step instances and the `skyra` script (see Open).
+- **One app-server process per thread**, launched by the runtime's instance
+  (which is not sandboxed) as a resident target, with `sandbox-exec` under the
+  profile rendered for that thread ([18](18-app-server-spec-improvements.md),
+  section 3). The profile is inherited by anything the app-server spawns, for
+  the whole of its execution. (One profile per process tree: a sandboxed child
+  cannot give the app-server a different profile, so the runtime launches it.)
+- There is no actor host. The app-server's connection is an fd in the frame
+  stack, carried through handoffs and parked with the ingress host while the
+  conversation is idle. The records the host kept (inbox, deliveries) are
+  invocation payloads and returns in the tree.
 
 ## Three layers, one authority
 
 | Layer | Role | Trusted? |
 |---|---|---|
 | 1. **Tool removal**: `--disable` feature flags, no environment (`environments: []`), our own model catalog, `web_search = "disabled"`, an isolated `CODEX_HOME` | shrink what the model is offered | no, for local tools: it reduces attempts. For server-side tools it is the only guard, so the adapter checks it (step 6) |
-| 2. **OS block**: our Seatbelt profile on the app-server, applied by its host | makes native execution fail | **yes. The only authority** |
+| 2. **OS block**: our Seatbelt profile on the app-server, applied by the runtime when it launches it | makes native execution fail | **yes. The only authority** |
 | 3. **Developer instructions**: native tools are unavailable and blocked | stops the model wasting turns trying | no. Guidance only |
 
 ### Codex's own sandbox: off, inside ours
@@ -156,8 +163,8 @@ same fields.
   denial tests must cover the whole profile, not a sample.
 - **Cost:** with the sandbox off, Codex upgrades an unset `web_search` to live
   search, so `web_search = "disabled"` becomes required (step 3).
-- **Guard:** the adapter refuses a full-access thread unless the host reports
-  that the app-server runs under our profile (see step 6).
+- **Guard:** the adapter refuses a full-access thread unless the recorded
+  `start` shows the app-server was launched under our profile (see step 6).
 
 ## Build order
 
@@ -175,8 +182,8 @@ has not been tested. Anything that fails changes the steps that follow.
 | `model_catalog_json` | with it set, Codex serves models from our file only (no fetch from OpenAI), and a model with `apply_patch_tool_type: null` and `shell_type` disabled is offered neither tool even with an environment |
 | server-side tools | with `web_search = "disabled"` and `image_generation` disabled, under `danger-full-access`, the model is offered no web search (hosted or `web.run`) and no image generation. And with `web_search` unset, it is offered live search, confirming the step 3 trap. How the adapter could see what is offered (the `thread/start` response, or a tool list), if at all |
 | requirements layer | no managed `requirements.toml` (e.g. `/etc/codex/`) applies to the actor, so nothing constrains `web_search` away from `Disabled` |
-| the binary | the path of the native binary the app-server runs as. An npm install's `codex` is a Node shim that spawns a vendored binary; the profile names the native one, and the host launches it directly |
-| app-server under a Seatbelt profile | launched by the host with `sandbox-exec`, it starts, logs in and completes a turn with only its binary, its `CODEX_HOME`, a temp dir, system libraries, the egress port and the mach services listed. The exact file reads and mach services it needs, as lists |
+| the binary | the path of the native binary the app-server runs as. An npm install's `codex` is a Node shim that spawns a vendored binary; the profile names the native one, and the runtime launches it directly |
+| app-server under a Seatbelt profile | launched by the runtime with `sandbox-exec`, it starts, logs in and completes a turn with only its binary, its `CODEX_HOME`, a temp dir, system libraries, the egress port and the mach services listed. The exact file reads and mach services it needs, as lists |
 | every registered leaf under the step 1 default | `echo`, the Codex adapter and the other Go leaves start and finish with no `Read` and no `Mach`. Any read or mach service one needs, as a list, so step 1 does not break `skyra demo`. (`fake-codex` is an actor, not a leaf: its needs come from the fake-mode entry in step 2) |
 | what Codex writes | the exact paths under `CODEX_HOME` it writes during login, a turn and a token refresh (sessions, logs, `auth.json`, …). Step 4 grants `Write` on these only |
 | how `apply_patch` runs | in-process, or by re-running the Codex binary as a helper. If a helper, which argument modes the binary accepts when run that way, since the profile allows running it. Only matters if step 3 fails to remove it |
@@ -185,7 +192,7 @@ has not been tested. Anything that fails changes the steps that follow.
 | auth store | with `cli_auth_credentials_store = "file"` in the isolated `config.toml`, login and token refresh use only `CODEX_HOME`, with no Keychain (`securityd`) lookups |
 | `sandbox-exec` inside our profile | denied at exec |
 | `thread/start` with `sandbox: "danger-full-access"` | accepted, reported as `dangerFullAccess` |
-| a command under full access inside our profile | denied by **our** profile: the command fails with a permission error in its item output, not with Codex's own sandbox error. (Seatbelt reports denials to the macOS unified log, not to the host's stderr; recording them is later OS event sourcing, not needed here) |
+| a command under full access inside our profile | denied by **our** profile: the command fails with a permission error in its item output, not with Codex's own sandbox error. (Seatbelt reports denials to the macOS unified log, not to the process's stderr; recording them is later OS event sourcing, not needed here) |
 | no escape to other processes | with `daemon_auto_start` and `code_mode_host` disabled, work is never handed to the managed daemon or the code-mode host (both were running outside our control on 2026-09-27) |
 | what `approvalPolicy: "never"` means | the documented and observed behaviour: never ask and run in Codex's sandbox, or never grant. And whether a policy that asks would turn native attempts into requests the adapter can refuse. Decides step 6 |
 | egress | Codex honours `HTTPS_PROXY` (or `network_proxy`) for every connection, websockets included, and the exact hosts a login and a turn need. The proxy URL is TCP (`http://127.0.0.1:PORT`): Codex's HTTP client is not expected to take a unix-socket proxy |
@@ -226,23 +233,26 @@ profile hash in step 2 is stable.
 
 **Actors are surfaces in the Horizon.** Today an adapter reaches its actor
 through `Connect`, a bare list of socket paths, so the actor's authority is in
-no Horizon at all. Nothing can derive H(actor), `runOf` has nothing to hash, and
-whatever launches the host reads its fields from outside any Horizon.
+no Horizon at all. Nothing can derive H(actor), and nothing has a profile to
+hash.
 
-Instead, the actor is a registry entry of its own: its binary, arguments,
-socket, and the same authority fields as any surface (`Exec`, `Read`, `Write`,
-`Mach`, `Egress`). An adapter's `Connect` names actor entries, not paths. The
-actor's entry is then inside the adapter's Horizon, and:
+Instead, the actor is a registry entry of its own: its binary, arguments, and
+the same authority fields as any surface (`Exec`, `Read`, `Write`, `Mach`,
+`Egress`). Those fields are its **ceiling**. The adapter reaches it through
+the Codex capabilities in its reach (`codex.start`, `codex.exchange`, …;
+[18](18-app-server-spec-improvements.md), section 1), not a socket, so:
 
-- `Narrow(H(adapter), deliver-to-actor)` gives H(actor), as for a leaf (see
+- each `start` is granted a subset of the ceiling for one thread, H(actor),
+  and the runtime launches the app-server under `Render(H(actor))` (see
   "Emission at t, execution at t+1");
-- `runOf` renders `Render(H(actor))`, hashes it, and puts the hash in the
-  adapter's environment beside `SKYRA_CONNECT` (step 2);
-- the launcher in the Open item "who owns the actor host" reads the same entry.
+- `start`'s return records the incarnation and the profile's hash;
+- per-thread paths (the thread's `CODEX_HOME`, step 2) are derived from the
+  invocation's operands, inside the ceiling, so the rendered profile is still
+  deterministic.
 
-The adapter itself gets no new authority: it still reaches only the actor's
-socket. The actor's fields describe the actor's process, which the adapter's
-own profile never grants.
+The adapter itself gets no new authority: it holds the connection only while
+an exchange child uses it. The actor's fields describe the actor's process,
+which the adapter's own profile never grants.
 
 **The system reads** a program needs to start at all (dyld, its shared cache,
 `/usr/lib`, `/System`, `/dev/urandom` and the like) are one constant in
@@ -259,29 +269,30 @@ binary, and no mach services.
 
 ### 2. Register the app-server in the runtime
 
-Waits on the open item "who owns the actor host".
-
 - A registry entry for the Codex actor: binary (the native one, per step 0),
-  arguments, socket, and its authority fields (step 1). The Codex adapter's
-  `Connect` names this entry, not the socket path.
+  arguments, and its authority fields (step 1). The Codex adapter reaches it
+  through the capabilities in [18](18-app-server-spec-improvements.md),
+  section 1.
 - A second entry for fake mode, for `fake-codex`, with its own fields. It is a
   Go binary and needs different reads, so `skyra test` and `skyra demo` go
-  through the same host path under their own profile.
-- The runtime renders the profile from them and starts the host with it
-  (`host -profile FILE ...`). The host runs unsandboxed and launches the
-  app-server as `sandbox-exec -p PROFILE <native binary> app-server`.
-  `codex_host` in `skyra` stops launching it.
-- The host's `ping` also reports the sha256 of the profile it launched the
-  actor under. `runOf` (`machine/machine.go:512`) renders H(actor) from the
-  actor entry in the adapter's Horizon and puts its hash in the adapter's
-  environment (`SKYRA_ACTOR_PROFILE`, beside `SKYRA_CONNECT`), so the adapter
-  can compare the two (step 6). Today `runOf` builds the environment only from
-  `Connect`'s socket paths.
-- `CODEX_HOME=~/.skyra/codex-home/`, holding only auth and a `config.toml` with
-  `cli_auth_credentials_store = "file"`, from a one-time
-  `CODEX_HOME=~/.skyra/codex-home codex login` (`install.sh` or `skyra doctor`
-  prompts for it). Not a copied `auth.json`, which goes stale when tokens
-  refresh. No Keychain. No user skills, plugins, MCP servers or hooks.
+  through the same invocation path under their own profile.
+- On `start`, the runtime renders the profile for that thread and launches the
+  app-server as `sandbox-exec -p PROFILE <native binary> app-server`, as a
+  resident target (18, section 3). `codex_host` in `skyra` stops launching it,
+  and `controller/host` is retired for Codex.
+- `start`'s return records the incarnation (pid, launch time) and the sha256
+  of the profile it launched under. Later exchanges are checked against that
+  record (step 6). `SKYRA_CONNECT` and the host's `ping` are no longer needed.
+- **A `CODEX_HOME` per process** (18, section 5), e.g.
+  `~/.skyra/codex/<thread key>/`, so each thread's rollouts and SQLite state
+  are its own. `CODEX_SQLITE_HOME` stays unset. Each home holds a
+  `config.toml` with `cli_auth_credentials_store = "file"` and the step 3
+  settings. No Keychain. No user skills, plugins, MCP servers or hooks.
+- **Auth, the one shared thing** (18, section 5). Preferred: an API key in the
+  app-server's environment, with no `auth.json` at all. Otherwise one shared
+  `auth.json`, from a one-time `codex login` into a fixed home (`install.sh` or
+  `skyra doctor` prompts for it), granted to each process by `literal`. Not a
+  copied `auth.json`, which goes stale when tokens refresh.
 - The model must not be able to rewrite what Codex loads at startup. The
   actor's `Write` grants only the paths step 0 lists as written (sessions, logs,
   `auth.json` for token refresh). `config.toml`, and any `AGENTS.md`, skills or
@@ -293,12 +304,12 @@ Waits on the open item "who owns the actor host".
   directory. Seatbelt cannot tell Codex's refresh from a model's file tool in
   the same process; what keeps the model off it is that no file tool is offered
   (step 3). If step 0 shows a file tool cannot be removed, auth moves out of the
-  file instead (an API key in the environment, or a read-only file refreshed by
-  the host).
+  file instead (an API key in the environment, or a read-only file refreshed
+  outside the sandbox).
 - The app-server's environment names only granted paths: `HOME` and `TMPDIR`
   point inside them, so nothing reaches for `~/.gitconfig` or `/var/folders`.
-- Actor liveness moves from the `skyra` script (the `pgrep -P` check) into
-  whatever owns the host.
+- Actor liveness moves from the `skyra` script (the `pgrep -P` check) into the
+  adapter's `inspect` invocations (18, section 2).
 
 ### 3. Remove native tools at launch
 
@@ -359,11 +370,10 @@ them. So the adapter checks it (step 6).
 
 ### 4. The Seatbelt profile and the egress proxy
 
-Deny by default. Rendered from the app-server's step 1 fields, and applied
-to the app-server only. Its host, which is outside the profile, keeps what it
-needs: its state directory (inbox and delivery log) and its own socket. The
-profile grants the app-server neither, so it cannot read its own inbox or forge
-a delivery. Allow:
+Deny by default. Rendered for each thread from the app-server's step 1 fields,
+and applied to that app-server process only. Everything recorded about it is in
+the tree, which the floor denies, and its connection is a pipe held by the
+runtime, so it cannot read its own records or forge an exchange. Allow:
 
 | Resource | Allowed |
 |---|---|
@@ -430,8 +440,10 @@ Sent in `thread/start`:
   `turn/completed` (interrupted), then emit the horizon fault. That way a
   blocked attempt never becomes a continued turn or an unseen answer, and the
   next turn in the conversation never finds this one still running. The
-  interrupt's delivery id comes from the frame (`<frame>:interrupt`), like
-  every other delivery, so a resumed step sends it again as a no-op. Step 0
+  interrupt is an ordinary exchange invocation
+  ([18](18-app-server-spec-improvements.md), section 1), recorded before it is
+  delivered, so a resumed step reads that it was sent instead of sending it
+  again. Step 0
   confirms `turn/interrupt` and the interrupted status exist; without them this
   step needs another way to stop a turn.
 - "Native" means an item type outside an allow list that step 0 settles, not
@@ -446,9 +458,9 @@ Sent in `thread/start`:
 - The policy check at `codex/main.go:122` expects `dangerFullAccess`, no
   environments, no network setting of Codex's own, no native tools offered
   (server-side ones above all, if step 0 finds a way to see what is offered;
-  see Open), and a host whose `ping` reports a profile hash
-  equal to `SKYRA_ACTOR_PROFILE` (step 2). Anything else refuses to start the
-  thread.
+  see Open), and a recorded `start` whose profile hash equals
+  `Render(H(actor))` for this thread (step 2). Anything else refuses to start
+  the thread.
 - The approval policy stays `never` unless step 0 shows that a policy that asks
   gives cleaner refusals.
 
@@ -504,12 +516,13 @@ For step 1, Go tests beside `horizon` and `machine`:
 - No Horizon, whatever its fields, renders a profile that allows the floor.
 - `Render` is deterministic: the same Horizon gives the same profile bytes,
   so the same hash.
-- An adapter's Horizon holds its actor's entry through `Connect`, and `runOf`
-  puts `Render(H(actor))`'s hash in the adapter's environment.
+- `start` launches the actor under `Render(H(actor))`, and its return carries
+  that profile's hash.
 
-And beside `registry`: a registry whose `Connect` names a bare path, or an
-unknown actor, is refused at load. `bin/registry-codex.json` still names a bare
-socket path, so it moves to an actor entry in the same change.
+And beside `registry`: an actor entry is refused at load unless it names a
+registered binary and authority fields. `bin/registry-codex.json` still names a
+bare socket path through `Connect`, so it moves to an actor entry and the
+capabilities of 18 in the same change.
 
 Then update the docs: `startup-doc.md` ("What it cannot do"), close the open
 item in [15](15-adapters.md), and replace the "detects, does not prevent" line
@@ -524,31 +537,32 @@ in `controller/codex/main.go`'s header.
   binary, or start one through launchd, shown by the step 7 cases.
 - Codex's file effects reach only what the profile grants. Its working
   directory is not among them, and nothing it loads at startup is writable.
-- Every actor's authority is an entry in its adapter's Horizon, and the
-  profile it runs under hashes equal to `Render` of that entry.
+- Every actor's authority is a registered ceiling, each process runs under a
+  subset granted at its `start`, and the profile it runs under hashes equal to
+  the one `start` recorded.
 - No server-side tool is ever offered to a thread the adapter starts.
 - A native attempt leaves the lineage and the thread in agreement: both say it
   was refused, and name what was tried.
 - The app-server reaches no network host outside its Horizon: a direct
   connection is denied by Seatbelt, an unlisted host by the egress proxy, and
   both are logged.
-- The app-server is started only by its host, which the runtime starts, and
-  only under the registered profile. The host keeps its own state and socket
-  outside that profile. A full-access thread whose host reports any other
-  profile is refused by the adapter.
+- The app-server is started only by the runtime, one process per thread, and
+  only under the profile rendered for that thread. Its records are in the tree,
+  outside that profile. A full-access thread whose recorded `start` shows any
+  other profile is refused by the adapter.
 - `skyra test`, `skyra demo` (all `byte-identical`) and `skyra live` pass.
 
 ## Open
 
-- **Who owns the actor host (blocks step 2).** The controller has nothing
-  long-lived: `boot` and `instance` run once per step, and `skyra` is a
-  script. Something must render the actor's profile, start the host, check its
-  liveness and restart it. Options: (a) a `skyra` subcommand, written in Go and
-  run from the script, that renders and launches but stays stateless, with
-  liveness read back from the host's `ping`; (b) a long-lived supervisor
-  process, which the design has so far avoided; (c) an adapter step that finds
-  no host starts one, which gives an adapter authority to launch processes.
-  Leaning (a).
+- **Who owns the actor host: resolved by
+  [18](18-app-server-spec-improvements.md).** Nothing does, because there is no
+  host. The runtime launches one app-server per thread as the target of an
+  ordinary `start` invocation, its connection travels in custody, and the
+  adapter decides liveness and restarts from recorded `inspect` returns.
+- **Who owns the egress proxy.** Step 4's proxy is still a long-lived process,
+  and 18 does not say who launches it. It could be a resident target launched
+  by the runtime, like the app-server, and shared by every process of one
+  actor, since they share one allow list. Unresolved.
 - **How `Narrow` bounds the new fields (blocks step 1's tests).** Today
   `Narrow` copies the reach entry as-is, and the entry comes from the
   registry, so "a subset of the parent's reach entry" is a no-op. It doesn't
@@ -558,9 +572,8 @@ in `controller/codex/main.go`'s header.
   fields are pinned by the registry, like `Path` and `SHA256`, and `Narrow`
   checks that the child's surface is exactly the parent's reach entry. Then
   the guarantee is "only the registry grants authority", not "children hold
-  less". The same rule covers the actor entries an adapter's `Connect` names
-  (step 1): H(actor) is exactly the registry's entry, which is what makes it
-  the same at every handoff.
+  less". For actors, 18 refines this: the registry entry is the ceiling, and
+  each `start` gets a subset for its thread, fixed for that process's life.
 - **Refused attempts in the thread:** Codex's thread keeps a refused call and
   its error; the fault's cause carries the same facts (step 6). Proposed as
   sufficient. The alternative, rolling the thread back, would make Codex's memory

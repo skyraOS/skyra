@@ -9,6 +9,8 @@ die() { printf '\033[1;31minstall:\033[0m %s\n' "$*" >&2; exit 1; }
 [ "$(uname)" = Darwin ] || die "macOS only (the sandbox uses sandbox-exec)"
 command -v go >/dev/null || die "Go 1.25+ is required: brew install go"
 command -v npm >/dev/null || die "Node 20+ is required: brew install node"
+command -v python3 >/dev/null || die "Python 3 is required for the provider launcher: brew install python"
+command -v sandbox-exec >/dev/null || die "macOS sandbox-exec is required"
 
 if [ ! -d "$ROOT/frontend/node_modules" ]; then
   say "installing frontend dependencies (about a minute)"

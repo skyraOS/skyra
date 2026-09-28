@@ -16,8 +16,8 @@
 //	the turn completes                  → the final agent message, as plain text (a reply)
 //	Codex uses anything native          → addressed output naming it, e.g. "native.commandExecution".
 //	(a shell command, a file change,       It is not in reach, so the runtime derives a horizon
-//	an approval request)                   fault. Codex may already have run it: this detects, it
-//	                                       does not prevent (next/15, open)
+//	an approval request)                   fault, after interrupting the affected turn.
+//	                                       The provider launcher enforces OS file/exec restrictions.
 package main
 
 import (
@@ -97,7 +97,7 @@ func run() (string, error) {
 		threadID = "conversation:" + c.Input.Conversation + ":thread"
 	}
 	seq, err = h.deliver(threadID, request(threadID, "thread/start", map[string]any{
-		"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": dynamicTools(c.Tools),
+		"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": dynamicTools(c.Tools),
 		"developerInstructions": "Only the registered dynamic tools may perform effects."}))
 	if err != nil {
 		return "", err
@@ -133,6 +133,26 @@ func run() (string, error) {
 		return "", err
 	}
 
+	turnResponse, err := h.response(from, turnID)
+	if err != nil {
+		return "", fmt.Errorf("turn/start: %w", err)
+	}
+	var turnStarted struct {
+		Turn struct {
+			ID string `json:"id"`
+		} `json:"turn"`
+	}
+	if json.Unmarshal(turnResponse, &turnStarted) != nil || turnStarted.Turn.ID == "" {
+		return "", errors.New("turn/start: no turn")
+	}
+	turn := turnStarted.Turn.ID
+	reject := func(what string) (string, error) {
+		if err := h.interrupt(c.Frame, thread, turn, from); err != nil {
+			return "", fmt.Errorf("native %s: %w", what, err)
+		}
+		return native(what), nil
+	}
+
 	// Walk the turn from its start. Tool calls already answered by a step are
 	// answered again (a no-op after the first time); the first unanswered one,
 	// or the turn's end, decides this step's output.
@@ -152,6 +172,7 @@ func run() (string, error) {
 				Method string          `json:"method"`
 				Params struct {
 					ThreadID string          `json:"threadId"`
+					TurnID   string          `json:"turnId"`
 					Tool     string          `json:"tool"`
 					Args     json.RawMessage `json:"arguments"`
 					Item     struct {
@@ -159,6 +180,7 @@ func run() (string, error) {
 						Text string `json:"text"`
 					} `json:"item"`
 					Turn struct {
+						ID     string `json:"id"`
 						Status string `json:"status"`
 					} `json:"turn"`
 				} `json:"params"`
@@ -166,9 +188,18 @@ func run() (string, error) {
 			if json.Unmarshal(e.Line, &m) != nil || m.Method == "" || m.Params.ThreadID != thread {
 				continue // a response, another thread's event, or not JSON-RPC
 			}
+			if m.Params.TurnID != "" && m.Params.TurnID != turn {
+				continue
+			}
+			if m.Method == "turn/completed" && m.Params.Turn.ID != turn {
+				continue
+			}
 			request := len(m.ID) > 0
 			switch {
 			case request && m.Method == "item/tool/call":
+				if _, registered := c.Tools[m.Params.Tool]; !registered {
+					return reject("dynamicTool." + m.Params.Tool)
+				}
 				if calls < len(c.Steps) {
 					if _, err := h.deliver(fmt.Sprintf("%s:tool:%d", c.Frame, calls), toolResult(m.ID, c.Steps[calls].State, c.Steps[calls].Value, c.Steps[calls].Fault)); err != nil {
 						return "", err
@@ -183,7 +214,7 @@ func run() (string, error) {
 				out, _ := json.Marshal(map[string]any{"to": m.Params.Tool, "payload": args})
 				return string(out), nil
 			case request:
-				return native(m.Method), nil // an approval or any other request: never granted
+				return reject(m.Method) // an approval or any other request: never granted
 			case m.Method == "item/started" || m.Method == "item/completed":
 				switch m.Params.Item.Type {
 				case "agentMessage":
@@ -192,7 +223,7 @@ func run() (string, error) {
 					}
 				case "userMessage", "reasoning", "plan", "dynamicToolCall":
 				default:
-					return native(m.Params.Item.Type), nil
+					return reject(m.Params.Item.Type)
 				}
 			case m.Method == "turn/completed":
 				if m.Params.Turn.Status != "completed" || final == "" || calls != len(c.Steps) {
@@ -211,6 +242,52 @@ func run() (string, error) {
 
 // native names a capability Codex tried to use on its own. It is not in any
 // Horizon, so the runtime derives a horizon fault.
+// interrupt is adapter policy, not a runtime event. A terminal observation
+// for this exact turn is required; an RPC acknowledgement alone is insufficient.
+func (h *host) interrupt(frame, thread, turn string, from int) error {
+	deadline := time.Now().Add(15 * time.Second)
+	if err := h.conn.SetDeadline(deadline); err != nil {
+		return err
+	}
+	defer h.conn.SetDeadline(time.Time{})
+	id := frame + ":interrupt"
+	if _, err := h.deliver(id, request(id, "turn/interrupt", map[string]string{"threadId": thread, "turnId": turn})); err != nil {
+		return fmt.Errorf("interrupt delivery: %w", err)
+	}
+	for time.Now().Before(deadline) {
+		events, next, err := h.read(from, 1000)
+		if err != nil {
+			return fmt.Errorf("interrupt confirmation: %w", err)
+		}
+		for _, e := range events {
+			if e.Host != "" {
+				return fmt.Errorf("interrupt confirmation: %s", e.Host)
+			}
+			var m struct {
+				Method string `json:"method"`
+				Params struct {
+					Thread string `json:"threadId"`
+					Turn   struct {
+						ID     string `json:"id"`
+						Status string `json:"status"`
+					} `json:"turn"`
+				} `json:"params"`
+			}
+			if json.Unmarshal(e.Line, &m) != nil {
+				continue
+			}
+			if m.Method == "turn/completed" && m.Params.Thread == thread && m.Params.Turn.ID == turn {
+				switch m.Params.Turn.Status {
+				case "interrupted", "completed", "failed":
+					return nil // completion may race interruption
+				}
+			}
+		}
+		from = next
+	}
+	return errors.New("interrupt was not confirmed; turn may still be active")
+}
+
 func native(what string) string {
 	out, _ := json.Marshal(map[string]any{"to": "native." + what, "payload": map[string]any{}})
 	return string(out)

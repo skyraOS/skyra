@@ -98,6 +98,7 @@ func Receive(c *net.UnixConn) (Frame, error) {
 			return Frame{}, err
 		}
 		for _, fd := range fds {
+			syscall.CloseOnExec(fd)
 			f.Files = append(f.Files, os.NewFile(uintptr(fd), "frame"))
 		}
 	}

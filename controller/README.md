@@ -7,7 +7,7 @@ The design is in [`../design/`](../design/) and [`../next/`](../next/).
 
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
-go test ./...             # the machine's transitions, its purity, and replay, with no processes
+go test ./...             # transitions, purity, replay, and the macOS resident-custody experiment
 skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
 skyra ask "TEXT"          # one question to real Codex, printed with its lineage
 skyra replay DIR          # re-derive any finished conversation or run from its records
@@ -28,6 +28,8 @@ record tree in `.skyra/`.
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
 | **Adapters** | A dumb, long-lived actor host in front of each async entity, and a stateless adapter step that owns the entity's semantics | `host/`, `codex/` |
+| **Provider sandbox** | The real-provider launcher requires Seatbelt, isolated config/scratch, and verified initialization. File/exec grants are operator bootstrap policy; outbound IP access is still broad | `provider/`, `../skyra` |
+| **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event before emitting its horizon fault; runtime transitions remain provider-agnostic | `codex/` |
 | **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask`, `skyra` |
 | **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds custody (the frame stack) until an outside event arrives, then resumes it; the successor checks the event like any output | `machine.parked`, `park/`, `skyra resume` |
 | **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `user/`, `webhost/` |
@@ -175,6 +177,12 @@ The runtime knows no actor ([next/15](../next/15-adapters.md)).
 | Join rule (thought 13) | `gather`: no resolve while a slot is open; the resolve names every discharge |
 
 ## Known gaps
+
+The [resident custody experiment](experiments/resident/README.md) exercises
+spec 18's connection handoffs with a sandboxed fake provider and ephemeral
+workers. It is not yet wired into `instance.Drive` or the chat path. Its tests
+launch `sandbox-exec`, so they must run outside an enclosing sandbox that
+prohibits applying Seatbelt profiles.
 
 - **Records store derived fields** (`state`, `to`, `payload`, `fault`). They
   are kept as a commitment that replay checks, not as a source of truth.

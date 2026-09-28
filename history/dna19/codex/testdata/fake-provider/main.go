@@ -69,6 +69,7 @@ func main() {
 		}
 		var v struct {
 			ThreadID string `json:"threadId"`
+			TurnID   string `json:"turnId"`
 			Input    []struct {
 				Text string `json:"text"`
 			} `json:"input"`
@@ -89,6 +90,13 @@ func main() {
 			}
 			reply(m.ID, map[string]string{"userAgent": "dna19-fake/1"})
 		case "initialized":
+		case "turn/interrupt":
+			reply(m.ID, map[string]any{})
+			if held != nil && held.thread == v.ThreadID && held.id == v.TurnID {
+				send(map[string]any{"method": "turn/completed", "params": map[string]any{
+					"threadId": held.thread, "turn": map[string]string{"id": held.id, "status": "interrupted"}}})
+				held = nil
+			}
 		case "thread/loaded/list":
 			if mode == "hang-health" {
 				continue
@@ -116,6 +124,13 @@ func main() {
 				return
 			case t.text == "hold":
 				held = &t
+			case t.text == "native-running":
+				held = &t
+				event("item/started", t, map[string]string{"type": "commandExecution"})
+			case t.text == "unregistered-tool":
+				held = &t
+				send(map[string]any{"id": "unregistered", "method": "item/tool/call", "params": map[string]any{
+					"threadId": t.thread, "turnId": t.id, "tool": "reply", "arguments": map[string]string{"text": "must not bypass registration"}}})
 			case t.text == "release":
 				complete(t, "isolated:"+t.thread)
 				if held != nil {

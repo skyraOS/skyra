@@ -3,24 +3,31 @@
 Everything needed to get Skyra running on a fresh machine. **Keep this current:**
 when anything about setup changes, update this file in the same commit.
 
-**Last verified: 2026-09-27** on macOS 15.6 (Apple Silicon), Go 1.25.0,
-Node 26.0.0, Codex CLI 0.157.1:
+**Current setup: 2026-09-28.** macOS 15.6 (Apple Silicon), Go 1.25.0,
+Node 26.0.0, Python 3.9, Codex CLI **0.157.1**.
 
-- `skyra` (the controller chat): a two-turn conversation with real Codex;
-  Codex remembered turn one in turn two; closed, then replayed (22 records,
-  byte-identical). `skyra chat --fake`: a tool call, a fenced native command
-  shown as a turn with the conversation going on, then close.
+The controller now launches Codex under external Seatbelt with direct dynamic
+tools, isolated configuration, and no code-mode helper. Live conversation,
+runtime echo execution, interruption and recovery passed on September 27.
+A captured inference request contains only the direct `functions.echo` tool.
+The sidebar supports deletion of idle chats and their local history.
 
-- `./install.sh` and `skyra doctor` pass.
-- `skyra demo`: all 7 scenarios end in `byte-identical`, including fake Codex
-  through the actor host.
-- `skyra ask` with real Codex: an echo tool call ran as its own sandboxed leaf
-  and resumed the turn; asking it to run `ls` was derived as a horizon fault; a
-  second ask reused the same actor host.
-- `skyra` with real Codex: a browser message made Codex call the `echo` tool,
-  which ran as a separate host process and resumed on the same turn.
-- `skyra chat --fake`, `skyra demo` and `skyra test` all pass.
-- `skyra live`: all 6 scenarios pass.
+Validation commands (run macOS sandbox tests outside another sandbox):
+
+```sh
+skyra build
+skyra doctor
+skyra test
+cd frontend && npm run typecheck
+```
+
+For provider-specific checks, from the repository root:
+
+```sh
+python3 controller/experiments/appserver/integration.py
+python3 controller/experiments/appserver/tool_surface.py
+python3 controller/experiments/appserver/integration.py --live  # real model usage
+```
 
 ## 1. Prerequisites
 
@@ -28,10 +35,15 @@ Node 26.0.0, Codex CLI 0.157.1:
 |---|---|---|
 | **macOS** | the sandbox is Seatbelt (`sandbox-exec`) | — |
 | **Go 1.25+** | builds everything; standard library only, no other Go dependencies | `brew install go` |
-| **Node 20+** | DNA-19's browser UI (Next.js) | `brew install node` |
-| **Codex CLI**, logged in | only for `skyra` with a real model | `brew install codex`, then `codex login` (a ChatGPT login works) |
+| **Node 20+** | browser UI (Next.js) | `brew install node` |
+| **Python 3.9+** | provider configuration and sandbox launcher | `brew install python` |
+| **Codex CLI 0.157.1**, logged in | verified direct-tool configuration for real chat | `npm install -g @openai/codex@0.157.1`, then `codex login` |
 
-Without Codex, everything else still works: use `skyra chat --fake`.
+After login, start `codex` once to fetch model metadata, then exit it.
+`skyra doctor` checks for a file-based login and matching `~/.codex/models_cache.json`.
+The real-provider launcher refuses unvalidated Codex versions; do not upgrade it
+without validating the direct-tool configuration. Without Codex, use
+`skyra chat --fake` for the deterministic provider.
 
 ## 2. Install (once)
 
@@ -55,7 +67,7 @@ skyra
 This builds the stateless controller, starts the Codex actor host (once; it
 keeps running), starts the browser host and the UI, and opens
 http://localhost:3000. Press **+ new** to start a conversation. The terminal
-shows the runtime's trace: every record committed, every park and resume.
+shows runtime, frontend and provider logs. Provider logs also remain on disk.
 Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 
 | Command | Does |
@@ -72,18 +84,20 @@ Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 | `skyra doctor` | check prerequisites and ports |
 | `skyra help` | list the commands |
 
-`skyra` always rebuilds first, so after a `git pull` just run it again.
+After updating, exit the running UI with Ctrl-C, run `skyra stop`, then run
+`skyra` again. This rebuilds binaries and starts the provider with the current
+configuration. Start a new conversation when testing tool changes.
 
 ### One question, from the terminal
 
 ```sh
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
-skyra ask "Run the ls command and tell me what it says."    # derived as a horizon fault
+skyra ask "What tools can you call?"                       # only echo is exposed
 skyra stop
 ```
 
-Actor hosts, logs and state live in `~/.skyra/`: `codex-real.sock` and
-`codex-real-host.log` for the Codex host, `conversations/` for chats (one
+Actor hosts, logs and state live in `~/.skyra/`: `codex-real-direct-v2.sock` and
+`codex-real-direct-v2-host.log` for the Codex host, `conversations/` for chats (one
 `.skyra` per conversation), `runs/` for `ask`.
 
 ## 4. What to try in a conversation
@@ -93,21 +107,57 @@ Actor hosts, logs and state live in `~/.skyra/`: `codex-real.sock` and
   sandboxed leaf, and a fresh adapter step answers Codex's pending call.
 - **Then: "What did the echo tool return a moment ago?"** One Codex thread per
   conversation, so it remembers.
-- **"Run the ls command and tell me what it says."** Codex tries its native
-  shell; the runtime derives a horizon fault, shows it as a turn, and the
-  conversation goes on.
+- **"What tools can you call?"** Only the registered `echo` tool is exposed.
+  A shell request may be declined by the model. OS probes and deterministic
+  native-attempt tests verify enforcement independently of model behavior.
 - **close**, then pick the conversation from the sidebar: its history is
   derived from its records. `skyra replay ~/.skyra/conversations/<id>/.skyra`
   re-derives every record.
 
-**What it cannot do, by design.** Codex's threads are read-only, with no
-network, `approvalPolicy=never`, and exactly the tools the user side holds
-(`echo`). Anything native it tries is a horizon fault.
+**Direct tool calling.** New launches expose registered Skyra tools directly
+(currently `functions.echo`), without the `exec`/`wait` JavaScript wrapper.
+The launcher creates a read-only model catalog selecting standard tool mode,
+disables built-in goals, clock, questions and collaboration, and suppresses
+skill discovery. The code-mode helper has no execute grant. The adapter also
+rejects calls naming tools absent from its registered tool set.
+
+This configuration is verified for Codex **0.157.1** and requires that version's
+`~/.codex/models_cache.json`. Missing or mismatched metadata fails startup;
+refresh it using the installed Codex outside Skyra. A Codex upgrade requires
+rerunning `controller/experiments/appserver/tool_surface.py` and validating the
+launch policy before changing the version guard. Existing conversations may
+retain old descriptions in their history; start a new conversation to inspect
+the new tool surface.
+
+**Provider isolation.** New `skyra` and `skyra ask` launches require an external
+macOS Seatbelt profile, with isolated configuration and scratch space. Shell
+execution and file access outside the granted paths are blocked by the OS.
+The adapter interrupts native attempts and confirms that the affected turn
+has ended before emitting the horizon fault. An unconfirmed interruption
+produces a custody fault instead. Threads retain `readOnly`/`never` policy.
+
+The provider still has broad outbound IP access for inference, can read its
+login and granted system files, and can write its temporary state and a system
+certificate cache lock. This is not a network isolation guarantee. Auth refresh
+is not supported by the read-only shared login grant; refresh the login outside
+Skyra and restart if needed. Python 3 is required for the launcher.
+
+Already running sessions are not migrated. Run `skyra stop`, then `skyra` to
+restart with the new provider. New launches use a separate
+`codex-real-direct-v2` host namespace and never reuse the old unsandboxed host.
+Provider launch state is retained under `~/.skyra/providers/`; the login is a
+symlink, not a credential copy. `SKYRA_STATE` can select an isolated state root.
 
 DNA-19's chat is still there as `skyra dna19`; its fence retires the whole
 conversation on any native attempt.
 
 ## 5. Troubleshooting
+
+The sidebar's trash button deletes a chat and its local Skyra history after
+confirmation. It is disabled while the agent is working. Deleting a waiting
+chat releases its parked frames; a small deletion marker prevents late messages
+or a restart from restoring it. This does not erase the separate Codex provider
+transcript or host diagnostic logs.
 
 | Symptom | Fix |
 |---|---|

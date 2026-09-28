@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"skyra/controller/boot"
+	"skyra/controller/handshake"
 	"skyra/controller/instance"
 	"skyra/controller/machine"
 	"skyra/controller/park"
@@ -108,10 +109,7 @@ func resume(root string) error {
 	if err := json.NewDecoder(os.Stdin).Decode(&r); err != nil {
 		return err
 	}
-	stack := make([]*os.File, r.Instance.Self.Depth())
-	for i := range stack {
-		stack[i] = os.NewFile(uintptr(3+i), "frame")
-	}
+	stack := handshake.Inherited(3, r.Instance.Self.Depth())
 	trace.Who = "resume " + record.Short(r.Instance.Stamp)
 	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
 	_, err := instance.Drive(root, nil, stack, r.Instance, machine.Emitted{Out: []byte(r.Out)})

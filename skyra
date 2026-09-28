@@ -118,7 +118,7 @@ dna19() {
 # The stateless controller. Its actor hosts are long-lived by design
 # (next/15): chat and ask start them once and leave them running; stop ends
 # them. A real Codex and a fake one each get their own host.
-STATE=$HOME/.skyra
+STATE=${SKYRA_STATE:-$HOME/.skyra}
 
 controller_build() {
   mkdir -p "$BUILD/controller"
@@ -131,31 +131,56 @@ controller_build() {
 # codex_host MODE: make sure the Codex actor host for MODE (real|fake) runs;
 # prints its socket.
 codex_host() {
-  local mode=$1 sock=$STATE/codex-$1.sock pid=$STATE/codex-$1.pid actor
+  local mode=$1 prepared host_pid
+  # A new namespace cannot silently reuse the old unsandboxed host.
+  [ "$mode" != real ] || mode=real-direct-v2
+  local sock=$STATE/codex-$mode.sock pid=$STATE/codex-$mode.pid
   mkdir -p "$STATE"
   if [ -S "$sock" ] && [ -f "$pid" ] && kill -0 "$(cat "$pid")" 2>/dev/null; then
     # The host outlives its actor: reuse it only if the actor still runs under it.
     if pgrep -P "$(cat "$pid")" >/dev/null; then
+      if [ "$mode" = real-direct-v2 ]; then
+        python3 "$ROOT/controller/provider/launch.py" --ready "$sock" || die "provider readiness failed; see $STATE/codex-$mode-host.log"
+      fi
       echo "$sock"
       return
     fi
     say "the Codex actor under the $mode host exited; restarting the host" >&2
     kill "$(cat "$pid")" 2>/dev/null || true
   fi
-  if [ "$mode" = real ]; then
-    actor=$(command -v codex) || die "codex is not installed. Try '--fake', or see startup-doc.md"
-    codex login status >/dev/null 2>&1 || die "codex is not logged in: run 'codex login', or try '--fake'"
-    set -- "$actor" app-server
+  if [ "$mode" = real-direct-v2 ]; then
+    command -v python3 >/dev/null || die "python3 is required for the sandboxed provider launcher"
+    prepared=$(python3 "$ROOT/controller/provider/launch.py" --prepare "$STATE/providers") || die "provider sandbox preparation failed"
+    set -- python3 "$ROOT/controller/provider/launch.py" --launch "$prepared"
   else
     set -- "$BUILD/controller/fake-codex"
   fi
   rm -f "$sock"
   nohup "$BUILD/controller/host" -sock "$sock" -state "$STATE/codex-$mode-host" -- "$@" >>"$STATE/codex-$mode-host.log" 2>&1 &
-  echo $! >"$pid"
+  host_pid=$!
+  echo "$host_pid" >"$pid"
   local i
   for i in $(seq 1 100); do [ -S "$sock" ] && break; sleep 0.1; done
   [ -S "$sock" ] || die "the Codex actor host did not start (see $STATE/codex-$mode-host.log)"
+  if [ "$mode" = real-direct-v2 ]; then
+    if ! python3 "$ROOT/controller/provider/launch.py" --ready "$sock"; then
+      kill_tree "$host_pid"
+      rm -f "$pid" "$sock"
+      die "sandboxed provider failed startup (see $STATE/codex-$mode-host.log)"
+    fi
+  fi
   echo "$sock"
+}
+
+follow_provider_log() {
+  local mode=$1
+  [ "$mode" != real ] || mode=real-direct-v2
+  mkdir -p "$STATE"
+  touch "$STATE/codex-$mode-host.log"
+  # The provider outlives this terminal, so retain its file and attach a
+  # terminal-local reader. Recent context also covers reused hosts.
+  tail -n 10 -F "$STATE/codex-$mode-host.log" >&2 &
+  provider_log_pid=$!
 }
 
 # registry CODEX_SOCK PARK_SOCK: the operator's registry for the controller.
@@ -175,7 +200,9 @@ ask() {
   [ $# -gt 0 ] || die 'usage: skyra ask "TEXT"'
   say "building"
   controller_build
-  local sock reg run
+  local sock reg run provider_log_pid
+  follow_provider_log real
+  trap "kill $provider_log_pid 2>/dev/null || true" EXIT
   sock=$(codex_host real)
   reg=$(registry "$sock" "$STATE/park.sock")
   mkdir -p "$STATE/runs"
@@ -202,29 +229,30 @@ chat() {
   controller_build
 
   local sock reg park=$STATE/park-$mode.sock convs=$STATE/conversations
-  [ "$mode" = fake ] && convs=$STATE/conversations-fake
-  sock=$(codex_host "$mode")
-  reg=$(registry "$sock" "$park")
-
-  local addr=127.0.0.1:$WS_PORT web_pid ui_pid
+  local addr=127.0.0.1:$WS_PORT web_pid ui_pid provider_log_pid
   cleanup() {
     trap - INT TERM EXIT
     say "stopping (the Codex actor host keeps running; 'skyra stop' ends it)"
     [ -n "${ui_pid:-}" ] && kill_tree "$ui_pid"
     [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
+    [ -n "${provider_log_pid:-}" ] && kill "$provider_log_pid" 2>/dev/null || true
     wait 2>/dev/null || true
   }
   trap cleanup INT TERM EXIT
-  nohup "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
+  follow_provider_log "$mode"
+  [ "$mode" = fake ] && convs=$STATE/conversations-fake
+  sock=$(codex_host "$mode")
+  reg=$(registry "$sock" "$park")
+  "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" &
   web_pid=$!
-  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") >"$BUILD/ui.log" 2>&1 &
+  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") &
   ui_pid=$!
 
   local url=http://localhost:$UI_PORT i
   for i in $(seq 1 60); do
     kill -0 "$web_pid" 2>/dev/null || die "the webhost exited during startup (see the output above)"
-    kill -0 "$ui_pid" 2>/dev/null || die "the UI exited during startup (see $BUILD/ui.log)"
+    kill -0 "$ui_pid" 2>/dev/null || die "the UI exited during startup (see the output above)"
     curl -s -o /dev/null "$url" && break
     sleep 1
   done
@@ -235,7 +263,7 @@ chat() {
 
 stop_host() {
   local mode stopped=0
-  for mode in real fake; do
+  for mode in real real-sandbox-v1 real-direct-v2 fake; do
     if [ -f "$STATE/codex-$mode.pid" ] && kill -0 "$(cat "$STATE/codex-$mode.pid")" 2>/dev/null; then
       kill_tree "$(cat "$STATE/codex-$mode.pid")"
       say "stopped the $mode Codex actor host"
@@ -253,6 +281,7 @@ doctor() {
   echo "skyra doctor ($ROOT)"
   check "macOS" '[ "$(uname)" = Darwin ]' "the sandbox uses sandbox-exec, which is macOS only"
   check "sandbox-exec" 'command -v sandbox-exec' "missing from this macOS"
+  check "python3" 'command -v python3' "required for the provider sandbox launcher"
   v=$(go env GOVERSION 2>/dev/null || true)
   check "Go >= 1.25 (${v:-none})" '[ -n "$v" ] && [ "$(printf "%s\n" go1.25 "$v" | sort -V | head -1)" = go1.25 ]' "install Go 1.25+: brew install go"
   check "node and npm" 'command -v node && command -v npm' "install Node 20+: brew install node"
@@ -260,6 +289,7 @@ doctor() {
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
   warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"
+  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see startup-doc.md"
   warn "port $WS_PORT free" 'port_free "$WS_PORT"' "set SKYRA_WS_PORT"
   warn "port $UI_PORT free" 'port_free "$UI_PORT"' "set SKYRA_UI_PORT"
   [ "$ok" = 1 ] || die "fix the FAIL lines above"
@@ -287,7 +317,7 @@ case ${1:-} in
   test)          cd "$ROOT" && exec go test -count=1 ./controller/... ./history/dna19/... ;;
   live)          live ;;
   doctor)        doctor ;;
-  build)         build && say "built into $BUILD" ;;
+  build)         build && controller_build && say "built into $BUILD" ;;
   help|-h|--help) usage ;;
   *)             usage; exit 2 ;;
 esac

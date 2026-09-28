@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,6 +115,9 @@ func fail(err error) {
 func (h *webhost) loadPast() {
 	dirs, _ := os.ReadDir(h.dir)
 	for _, d := range dirs {
+		if !d.IsDir() || strings.HasPrefix(d.Name(), ".") || h.deleted(d.Name()) {
+			continue
+		}
 		root := filepath.Join(h.dir, d.Name(), ".skyra")
 		records, err := os.ReadDir(filepath.Join(root, "records"))
 		if err != nil {
@@ -171,6 +175,12 @@ func (h *webhost) acceptParks(l net.Listener) {
 				return
 			}
 			h.mu.Lock()
+			if !validConversationID(p.Conversation) || h.deleted(p.Conversation) {
+				h.mu.Unlock()
+				f.Close()
+				park.Answer(uc, "the conversation was deleted or is invalid")
+				return
+			}
 			conv := h.convos[p.Conversation]
 			if conv == nil {
 				conv = &conversation{id: p.Conversation, started: time.Now()}
@@ -253,6 +263,16 @@ func (h *webhost) handle(raw []byte) {
 		return
 	}
 	switch m.Type {
+	case "delete-conversation":
+		if err := h.deleteConversation(m.Conversation); err != nil {
+			h.mu.Unlock()
+			reject("delete-failed", err.Error())
+			return
+		}
+		h.seen[m.RequestID] = true
+		h.mu.Unlock()
+		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
+		h.broadcast()
 	case "open-conversation":
 		id := fmt.Sprintf("c-%s", time.Now().Format("20060102-150405.000"))
 		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending"}
@@ -296,6 +316,50 @@ func (h *webhost) handle(raw []byte) {
 		h.mu.Unlock()
 		reject("unknown", "unknown message type")
 	}
+}
+
+func validConversationID(id string) bool {
+	return id != "" && !strings.HasPrefix(id, ".") && filepath.Base(id) == id && !strings.ContainsAny(id, `/\`)
+}
+
+func (h *webhost) deleted(id string) bool {
+	_, err := os.Stat(filepath.Join(h.dir, ".deleted", id))
+	return err == nil
+}
+
+// Caller holds mu. Keep a durable tombstone so late parks or writes cannot
+// resurrect a deleted conversation. Provider-side retention is separate.
+func (h *webhost) deleteConversation(id string) error {
+	if !validConversationID(id) {
+		return fmt.Errorf("invalid conversation")
+	}
+	c := h.convos[id]
+	if c == nil {
+		if h.deleted(id) {
+			return nil
+		}
+		return fmt.Errorf("conversation not found")
+	}
+	if c.phase == "pending" {
+		return fmt.Errorf("wait for the agent to finish before deleting this chat")
+	}
+	markers := filepath.Join(h.dir, ".deleted")
+	if err := os.MkdirAll(markers, 0o700); err != nil {
+		return err
+	}
+	marker := filepath.Join(markers, id)
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(filepath.Join(h.dir, id)); err != nil {
+		os.Remove(marker)
+		return fmt.Errorf("could not remove chat history: %w", err)
+	}
+	if c.parked != nil {
+		c.parked.Close()
+	}
+	delete(h.convos, id)
+	return nil
 }
 
 // seed starts a new conversation as the operator: genesis, then the user side.

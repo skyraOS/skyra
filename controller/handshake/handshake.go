@@ -28,6 +28,11 @@ func Pair() (*net.UnixConn, *os.File, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// Only explicit ExtraFiles/SCM_RIGHTS grants may survive an exec. Raw
+	// socketpair descriptors otherwise leak beside the intended fd 3 copy.
+	for _, fd := range fds {
+		syscall.CloseOnExec(fd)
+	}
 	// macOS caps a unix datagram at net.local.dgram.maxdgram (2 KiB) unless the
 	// socket's buffers are raised. A Horizon carries contracts and the
 	// continuations waiting on it, so give it room.
@@ -43,6 +48,19 @@ func Pair() (*net.UnixConn, *os.File, error) {
 		return nil, nil, err
 	}
 	return c, os.NewFile(uintptr(fds[1]), "handshake-child"), nil
+}
+
+// Inherited wraps n fds granted through ExtraFiles, from fd first on. An
+// inherited fd has close-on-exec cleared, so without this every target the
+// process runs would inherit it too: a frame directory fd would let a
+// sandboxed target list a directory its profile denies.
+func Inherited(first, n int) []*os.File {
+	files := make([]*os.File, n)
+	for i := range files {
+		syscall.CloseOnExec(first + i)
+		files[i] = os.NewFile(uintptr(first+i), "frame")
+	}
+	return files
 }
 
 // Conn turns an inherited socket fd into a conn.
@@ -109,6 +127,7 @@ func Recv(c *net.UnixConn, v any) ([]*os.File, error) {
 	}
 	files := make([]*os.File, len(raw))
 	for i, fd := range raw {
+		syscall.CloseOnExec(fd)
 		files[i] = os.NewFile(uintptr(fd), "frame")
 	}
 	return files, nil
