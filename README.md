@@ -151,12 +151,13 @@ design decision to the line that implements it.
 
 Seven months, solo, and a lot of deleted code. The lineage that matters:
 
-**DNA-19** ([`history/dna19/`](history/dna19/)) is the long-running
+**DNA-19** is the long-running
 predecessor: a Go host mediating separate processes, about 7k lines. It proved
 the semantics against the **real Codex app-server** (CLI 0.155.1): persistent
 conversations, a real tool call resumed on the same turn, native fork, tool
 migration across replacement threads, and two concurrent conversations kept
-isolated ([`live.txt`](history/dna19/artifacts/live.txt)).
+isolated, recorded in a live suite against the installed CLI. It has since
+been removed from the tree; the last commit that holds it is `b243b03`.
 
 Its own critique found the flaw: authority lived in Go pointers and exported
 functions, so anything that could call a function could enter the root without
@@ -244,12 +245,11 @@ skyra         the one command (installed by install.sh); `skyra help`
 startup-doc.md  setup, commands, troubleshooting: kept current
 grips-and-invariants.md  why: the six pains, and the invariants they force
 controller/   the stateless controller: skyra, skyra demo, skyra ask
-frontend/     the browser UI: served by the controller's webhost (and by DNA-19)
+frontend/     the browser UI: served by the controller's webhost
 tui/          terminal client of the same conversation protocol
 desktop/      Skyra.app: the SwiftUI client and entry point (next/23)
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
-history/      DNA-19 and the earlier specs, kept for reference
 assets/       the README demo GIF and the VHS tape that records it
 ```
 

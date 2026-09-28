@@ -9,10 +9,6 @@ worktrees/
 
 # Build outputs
 controller/bin/
-history/dna19/artifacts/root
-history/dna19/artifacts/codex
-history/dna19/artifacts/echo
-history/dna19/artifacts/fake-provider
 
 # Frontend dependencies (frontend/)
 node_modules/

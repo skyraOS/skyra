@@ -9,9 +9,9 @@ go build -o bin/echo ./echo
 go build -o bin/agent ./agent
 go build -o bin/codex ./codex
 go build -o bin/host ./host
-go build -o bin/fake-codex ../history/dna19/codex/testdata/fake-provider
+go build -o bin/fake-codex ./fakecodex
 
-# The actor host in front of a deterministic fake Codex app-server (DNA-19's).
+# The actor host in front of a deterministic fake Codex app-server (fakecodex/).
 # A unix socket path must be short, and real (the sandbox matches real paths).
 sock=/private/tmp/skyra-fake-$$.sock
 ./bin/host -sock "$sock" -state "$(mktemp -d)" -- ./bin/fake-codex 2>/dev/null &

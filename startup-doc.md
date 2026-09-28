@@ -84,10 +84,9 @@ Ctrl-C stops the browser host and the UI; parked connections close with it.
 | `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |
 | `skyra stop` | stop actor hosts left by older Skyra versions |
-| `skyra dna19` | DNA-19, the predecessor: its browser chat through its capability fence (`--fake`, `--echo`) |
 | `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
-| `skyra test` | every Go test, for the controller and DNA-19 |
-| `skyra live` | DNA-19's live suite against your installed Codex (about a minute; rewrites the evidence in `history/dna19/artifacts/`) |
+| `skyra test` | every Go test, for the controller and the TUI |
+| `skyra build` | build every binary into `build/` |
 | `skyra doctor` | check prerequisites and ports |
 | `skyra help` | list the commands |
 
@@ -158,9 +157,6 @@ conversation to use the new provider.
 Provider launch state is retained under `~/.skyra/providers/`; the login is a
 symlink, not a credential copy. `SKYRA_STATE` can select an isolated state root.
 
-DNA-19's chat is still there as `skyra dna19`; its fence retires the whole
-conversation on any native attempt.
-
 **The workspace.** `read` is granted one directory: where you started `skyra`,
 or `SKYRA_WORKSPACE` if set. That grant is the Horizon you approve by starting
 it; every read inside it runs with no prompt, and anything outside is denied by
@@ -185,7 +181,6 @@ remain under `providers/`.
 | `port 8080 is in use` / `port 3000 is in use` | stop the other process, or `SKYRA_WS_PORT=8090 SKYRA_UI_PORT=3001 skyra` |
 | `codex is not logged in` | `codex login`, or use `skyra chat --fake` |
 | a turn shows `⚠ the agent faulted (custody)` | check the runtime trace and the conversation's lineage; start a new conversation after a resident connection fault |
-| `skyra dna19`: the first message fails with `contamination:` | a newer Codex emits an event DNA-19's fence doesn't know. Run `skyra live` to see which; the allowlist is in `history/dna19/codex/events.go` |
 | the UI says `open` but stays on "waiting for the interaction to open…" | the UI is dropping the server's snapshots as invalid. Open the browser console and look for `schema_invalid` drops: the server and `frontend/lib/protocol/schemas.ts` disagree (fixed 2026-09-26 for empty lists sent as `null`) |
 | the UI loads but never connects | the browser host isn't up: check the terminal for an error above the trace |
 | a conversation stays grey after a restart | expected: its waiting frame lived in the browser host that stopped. It is viewable, and replayable, but cannot continue yet |

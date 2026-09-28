@@ -19,7 +19,7 @@ import (
 
 func TestResidentLaunchAndExchange(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "fake")
-	build := exec.Command("go", "build", "-o", bin, "./history/dna19/codex/testdata/fake-provider")
+	build := exec.Command("go", "build", "-o", bin, "./controller/fakecodex")
 	build.Dir = filepath.Join("..", "..")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v %s", err, output)

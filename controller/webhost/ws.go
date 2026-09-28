@@ -15,7 +15,7 @@ import (
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // Minimal RFC 6455 framing (text/close/ping only, unfragmented), from
-// DNA-19's user peer (history/dna19/user/browser.go).
+// DNA-19's user peer, the predecessor's browser host.
 //
 // When token is set, the client must present it as "Authorization: Bearer
 // TOKEN" (next/23): whoever holds this socket speaks as the human.

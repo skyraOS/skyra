@@ -1,13 +1,14 @@
 # The stateless controller
 
 Date: 2026-09-27  
-Status: runnable. Standard library only; macOS (uses `sandbox-exec`). It does
-not import DNA-19 (it only borrows DNA-19's fake Codex binary for a test).
+Status: runnable. Standard library only; macOS (uses `sandbox-exec`). A
+deterministic fake Codex app-server for the demo and tests is in
+[`fakecodex/`](fakecodex/).
 The design is in [`../design/`](../design/) and [`../next/`](../next/).
 
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
-go test ./controller/... ./history/dna19/... # transitions, replay, and custody
+go test ./controller/...  # transitions, replay, and custody
 skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
 skyra ask "TEXT"          # one question to real Codex, printed with its lineage
 skyra replay DIR          # re-derive any finished conversation or run from its records
@@ -222,7 +223,7 @@ sandbox that prohibits applying Seatbelt profiles.
 
 ## Improvements to carry forward
 
-[`improvements/`](improvements/): lessons from DNA-19 for the next version.
+[`improvements/`](improvements/): lessons from DNA-19, the predecessor, for the next version.
 
 - [Profiles become input contracts](improvements/01-profiles-become-input-contracts.md)
 - [No silent refusals: a fault-tolerant async boundary](improvements/02-no-silent-refusals.md)

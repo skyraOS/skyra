@@ -485,4 +485,4 @@ tools run with zero approvals, and containment against an adversarial suite
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
 | the Codex adapter and its sandbox | [`next/17`](next/17-app-server-custody.md), [`next/18`](next/18-app-server-spec-improvements.md), [`controller/codexresident/`](controller/codexresident/) |
 | the newest tool | [`next/22-read-tool.md`](next/22-read-tool.md) |
-| the predecessor, and what it taught | [`history/dna19/`](history/dna19/) |
+| the predecessor, and what it taught | [How it got here](README.md#how-it-got-here); the code is in git history (last at `b243b03`) |

@@ -3,12 +3,9 @@
 The browser client. `skyra` runs it against the **stateless controller**: the
 webhost ([`../controller/webhost`](../controller/webhost/)) serves it, holds
 every conversation waiting on you, and lists each conversation's history,
-derived from its records. `skyra dna19` runs it against DNA-19's `user` peer
-([`../history/dna19/user`](../history/dna19/user/)), where it started.
-
-Both speak the same browser protocol, originally specified in
-[`history/specs/2026-09-22/frontend.md/proposal.md`](../history/specs/2026-09-22/frontend.md/proposal.md)
-§"Browser contract and reconnect". The controller adds one message,
+derived from its records. It started as the client of DNA-19, the predecessor,
+and speaks the same browser protocol (§"Browser contract and reconnect" of the
+2026-09-22 frontend spec, now in git history). The controller adds one message,
 `open-conversation`, behind the sidebar's **+ new**.
 
 ## Protocol
@@ -51,18 +48,10 @@ npm run mock      # terminal 1 — mock user server on ws://localhost:8080/ws
 npm run dev       # terminal 2 — Next.js dev server
 ```
 
-Against the real runtime (build the Go binaries from `..` first):
+Against the real controller with a deterministic fake Codex, from the repo root:
 
 ```bash
-# terminal 1 — from history/dna19
-go build -o artifacts/root ./root && go build -o artifacts/user ./user && go build -o artifacts/echo ./root/echo
-./artifacts/root user-demo ./artifacts/user ./artifacts/echo 127.0.0.1:8080
-# ...or drive the real Codex agent (fake provider for a deterministic dev loop):
-#   go build -o artifacts/codex ./codex && go build -o artifacts/fake-provider ./codex/testdata/fake-provider
-#   ./artifacts/root user-codex-demo ./artifacts/user ./artifacts/codex ./codex/profiles.json \
-#     ./artifacts/fake-provider ./artifacts/echo 127.0.0.1:8080
-# terminal 2
-npm run dev
+skyra chat --fake
 ```
 
 ## Verify

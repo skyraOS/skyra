@@ -26,7 +26,7 @@ def main():
         prepared = Path(subprocess.check_output([sys.executable, str(REPO / 'controller/provider/launch.py'), '--prepare', str(run / 'providers')], text=True).strip())
         actor = [sys.executable, str(REPO / 'controller/provider/launch.py'), '--launch', str(prepared)]
     else:
-        subprocess.run(['go', 'build', '-o', str(run / 'fake'), './history/dna19/codex/testdata/fake-provider'], cwd=REPO, check=True)
+        subprocess.run(['go', 'build', '-o', str(run / 'fake'), './controller/fakecodex'], cwd=REPO, check=True)
         actor = [str(run / 'fake')]
     sock = run / 'host.sock'
     log = (run / 'host.log').open('w')
