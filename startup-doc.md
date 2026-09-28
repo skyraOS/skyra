@@ -6,10 +6,12 @@ when anything about setup changes, update this file in the same commit.
 **Current setup: 2026-09-28.** macOS 15.6 (Apple Silicon), Go 1.25.0,
 Node 26.0.0, Python 3.9, Codex CLI **0.157.1**.
 
-The controller now launches Codex under external Seatbelt with direct dynamic
-tools, isolated configuration, and no code-mode helper. Live conversation,
-runtime echo execution, interruption and recovery passed on September 27.
-A captured inference request contains only the direct `functions.echo` tool.
+The controller launches one Codex app-server per conversation under a registered
+Seatbelt profile, with direct dynamic tools, private state and an allowlisted
+egress proxy. The runtime keeps the connection in custody across turns and
+records each exchange. Live conversation, runtime echo execution and replay
+passed on September 28. A captured inference request contains only the direct
+`functions.echo` tool.
 The sidebar supports deletion of idle chats and their local history.
 
 Validation commands (run macOS sandbox tests outside another sandbox):
@@ -64,11 +66,10 @@ prints an `export PATH=…` line, add that to `~/.zshrc` and open a new terminal
 skyra
 ```
 
-This builds the stateless controller, starts the Codex actor host (once; it
-keeps running), starts the browser host and the UI, and opens
+This builds the stateless controller, starts the browser host and the UI, and opens
 http://localhost:3000. Press **+ new** to start a conversation. The terminal
-shows runtime, frontend and provider logs. Provider logs also remain on disk.
-Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
+shows runtime and frontend logs. Provider state and proxy journals remain on disk.
+Ctrl-C stops the browser host and the UI; parked connections close with it.
 
 | Command | Does |
 |---|---|
@@ -78,7 +79,7 @@ Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 | `skyra tui --fake` | terminal UI with the deterministic provider |
 | `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |
-| `skyra stop` | stop the Codex actor hosts that `skyra` and `ask` leave running |
+| `skyra stop` | stop actor hosts left by older Skyra versions |
 | `skyra dna19` | DNA-19, the predecessor: its browser chat through its capability fence (`--fake`, `--echo`) |
 | `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
 | `skyra test` | every Go test, for the controller and DNA-19 |
@@ -86,21 +87,19 @@ Ctrl-C stops the browser host and the UI; `skyra stop` ends the Codex host.
 | `skyra doctor` | check prerequisites and ports |
 | `skyra help` | list the commands |
 
-After updating, exit the running UI with Ctrl-C, run `skyra stop`, then run
-`skyra` again. This rebuilds binaries and starts the provider with the current
-configuration. Start a new conversation when testing tool changes.
+After updating, exit the running UI with Ctrl-C, then run `skyra` again. This
+rebuilds the binaries. Start a new conversation when testing tool changes.
 
 ### One question, from the terminal
 
 ```sh
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
 skyra ask "What tools can you call?"                       # only echo is exposed
-skyra stop
 ```
 
-Actor hosts, logs and state live in `~/.skyra/`: `codex-real-direct-v2.sock` and
-`codex-real-direct-v2-host.log` for the Codex host, `conversations/` for chats (one
-`.skyra` per conversation), `runs/` for `ask`.
+State lives in `~/.skyra/`: `conversations/` holds chats (one `.skyra` per
+conversation), `runs/` holds `ask`, and each resident has a private directory
+under `providers/` with its proxy journal and diagnostics.
 
 ## 4. What to try in a conversation
 
@@ -132,22 +131,22 @@ retain old descriptions in their history; start a new conversation to inspect
 the new tool surface.
 
 **Provider isolation.** New `skyra` and `skyra ask` launches require an external
-macOS Seatbelt profile, with isolated configuration and scratch space. Shell
-execution and file access outside the granted paths are blocked by the OS.
-`HOME`, `CODEX_HOME` and `TMPDIR` point into that isolated provider run.
+macOS Seatbelt profile rendered from the registered Horizon. Each Codex process
+has private configuration, work and scratch paths. Shell execution and file
+access outside the granted paths are blocked by the OS. `HOME`, `CODEX_HOME`
+and `TMPDIR` point into that isolated provider run.
 The adapter interrupts native attempts and confirms that the affected turn
 has ended before emitting the horizon fault. An unconfirmed interruption
 produces a custody fault instead. Threads retain `readOnly`/`never` policy.
 
-The provider still has broad outbound IP access for inference, can read its
-login and granted system files, and can write its temporary state and a system
-certificate cache lock. This is not a network isolation guarantee. Auth refresh
-is not supported by the read-only shared login grant; refresh the login outside
-Skyra and restart if needed. Python 3 is required for the launcher.
+The provider can connect only to its local egress proxy; that proxy accepts
+HTTPS tunnels to the registered host list. It can read its login and granted
+system files and write its private state. Auth refresh is not supported by the
+read-only shared login grant; refresh the login outside Skyra and start a new
+conversation if needed. Python 3 runs the egress proxy.
 
-Already running sessions are not migrated. Run `skyra stop`, then `skyra` to
-restart with the new provider. New launches use a separate
-`codex-real-direct-v2` host namespace and never reuse the old unsandboxed host.
+Already running sessions are not migrated. Exit the UI and start a new
+conversation to use the new provider.
 Provider launch state is retained under `~/.skyra/providers/`; the login is a
 symlink, not a credential copy. `SKYRA_STATE` can select an isolated state root.
 
@@ -158,22 +157,21 @@ conversation on any native attempt.
 
 The sidebar's trash button deletes a chat and its local Skyra history after
 confirmation. It is disabled while the agent is working. Deleting a waiting
-chat releases its parked frames; a small deletion marker prevents late messages
-or a restart from restoring it. This does not erase the separate Codex provider
-transcript or host diagnostic logs.
+chat releases its parked frames and resident connection; a small deletion marker
+prevents late messages or a restart from restoring it. Provider diagnostics
+remain under `providers/`.
 
 | Symptom | Fix |
 |---|---|
 | `skyra: command not found` | open a new terminal; or add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc`; or run `./skyra` from the repo |
 | `port 8080 is in use` / `port 3000 is in use` | stop the other process, or `SKYRA_WS_PORT=8090 SKYRA_UI_PORT=3001 skyra` |
 | `codex is not logged in` | `codex login`, or use `skyra chat --fake` |
-| a turn shows `⚠ the agent faulted (custody)` | the Codex adapter's last stderr line is the cause; `skyra stop`, then run `skyra` again. `… actor is not alive` means Codex exited under a host that kept running; `skyra` now restarts such a host on launch |
+| a turn shows `⚠ the agent faulted (custody)` | check the runtime trace and the conversation's lineage; start a new conversation after a resident connection fault |
 | `skyra dna19`: the first message fails with `contamination:` | a newer Codex emits an event DNA-19's fence doesn't know. Run `skyra live` to see which; the allowlist is in `history/dna19/codex/events.go` |
 | the UI says `open` but stays on "waiting for the interaction to open…" | the UI is dropping the server's snapshots as invalid. Open the browser console and look for `schema_invalid` drops: the server and `frontend/lib/protocol/schemas.ts` disagree (fixed 2026-09-26 for empty lists sent as `null`) |
 | the UI loads but never connects | the browser host isn't up: check the terminal for an error above the trace |
 | a conversation stays grey after a restart | expected: its waiting frame lived in the browser host that stopped. It is viewable, and replayable, but cannot continue yet |
 | the UI fails to start | read `build/ui.log`; rerun `./install.sh` to reinstall the npm dependencies |
-| `the Codex actor host did not start` | read `~/.skyra/codex-real-host.log`; `skyra stop`, then try again |
 | anything else | `skyra doctor` |
 
 ## 6. Keeping this current

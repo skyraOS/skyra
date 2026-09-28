@@ -125,6 +125,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
 				var conn *os.File
+				resourceIndex, incarnation := -1, ""
 				if x.ConnectionOwner != "" {
 					var request struct {
 						Incarnation string `json:"incarnation"`
@@ -139,8 +140,22 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 						e = machine.Emitted{Err: err.Error()}
 						break
 					}
+					incarnation = request.Incarnation
+					for i, r := range s.Resources {
+						if r.Owner == x.ConnectionOwner && r.Incarnation == incarnation {
+							resourceIndex = s.Self.Depth() + i
+							break
+						}
+					}
 				}
 				e = run(x, conn)
+				if x.CloseConnection && resourceIndex >= 0 {
+					stack[resourceIndex].Close()
+					stack = append(stack[:resourceIndex:resourceIndex], stack[resourceIndex+1:]...)
+					out := e.(machine.Emitted)
+					out.ReleasedResource = incarnation
+					e = out
+				}
 			case machine.StartResident:
 				var file *os.File
 				e, file = startResident(x, root)
@@ -328,6 +343,9 @@ func startResident(x machine.StartResident, root string) (machine.Event, *os.Fil
 	}
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
+		if prepared != nil {
+			prepared.abort()
+		}
 		return machine.Started{Err: err.Error()}, nil
 	}
 	for _, fd := range fds {

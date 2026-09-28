@@ -1,5 +1,9 @@
 # Adapters: a dumb host, a stateless step
 
+Historical design. The current Codex path uses resident connection custody and
+recorded start, exchange, inspect and stop operations; see
+[18](18-app-server-spec-improvements.md) and [the controller](../controller/README.md).
+
 Date: 2026-09-27  
 Status: agreed direction. Follows [14](14-interpreted-not-stated.md) and
 [`controller/improvements/`](../controller/improvements/).

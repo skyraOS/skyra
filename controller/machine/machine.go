@@ -90,8 +90,9 @@ type Released struct { // → Release: this instance's Horizon, and how many fra
 	Resources []horizon.Resource
 }
 type Emitted struct { // → Execute: the target's one emission (empty: it exited without one)
-	Out []byte
-	Err string
+	Out              []byte
+	Err              string
+	ReleasedResource string // an explicit close-connection surface released this incarnation
 }
 type Started struct { // → Execute: a resident and its connection entered custody
 	Out      []byte
@@ -147,6 +148,7 @@ type Run struct {                     // then wait for Emitted
 	Profile         string
 	Env             []string // the target's whole environment: nothing is inherited
 	ConnectionOwner string   // optional: pass this owner's connection as fd 3
+	CloseConnection bool
 }
 type StartResident struct {
 	Run     Run
@@ -382,6 +384,19 @@ func parked(s Instance, e Parked) (Instance, []Effect) {
 // failed or exited without output is faulted by this instance, which still
 // holds custody.
 func execute(s Instance, e Emitted) (Instance, []Effect) {
+	if e.ReleasedResource != "" {
+		found := false
+		for i, r := range s.Resources {
+			if r.Incarnation == e.ReleasedResource {
+				s.Resources = append(s.Resources[:i:i], s.Resources[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fault(s, "released resource was not in custody")
+		}
+	}
 	if e.Err != "" {
 		return fault(s, e.Err)
 	}
@@ -559,6 +574,7 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	r := Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
 	if h.Surface.Connection {
 		r.ConnectionOwner = resourceOwner(h)
+		r.CloseConnection = h.Surface.CloseConnection
 	}
 	return r
 }

@@ -132,6 +132,20 @@ func TestStepIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestStopReleasesOnlyItsConnection(t *testing.T) {
+	s := Instance{Phase: Execute, State: record.Invoke, Resources: []horizon.Resource{
+		{Kind: "connection", Owner: "codex", Incarnation: "one"},
+		{Kind: "connection", Owner: "codex", Incarnation: "two"},
+	}}
+	s, effects := Step(s, Emitted{Out: []byte(`{"to":"reply","payload":{}}`), ReleasedResource: "one"})
+	if s.Phase != Handoff || len(s.Resources) != 1 || s.Resources[0].Incarnation != "two" {
+		t.Fatalf("resource release: %+v", s)
+	}
+	if _, ok := effects[0].(Spawn); !ok {
+		t.Fatalf("expected handoff, got %#v", effects)
+	}
+}
+
 // awaiting returns an instance that has committed an invoke of echo and is
 // waiting for its release.
 func awaiting(t *testing.T) Instance {

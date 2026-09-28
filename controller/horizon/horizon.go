@@ -91,6 +91,7 @@ type Surface struct {
 	Authority          Authority        `json:"authority,omitempty"`            // direct OS grants, pinned in the registry
 	Resident           bool             `json:"resident,omitempty"`             // launch and retain a stream connection in custody
 	Connection         bool             `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
+	CloseConnection    bool             `json:"close_connection,omitempty"`     // release that connection after this operation
 	Args               []string         `json:"args,omitempty"`                 // fixed arguments for a resident target
 	ResourceOwnerDepth int              `json:"resource_owner_depth,omitempty"` // ancestor frame identifying the resident connection
 	ResidentProfile    string           `json:"resident_profile,omitempty"`     // named runtime-rendered profile template

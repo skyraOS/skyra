@@ -28,6 +28,7 @@ type Entry struct {
 	Delegate           map[string]horizon.Authority `json:"delegate,omitempty"`
 	Resident           bool                         `json:"resident,omitempty"`
 	Connection         bool                         `json:"connection,omitempty"`
+	CloseConnection    bool                         `json:"close_connection,omitempty"`
 	Args               []string                     `json:"args,omitempty"`
 	ResourceOwnerDepth int                          `json:"resource_owner_depth,omitempty"`
 	ResidentProfile    string                       `json:"resident_profile,omitempty"`
@@ -75,7 +76,7 @@ func Load(file string) (map[string]horizon.Surface, error) {
 		if e.Path == "" {
 			return nil, fmt.Errorf("%s: missing executable path", name)
 		}
-		if e.Resident && e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "") {
+		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "") {
 			return nil, fmt.Errorf("%s: invalid resident or connection configuration", name)
 		}
 		if e.ResidentProfile != "" && (e.ResidentProfile != "darwin-appserver-v1" || len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
@@ -144,7 +145,7 @@ func Load(file string) (map[string]horizon.Surface, error) {
 			}
 			proxySHA = record.Sum(proxy)
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Output: d.Output, Reach: d.Reach, Delegate: delegates, Authority: authority, Resident: e.Resident, Connection: e.Connection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA}
+		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Output: d.Output, Reach: d.Reach, Delegate: delegates, Authority: authority, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA}
 	}
 	for name, s := range reach {
 		for _, want := range s.Reach {

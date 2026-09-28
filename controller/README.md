@@ -7,7 +7,7 @@ The design is in [`../design/`](../design/) and [`../next/`](../next/).
 
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
-go test ./...             # transitions, purity, replay, and the macOS resident-custody experiment
+go test ./controller/... ./history/dna19/... # transitions, replay, and custody
 skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
 skyra ask "TEXT"          # one question to real Codex, printed with its lineage
 skyra replay DIR          # re-derive any finished conversation or run from its records
@@ -27,9 +27,9 @@ record tree in `.skyra/`.
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
-| **Adapters** | A dumb, long-lived actor host in front of each async entity, and a stateless adapter step that owns the entity's semantics | `host/`, `codex/` |
-| **Provider sandbox** | The real-provider launcher requires Seatbelt, isolated config/scratch, and verified initialization. File/exec grants are operator bootstrap policy; outbound IP access is still broad | `provider/`, `../skyra` |
-| **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event before emitting its horizon fault; runtime transitions remain provider-agnostic | `codex/` |
+| **Adapters** | A stateless Codex adapter invokes recorded start, exchange, inspect and stop operations on a resident process; the browser host holds parked conversations | `codexresident/`, `codexio/`, `webhost/` |
+| **Provider sandbox** | The runtime launches each Codex process under a registered Seatbelt profile with private state and a per-actor allowlisted egress proxy | `instance/`, `provider/` |
+| **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event before emitting its horizon fault; runtime transitions remain provider-agnostic | `codexresident/` |
 | **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask`, `skyra` |
 | **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds custody (the frame stack) until an outside event arrives, then resumes it; the successor checks the event like any output | `machine.parked`, `park/`, `skyra resume` |
 | **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `user/`, `webhost/` |
@@ -55,14 +55,16 @@ or the network.
 | [`skyra`](skyra/) | The command: argv and flags only | — |
 | [`echo`](echo/) | An untrusted leaf. Prints its text | — |
 | [`agent`](agent/) | A fake continuation: calls echo, then replies with what it said | — |
-| [`host`](host/) | The universal actor host: owns an actor's connection, a durable inbox, delivery by id. Decides nothing | — |
-| [`codex`](codex/) | The Codex adapter step: every Codex semantic, stateless; one Codex thread per conversation | — |
+| [`host`](host/) | Legacy actor host, retained for earlier tests; current chat does not launch it | — |
+| [`codex`](codex/) | Legacy Codex adapter, retained for earlier tests | — |
+| [`codexresident`](codexresident/) | Stateless Codex protocol and lifecycle decisions | — |
+| [`codexio`](codexio/) | One bounded operation on a granted resident connection | — |
 | [`park`](park/) | Parking a frame with a host, and resuming it | no |
 | [`user`](user/) | The user's side of a conversation: a continuation whose steps are the transcript | — |
 | [`browser`](browser/) | The browser's contract: an async surface, served by the webhost | — |
 | [`webhost`](webhost/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records | — |
 
-The targets (`echo`, `agent`, `codex`) share no code with skyra.
+The targets (`echo`, `agent`, `codexresident`, `codexio`) share no code with skyra.
 
 ### Tool authority in the registry
 
@@ -77,8 +79,8 @@ The caller does not gain its tool's direct OS permissions. Legacy top-level
 
 Tool profiles grant only their own binary, fixed system loader reads, and
 declared resources. An OS test checks that a file outside `read` is denied and
-the same file is readable when granted. The real Codex app-server still uses
-the separate provider profile described under known gaps.
+the same file is readable when granted. The real Codex app-server uses the
+registered resident profile and per-actor proxy.
 
 ## The step
 
@@ -165,18 +167,17 @@ boot wakes (kqueue on G0), prints the lineage, replays it: 7 records, byte-ident
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
 ```
 
-## Adapters: the actor host and the Codex adapter step
+## Resident Codex adapter
 
-The runtime knows no actor ([next/15](../next/15-adapters.md)).
-
-- **`host`** is long-lived and dumb. It owns the actor's stdio, writes every
-  line the actor prints to a durable inbox, and delivers lines at most once per
-  id. Contracts: `deliver`, `read`, `status`, `ping`, over a unix socket.
-- **`codex`** is a continuation, registered like any surface, granted exactly
-  one socket. Each run rebuilds the turn from the inbox; its delivery ids come
-  from its frame, so a resumed step re-derives what the previous step did. A
-  Codex tool call becomes addressed output; a native item or request becomes an
-  address outside the Horizon, which the runtime derives as a horizon fault.
+The runtime knows only resident connections and registered operations. `codex.start`
+launches a private app-server and adds its connection to custody. `codexio`
+performs one recorded exchange or inspection on that connection. `codexresident`
+rebuilds protocol state from the continuation's steps and chooses the next
+operation. Before a later turn it inspects the existing process; after 30
+minutes without turn activity it stops the process and starts a fresh one.
+`codex.stop` shuts down the write side, observes peer EOF, and removes the
+connection from custody. Codex tool calls become ordinary invokes of registered
+leaves. Unexpected provider requests become horizon faults.
 
 ## Decisions, and where they live
 
@@ -194,11 +195,10 @@ The runtime knows no actor ([next/15](../next/15-adapters.md)).
 
 ## Known gaps
 
-The [resident custody experiment](experiments/resident/README.md) exercises
-spec 18's connection handoffs with a sandboxed fake provider and ephemeral
-workers. It is not yet wired into `instance.Drive` or the chat path. Its tests
-launch `sandbox-exec`, so they must run outside an enclosing sandbox that
-prohibits applying Seatbelt profiles.
+The [resident custody experiment](experiments/resident/README.md) preceded the
+production path. Connection handoff now runs through `instance.Drive` and
+chat. Its tests launch `sandbox-exec`, so they must run outside an enclosing
+sandbox that prohibits applying Seatbelt profiles.
 
 - **Records store derived fields** (`state`, `to`, `payload`, `fault`). They
   are kept as a commitment that replay checks, not as a source of truth.
@@ -214,12 +214,8 @@ prohibits applying Seatbelt profiles.
 - **One output per step**, so one child per round: fan-out is supported by the
   slots and the claim, but nothing emits two children yet.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
-- **The resident Codex actor is not in a Horizon.** Its existing provider
-  profile is separate operator bootstrap policy, and outbound IP access is
-  broad. Spec 18's resident process and connection custody are needed before
-  the runtime can launch it from a committed actor grant.
-- **Codex's native execution is detected, not prevented**: the command may
-  already have run in Codex's own read-only sandbox (next/15, open).
+- **The provider profile is pinned to Codex 0.157.1.** A new version needs a
+  fresh validation of startup, tool exposure, file effects and egress.
 
 ## Improvements to carry forward
 
