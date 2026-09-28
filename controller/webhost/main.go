@@ -44,6 +44,7 @@ type entry struct {
 	Text      string  `json:"text"`
 	TS        int64   `json:"ts"`
 	RequestID *string `json:"requestId"`
+	Call      *call   `json:"call,omitempty"` // role "call": a tool call in the agent's turn
 }
 
 type conversation struct {
@@ -52,6 +53,7 @@ type conversation struct {
 	phase   string // ready | pending | failed | closed
 	entries []entry
 	parked  *park.Frame
+	lineage *lineage // its records, read as they are committed
 }
 
 type webhost struct {
@@ -86,6 +88,7 @@ func main() {
 		fail(err)
 	}
 	h.loadPast()
+	go h.watch()
 
 	os.Remove(*parkSock)
 	pl, err := net.Listen("unix", *parkSock)
@@ -127,7 +130,8 @@ func (h *webhost) loadPast() {
 		if err != nil {
 			continue
 		}
-		c := &conversation{id: d.Name(), phase: "closed"}
+		c := &conversation{id: d.Name(), phase: "closed", lineage: newLineage(root)}
+		c.lineage.refresh()
 		if info, err := d.Info(); err == nil {
 			c.started = info.ModTime()
 		}
@@ -187,7 +191,7 @@ func (h *webhost) acceptParks(l net.Listener) {
 			}
 			conv := h.convos[p.Conversation]
 			if conv == nil {
-				conv = &conversation{id: p.Conversation, started: time.Now()}
+				conv = &conversation{id: p.Conversation, started: time.Now(), lineage: newLineage(filepath.Join(h.dir, p.Conversation, ".skyra"))}
 				h.convos[p.Conversation] = conv
 			}
 			if conv.parked != nil {
@@ -197,7 +201,9 @@ func (h *webhost) acceptParks(l net.Listener) {
 				return
 			}
 			conv.parked, conv.phase, conv.entries = &f, "ready", stamp(p.Transcript)
+			l := conv.lineage
 			h.mu.Unlock()
+			l.refresh()
 			if err := park.Answer(uc, ""); err != nil {
 				return
 			}
@@ -279,7 +285,7 @@ func (h *webhost) handle(raw []byte) {
 		h.broadcast()
 	case "open-conversation":
 		id := fmt.Sprintf("c-%s", time.Now().Format("20060102-150405.000"))
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending"}
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
 		h.seen[m.RequestID] = true
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
@@ -383,6 +389,30 @@ func (h *webhost) seed(id string) {
 	}
 }
 
+// watch reads the lineage of every conversation whose agent is working, so a
+// tool call shows while it runs rather than when the turn ends.
+func (h *webhost) watch() {
+	for range time.Tick(200 * time.Millisecond) {
+		h.mu.Lock()
+		var working []*lineage
+		for _, c := range h.convos {
+			if c.phase == "pending" && c.lineage != nil {
+				working = append(working, c.lineage)
+			}
+		}
+		h.mu.Unlock()
+		changed := false
+		for _, l := range working {
+			if l.refresh() {
+				changed = true
+			}
+		}
+		if changed {
+			h.broadcast()
+		}
+	}
+}
+
 func (h *webhost) broadcast() {
 	h.mu.Lock()
 	h.revision++
@@ -393,10 +423,7 @@ func (h *webhost) broadcast() {
 	sort.Slice(list, func(i, j int) bool { return list[i].started.After(list[j].started) })
 	views := []map[string]any{}
 	for _, c := range list {
-		entries := c.entries
-		if entries == nil {
-			entries = []entry{}
-		}
+		entries := withCalls(append([]entry(nil), c.entries...), c.lineage.snapshot())
 		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "pendingRequestId": nil})
 	}
 	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": []any{}}
