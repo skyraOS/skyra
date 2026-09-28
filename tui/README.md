@@ -68,7 +68,10 @@ Ctrl+T turns it off and on. Terminals that do not report plain pointer motion
 only move the satellites while a button is held.
 
 Chat messages and the composer are translucent panels over the sky, so stars
-and satellites show through them, dimmed. The header and footer have no panel;
+and satellites show through them, dimmed. The composer sits one open row below
+the transcript, in a soft glow that fades over a couple of rows: teal when it
+is ready for a message, a dimmer grey while the agent works or the backend is
+offline. The header and footer have no panel;
 their text sits directly on the sky. The title, `✦ skyra`, is set in near-sky
 tones: readable on an empty session, it recedes to little more than its mark
 over two seconds once a conversation is on screen, and brightens when a

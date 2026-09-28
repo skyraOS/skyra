@@ -116,6 +116,26 @@ func (c *canvas) panel(x0, y0, w, h int, color string, alpha float64) {
 	}
 }
 
+// glow lifts the background around a rectangle toward color, strongest at
+// its edge and falling off softly with distance. Rows are about twice as tall
+// as columns are wide, so rows count double. The rectangle itself is left to
+// the panel drawn over it; marks beneath the glow stay as they are.
+func (c *canvas) glow(x0, y0, w, h int, color string, strength float64) {
+	const reach, spread = 7, 12.0 // columns of falloff (rows: half), and its width
+	p := parseRGB(color)
+	for y := max(0, y0-reach/2); y < min(c.h, y0+h+reach/2); y++ {
+		for x := max(0, x0-reach); x < min(c.w, x0+w+reach); x++ {
+			dx := float64(max(x0-x, 0, x-(x0+w-1)))
+			dy := 2 * float64(max(y0-y, 0, y-(y0+h-1)))
+			d2 := dx*dx + dy*dy
+			if d2 == 0 {
+				continue
+			}
+			c.bg[y][x] = lerp(c.bg[y][x], p, strength*math.Exp(-d2/spread))
+		}
+	}
+}
+
 // text writes s from x, clipped to width. Spaces are left transparent, so
 // the sky (or the panel under it) shows between words.
 func (c *canvas) text(x, y, width int, s, fg string) int {
@@ -260,7 +280,9 @@ func (a *app) compose() [][]pixel {
 	if h < 12 {
 		composerHeight = 1
 	}
-	bodyHeight := h - composerHeight - 5
+	// One row stays open between the transcript and the composer, for the
+	// composer's glow.
+	bodyHeight := h - composerHeight - 6
 	readingWidth := w - 4
 	inset := 2
 	for i, r := range a.transcript(readingWidth, bodyHeight) {
@@ -301,8 +323,16 @@ func (a *app) compose() [][]pixel {
 	lineCount := len(a.input)/textWidth + 1
 	caretLine := a.caret / textWidth
 	firstLine := max(0, caretLine-contentRows+1)
-	top := 2 + bodyHeight
+	top := 3 + bodyHeight
+	// A soft glow sets the composer apart from the transcript: teal when it
+	// is ready for a message, dimmer while the agent works or it is offline.
+	glowColor, glowStrength := dim, 0.08
+	if ready {
+		glowColor, glowStrength = accent, 0.14
+	}
+	c.glow(inset, top, readingWidth, composerHeight, glowColor, glowStrength)
 	c.panel(inset, top, readingWidth, composerHeight, composer, composerAlpha)
+	c.panel(inset, top, readingWidth, composerHeight, glowColor, glowStrength)
 	for r := 0; r < contentRows; r++ {
 		y, lineIndex := top+contentOffset+r, firstLine+r
 		if r == 0 {
