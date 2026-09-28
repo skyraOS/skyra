@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -43,11 +44,14 @@ type message struct {
 }
 
 type event struct {
-	kind string
-	sock *socket
-	data []byte
-	key  string
-	err  error
+	kind   string
+	sock   *socket
+	data   []byte
+	key    string
+	err    error
+	button int // mouse: the SGR button code
+	col    int // mouse: 1-based cell
+	row    int
 }
 
 type app struct {
@@ -64,6 +68,10 @@ type app struct {
 	scroll        int // transcript lines above the bottom
 	wallFrame     uint64
 	screen        [][]pixel // what the terminal shows now
+	sim           *skySim   // the satellites, which the pointer can pull
+	mouseOff      bool      // Ctrl+T turns pointer tracking off and back on
+	pointer       *point    // the mouse, in braille dots; nil when unknown
+	titleOpen     float64   // 1 on an empty session, easing to 0 in a conversation
 	cursorRow     int
 	cursorCol     int
 	notice        string
@@ -92,8 +100,8 @@ func run(addr string) error {
 		return err
 	}
 	defer func() { _, _ = stty(strings.TrimSpace(old)) }()
-	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[2J")
-	defer fmt.Print("\x1b[0m\x1b[?25h\x1b[?1049l")
+	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[2J" + mouseOn)
+	defer fmt.Print(mouseOffSeq + "\x1b[0m\x1b[?25h\x1b[?1049l")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -112,6 +120,7 @@ func run(addr string) error {
 		select {
 		case <-wallTicker.C:
 			a.wallFrame++
+			a.stepSky()
 			a.tick()
 		case e := <-events:
 			switch e.kind {
@@ -130,6 +139,13 @@ func run(addr string) error {
 				}
 			case "input-error":
 				return e.err
+			case "mouse":
+				if !a.mouse(e) {
+					continue // pointer motion shows on the next tick
+				}
+			case "focus-out":
+				a.pointer = nil
+				continue
 			}
 			a.draw()
 		case sig := <-signals:
@@ -158,6 +174,80 @@ func stty(args ...string) (string, error) {
 		return "", fmt.Errorf("stty %s: %w: %s", strings.Join(args, " "), err, b)
 	}
 	return string(b), nil
+}
+
+// Any-motion mouse reports in SGR form, and focus reports so the pointer is
+// forgotten when the window loses focus.
+const (
+	mouseOn     = "\x1b[?1003h\x1b[?1006h\x1b[?1004h"
+	mouseOffSeq = "\x1b[?1003l\x1b[?1006l\x1b[?1004l"
+)
+
+// readMouse reads the rest of an SGR mouse report, "<b;col;row" then M or m.
+func readMouse(r *bufio.Reader) (event, bool) {
+	var buf []byte
+	for len(buf) < 32 {
+		c, err := r.ReadByte()
+		if err != nil {
+			return event{}, false
+		}
+		if c == 'M' || c == 'm' {
+			parts := strings.Split(string(buf), ";")
+			if len(parts) != 3 {
+				return event{}, false
+			}
+			b, e1 := strconv.Atoi(parts[0])
+			col, e2 := strconv.Atoi(parts[1])
+			row, e3 := strconv.Atoi(parts[2])
+			if e1 != nil || e2 != nil || e3 != nil {
+				return event{}, false
+			}
+			return event{kind: "mouse", button: b, col: col, row: row}, true
+		}
+		buf = append(buf, c)
+	}
+	return event{}, false
+}
+
+// mouse handles a mouse report: the wheel scrolls the transcript, and any
+// report places the pointer. It reports whether the screen needs a redraw.
+func (a *app) mouse(e event) bool {
+	if a.mouseOff {
+		return false
+	}
+	a.pointer = &point{float64((e.col-1)*2 + 1), float64((e.row-1)*4 + 2)}
+	switch e.button &^ 32 { // 32 marks motion
+	case 64:
+		a.scroll += 3
+		return true
+	case 65:
+		a.scroll = max(0, a.scroll-3)
+		return true
+	}
+	return false
+}
+
+// titleFade is how far the title eases each frame: two seconds end to end.
+const titleFade = 0.05
+
+// stepSky moves the satellites one frame, toward the pointer when it is near,
+// and eases the title toward open or receded.
+func (a *app) stepSky() {
+	target := 0.0
+	if c := a.current(); c == nil || len(c.Entries) == 0 {
+		target = 1
+	}
+	if a.titleOpen < target {
+		a.titleOpen = math.Min(target, a.titleOpen+titleFade)
+	} else {
+		a.titleOpen = math.Max(target, a.titleOpen-titleFade)
+	}
+
+	if a.sim == nil || a.sim.width != a.width || a.sim.height != a.height {
+		a.sim = newSkySim(a.width, a.height, a.wallFrame)
+		return
+	}
+	a.sim.step(a.wallFrame, a.pointer)
 }
 
 func (a *app) resize() {
@@ -241,6 +331,16 @@ func keyLoop(events chan<- event) {
 				continue
 			}
 			switch third {
+			case '<':
+				if e, ok := readMouse(r); ok {
+					events <- e
+				}
+				continue
+			case 'O':
+				events <- event{kind: "focus-out"}
+				continue
+			case 'I':
+				continue // focus in: the next motion report places the pointer
 			case 'A':
 				key = "up"
 			case 'B':
@@ -384,6 +484,16 @@ func (a *app) key(k string) bool {
 			return true
 		} else {
 			a.quitArmed, a.notice = true, quitNotice
+		}
+	case "\x14": // Ctrl+T: pointer tracking off and on
+		a.mouseOff = !a.mouseOff
+		if a.mouseOff {
+			a.pointer = nil
+			fmt.Print(mouseOffSeq)
+			a.notice = "mouse off: the terminal selects text again"
+		} else {
+			fmt.Print(mouseOn)
+			a.notice = "mouse on: satellites follow the pointer"
 		}
 	case "\x0e": // Ctrl+N
 		if a.opening {

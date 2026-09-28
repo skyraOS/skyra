@@ -15,9 +15,10 @@ skyra tui --fake      no model or login
 |---|---|
 | Enter | Send a message; the first message opens a fresh session |
 | Ctrl+N | Clear the view so the next message starts another fresh session |
-| Page Up / Page Down | Scroll the transcript |
+| Page Up / Page Down, mouse wheel | Scroll the transcript |
 | Ctrl+U | Clear the composer |
 | Ctrl+D | Close the current session |
+| Ctrl+T | Turn mouse tracking off (to select text) and back on |
 | Ctrl+C | Clear the composer; the transcript stays |
 | Ctrl+C twice | Quit the TUI (on an empty composer) |
 
@@ -51,9 +52,22 @@ the stars follow it by depth: faint dust barely moves, bright stars move the
 most, and each star steps at its own moment, so the sky parallaxes instead of
 shifting as one. The core, its satellites and the name hold still in front.
 
-The header, chat messages and composer are translucent panels over the sky,
-so stars and satellites show through them, dimmed; the footer's text sits
-directly on the sky.
+The satellites notice the mouse. When the pointer comes within about twelve
+characters of one, it leaves its orbit and circles the pointer, its tail
+curving along the path it flies; its place on the orbit waits for it, and it
+never strays more than about twenty characters from there. Move the pointer
+away and it glides back and carries on. This needs mouse tracking, which the
+TUI turns on at start: while it is on, the terminal's own drag-to-select is
+replaced (Option-drag in iTerm2, Shift-drag in most others still selects), and
+Ctrl+T turns it off and on. Terminals that do not report plain pointer motion
+only move the satellites while a button is held.
+
+Chat messages and the composer are translucent panels over the sky, so stars
+and satellites show through them, dimmed. The header and footer have no panel;
+their text sits directly on the sky. The title, `✦ skyra`, is set in near-sky
+tones: readable on an empty session, it recedes to little more than its mark
+over two seconds once a conversation is on screen, and brightens when a
+satellite or meteor passes it.
 
 During an active agent turn, typed text remains a draft until the session is
 ready. Closed sessions stay saved in the backend, but the TUI does not browse
