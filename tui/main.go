@@ -26,6 +26,19 @@ import (
 type entry struct {
 	Role string `json:"role"`
 	Text string `json:"text"`
+	Call *call  `json:"call"` // role "call": a tool call in the agent's turn
+}
+
+// call is a tool call, as the webhost reads it from the lineage.
+type call struct {
+	To     string `json:"to"`
+	Arg    string `json:"arg"`
+	State  string `json:"state"` // running | returned | fault
+	Result string `json:"result"`
+	Fault  string `json:"fault"`
+	Cause  string `json:"cause"`
+	Stamp  string `json:"stamp"`
+	MS     *int64 `json:"ms"`
 }
 
 type conversation struct {
@@ -73,6 +86,9 @@ type app struct {
 	mouseOff      bool      // Ctrl+T turns pointer tracking off and back on
 	pointer       *point    // the mouse, in braille dots; nil when unknown
 	titleOpen     float64   // 1 on an empty session, easing to 0 in a conversation
+	calls         callLights
+	onScreen      string            // the conversation whose calls the sky follows
+	seenCalls     map[string]string // each call's state when last seen, by conversation and stamp
 	cursorRow     int
 	cursorCol     int
 	notice        string
@@ -457,6 +473,7 @@ func (a *app) receive(raw []byte) {
 		if a.selected != "" && a.current() == nil {
 			a.selected, a.scroll = "", 0
 		}
+		a.followCalls()
 	case "rejected":
 		a.notice = m.Code + ": " + m.Message
 		if a.opening {
@@ -466,6 +483,38 @@ func (a *app) receive(raw []byte) {
 	case "accepted":
 	default:
 		a.notice = "unknown server message"
+	}
+}
+
+// followCalls launches a light for each call that appeared in the
+// conversation on screen, and brings home each one that stopped running. A
+// conversation's calls that were there when it came on screen launch nothing.
+func (a *app) followCalls() {
+	if a.seenCalls == nil {
+		a.seenCalls = map[string]string{}
+	}
+	id := a.selected
+	quiet := id != a.onScreen
+	a.onScreen = id
+	c := a.current()
+	if c == nil {
+		return
+	}
+	f := float64(a.wallFrame)
+	for _, e := range c.Entries {
+		if e.Call == nil {
+			continue
+		}
+		key := id + "/" + e.Call.Stamp
+		before, seen := a.seenCalls[key]
+		a.seenCalls[key] = e.Call.State
+		switch {
+		case quiet:
+		case !seen:
+			a.calls.launch(key, e.Call.State, f)
+		case before == "running" && e.Call.State != "running":
+			a.calls.settle(key, f)
+		}
 	}
 }
 

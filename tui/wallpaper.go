@@ -101,17 +101,19 @@ func sweep(a, at float64) float64 {
 // makeWallpaper draws a deterministic frame in blank transcript space. The
 // ticker advances frame; typing by itself does not change the sky.
 func makeWallpaper(width, height int, frame uint64) [][]wallCell {
-	return drawSky(width, height, frame, nil)
+	return drawSky(width, height, frame, nil, nil)
 }
 
 // drawSky draws the sky with the satellites' tails from sim, or on their
-// orbits when sim is nil.
-func drawSky(width, height int, frame uint64, sim *skySim) [][]wallCell {
+// orbits when sim is nil, and the lights of calls. While a call's light is
+// out, meteors and glints wait.
+func drawSky(width, height int, frame uint64, sim *skySim, calls *callLights) [][]wallCell {
 	rows := make([][]wallCell, height)
 	for y := range rows {
 		rows[y] = make([]wallCell, width)
 	}
 	f := float64(frame)
+	busy := calls.busy(f)
 	put := func(x, y int, mark rune, fg string, priority uint8) {
 		if x >= 0 && x < width && y >= 0 && y < height && rows[y][x].priority <= priority {
 			rows[y][x] = wallCell{mark: mark, fg: fg, priority: priority}
@@ -175,7 +177,7 @@ func drawSky(width, height int, frame uint64, sim *skySim) [][]wallCell {
 				}
 				// Now and then one star glints: up and back over eight seconds.
 				glint := 0.0
-				if t := (frame + uint64(v>>4)) % glintEvery; t < glintLength {
+				if t := (frame + uint64(v>>4)) % glintEvery; !busy && t < glintLength {
 					glint = math.Pow(math.Sin(math.Pi*float64(t)/glintLength), 2)
 				}
 				dot(depth, mix(lerp(starFloor, peak, 0.35+0.4*breath), glintPeak, 0.6*glint))
@@ -214,7 +216,7 @@ func drawSky(width, height int, frame uint64, sim *skySim) [][]wallCell {
 
 	// Every ninety seconds a meteor crosses the whole sky in three seconds,
 	// entering off the left edge and leaving off the right.
-	if t := frame % meteorEvery; t < meteorLength {
+	if t := frame % meteorEvery; !busy && t < meteorLength {
 		seed := cellHash(int(frame/meteorEvery), 31)
 		angle := 0.12 + float64(seed>>16%26)/100
 		const tail = 16
@@ -229,6 +231,8 @@ func drawSky(width, height int, frame uint64, sim *skySim) [][]wallCell {
 				mix(tailFloor, meteorPeak, 0.85*math.Pow(0.82, float64(i))), 3)
 		}
 	}
+
+	calls.draw(width, height, f, putDot)
 
 	// The core is one small star, breathing on a thirty-second cycle.
 	mx, my := int(float64(width)*0.72), int(float64(height)*0.5)

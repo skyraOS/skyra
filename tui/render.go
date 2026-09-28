@@ -7,32 +7,37 @@ import (
 	"unicode"
 )
 
+// The interface's colors: desktop/Sources/Skyra/Sky/Theme.swift and the
+// frontend's tailwind.config.ts use the same values.
 const (
 	surface  = "8;10;14"
-	raised   = "13;16;22"
-	composer = "16;19;26"
-	edge     = "26;31;41"
 	userBG   = "15;20;29"
-	world    = "124;168;232"
-	being    = "164;152;226"
 	operator = "96;196;166"
 	accent   = "126;196;204"
 	ink      = "214;219;229"
 	dim      = "120;128;146"
 	faint    = "60;66;80"
 	red      = "226;112;112"
+	amber    = "222;168;104" // a refused call: the Horizon doing its job
+	callTo   = "169;201;206"
 )
 
-type line struct{ text, bg, fg, rail string }
+// line is one transcript row: text on a panel with a rail, or, for a tool
+// call, a run of segments straight on the sky.
+type line struct {
+	text, bg, fg, rail string
+	segs               []segment
+}
 
 // segment is one run of text in one color.
 type segment struct{ fg, text string }
 
-// How much of the sky each surface covers: the sky shows through every
-// panel, dimmed, so the whole screen is one background.
+// How much of the sky each panel covers, as the desktop app draws them: the
+// sky shows through, dimmed, so the whole screen is one background. Your
+// messages sit on a panel of their own; the agent's on a veil of the sky.
 const (
-	messageAlpha  = 0.84
-	composerAlpha = 0.8
+	userAlpha  = 0.8
+	agentAlpha = 0.55
 )
 
 // pixel is one composed terminal cell.
@@ -58,9 +63,9 @@ func parseRGB(s string) rgb {
 	return c
 }
 
-func newCanvas(w, h int, frame uint64, sim *skySim) *canvas {
+func newCanvas(w, h int, frame uint64, sim *skySim, calls *callLights) *canvas {
 	c := &canvas{w: w, h: h}
-	sky := drawSky(w, h, frame, sim)
+	sky := drawSky(w, h, frame, sim, calls)
 	for y := 0; y < h; y++ {
 		fgRow, bgRow, markRow := make([]rgb, w), make([]rgb, w), make([]rune, w)
 		for x, cell := range sky[y] {
@@ -223,7 +228,7 @@ func (a *app) draw() {
 	frame := a.compose()
 	if frame == nil {
 		a.screen = nil
-		c := newCanvas(a.width, a.height, a.wallFrame, nil)
+		c := newCanvas(a.width, a.height, a.wallFrame, nil, nil)
 		c.segments(0, 0, a.width, segment{faint, " ✦ "}, segment{dim, "skyra · enlarge terminal"})
 		fmt.Print("\x1b[2J" + paint(nil, c.pixels(), 1, 1))
 		return
@@ -252,7 +257,7 @@ func (a *app) compose() [][]pixel {
 	if h < 10 || w < 35 {
 		return nil
 	}
-	c := newCanvas(w, h, a.wallFrame, a.sim)
+	c := newCanvas(w, h, a.wallFrame, a.sim, &a.calls)
 
 	status, statusColor := "offline", red
 	if a.connected {
@@ -288,8 +293,14 @@ func (a *app) compose() [][]pixel {
 	for i, r := range a.transcript(readingWidth, bodyHeight) {
 		y := 2 + i
 		switch {
+		case len(r.segs) > 0:
+			c.segments(inset+3, y, readingWidth-3, r.segs...)
 		case r.rail != "":
-			c.panel(inset, y, readingWidth, 1, r.bg, messageAlpha)
+			alpha := agentAlpha
+			if r.bg == userBG {
+				alpha = userAlpha
+			}
+			c.panel(inset, y, readingWidth, 1, r.bg, alpha)
 			c.text(inset+1, y, 1, "▎", r.rail)
 			c.text(inset+3, y, readingWidth-3, r.text, r.fg)
 		case r.text != "":
@@ -324,15 +335,16 @@ func (a *app) compose() [][]pixel {
 	caretLine := a.caret / textWidth
 	firstLine := max(0, caretLine-contentRows+1)
 	top := 3 + bodyHeight
-	// A soft glow sets the composer apart from the transcript: teal when it
-	// is ready for a message, dimmer while the agent works or it is offline.
-	glowColor, glowStrength := dim, 0.08
+	// As in the desktop app, the composer is a dark field with no outline,
+	// set apart by a soft white light: brighter when it is ready for a
+	// message, fainter while the agent works or it is offline. The light is
+	// around the field, not on it.
+	glowStrength := 0.05
 	if ready {
-		glowColor, glowStrength = accent, 0.14
+		glowStrength = 0.14
 	}
-	c.glow(inset, top, readingWidth, composerHeight, glowColor, glowStrength)
-	c.panel(inset, top, readingWidth, composerHeight, composer, composerAlpha)
-	c.panel(inset, top, readingWidth, composerHeight, glowColor, glowStrength)
+	c.glow(inset, top, readingWidth, composerHeight, ink, glowStrength)
+	c.panel(inset, top, readingWidth, composerHeight, surface, 1)
 	for r := 0; r < contentRows; r++ {
 		y, lineIndex := top+contentOffset+r, firstLine+r
 		if r == 0 {
@@ -368,7 +380,7 @@ func (a *app) compose() [][]pixel {
 func (a *app) transcript(width, height int) []line {
 	rows := make([]line, height)
 	for i := range rows {
-		rows[i] = line{"", surface, ink, ""}
+		rows[i] = line{"", surface, ink, "", nil}
 	}
 	c := a.current()
 	if c == nil {
@@ -376,24 +388,39 @@ func (a *app) transcript(width, height int) []line {
 	}
 	var all []line
 	if len(c.Entries) == 0 {
-		all = append(all, line{"  opening the session…", surface, faint, ""})
+		all = append(all, line{"  opening the session…", surface, faint, "", nil})
 	}
-	for _, e := range c.Entries {
-		label, bg, rail := "agent", raised, being
+	for i, e := range c.Entries {
+		if e.Call != nil {
+			if i == 0 || c.Entries[i-1].Call == nil {
+				all = append(all, line{"", surface, ink, "", nil})
+			}
+			all = append(all, line{bg: surface, segs: ledger(*e.Call, width-3)})
+			continue
+		}
+		// The desktop tells you from the agent by side and panel; a terminal
+		// line has no side, so a quiet rail and label say it.
+		label, bg, rail := "agent", surface, faint
 		if e.Role == "user" {
-			label, bg, rail = "you", userBG, world
+			label, bg, rail = "you", userBG, dim
 		}
 		fg := ink
 		if strings.HasPrefix(e.Text, "⚠") {
 			fg, rail = red, red
 		}
-		all = append(all, line{"", surface, ink, ""}, line{label, bg, rail, rail})
+		all = append(all, line{"", surface, ink, "", nil}, line{label, bg, dim, rail, nil})
 		for _, part := range wrap(safe(e.Text), width-5) {
-			all = append(all, line{part, bg, fg, rail})
+			all = append(all, line{part, bg, fg, rail, nil})
 		}
 	}
 	if c.Phase == "pending" {
-		all = append(all, line{"", surface, ink, ""}, line{"working…", raised, dim, faint})
+		// Three dots breathing, like the stars, as the desktop app shows it.
+		var dots []segment
+		for i := range 3 {
+			breath := (1 + math.Sin(float64(a.wallFrame)*0.3-float64(i)*0.8)) / 2
+			dots = append(dots, segment{mix(surfaceRGB, parseRGB(accent), 0.25+0.5*breath), "• "})
+		}
+		all = append(all, line{"", surface, ink, "", nil}, line{bg: surface, segs: dots})
 	}
 	// Scrolling stops at the first line, so scrolling back down answers at once.
 	a.scroll = max(0, min(a.scroll, len(all)-height))
@@ -405,6 +432,53 @@ func (a *app) transcript(width, height int) []line {
 		rows[i] = all[start+i]
 	}
 	return rows
+}
+
+// ledger is a tool call on one line: what was called, with what, and what
+// came of it, the outcome and stamp flush right.
+func ledger(c call, width int) []segment {
+	toColor, outColor := callTo, dim
+	var out string
+	switch {
+	case c.State == "running":
+		out = "running"
+	case c.State == "returned":
+		out = c.Result
+		if c.MS != nil {
+			out += fmt.Sprintf(" · %.1f s", float64(*c.MS)/1000)
+		}
+	case c.Fault == "horizon":
+		toColor, outColor, out = amber, amber, "outside the Horizon"
+	case c.Fault == "contract":
+		toColor, outColor, out = amber, amber, "didn't fit "+c.To+"'s input"
+	default:
+		toColor, outColor, out = red, red, c.Cause
+	}
+	stamp := c.Stamp
+	if len(stamp) > 8 {
+		stamp = stamp[:8]
+	}
+	to := []rune(c.To)
+	right := []rune(out + "  " + stamp)
+	arg := []rune(c.Arg)
+	room := width - 2 - len(to) - len(right) - 2
+	if room < 0 {
+		// Too narrow for everything: the outcome matters more than the
+		// stamp, and both more than the whole tool name.
+		right = []rune(out)
+		if len(to) > width-2-len(right)-2 {
+			to = to[:max(0, width-2-len(right)-2)]
+		}
+		room = width - 2 - len(to) - len(right) - 2
+	}
+	if len(arg) > max(0, room) {
+		arg = arg[:max(0, room)]
+	}
+	pad := max(1, width-2-len(to)-1-len(arg)-len(right))
+	return []segment{
+		{faint, "↳ "}, {toColor, string(to)}, {dim, " " + string(arg) + strings.Repeat(" ", pad)},
+		{outColor, out}, {faint, string(right[len([]rune(out)):])},
+	}
 }
 
 func color(bg, fg, text string) string {

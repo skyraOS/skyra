@@ -20,7 +20,7 @@ func TestSatellitesRideTheirOrbitsWithoutAPointer(t *testing.T) {
 		}
 	}
 	// With no pointer the simulated sky is the plain sky.
-	if got, want := drawSky(simWidth, simHeight, 300, s), makeWallpaper(simWidth, simHeight, 300); !sameMarks(got, want) {
+	if got, want := drawSky(simWidth, simHeight, 300, s, nil), makeWallpaper(simWidth, simHeight, 300); !sameMarks(got, want) {
 		t.Fatal("the simulated sky differs from the orbit sky")
 	}
 }

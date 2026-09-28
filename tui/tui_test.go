@@ -228,7 +228,7 @@ func TestTitleRecedesInAConversationAndReturnsWhenEmpty(t *testing.T) {
 func TestHeaderFloatsOnTheSky(t *testing.T) {
 	a := app{width: 120, height: 35}
 	screen := a.compose()
-	sky := newCanvas(120, 35, 0, nil).pixels()
+	sky := newCanvas(120, 35, 0, nil, nil).pixels()
 	for x := 20; x < 80; x++ { // between the title and the status
 		if screen[0][x].bg != sky[0][x].bg {
 			t.Fatalf("the header row is covered at column %d", x)
