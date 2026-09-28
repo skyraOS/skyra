@@ -22,3 +22,6 @@ Where the controller goes after the prototype. Agreed on paper, not built.
 7. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
    travel by hash. Nodes may author them for child invocations; continuations
    pass child observations on return instead of authoring a replacement result.
+8. **[`22-read-tool.md`](22-read-tool.md)**: `read`, the first leaf that
+   observes the world: a workspace grant approved once, a typed observation
+   with provenance, and the adapter's model-facing tool set. Built.

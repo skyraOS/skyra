@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -60,7 +62,22 @@ type derived struct {
 	Terminal                                                         string
 	Pending                                                          []message
 	Answered                                                         map[string]bool
-	Echo                                                             []step
+	Results                                                          []step // model-tool steps, in the order Codex's calls were invoked
+}
+
+// modelTools are the capabilities Codex is shown, with the description it
+// sees. Everything else in reach (codex.*) is this adapter's own operation.
+// A tool is offered only when it is also in the continuation's reach.
+var modelTools = map[string]string{
+	"echo": "Skyra echo",
+	"read": "Read a UTF-8 text file, or list a directory, in the workspace. Paths are relative to the workspace root; \".\" lists the root. " +
+		"Returns at most 2000 lines or 64 KiB: when truncated is true, call again with start_line set to end_line + 1. " +
+		"sha256 and size describe the whole file. A failure is reported in error (not_found, denied, not_text, too_large).",
+}
+
+func offered(c continuation, name string) bool {
+	_, ok := modelTools[name]
+	return ok && c.Tools[name] != nil
 }
 
 func main() {
@@ -112,9 +129,13 @@ func decide(c continuation) (string, error) {
 		d.Thread = ""
 	}
 	for _, s := range c.Steps {
+		if _, tool := modelTools[s.To]; tool {
+			// A tool's return or fault is an observation for Codex, in the same turn.
+			d.Results = append(d.Results, s)
+			continue
+		}
 		if s.Fault != nil {
 			switch s.To {
-			case "echo":
 			case "codex.inspect":
 				d.SentInspect, d.NeedStop, d.Lost = true, true, true
 				continue
@@ -129,7 +150,7 @@ func decide(c continuation) (string, error) {
 				return "", fmt.Errorf("%s fault (%s): %s", s.To, s.Fault.Kind, s.Fault.Cause)
 			}
 		}
-		if s.State != "return" && s.To != "echo" {
+		if s.State != "return" {
 			return "", fmt.Errorf("%s ended in %s", s.To, s.State)
 		}
 		switch s.To {
@@ -143,8 +164,6 @@ func decide(c continuation) (string, error) {
 			d.Incarnation, d.Thread, d.Partial = started.Incarnation, "", ""
 			d.NeedInspect, d.SentInspect, d.Inspected = false, false, false
 			d.Initialized, d.SentInitialize, d.SentThread = false, false, false
-		case "echo":
-			d.Echo = append(d.Echo, s)
 		case "codex.stop":
 			var o observation
 			if err := json.Unmarshal(s.Value, &o); err != nil {
@@ -267,7 +286,7 @@ func decide(c continuation) (string, error) {
 				}
 				switch m.Method {
 				case "item/tool/call":
-					if m.Params.Tool != "echo" || c.Tools["echo"] == nil {
+					if !offered(c, m.Params.Tool) {
 						d.Violation = "dynamicTool." + m.Params.Tool
 					} else {
 						d.Pending = append(d.Pending, m)
@@ -312,8 +331,10 @@ func decide(c continuation) (string, error) {
 	}
 	if !d.SentThread && d.Thread == "" {
 		tools := []any{}
-		if echo := c.Tools["echo"]; echo != nil {
-			tools = append(tools, map[string]any{"name": "echo", "description": "Skyra echo", "inputSchema": jsonSchema(echo)})
+		for _, name := range slices.Sorted(maps.Keys(modelTools)) {
+			if offered(c, name) {
+				tools = append(tools, map[string]any{"name": name, "description": modelTools[name], "inputSchema": jsonSchema(c.Tools[name])})
+			}
 		}
 		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
 		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": tools, "developerInstructions": "Only registered dynamic tools may perform effects."})
@@ -349,14 +370,17 @@ func decide(c continuation) (string, error) {
 		if d.Answered[id(call.ID)] {
 			continue
 		}
-		if i >= len(d.Echo) {
+		if i >= len(d.Results) {
 			args := call.Params.Arguments
 			if len(args) == 0 {
 				args = json.RawMessage(`{}`)
 			}
-			return emit("echo", args), nil
+			return emit(call.Params.Tool, args), nil
 		}
-		result := toolResult(call.ID, d.Echo[i])
+		if d.Results[i].To != call.Params.Tool {
+			return "", fmt.Errorf("tool call %s asked for %s, but step %d invoked %s", id(call.ID), call.Params.Tool, i, d.Results[i].To)
+		}
+		result := toolResult(call.ID, d.Results[i])
 		line, _ := json.Marshal(result)
 		return ioCall(d.Incarnation, []string{string(line)}, d.Partial), nil
 	}

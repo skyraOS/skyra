@@ -137,6 +137,10 @@ func main() {
 					complete(*held, "held:"+held.thread)
 					held = nil
 				}
+			case strings.HasPrefix(t.text, "read:"):
+				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
+				pending[string(id)] = t
+				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "read", "arguments": map[string]string{"path": strings.TrimPrefix(t.text, "read:")}}})
 			case strings.HasPrefix(t.text, "tool:") || t.text == "taint-child":
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t

@@ -11,7 +11,9 @@ Seatbelt profile, with direct dynamic tools, private state and an allowlisted
 egress proxy. The runtime keeps the connection in custody across turns and
 records each exchange. Live conversation, runtime echo execution and replay
 passed on September 28. A captured inference request contains only the direct
-`functions.echo` tool.
+`functions.echo` tool. The `read` tool was added after that capture: it is
+verified with the fake provider, not yet against live Codex (rerun
+`tool_surface.py`).
 The sidebar supports deletion of idle chats and their local history.
 
 Validation commands (run macOS sandbox tests outside another sandbox):
@@ -94,7 +96,8 @@ rebuilds the binaries. Start a new conversation when testing tool changes.
 
 ```sh
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
-skyra ask "What tools can you call?"                       # only echo is exposed
+skyra ask "What tools can you call?"                       # echo and read
+skyra ask "Read README.md and summarize it."                # read, inside the workspace
 ```
 
 State lives in `~/.skyra/`: `conversations/` holds chats (one `.skyra` per
@@ -108,7 +111,10 @@ under `providers/` with its proxy journal and diagnostics.
   sandboxed leaf, and a fresh adapter step answers Codex's pending call.
 - **Then: "What did the echo tool return a moment ago?"** One Codex thread per
   conversation, so it remembers.
-- **"What tools can you call?"** Only the registered `echo` tool is exposed.
+- **"Read README.md and tell me what this project is."** Codex asks for `read`;
+  the leaf runs under a sandbox that grants only the workspace. Paths outside
+  it, including symlinks that point out, come back as `"error":"denied"`.
+- **"What tools can you call?"** Only the registered `echo` and `read` tools are exposed.
   A shell request may be declined by the model. OS probes and deterministic
   native-attempt tests verify enforcement independently of model behavior.
 - **close**, then pick the conversation from the sidebar: its history is
@@ -116,7 +122,7 @@ under `providers/` with its proxy journal and diagnostics.
   re-derives every record.
 
 **Direct tool calling.** New launches expose registered Skyra tools directly
-(currently `functions.echo`), without the `exec`/`wait` JavaScript wrapper.
+(currently `functions.echo` and `functions.read`), without the `exec`/`wait` JavaScript wrapper.
 The launcher creates a read-only model catalog selecting standard tool mode,
 disables built-in goals, clock, questions and collaboration, and suppresses
 skill discovery. The code-mode helper has no execute grant. The adapter also
@@ -153,6 +159,15 @@ symlink, not a credential copy. `SKYRA_STATE` can select an isolated state root.
 DNA-19's chat is still there as `skyra dna19`; its fence retires the whole
 conversation on any native attempt.
 
+**The workspace.** `read` is granted one directory: where you started `skyra`,
+or `SKYRA_WORKSPACE` if set. That grant is the Horizon you approve by starting
+it; every read inside it runs with no prompt, and anything outside is denied by
+the OS. The file contents a read returns go to the model. `skyra` refuses a
+workspace that is your home directory, `/`, or that overlaps `~/.skyra` or
+`~/.codex`, because the sandbox floor protects only the current conversation's
+records. A read returns at most 2000 lines or 64 KiB; every read is recorded in
+the conversation's lineage.
+
 ## 5. Troubleshooting
 
 The sidebar's trash button deletes a chat and its local Skyra history after
@@ -163,6 +178,7 @@ remain under `providers/`.
 
 | Symptom | Fix |
 |---|---|
+| `the workspace … overlaps …` or `cannot be the workspace` | `cd` into a project directory before `skyra`, or `SKYRA_WORKSPACE=/path/to/project skyra` |
 | `skyra: command not found` | open a new terminal; or add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc`; or run `./skyra` from the repo |
 | `port 8080 is in use` / `port 3000 is in use` | stop the other process, or `SKYRA_WS_PORT=8090 SKYRA_UI_PORT=3001 skyra` |
 | `codex is not logged in` | `codex login`, or use `skyra chat --fake` |

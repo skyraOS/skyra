@@ -1,0 +1,32 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["path"],
+    "fields": {
+      "path": {"type": "string"},
+      "start_line": {"type": "number"},
+      "max_lines": {"type": "number"}
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": ["path", "kind"],
+    "fields": {
+      "path": {"type": "string"},
+      "kind": {"type": "string"},
+      "sha256": {"type": "string"},
+      "size": {"type": "number"},
+      "start_line": {"type": "number"},
+      "end_line": {"type": "number"},
+      "total_lines": {"type": "number"},
+      "truncated": {"type": "bool"},
+      "text": {"type": "string"},
+      "entries": {"type": "array", "items": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "fields": {"name": {"type": "string"}, "kind": {"type": "string"}, "size": {"type": "number"}}
+      }},
+      "error": {"type": "string"}
+    }
+  }
+}

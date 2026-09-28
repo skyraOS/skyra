@@ -571,6 +571,15 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	for _, sock := range h.Surface.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}
+	// A target is told where its read grants are, as PATH lists directories.
+	// This is information, not authority: the rendered profile enforces them.
+	if reads := h.Surface.Authority.Read; len(reads) > 0 {
+		paths := reads[0].Path
+		for _, grant := range reads[1:] {
+			paths += ":" + grant.Path
+		}
+		env = append(env, "SKYRA_READ="+paths)
+	}
 	r := Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
 	if h.Surface.Connection {
 		r.ConnectionOwner = resourceOwner(h)

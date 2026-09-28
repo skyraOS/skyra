@@ -485,3 +485,15 @@ func TestAsyncSurfaceParks(t *testing.T) {
 		t.Fatalf("a resumed instance hands the event off like any output: %#v", effs)
 	}
 }
+
+func TestRunTellsATargetItsReadGrants(t *testing.T) {
+	s := horizon.Surface{Path: "/bin/tool"}
+	if env := runOf(horizon.Horizon{Surface: &s}, nil, "/floor").Env; len(env) != 1 {
+		t.Fatalf("no read grant, no SKYRA_READ: %v", env)
+	}
+	s.Authority.Read = []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}
+	env := runOf(horizon.Horizon{Surface: &s}, nil, "/floor").Env
+	if env[len(env)-1] != "SKYRA_READ=/work:/etc/x" {
+		t.Fatalf("%v", env)
+	}
+}

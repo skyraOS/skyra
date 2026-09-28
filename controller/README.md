@@ -54,6 +54,7 @@ or the network.
 | [`boot`](boot/) | The operator: genesis, the seed, then waits for its frame (kqueue) | no |
 | [`skyra`](skyra/) | The command: argv and flags only | — |
 | [`echo`](echo/) | An untrusted leaf. Prints its text | — |
+| [`read`](read/) | An untrusted leaf. Reads a range of a UTF-8 file, or lists a directory, under a workspace read grant; replies with a typed observation (path, sha256, lines, text) | — |
 | [`agent`](agent/) | A fake continuation: calls echo, then replies with what it said | — |
 | [`host`](host/) | Legacy actor host, retained for earlier tests; current chat does not launch it | — |
 | [`codex`](codex/) | Legacy Codex adapter, retained for earlier tests | — |
@@ -64,7 +65,7 @@ or the network.
 | [`browser`](browser/) | The browser's contract: an async surface, served by the webhost | — |
 | [`webhost`](webhost/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records | — |
 
-The targets (`echo`, `agent`, `codexresident`, `codexio`) share no code with skyra.
+The targets (`echo`, `read`, `agent`, `codexresident`, `codexio`) share no code with skyra.
 
 ### Tool authority in the registry
 
@@ -78,7 +79,9 @@ The caller does not gain its tool's direct OS permissions. Legacy top-level
 `connect` entries are folded into `authority.connect` on load.
 
 Tool profiles grant only their own binary, fixed system loader reads, and
-declared resources. An OS test checks that a file outside `read` is denied and
+declared resources. A target is told its read grants in `SKYRA_READ`
+(colon-separated, like `PATH`); that is information, and the profile is what
+enforces it. An OS test checks that a file outside `read` is denied and
 the same file is readable when granted. The real Codex app-server uses the
 registered resident profile and per-actor proxy.
 

@@ -11,6 +11,9 @@ done
 ROOT=$(cd "$(dirname "$self")" && pwd)
 DNA=$ROOT/history/dna19
 BUILD=$ROOT/build
+# The workspace the read tool is granted: where skyra was started, unless set.
+# Captured before anything below changes directory.
+WORKSPACE=${SKYRA_WORKSPACE:-$PWD}
 WS_PORT=${SKYRA_WS_PORT:-8080}
 UI_PORT=${SKYRA_UI_PORT:-3000}
 
@@ -125,7 +128,7 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  for t in skyra echo agent codexresident codexio user webhost; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
+  for t in skyra echo read agent codexresident codexio user webhost; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
   go build -o "$BUILD/controller/fake-codex" ./history/dna19/codex/testdata/fake-provider
   go build -o "$BUILD/tui" ./tui
 }
@@ -136,11 +139,23 @@ registry() {
   local mode=$1 park=$2 depth=$3 file="$BUILD/controller/registry-$1-$3.json"
   SKYRA_REGISTRY_ROOT="$ROOT" SKYRA_REGISTRY_BUILD="$BUILD/controller" \
     SKYRA_REGISTRY_MODE="$mode" SKYRA_REGISTRY_PARK="$park" \
-    SKYRA_REGISTRY_DEPTH="$depth" SKYRA_REGISTRY_FILE="$file" python3 - <<'PY'
+    SKYRA_REGISTRY_DEPTH="$depth" SKYRA_REGISTRY_FILE="$file" \
+    SKYRA_REGISTRY_WORKSPACE="$WORKSPACE" SKYRA_REGISTRY_STATE="$STATE" python3 - <<'PY' || return 1
 import json, os, sys
 from pathlib import Path
 root=Path(os.environ['SKYRA_REGISTRY_ROOT'])
 build=Path(os.environ['SKYRA_REGISTRY_BUILD'])
+# The read grant. The sandbox denies only this run's .skyra, so the workspace
+# must not contain Skyra's state (other conversations, provider logins) or
+# Codex's login, and must not be the home directory or the filesystem root.
+workspace=Path(os.environ['SKYRA_REGISTRY_WORKSPACE']).resolve(strict=True)
+home=Path.home().resolve()
+for private in [Path(os.environ['SKYRA_REGISTRY_STATE']), home/'.codex']:
+    private=private.resolve()
+    if workspace==private or workspace in private.parents or private in workspace.parents:
+        sys.exit(f'skyra: the workspace {workspace} overlaps {private}; start skyra in a project directory or set SKYRA_WORKSPACE')
+if workspace in (home, Path('/')) or not workspace.is_dir():
+    sys.exit(f'skyra: {workspace} cannot be the workspace; start skyra in a project directory or set SKYRA_WORKSPACE')
 sys.path.insert(0,str(root/'controller/provider'))
 from launch import FEATURES, verified_version
 from sandbox import native_binary
@@ -161,6 +176,8 @@ start.update({'contract':str(root/'controller/codexio/start-contract.json'),
               'resident':True,'resource_owner_depth':depth})
 registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/echo/contract.json')},
+ 'read':{'path':str(build/'read'),'contract':str(root/'controller/read/contract.json'),
+         'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
  'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codexresident/contract.json')},
  'codex.start':start,
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),

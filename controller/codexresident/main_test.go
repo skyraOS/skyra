@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -85,5 +86,76 @@ func TestOnlyModelFacingToolsAreOfferedToCodex(t *testing.T) {
 	}
 	if len(q.Deliver) != 2 || !strings.Contains(q.Deliver[1], `"name":"echo"`) || strings.Contains(q.Deliver[1], `"name":"codex.stop"`) || strings.Contains(q.Deliver[1], `"name":"codex.exchange"`) {
 		t.Fatalf("offered tools: %v", q.Deliver)
+	}
+}
+
+// turnWithCalls is a continuation whose turn has started and whose Codex has
+// asked for each tool call given, in order.
+func turnWithCalls(calls ...string) continuation {
+	c := continuation{Frame: "frame", Tools: map[string]*schema{
+		"echo": {Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}},
+		"read": {Type: "object", Fields: map[string]*schema{"path": {Type: "string"}}, Required: []string{"path"}},
+	}}
+	c.Input.Text = "hello"
+	observed := func(deliver []string, lines ...string) step {
+		return step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": deliver}),
+			Value: value(map[string]any{"lines": lines, "delivery": "written", "read": "observed", "observed_at": 1, "peer_eof": false, "error": "", "partial": ""})}
+	}
+	turn := []string{`{"id":"frame:turn","result":{"turn":{"id":"turn-1"}}}`}
+	for i, call := range calls {
+		tool, args, _ := strings.Cut(call, " ")
+		turn = append(turn, fmt.Sprintf(`{"id":"call-%d","method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","tool":%q,"arguments":%s}}`, i, tool, args))
+	}
+	c.Steps = []step{
+		{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+		observed([]string{rpc("frame:initialize", "initialize", map[string]any{})}, `{"id":"frame:initialize","result":{}}`),
+		observed([]string{`{"method":"initialized"}`, rpc("frame:thread", "thread/start", map[string]any{})},
+			`{"id":"frame:thread","result":{"thread":{"id":"thread-1"},"approvalPolicy":"never","sandbox":{"type":"readOnly","networkAccess":false}}}`),
+		observed([]string{rpc("frame:turn", "turn/start", map[string]any{})}, turn...),
+	}
+	return c
+}
+
+func TestEachToolCallInvokesTheToolItNames(t *testing.T) {
+	c := turnWithCalls(`echo {"text":"hi"}`, `read {"path":"README.md"}`)
+	to, m := emitted(t, c)
+	if to != "echo" || string(m["payload"]) != `{"text":"hi"}` {
+		t.Fatalf("first call: %s %s", to, m["payload"])
+	}
+	c.Steps = append(c.Steps, step{To: "echo", Payload: m["payload"], State: "return", Value: value("hi")})
+	to, m = emitted(t, c)
+	var q struct{ Deliver []string }
+	json.Unmarshal(m["payload"], &q)
+	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], `"id":"call-0"`) {
+		t.Fatalf("echo's result should answer call-0: %s %v", to, q.Deliver)
+	}
+	c.Steps = append(c.Steps, step{To: to, Payload: m["payload"], State: "return", Value: value(map[string]any{"lines": []string{}, "delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": ""})})
+	to, m = emitted(t, c)
+	if to != "read" || string(m["payload"]) != `{"path":"README.md"}` {
+		t.Fatalf("second call: %s %s", to, m["payload"])
+	}
+	c.Steps = append(c.Steps, step{To: "read", Payload: m["payload"], State: "fault", Fault: &struct{ Kind, Cause string }{"contract", "read: unknown field"}})
+	to, m = emitted(t, c)
+	json.Unmarshal(m["payload"], &q)
+	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], `"success":false`) || !strings.Contains(q.Deliver[0], "fault (contract)") {
+		t.Fatalf("a tool fault goes back to Codex in the same turn: %s %v", to, q.Deliver)
+	}
+}
+
+func TestAToolOutsideReachIsAViolation(t *testing.T) {
+	c := turnWithCalls(`read {"path":"x"}`)
+	delete(c.Tools, "read")
+	to, m := emitted(t, c)
+	var q struct{ Deliver []string }
+	json.Unmarshal(m["payload"], &q)
+	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], "turn/interrupt") {
+		t.Fatalf("an unoffered tool should interrupt the turn: %s %v", to, q.Deliver)
+	}
+	if _, err := decide(func() continuation {
+		c := turnWithCalls(`read {"path":"x"}`)
+		c.Steps = append(c.Steps, step{To: "echo", State: "return", Value: value("hi")})
+		return c
+	}()); err == nil || !strings.Contains(err.Error(), "asked for read") {
+		t.Fatalf("a result from a different tool must not answer the call: %v", err)
 	}
 }
