@@ -14,7 +14,7 @@ disables agents, and disables bundled/host skills. Both the code-mode host
 feature and its executable grant are removed. The earlier code-mode results
 below describe the initial experiment, before this direct-mode integration.
 
-Production integration now lives in `controller/provider/` and the root
+Production integration now lives in `controller/codex/provider/` and the root
 `skyra` launcher. The original probe below shares that profile renderer.
 Run `python3 controller/experiments/appserver/integration.py` for deterministic
 adapter/Drive/replay tests, or add `--live` to use the actual sandboxed Codex
@@ -32,7 +32,7 @@ prompt, so the live suite intentionally separates direct OS probes and real
 interrupt RPC verification from deterministic adapter native-event testing.
 
 `probe.py` launches the installed native Codex binary through the existing
-`controller/host`, with an external macOS Seatbelt profile. It creates a separate
+`controller/hosts/actor`, with an external macOS Seatbelt profile. It creates a separate
 host socket, private evidence directory, CODEX_HOME, workspace and scratch
 directory. It does not change or restart the production Skyra service.
 

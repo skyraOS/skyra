@@ -23,7 +23,7 @@ launch resident → exchange → isolated tool → park → resume → exchange 
 ```
 
 - The launcher exits before the first exchange. Each succeeding custodian exits
-  after an acknowledged SCM_RIGHTS handoff using `controller/handshake`.
+  after an acknowledged SCM_RIGHTS handoff using `controller/runtime/handshake`.
 - An experimental manifest distinguishes frame directories from connections,
   with owner and incarnation identity. Old senders close their resource copies
   after acknowledgment. The resident stays the same process throughout.

@@ -30,7 +30,7 @@ So interpret and execute stay together in one instance. Persistence lives below
 execute, in the adapter/actor layer, where the runtime does not look.
 
 This is the stricter form of "Persistent services, ephemeral adapters" in
-[`improvements.md`](../../history/dna19/root/improvements.md). It withdraws the
+[`improvements.md`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/root/improvements.md). It withdraws the
 later relaxation, "stateful adapters are allowed".
 
 ## Terminology check

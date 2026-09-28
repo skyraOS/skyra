@@ -8,7 +8,7 @@ Status: agreed 2026-09-23 (D6). Names the handle from [05](05-the-release-is-a-h
 The parent reads the child's commit and returns the child's **Horizon**. The
 release, the handle and the Horizon are one object. Provisioning happens exactly
 at the handoff, which is where
-[possibility-as-process](../../history/specs/2026-09-21/possibility-as-process.md) says it
+[possibility-as-process](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/possibility-as-process.md) says it
 belongs: "authority is checked once, at provision". Execution against what the
 Horizon holds is then free.
 

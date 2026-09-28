@@ -5,7 +5,7 @@ Status: mostly built on the controller (next/16, `d27f4c5`): conversations
 are lineages with their history listed, the user side is Codex's parent, and a
 fault in a turn no longer ends the conversation. Not built: routing a horizon
 fault back into the same Codex turn, and continuing after the host restarts. Follows from DNA-19's browser path
-(`history/dna19/user/`) and the Codex actor's private thread ids.
+([`history/dna19/user/`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/tree/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/user)) and the Codex actor's private thread ids.
 
 ## The claim
 
@@ -15,7 +15,7 @@ fault back into the same Codex turn, and continuing after the host restarts. Fol
 
 A Possibility is the process, the port space, the Horizon and the root of the
 frames it spawns: one object with five faces
-([possibility-as-process](../../history/specs/2026-09-21/possibility-as-process.md)).
+([possibility-as-process](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/possibility-as-process.md)).
 Invoking one opens a conversation instance: its own Horizon, frames and log,
 and nothing it can reach outside them. In the controller's terms it is a
 [Potential](../../design/thoughts/11-the-potential.md) invoked as a

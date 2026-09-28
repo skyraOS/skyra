@@ -4,7 +4,7 @@ Date: 2026-09-23
 Status: draft; design agreed in outline, not implemented. Builds on DNA-19
 (`src/skyra` at `3f10fd4` plus the uncommitted `root/` package split).
 Consolidates the target model in
-[`root/improvements.md`](../history/dna19/root/improvements.md) and §13 of the
+[`root/improvements.md`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/root/improvements.md) and §13 of the
 DNA-19 summary.
 The reasoning behind each decision is in [`thoughts/`](thoughts/). §1 lists what
 is agreed, and §12 lists what is still open.
@@ -51,18 +51,18 @@ fence, and the external `codex` and `user` boundaries.
 
 ## Sources and retained direction
 
-- [`root/improvements.md`](../history/dna19/root/improvements.md): the
+- [`root/improvements.md`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/root/improvements.md): the
   single-entry problem, creation by callback, the persistent/live frame split,
   the target model, its refinements, measured cost and the 2026-09-22 decisions.
 - DNA-19 summary:
   what is built today, §13 (the target) and §17 (the immediate work order).
-- [DNA-19 decisions](../history/dna19/DECISIONS.md) and
-  [limits](../history/dna19/issues.md): parent lifetime, continuation-only
+- [DNA-19 decisions](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/DECISIONS.md) and
+  [limits](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/issues.md): parent lifetime, continuation-only
   `tool-result`, sticky contamination, bounded migration and shutdown.
-- [Codex registration proposal](../history/specs/2026-09-21/proposal/codex-registration.md)
-  and [user executable proposal](../history/specs/2026-09-22/frontend.md/proposal.md): the
+- [Codex registration proposal](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/proposal/codex-registration.md)
+  and [user executable proposal](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-22/frontend.md/proposal.md): the
   external executables whose contracts this proposal keeps.
-- [possibility-as-process](../history/specs/2026-09-21/possibility-as-process.md):
+- [possibility-as-process](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/possibility-as-process.md):
   "authority is checked once, at provision". Here, provision is the release of a
   Horizon.
 
@@ -79,7 +79,7 @@ fence, and the external `codex` and `user` boundaries.
 | D7 | **The sandbox is rendered from the Horizon.** `.skyra/` is always denied, whatever the Horizon says | 2026-09-23 | [07](thoughts/07-the-sandbox-is-rendered-from-the-horizon.md) |
 | D8 | **Leaves.** Registration marks an executable as a leaf. A leaf can only return: it cannot invoke and cannot be continued. Only non-leaves are resumed, and a non-leaf's supervisor is alive while it waits | 2026-09-23 | [08](thoughts/08-leaves.md) |
 | D9 | **Potentials and their states.** The addressed thing is a **Potential**: an executable applied to arguments, some possibly holes. Its states are named by the naming test "the system is in a state of ___": **resolve → invoke → return / fault**. Resolve covers everything before an instance takes custody and is always safe to restart. Invoke is custody. Return and fault are terminal, written once. "Waiting" and "running" are not states | 2026-09-23 | [10](thoughts/10-the-move-is-the-state.md), [11](thoughts/11-the-potential.md) |
-| — | Carried forward from 2026-09-22: one atomic write per step, write before execute, no persistent Scheduler, creation is emission, runtime registration is a checked write with first write winning, nondeterminism written before use, no secrets in the tree or in Moves | 2026-09-22 | [`improvements.md`](../history/dna19/root/improvements.md) |
+| — | Carried forward from 2026-09-22: one atomic write per step, write before execute, no persistent Scheduler, creation is emission, runtime registration is a checked write with first write winning, nondeterminism written before use, no secrets in the tree or in Moves | 2026-09-22 | [`improvements.md`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/root/improvements.md) |
 
 ## 1a. Potentials and their states
 
