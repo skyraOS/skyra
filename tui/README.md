@@ -46,6 +46,11 @@ on the core and a violet one circling it every eight minutes, and every
 ninety seconds a meteor crosses the whole screen in three seconds. The name
 is a faint star-chart label that brightens as the middle satellite goes by.
 
+The camera sways slowly, a few characters at most over several minutes, and
+the stars follow it by depth: faint dust barely moves, bright stars move the
+most, and each star steps at its own moment, so the sky parallaxes instead of
+shifting as one. The core, its satellites and the name hold still in front.
+
 The header, chat messages and composer are translucent panels over the sky,
 so stars and satellites show through them, dimmed; the footer's text sits
 directly on the sky.

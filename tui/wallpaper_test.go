@@ -55,7 +55,16 @@ func TestWallpaperAnimatesWithoutMovingTheMark(t *testing.T) {
 	}
 }
 
+// holdCamera stops the sway for the rest of a test, for checks about the
+// sky's own light.
+func holdCamera(t *testing.T) {
+	sway := cameraSway
+	cameraSway = 0
+	t.Cleanup(func() { cameraSway = sway })
+}
+
 func TestStarsRemainVisibleWhileFading(t *testing.T) {
+	holdCamera(t)
 	first := makeWallpaper(120, 35, 0)
 	nextFrame := makeWallpaper(120, 35, 1)
 	later := makeWallpaper(120, 35, 40)
@@ -131,6 +140,7 @@ func TestSkyFillsTheScreenBehindEverything(t *testing.T) {
 }
 
 func TestFixedMarksChangeOnlyInBrightness(t *testing.T) {
+	holdCamera(t)
 	previous := makeWallpaper(120, 35, 0)
 	for frame := uint64(1); frame <= 600; frame++ {
 		next := makeWallpaper(120, 35, frame)
@@ -224,5 +234,74 @@ func TestBackgroundLightChangesGently(t *testing.T) {
 	}
 	if !lit {
 		t.Fatal("the sky has no light behind it")
+	}
+}
+
+func starCells(rows [][]wallCell) map[[2]int]bool {
+	cells := map[[2]int]bool{}
+	for y, row := range rows {
+		for x, cell := range row {
+			if cell.priority == 2 {
+				cells[[2]int{x, y}] = true
+			}
+		}
+	}
+	return cells
+}
+
+// coveredCells returns cells where a satellite, meteor, the core or the name
+// may be hiding a star.
+func coveredCells(rows [][]wallCell) map[[2]int]bool {
+	cells := map[[2]int]bool{}
+	for y, row := range rows {
+		for x, cell := range row {
+			if cell.priority >= 3 {
+				cells[[2]int{x, y}] = true
+			}
+		}
+	}
+	return cells
+}
+
+func TestCameraDriftIsGradual(t *testing.T) {
+	const width, height = 120, 35
+	sky := makeWallpaper(width, height, 0)
+	previous, covered := starCells(sky), coveredCells(sky)
+	moved := 0
+	for frame := uint64(1); frame <= 1500; frame++ {
+		sky = makeWallpaper(width, height, frame)
+		next := starCells(sky)
+		stepped := 0
+		for cell := range next {
+			if previous[cell] {
+				continue
+			}
+			stepped++
+			if cell[0] == 0 || cell[0] == width-1 || cell[1] == 0 || cell[1] == height-1 {
+				continue // drifting in from beyond the edge
+			}
+			near := false
+			for dy := -1; dy <= 1 && !near; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					if n := [2]int{cell[0] + dx, cell[1] + dy}; previous[n] || covered[n] {
+						near = true
+						break
+					}
+				}
+			}
+			if !near {
+				t.Fatalf("frame %d: a star jumped to %v", frame, cell)
+			}
+		}
+		// A satellite or meteor crossing a star also changes cells; allow
+		// for them, but the field as a whole must never step at once.
+		if stepped > len(next)/6+4 {
+			t.Fatalf("frame %d: %d of %d stars stepped together", frame, stepped, len(next))
+		}
+		moved += stepped
+		previous, covered = next, coveredCells(sky)
+	}
+	if moved < 50 {
+		t.Fatalf("the camera barely moved: %d star steps in 150 seconds", moved)
 	}
 }

@@ -32,6 +32,22 @@ var (
 	satellite   = rgb{132, 188, 196}
 )
 
+// The camera sways along a slow loop, at most cameraSway characters from
+// center, taking cameraPeriod frames for one sideways swing. Stars follow it
+// by depth: far dust barely moves, near bright stars move the most, so the
+// sky parallaxes. The core, its satellites and the name hold still in front.
+var (
+	cameraSway   = 3.0
+	cameraPeriod = 3000.0
+)
+
+// camera is the sway offset at frame f, in braille dots.
+func camera(f float64) (float64, float64) {
+	x := cameraSway * 2 * math.Sin(2*math.Pi*f/cameraPeriod)
+	y := cameraSway * 1.6 * math.Sin(2*math.Pi*f/(cameraPeriod*1.43)+1.1)
+	return x, y
+}
+
 // Satellite speed on each orbit, in braille dots per frame (10 frames a
 // second); the sign is the direction.
 var orbitSpeeds = [3]float64{0.45, -0.33, 0.24}
@@ -123,18 +139,29 @@ func makeWallpaper(width, height int, frame uint64) [][]wallCell {
 	}
 
 	// Stars breathe on their own slow periods (40 to 120 seconds) and never
-	// fall below their floor, so none of them blinks out.
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	// fall below their floor, so none of them blinks out. They are laid out
+	// on a grid a little larger than the screen, so the sway brings stars in
+	// at the edges rather than leaving them bare.
+	camX, camY := camera(f)
+	const margin = 5
+	for y := -margin; y < height+margin; y++ {
+		for x := -margin; x < width+margin; x++ {
 			v := cellHash(x, y)
 			period := 400 + float64(v%800)
 			breath := (1 + math.Sin(2*math.Pi*f/period+float64(v%628)/100)) / 2
+			// Each star's own depth staggers when it steps, so the field
+			// creeps instead of jumping all at once.
+			jitter := float64(v>>20%100) / 100
+			dot := func(depth float64, fg string) {
+				putDot(int(math.Round(float64(x*2+int(v>>8&1))+depth*camX)),
+					int(math.Round(float64(y*4+int(v>>9&3))+depth*camY)), fg, 2)
+			}
 			if v%613 == 0 {
 				// Most stars are cool; a few run warm or violet.
-				peak := starPeak
+				peak, depth := starPeak, 0.6+0.25*jitter
 				switch {
 				case v>>12%5 == 0:
-					peak = starBright
+					peak, depth = starBright, 0.9+0.1*jitter
 				case v>>14%7 == 0:
 					peak = warmPeak
 				case v>>14%7 == 1:
@@ -145,13 +172,12 @@ func makeWallpaper(width, height int, frame uint64) [][]wallCell {
 				if t := (frame + uint64(v>>4)) % glintEvery; t < glintLength {
 					glint = math.Pow(math.Sin(math.Pi*float64(t)/glintLength), 2)
 				}
-				fg := mix(lerp(starFloor, peak, 0.35+0.4*breath), glintPeak, 0.6*glint)
-				putDot(x*2+int(v>>8&1), y*4+int(v>>9&3), fg, 2)
+				dot(depth, mix(lerp(starFloor, peak, 0.35+0.4*breath), glintPeak, 0.6*glint))
 			} else if v%2089 == 0 {
 				put(x, y, '+', mix(starFloor, starPeak, 0.3+0.35*breath), 2)
 			} else if v%181 == 0 {
 				// Dust: far stars at the edge of seeing, for depth.
-				putDot(x*2+int(v>>8&1), y*4+int(v>>9&3), mix(starFloor, starPeak, 0.1+0.15*breath), 2)
+				dot(0.25+0.2*jitter, mix(starFloor, starPeak, 0.1+0.15*breath))
 			}
 		}
 	}
@@ -220,7 +246,9 @@ func makeWallpaper(width, height int, frame uint64) [][]wallCell {
 // smaller violet one circling it every eight minutes, both fading out
 // before the edges of the sky.
 func light(rows [][]wallCell, width, height int, f float64) {
-	mx, my := float64(width)*0.72, float64(height)*0.5
+	// The glow is far away: it follows the camera at a third of its sway.
+	camX, camY := camera(f)
+	mx, my := float64(width)*0.72+camX/6, float64(height)*0.5+camY/12
 	breath := 0.8 + 0.2*math.Sin(2*math.Pi*f/600)
 	orbit := 2 * math.Pi * f / 4800
 	vx, vy := mx+float64(width)*0.16*math.Cos(orbit), my+float64(height)*0.22*math.Sin(orbit)
