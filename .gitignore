@@ -26,3 +26,6 @@ build/
 # SwiftPM (desktop/)
 desktop/.build/
 desktop/.swiftpm/
+
+# Background run logs
+nohup.out

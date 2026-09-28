@@ -3,6 +3,25 @@
 **Agents that extend themselves without asking. The human approves the
 boundary once, not every tool; the OS enforces it.**
 
+<!-- TODO: demo GIF here — Codex calls a tool, then tries to reach past its boundary and is faulted -->
+
+Coding agents ask permission for everything, so people stop reading the
+prompts and switch on full-auto. Skyra takes a different route: you grant an
+agent a boundary once, and the operating system enforces that boundary on
+every call, including calls to tools the agent writes for itself. Nothing an
+agent says can widen its own authority, and every step is recorded so the
+whole run can be replayed and checked.
+
+**What's here:** a runtime in standard-library Go that runs real Codex under
+per-call macOS sandboxes, with hash-chained records that replay
+byte-identically, and browser, terminal and native macOS clients on one
+protocol. Built solo over seven months, including a full rewrite of a working
+predecessor once its design flaw became clear ([how it got here](#how-it-got-here)).
+
+```sh
+./install.sh && skyra demo   # every scenario, each ending in a replay check
+```
+
 ## The problem
 
 Today's coding agents ask before they act: *allow this command? this tool?
@@ -123,7 +142,7 @@ restore. There is never live state to recover, only the tree.
   invoke, and every step it has taken, and prints one output.
 - **No secrets anywhere.** A stamp is a hash, verified by reading the tree.
 
-The code is about 3,400 lines of Go, standard library only, 23 tests. Start
+The code is about 5,700 lines of Go, standard library only, with 63 tests. Start
 with [`controller/machine/machine.go`](controller/machine/machine.go); the
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
