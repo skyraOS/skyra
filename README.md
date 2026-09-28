@@ -3,7 +3,7 @@
 **Agents that extend themselves without asking. The human approves the
 boundary once, not every tool; the OS enforces it.**
 
-<!-- TODO: demo GIF here — Codex calls a tool, then tries to reach past its boundary and is faulted -->
+![skyra demo: each scenario commits its records, faults what reaches past its boundary, and replays byte-identically](assets/demo.gif)
 
 Coding agents ask permission for everything, so people stop reading the
 prompts and switch on full-auto. Skyra takes a different route: you grant an
@@ -250,6 +250,7 @@ desktop/      Skyra.app: the SwiftUI client and entry point (next/23)
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
 history/      DNA-19 and the earlier specs, kept for reference
+assets/       the README demo GIF and the VHS tape that records it
 ```
 
 Everything older is preserved at the git tag `pre-cleanup`.
