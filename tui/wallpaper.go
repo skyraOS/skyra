@@ -101,6 +101,12 @@ func sweep(a, at float64) float64 {
 // makeWallpaper draws a deterministic frame in blank transcript space. The
 // ticker advances frame; typing by itself does not change the sky.
 func makeWallpaper(width, height int, frame uint64) [][]wallCell {
+	return drawSky(width, height, frame, nil)
+}
+
+// drawSky draws the sky with the satellites' tails from sim, or on their
+// orbits when sim is nil.
+func drawSky(width, height int, frame uint64, sim *skySim) [][]wallCell {
 	rows := make([][]wallCell, height)
 	for y := range rows {
 		rows[y] = make([]wallCell, width)
@@ -187,22 +193,22 @@ func makeWallpaper(width, height int, frame uint64) [][]wallCell {
 
 	// Three orbits share a center. The orbits themselves are not drawn: a
 	// satellite with a short tail travels each one, and is the only trace of
-	// its path.
-	cx, cy := float64(width*2)*0.72, float64(height*4)*0.5
-	rings := [3][2]float64{{0.18, 0.26}, {0.31, 0.45}, {0.44, 0.63}}
-	satellites := [3]float64{}
-	for ringIndex, ring := range rings {
-		rx, ry := float64(width*2)*ring[0], float64(height*4)*ring[1]
-		at := float64(ringIndex)*2.1 + f*orbitSpeeds[ringIndex]/((rx+ry)/2)
-		satellites[ringIndex] = at
-		// The tail trails the satellite, one and a half dots apart.
-		back := -math.Copysign(1, orbitSpeeds[ringIndex])
-		a := at
-		for i := 5; i >= 0; i-- {
-			ta := at + back*float64(i)*1.5/math.Hypot(rx*math.Sin(a), ry*math.Cos(a))
-			x := int(math.Round(cx + rx*math.Cos(ta)))
-			y := int(math.Round(cy + ry*math.Sin(ta)))
-			putDot(x, y, mix(tailFloor, satellite, math.Pow(0.62, float64(i))), 4)
+	// its path, unless the pointer has drawn it away.
+	var tails [3][]point
+	if sim != nil && (sim.width != width || sim.height != height) {
+		sim = nil
+	}
+	if sim != nil {
+		tails = sim.tails()
+	} else {
+		for ring := range tails {
+			tails[ring] = orbitTrail(width, height, ring, f)
+		}
+	}
+	for _, tail := range tails {
+		for i := len(tail) - 1; i >= 0; i-- {
+			putDot(int(math.Round(tail[i][0])), int(math.Round(tail[i][1])),
+				mix(tailFloor, satellite, math.Pow(0.62, float64(i))), 4)
 		}
 	}
 
@@ -232,9 +238,14 @@ func makeWallpaper(width, height int, frame uint64) [][]wallCell {
 	// The name is a star-chart label: barely there until the middle orbit's
 	// light passes it, then it recedes again.
 	lx, ly := int(float64(width)*0.59), int(float64(height)*0.7)
-	rx, ry := float64(width*2)*rings[1][0], float64(height*4)*rings[1][1]
+	cx, cy := orbitCenter(width, height)[0], orbitCenter(width, height)[1]
+	rx, ry := float64(width*2)*orbitRings[1][0], float64(height*4)*orbitRings[1][1]
 	labelAngle := math.Atan2((float64(ly*4)-cy)/ry, (float64(lx*2+8)-cx)/rx)
-	labelFG := mix(labelFloor, labelPeak, 0.15+0.85*sweep(labelAngle, satellites[1]))
+	_, middle := orbit(width, height, 1, f)
+	if sim != nil {
+		middle = sim.angle(1, f)
+	}
+	labelFG := mix(labelFloor, labelPeak, 0.15+0.85*sweep(labelAngle, middle))
 	for i, r := range "s k y r a" {
 		put(lx+i, ly, r, labelFG, 5)
 	}

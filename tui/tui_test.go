@@ -202,3 +202,49 @@ func TestCtrlCClearsTheComposerAndTwiceQuits(t *testing.T) {
 		t.Fatal("second ctrl+c on an empty composer did not quit")
 	}
 }
+
+func TestTitleRecedesInAConversationAndReturnsWhenEmpty(t *testing.T) {
+	a := app{width: 120, height: 35}
+	for i := 0; i < 25; i++ {
+		before := a.titleOpen
+		a.stepSky()
+		if a.titleOpen-before > titleFade+1e-9 {
+			t.Fatal("the title opened in a jump")
+		}
+	}
+	if a.titleOpen != 1 {
+		t.Fatalf("an empty session left the title at %.2f", a.titleOpen)
+	}
+	a.conversations = []conversation{{ID: "c", Phase: "ready", Entries: []entry{{Role: "user", Text: "hi"}}}}
+	a.selected = "c"
+	for i := 0; i < 25; i++ {
+		a.stepSky()
+	}
+	if a.titleOpen != 0 {
+		t.Fatalf("a conversation left the title at %.2f", a.titleOpen)
+	}
+}
+
+func TestHeaderFloatsOnTheSky(t *testing.T) {
+	a := app{width: 120, height: 35}
+	screen := a.compose()
+	sky := newCanvas(120, 35, 0, nil).pixels()
+	for x := 20; x < 80; x++ { // between the title and the status
+		if screen[0][x].bg != sky[0][x].bg {
+			t.Fatalf("the header row is covered at column %d", x)
+		}
+	}
+}
+
+func TestLightBrightensTheTitle(t *testing.T) {
+	dark, _ := titleColors(0, 0)
+	lit, _ := titleColors(0, 1)
+	if dark == lit {
+		t.Fatal("light did not change the title")
+	}
+	_, receded := titleColors(0, 0)
+	_, open := titleColors(1, 0)
+	if receded == open {
+		t.Fatal("opening did not change the title")
+	}
+}

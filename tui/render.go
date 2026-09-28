@@ -31,7 +31,6 @@ type segment struct{ fg, text string }
 // How much of the sky each surface covers: the sky shows through every
 // panel, dimmed, so the whole screen is one background.
 const (
-	headerAlpha   = 0.7
 	messageAlpha  = 0.84
 	composerAlpha = 0.8
 )
@@ -45,11 +44,12 @@ type pixel struct {
 // canvas is the screen being composed: the sky first, then translucent
 // panels and text on top.
 type canvas struct {
-	w, h  int
-	cells [][]pixel
-	fg    [][]rgb
-	bg    [][]rgb
-	marks [][]rune
+	w, h       int
+	titleLight float64 // how lit the title is by a satellite or meteor near it
+	cells      [][]pixel
+	fg         [][]rgb
+	bg         [][]rgb
+	marks      [][]rune
 }
 
 func parseRGB(s string) rgb {
@@ -58,9 +58,9 @@ func parseRGB(s string) rgb {
 	return c
 }
 
-func newCanvas(w, h int, frame uint64) *canvas {
+func newCanvas(w, h int, frame uint64, sim *skySim) *canvas {
 	c := &canvas{w: w, h: h}
-	sky := makeWallpaper(w, h, frame)
+	sky := drawSky(w, h, frame, sim)
 	for y := 0; y < h; y++ {
 		fgRow, bgRow, markRow := make([]rgb, w), make([]rgb, w), make([]rune, w)
 		for x, cell := range sky[y] {
@@ -72,7 +72,36 @@ func newCanvas(w, h int, frame uint64) *canvas {
 		}
 		c.fg, c.bg, c.marks = append(c.fg, fgRow), append(c.bg, bgRow), append(c.marks, markRow)
 	}
+	// A satellite or meteor passing the title lights it. Rows are about
+	// twice as tall as columns are wide, so rows count double.
+	for y := 0; y < min(h, 4); y++ {
+		for x := 0; x < min(w, 16); x++ {
+			if p := sky[y][x].priority; p == 3 || p == 4 {
+				dx, dy := float64(x-4), float64(2*y)
+				c.titleLight = math.Max(c.titleLight, math.Exp(-(dx*dx+dy*dy)/40))
+			}
+		}
+	}
 	return c
+}
+
+// The title's light, from receded (a conversation is on screen) through open
+// (an empty session) to lit (something in the sky passing it).
+var (
+	titleWordReceded = rgb{28, 34, 44}
+	titleWordOpen    = rgb{74, 84, 100}
+	titleWordLit     = rgb{132, 150, 166}
+	titleMarkReceded = rgb{52, 84, 92}
+	titleMarkOpen    = rgb{96, 154, 162}
+	titleMarkLit     = rgb{150, 208, 214}
+)
+
+// titleColors are the mark's and word's colors for how open the title is
+// (0 to 1) and how lit.
+func titleColors(open, lit float64) (mark, word string) {
+	mark = mix(lerp(titleMarkReceded, titleMarkOpen, open), titleMarkLit, lit)
+	word = mix(lerp(titleWordReceded, titleWordOpen, open), titleWordLit, lit)
+	return mark, word
 }
 
 // panel lays a translucent color over a rectangle; marks beneath it stay,
@@ -174,7 +203,7 @@ func (a *app) draw() {
 	frame := a.compose()
 	if frame == nil {
 		a.screen = nil
-		c := newCanvas(a.width, a.height, a.wallFrame)
+		c := newCanvas(a.width, a.height, a.wallFrame, nil)
 		c.segments(0, 0, a.width, segment{faint, " ✦ "}, segment{dim, "skyra · enlarge terminal"})
 		fmt.Print("\x1b[2J" + paint(nil, c.pixels(), 1, 1))
 		return
@@ -203,7 +232,7 @@ func (a *app) compose() [][]pixel {
 	if h < 10 || w < 35 {
 		return nil
 	}
-	c := newCanvas(w, h, a.wallFrame)
+	c := newCanvas(w, h, a.wallFrame, a.sim)
 
 	status, statusColor := "offline", red
 	if a.connected {
@@ -213,8 +242,11 @@ func (a *app) compose() [][]pixel {
 	if cur := a.current(); cur != nil {
 		phase = cur.Phase
 	}
-	c.panel(0, 0, w, 1, raised, headerAlpha)
-	c.segments(0, 0, w, segment{accent, " ✦ "}, segment{dim, "skyra"})
+	// The title floats on the sky in near-sky tones: readable on an empty
+	// session, receding to little more than its mark once a conversation is
+	// on screen.
+	markColor, wordColor := titleColors(a.titleOpen, c.titleLight)
+	c.segments(0, 0, w, segment{markColor, " ✦ "}, segment{wordColor, "skyra"})
 	right := []segment{{faint, phase + "   "}, {statusColor, "•"}, {dim, " " + status + " "}}
 	rightWidth := 0
 	for _, s := range right {
@@ -285,7 +317,7 @@ func (a *app) compose() [][]pixel {
 	if a.notice != "" {
 		footer = []segment{{dim, "  " + a.notice}}
 	} else {
-		for i, k := range [][2]string{{"enter", "send"}, {"^n", "new"}, {"pgup/pgdn", "scroll"}, {"^c", "clear"}, {"^d", "close"}, {"^c ^c", "quit"}} {
+		for i, k := range [][2]string{{"enter", "send"}, {"^n", "new"}, {"pgup/pgdn", "scroll"}, {"^c", "clear"}, {"^d", "close"}, {"^t", "mouse"}, {"^c ^c", "quit"}} {
 			sep := "   "
 			if i == 0 {
 				sep = "  "
