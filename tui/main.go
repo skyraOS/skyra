@@ -62,6 +62,7 @@ type app struct {
 	conversations []conversation
 	selected      string
 	input         []rune
+	caret         int // position in input, in runes
 	opening       bool
 	openBefore    string
 	pendingText   string
@@ -312,62 +313,114 @@ func socketLoop(ctx context.Context, addr string, events chan<- event) {
 func keyLoop(events chan<- event) {
 	r := bufio.NewReader(os.Stdin)
 	for {
-		b, err := r.ReadByte()
+		e, err := readEvent(r)
 		if err != nil {
 			events <- event{kind: "input-error", err: err}
 			return
 		}
-		key := string(b)
-		if b == 0x1b {
-			second, err := r.ReadByte()
-			if err != nil {
-				continue
-			}
-			if second != '[' {
-				continue
-			}
-			third, err := r.ReadByte()
-			if err != nil {
-				continue
-			}
-			switch third {
-			case '<':
-				if e, ok := readMouse(r); ok {
-					events <- e
-				}
-				continue
-			case 'O':
-				events <- event{kind: "focus-out"}
-				continue
-			case 'I':
-				continue // focus in: the next motion report places the pointer
-			case 'A':
-				key = "up"
-			case 'B':
-				key = "down"
-			case '5', '6':
-				_, _ = r.ReadByte() // trailing ~
-				if third == '5' {
-					key = "pageup"
-				} else {
-					key = "pagedown"
-				}
-			default:
-				continue
-			}
-		} else if b >= utf8.RuneSelf {
-			buf := []byte{b}
-			for !utf8.FullRune(buf) && len(buf) < 4 {
-				c, e := r.ReadByte()
-				if e != nil {
-					break
-				}
-				buf = append(buf, c)
-			}
-			key = string(buf)
+		if e.kind != "" {
+			events <- e
 		}
-		events <- event{kind: "key", key: key}
 	}
+}
+
+// readEvent reads one key, mouse report or focus change. Escape sequences
+// are always read to their end, so an unknown one is dropped whole rather
+// than leaking characters into the draft. An empty kind means nothing to do.
+func readEvent(r *bufio.Reader) (event, error) {
+	b, err := r.ReadByte()
+	if err != nil {
+		return event{}, err
+	}
+	switch {
+	case b == 0x1b:
+		return readEscape(r), nil
+	case b >= utf8.RuneSelf:
+		buf := []byte{b}
+		for !utf8.FullRune(buf) && len(buf) < 4 {
+			c, err := r.ReadByte()
+			if err != nil {
+				break
+			}
+			buf = append(buf, c)
+		}
+		return event{kind: "key", key: string(buf)}, nil
+	}
+	return event{kind: "key", key: string(b)}, nil
+}
+
+func readEscape(r *bufio.Reader) event {
+	second, err := r.ReadByte()
+	if err != nil {
+		return event{}
+	}
+	key := func(k string) event {
+		if k == "" {
+			return event{} // a key this client does not use
+		}
+		return event{kind: "key", key: k}
+	}
+	switch second {
+	case 'b':
+		return key("word-left") // Option+Left in macOS Terminal
+	case 'f':
+		return key("word-right")
+	case 'O': // SS3: arrows in application mode
+		third, err := r.ReadByte()
+		if err != nil {
+			return event{}
+		}
+		return key(map[byte]string{'A': "up", 'B': "down", 'C': "right", 'D': "left", 'H': "home", 'F': "end"}[third])
+	case '[':
+	default:
+		return event{}
+	}
+	first, err := r.ReadByte()
+	if err != nil {
+		return event{}
+	}
+	if first == '<' {
+		if e, ok := readMouse(r); ok {
+			return e
+		}
+		return event{}
+	}
+	// A CSI sequence: parameter bytes, then one final byte.
+	var params []byte
+	final := first
+	for final >= 0x30 && final <= 0x3f && len(params) < 16 {
+		params = append(params, final)
+		if final, err = r.ReadByte(); err != nil {
+			return event{}
+		}
+	}
+	p := string(params)
+	modified := strings.Contains(p, ";") // Ctrl, Option or Shift held
+	switch final {
+	case 'A':
+		return key("up")
+	case 'B':
+		return key("down")
+	case 'C':
+		if modified {
+			return key("word-right")
+		}
+		return key("right")
+	case 'D':
+		if modified {
+			return key("word-left")
+		}
+		return key("left")
+	case 'H':
+		return key("home")
+	case 'F':
+		return key("end")
+	case 'O':
+		return event{kind: "focus-out"}
+	case '~':
+		return key(map[string]string{"1": "home", "7": "home", "4": "end", "8": "end", "3": "delete", "5": "pageup", "6": "pagedown"}[strings.Split(p, ";")[0]])
+	}
+	return event{} // focus in, and anything else
 }
 
 func (a *app) receive(raw []byte) {
@@ -382,7 +435,7 @@ func (a *app) receive(raw []byte) {
 			return
 		}
 		if a.incarnation != "" && m.UIIncarnation != a.incarnation && a.opening {
-			a.input = []rune(a.pendingText)
+			a.setInput([]rune(a.pendingText))
 			a.pendingText, a.opening = "", false
 			a.notice = "host restarted; draft kept, press Enter to send"
 		}
@@ -407,7 +460,7 @@ func (a *app) receive(raw []byte) {
 	case "rejected":
 		a.notice = m.Code + ": " + m.Message
 		if a.opening {
-			a.input = []rune(a.pendingText)
+			a.setInput([]rune(a.pendingText))
 			a.pendingText, a.opening = "", false
 		}
 	case "accepted":
@@ -452,7 +505,8 @@ func (a *app) startNew(text string) {
 	}
 	if a.opening {
 		if a.pendingText == "" && text != "" {
-			a.pendingText, a.input = text, nil
+			a.pendingText = text
+			a.setInput(nil)
 		}
 		return
 	}
@@ -462,9 +516,43 @@ func (a *app) startNew(text string) {
 	}
 	if a.send(map[string]string{"type": "open-conversation", "requestId": requestID()}) {
 		a.opening, a.openBefore, a.pendingText = true, before, text
-		a.input = nil
+		a.setInput(nil)
 		a.notice = "opening a conversation…"
 	}
+}
+
+// setInput replaces the draft and puts the caret at its end.
+func (a *app) setInput(r []rune) {
+	a.input, a.caret = r, len(r)
+}
+
+// textWidth is how many characters fit on one line of the composer.
+func (a *app) textWidth() int {
+	return max(1, a.width-8)
+}
+
+// wordLeft and wordRight are where Ctrl or Option with an arrow lands: the
+// start of the previous word, or just past the end of the next.
+func (a *app) wordLeft() int {
+	i := a.caret
+	for i > 0 && unicode.IsSpace(a.input[i-1]) {
+		i--
+	}
+	for i > 0 && !unicode.IsSpace(a.input[i-1]) {
+		i--
+	}
+	return i
+}
+
+func (a *app) wordRight() int {
+	i := a.caret
+	for i < len(a.input) && unicode.IsSpace(a.input[i]) {
+		i++
+	}
+	for i < len(a.input) && !unicode.IsSpace(a.input[i]) {
+		i++
+	}
+	return i
 }
 
 const quitNotice = "press ctrl+c again to quit"
@@ -479,7 +567,7 @@ func (a *app) key(k string) bool {
 	switch k {
 	case "\x03": // Ctrl+C: clear the composer; on an empty one, twice quits
 		if len(a.input) > 0 {
-			a.input = nil
+			a.setInput(nil)
 		} else if a.quitArmed {
 			return true
 		} else {
@@ -505,15 +593,52 @@ func (a *app) key(k string) bool {
 		a.scroll += max(3, a.height/2)
 	case "pagedown":
 		a.scroll = max(0, a.scroll-max(3, a.height/2))
+	case "left":
+		a.caret = max(0, a.caret-1)
+	case "right":
+		a.caret = min(len(a.input), a.caret+1)
+	case "word-left":
+		a.caret = a.wordLeft()
+	case "word-right":
+		a.caret = a.wordRight()
+	case "home", "\x01": // Home, Ctrl+A
+		a.caret = 0
+	case "end", "\x05": // End, Ctrl+E
+		a.caret = len(a.input)
+	case "up": // up a line of a long draft, else scroll the transcript
+		if a.caret >= a.textWidth() {
+			a.caret -= a.textWidth()
+		} else {
+			a.scroll++
+		}
+	case "down":
+		if a.caret/a.textWidth() < len(a.input)/a.textWidth() {
+			a.caret = min(len(a.input), a.caret+a.textWidth())
+		} else {
+			a.scroll = max(0, a.scroll-1)
+		}
 	case "\x04": // Ctrl+D: close
-		if c := a.current(); c != nil && (c.Phase == "ready" || c.Phase == "failed") {
+		c := a.current()
+		switch {
+		case c == nil:
+			a.notice = "no session to close"
+		case c.Phase == "ready" || c.Phase == "failed":
 			a.send(map[string]string{"type": "close-interaction", "uiIncarnation": a.incarnation, "conversation": c.ID, "requestId": requestID()})
+		case c.Phase == "closed":
+			a.notice = "this session is already closed"
+		default:
+			a.notice = "agent working; close the session when it finishes"
 		}
 	case "\x15":
-		a.input = nil // Ctrl+U
+		a.setInput(nil) // Ctrl+U
 	case "\x7f", "\b":
-		if len(a.input) > 0 {
-			a.input = a.input[:len(a.input)-1]
+		if a.caret > 0 {
+			a.input = append(a.input[:a.caret-1], a.input[a.caret:]...)
+			a.caret--
+		}
+	case "delete":
+		if a.caret < len(a.input) {
+			a.input = append(a.input[:a.caret], a.input[a.caret+1:]...)
 		}
 	case "\r", "\n":
 		c := a.current()
@@ -529,7 +654,8 @@ func (a *app) key(k string) bool {
 			a.startNew(text)
 		} else if c != nil && c.Phase == "ready" && a.connected && a.incarnation != "" {
 			if a.send(map[string]string{"type": "submit", "uiIncarnation": a.incarnation, "conversation": c.ID, "requestId": requestID(), "text": text}) {
-				a.input, a.scroll = nil, 0
+				a.setInput(nil)
+				a.scroll = 0
 			}
 		} else if c == nil || c.Phase == "closed" || c.Phase == "failed" {
 			a.startNew(text)
@@ -541,9 +667,11 @@ func (a *app) key(k string) bool {
 			a.notice = "message limit reached"
 			break
 		}
-		r, _ := utf8.DecodeRuneInString(k)
-		if r != utf8.RuneError && unicode.IsPrint(r) {
-			a.input = append(a.input, r)
+		r, size := utf8.DecodeRuneInString(k)
+		if r != utf8.RuneError && size == len(k) && unicode.IsPrint(r) {
+			a.caret = min(a.caret, len(a.input))
+			a.input = append(a.input[:a.caret], append([]rune{r}, a.input[a.caret:]...)...)
+			a.caret++
 		}
 	}
 	return false

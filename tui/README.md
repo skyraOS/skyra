@@ -16,6 +16,11 @@ skyra tui --fake      no model or login
 | Enter | Send a message; the first message opens a fresh session |
 | Ctrl+N | Clear the view so the next message starts another fresh session |
 | Page Up / Page Down, mouse wheel | Scroll the transcript |
+| Left / Right | Move through the draft |
+| Ctrl or Option + Left / Right | Move by word |
+| Home / End, Ctrl+A / Ctrl+E | Start or end of the draft |
+| Up / Down | Move between lines of a long draft; otherwise scroll the transcript a line |
+| Backspace / Delete | Delete before or after the cursor |
 | Ctrl+U | Clear the composer |
 | Ctrl+D | Close the current session |
 | Ctrl+T | Turn mouse tracking off (to select text) and back on |

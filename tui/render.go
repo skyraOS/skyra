@@ -290,14 +290,17 @@ func (a *app) compose() [][]pixel {
 	if ready {
 		prompt = accent
 	}
-	textWidth := readingWidth - 4
+	textWidth := a.textWidth()
 	contentRows := composerHeight - 2
 	contentOffset := 1
 	if composerHeight == 1 {
 		contentRows, contentOffset = 1, 0
 	}
+	// The composer shows the lines around the caret.
+	a.caret = max(0, min(a.caret, len(a.input)))
 	lineCount := len(a.input)/textWidth + 1
-	firstLine := max(0, lineCount-contentRows)
+	caretLine := a.caret / textWidth
+	firstLine := max(0, caretLine-contentRows+1)
 	top := 2 + bodyHeight
 	c.panel(inset, top, readingWidth, composerHeight, composer, composerAlpha)
 	for r := 0; r < contentRows; r++ {
@@ -327,8 +330,8 @@ func (a *app) compose() [][]pixel {
 	}
 	c.segments(0, top+composerHeight+1, w, footer...)
 
-	a.cursorRow = top + contentOffset + lineCount - firstLine
-	a.cursorCol = inset + 4 + len(a.input)%textWidth
+	a.cursorRow = top + contentOffset + caretLine - firstLine + 1
+	a.cursorCol = inset + 4 + a.caret%textWidth
 	return c.pixels()
 }
 
@@ -362,6 +365,8 @@ func (a *app) transcript(width, height int) []line {
 	if c.Phase == "pending" {
 		all = append(all, line{"", surface, ink, ""}, line{"working…", raised, dim, faint})
 	}
+	// Scrolling stops at the first line, so scrolling back down answers at once.
+	a.scroll = max(0, min(a.scroll, len(all)-height))
 	start := max(0, len(all)-height-a.scroll)
 	if start+height > len(all) {
 		start = max(0, len(all)-height)
