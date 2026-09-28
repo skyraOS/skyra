@@ -34,7 +34,7 @@ not production integration; network egress remains broad. See its README for
 the grants, evidence and limits.
 
 Follow-up integration: new real-provider launches from `skyra` require the
-profile in `controller/provider/`, isolated configuration and scratch, and a
+profile in `controller/codex/provider/`, isolated configuration and scratch, and a
 successful initialization check. The adapter now interrupts native attempts
 and confirms that the exact turn has ended before emitting the horizon fault.
 The host and runtime remain generic. Existing running sessions are not
@@ -80,7 +80,7 @@ access. Its `HOME` now points to its isolated `CODEX_HOME`.
 | One `CODEX_HOME` per process, `config.toml` read-only, `HOME`/`TMPDIR` inside granted paths | new launches isolate CODEX_HOME, HOME and TMPDIR and protect config | **No resident-mode blocker** for isolating today's host. Per-thread homes still depend on per-thread launch |
 | Auth: an API key in the environment, or one shared `auth.json` granted by `literal` | the user's own login | **Unverified** (concurrent refresh, how `auth.json` is written) and **Blocked** on the per-process home |
 | Step 3 tool removal: the `--disable` list, `environments: []`, `model_catalog_json`, `web_search = "disabled"`, `image_generation` off | `thread/start` sends `environments: []` and retains read-only/never; the launcher disables unrelated integrations and web search with direct tool mode and no code-mode helper | **Partially implemented**. Flags do not prove native-tool removal; `model_catalog_json` remains **Unverified** |
-| Step 4: the app-server's Seatbelt profile | new real-provider launches require the shared tested profile through `controller/provider`; file/exec denials and inference are tested | **Partially implemented**. Egress restriction, auth refresh and authority-derived rendering remain; no resident-mode blocker |
+| Step 4: the app-server's Seatbelt profile | new real-provider launches require the shared tested profile through `controller/codex/provider`; file/exec denials and inference are tested | **Partially implemented**. Egress restriction, auth refresh and authority-derived rendering remain; no resident-mode blocker |
 | Step 4: the egress proxy | absent | **Blocked**: who launches and owns it is an open item in 17 |
 | Switching threads to `danger-full-access` | the adapter requires `readOnly` | **Unsafe alone**. Turning Codex's own sandbox off before ours is in place would remove the only sandbox the app-server has |
 | Step 5 developer instructions ("blocked by the operating system") | the old one-liner | **Unsafe alone**: the new wording would be false until step 4 exists |
@@ -98,9 +98,9 @@ access. Its `HOME` now points to its isolated `CODEX_HOME`.
 | The connection as a custody resource in the production frame stack and `park.Frame` | an experimental manifest (`kind`, `owner`, `incarnation`) in the harness | **Blocked** as above |
 | Capabilities `codex.start`, `codex.exchange`, `codex.inspect`, `codex.stop` with contracts | not registered; the experiment's ops are journal entries | **Blocked** on the resident mode. `inspect` has not been built even in the experiment |
 | The adapter's lifecycle rules (idle limit, inspect, stop then start) | absent | **Blocked** on the capabilities |
-| The adapter emitting invocations instead of dialing the host | `controller/codex` still dials `SKYRA_CONNECT` and reads the host's inbox | **Blocked** on the capabilities |
+| The adapter emitting invocations instead of dialing the host | `controller/codex/adapter` still dials `SKYRA_CONNECT` and reads the host's inbox | **Blocked** on the capabilities |
 | State as returns, not a host inbox | the host's `inbox.jsonl` and `deliveries.jsonl` are still the record of Codex | **Blocked** on the refactored adapter |
-| Retiring `controller/host` for Codex | still in use | **Blocked** on all of the above |
+| Retiring `controller/hosts/actor` for Codex | still in use | **Blocked** on all of the above |
 | One app-server process per thread | one app-server per host, shared by every conversation | **Blocked** on the resident mode; its cost per process is **Unverified** |
 | Grants as Horizon fields: the ceiling, and a subset per invocation | owner and incarnation checks in the experiment's manifest only | **Blocked** on 17's step 1 fields |
 | Removing a stopped connection from custody | the experiment keeps the dead descriptor | **No blocker** in design; waits for the production resource model |

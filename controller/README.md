@@ -3,7 +3,7 @@
 Date: 2026-09-27  
 Status: runnable. Standard library only; macOS (uses `sandbox-exec`). A
 deterministic fake Codex app-server for the demo and tests is in
-[`fakecodex/`](fakecodex/).
+[`codex/fake/`](codex/fake/).
 The design is in [`../design/`](../design/) and [`../next/`](../next/).
 
 ```sh
@@ -23,50 +23,78 @@ record tree in `.skyra/`.
 | | Built | Where |
 |---|---|---|
 | **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": capability, "payload": JSON}` or plain text, and `interpret` derives invoke, return or a typed fault (`malformed`, `horizon`, `contract`, `custody`) | `machine.interpret` |
-| **Input contracts** | Every surface declares an input contract and a return contract (the `reply` capability's input contract), and what it may be granted. Fit is strict | `contract/`, `*/contract.json` |
+| **Input contracts** | Every surface declares an input contract and a return contract (the `reply` capability's input contract), and what it may be granted. Fit is strict | `core/contract/`, `targets/*/contract.json` |
 | **Authority only narrows** | A child is granted only surfaces its parent holds. A registry entry can attenuate a child's file, process, Mach and socket grants; `Narrow` checks each grant against the parent's reachable ceiling. The tool sandbox is rendered from those grants; `.skyra/` is always denied | `machine.Narrow`, `horizon.Render` |
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a reply discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
-| **Adapters** | A stateless Codex adapter invokes recorded start, exchange, inspect and stop operations on a resident process; the browser host holds parked conversations | `codexresident/`, `codexio/`, `webhost/` |
-| **Provider sandbox** | The runtime launches each Codex process under a registered Seatbelt profile with private state and a per-actor allowlisted egress proxy | `instance/`, `provider/` |
-| **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event before emitting its horizon fault; runtime transitions remain provider-agnostic | `codexresident/` |
+| **Adapters** | A stateless Codex adapter invokes recorded start, exchange, inspect and stop operations on a resident process; the browser host holds parked conversations | `codex/resident/`, `codex/io/`, `hosts/web/` |
+| **Provider sandbox** | The runtime launches each Codex process under a registered Seatbelt profile with private state and a per-actor allowlisted egress proxy | `runtime/instance/`, `codex/provider/` |
+| **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event before emitting its horizon fault; runtime transitions remain provider-agnostic | `codex/resident/` |
 | **Real Codex** | Codex's tool calls become derived invokes of leaves that run under their own sandbox; a native command becomes a horizon fault | `skyra ask`, `skyra` |
-| **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds custody (the frame stack) until an outside event arrives, then resumes it; the successor checks the event like any output | `machine.parked`, `park/`, `skyra resume` |
-| **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `user/`, `webhost/` |
+| **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds custody (the frame stack) until an outside event arrives, then resumes it; the successor checks the event like any output | `machine.parked`, `runtime/park/`, `skyra resume` |
+| **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `targets/user/`, `hosts/web/` |
 
 ## Packages
 
-One directory per owner. Imports only run downward, and `machine` is pure:
-`TestMachineIsPure` fails if it imports anything that touches the OS, the tree
-or the network.
+Five groups, by what a package is. Imports only run downward: `core/` imports
+nothing outside itself, `runtime/` builds on `core/`, the web host builds on
+`runtime/`, and the programs under `targets/` and `codex/` share no code with
+any of them. `core/` is pure,
+and `TestMachineIsPure` fails if `machine` imports anything that touches the
+OS, the tree or the network.
 
-| Package | Owns | Pure? |
-|---|---|---|
-| [`contract`](contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads | yes |
-| [`horizon`](horizon/) | Authority: `Surface` (contracts, grants, sockets), `Horizon` (reach, the frame its reply discharges, the continuation waiting on it), `Render` (the Seatbelt profile) | yes |
-| [`record`](record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` | yes |
-| [`machine`](machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, resolve. **Pure, enforced** | yes |
-| [`registry`](registry/) | The operator's registry: surfaces, binaries (pinned by hash), contracts | no |
-| [`tree`](tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` | no |
-| [`handshake`](handshake/) | The parent ↔ successor socket: messages plus the frame stack as fds | no |
-| [`instance`](instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions | no |
-| [`replay`](replay/) | Re-derives a lineage from genesis with the machine | reads only |
-| [`boot`](boot/) | The operator: genesis, the seed, then waits for its frame (kqueue) | no |
-| [`skyra`](skyra/) | The command: argv and flags only | — |
-| [`echo`](echo/) | An untrusted leaf. Prints its text | — |
-| [`read`](read/) | An untrusted leaf. Reads a range of a UTF-8 file, or lists a directory, under a workspace read grant; replies with a typed observation (path, sha256, lines, text) | — |
-| [`agent`](agent/) | A fake continuation: calls echo, then replies with what it said | — |
-| [`host`](host/) | Legacy actor host, retained for earlier tests; current chat does not launch it | — |
-| [`codex`](codex/) | Legacy Codex adapter, retained for earlier tests | — |
-| [`codexresident`](codexresident/) | Stateless Codex protocol and lifecycle decisions | — |
-| [`codexio`](codexio/) | One bounded operation on a granted resident connection | — |
-| [`park`](park/) | Parking a frame with a host, and resuming it | no |
-| [`user`](user/) | The user's side of a conversation: a continuation whose steps are the transcript | — |
-| [`browser`](browser/) | The browser's contract: an async surface, served by the webhost | — |
-| [`webhost`](webhost/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records | — |
+**[`core/`](core/): decides, never touches the OS**
 
-The targets (`echo`, `read`, `agent`, `codexresident`, `codexio`) share no code with skyra.
+| Package | Owns |
+|---|---|
+| [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads |
+| [`horizon`](core/horizon/) | Authority: `Surface` (contracts, grants, sockets), `Horizon` (reach, the frame its reply discharges, the continuation waiting on it), `Render` (the Seatbelt profile) |
+| [`record`](core/record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` |
+| [`machine`](core/machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, resolve. **Pure, enforced** |
+
+**[`runtime/`](runtime/): the I/O around the core, inside one step**
+
+| Package | Owns |
+|---|---|
+| [`instance`](runtime/instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions |
+| [`tree`](runtime/tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` |
+| [`replay`](runtime/replay/) | Re-derives a lineage from genesis with the machine; reads the tree, writes nothing |
+| [`boot`](runtime/boot/) | The operator: genesis, the seed, then waits for its frame (kqueue) |
+| [`registry`](runtime/registry/) | The operator's registry: surfaces, binaries (pinned by hash), contracts |
+| [`handshake`](runtime/handshake/) | The parent ↔ successor socket: messages plus the frame stack as fds |
+| [`custody`](runtime/custody/) | The manifest of non-frame descriptors carried beside a lineage |
+| [`park`](runtime/park/) | Parking a frame with a host, and resuming it |
+| [`trace`](runtime/trace/) | The process's log lines on stderr |
+
+**[`skyra/`](skyra/)**: the command: argv and flags only.
+
+**[`targets/`](targets/): programs run once under a rendered sandbox, each with its `contract.json`**
+
+| Package | What it is |
+|---|---|
+| [`echo`](targets/echo/) | An untrusted leaf. Prints its text |
+| [`read`](targets/read/) | An untrusted leaf. Reads a range of a UTF-8 file, or lists a directory, under a workspace read grant; replies with a typed observation (path, sha256, lines, text) |
+| [`agent`](targets/agent/) | A fake continuation: calls echo, then replies with what it said |
+| [`user`](targets/user/) | The user's side of a conversation: a continuation whose steps are the transcript |
+| [`browser`](targets/browser/) | The browser's contract: an async surface, served by the web host |
+
+**[`codex/`](codex/): every Codex semantic**
+
+| Package | What it is |
+|---|---|
+| [`resident`](codex/resident/) | Stateless Codex protocol and lifecycle decisions |
+| [`io`](codex/io/) | One bounded operation on a granted resident connection |
+| [`provider`](codex/provider/) | Launches each Codex process under its Seatbelt profile, with an allowlisted egress proxy (Python) |
+| [`fake`](codex/fake/) | A deterministic fake app-server, for the demo and tests |
+| [`adapter`](codex/adapter/) | Legacy Codex adapter, retained for the demo and earlier tests |
+
+**[`hosts/`](hosts/): the only long-lived processes, outside the step**
+
+| Package | What it is |
+|---|---|
+| [`web`](hosts/web/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records |
+| [`actor`](hosts/actor/) | Legacy universal actor host, retained for the demo and earlier tests; current chat does not launch it |
 
 ### Tool authority in the registry
 
@@ -211,7 +239,7 @@ sandbox that prohibits applying Seatbelt profiles.
 - **A fault ends the Codex turn it happened in.** The conversation goes on
   (the user side shows it), but Codex itself is not told within the turn;
   routing a horizon fault back into the same turn as an observation is still
-  [improvement 03](improvements/03-conversation-is-an-invocation.md).
+  [improvement 03](../design/improvements/03-conversation-is-an-invocation.md).
 - **Parked frames live in the webhost's memory.** fds cannot be written to
   disk: if the webhost stops, a waiting conversation stays viewable but cannot
   continue until restore exists.
@@ -223,8 +251,8 @@ sandbox that prohibits applying Seatbelt profiles.
 
 ## Improvements to carry forward
 
-[`improvements/`](improvements/): lessons from DNA-19, the predecessor, for the next version.
+[`design/improvements/`](../design/improvements/): lessons from DNA-19, the predecessor, for the next version.
 
-- [Profiles become input contracts](improvements/01-profiles-become-input-contracts.md)
-- [No silent refusals: a fault-tolerant async boundary](improvements/02-no-silent-refusals.md)
-- [A conversation is an invocation: logs, history and isolation](improvements/03-conversation-is-an-invocation.md)
+- [Profiles become input contracts](../design/improvements/01-profiles-become-input-contracts.md)
+- [No silent refusals: a fault-tolerant async boundary](../design/improvements/02-no-silent-refusals.md)
+- [A conversation is an invocation: logs, history and isolation](../design/improvements/03-conversation-is-an-invocation.md)

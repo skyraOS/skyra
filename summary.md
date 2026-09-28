@@ -479,10 +479,10 @@ tools run with zero approvals, and containment against an adversarial suite
 | To understand | Read |
 |---|---|
 | why any of this exists | [`grips-and-invariants.md`](grips-and-invariants.md) |
-| the code, package by package, and each decision's line | [`controller/README.md`](controller/README.md), starting at [`controller/machine/machine.go`](controller/machine/machine.go) |
+| the code, package by package, and each decision's line | [`controller/README.md`](controller/README.md), starting at [`controller/core/machine/machine.go`](controller/core/machine/machine.go) |
 | the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–22`](next/) |
 | faults, interrupts and memory | [`design/faults.md`](design/faults.md), [`design/durable-storage.md`](design/durable-storage.md) |
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
-| the Codex adapter and its sandbox | [`next/17`](next/17-app-server-custody.md), [`next/18`](next/18-app-server-spec-improvements.md), [`controller/codexresident/`](controller/codexresident/) |
+| the Codex adapter and its sandbox | [`next/17`](next/17-app-server-custody.md), [`next/18`](next/18-app-server-spec-improvements.md), [`controller/codex/resident/`](controller/codex/resident/) |
 | the newest tool | [`next/22-read-tool.md`](next/22-read-tool.md) |
 | the predecessor, and what it taught | [How it got here](README.md#how-it-got-here); the code is in git history (last at `b243b03`) |

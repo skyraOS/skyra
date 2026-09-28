@@ -61,8 +61,9 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  for t in skyra echo read agent codexresident codexio user webhost; do go build -o "$BUILD/controller/$t" "./controller/$t"; done
-  go build -o "$BUILD/controller/fake-codex" ./controller/fakecodex
+  local builds="skyra:skyra echo:targets/echo read:targets/read agent:targets/agent user:targets/user
+    codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake"
+  for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
   go build -o "$BUILD/tui" ./tui
 }
 
@@ -90,7 +91,7 @@ for private in [Path(os.environ['SKYRA_REGISTRY_STATE']), home/'.codex']:
         sys.exit(f'skyra: the workspace {workspace} overlaps {private}; start skyra in a project directory or set SKYRA_WORKSPACE')
 if workspace in (home, Path('/')) or not workspace.is_dir():
     sys.exit(f'skyra: {workspace} cannot be the workspace; start skyra in a project directory or set SKYRA_WORKSPACE')
-sys.path.insert(0,str(root/'controller/provider'))
+sys.path.insert(0,str(root/'controller/codex/provider'))
 from launch import FEATURES, verified_version
 from sandbox import native_binary
 mode=os.environ['SKYRA_REGISTRY_MODE']
@@ -103,25 +104,25 @@ if mode=='real':
     args.extend(['--enable','skip_host_skill_discovery','app-server','--listen','stdio://'])
     start={'path':str(binary),'resident_profile':'darwin-appserver-v1',
            'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
-           'proxy_path':str(root/'controller/provider/proxy.py'),'args':args}
+           'proxy_path':str(root/'controller/codex/provider/proxy.py'),'args':args}
 else:
     start={'path':str(build/'fake-codex')}
-start.update({'contract':str(root/'controller/codexio/start-contract.json'),
+start.update({'contract':str(root/'controller/codex/io/start-contract.json'),
               'resident':True,'resource_owner_depth':depth})
 registry={
- 'echo':{'path':str(build/'echo'),'contract':str(root/'controller/echo/contract.json')},
- 'read':{'path':str(build/'read'),'contract':str(root/'controller/read/contract.json'),
+ 'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
+ 'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
- 'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codexresident/contract.json')},
+ 'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.start':start,
- 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+ 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
                    'connection':True,'resource_owner_depth':depth},
- 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+ 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
                   'connection':True,'resource_owner_depth':depth},
- 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+ 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
                'connection':True,'close_connection':True,'resource_owner_depth':depth},
- 'user':{'path':str(build/'user'),'contract':str(root/'controller/user/contract.json')},
- 'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/browser/contract.json')}
+ 'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
+ 'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
 Path(os.environ['SKYRA_REGISTRY_FILE']).write_text(json.dumps(registry,sort_keys=True))
 PY
@@ -325,7 +326,7 @@ doctor() {
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
   warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"
-  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see startup-doc.md"
+  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see startup-doc.md"
   warn "port $WS_PORT free" 'port_free "$WS_PORT"' "set SKYRA_WS_PORT"
   warn "port $UI_PORT free" 'port_free "$UI_PORT"' "set SKYRA_UI_PORT"
   [ "$ok" = 1 ] || die "fix the FAIL lines above"

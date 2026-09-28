@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"skyra/controller/handshake"
+	"skyra/controller/runtime/handshake"
 )
 
 // TestResidentHelper is re-executed as real, separate runtime, provider, and

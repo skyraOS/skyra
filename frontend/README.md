@@ -1,7 +1,7 @@
 # Skyra frontend
 
 The browser client. `skyra` runs it against the **stateless controller**: the
-webhost ([`../controller/webhost`](../controller/webhost/)) serves it, holds
+web host ([`../controller/hosts/web`](../controller/hosts/web/)) serves it, holds
 every conversation waiting on you, and lists each conversation's history,
 derived from its records. It started as the client of DNA-19, the predecessor,
 and speaks the same browser protocol (§"Browser contract and reconnect" of the

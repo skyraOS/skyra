@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[3]
 
 
 import sys
-sys.path.insert(0, str(REPO / "controller/provider"))
+sys.path.insert(0, str(REPO / "controller/codex/provider"))
 from sandbox import native_binary, render
 from launch import FEATURES, configuration, direct_catalog
 
@@ -109,7 +109,7 @@ def main():
     allowed = scratch / "inside-grant.txt"
     allowed.write_text("SKYRA_OS_ALLOWED_CANARY")
     host_bin = run / "host"
-    subprocess.run(["go", "build", "-o", str(host_bin), "./controller/host"], cwd=REPO, check=True)
+    subprocess.run(["go", "build", "-o", str(host_bin), "./controller/hosts/actor"], cwd=REPO, check=True)
     log = (run / "host.log").open("w")
     sock = run / "host.sock"
     env = {"PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "CODEX_HOME": str(home), "TMPDIR": str(scratch)}

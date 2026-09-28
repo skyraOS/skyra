@@ -14,14 +14,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"skyra/controller/boot"
-	"skyra/controller/handshake"
-	"skyra/controller/instance"
-	"skyra/controller/machine"
-	"skyra/controller/park"
-	"skyra/controller/record"
-	"skyra/controller/replay"
-	"skyra/controller/trace"
+	"skyra/controller/core/machine"
+	"skyra/controller/core/record"
+	"skyra/controller/runtime/boot"
+	"skyra/controller/runtime/handshake"
+	"skyra/controller/runtime/instance"
+	"skyra/controller/runtime/park"
+	"skyra/controller/runtime/replay"
+	"skyra/controller/runtime/trace"
 )
 
 func main() {

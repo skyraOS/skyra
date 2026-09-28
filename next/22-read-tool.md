@@ -1,7 +1,7 @@
 # The read tool: the first leaf that observes the world
 
 Date: 2026-09-28  
-Status: built (`controller/read/`), verified with the fake provider and the
+Status: built (`controller/targets/read/`), verified with the fake provider and the
 OS tests. Not yet validated against live Codex. Follows [20](20-boundry-crossing.md)
 and [21](21-observation-passing.md).
 

@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	"skyra/controller/contract"
-	"skyra/controller/horizon"
-	"skyra/controller/machine"
-	"skyra/controller/record"
-	"skyra/controller/replay"
-	"skyra/controller/tree"
+	"skyra/controller/core/contract"
+	"skyra/controller/core/horizon"
+	"skyra/controller/core/machine"
+	"skyra/controller/core/record"
+	"skyra/controller/runtime/replay"
+	"skyra/controller/runtime/tree"
 )
 
 // journal exercises the existing intake/narrow/resolve/replay vocabulary

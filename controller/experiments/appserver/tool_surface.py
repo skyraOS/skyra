@@ -28,11 +28,11 @@ def main():
             self.wfile.write(b'{"error":{"message":"intentional tool-surface capture"}}')
     server = ThreadingHTTPServer(('127.0.0.1', 0), Capture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    launcher = str(REPO / 'controller/provider/launch.py')
+    launcher = str(REPO / 'controller/codex/provider/launch.py')
     prepared = Path(subprocess.check_output([sys.executable, launcher, '--prepare', str(run / 'providers')], text=True).strip())
     config = prepared / 'home/config.toml'
     config.write_text('model_provider = "capture"\n' + config.read_text() + f'\n[model_providers.capture]\nname = "capture"\nbase_url = "http://127.0.0.1:{server.server_port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[features]\nenable_request_compression = false\n')
-    subprocess.run(['go', 'build', '-o', str(run / 'host'), './controller/host'], cwd=REPO, check=True)
+    subprocess.run(['go', 'build', '-o', str(run / 'host'), './controller/hosts/actor'], cwd=REPO, check=True)
     log = (run / 'host.log').open('w'); sock = run / 'host.sock'
     proc = subprocess.Popen([str(run / 'host'), '-sock', str(sock), '-state', str(run / 'state'), '--', sys.executable, launcher, '--launch', str(prepared)], stdout=log, stderr=log, start_new_session=True)
     h = None

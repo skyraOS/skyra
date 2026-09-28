@@ -20,20 +20,21 @@ def main():
     run = Path(tempfile.mkdtemp(prefix='skyra-e2e-', dir='/tmp')).resolve()
     os.chmod(run, 0o700)
     print(f'evidence: {run}', flush=True)
-    for name in ['skyra', 'codex', 'echo', 'host']:
-        subprocess.run(['go', 'build', '-o', str(run / name), './controller/' + name], cwd=REPO, check=True)
+    sources = {'skyra': 'skyra', 'codex': 'codex/adapter', 'echo': 'targets/echo', 'host': 'hosts/actor'}
+    for name, source in sources.items():
+        subprocess.run(['go', 'build', '-o', str(run / name), './controller/' + source], cwd=REPO, check=True)
     if args.live:
-        prepared = Path(subprocess.check_output([sys.executable, str(REPO / 'controller/provider/launch.py'), '--prepare', str(run / 'providers')], text=True).strip())
-        actor = [sys.executable, str(REPO / 'controller/provider/launch.py'), '--launch', str(prepared)]
+        prepared = Path(subprocess.check_output([sys.executable, str(REPO / 'controller/codex/provider/launch.py'), '--prepare', str(run / 'providers')], text=True).strip())
+        actor = [sys.executable, str(REPO / 'controller/codex/provider/launch.py'), '--launch', str(prepared)]
     else:
-        subprocess.run(['go', 'build', '-o', str(run / 'fake'), './controller/fakecodex'], cwd=REPO, check=True)
+        subprocess.run(['go', 'build', '-o', str(run / 'fake'), './controller/codex/fake'], cwd=REPO, check=True)
         actor = [str(run / 'fake')]
     sock = run / 'host.sock'
     log = (run / 'host.log').open('w')
     proc = subprocess.Popen([str(run / 'host'), '-sock', str(sock), '-state', str(run / 'host-state'), '--', *actor], stdout=log, stderr=log, start_new_session=True)
     try:
-        subprocess.run([sys.executable, str(REPO / 'controller/provider/launch.py'), '--ready', str(sock)], check=True, timeout=25)
-        reg = {name: {'path': str(run / name), 'contract': str(REPO / f'controller/{name}/contract.json')} for name in ['codex', 'echo']}
+        subprocess.run([sys.executable, str(REPO / 'controller/codex/provider/launch.py'), '--ready', str(sock)], check=True, timeout=25)
+        reg = {name: {'path': str(run / name), 'contract': str(REPO / 'controller' / sources[name] / 'contract.json')} for name in ['codex', 'echo']}
         reg['codex']['connect'] = [str(sock)]
         registry = run / 'registry.json'; registry.write_text(json.dumps(reg))
         def turn(name, text, expected):

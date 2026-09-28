@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Skyra
 
-// The webhost's messages as controller/webhost/main.go writes them.
+// The webhost's messages as controller/hosts/web/main.go writes them.
 
 @Test func decodesTheWebhostsSnapshot() throws {
     let raw = """

@@ -107,7 +107,7 @@ Either way, no byte is read by a child and then lost.
 
 ## 2. Put lifecycle policy in the ephemeral adapter
 
-`controller/codex`'s decision logic consumes its continuation, applies
+`controller/codex/adapter`'s decision logic consumes its continuation, applies
 predefined rules, and emits one next request. Socket operations and clock
 reads move out of it into the invoked children.
 
@@ -264,7 +264,7 @@ itself, launched by the instance under its own rendered profile. That also
 replaces 17's host-reported profile hash: the runtime launched the process, so
 the hash it rendered is in `start`'s return.
 
-**Operational capabilities are not model tools.** Today `controller/codex`
+**Operational capabilities are not model tools.** Today `controller/codex/adapter`
 turns its whole reach into Codex dynamic tools, and emits `{"to":
 m.Params.Tool}` without checking the name. Once `codex.stop` is in reach, a
 tool call with that name would pass the runtime's reach check. The adapter
@@ -317,7 +317,7 @@ everywhere it is created, received or inherited.
    model-facing tools.
 6. Verify idle restart (a new thread, recorded) and faults on death mid-turn.
 7. Apply spec 17's restrictions to each real app-server process.
-8. Retire `controller/host` for Codex, and update 15, 17 and the startup doc.
+8. Retire `controller/hosts/actor` for Codex, and update 15, 17 and the startup doc.
 
 ## Acceptance
 

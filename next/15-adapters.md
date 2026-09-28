@@ -6,7 +6,7 @@ recorded start, exchange, inspect and stop operations; see
 
 Date: 2026-09-27  
 Status: agreed direction. Follows [14](14-interpreted-not-stated.md) and
-[`controller/improvements/`](../controller/improvements/).
+[`design/improvements/`](../design/improvements/).
 
 ## The problem
 
@@ -58,7 +58,7 @@ the runtime can rely on for any async entity:
 - **No cancellation** (thought 13's join rule). A late answer is recorded, not
   dropped.
 - **Every delivery is answered exactly once**
-  ([improvement 02](../controller/improvements/02-no-silent-refusals.md)).
+  ([improvement 02](../design/improvements/02-no-silent-refusals.md)).
 
 ## No streaming
 

@@ -143,7 +143,7 @@ restore. There is never live state to recover, only the tree.
 - **No secrets anywhere.** A stamp is a hash, verified by reading the tree.
 
 The code is about 5,700 lines of Go, standard library only, with 63 tests. Start
-with [`controller/machine/machine.go`](controller/machine/machine.go); the
+with [`controller/core/machine/machine.go`](controller/core/machine/machine.go); the
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
 
@@ -179,7 +179,7 @@ handles, and puts every decision in one replayable function.
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls (passing `reply` on), fan-out of several children at once | the slots support it; nothing emits it yet |
-| Self-extension: an agent registers a tool it wrote, as a leaf under a narrower Horizon, and runs it with no approval | **not built**; the registry is fixed at genesis ([`registry.go`](controller/registry/registry.go)) |
+| Self-extension: an agent registers a tool it wrote, as a leaf under a narrower Horizon, and runs it with no approval | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
 | Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`design/faults.md`](design/faults.md)) | designed, not built |
 | Codex's native execution | detected and faulted, not yet prevented |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
@@ -231,7 +231,7 @@ Four pieces that are well defined and unowned:
    how strong the baseline should be. The open questions are listed at the end
    of the [research question](next/research-question.md).
 2. **Fault routing and restore** on the controller: the design is in
-   [`controller/improvements/`](controller/improvements/) and
+   [`design/improvements/`](design/improvements/) and
    [`next/16`](next/16-ingress.md).
 3. **Self-extension**: runtime registration of an agent-built leaf, narrowed
    from its creator's Horizon (today the registry is read once, at genesis).

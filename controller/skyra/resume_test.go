@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"skyra/controller/boot"
-	"skyra/controller/park"
-	"skyra/controller/record"
-	"skyra/controller/replay"
-	"skyra/controller/tree"
+	"skyra/controller/core/record"
+	"skyra/controller/runtime/boot"
+	"skyra/controller/runtime/park"
+	"skyra/controller/runtime/replay"
+	"skyra/controller/runtime/tree"
 )
 
 // This tests the actual executable, not a helper imitating resume. A real

@@ -279,7 +279,7 @@ binary, and no mach services.
 - On `start`, the runtime renders the profile for that thread and launches the
   app-server as `sandbox-exec -p PROFILE <native binary> app-server`, as a
   resident target (18, section 3). `codex_host` in `skyra` stops launching it,
-  and `controller/host` is retired for Codex.
+  and `controller/hosts/actor` is retired for Codex.
 - `start`'s return records the incarnation (pid, launch time) and the sha256
   of the profile it launched under. Later exchanges are checked against that
   record (step 6). `SKYRA_CONNECT` and the host's `ping` are no longer needed.
@@ -526,7 +526,7 @@ capabilities of 18 in the same change.
 
 Then update the docs: `startup-doc.md` ("What it cannot do"), close the open
 item in [15](15-adapters.md), and replace the "detects, does not prevent" line
-in `controller/codex/main.go`'s header.
+in `controller/codex/adapter/main.go`'s header.
 
 ## Acceptance
 

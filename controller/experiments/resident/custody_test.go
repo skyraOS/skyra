@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
-	"skyra/controller/handshake"
-	"skyra/controller/horizon"
-	"skyra/controller/record"
+	"skyra/controller/core/horizon"
+	"skyra/controller/core/record"
+	"skyra/controller/runtime/handshake"
 )
 
 const helperEnv = "SKYRA_RESIDENT_EXPERIMENT"
