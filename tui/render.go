@@ -1,0 +1,390 @@
+package main
+
+import (
+	"fmt"
+	"math"
+	"strings"
+	"unicode"
+)
+
+const (
+	surface  = "8;10;14"
+	raised   = "13;16;22"
+	composer = "16;19;26"
+	edge     = "26;31;41"
+	userBG   = "15;20;29"
+	world    = "124;168;232"
+	being    = "164;152;226"
+	operator = "96;196;166"
+	accent   = "126;196;204"
+	ink      = "214;219;229"
+	dim      = "120;128;146"
+	faint    = "60;66;80"
+	red      = "226;112;112"
+)
+
+type line struct{ text, bg, fg, rail string }
+
+// segment is one run of text in one color.
+type segment struct{ fg, text string }
+
+// How much of the sky each surface covers: the sky shows through every
+// panel, dimmed, so the whole screen is one background.
+const (
+	headerAlpha   = 0.7
+	messageAlpha  = 0.84
+	composerAlpha = 0.8
+)
+
+// pixel is one composed terminal cell.
+type pixel struct {
+	r      rune
+	fg, bg [3]uint8
+}
+
+// canvas is the screen being composed: the sky first, then translucent
+// panels and text on top.
+type canvas struct {
+	w, h  int
+	cells [][]pixel
+	fg    [][]rgb
+	bg    [][]rgb
+	marks [][]rune
+}
+
+func parseRGB(s string) rgb {
+	var c rgb
+	fmt.Sscanf(s, "%f;%f;%f", &c[0], &c[1], &c[2])
+	return c
+}
+
+func newCanvas(w, h int, frame uint64) *canvas {
+	c := &canvas{w: w, h: h}
+	sky := makeWallpaper(w, h, frame)
+	for y := 0; y < h; y++ {
+		fgRow, bgRow, markRow := make([]rgb, w), make([]rgb, w), make([]rune, w)
+		for x, cell := range sky[y] {
+			bgRow[x] = rgb{surfaceRGB[0] + cell.lift[0], surfaceRGB[1] + cell.lift[1], surfaceRGB[2] + cell.lift[2]}
+			markRow[x] = ' '
+			if cell.mark != 0 {
+				markRow[x], fgRow[x] = cell.mark, parseRGB(cell.fg)
+			}
+		}
+		c.fg, c.bg, c.marks = append(c.fg, fgRow), append(c.bg, bgRow), append(c.marks, markRow)
+	}
+	return c
+}
+
+// panel lays a translucent color over a rectangle; marks beneath it stay,
+// sunk into the panel by the same amount.
+func (c *canvas) panel(x0, y0, w, h int, color string, alpha float64) {
+	p := parseRGB(color)
+	for y := max(0, y0); y < min(c.h, y0+h); y++ {
+		for x := max(0, x0); x < min(c.w, x0+w); x++ {
+			c.bg[y][x] = lerp(c.bg[y][x], p, alpha)
+			c.fg[y][x] = lerp(c.fg[y][x], c.bg[y][x], alpha)
+		}
+	}
+}
+
+// text writes s from x, clipped to width. Spaces are left transparent, so
+// the sky (or the panel under it) shows between words.
+func (c *canvas) text(x, y, width int, s, fg string) int {
+	if y < 0 || y >= c.h {
+		return 0
+	}
+	col := parseRGB(fg)
+	n := 0
+	for _, r := range strings.ReplaceAll(safe(s), "\n", " ") {
+		if n >= width || x+n >= c.w {
+			break
+		}
+		if r != ' ' {
+			c.marks[y][x+n], c.fg[y][x+n] = r, col
+		}
+		n++
+	}
+	return n
+}
+
+func (c *canvas) segments(x, y, width int, segs ...segment) {
+	for _, s := range segs {
+		n := c.text(x, y, width, s.text, s.fg)
+		x, width = x+n, width-n
+	}
+}
+
+func quantize(c rgb) [3]uint8 {
+	var q [3]uint8
+	for i, v := range c {
+		q[i] = uint8(math.Round(math.Max(0, math.Min(255, v))))
+	}
+	return q
+}
+
+func (c *canvas) pixels() [][]pixel {
+	out := make([][]pixel, c.h)
+	for y := range out {
+		out[y] = make([]pixel, c.w)
+		for x := range out[y] {
+			out[y][x] = pixel{c.marks[y][x], quantize(c.fg[y][x]), quantize(c.bg[y][x])}
+		}
+	}
+	return out
+}
+
+func style(p pixel) string {
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm\x1b[38;2;%d;%d;%dm", p.bg[0], p.bg[1], p.bg[2], p.fg[0], p.fg[1], p.fg[2])
+}
+
+// paint writes every cell of after that differs from before (all of them
+// when before is nil), then returns the cursor to the composer.
+func paint(before, after [][]pixel, cursorRow, cursorCol int) string {
+	var out strings.Builder
+	lastStyle := ""
+	for y, row := range after {
+		next := -1 // column the terminal cursor is at, if on this row
+		for x, p := range row {
+			if before != nil && y < len(before) && x < len(before[y]) && before[y][x] == p {
+				continue
+			}
+			if out.Len() == 0 {
+				out.WriteString("\x1b[?25l")
+			}
+			if x != next {
+				fmt.Fprintf(&out, "\x1b[%d;%dH", y+1, x+1)
+			}
+			if st := style(p); st != lastStyle {
+				out.WriteString(st)
+				lastStyle = st
+			}
+			out.WriteRune(p.r)
+			next = x + 1
+		}
+	}
+	if out.Len() == 0 {
+		return ""
+	}
+	fmt.Fprintf(&out, "\x1b[0m\x1b[%d;%dH\x1b[?25h", cursorRow, cursorCol)
+	return out.String()
+}
+
+// draw repaints the whole screen.
+func (a *app) draw() {
+	frame := a.compose()
+	if frame == nil {
+		a.screen = nil
+		c := newCanvas(a.width, a.height, a.wallFrame)
+		c.segments(0, 0, a.width, segment{faint, " ✦ "}, segment{dim, "skyra · enlarge terminal"})
+		fmt.Print("\x1b[2J" + paint(nil, c.pixels(), 1, 1))
+		return
+	}
+	fmt.Print(paint(nil, frame, a.cursorRow, a.cursorCol))
+	a.screen = frame
+}
+
+// tick advances the sky, writing only the cells that changed.
+func (a *app) tick() {
+	if a.screen == nil {
+		return
+	}
+	frame := a.compose()
+	if frame == nil {
+		return
+	}
+	fmt.Print(paint(a.screen, frame, a.cursorRow, a.cursorCol))
+	a.screen = frame
+}
+
+// compose builds the screen: the sky over the whole terminal, then the
+// header, transcript, composer and footer on top of it.
+func (a *app) compose() [][]pixel {
+	w, h := a.width, a.height
+	if h < 10 || w < 35 {
+		return nil
+	}
+	c := newCanvas(w, h, a.wallFrame)
+
+	status, statusColor := "offline", red
+	if a.connected {
+		status, statusColor = "online", operator
+	}
+	phase := "new session"
+	if cur := a.current(); cur != nil {
+		phase = cur.Phase
+	}
+	c.panel(0, 0, w, 1, raised, headerAlpha)
+	c.segments(0, 0, w, segment{accent, " ✦ "}, segment{dim, "skyra"})
+	right := []segment{{faint, phase + "   "}, {statusColor, "•"}, {dim, " " + status + " "}}
+	rightWidth := 0
+	for _, s := range right {
+		rightWidth += len([]rune(s.text))
+	}
+	if w-8-rightWidth > 0 {
+		c.segments(w-rightWidth, 0, rightWidth, right...)
+	}
+
+	composerHeight := 3
+	if h < 12 {
+		composerHeight = 1
+	}
+	bodyHeight := h - composerHeight - 5
+	readingWidth := w - 4
+	inset := 2
+	for i, r := range a.transcript(readingWidth, bodyHeight) {
+		y := 2 + i
+		switch {
+		case r.rail != "":
+			c.panel(inset, y, readingWidth, 1, r.bg, messageAlpha)
+			c.text(inset+1, y, 1, "▎", r.rail)
+			c.text(inset+3, y, readingWidth-3, r.text, r.fg)
+		case r.text != "":
+			c.text(inset, y, readingWidth, r.text, r.fg)
+		}
+	}
+
+	placeholder := "Message the agent"
+	ready := a.connected && !a.opening
+	if !a.connected {
+		placeholder = "Connecting… type a draft"
+	} else if a.opening {
+		placeholder = "Opening a session…"
+	} else if cur := a.current(); cur == nil || cur.Phase == "closed" || cur.Phase == "failed" {
+		placeholder = "Type a message to begin"
+	} else if cur.Phase == "pending" {
+		placeholder, ready = "Agent working… type a draft", false
+	}
+	prompt := faint
+	if ready {
+		prompt = accent
+	}
+	textWidth := readingWidth - 4
+	contentRows := composerHeight - 2
+	contentOffset := 1
+	if composerHeight == 1 {
+		contentRows, contentOffset = 1, 0
+	}
+	lineCount := len(a.input)/textWidth + 1
+	firstLine := max(0, lineCount-contentRows)
+	top := 2 + bodyHeight
+	c.panel(inset, top, readingWidth, composerHeight, composer, composerAlpha)
+	for r := 0; r < contentRows; r++ {
+		y, lineIndex := top+contentOffset+r, firstLine+r
+		if r == 0 {
+			c.text(inset+1, y, 1, "›", prompt)
+		}
+		if len(a.input) == 0 && lineIndex == 0 {
+			c.text(inset+3, y, textWidth, placeholder, faint)
+		} else if lineIndex < lineCount {
+			start := lineIndex * textWidth
+			c.text(inset+3, y, textWidth, string(a.input[start:min(start+textWidth, len(a.input))]), ink)
+		}
+	}
+
+	var footer []segment
+	if a.notice != "" {
+		footer = []segment{{dim, "  " + a.notice}}
+	} else {
+		for i, k := range [][2]string{{"enter", "send"}, {"^n", "new"}, {"pgup/pgdn", "scroll"}, {"^c", "clear"}, {"^d", "close"}, {"^c ^c", "quit"}} {
+			sep := "   "
+			if i == 0 {
+				sep = "  "
+			}
+			footer = append(footer, segment{dim, sep + k[0]}, segment{faint, " " + k[1]})
+		}
+	}
+	c.segments(0, top+composerHeight+1, w, footer...)
+
+	a.cursorRow = top + contentOffset + lineCount - firstLine
+	a.cursorCol = inset + 4 + len(a.input)%textWidth
+	return c.pixels()
+}
+
+func (a *app) transcript(width, height int) []line {
+	rows := make([]line, height)
+	for i := range rows {
+		rows[i] = line{"", surface, ink, ""}
+	}
+	c := a.current()
+	if c == nil {
+		return rows
+	}
+	var all []line
+	if len(c.Entries) == 0 {
+		all = append(all, line{"  opening the session…", surface, faint, ""})
+	}
+	for _, e := range c.Entries {
+		label, bg, rail := "agent", raised, being
+		if e.Role == "user" {
+			label, bg, rail = "you", userBG, world
+		}
+		fg := ink
+		if strings.HasPrefix(e.Text, "⚠") {
+			fg, rail = red, red
+		}
+		all = append(all, line{"", surface, ink, ""}, line{label, bg, rail, rail})
+		for _, part := range wrap(safe(e.Text), width-5) {
+			all = append(all, line{part, bg, fg, rail})
+		}
+	}
+	if c.Phase == "pending" {
+		all = append(all, line{"", surface, ink, ""}, line{"working…", raised, dim, faint})
+	}
+	start := max(0, len(all)-height-a.scroll)
+	if start+height > len(all) {
+		start = max(0, len(all)-height)
+	}
+	for i := 0; i < height && start+i < len(all); i++ {
+		rows[i] = all[start+i]
+	}
+	return rows
+}
+
+func color(bg, fg, text string) string {
+	return "\x1b[48;2;" + bg + "m\x1b[38;2;" + fg + "m" + text + "\x1b[0m"
+}
+
+func safe(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\n' {
+			b.WriteRune(r)
+		} else if r == '\t' {
+			b.WriteRune(' ')
+		} else if unicode.IsPrint(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func fit(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	r := []rune(strings.ReplaceAll(safe(s), "\n", " "))
+	if len(r) > width {
+		r = r[:width]
+	}
+	return string(r) + strings.Repeat(" ", width-len(r))
+}
+
+func wrap(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	var out []string
+	for _, paragraph := range strings.Split(s, "\n") {
+		r := []rune(paragraph)
+		if len(r) == 0 {
+			out = append(out, "")
+			continue
+		}
+		for len(r) > 0 {
+			n := min(width, len(r))
+			out = append(out, string(r[:n]))
+			r = r[n:]
+		}
+	}
+	return out
+}
