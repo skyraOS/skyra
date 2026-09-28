@@ -3,7 +3,10 @@
 **Agents that extend themselves without asking. The human approves the
 boundary once, not every tool; the OS enforces it.**
 
-![skyra demo: each scenario commits its records, faults what reaches past its boundary, and replays byte-identically](assets/demo.gif)
+![skyra desktop: Codex reads controller/core file by file, each read recorded with its size and hash, then answers with a design review](assets/desktop.gif)
+
+*The desktop app: real Codex reading this repo. Every tool call runs under the
+granted boundary and is recorded.*
 
 Coding agents ask permission for everything, so people stop reading the
 prompts and switch on full-auto. Skyra takes a different route: you grant an
@@ -21,6 +24,8 @@ predecessor once its design flaw became clear ([how it got here](#how-it-got-her
 ```sh
 ./install.sh && skyra demo   # every scenario, each ending in a replay check
 ```
+
+![skyra demo: each scenario commits its records, faults what reaches past its boundary, and replays byte-identically](assets/demo.gif)
 
 ## The problem
 

@@ -1,5 +1,6 @@
 # Records assets/demo.gif. From the repo root: vhs assets/demo.tape
-# (brew install vhs). The pacing and trimming are in demo-reel.sh.
+# (brew install vhs). The pacing and trimming are in demo-reel.sh. The
+# desktop app's GIF, assets/desktop.gif, is made by desktop-demo.sh.
 
 Output assets/demo.gif
 
