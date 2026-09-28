@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { WSBoot } from "@/components/WSBoot";
+import { Sky } from "@/components/Sky";
 
 export const metadata: Metadata = {
   title: "Skyra",
-  description: "Browser client for a DNA-19 user-executable interaction.",
+  description: "Chat with Codex through the Skyra runtime.",
 };
 
 export default function RootLayout({
@@ -16,7 +17,8 @@ export default function RootLayout({
     <html lang="en">
       <body className="h-screen overflow-hidden">
         <WSBoot />
-        <main className="h-full">{children}</main>
+        <Sky />
+        <main className="relative h-full">{children}</main>
       </body>
     </html>
   );

@@ -9,7 +9,7 @@
 html,
 body {
   height: 100%;
-  background: theme("colors.surface.DEFAULT");
+  background: theme("colors.sky");
   color: theme("colors.ink.DEFAULT");
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -17,4 +17,26 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* A translucent panel over the sky, as the desktop app's panel(). */
+.panel {
+  background: rgb(8 10 14 / 0.55);
+  border: 1px solid rgb(214 219 229 / 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.panel-user {
+  background: rgb(15 20 29 / 0.8);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.75; }
+}
+.breathe {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .breathe { animation: none; opacity: 0.6; }
 }

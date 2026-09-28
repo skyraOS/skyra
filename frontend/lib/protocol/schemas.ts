@@ -16,7 +16,18 @@ export const ConversationPhaseSchema = z.enum([
   "closed",
 ]);
 
-export const EntryRoleSchema = z.enum(["user", "agent"]);
+export const EntryRoleSchema = z.enum(["user", "agent", "call"]);
+
+export const CallSchema = z.object({
+  to: z.string(),
+  arg: z.string(),
+  state: z.enum(["running", "returned", "fault"]),
+  result: z.string().optional(),
+  fault: z.string().optional(),
+  cause: z.string().optional(),
+  stamp: z.string(),
+  ms: z.number().optional(),
+});
 
 export const RequestStatusSchema = z.enum([
   "accepted",
@@ -30,6 +41,7 @@ export const ConversationEntrySchema = z.object({
   text: z.string(),
   ts: z.number(),
   requestId: z.string().nullable(),
+  call: CallSchema.optional(),
 });
 
 export const RequestRecordSchema = z.object({

@@ -7,28 +7,21 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // The TUI's palette (tui/render.go), as desktop/Sources/Skyra/Sky/Theme.swift has it.
       colors: {
-        // Three-region palette. Tweak in week 2 once we see them in motion.
-        region: {
-          user: "#1a2332",
-          overlap: "#2d2438",
-          being: "#1f1a2e",
-        },
-        logos: {
-          world: "#5b8def",
-          being: "#a78bfa",
-          operator: "#34d399",
-        },
+        sky: "#080a0e",
+        panel: "#0f141d",
         ink: {
-          DEFAULT: "#e6e8ee",
-          dim: "#8a8fa0",
-          faint: "#4a4f5e",
+          DEFAULT: "#d6dbe5",
+          dim: "#788092",
+          faint: "#3c4250",
         },
-        surface: {
-          DEFAULT: "#0b0d12",
-          raised: "#141821",
-          edge: "#222632",
-        },
+        accent: "#7ec4cc",
+        green: "#60c4a6",
+        // A refused call: the Horizon doing its job, not a failure.
+        amber: "#dea868",
+        // Something broke: the backend, custody.
+        fault: "#e27070",
       },
       fontFamily: {
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],

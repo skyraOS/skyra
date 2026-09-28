@@ -27,8 +27,24 @@
  */
 export type ConversationPhase = "ready" | "pending" | "failed" | "closed";
 
-/** Who authored an entry. */
-export type EntryRole = "user" | "agent";
+/** Who authored an entry. A `call` is a tool call in the agent's turn, read from the lineage by the webhost. */
+export type EntryRole = "user" | "agent" | "call";
+
+/** A tool call: an invoke and what discharged it, or a refused emission that addressed a tool. */
+export interface Call {
+  to: string;
+  arg: string;
+  state: "running" | "returned" | "fault";
+  /** returned: what came back, in a few words */
+  result?: string;
+  /** fault: its kind (horizon, contract, custody, malformed) and cause */
+  fault?: string;
+  cause?: string;
+  /** The invoke's stamp, or the fault's. */
+  stamp: string;
+  /** returned: from the invoke's commit to the return's */
+  ms?: number;
+}
 
 /** The ledger status of a submitted request. */
 export type RequestStatus = "accepted" | "returned" | "failed" | "rejected";
@@ -39,6 +55,8 @@ export interface ConversationEntry {
   ts: number;
   /** The request this entry belongs to (a user message and its agent answer share it). */
   requestId: string | null;
+  /** Present on a `call` entry. */
+  call?: Call;
 }
 
 export interface RequestRecord {
