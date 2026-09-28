@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -15,8 +16,11 @@ const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // Minimal RFC 6455 framing (text/close/ping only, unfragmented), from
 // DNA-19's user peer (history/dna19/user/browser.go).
-func handshake(r *bufio.Reader, conn net.Conn) error {
-	var key string
+//
+// When token is set, the client must present it as "Authorization: Bearer
+// TOKEN" (next/23): whoever holds this socket speaks as the human.
+func handshake(r *bufio.Reader, conn net.Conn, token string) error {
+	var key, auth string
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
@@ -28,10 +32,17 @@ func handshake(r *bufio.Reader, conn net.Conn) error {
 		}
 		if i := strings.IndexByte(line, ':'); i > 0 {
 			name := strings.ToLower(strings.TrimSpace(line[:i]))
-			if name == "sec-websocket-key" {
+			switch name {
+			case "sec-websocket-key":
 				key = strings.TrimSpace(line[i+1:])
+			case "authorization":
+				auth = strings.TrimSpace(line[i+1:])
 			}
 		}
+	}
+	if token != "" && subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+token)) != 1 {
+		io.WriteString(conn, "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
+		return fmt.Errorf("missing or wrong token")
 	}
 	if key == "" {
 		return fmt.Errorf("missing Sec-WebSocket-Key")

@@ -4,6 +4,9 @@
 //
 //	webhost -ws ADDR -park SOCK -skyra BIN -registry FILE -conversations DIR
 //
+// With SKYRA_WS_TOKEN set, only a client presenting that token may connect
+// (next/23). It is read from the environment so it never shows in ps.
+//
 // It follows the browser surface's registered procedure and decides nothing:
 //
 //	a frame is parked      show its transcript; wait for the human
@@ -54,6 +57,7 @@ type conversation struct {
 type webhost struct {
 	skyra, registry, dir string
 	incarnation          string
+	token                string // empty: any loopback client may connect
 	log                  *os.File
 
 	mu       sync.Mutex
@@ -76,7 +80,7 @@ func main() {
 		os.Exit(2)
 	}
 	h := &webhost{skyra: *skyra, registry: *registry, dir: *dir, convos: map[string]*conversation{}, seen: map[string]bool{},
-		incarnation: fmt.Sprintf("webhost-%d-%d", os.Getpid(), time.Now().UnixMilli())}
+		incarnation: fmt.Sprintf("webhost-%d-%d", os.Getpid(), time.Now().UnixMilli()), token: os.Getenv("SKYRA_WS_TOKEN")}
 	h.log = os.Stderr
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		fail(err)
@@ -205,7 +209,7 @@ func (h *webhost) acceptParks(l net.Listener) {
 
 func (h *webhost) serveBrowser(conn net.Conn) {
 	r := bufio.NewReader(conn)
-	if err := handshake(r, conn); err != nil {
+	if err := handshake(r, conn, h.token); err != nil {
 		conn.Close()
 		return
 	}

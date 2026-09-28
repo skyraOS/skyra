@@ -42,6 +42,7 @@ record from its stored input (intake, supervisor faults and resolves alike);
 ./install.sh      # once: dependencies, build, puts `skyra` on your PATH
 skyra             # chat with real Codex in the browser, through the stateless controller
 skyra tui         # a fresh terminal session; first message opens its conversation
+skyra app         # Skyra.app, the desktop client: grant a workspace once, then chat
 skyra demo        # every scenario, each ending in a replay check
 skyra ask "Call the echo tool with the text hi, then tell me what it returned."
 skyra test        # every test
@@ -226,6 +227,7 @@ grips-and-invariants.md  why: the six pains, and the invariants they force
 controller/   the stateless controller: skyra, skyra demo, skyra ask
 frontend/     the browser UI: served by the controller's webhost (and by DNA-19)
 tui/          terminal client of the same conversation protocol
+desktop/      Skyra.app: the SwiftUI client and entry point (next/23)
 design/       the controller's spec (D1–D9) and the notes that led to it
 next/         capability: derived states, reply, the research question, the agenda
 history/      DNA-19 and the earlier specs, kept for reference

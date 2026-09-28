@@ -22,3 +22,7 @@ dist/
 
 # skyra launcher build output
 build/
+
+# SwiftPM (desktop/)
+desktop/.build/
+desktop/.swiftpm/

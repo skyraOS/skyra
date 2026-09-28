@@ -29,6 +29,9 @@ usage: skyra [command]
   chat --fake   the same, against a deterministic fake Codex (no model, no login)
   tui           chat with Codex in the terminal, using the same conversations
   tui --fake    the terminal UI against the deterministic fake Codex
+  app           build and open Skyra.app, the desktop client (next/23)
+  serve [--fake]  the backend alone, as the desktop app starts it: the webhost,
+                its log on stdout, SKYRA_WS_TOKEN required when set
   ask "TEXT"    one question to real Codex through the controller; prints the lineage,
                 the replay check and the answer
   replay DIR    re-derive a finished conversation or run from its records
@@ -133,10 +136,11 @@ controller_build() {
   go build -o "$BUILD/tui" ./tui
 }
 
-# registry MODE PARK_SOCK OWNER_DEPTH: the operator's registry. The resource
-# owner is the operator for ask, and the user frame for chat/tui.
+# registry MODE PARK_SOCK OWNER_DEPTH [TAG]: the operator's registry. The
+# resource owner is the operator for ask, and the user frame for chat/tui. TAG
+# keeps a client's registry apart from another's that parks on another socket.
 registry() {
-  local mode=$1 park=$2 depth=$3 file="$BUILD/controller/registry-$1-$3.json"
+  local mode=$1 park=$2 depth=$3 file="$BUILD/controller/registry-$1-$3${4:+-$4}.json"
   SKYRA_REGISTRY_ROOT="$ROOT" SKYRA_REGISTRY_BUILD="$BUILD/controller" \
     SKYRA_REGISTRY_MODE="$mode" SKYRA_REGISTRY_PARK="$park" \
     SKYRA_REGISTRY_DEPTH="$depth" SKYRA_REGISTRY_FILE="$file" \
@@ -290,6 +294,79 @@ tui_chat() {
   cleanup
 }
 
+# serve [--fake]: what the desktop app runs. The same backend and conversations
+# as chat and tui, without a client; the app is the client. The launcher's
+# workspace checks still decide, and their refusal is this command's output.
+serve() {
+  local mode=real
+  case ${1:-} in
+    ""|--codex) ;;
+    --fake) mode=fake ;;
+    *) die "unknown serve mode '$1' (use --fake)" ;;
+  esac
+  port_free "$WS_PORT" || die "port $WS_PORT is in use"
+  say "building"
+  controller_build
+
+  local reg park=$STATE/park-app-$mode.sock convs=$STATE/conversations
+  local addr=127.0.0.1:$WS_PORT web_pid i
+  cleanup() {
+    trap - INT TERM EXIT
+    [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
+  }
+  trap cleanup INT TERM EXIT
+  [ "$mode" = fake ] && convs=$STATE/conversations-fake
+  mkdir -p "$STATE"
+  reg=$(registry "$mode" "$park" 2 app)
+  "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
+    -registry "$reg" -conversations "$convs" &
+  web_pid=$!
+  for i in $(seq 1 100); do
+    kill -0 "$web_pid" 2>/dev/null || die "the webhost exited during startup"
+    [ -S "$park" ] && break
+    sleep 0.1
+  done
+  [ -S "$park" ] || die "the webhost did not start"
+  say "ready ws://$addr/ws workspace $WORKSPACE"
+  wait "$web_pid"
+}
+
+# app: build Skyra.app into build/ and open it. SwiftPM needs a full Xcode
+# toolchain; use Xcode's when the selected developer directory has none.
+# The PATH is recorded in the bundle, because an app opened from Finder gets
+# a bare one and serve needs go, python3 and codex.
+app() {
+  local dir=$BUILD/Skyra.app bin
+  if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ] && \
+     ! xcode-select -p 2>/dev/null | grep -q '\.app/'; then
+    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+  fi
+  say "building the controller"
+  controller_build
+  say "building Skyra.app"
+  (cd "$ROOT/desktop" && swift build -c release) || die "swift build failed (it needs Xcode, not only the Command Line Tools)"
+  bin=$(cd "$ROOT/desktop" && swift build -c release --show-bin-path)/Skyra
+  rm -rf "$dir" "$BUILD/Skyra.iconset"
+  mkdir -p "$dir/Contents/MacOS" "$dir/Contents/Resources"
+  cp "$bin" "$dir/Contents/MacOS/Skyra"
+  swift "$ROOT/desktop/Icon/make-icon.swift" "$BUILD/Skyra.iconset" &&
+    iconutil -c icns "$BUILD/Skyra.iconset" -o "$dir/Contents/Resources/Skyra.icns" ||
+    say "the icon did not build; the app will use the default one"
+  SKYRA_APP_ROOT="$ROOT" SKYRA_APP_PATH="$PATH" SKYRA_APP_PLIST="$dir/Contents/Info.plist" python3 - <<'PY'
+import os, plistlib
+plistlib.dump({
+  'CFBundleName': 'Skyra', 'CFBundleDisplayName': 'Skyra',
+  'CFBundleIdentifier': 'local.skyra.desktop', 'CFBundleExecutable': 'Skyra',
+  'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Skyra', 'CFBundleShortVersionString': '0.1', 'CFBundleVersion': '1',
+  'LSMinimumSystemVersion': '14.0', 'NSHighResolutionCapable': True,
+  'SkyraRoot': os.environ['SKYRA_APP_ROOT'], 'SkyraPATH': os.environ['SKYRA_APP_PATH'],
+}, open(os.environ['SKYRA_APP_PLIST'], 'wb'))
+PY
+  touch "$dir"   # Finder and the Dock pick up the new icon
+  say "built $dir"
+  [ -n "${SKYRA_NO_OPEN:-}" ] || open "$dir"
+}
+
 stop_host() {
   local mode stopped=0
   for mode in real real-sandbox-v1 real-direct-v2 fake; do
@@ -339,6 +416,8 @@ case ${1:-} in
   "")            chat ;;
   chat)          chat "${2:-}" ;;
   tui)           tui_chat "${2:-}" ;;
+  serve)         serve "${2:-}" ;;
+  app)           app ;;
   dna19)         dna19 "${2:-codex}" ;;
   replay)        [ $# -eq 2 ] || die "usage: skyra replay DIR"; controller_build; exec "$BUILD/controller/skyra" replay "$2" ;;
   ask)           shift; ask "$@" ;;

@@ -25,3 +25,7 @@ Where the controller goes after the prototype. Agreed on paper, not built.
 8. **[`22-read-tool.md`](22-read-tool.md)**: `read`, the first leaf that
    observes the world: a workspace grant approved once, a typed observation
    with provenance, and the adapter's model-facing tool set. Built.
+9. **[`23-desktop-app.md`](23-desktop-app.md)**: `Skyra.app`, a SwiftUI client
+   of the conversation protocol in the TUI's night-sky theme, and the user's
+   entry point: the workspace grant approved once, and later the one place a
+   boundary crossing is asked. Cuts 1 and 2 built.
