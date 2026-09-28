@@ -165,6 +165,10 @@ registry={
  'codex.start':start,
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
                    'connection':True,'resource_owner_depth':depth},
+ 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+                  'connection':True,'resource_owner_depth':depth},
+ 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codexio/contract.json'),
+               'connection':True,'close_connection':True,'resource_owner_depth':depth},
  'user':{'path':str(build/'user'),'contract':str(root/'controller/user/contract.json')},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/browser/contract.json')}
 }

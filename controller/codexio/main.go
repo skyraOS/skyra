@@ -64,6 +64,10 @@ func operate(file *os.File, q request) (o observation) {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond))
 	if q.Op == "stop" {
+		if len(q.Deliver) != 0 {
+			o.Error = "stop cannot deliver protocol requests"
+			return
+		}
 		if err = syscall.Shutdown(int(file.Fd()), syscall.SHUT_WR); err != nil {
 			o.Error = err.Error()
 			return
@@ -90,28 +94,46 @@ func operate(file *os.File, q request) (o observation) {
 		return
 	}
 	o.Read = "observed"
-	// One exact line per invocation. No bufio reader may consume bytes that
-	// belong to the next operation child.
-	partial := []byte(q.Prefix)
-	var one [1]byte
-	for len(partial) < 1<<20 {
-		n, readErr := conn.Read(one[:])
-		if n == 1 {
-			partial = append(partial, one[0])
-			if one[0] == '\n' {
-				o.Lines = append(o.Lines, string(partial))
-				return
-			}
-		}
+	// Each read stops exactly at a newline. A stop drains until EOF; an
+	// exchange returns one line without consuming the next operation's bytes.
+	limit := 1
+	if q.Op == "stop" {
+		limit = 1024
+	}
+	prefix := q.Prefix
+	for i := 0; i < limit; i++ {
+		line, readErr := exactLine(conn, prefix)
+		prefix = ""
 		if readErr != nil {
-			o.Partial = string(partial)
+			o.Partial = line
 			o.PeerEOF = errors.Is(readErr, io.EOF)
 			if !o.PeerEOF {
 				o.Error = readErr.Error()
 			}
 			return
 		}
+		o.Lines = append(o.Lines, line)
 	}
-	o.Partial, o.Error = string(partial), "line exceeds 1 MiB"
+	if q.Op == "stop" {
+		o.Error = "stop drain exceeded 1024 lines"
+	}
 	return
+}
+
+func exactLine(conn net.Conn, prefix string) (string, error) {
+	line := []byte(prefix)
+	var one [1]byte
+	for len(line) < 1<<20 {
+		n, err := conn.Read(one[:])
+		if n == 1 {
+			line = append(line, one[0])
+			if one[0] == '\n' {
+				return string(line), nil
+			}
+		}
+		if err != nil {
+			return string(line), err
+		}
+	}
+	return string(line), errors.New("line exceeds 1 MiB")
 }

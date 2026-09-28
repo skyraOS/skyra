@@ -1,10 +1,10 @@
 {
   "input": {"type":"object","required":["text"],"fields":{
     "text":{"type":"string"},"conversation":{"type":"string"},
-    "thread":{"type":"string"},"incarnation":{"type":"string"}
+    "thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
   }},
-  "output": {"type":"object","required":["text","thread","incarnation"],"fields":{
-    "text":{"type":"string"},"thread":{"type":"string"},"incarnation":{"type":"string"}
+  "output": {"type":"object","required":["text","thread","incarnation","activity_at"],"fields":{
+    "text":{"type":"string"},"thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
   }},
-  "reach":["codex.start","codex.exchange","echo"]
+  "reach":["codex.start","codex.exchange","codex.inspect","codex.stop","echo"]
 }

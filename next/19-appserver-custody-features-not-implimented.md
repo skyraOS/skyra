@@ -1,5 +1,9 @@
 # App-server custody: what 17 and 18 describe that the code does not do yet
 
+Historical gap inventory from before the resident path was wired into the
+controller. For the current implementation and remaining limits, see
+[the controller README](../controller/README.md) and [startup](../startup-doc.md).
+
 Date: 2026-09-27  
 Status: inventory, checked against the working tree on this date. Covers
 [17 — The app-server in custody](17-app-server-custody.md) and
