@@ -227,22 +227,6 @@ containment of those tools and of the agent against an adversarial suite.
 | November | audit and replay; the baseline harness and task set |
 | December | evaluation and writeup |
 
-## Where you'd come in
-
-Four pieces that are well defined and unowned:
-
-1. **The evaluation.** Task set, interruption counting against Codex's
-   approval modes, adversarial suite (AgentDojo or our own), and
-   how strong the baseline should be. The open questions are listed at the end
-   of the [research question](next/research-question.md).
-2. **Fault routing and restore** on the controller: the design is in
-   [`design/improvements/`](design/improvements/) and
-   [`next/16`](next/16-ingress.md).
-3. **Self-extension**: runtime registration of an agent-built leaf, narrowed
-   from its creator's Horizon (today the registry is read once, at genesis).
-4. **Preventing Codex's native execution**, in the Codex adapter
-   ([`controller/codex/`](controller/codex/)), where every Codex semantic lives.
-
 ## Layout
 
 ```text
