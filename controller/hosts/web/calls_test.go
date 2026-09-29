@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
@@ -86,5 +87,39 @@ func TestCallsFromTheLineage(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("entries:\n%q\nwant\n%q", got, want)
 		}
+	}
+}
+
+// A successor that commits and then dies before its stamp reaches the parent
+// leaves a record that was never released. The parent faults its own frame
+// under the same predecessor; the call ends in that fault, not in the orphan.
+func TestUnreleasedSuccessorIsLeftOut(t *testing.T) {
+	root := t.TempDir()
+	if err := tree.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	s := commit(t, root, "", "genesis", record.Record{State: record.Invoke})
+	s = commit(t, root, s, "1", record.Record{State: record.Invoke, To: "codex", Payload: json.RawMessage(`{"text":"read it"}`)})
+	read := commit(t, root, s, "2", record.Record{State: record.Invoke, To: "read", Payload: json.RawMessage(`{"path":"README.md"}`)})
+	orphan := commit(t, root, read, "3", record.Record{State: record.Return, Payload: json.RawMessage(`{"text":"# Skyra"}`)})
+	obs := "successor died before stamping: EOF"
+	f := commit(t, root, read, obs, machine.Observed(read, []byte(obs)))
+
+	l := newLineage(root)
+	l.refresh()
+	turns := l.snapshot()
+	if len(turns) != 1 || len(turns[0]) != 1 {
+		t.Fatalf("turns: %+v", turns)
+	}
+	if c := turns[0][0]; c.State != "fault" || c.Fault != record.Custody || c.Stamp != read {
+		t.Fatalf("the call must end in the supervisor's fault: %+v", c)
+	}
+	for _, s := range l.order() {
+		if s == orphan {
+			t.Fatal("the unreleased successor is in the lineage")
+		}
+	}
+	if o := l.order(); o[len(o)-1] != f {
+		t.Fatalf("the lineage must end in the fault: %v", o)
 	}
 }

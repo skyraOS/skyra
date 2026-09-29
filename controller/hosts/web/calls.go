@@ -95,12 +95,37 @@ func (l *lineage) snapshot() [][]call {
 	return l.turns
 }
 
+// live returns the records order walks, in its order.
+func (l *lineage) live() []record.Record {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []record.Record
+	for _, s := range l.order() {
+		out = append(out, l.records[s].r)
+	}
+	return out
+}
+
 // order walks the chain from genesis, each record after its predecessor;
-// siblings (a fan-out) in the order they were committed.
+// siblings (a fan-out) in the order they were committed. A record whose
+// predecessor also has a supervisor fault was never released: that instance
+// kept custody and faulted its own frame, so the successor it had spawned
+// (killed, or dead before its stamp arrived) is left out.
 func (l *lineage) order() []string {
 	children := map[string][]string{}
 	for s, x := range l.records {
 		children[x.r.Predecessor] = append(children[x.r.Predecessor], s)
+	}
+	for p, kids := range children {
+		var faulted []string
+		for _, k := range kids {
+			if l.records[k].r.Supervisor {
+				faulted = append(faulted, k)
+			}
+		}
+		if faulted != nil {
+			children[p] = faulted
+		}
 	}
 	for _, kids := range children {
 		sort.Slice(kids, func(i, j int) bool {

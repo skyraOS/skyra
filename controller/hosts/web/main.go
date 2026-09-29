@@ -36,7 +36,6 @@ import (
 
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/park"
-	"skyra/controller/runtime/tree"
 )
 
 type entry struct {
@@ -126,8 +125,7 @@ func (h *webhost) loadPast() {
 			continue
 		}
 		root := filepath.Join(h.dir, d.Name(), ".skyra")
-		records, err := os.ReadDir(filepath.Join(root, "records"))
-		if err != nil {
+		if _, err := os.Stat(filepath.Join(root, "records")); err != nil {
 			continue
 		}
 		c := &conversation{id: d.Name(), phase: "closed", lineage: newLineage(root)}
@@ -135,9 +133,8 @@ func (h *webhost) loadPast() {
 		if info, err := d.Info(); err == nil {
 			c.started = info.ModTime()
 		}
-		for _, f := range records {
-			r, err := tree.Load(root, f.Name())
-			if err != nil || r.State != record.Invoke || r.To != "browser" {
+		for _, r := range c.lineage.live() {
+			if r.State != record.Invoke || r.To != "browser" {
 				continue
 			}
 			var p struct {
