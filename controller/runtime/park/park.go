@@ -20,16 +20,20 @@ import (
 	"os/exec"
 	"syscall"
 
-	"skyra/controller/core/machine"
+	"skyra/controller/core/horizon"
 	"skyra/controller/runtime/custody"
 )
 
-// Frame is a parked invocation: everything needed to resume it.
+// Frame is a parked invocation. The host holds a reference to the work and
+// its descriptors, never its authority: resume derives the instance from the
+// tree (next/20, finding 1; next/24).
 type Frame struct {
-	Root     string           `json:"root"`     // the .skyra it belongs to
-	Instance machine.Instance `json:"instance"` // the instance, in Execute, waiting for its target's output
-	Payload  json.RawMessage  `json:"payload"`  // what the invocation asked of the host
-	Files    []*os.File       `json:"-"`        // the frame stack: custody
+	Root      string             `json:"root"`                // the .skyra it belongs to
+	Stamp     string             `json:"stamp"`               // the parked invoke; its frame is the slot the event returns to
+	Frames    int                `json:"frames"`              // how many of Files are the frame stack; resume checks it against the derived Horizon
+	Resources []horizon.Resource `json:"resources,omitempty"` // what the descriptors after the frame stack are
+	Payload   json.RawMessage    `json:"payload"`             // what the invocation asked of the host
+	Files     []*os.File         `json:"-"`                   // the frame stack and resources: custody
 }
 
 // Send parks a frame with the host at sock and waits for its answer.
@@ -103,12 +107,12 @@ func Receive(c *net.UnixConn) (Frame, error) {
 			f.Files = append(f.Files, os.NewFile(uintptr(fd), "frame"))
 		}
 	}
-	depth := f.Instance.Self.Depth()
-	if len(f.Files) != depth+len(f.Instance.Resources) {
+	depth := f.Frames
+	if depth < 1 || len(f.Files) != depth+len(f.Resources) {
 		f.Close()
-		return Frame{}, fmt.Errorf("parked with %d descriptors, its Horizon needs %d frames and %d resources", len(f.Files), depth, len(f.Instance.Resources))
+		return Frame{}, fmt.Errorf("parked with %d descriptors, for %d frames and %d resources", len(f.Files), depth, len(f.Resources))
 	}
-	if err := custody.Validate(f.Instance.Resources, f.Files[depth:]); err != nil {
+	if err := custody.Validate(f.Resources, f.Files[depth:]); err != nil {
 		f.Close()
 		return Frame{}, err
 	}
@@ -123,11 +127,11 @@ func Answer(c *net.UnixConn, refusal string) error {
 }
 
 // Resume hands a parked frame back to the runtime: it starts `skyra resume`
-// with the frame stack as fds 3.., and the instance and the event on stdin.
-// The event is the target's output; the resumed instance hands it off to a
-// successor, which checks it like any other output.
+// with the frame stack as fds 3.., and the parked stamp and the event on
+// stdin. The runtime derives the instance from the tree; the event is the
+// target's output, handed off to a successor that checks it like any other.
 func Resume(skyra string, f Frame, event []byte, stderr io.Writer) error {
-	in, _ := json.Marshal(Resumed{Instance: f.Instance, Out: string(event)})
+	in, _ := json.Marshal(Resumed{Stamp: f.Stamp, Frames: f.Frames, Resources: f.Resources, Out: string(event)})
 	cmd := exec.Command(skyra, "resume", f.Root)
 	cmd.Stdin = bytes.NewReader(in)
 	cmd.Stderr = stderr
@@ -140,10 +144,13 @@ func Resume(skyra string, f Frame, event []byte, stderr io.Writer) error {
 	return nil
 }
 
-// Resumed is what `skyra resume` reads on stdin.
+// Resumed is what `skyra resume` reads on stdin: which work, what its
+// descriptors are, and the event. Nothing in it is authority.
 type Resumed struct {
-	Instance machine.Instance `json:"instance"`
-	Out      string           `json:"out"`
+	Stamp     string             `json:"stamp"`
+	Frames    int                `json:"frames"`
+	Resources []horizon.Resource `json:"resources,omitempty"`
+	Out       string             `json:"out"`
 }
 
 // Close releases the host's hold on the frame stack.

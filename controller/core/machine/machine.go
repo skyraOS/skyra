@@ -326,11 +326,21 @@ func faulted(kind, cause string, observation json.RawMessage) record.Record {
 	return record.Record{State: record.Fault, Payload: observation, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
 }
 
-// accept is the child's half of Release, for every state: the Horizon must be
-// for this commit and come with its whole frame stack, or the instance stops.
+// accept is the child's half of Release, for every state: the Horizon it
+// looked up must be for this commit, must be exactly what this commit derives
+// from the Horizon it was emitted under, and must come with its whole frame
+// stack, or the instance stops. Authority is derived, never taken on trust
+// (next/24): the id is only a handle.
 func accept(s Instance, e Released) error {
 	if e.Self.Stamp != s.Stamp {
 		return errors.New("release is not for this commit")
+	}
+	want, err := Narrow(s.Under, s.R, s.Stamp)
+	if err != nil {
+		return fmt.Errorf("release cannot be derived: %w", err)
+	}
+	if a, b := encode(want), encode(e.Self); a != b {
+		return errors.New("release is not what this commit derives")
 	}
 	if e.Frames != e.Self.Depth() {
 		return fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, e.Self.Depth())
@@ -339,6 +349,11 @@ func accept(s Instance, e Released) error {
 		return errors.New("too many custody resources")
 	}
 	return nil
+}
+
+func encode(h horizon.Horizon) string {
+	b, _ := json.Marshal(h)
+	return string(b)
 }
 
 // 2. Release, invoke: accept the Horizon and run exactly the committed

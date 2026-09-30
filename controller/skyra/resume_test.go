@@ -134,7 +134,7 @@ func TestResumeFramesDoNotReachTarget(t *testing.T) {
 		identities = append(identities, map[string]any{"device": s.Dev, "inode": s.Ino})
 	}
 	ids, _ := json.Marshal(identities)
-	event, _ := json.Marshal(map[string]string{"to": f.Instance.Self.Frame, "payload": string(ids)})
+	event, _ := json.Marshal(map[string]string{"to": f.Stamp, "payload": string(ids)})
 	if err := park.Resume(skyra, f, event, log); err != nil {
 		t.Fatal(err)
 	}

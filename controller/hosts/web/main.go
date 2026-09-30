@@ -312,7 +312,7 @@ func (h *webhost) handle(raw []byte) {
 		h.broadcast()
 		// The event goes back in as a return, addressed to the parked frame's
 		// slot: whatever the human typed is only text.
-		event, _ := json.Marshal(map[string]string{"to": f.Instance.Self.Frame, "payload": text})
+		event, _ := json.Marshal(map[string]string{"to": f.Stamp, "payload": text}) // a parked invoke's frame is its own stamp
 		if err := park.Resume(h.skyra, f, event, h.log); err != nil {
 			h.mu.Lock()
 			conv.phase = "failed"

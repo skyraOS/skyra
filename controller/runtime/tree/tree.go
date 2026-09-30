@@ -2,6 +2,7 @@
 // the inputs they point at) and frame directories. It is the only package that
 // reads or writes .skyra/ files.
 //
+//	horizons/<id>                     a Horizon, committed when it is released: the child looks it up by its hash
 //	frames/<F>/result                 write-once: the record that discharged F's slot
 //	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before the child ran
 //	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
@@ -19,12 +20,13 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
 // Init creates the tree's directories.
 func Init(root string) error {
-	for _, d := range []string{"records", "inputs", "frames"} {
+	for _, d := range []string{"records", "inputs", "horizons", "frames"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return err
 		}
@@ -84,6 +86,30 @@ func Commit(root string, r record.Record) (string, error) {
 	return Put(root, "records", b)
 }
 
+// PutHorizon commits a Horizon and returns its id, the hash of its encoding.
+// A Horizon is released by committing it (next/24): what crosses to the child
+// is only the id, and the child looks it up here.
+func PutHorizon(root string, h horizon.Horizon) (string, error) {
+	b, err := json.Marshal(h)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(root, "horizons"), 0o755); err != nil {
+		return "", err
+	}
+	return Put(root, "horizons", b)
+}
+
+// LoadHorizon reads a Horizon by id, refusing it unless it hashes to that id.
+func LoadHorizon(root, id string) (horizon.Horizon, error) {
+	b, err := Get(root, "horizons", id)
+	if err != nil {
+		return horizon.Horizon{}, err
+	}
+	var h horizon.Horizon
+	return h, json.Unmarshal(b, &h)
+}
+
 // Load reads a record by stamp, refusing it unless it hashes to that stamp.
 func Load(root, stamp string) (record.Record, error) {
 	b, err := Get(root, "records", stamp)
@@ -101,6 +127,28 @@ func OpenFrame(root, stamp string) (*os.File, error) {
 		return nil, err
 	}
 	return os.Open(dir)
+}
+
+// HasSuccessor reports whether any record was committed under stamp: whether
+// the work at stamp has already been handed on.
+func HasSuccessor(root, stamp string) (bool, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "records"))
+	if err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		if e.Name()[0] == '.' {
+			continue
+		}
+		r, err := Load(root, e.Name())
+		if err != nil {
+			return false, err
+		}
+		if r.Predecessor == stamp {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Result reads a frame's result, if it has settled.

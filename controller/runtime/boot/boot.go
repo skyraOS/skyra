@@ -5,6 +5,8 @@
 package boot
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,9 +45,16 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	}
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
-	// operator, and everything under it shares them until a narrowing.
+	// operator, and everything under it shares them until a narrowing. It is
+	// the one origin with no predecessor, so it is authored, and it carries a
+	// nonce: two boots of the same registry are two histories, never one.
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return Outcome{}, err
+	}
 	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
-	g0, err := tree.Commit(root, record.Record{Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority}) // frame 0: the operator's, in invoke
+	g0, err := tree.Commit(root, record.Record{Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
+		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
 	if err != nil {
 		return Outcome{}, err
 	}

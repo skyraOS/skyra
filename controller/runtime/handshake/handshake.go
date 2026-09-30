@@ -16,7 +16,6 @@ import (
 	"os"
 	"syscall"
 
-	"skyra/controller/core/horizon"
 	"skyra/controller/runtime/custody"
 )
 
@@ -24,10 +23,17 @@ type StampMsg struct {
 	Stamp string `json:"stamp"`
 }
 
-// Release carries the checked Horizon and the manifest for descriptors after
-// its frame stack. The descriptors themselves travel in the same datagram.
+// Under names, by id, the Horizon a successor's input was emitted under.
+type Under struct {
+	Horizon string `json:"horizon"`
+}
+
+// Release names the committed Horizon by id, with the manifest for
+// descriptors after its frame stack. The descriptors themselves travel in the
+// same datagram.
 type Release struct {
-	Horizon   horizon.Horizon    `json:"horizon"`
+	Horizon string `json:"horizon"` // the id of the committed Horizon: the child looks it up
+
 	Resources []custody.Resource `json:"resources,omitempty"`
 }
 

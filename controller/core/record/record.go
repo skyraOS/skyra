@@ -55,6 +55,8 @@ type Record struct {
 	Deps        []string                   `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
 	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
 	Authority   *horizon.Authority         `json:"authority,omitempty"`  // genesis only: the grants everything under the root shares
+	Author      string                     `json:"author,omitempty"`     // genesis only: who created the room (next/24: the one authored origin)
+	Nonce       string                     `json:"nonce,omitempty"`      // genesis only: makes this act, and every stamp after it, unique
 	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
 

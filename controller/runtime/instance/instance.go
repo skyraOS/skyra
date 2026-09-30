@@ -36,9 +36,13 @@ func Run(root string) error {
 		return fmt.Errorf("an instance must be started by a parent: %w", err)
 	}
 	defer up.Close()
-	var under horizon.Horizon // the Horizon the bytes were emitted under
-	if _, err := handshake.Recv(up, &under); err != nil {
+	var named handshake.Under // the Horizon the bytes were emitted under, by id
+	if _, err := handshake.Recv(up, &named); err != nil {
 		return err
+	}
+	under, err := tree.LoadHorizon(root, named.Horizon)
+	if err != nil {
+		return fmt.Errorf("the Horizon this input was emitted under: %w", err)
 	}
 	in, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -101,7 +105,14 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err != nil {
 					return s, fmt.Errorf("no Horizon, cannot execute: %w", err)
 				}
-				h := release.Horizon
+				h, err := tree.LoadHorizon(root, release.Horizon)
+				if err != nil {
+					for _, f := range files {
+						f.Close()
+					}
+					_ = handshake.Send(up, handshake.Accepted{Error: "released Horizon: " + err.Error()})
+					return s, fmt.Errorf("released Horizon: %w", err)
+				}
 				if len(files) != h.Depth()+len(release.Resources) {
 					for _, f := range files {
 						f.Close()
@@ -120,7 +131,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err := handshake.Send(up, handshake.Accepted{}); err != nil {
 					return s, err
 				}
-				trace.Logf("release  Horizon received (reach %v, %d frames, %d resources)", h.Names(), h.Depth(), len(release.Resources))
+				trace.Logf("release  Horizon %s looked up (reach %v, %d frames, %d resources)", record.Short(release.Horizon), h.Names(), h.Depth(), len(release.Resources))
 				e = machine.Released{Self: h, Frames: h.Depth(), Resources: release.Resources}
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
@@ -184,7 +195,11 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					defer f.Close()
 					frames = append([]*os.File{f}, stack...)
 				}
-				if err := handshake.Send(down, handshake.Release{Horizon: x.Child, Resources: s.Resources}, frames...); err != nil {
+				id, err := tree.PutHorizon(root, x.Child)
+				if err != nil {
+					return s, err
+				}
+				if err := handshake.Send(down, handshake.Release{Horizon: id, Resources: s.Resources}, frames...); err != nil {
 					return s, err
 				}
 				var accepted handshake.Accepted
@@ -218,7 +233,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 			case machine.Park:
 				trace.Logf("park     custody passes to the host at %s; waiting on an outside event", x.Host)
 				e = machine.Parked{}
-				if err := park.Send(x.Host, park.Frame{Root: root, Instance: s, Payload: x.Payload, Files: stack}); err != nil {
+				if err := park.Send(x.Host, park.Frame{Root: root, Stamp: s.Stamp, Frames: s.Self.Depth(), Resources: s.Resources, Payload: x.Payload, Files: stack}); err != nil {
 					e = machine.Parked{Err: err.Error()}
 				}
 			case machine.Pop:
@@ -403,7 +418,11 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 		return nil, nil, nil, err
 	}
 	childEnd.Close()
-	if err := handshake.Send(down, x.Under); err != nil {
+	id, err := tree.PutHorizon(root, x.Under)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := handshake.Send(down, handshake.Under{Horizon: id}); err != nil {
 		return nil, nil, nil, err
 	}
 	var st handshake.StampMsg

@@ -202,15 +202,29 @@ func TestReleaseRefusals(t *testing.T) {
 // instance goes on to read what that continuation still waits on; if only the
 // operator waits, it exits.
 func TestReleaseToSettle(t *testing.T) {
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`x`)})
-	s, effs := released(s, horizon.Horizon{Stamp: s.Stamp, Frame: "r1"})
+	// The operator's own emission is refused: its fault discharges frame 0,
+	// which only the operator waits on.
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"ghost","payload":{}}`)})
+	s, effs := released(s, selfOf(t, s))
 	if !reflect.DeepEqual(effs, []Effect{Settle{s.Stamp}, Exit{}}) {
 		t.Fatalf("with only the operator waiting: %#v", effs)
 	}
-	s, _ = Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`x`)})
-	s, effs = released(s, horizon.Horizon{Stamp: s.Stamp, Frame: "r1", Resume: &operator})
+	s, _ = Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, effs = released(s, selfOf(t, s))
 	if !reflect.DeepEqual(effs, []Effect{Settle{s.Stamp}, GatherWaiter{}}) || s.Phase != Gather {
 		t.Fatalf("with a continuation waiting: %#v", effs)
+	}
+}
+
+// The child re-derives the Horizon it looked up: one with the right stamp
+// but more reach than its commit derives is refused, and nothing runs.
+func TestReleaseMustBeWhatTheCommitDerives(t *testing.T) {
+	s := awaiting(t)
+	forged := selfOf(t, s)
+	forged.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS, "shell": echoS}
+	_, effs := released(s, forged)
+	if x, ok := effs[0].(Exit); !ok || !strings.Contains(x.Err, "not what this commit derives") {
+		t.Fatalf("a Horizon the commit does not derive must stop the instance: %#v", effs)
 	}
 }
 
