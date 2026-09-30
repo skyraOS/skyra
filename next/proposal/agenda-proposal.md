@@ -1,5 +1,7 @@
 # Agenda: proposal
 
+Status (2026-09-30): **Implemented.** Revision note added to the agenda (`a24fdfb`).
+
 Proposes changes to [agenda](../agenda.md). Ids refer to the
 [list](README.md).
 

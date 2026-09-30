@@ -1,5 +1,7 @@
 # 14 — Interpreted, not stated: proposal
 
+Status (2026-09-30): **Implemented.** Code: A1–A9 (`d49ce18`). Document: revision note added to 14 (`a24fdfb`).
+
 Proposes changes to [14](../14-interpreted-not-stated.md). Ids refer to the
 [list](README.md).
 

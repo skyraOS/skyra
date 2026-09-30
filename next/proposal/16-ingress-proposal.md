@@ -1,5 +1,7 @@
 # 16 — Ingress: proposal
 
+Status (2026-09-30): **Implemented.** Code: A5 and B10 (`d49ce18`, `dad1bf0`); the host holds a stamp and resume derives from the tree. Document revised (`a24fdfb`). **Not built:** the webhost listing parked steps from the tree on start (recovery after the host dies).
+
 Proposes changes to [16](../16-ingress.md). Ids refer to the [list](README.md).
 
 ## What changes

@@ -1,5 +1,7 @@
 # 18 — App-server spec improvements: proposal
 
+Status (2026-09-30): **Document revised** (`a24fdfb`). **Not built:** D4, D6 and C4, which this document's code depends on.
+
 Proposes changes to [18](../18-app-server-spec-improvements.md). Ids refer to
 the [list](README.md).
 

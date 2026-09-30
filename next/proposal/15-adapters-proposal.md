@@ -1,5 +1,7 @@
 # 15 — Adapters: proposal
 
+Status (2026-09-30): **Implemented.** The note is added to 15 (`a24fdfb`).
+
 Proposes changes to [15](../15-adapters.md). Ids refer to the [list](README.md).
 
 ## What changes

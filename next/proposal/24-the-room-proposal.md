@@ -1,5 +1,7 @@
 # 24 — The room: proposal
 
+Status (2026-09-30): **Implemented in part.** Steps 1 (`a275748`), 2 (`dad1bf0`), 4 and 5's resume (`dad1bf0`) are built; B1 and B2 in part. **Not built:** step 3 (the stack without the `Resume` copy), step 5's recovery by reading state, step 6 (marks backed by records).
+
 The implementation plan for [24](../24-the-room.md). Ids refer to the
 [list](README.md). 24 depends on improvements items 1 and 2 (A), which land
 first.

@@ -1,5 +1,7 @@
 # 23 — The desktop app: proposal
 
+Status (2026-09-30): **Document revised** (`a24fdfb`); B8 built (`dad1bf0`). **Not built:** faults climbing to the human and the room's admin facet, which cut 3 needs.
+
 Proposes changes to [23](../23-desktop-app.md). Ids refer to the
 [list](README.md).
 

@@ -1,5 +1,7 @@
 # 19 — App-server custody, not implemented: proposal
 
+Status (2026-09-30): **Implemented.** Statuses revised in 19 (`a24fdfb`).
+
 Proposes changes to [19](../19-appserver-custody-features-not-implimented.md).
 Ids refer to the [list](README.md).
 

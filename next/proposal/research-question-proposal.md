@@ -1,5 +1,7 @@
 # Research question: proposal
 
+Status (2026-09-30): **Implemented.** The system description and H3 revised (`a24fdfb`).
+
 Proposes changes to [research-question](../research-question.md). Ids refer
 to the [list](README.md).
 

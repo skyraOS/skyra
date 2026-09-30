@@ -1,5 +1,7 @@
 # 25 — Surface refactor: proposal
 
+Status (2026-09-30): **Implemented in part.** C1 and C2 built (`a275748`). **Corrected and deferred:** C3, since the launcher passes the real app-server's `--disable` flags through `Args`. **Not built:** C4.
+
 The implementation plan for [25](../25-surface-refactor.md). Ids refer to the
 [list](README.md). C1–C3 land with 24's step 1.
 

@@ -1,5 +1,7 @@
 # 20 — Boundary crossing: proposal
 
+Status (2026-09-30): **Implemented.** Crossings revised and finding 1 closed in 20 (`a24fdfb`), by B10 (`dad1bf0`).
+
 Proposes changes to [20](../20-boundry-crossing.md). Ids refer to the
 [list](README.md).
 

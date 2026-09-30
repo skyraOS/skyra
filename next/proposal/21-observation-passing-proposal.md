@@ -1,5 +1,7 @@
 # 21 — Observation passing: proposal
 
+Status (2026-09-30): **Document revised** (`a24fdfb`); A6 built (`d49ce18`). **Not built:** 21's own observation register.
+
 Proposes changes to [21](../21-observation-passing.md). Ids refer to the
 [list](README.md).
 

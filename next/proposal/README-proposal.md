@@ -1,5 +1,7 @@
 # next/README: proposal
 
+Status (2026-09-30): **Not applied.** `next/README.md` has uncommitted edits; apply the entries on top of them.
+
 Proposes changes to the [index](../README.md).
 
 ## What changes

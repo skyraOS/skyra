@@ -1,5 +1,7 @@
 # 22 — The read tool: proposal
 
+Status (2026-09-30): **Implemented.** Code: A4, A5, B6, B7 (`d49ce18`, `a275748`); `read_test` updated. Document revised (`a24fdfb`).
+
 Proposes changes to [22](../22-read-tool.md). Ids refer to the
 [list](README.md).
 

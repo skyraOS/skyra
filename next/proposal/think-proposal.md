@@ -1,5 +1,7 @@
 # Think: proposal
 
+Status (2026-09-30): **Not applied.** `think.md` is uncommitted work in the tree. The mechanism it relies on, `system.narrow`, is built (`8ba6f4c`).
+
 Proposes changes to [think](../think.md). Ids refer to the
 [list](README.md).
 

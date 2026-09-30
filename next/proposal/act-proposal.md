@@ -1,5 +1,7 @@
 # Act: proposal
 
+Status (2026-09-30): **Not applied.** `act.md` is uncommitted work in the tree. `system.narrow` is built (`8ba6f4c`); the continuation count needs C2 (built).
+
 Proposes changes to [act](../act.md). Ids refer to the [list](README.md).
 
 ## What changes

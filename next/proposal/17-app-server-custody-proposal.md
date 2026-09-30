@@ -1,5 +1,7 @@
 # 17 — The app-server in custody: proposal
 
+Status (2026-09-30): **Implemented in part.** Document revised (`a24fdfb`). Code: B7 and C1 (`a275748`), A7 (`d49ce18`). **Not built:** the app-server's per-thread narrowing through `system.narrow` at `start`; the network fields leaving the surface (C4).
+
 Proposes changes to [17](../17-app-server-custody.md). Ids refer to the
 [list](README.md).
 
