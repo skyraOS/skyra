@@ -55,7 +55,7 @@ func TestResumeDerivesTheParkedInstance(t *testing.T) {
 		r    park.Resumed
 		want string
 	}{
-		"genesis is not parked work": {park.Resumed{Stamp: g0, Frames: 1}, "not a parked invocation"},
+		"genesis is not parked work":        {park.Resumed{Stamp: g0, Frames: 1}, "not a parked invocation"},
 		"a frame count that does not match": {park.Resumed{Stamp: invoke, Frames: 5}, "carries 5 frames"},
 	} {
 		if _, err := parked(root, c.r); err == nil || !strings.Contains(err.Error(), c.want) {

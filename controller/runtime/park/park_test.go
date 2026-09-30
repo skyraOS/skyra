@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 // Parking passes the instance, its payload and its frame stack; the host
