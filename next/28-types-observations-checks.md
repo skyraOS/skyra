@@ -93,6 +93,34 @@ cold start, and what it decided is kept. A deterministic parent (the Codex
 adapter, `user`, `agent`) cannot answer an interrupt, so it declares its
 checks at registration; "accept any fitting return" is a check it may choose.
 
+## The log is the test suite
+
+Every time a check runs, the runtime records the observation and the verdict.
+So the cases a boundary has seen are already in the log: every
+`(observation, verdict)` pair for that binding. Nothing extra is collected.
+
+When a parent **rewrites** a check (after a failure, an overfit, or a change
+in the child), the runtime runs the new check against every recorded case for
+that boundary before accepting it:
+
+- **Every verdict matches:** the new check is accepted. Behavior stays defined
+  for every previous case.
+- **A verdict flips:** the rewrite must say so. Each flipped case is shown to
+  the parent, which accepts the change deliberately, and the flip is recorded
+  with the parent as author. A check can change, but never silently.
+
+The suite is past **verdicts**, not past checks. Requiring every old check to
+keep passing would make checks only ever stricter, so one written too strict
+could never be fixed. Past verdicts keep behavior defined without freezing a
+mistake.
+
+It is sound here because checks are deterministic (a re-run is exact, with no
+flaky cases), have no authority (hundreds of old cases are safe and cheap to
+run), and every case names the step that produced it (a flip points at real
+history, not a fixture). Procedures, when they come, are validated the same
+way: replayed against the recorded runs they replace, matching them or
+declaring what differs.
+
 ## Checks are Starlark
 
 A check is written in [Starlark](https://github.com/bazelbuild/starlark), and
@@ -157,6 +185,11 @@ known gap: a fault in a Codex turn does not yet reach Codex within the turn.
   guard falls back.
 - **Starlark in Bazel.** Hermetic, deterministic rules written by people who
   are not the build system: the same property wanted from an LLM-written check.
+- **Characterization tests** (Feathers, *Working Effectively with Legacy
+  Code*): record what the system actually does, and treat it as the
+  specification while changing it. **Golden and snapshot tests** do the same
+  with recorded outputs as the oracle, accepted explicitly when they change.
+  Here the log is the record, and a flipped verdict is the explicit acceptance.
 
 ## Self-extension
 
@@ -199,6 +232,9 @@ to the registrant's reach, the way `system.narrow`'s references are added.
 - **Handlers' defaults.** Whether a binding without a handler faults, as today.
 - **Metering.** The step cap per check, and whether it is charged to the
   parent's Horizon (improvements item 7).
+- **The size of a suite.** Every past case, or a bounded, deduplicated set
+  (distinct observations by content id, improvements item 9). Long
+  conversations make "every" large.
 - **Record encoding.** Traces, blame and bindings as records belong with
   improvements item 9.
 
@@ -211,4 +247,6 @@ to the registrant's reach, the way `system.narrow`'s references are added.
    return.
 4. The novelty interrupt: the first interrupt state in `core/machine`.
 5. Handlers and restarts.
-6. Agent-written tools as Starlark, and `system.register`.
+6. The log as the test suite: a rewritten check runs against a boundary's
+   recorded cases, and flips are declared.
+7. Agent-written tools as Starlark, and `system.register`.
