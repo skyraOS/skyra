@@ -41,10 +41,14 @@ became) or **not in the proposal**.
    types are contracts, observations are values. The parent owns the check on
    its children, written in Starlark at a novelty interrupt and kept; the log
    is the test suite; agent-written tools as Starlark.
-9. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
-   travel by hash; continuations pass their children's observations up instead
-   of authoring a replacement.
-10. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
+9. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
+   runtime owns control flow, an actor owns its state. The kernel provisions
+   where an actor's state and methods live, in no Horizon; a novelty interrupt
+   shows three interfaces. The Codex adapter as the example.
+10. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
+    travel by hash; continuations pass their children's observations up instead
+    of authoring a replacement.
+11. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
     crossing of the trusted boundary must answer. A standing rule.
-11. **[`research-question.md`](research-question.md)**: the question, the
+12. **[`research-question.md`](research-question.md)**: the question, the
     metrics, the baseline, and the September–December plan.
