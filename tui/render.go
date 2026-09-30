@@ -51,7 +51,6 @@ type pixel struct {
 type canvas struct {
 	w, h       int
 	titleLight float64 // how lit the title is by a satellite or meteor near it
-	cells      [][]pixel
 	fg         [][]rgb
 	bg         [][]rgb
 	marks      [][]rune
@@ -481,10 +480,6 @@ func ledger(c call, width int) []segment {
 	}
 }
 
-func color(bg, fg, text string) string {
-	return "\x1b[48;2;" + bg + "m\x1b[38;2;" + fg + "m" + text + "\x1b[0m"
-}
-
 func safe(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -497,17 +492,6 @@ func safe(s string) string {
 		}
 	}
 	return b.String()
-}
-
-func fit(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	r := []rune(strings.ReplaceAll(safe(s), "\n", " "))
-	if len(r) > width {
-		r = r[:width]
-	}
-	return string(r) + strings.Repeat(" ", width-len(r))
 }
 
 func wrap(s string, width int) []string {
