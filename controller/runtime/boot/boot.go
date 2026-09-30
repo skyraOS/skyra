@@ -43,6 +43,9 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	if err != nil {
 		return Outcome{}, err
 	}
+	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
+		reach[name] = facet
+	}
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
 	// operator, and everything under it shares them until a narrowing. It is

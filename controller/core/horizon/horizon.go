@@ -88,6 +88,7 @@ type Surface struct {
 	Input              *contract.Schema `json:"input"`                          // what invoking it must fit
 	Output             *contract.Schema `json:"output"`                         // what its return must fit
 	Continuation       bool             `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
+	System             string           `json:"system,omitempty"`               // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
 	Resident           bool             `json:"resident,omitempty"`             // launch and retain a stream connection in custody
 	Connection         bool             `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
 	CloseConnection    bool             `json:"close_connection,omitempty"`     // release that connection after this operation
@@ -122,8 +123,17 @@ type Horizon struct {
 	Surface   *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
 	Reach     map[string]Surface `json:"reach"`             // what emissions under this Horizon may invoke
 	Authority Authority          `json:"authority"`         // the OS grants everything under this Horizon runs with
+	Refs      map[string]Grant   `json:"refs,omitempty"`    // references received from the room: each names a narrowed Horizon for one actor (next/26)
 	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
 	Resume    *Horizon           `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
+}
+
+// Grant is what a reference stands for: an actor in reach, and the narrowed
+// Horizon it runs under when the reference is invoked.
+type Grant struct {
+	Actor     string    `json:"actor"`
+	Reach     []string  `json:"reach"`
+	Authority Authority `json:"authority"`
 }
 
 // Depth is the number of frames in the stack that travels with this Horizon.

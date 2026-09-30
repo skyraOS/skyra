@@ -442,7 +442,7 @@ func TestNarrowSharesTheCallersHorizon(t *testing.T) {
 // non-I/O packages and the pure packages of this module.
 func TestMachineIsPure(t *testing.T) {
 	allowed := map[string]bool{
-		"encoding/json": true, "errors": true, "fmt": true, "unicode/utf8": true,
+		"encoding/json": true, "errors": true, "fmt": true, "unicode/utf8": true, "slices": true, "strings": true,
 		"skyra/controller/core/contract": true,
 		"skyra/controller/core/horizon":  true,
 		"skyra/controller/core/record":   true,

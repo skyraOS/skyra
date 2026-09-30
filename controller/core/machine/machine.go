@@ -311,11 +311,19 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
 	}
 	target, ok := h.Reach[to]
+	if g, isRef := h.Refs[to]; isRef && !ok {
+		target, ok = h.Reach[g.Actor]
+	}
 	if !ok {
 		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
 	if err := contract.Fits(target.Input, payload); err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
+	}
+	if target.System == "narrow" {
+		if _, err := narrowing(h, contract.Canonical(payload)); err != nil {
+			return faulted(record.Horizon, to+": "+err.Error(), attempt)
+		}
 	}
 	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
 }
@@ -366,6 +374,10 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	s.Self, s.Phase = e.Self, Execute
 	s.Resources = append([]horizon.Resource(nil), e.Resources...)
+	if e.Self.Surface.System != "" {
+		// A facet of the room: nothing runs; its result is derived.
+		return execute(s, Emitted{Out: runFacet(s)})
+	}
 	if e.Self.Surface.Host != "" {
 		// An async surface: nothing runs here. The host takes custody and
 		// resumes this instance, in Execute, with the event as the output.
@@ -467,25 +479,50 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 
 // Narrow computes the child's Horizon from the parent's and the child's
 // record. Every call shares its caller's Horizon (next/24): the child runs
-// with the same reach and the same grants. Nothing about the callee narrows
-// them; a narrowing is requested, through the room (next/26, not built).
+// with the same reach, references and grants. Nothing about the callee
+// narrows them; a narrowing is requested, through the room (next/26):
+//
+//	invoke system.narrow   the caller's Horizon, and the waiting caller is
+//	                       recorded as holding a new reference: the grant
+//	                       its payload derives, named by this invoke's stamp
+//	invoke a reference     the actor, under the narrowed Horizon it names
 //
 // An invoke opens a new frame for the child, waited on by the parent as it is
 // now. A return or fault runs nothing: it discharges the parent's slot.
 func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
 	switch r.State {
 	case record.Return, record.Fault:
-		return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Authority: parent.Authority, Frame: parent.Frame, Resume: parent.Resume}, nil
+		return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: parent.Frame, Resume: parent.Resume}, nil
 	case record.Invoke:
 	default:
 		return horizon.Horizon{}, fmt.Errorf("no Horizon for a record in a state of %s", r.State)
+	}
+	waiter := parent
+	if g, isRef := parent.Refs[r.To]; isRef {
+		if _, named := parent.Reach[r.To]; !named {
+			s, ok := parent.Reach[g.Actor]
+			if !ok {
+				return horizon.Horizon{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
+			}
+			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Frame: stamp, Resume: &waiter}, nil
+		}
 	}
 	s, ok := parent.Reach[r.To]
 	if !ok {
 		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
-	waiter := parent
-	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
+	if s.System == "narrow" {
+		g, err := narrowing(parent, r.Payload)
+		if err != nil {
+			return horizon.Horizon{}, err
+		}
+		refs := map[string]horizon.Grant{stamp: g}
+		for name, held := range parent.Refs {
+			refs[name] = held
+		}
+		waiter.Refs = refs
+	}
+	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
 }
 
 // 5. Settle: accept the Horizon, whose first frame is the slot this record
@@ -619,6 +656,11 @@ func tools(h horizon.Horizon) map[string]*contract.Schema {
 	t := map[string]*contract.Schema{}
 	for name, s := range h.Reach {
 		t[name] = s.Input
+	}
+	for ref, g := range h.Refs {
+		if s, ok := h.Reach[g.Actor]; ok {
+			t[ref] = s.Input
+		}
 	}
 	return t
 }

@@ -60,6 +60,9 @@ func Load(file string) (map[string]horizon.Surface, horizon.Authority, error) {
 	dir := filepath.Dir(file)
 	reach := map[string]horizon.Surface{}
 	for name, e := range entries {
+		if strings.HasPrefix(name, "system.") {
+			return nil, room, fmt.Errorf("%s: the room's facets are the runtime's, never registered", name)
+		}
 		var d Declared
 		if err := strict(resolve(dir, e.Contract), &d); err != nil {
 			return nil, room, fmt.Errorf("%s contract: %w", name, err)

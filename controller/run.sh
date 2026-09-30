@@ -37,6 +37,7 @@ scenario() {
 }
 
 scenario "agent: a continuation calls echo, waits, resumes" -to agent -payload '{"text":"hello"}'
+scenario "agent narrows echo through the room, then calls it" -to agent -payload '{"text":"narrow:hello"}'
 scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'
