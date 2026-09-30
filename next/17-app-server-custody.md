@@ -1,7 +1,9 @@
 # The app-server in custody: Codex asks, never executes
 
+Proposal: **In the proposal.** Open work tracked in [next/proposal](proposal/README.md): the app-server narrowed per thread through `system.narrow` (D1, D2), and its network fields leaving the surface (C4).
+
 Date: 2026-09-27  
-Status: draft spec, revised after review. Follows [15](15-adapters.md) and
+Status: draft spec, revised after review. Follows 15 and
 closes its open item "preventing native execution". Nothing here is built.
 [18](18-app-server-spec-improvements.md) replaces this spec's lifecycle and
 communication design: there is no actor host. The runtime launches one
@@ -406,7 +408,7 @@ this is the fallback: with no environment (step 3), no such tool is offered.
 
 Seatbelt cannot filter by hostname, so the network goes through an **egress
 proxy**. It is its own small process, not an actor host: the universal
-contracts ([15](15-adapters.md)) carry one JSON line per request, and a
+contracts (15) carry one JSON line per request, and a
 `CONNECT` tunnel's byte stream does not fit them. It follows the same rules,
 though: it decides nothing, and it records every observation durably before
 acting on it.
@@ -537,7 +539,7 @@ bare socket path through `Connect`, so it moves to an actor entry and the
 capabilities of 18 in the same change.
 
 Then update the docs: `startup-doc.md` ("What it cannot do"), close the open
-item in [15](15-adapters.md), and replace the "detects, does not prevent" line
+item in 15, and replace the "detects, does not prevent" line
 in `controller/codex/adapter/main.go`'s header.
 
 ## Acceptance

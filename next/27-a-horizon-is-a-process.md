@@ -1,5 +1,7 @@
 # A Horizon is a process
 
+Proposal: **Not in the proposal.** Written after the proposal. Its order (one envelope, supervision, near and far in the record) is not yet in [next/proposal](proposal/README.md).
+
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [24](24-the-room.md) and
 [26](26-agents-and-facets.md). Settles the `continuation` flag left by

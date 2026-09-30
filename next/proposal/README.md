@@ -126,21 +126,18 @@ the per-document proposals say the same for their documents.
 
 | Document | Proposal | Kind | Implemented |
 |---|---|---|---|
-| [14](../14-interpreted-not-stated.md) | [14-interpreted-not-stated-proposal](14-interpreted-not-stated-proposal.md) | superseded in part: the `reply` capability | **Done**: revision note added; code: A (built) |
-| [15](../15-adapters.md) | [15-adapters-proposal](15-adapters-proposal.md) | historical; a note | **Done**: the note is added |
-| [16](../16-ingress.md) | [16-ingress-proposal](16-ingress-proposal.md) | code and doc: park by hash, resume from the tree | **Done**: doc revised; code: A5, B10 built. Restore from the tree after a host dies is not built |
 | [17](../17-app-server-custody.md) | [17-app-server-custody-proposal](17-app-server-custody-proposal.md) | its blocking open item is answered | **Done**: revision note; code: B7, C1 built. The per-thread narrowing at `start` is not wired |
 | [18](../18-app-server-spec-improvements.md) | [18-app-server-spec-improvements-proposal](18-app-server-spec-improvements-proposal.md) | section 7 conflicts; facets replace the tool split | **Done**: section 7 reconciled; code: D6 not built |
-| [19](../19-appserver-custody-features-not-implimented.md) | [19-…-proposal](19-appserver-custody-features-not-implimented-proposal.md) | statuses change | **Done**: statuses revised |
-| [20](../20-boundry-crossing.md) | [20-boundry-crossing-proposal](20-boundry-crossing-proposal.md) | crossings change; finding 1 closes | **Done**: crossings revised; finding 1 closed by B10 |
-| [21](../21-observation-passing.md) | [21-observation-passing-proposal](21-observation-passing-proposal.md) | three open choices answered | **Done**: three open choices answered; the register itself is not built |
-| [22](../22-read-tool.md) | [22-read-tool-proposal](22-read-tool-proposal.md) | code and doc: address the slot, shared Horizon | **Done**: doc revised; code: A5 built |
 | [23](../23-desktop-app.md) | [23-desktop-app-proposal](23-desktop-app-proposal.md) | cut 3 gets its mechanism | **Done**: cut 3's mechanism named; code: the admin facet is not built |
 | [24](../24-the-room.md) | [24-the-room-proposal](24-the-room-proposal.md) | implementation plan | **In part**: status line added; see B |
 | [25](../25-surface-refactor.md) | [25-surface-refactor-proposal](25-surface-refactor-proposal.md) | implementation plan | **In part**: item 1 built; item 2 corrected and deferred; item 3 not built |
 | [26](../26-agents-and-facets.md) | [26-agents-and-facets-proposal](26-agents-and-facets-proposal.md) | implementation plan | **In part**: `system.narrow` and its references built; see D |
-| [agenda](../agenda.md) | [agenda-proposal](agenda-proposal.md) | `interpret` and `reply` sections superseded | **Done**: revision note added |
-| [research-question](../research-question.md) | [research-question-proposal](research-question-proposal.md) | the system description and H3 | **Done**: the system description and H3 revised |
 | [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
 | [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
-| [README](../README.md) | [README-proposal](README-proposal.md) | the index | Not applied: `next/README.md` has uncommitted edits |
+| [README](../README.md) | [README-proposal](README-proposal.md) | the index | Applied in the working tree, uncommitted |
+
+Removed on 2026-09-30, with their per-document proposals, because they were
+retired or fully done: 14 (interpreted, not stated), 15 (adapters), 16
+(ingress), 19 (the app-server gap inventory), 22 (the read tool) and the
+agenda. The proposals for 20, 21 and the research question were removed too:
+their edits are applied, and those documents stay. All are in git history.

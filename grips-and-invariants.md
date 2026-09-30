@@ -57,7 +57,7 @@ is not forbidden, which would kill adaptivity; drift that fits no contract is
 a fault, never silence.
 
 - **Built:** targets never say "invoke", "return" or "fault". `interpret`
-  derives the state from operands ([thought 14](next/14-interpreted-not-stated.md)).
+  derives the state from operands (thought 14).
   Every capability has an input contract and a return contract, and a payload
   that does not fit is a typed `contract` fault, committed and replayable.
   The emitter is never the checker.

@@ -1,12 +1,14 @@
 # App-server spec improvements: a process per thread, the connection in custody
 
+Proposal: **In the proposal.** Open work tracked in [next/proposal](proposal/README.md): section 7 as a narrowed Horizon at `start`, the tool split as facets (D4, D6), and connection custody as control flow (C4).
+
 Date: 2026-09-27  
 Status: resident connection custody and the Codex start, exchange, inspect and
 stop path are implemented. This document records the design and earlier
 experiment; see [the controller](../controller/README.md) for current limits.
 Revises the lifecycle and communication
 design in [17 — The app-server in custody](17-app-server-custody.md) and the
-long-lived host split in [15 — Adapters](15-adapters.md). Resolves 17's open
+long-lived host split in 15 — Adapters. Resolves 17's open
 item "who owns the actor host": nothing does, because there is no host.
 
 ## The boundary
@@ -153,7 +155,7 @@ runtime already has: **the connection is an fd in the frame stack.**
   over SCM_RIGHTS. While the adapter waits on a tool, the connection travels
   with it; when the adapter resumes, it is there.
 - **Parked while idle.** Between conversation turns, the frame is parked with
-  the ingress host ([16](16-ingress.md)), fds included. The ingress host holds
+  the ingress host (16), fds included. The ingress host holds
   the connection exactly as it holds the directory fds, and decides nothing.
 - **Lost only with its holder.** fds cannot be written to disk. If the process
   holding the parked frame dies, the connection closes, the app-server sees

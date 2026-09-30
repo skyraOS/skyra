@@ -1,6 +1,6 @@
 # next/README: proposal
 
-Status (2026-09-30): **Not applied.** `next/README.md` has uncommitted edits; apply the entries on top of them.
+Status (2026-09-30): **Applied in the working tree, uncommitted.** `next/README.md` was rewritten around the documents that remain, in and not in the proposal, keeping the think/act entry; it is left uncommitted with the other edits there.
 
 Proposes changes to the [index](../README.md).
 

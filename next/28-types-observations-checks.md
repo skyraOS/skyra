@@ -1,9 +1,11 @@
 # Types, observations, and checks
 
+Proposal: **Not in the proposal.** Written after the proposal. Checks, novelty interrupts, handlers and `system.register` as Starlark are not yet in [next/proposal](proposal/README.md).
+
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [24](24-the-room.md),
 [26](26-agents-and-facets.md) and [27](27-a-horizon-is-a-process.md); gives
-[21](21-observation-passing.md) its values and [14](14-interpreted-not-stated.md)
+[21](21-observation-passing.md) its values and 14
 its novelty interrupt. Replaces the `continuation` flag (25) for good.
 
 ## The rule

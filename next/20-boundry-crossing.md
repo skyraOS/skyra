@@ -1,8 +1,10 @@
 # Boundry crossing
 
+Proposal: **Not in the proposal.** A standing rule every new crossing must answer, not a change to build. Its revisions from the proposal are applied.
+
 Date: 2026-09-27  
 Status: audit of the working tree on this date, and the rule for every future
-crossing. Follows [15](15-adapters.md), [16](16-ingress.md),
+crossing. Follows 15, 16,
 [17](17-app-server-custody.md) and [18](18-app-server-spec-improvements.md).
 
 ## The invariants this protects
@@ -20,7 +22,7 @@ And the structural rules the specs added to keep them true:
 
 | Rule | Source |
 |---|---|
-| **The runtime knows no actor.** Every actor's semantics live in its adapter, a stateless continuation | [15](15-adapters.md) |
+| **The runtime knows no actor.** Every actor's semantics live in its adapter, a stateless continuation | 15 |
 | **Custody:** each piece of work is held by exactly one live process or one durable commit | README, "How a step works" |
 | **Every decision is in `machine.Step`**, which touches no OS; all I/O is in `instance.Drive`, which decides nothing | README |
 | **No live state to recover, only the tree** | README, "Why no server" |

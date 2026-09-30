@@ -1,5 +1,7 @@
 # Research question: an agent runtime on object capabilities
 
+Proposal: **Not in the proposal.** The research frame, not a change to build. Its revisions from the proposal are applied.
+
 Date: 2026-09-25, reframed 2026-09-27 around approval fatigue and self-extension  
 Status: draft for discussion. Scope: September to December 2026, two people.
 

@@ -116,7 +116,7 @@ purity is what lets replay feed recorded inputs back and get the same records.
 
 A program never says "invoke", "return" or "fault". It emits operands,
 `{"to": <address>, "payload": <JSON>}`, and the runtime derives the state
-([next/14](next/14-interpreted-not-stated.md), [next/24](next/24-the-room.md)):
+(next/14, [next/24](next/24-the-room.md)):
 
 ```text
 addresses the slot its frame discharges (SKYRA_FRAME), fits its output contract   → return

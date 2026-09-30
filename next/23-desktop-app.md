@@ -1,9 +1,11 @@
 # The desktop app: the user's way in
 
+Proposal: **In the proposal.** Cut 3 needs faults that climb to the human and the room's admin facet, tracked in [next/proposal](proposal/README.md) as the rest of D1.
+
 Date: 2026-09-28  
 Status: cuts 1 and 2 built (`desktop/`, `skyra app`), with the per-launch
-token. Cut 3 waits on fault routing. Follows [16](16-ingress.md),
-[20](20-boundry-crossing.md) and [22](22-read-tool.md). The theme is the TUI's
+token. Cut 3 waits on fault routing. Follows 16,
+[20](20-boundry-crossing.md) and 22. The theme is the TUI's
 ([`tui/README.md`](../tui/README.md)).
 
 ## What it is
@@ -24,7 +26,7 @@ about the actor side applies to it.
 
 The thesis moves approval from every action to one grant of a Horizon. Today
 that grant is implicit: the workspace is wherever the human happened to type
-`skyra` ([22](22-read-tool.md)). Nobody sees it, and nobody approves it. The
+`skyra` (22). Nobody sees it, and nobody approves it. The
 app makes it the first thing the human does:
 
 | Moment | Today | In the app |

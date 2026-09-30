@@ -41,7 +41,7 @@ question ([`research-question.md`](../next/research-question.md)).
 | [`faults.md`](faults.md) | faults (runtime-proven) and interrupts (memory misses) | agreed in outline |
 | [`durable-storage.md`](durable-storage.md) | memory of contracts and procedures; snapshots | agreed in outline |
 | [`research-question.md`](../next/research-question.md) | the semester research question, metrics, hypotheses, plan | draft for discussion |
-| [`tomorrows-agenda.md`](../next/agenda.md) | semantics first: the transition checklist, `interpret`, the reply capability | agenda for `transitions.md` |
+| `tomorrows-agenda.md` | semantics first: the transition checklist, `interpret`, the reply capability | agenda for `transitions.md` |
 | `../../summaries/2026-09-23-the-stateless-controller-design.md` | the handoff written mid-session | superseded by this file |
 
 ---
@@ -229,7 +229,7 @@ latest proposal: the adapter repeats the instance pattern one layer down
 (read, commit, execute against the actor), and tail calls with holes carry
 mid-turn dependencies back to the runtime. Not yet reconciled with sections 3–5.
 
-## 7. Derived, not stated ([thoughts/14](../next/14-interpreted-not-stated.md))
+## 7. Derived, not stated (thoughts/14)
 
 The LLM does not declare whether its output is an invoke or a return. **The
 runtime derives it**, from state (memory, the stack, the Horizon) and operands.
@@ -352,7 +352,7 @@ into every step.
 
 ## Next steps
 
-1. **Semantics first** ([`tomorrows-agenda.md`](../next/agenda.md)): define the
+1. **Semantics first** (`tomorrows-agenda.md`): define the
    input contract; write `interpret` as a total function; define the reply
    capability's lifecycle; fill in the transition checklist in `transitions.md`.
 2. **Run the nested-Seatbelt spike** against the real Codex app-server.

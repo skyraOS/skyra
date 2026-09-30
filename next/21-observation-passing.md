@@ -1,7 +1,9 @@
 # Observation passing: author on the way down, pass on the way up
 
+Proposal: **Not in the proposal.** Its open choices were answered by the proposal; building the observation register is not scheduled in it.
+
 Date: 2026-09-28  
-Status: proposed rule, not implemented. Follows [13 — Dependencies](../design/thoughts/13-dependencies.md) and [14 — Interpreted, not stated](14-interpreted-not-stated.md).
+Status: proposed rule, not implemented. Follows [13 — Dependencies](../design/thoughts/13-dependencies.md) and 14 — Interpreted, not stated.
 
 > **Revised 2026-09-30.** Three open choices are answered by
 > [24](24-the-room.md), [25](25-surface-refactor.md) and improvements item 9:
