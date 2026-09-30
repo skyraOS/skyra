@@ -1,7 +1,7 @@
 # Surface refactor
 
 Date: 2026-09-30  
-Status: item 1 built on 2026-09-30; item 2 deferred to item 3 (see below). Items are added as
+Status: item 1 built on 2026-09-30, except that its `continuation` flag is to be removed ([27](27-a-horizon-is-a-process.md): one envelope for every worker); item 2 deferred to item 3 (see below). Items are added as
 the walk finds them.
 
 ## The rule

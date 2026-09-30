@@ -62,7 +62,7 @@ contracts; reach holds facets.
 | Id | Change | Where | Status |
 |---|---|---|---|
 | C1 | Delete `Surface.Reach`, `Authority` and `Delegate`; they are the Horizon's | `horizon.go:85`, `registry.go:73,116,148,151`, `machine.Narrow`, the `"reach"` line in four `contract.json` files | **Built**. `a275748`. Contracts say `"continuation": true`; every registry grant joins the room's one authority |
-| C2 | Delete `Leaf()`; the stdin format (continuation or bare payload) becomes an explicit property of the surface | `horizon.go:111`, `machine.go:359` | **Built**. `a275748`. `Surface.Continuation`, declared in the contract |
+| C2 | Delete `Leaf()`; the stdin format (continuation or bare payload) becomes an explicit property of the surface. **Superseded by [27](../27-a-horizon-is-a-process.md):** one envelope for every worker, so the `continuation` flag goes | `horizon.go:111`, `machine.go:359` | **Built**. `a275748`. `Surface.Continuation`, declared in the contract |
 | C3 | Delete `Surface.Args`. **Corrected:** not unused; the launcher passes the real app-server's `--disable` flags through it, so it moves with C4 | `horizon.go`, `registry.go:70,79,148`, `instance.go:361`, `appserver.go:178` | Deferred. Moves with C4 |
 | C4 | Later: move the resident and network fields off the surface; network grants to the Horizon, keep-alive to control flow (a loop operator) | `horizon.go:92–100`, `instance.startResident`, `runtime/custody` | Not built. Needs the loop operator |
 
