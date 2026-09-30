@@ -1,6 +1,6 @@
 # Skyra.app
 
-The desktop client and the user's way in ([next/23](../next/23-desktop-app.md)).
+The desktop client and the user's way in ([next/23](../docs/next/23-desktop-app.md)).
 Like the TUI, it is a client of the webhost's conversation protocol: it holds
 no frame descriptors, never reads `.skyra/`, and holds no runtime authority.
 

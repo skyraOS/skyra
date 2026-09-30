@@ -9,7 +9,7 @@ crossing. Follows 15, 16,
 
 ## The invariants this protects
 
-From the [README](../README.md) and
+From the [README](../../README.md) and
 [grips-and-invariants](../grips-and-invariants.md):
 
 | # | Invariant | What it demands of the boundary |

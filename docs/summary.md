@@ -3,7 +3,7 @@
 Date: 2026-09-30  
 Status: current summary of the whole project: the properties it is after, the
 patterns that produce them, what runs today, and what does not yet. The
-[README](README.md) is the front door and [`startup-doc.md`](startup-doc.md)
+[README](../README.md) is the front door and [`startup-doc.md`](startup-doc.md)
 is how to run it. This file explains *why it works the way it does*.
 ([`design/summary.md`](design/summary.md) is an older snapshot from 2026-09-25.)
 
@@ -445,7 +445,7 @@ Details: [`next/research-question.md`](next/research-question.md).
 | To understand | Read |
 |---|---|
 | why any of this exists | [`grips-and-invariants.md`](grips-and-invariants.md) |
-| the code, package by package | [`controller/README.md`](controller/README.md), starting at [`controller/core/machine/machine.go`](controller/core/machine/machine.go) |
+| the code, package by package | [`controller/README.md`](../controller/README.md), starting at [`controller/core/machine/machine.go`](../controller/core/machine/machine.go) |
 | authority derived from state, the room, faults that climb | [`next/24-the-room.md`](next/24-the-room.md) |
 | agents, facets, narrowing | [`next/26-agents-and-facets.md`](next/26-agents-and-facets.md) |
 | a Horizon as the process | [`next/27-a-horizon-is-a-process.md`](next/27-a-horizon-is-a-process.md) |
@@ -453,4 +453,4 @@ Details: [`next/research-question.md`](next/research-question.md).
 | what is built and what is not, change by change | [`next/proposal/`](next/proposal/README.md) |
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
 | the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–28`](next/) |
-| the predecessor, and what it taught | [How it got here](README.md#how-it-got-here); the code is in git history (last at `b243b03`) |
+| the predecessor, and what it taught | [How it got here](../README.md#how-it-got-here); the code is in git history (last at `b243b03`) |

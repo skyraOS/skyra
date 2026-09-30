@@ -2,7 +2,7 @@
 
 Date: 2026-09-23  
 Status: working list; not implemented. Sorts every I/O operation the
-[minimal shape](../controller/) performs into buckets, so each has one right
+[minimal shape](../../controller/) performs into buckets, so each has one right
 home. Companion to [`improvements.md`](improvements.md) (custody vs reductions).
 Code paths are relative to `minimal-shape/`.
 

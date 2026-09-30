@@ -142,6 +142,6 @@ it since:
 | **I.** Compiled, remembered cognition | **designed**, deferred until the authority model is evaluated |
 
 The next revision of this document should come from the code pushing back,
-not from a nicer ontology. See [`README.md`](README.md) for what runs today,
+not from a nicer ontology. See [`README.md`](../README.md) for what runs today,
 and [`next/research-question.md`](next/research-question.md) for how it will
 be measured.

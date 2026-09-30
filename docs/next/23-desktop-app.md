@@ -6,7 +6,7 @@ Date: 2026-09-28
 Status: cuts 1 and 2 built (`desktop/`, `skyra app`), with the per-launch
 token. Cut 3 waits on fault routing. Follows 16,
 [20](20-boundry-crossing.md) and 22. The theme is the TUI's
-([`tui/README.md`](../tui/README.md)).
+([`tui/README.md`](../../tui/README.md)).
 
 ## What it is
 
@@ -67,7 +67,7 @@ running. The webhost's log goes to `~/.skyra/app-webhost.log`.
 
 The TUI builds its sky from glyphs and 24-bit color. SwiftUI can draw the same
 sky at full resolution and get translucency from the system instead of
-imitating it. Everything [`tui/README.md`](../tui/README.md) describes carries
+imitating it. Everything [`tui/README.md`](../../tui/README.md) describes carries
 over, element by element:
 
 | TUI | SwiftUI |

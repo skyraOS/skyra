@@ -77,9 +77,9 @@ Ctrl-C stops the browser host and the UI; parked connections close with it.
 |---|---|
 | `skyra` | **chat with real Codex in the browser, through the stateless controller.** Every conversation is saved as its lineage and listed with its history |
 | `skyra chat --fake` | the same, against a deterministic fake Codex: no model, no login |
-| `skyra tui` | a fresh terminal session backed by the conversation protocol, without starting Next.js ([keys and layout](tui/README.md)) |
+| `skyra tui` | a fresh terminal session backed by the conversation protocol, without starting Next.js ([keys and layout](../tui/README.md)) |
 | `skyra tui --fake` | terminal UI with the deterministic provider |
-| `skyra app` | build and open `build/Skyra.app`, the desktop client; needs Xcode ([desktop/README.md](desktop/README.md)) |
+| `skyra app` | build and open `build/Skyra.app`, the desktop client; needs Xcode ([desktop/README.md](../desktop/README.md)) |
 | `skyra serve [--fake]` | the backend alone, as the app starts it; with `SKYRA_WS_TOKEN` set, the webhost accepts only that token |
 | `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |

@@ -46,7 +46,7 @@ enforces the boundary on every invocation. Asking the human is reserved for
 the one case that needs them: reaching past the Horizon.
 
 Skyra's principal is the **bounded, auditable agent**, not the process. The
-full argument, from the pains that drove it: [`grips-and-invariants.md`](grips-and-invariants.md).
+full argument, from the pains that drove it: [`docs/grips-and-invariants.md`](docs/grips-and-invariants.md).
 
 ## Three invariants
 
@@ -72,7 +72,7 @@ skyra ask "Call the echo tool with the text hi, then tell me what it returned."
 skyra test        # every test
 ```
 
-Full setup, every command and troubleshooting: [`startup-doc.md`](startup-doc.md).
+Full setup, every command and troubleshooting: [`docs/startup-doc.md`](docs/startup-doc.md).
 
 Each scenario proves one thing. Trimmed real output:
 
@@ -194,16 +194,16 @@ handles, and puts every decision in one replayable function.
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | the slots support it; nothing emits it yet |
 | Self-extension: an agent registers a tool it wrote under its own Horizon, and runs it with no approval (`system.register`) | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
-| Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`design/faults.md`](design/faults.md)) | designed, not built |
+| Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`docs/design/faults.md`](docs/design/faults.md)) | designed, not built |
 | Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
-The design behind what's built is in [`design/`](design/), in the order it was
+The design behind what's built is in [`docs/design/`](docs/design/), in the order it was
 reasoned out.
 
 ## Where we're going: capability
 
-The core of the capability model is now running ([`next/`](next/)): the model
+The core of the capability model is now running ([`docs/next/`](docs/next/)): the model
 never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
 under its own generated sandbox. What comes next:
@@ -218,7 +218,7 @@ under its own generated sandbox. What comes next:
 - **Prevention, not detection,** of Codex's native execution.
 - **The evaluation** against Codex's native sandbox.
 
-**The research question** ([`next/research-question.md`](next/research-question.md)):
+**The research question** ([`docs/next/research-question.md`](docs/next/research-question.md)):
 
 > Can human approval move from every action to one grant of a Horizon, so an
 > agent extends itself without asking, while matching a conventional runtime on
@@ -240,15 +240,18 @@ containment of those tools and of the agent against an adversarial suite.
 
 ```text
 skyra         the one command (installed by install.sh); `skyra help`
-startup-doc.md  setup, commands, troubleshooting: kept current
-grips-and-invariants.md  why: the six pains, and the invariants they force
 controller/   the stateless controller: skyra, skyra demo, skyra ask
 frontend/     the browser UI: served by the controller's webhost
 tui/          terminal client of the same conversation protocol
-desktop/      Skyra.app: the SwiftUI client and entry point (next/23)
-design/       the controller's spec (D1–D9) and the notes that led to it
-next/         capability: derived states, the room, facets, the research question, proposals
+desktop/      Skyra.app: the SwiftUI client and entry point (docs/next/23)
 assets/       the README demo GIF and the VHS tape that records it
+docs/
+  startup-doc.md           setup, commands, troubleshooting: kept current
+  grips-and-invariants.md  why: the six pains, and the invariants they force
+  improvements.md          design changes found reading the code, item by item
+  summary.md               where the project is: properties, patterns, what runs
+  design/                  the controller's spec (D1–D9) and the notes that led to it
+  next/                    capability: derived states, the room, facets, the research question, proposals
 ```
 
 Everything older is preserved at the git tag `pre-cleanup`.

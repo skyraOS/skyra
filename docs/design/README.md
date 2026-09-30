@@ -1,6 +1,6 @@
 # Design: the stateless controller
 
-The spec behind [`controller/`](../controller/), and the reasoning that produced
+The spec behind [`controller/`](../../controller/), and the reasoning that produced
 it. Everything here is agreed and, except where noted, built.
 
 ## Read in this order
@@ -32,4 +32,4 @@ it. Everything here is agreed and, except where noted, built.
    - [`io-buckets.md`](io-buckets.md), [`improvements.md`](improvements.md):
      proposals for separating custody from the effects it performs.
 4. [`summary.md`](summary.md): the full map as of 2026-09-25. Long; the
-   [root README](../README.md) is the current overview.
+   [root README](../../README.md) is the current overview.

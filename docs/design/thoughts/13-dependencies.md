@@ -7,7 +7,7 @@ Status: agreed in conversation. Follows [10](10-the-move-is-the-state.md),
 
 ## Where it came from
 
-In the [minimal shape](../../controller/), settle is a dead end: `drive`
+In the [minimal shape](../../../controller/), settle is a dead end: `drive`
 writes the frame's `result`, then exits, and nobody is told. Boot finds out by
 polling `frames/<R1>/result` every 5 ms. That polling stands in for the missing
 mechanism: after a settle, something must look at the parent and decide whether

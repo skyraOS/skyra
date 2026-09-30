@@ -38,7 +38,7 @@ Contract rules the UI and mock both honor:
 ## Run
 
 The easy way: `skyra` from the repo root starts the runtime and this UI together
-(see [`startup-doc.md`](../startup-doc.md)). Manually:
+(see [`startup-doc.md`](../docs/startup-doc.md)). Manually:
 
 Against the mock:
 

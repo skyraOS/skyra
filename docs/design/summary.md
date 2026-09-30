@@ -2,7 +2,7 @@
 
 > **Snapshot of 2026-09-25**, from before the repo was flattened: paths and some
 > items (the nested-Seatbelt spike, now retired) are out of date. The
-> [root README](../README.md) is the current overview.
+> [root README](../../README.md) is the current overview.
 
 Date: 2026-09-25, updated 2026-09-26  
 Status: a map of this directory. It separates what is built, what is agreed on
@@ -16,7 +16,7 @@ controller**: one `skyra` binary that runs once per step. Each run takes custody
 of one Move, checks it, commits a content-addressed record, runs the target the
 record names inside an OS sandbox rendered from its authority (the Horizon), and
 hands the target's output to a fresh successor that checks it in turn. All
-durable state lives in `.skyra/`. A runnable demo, [`minimal-shape/`](../controller/),
+durable state lives in `.skyra/`. A runnable demo, [`minimal-shape/`](../../controller/),
 boots to echo and proves the core protocol. The current design work is on what
 happens *around* a single call: dependencies between calls, faults and
 interrupts, and a durable memory of contracts that lets the system learn.
@@ -35,7 +35,7 @@ question ([`research-question.md`](../next/research-question.md)).
 |---|---|---|
 | [`stateless-controller/proposal.md`](proposal.md) | the original spec: decisions D1–D9 | agreed; **lags** the later work below |
 | [`stateless-controller/thoughts/01–14`](thoughts/) | the reasoning behind each decision, in order | agreed per note |
-| [`minimal-shape/`](../controller/) | runnable demo: boot to echo | **built**, tested |
+| [`minimal-shape/`](../../controller/) | runnable demo: boot to echo | **built**, tested |
 | [`improvements.md`](improvements.md) | separate the custody envelope from the reductions | proposed |
 | [`io-buckets.md`](io-buckets.md) | every I/O operation bucketed; primitives; handlers by state; the join rule | proposed |
 | [`faults.md`](faults.md) | faults (runtime-proven) and interrupts (memory misses) | agreed in outline |

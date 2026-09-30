@@ -5,7 +5,7 @@ Proposal: **In the proposal.** Open work tracked in [next/proposal](proposal/REA
 Date: 2026-09-27  
 Status: resident connection custody and the Codex start, exchange, inspect and
 stop path are implemented. This document records the design and earlier
-experiment; see [the controller](../controller/README.md) for current limits.
+experiment; see [the controller](../../controller/README.md) for current limits.
 Revises the lifecycle and communication
 design in [17 — The app-server in custody](17-app-server-custody.md) and the
 long-lived host split in 15 — Adapters. Resolves 17's open
@@ -286,7 +286,7 @@ app-server process unchanged.
 
 ## Implementation order
 
-Experiment evidence: [resident custody harness](../controller/experiments/resident/README.md).
+Experiment evidence: [resident custody harness](../../controller/experiments/resident/README.md).
 It passes launch, exchange, isolated tool execution, experimental parking and
 resume, stop, and a 24-record replay using existing runtime states. It also
 demonstrates two constraints: closing a worker's descriptor alone cannot stop a

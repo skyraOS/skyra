@@ -4,7 +4,7 @@ Date: 2026-09-27
 Status: runnable. Standard library only; macOS (uses `sandbox-exec`). A
 deterministic fake Codex app-server for the demo and tests is in
 [`codex/fake/`](codex/fake/).
-The design is in [`../design/`](../design/) and [`../next/`](../next/).
+The design is in [`../docs/design/`](../docs/design/) and [`../docs/next/`](../docs/next/).
 
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
@@ -247,7 +247,7 @@ sandbox that prohibits applying Seatbelt profiles.
 - **A fault ends the Codex turn it happened in.** The conversation goes on
   (the user side shows it), but Codex itself is not told within the turn;
   routing a horizon fault back into the same turn as an observation is still
-  [improvement 03](../design/improvements/03-conversation-is-an-invocation.md).
+  [improvement 03](../docs/design/improvements/03-conversation-is-an-invocation.md).
 - **Parked descriptors live in the webhost's memory.** The parked work and
   its Horizon are on disk, and resume derives them from the tree, but the
   frame fds and a resident connection cannot be written to disk: if the
@@ -264,8 +264,8 @@ sandbox that prohibits applying Seatbelt profiles.
 
 ## Improvements to carry forward
 
-[`design/improvements/`](../design/improvements/): lessons from DNA-19, the predecessor, for the next version.
+[`docs/design/improvements/`](../docs/design/improvements/): lessons from DNA-19, the predecessor, for the next version.
 
-- [Profiles become input contracts](../design/improvements/01-profiles-become-input-contracts.md)
-- [No silent refusals: a fault-tolerant async boundary](../design/improvements/02-no-silent-refusals.md)
-- [A conversation is an invocation: logs, history and isolation](../design/improvements/03-conversation-is-an-invocation.md)
+- [Profiles become input contracts](../docs/design/improvements/01-profiles-become-input-contracts.md)
+- [No silent refusals: a fault-tolerant async boundary](../docs/design/improvements/02-no-silent-refusals.md)
+- [A conversation is an invocation: logs, history and isolation](../docs/design/improvements/03-conversation-is-an-invocation.md)

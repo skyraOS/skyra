@@ -2,7 +2,7 @@
 
 Date: 2026-09-23  
 Status: proposed; not implemented. Applies to the runnable demo in
-[`minimal-shape/`](../controller/) and, through it, to the
+[`minimal-shape/`](../../controller/) and, through it, to the
 [stateless controller proposal](proposal.md). Paths below
 are relative to `minimal-shape/`.
 
