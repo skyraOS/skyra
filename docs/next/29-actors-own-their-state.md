@@ -116,7 +116,9 @@ Recovering state by redelivery works only if every line is byte-identical to
 the first time. On 2026-09-30 it was not: `dynamicTools` builds the tool list
 from a Go map, so a resumed round delivered `thread/start` with the tools in
 another order, and the host refused it as a conflict. Both fake-Codex demo
-scenarios faulted.
+scenarios faulted. (Fixed in `d1389c7`: the adapter now offers only its
+model-facing tools, in a fixed order. The fragility of recovering state by
+redelivery remains.)
 
 Under this document:
 
