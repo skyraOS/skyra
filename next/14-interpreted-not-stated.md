@@ -4,6 +4,29 @@ Date: 2026-09-25
 Status: agreed in conversation. Follows [13](../design/thoughts/13-dependencies.md) and
 [`../../faults.md`](../design/faults.md).
 
+> **Revised 2026-09-30.** The core holds: the emitter supplies operands and
+> the runtime derives the state. The `reply` capability is superseded
+> ([24](24-the-room.md); improvements items 1 and 2): a return **addresses the
+> slot its frame discharges** (the frame id, told to a target in
+> `SKYRA_FRAME`), and output that addresses nothing is a **`leaf` fault**
+> carrying the output. No name is reserved. A leaf shares its caller's
+> Horizon; its reach is not "only `reply`". A fault is its own derived state
+> and carries the observation it was derived from. The sections on the reply
+> capability and "What falls out" items 3–7 are kept as history.
+>
+> ```text
+> addresses the slot its frame discharges   → return
+> names anything else in reach              → invoke
+> names nothing in reach                    → fault (horizon)
+> addresses nothing                         → fault (leaf), carrying the output
+> not readable as operands                  → fault (malformed)
+> fits no contract                          → fault (contract)
+> ```
+>
+> Open item 1 is answered: `{"to": <slot | name | reference>, "payload":
+> <JSON>}`, nothing else. Open item 2 becomes the tail-call question: a call
+> whose return discharges its caller's slot.
+
 ## The idea
 
 The LLM does not declare whether its output is an invoke or a return. **The

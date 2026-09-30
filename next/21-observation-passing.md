@@ -3,6 +3,25 @@
 Date: 2026-09-28  
 Status: proposed rule, not implemented. Follows [13 — Dependencies](../design/thoughts/13-dependencies.md) and [14 — Interpreted, not stated](14-interpreted-not-stated.md).
 
+> **Revised 2026-09-30.** Three open choices are answered by
+> [24](24-the-room.md), [25](25-surface-refactor.md) and improvements item 9:
+>
+> - **Faults:** both. A fault is its own derived state, and it **carries the
+>   observation of why it faulted** as its payload (built). The parent passes
+>   the whole fault as one observation, or singles out the observation inside it.
+> - **A model that makes no calls:** `Surface.Leaf()` is gone. Authority is not
+>   coupled to leaf or continuation; whether a node authored or passed its
+>   return is read from the realized tree, which is this document's own
+>   definition.
+> - **Author identity:** a principal's stable id is the stamp of its first
+>   declaration; an observation's origin is the step that authored it
+>   (improvements item 9).
+>
+> The register lives in the durable stack of 24. One case is added: **7. A
+> leaf fault**, a program that printed without addressing its slot; the
+> fault's observation is what it printed, authored by that leaf, and the
+> parent may pass it on.
+
 ## The rule
 
 > A node may create observations for an invocation on the way down. A

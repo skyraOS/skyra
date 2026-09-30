@@ -10,6 +10,17 @@ spec's sandbox, network and native-tool controls apply to every such process.
 One open item blocks work: how `Narrow` bounds the new fields blocks step 1's
 tests (see Open).
 
+> **Revised 2026-09-30.** Step 1's blocking question is answered by
+> [24](24-the-room.md): authority is the Horizon's, not the surface's, shared
+> by every call and narrowed only on request, through the room's
+> `system.narrow` ([26](26-agents-and-facets.md)). The registry row carries no
+> grants; a profile is rendered per Horizon plus the exclusions (the floor,
+> and exec of the running program only). A native attempt is interrupted and
+> then returned to the parent as an observation, not emitted as `native.<type>`
+> to trigger a fault. The app-server's resident profile renders none of the
+> Horizon's shared grants until its fields leave the surface
+> ([25](25-surface-refactor.md), item 3).
+
 ## The problem
 
 The adapter maps Codex's native actions to a horizon fault, but it only
@@ -221,8 +232,8 @@ reopen that. `Render` is pure, so replay re-derives the same profile anyway.
 | `Mach` | `mach-lookup` on each `global-name`. Default: none |
 | `Egress` | the egress proxy's allow list (step 4). The Seatbelt side is `network-outbound` to the proxy's TCP port on localhost, not a unix socket, so it is rendered from `Egress`, not `Connect` |
 
-The registry declares them per surface. How `Narrow` bounds them by the
-parent's grant is open (see Open). Whatever the rule, paths are compared
+The registry row carries none of them; they are the Horizon's
+([24](24-the-room.md)). Whatever the rule, paths are compared
 canonically (symlinks resolved, so `/tmp` and `/private/tmp` are one path) and
 by containment (`subpath`), never as strings.
 
@@ -437,7 +448,8 @@ Sent in `thread/start`:
 ### 6. Adapter changes
 
 - On any native `item/started`: send `turn/interrupt`, wait for the turn's
-  `turn/completed` (interrupted), then emit the horizon fault. That way a
+  `turn/completed` (interrupted), then return the attempt to the parent as an
+  observation (revised 2026-09-30; it was a horizon fault). That way a
   blocked attempt never becomes a continued turn or an unseen answer, and the
   next turn in the conversation never finds this one still running. The
   interrupt is an ordinary exchange invocation
@@ -563,7 +575,10 @@ in `controller/codex/adapter/main.go`'s header.
   and 18 does not say who launches it. It could be a resident target launched
   by the runtime, like the app-server, and shared by every process of one
   actor, since they share one allow list. Unresolved.
-- **How `Narrow` bounds the new fields (blocks step 1's tests).** Today
+- **Answered 2026-09-30 ([24](24-the-room.md)): nothing narrows by default;
+  a narrowing is requested through `system.narrow` and may only drop what is
+  held.** The original question: **How `Narrow` bounds the new fields (blocks
+  step 1's tests).** Today
   `Narrow` copies the reach entry as-is, and the entry comes from the
   registry, so "a subset of the parent's reach entry" is a no-op. It doesn't
   narrow `Connect` either. The alternative, "a subset of the parent's own

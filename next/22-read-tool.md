@@ -5,6 +5,17 @@ Status: built (`controller/targets/read/`), verified with the fake provider and 
 OS tests. Not yet validated against live Codex. Follows [20](20-boundry-crossing.md)
 and [21](21-observation-passing.md).
 
+> **Revised 2026-09-30** ([24](24-the-room.md), [25](25-surface-refactor.md)).
+> `read` no longer has an empty reach of its own: it runs under its caller's
+> Horizon, with that Horizon's reach and grants, and the profile is rendered
+> per Horizon. It returns by addressing its slot (`SKYRA_FRAME`), not
+> `reply`; output that addresses nothing is a leaf fault that keeps the
+> output. One guarantee is traded: under a shared Horizon, `read` addressing
+> `codex` derives an invoke, not a horizon fault. The Horizon is the unit that
+> contains a tool; to contain `read` more tightly, its caller narrows it
+> through `system.narrow` ([26](26-agents-and-facets.md)). File contents still
+> only ever travel inside `payload.text`, never as `read`'s envelope.
+
 ## What it is
 
 `read` is a leaf: it has an empty reach, it shares no code with skyra, and it checks

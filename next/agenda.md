@@ -4,6 +4,22 @@ Date: 2026-09-25 (for the next session)
 Status: agenda. Produces `transitions.md`. Revised after
 [`thoughts/14`](14-interpreted-not-stated.md).
 
+> **Revised 2026-09-30** ([24](24-the-room.md); improvements items 1 and 2).
+> Superseded here: "return is `invoke(reply, payload)`" and §3, the reply
+> capability. A return **addresses the slot** its frame discharges, and is
+> checked against the emitter's own output contract; there is no default
+> target, and output that addresses nothing is a **`leaf` fault**. The Invoke
+> draft's "Authority is narrowed: the child's Horizon is a subset of the
+> invoker's… and includes a fresh `reply`" is superseded too: authority is
+> **shared**, the child runs under the invoker's Horizon unless the invoker
+> narrows through the room. A fault discharges the frame directly and carries
+> its observation. Fault kinds gain `leaf`; authority faults climb (24).
+>
+> Answered: the addressing format is `{"to": <slot | name | reference>,
+> "payload": <JSON>}`; "state" is the Horizon (reach, references, grants), its
+> durable stack and the proposal; the authority fault is a horizon fault that
+> climbs until someone holds the authority.
+
 ## The governing question
 
 > **What is the complete set of valid executions this machine admits?**

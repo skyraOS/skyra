@@ -37,7 +37,7 @@ even at the edge.
 |---|---|
 | hold the parked frame stack and state | interpret the payload |
 | follow the registered procedure (which event completes the invocation) | decide what the event means |
-| emit the event as a reply: `{"to":"reply","payload":<the event>}` | let the event address anything: a human who types JSON is still text |
+| emit the event as a return, addressed to the parked frame's slot: `{"to":<its stamp>,"payload":<the event>}` | let the event address anything: a human who types JSON is still text |
 | answer every delivery exactly once (improvement 02) | retry, time out, or drop |
 
 ## Conversations fall out of it
@@ -54,7 +54,11 @@ and one of Codex (the answer). The conversation's saved state is its lineage.
 
 ## Limits of this cut
 
-- **Parked frames live in the host's memory.** fds cannot be written to disk,
-  so if the host dies, the conversation is still viewable (its lineage is
-  intact) but cannot continue until restore exists.
+- **Parked descriptors live in the host's memory.** The host holds the parked
+  step's stamp and its descriptors, never its authority: `skyra resume`
+  derives the instance and its Horizon from the tree and refuses work that is
+  not parked or was already resumed ([24](24-the-room.md); 20's finding 1,
+  closed). The frame fds and a resident connection cannot be written to disk,
+  so if the host dies the conversation is viewable but cannot continue until
+  restore exists.
 - One human per host, on loopback.

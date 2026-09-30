@@ -53,7 +53,7 @@ full argument, from the pains that drove it: [`grips-and-invariants.md`](grips-a
 | | Invariant | What it means |
 |---|---|---|
 | **1** | **The emitter is never the checker.** | Whatever a model or tool outputs is untrusted bytes. A *different* process interprets and commits it before anything acts on it. Nothing an agent emits can put the system into a state by saying so. |
-| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a **Horizon**: an explicit set of what it may invoke. A child's Horizon is always a subset of its parent's. The macOS sandbox profile is *generated from the Horizon* for each invocation, and the runtime's own state is always denied. |
+| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a **Horizon**: an explicit set of what it may invoke and touch. A call shares its caller's Horizon unless it asks the room to narrow it; nothing can widen one. The macOS sandbox profile is *generated from the Horizon*, the runtime's own state is always denied, and no target can start a program the runtime did not record. |
 | **3** | **Truth is derived, not stored.** | Only observations are stored: the bytes received, what a target emitted. Everything else is re-derived by one pure function, so replaying the record chain from genesis *is* the definition of correctness. |
 
 All three are built and shown below. For invariant 3, replay re-derives every
@@ -80,7 +80,7 @@ Each scenario proves one thing. Trimmed real output:
 ══ agent: a continuation calls echo, waits, resumes ══     the core loop
 [inst 8828b46b] intake   committed 8828b46b  invoke agent {"text":"hello"}
 [inst 4b7d45a7] intake   committed 4b7d45a7  invoke echo {"text":"hello"}     ← derived from {"to":"echo",…}
-[inst 2ae3f9ec] intake   committed 2ae3f9ec  return "hello"                    ← echo just printed: hello
+[inst 2ae3f9ec] intake   committed 2ae3f9ec  return "hello"                    ← echo addressed its own slot
 [inst 2ae3f9ec] settle   discharges the slot of 4b7d45a7
 [inst 2ae3f9ec] gather   every slot of 8828b46b discharged: committed resolve 9a3d13e2
 [inst 2ae3f9ec] claim    won: resumes 8828b46b
@@ -90,25 +90,32 @@ replay: 7 records re-derived from genesis by step, byte-identical      ← invar
 ══ echo probes .skyra/ from inside ══                     ← invariant 2
   return "hello [probe .skyra: read denied, write denied]"
 
-══ echo (a leaf) addresses echo ══                        ← invariant 1
-  fault (horizon, derived at intake): "echo" is not in reach
+══ echo addresses what is outside the Horizon ══          ← invariant 1
+  fault (horizon, derived at intake): "shell" is not in reach
+
+══ agent narrows echo through the room, then calls it ══  ← invariant 2
+  invoke system.narrow {"actor":"echo","authority":{},"reach":[]}
+  return {"reference":"84828a5a…"}
+  invoke 84828a5a… {"text":"hello"}                        ← echo runs under the narrower Horizon
 
 ══ payload breaks echo's contract ══                      ← invariant 1
   fault (contract, derived at intake): echo: unknown field "txt"
 
 ══ codex (fake) runs a native command: fenced ══
-  fault (horizon, derived at intake): "native.commandExecution" is not in reach
+  return "refused: the agent attempted native.commandExecution; the turn was interrupted"
 ```
 
 No target ever says "invoke", "return" or "fault". It prints operands, and
-the runtime derives the state. A refused output is still committed and
-stamped, **as a fault**: a stamp means custody, not approval.
+the runtime derives the state from where the emitter stands: addressing its
+own slot is a return, naming something in reach an invoke. A refused output is
+still committed and stamped, **as a fault** that keeps what was refused: a
+stamp means custody, not approval.
 
 With real Codex (`skyra ask`), the same thing happens against the live model:
 Codex asks for `echo`, the runtime derives an invoke, echo runs as its own
-sandboxed leaf, and a fresh adapter step answers Codex's pending tool call.
-Asking it to run `ls` is derived as a horizon fault on
-`native.commandExecution`.
+sandboxed program, and a fresh adapter step answers Codex's pending tool call.
+Asking it to run `ls` interrupts the turn, and the attempt comes back to the
+user side as an observation.
 
 ## How a step works
 
@@ -126,8 +133,9 @@ restore. There is never live state to recover, only the tree.
 ```text
  INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
            reply with its stamp (a hash)
- RELEASE   the parent reads the record back, checks it hashes to the stamp, narrows the Horizon,
-           and passes {Horizon + the frame stack as directory fds} over a Unix socket (SCM_RIGHTS)
+ RELEASE   the parent reads the record back, checks it hashes to the stamp, derives the child's Horizon,
+           commits it, and passes {its hash + the frame stack as directory fds} over a Unix socket
+           (SCM_RIGHTS); the child looks the Horizon up and re-derives it before it runs anything
  EXECUTE   run the target under a Seatbelt profile rendered from that Horizon. Its output is not parsed here
  HANDOFF   spawn a successor with the raw output; open a slot if it is an invoke; exit once it has stamped
  SETTLE    a return or fault discharges the slot it answers, once
@@ -175,18 +183,19 @@ handles, and puts every decision in one replayable function.
 | | Status |
 |---|---|
 | The step protocol, custody handoff, content-addressed records | **built**, tested |
-| Horizons that only narrow; sandbox rendered per invocation; `.skyra/` denied | **built**; reads and writes denied from inside |
+| One authority per Horizon, shared by every call; narrowing through the room's `system.narrow`; sandbox rendered from the Horizon; `.skyra/` denied; exec only of the program run (next/24–26) | **built**; reads, writes and exec denied from inside |
+| Horizons committed and looked up by hash; resume derives the parked work from the tree | **built** |
 | Operators derived from operands; input contracts; typed faults (thought 14) | **built** |
 | Dependencies and resolve: a continuation invokes, waits, resumes (thought 13) | **built**; boot waits on a real resolve, not a poll |
 | Replay derives every record, supervisor faults and resolves included | **built** |
 | Adapters: a dumb actor host and a stateless Codex adapter step (next/15) | **built**; real Codex works through it |
-| Ingress: an outside event resumes a frame parked with its host (next/16) | **built** |
+| Ingress: an outside event resumes a frame parked with its host (next/16) | **built**; the host holds a stamp, never authority |
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
-| Tail calls (passing `reply` on), fan-out of several children at once | the slots support it; nothing emits it yet |
-| Self-extension: an agent registers a tool it wrote, as a leaf under a narrower Horizon, and runs it with no approval | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
+| Tail calls, fan-out of several children at once | the slots support it; nothing emits it yet |
+| Self-extension: an agent registers a tool it wrote under its own Horizon, and runs it with no approval (`system.register`) | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
 | Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`design/faults.md`](design/faults.md)) | designed, not built |
-| Codex's native execution | detected and faulted, not yet prevented |
+| Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
 The design behind what's built is in [`design/`](design/), in the order it was
@@ -238,7 +247,7 @@ frontend/     the browser UI: served by the controller's webhost
 tui/          terminal client of the same conversation protocol
 desktop/      Skyra.app: the SwiftUI client and entry point (next/23)
 design/       the controller's spec (D1–D9) and the notes that led to it
-next/         capability: derived states, reply, the research question, the agenda
+next/         capability: derived states, the room, facets, the research question, proposals
 assets/       the README demo GIF and the VHS tape that records it
 ```
 

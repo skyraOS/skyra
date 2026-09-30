@@ -1,7 +1,7 @@
 # The room: authority derived from state and proposal
 
 Date: 2026-09-30  
-Status: agreed in discussion, not built. Follows [14](14-interpreted-not-stated.md)
+Status: agreed in discussion; built in part on 2026-09-30 (see the [proposal status](proposal/README.md#status)): one authority per Horizon, the profile per Horizon with the exclusions, Horizons committed and looked up by hash, resume derived from the tree, genesis authored. Follows [14](14-interpreted-not-stated.md)
 and [20](20-boundry-crossing.md), and builds on items 1, 2, 8 and 9 of
 [improvements](../improvements.md). It supersedes 14's "a return is invoking
 a single-use `reply` capability".

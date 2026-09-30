@@ -62,7 +62,7 @@ contracts; reach holds facets.
 |---|---|---|
 | C1 | Delete `Surface.Reach`, `Authority` and `Delegate`; they are the Horizon's | `horizon.go:85`, `registry.go:73,116,148,151`, `machine.Narrow`, the `"reach"` line in four `contract.json` files |
 | C2 | Delete `Leaf()`; the stdin format (continuation or bare payload) becomes an explicit property of the surface | `horizon.go:111`, `machine.go:359` |
-| C3 | Delete `Surface.Args` (unused) | `horizon.go`, `registry.go:70,79,148`, `instance.go:361`, `appserver.go:178` |
+| C3 | Delete `Surface.Args`. **Corrected:** not unused; the launcher passes the real app-server's `--disable` flags through it, so it moves with C4 | `horizon.go`, `registry.go:70,79,148`, `instance.go:361`, `appserver.go:178` |
 | C4 | Later: move the resident and network fields off the surface; network grants to the Horizon, keep-alive to control flow (a loop operator) | `horizon.go:92–100`, `instance.startResident`, `runtime/custody` |
 
 ### D. Agents and facets (26)
@@ -87,6 +87,34 @@ contracts; reach holds facets.
 | E5 | Types and principals as records; the runtime derives a record's type | `registry`, `record` |
 | E6 | The recipient on return and fault records (improvements decision 5, 2b) | `record`, `machine.faulted` |
 | E7 | A version for the rules, or a one-time migration of existing `.skyra` trees | `replay` |
+
+## Status
+
+Built on branch `design-room-implimentation`, 2026-09-30. Every Go test and
+every `skyra demo` scenario pass, each ending in a byte-identical replay, and a
+fake-Codex conversation driven through the webhost (turns, `echo`, `read`, a
+native attempt, a close) replays byte-identically.
+
+| Ids | State | Commit | Note |
+|---|---|---|---|
+| A1–A9 | **built** | `d49ce18` | The fake Codex's probe still names `reply`: an unoffered tool, now interrupted and returned as `refused` |
+| B1 | **in part** | `a275748` | Authority is on the Horizon; `Stamp`, `Frame` and `Resume` are still in the struct |
+| B2 | **in part** | `dad1bf0` | A Horizon's id is the hash of its encoding, not yet (authority, creating invoke, input contract): that is E |
+| B3, B4 | **built** | `dad1bf0` | Committed at release; the child looks it up and refuses one its commit does not derive |
+| B5 | not built | | The stack is durable (each Horizon is committed with it), but the `Resume` copy still travels |
+| B6, B7 | **built** | `a275748` | Exec is no longer expressible as a grant |
+| B8 | **built** | `dad1bf0` | Author `operator`, a 16-byte nonce |
+| B9 | not built | | The webhost's sibling rule stays until item 8 defines an accepted record |
+| B10 | **built** | `dad1bf0` | Closes 20's finding 1 |
+| B11 | not built | | Improvements item 8, direction 1 |
+| C1, C2 | **built** | `a275748` | `"continuation": true` replaces `"reach"` in a contract |
+| C3 | deferred | | Moves with C4 (see the correction above) |
+| C4 | not built | | Needs the loop operator |
+| D1 | **in part** | `8ba6f4c` | `system.narrow` built. `system.register` needs a tool's bytes in the tree for replay (improvements item 6); the admin facet needs faults that climb to the human |
+| D2, D3 | **built** | `8ba6f4c` | A reference is the narrow invoke's stamp, recorded in the waiting caller's `Horizon.Refs` |
+| D4–D6 | not built | | Need the facet declaration format, agents with Horizons of their own, and C4 |
+| E1–E7 | not built | | One encoding change for all of it; its open questions (a written canonical encoding, migrate or version) come first |
+| Doc edits | **done** | | 14–23, the agenda, the research question, both READMEs. Not applied to `next/README.md`, `think.md` or `act.md`, which hold uncommitted work |
 
 ## Order
 

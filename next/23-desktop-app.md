@@ -127,7 +127,7 @@ setup step and Xcode is optional.
 |---|---|---|
 | **1. Parity** | the sky, one window, conversations over the existing protocol, the app launching the webhost | nothing new in the runtime |
 | **2. The grant** | the folder picker becomes the workspace; the launcher's refusal is shown in the app | the launcher accepting a workspace from its caller (it already reads `SKYRA_WORKSPACE`) |
-| **3. The boundary** | an authority fault reaches the human as a request, the app shows it, the answer goes back as a grant or a refusal | fault routing by kind (README, "Where we're going"), and a protocol message for it |
+| **3. The boundary** | an authority fault reaches the human as a request, the app shows it, the answer goes back as a grant or a refusal | faults climbing to the room, and the room's admin facet, which only the human holds ([24](24-the-room.md), [26](26-agents-and-facets.md)); a protocol message for it |
 
 Cut 1 is a client. Cut 3 is where the app starts to carry the thesis, and it
 cannot come before the runtime routes faults by kind.
@@ -144,8 +144,9 @@ cannot come before the runtime routes faults by kind.
   it a per-launch token through its environment or a pipe; the webhost would
   reject connections without it. This should land with cut 1, or at the latest
   with cut 3.
-- **Finding 1 of [20](20-boundry-crossing.md) still stands.** The webhost
-  hands the runtime an unchecked `Instance` on resume. The app adds nothing to
+- **Finding 1 of [20](20-boundry-crossing.md) is closed** (2026-09-30): the
+  webhost hands back a stamp, and resume derives the instance from the tree.
+  Before that, the webhost handed the runtime an unchecked `Instance` on resume. The app adds nothing to
   that, but it makes the webhost part of the product, so the fix matters more.
 - **Two copies of the palette.** Go in `tui/`, Swift in `desktop/`, and CSS in
   `frontend/`. Either one file (for example `design/theme.json`) generates all

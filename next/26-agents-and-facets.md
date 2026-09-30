@@ -1,7 +1,7 @@
 # Agents and facets
 
 Date: 2026-09-30  
-Status: agreed in discussion, not built. Builds on [24](24-the-room.md) and
+Status: agreed in discussion; `system.narrow` and references joining the caller's reach built on 2026-09-30 (see the [proposal status](proposal/README.md#status)). Builds on [24](24-the-room.md) and
 [25](25-surface-refactor.md); extends the adapter model of
 [15](15-adapters.md).
 

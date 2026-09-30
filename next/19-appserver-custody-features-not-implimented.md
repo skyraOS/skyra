@@ -9,6 +9,22 @@ Status: inventory, checked against the working tree on this date. Covers
 [17 — The app-server in custody](17-app-server-custody.md) and
 [18 — App-server spec improvements](18-app-server-spec-improvements.md).
 
+> **Statuses revised 2026-09-30** against [24](24-the-room.md),
+> [25](25-surface-refactor.md) and [26](26-agents-and-facets.md):
+>
+> - *Grants as Horizon fields*: **unblocked and built in part.** Grants moved
+>   from the surface to the Horizon, shared per Horizon and narrowed through
+>   `system.narrow`. The resident's per-thread narrowing at `start` is not
+>   wired yet.
+> - *Step 6, the interrupt then the fault*: the interrupt stays; the emission
+>   is now a returned observation (`refused`), not `native.<type>`.
+> - *Resume authority*: **built** (below, "Proposed change"). The host holds
+>   a stamp; resume derives the instance from the tree and refuses work that
+>   is not parked or was already resumed.
+> - *What could land now*, item 2: replaced by the returned observation.
+> - *Canonical, containment-based path comparison*: now also what
+>   `system.narrow` uses to check a narrowing only drops what is held.
+
 ## What is in the code
 
 So the list below has a baseline:
@@ -156,7 +172,7 @@ protects.
 The intended responsibility is: **hold this suspended interaction and bring
 back an event**. The runtime decides what that event can cause.
 
-### Proposed change, not implemented
+### Proposed change, built 2026-09-30
 
 The host holds a reference to the suspended work (its stamp) and custody
 descriptors. Resume reconstructs the execution state and Horizon from the tree,

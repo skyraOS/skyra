@@ -45,11 +45,12 @@ experiments.
 |---|---|---|---|
 | Target output → intake | actor → runtime | one line of bytes | `interpret` against the Horizon they were emitted under, then committed (invariant 1) |
 | Continuation on stdin | runtime → actor | frame, input, tools (the input contracts in reach), steps | derived from records |
-| Release | runtime → runtime | Horizon + frame stack fds | the parent verifies the child's stamp first |
-| Run | runtime → actor | the target under `Render(H)`, env `PATH` and `SKYRA_CONNECT` | the sandbox |
+| Release | runtime → runtime | the committed Horizon's **id** + frame stack fds | the parent verifies the child's stamp first; the child looks the Horizon up and re-derives it (revised 2026-09-30) |
+| Run | runtime → actor | the target under `Render(H)`, env `PATH`, `SKYRA_FRAME`, `SKYRA_READ`, `SKYRA_CONNECT` | the sandbox, rendered per Horizon plus the exclusions (revised 2026-09-30) |
 | Adapter ↔ actor host | actor ↔ actor | JSON lines on a unix socket | nothing in the runtime: the adapter owns it (15) |
-| Park | runtime → ingress host | `machine.Instance`, the payload, the frame stack fds | the host acknowledges custody |
-| **Resume** | **ingress host → runtime** | **`machine.Instance` on stdin, the event, the frame stack fds** | **the event is checked at intake. The `Instance` is not checked at all** (finding 1) |
+| Park | runtime → ingress host | the parked **stamp**, the payload, the frame stack fds | the host acknowledges custody (revised 2026-09-30) |
+| Resume | ingress host → runtime | the stamp, the event, the frame stack fds | the runtime derives the instance from the tree, refuses work not parked or already resumed; the event is checked at intake (finding 1, closed 2026-09-30) |
+| The room's facets | runtime → runtime | `system.narrow`: an invoke like any other | implemented by the runtime; a narrowing may only drop what is held ([26](26-agents-and-facets.md)) |
 | Registry | operator → runtime | surfaces, contracts, `connect`, `host` | `registry.Load`, strict JSON, pinned by hash |
 
 ## Audit: actor details in the trusted runtime
@@ -71,7 +72,13 @@ What remains is generic, or cosmetic:
 
 ## Findings
 
-### 1. Resume trusts authority handed back by an actor host (open)
+### 1. Resume trusts authority handed back by an actor host (closed 2026-09-30)
+
+> Closed by [24](24-the-room.md): the host now holds only the parked stamp
+> and the descriptors, and `skyra resume` derives the instance, its Horizon
+> and the floor from the tree (`replay.HorizonAt`), refusing a stamp that is
+> not parked work, whose frame count does not match, or that was already
+> resumed. The finding as it was:
 
 `park.Frame` sends the whole `machine.Instance` to the ingress host, and
 `park.Resume` hands it back to `skyra resume` on stdin. `resume` passes it

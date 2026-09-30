@@ -244,6 +244,14 @@ Do not treat it as an idle restart.
 
 ## 7. Authority: the Horizon is the ceiling, each invocation a subset
 
+> **Revised 2026-09-30.** [24](24-the-room.md) shares one authority across
+> every call in a Horizon and narrows only on request. Reconciled: the
+> app-server's per-thread authority is a **narrowed Horizon**, created once at
+> `start` through `system.narrow` ([26](26-agents-and-facets.md)), and every
+> exchange of that thread runs under it. Operation children share the
+> thread's Horizon; their connection access is by custody. The model-facing
+> tool split below becomes the facet an agent hands its continuation (26).
+
 Separate what a program **could** do from what **this invocation** may do:
 
 - A surface's registered fields (17, step 1) are its **ceiling**: the complete

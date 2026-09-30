@@ -1,7 +1,7 @@
 # Surface refactor
 
 Date: 2026-09-30  
-Status: to do after [24](24-the-room.md) is walked through. Items are added as
+Status: item 1 built on 2026-09-30; item 2 deferred to item 3 (see below). Items are added as
 the walk finds them.
 
 ## The rule
@@ -58,7 +58,14 @@ it may call or touch is the program stating its own authority.
 
 **Now.** Fixed argv for a resident, from the registry entry
 (`registry.go:79`, `:148`), appended at launch (`instance.go:361`,
-`appserver.go:178`). No registry in the repo sets it.
+`appserver.go:178`).
+
+**Correction, 2026-09-30:** a registry does set it. The `skyra` launcher builds
+the real Codex `codex.start` entry with `args`: the `--disable <feature>`
+flags that turn off Codex's native tools. Moving them into `codex.start`'s
+input contract would let the Codex adapter, a continuation, choose them. So
+`Args` stays until the resident fields leave the surface (item 3), where
+launch policy belongs to the room, not to the caller.
 
 **Why it goes.** Anything that varies how a program runs is input, and input
 is checked by the input contract. A fixed argv in the registry is a second,

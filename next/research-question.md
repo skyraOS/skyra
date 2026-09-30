@@ -49,16 +49,18 @@ Two kinds of node:
 | Node | Is | Authority |
 |---|---|---|
 | **Continuation** | an LLM agent (for example Codex) | a Horizon with **reach**: the tools it may invoke. It can invoke leaves |
-| **Leaf** | a tool | a Horizon with **empty reach**: it can only return. Any invoke it attempts is refused |
+| **Leaf** | a tool | the Horizon of its caller: leaf and continuation are behaviours, not authority. To contain a tool, its caller narrows it through the room (revised 2026-09-30, [24](24-the-room.md)) |
 
 Every step runs the same way:
 
-1. **Intake:** the step receives unchecked bytes, parses them as one Move
-   (invoke, return or fault), checks them against the Horizon they were emitted
-   under, and commits a content-addressed record.
-2. **Release:** the parent verifies that record and sends the child its
-   **Horizon**, which is always a subset of the parent's. It travels with a file
-   descriptor for the child's state directory, and that fd is the capability.
+1. **Intake:** the step receives unchecked bytes, derives the state from them
+   and the Horizon they were emitted under (its own slot is a return, a name in
+   reach an invoke), and commits a content-addressed record.
+2. **Release:** the parent verifies that record, derives the child's
+   **Horizon** (its own, unless it asked the room to narrow), commits it, and
+   hands the child its hash with the frame stack's descriptors. The child looks
+   the Horizon up and re-derives it: authority is derived from state and
+   proposal, never held (revised 2026-09-30).
 3. **Execute:** the target runs inside a **Seatbelt sandbox rendered from its
    Horizon**. Deny by default; the runtime's own state is always denied.
 4. **Handoff:** the target's output goes, unparsed, to a fresh successor that
@@ -109,6 +111,12 @@ containment; the claim is that it does both at once.
   nonzero rate for full auto, including effects attempted by tools the agent
   built itself. This holds by construction if the sandbox is sound, so the
   informative number is how narrow a Horizon can be while H2 still holds.
+  *Revised 2026-09-30:* under a shared Horizon the unit of narrowing is the
+  **Horizon**, not the tool call. The claim is that effects outside **the
+  Horizon** succeed zero times; a tool shares its caller's authority unless
+  narrowed. Measure the narrowings a task needs (`system.narrow` invokes) and
+  the authority each Horizon holds, against the baseline's one ambient
+  authority.
 - **H4, stretch, recurrence:** with stored procedures (memoized sequences of tool
   calls), repeated tasks become **cheaper** than the baseline. That would turn "as
   efficient" into "more efficient".

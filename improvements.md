@@ -6,6 +6,13 @@ Status: to design. Found while reading how `interpret` derives a state
 
 ## 1. Invoke is derived from the state and the envelope's fields
 
+> **Built 2026-09-30** (`d49ce18`). Decision 1 took Agoric's decider rule: a
+> return addresses **the slot** (`Horizon.Frame`), told to targets in
+> `SKYRA_FRAME`, so no parent name, no `SKYRA_PARENT`, and no precedence rule
+> were needed. Decision 3: unaddressed output is a `leaf` fault that keeps the
+> output. Decision 4 as proposed. Decision 5 (the recipient on return records)
+> is folded into item 9.
+
 ### The rule
 
 > **The state of an emission is derived from two things only: where the
@@ -111,6 +118,12 @@ against decision 3.
 | Tests | `TestInterpret`, the replay tests, the fake Codex's `"tool": "reply"` bypass probe (`codex/fake/main.go`), which becomes a probe of naming the parent |
 
 ## 2. Do the other states fit the same rule?
+
+> **Built 2026-09-30** (`d49ce18`). 2a: the adapter returns the attempt as an
+> observation (`refused`) after interrupting the turn; no `native.*` name is
+> emitted. 2b (the recipient on fault records) is folded into item 9; every
+> intake fault now carries, as its payload, the observation it was derived
+> from.
 
 The same test for each state: is it derived only from the state and the
 envelope's fields (or, for the runtime's own records, from an observation),
