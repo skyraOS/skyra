@@ -13,10 +13,10 @@
 //	Codex asks for a dynamic tool       → addressed output {"to": tool, "payload": args}
 //	                                      (the runtime derives an invoke, or a fault)
 //	a step came back                    → the tool call's JSON-RPC result
-//	the turn completes                  → the final agent message, as plain text (a reply)
-//	Codex uses anything native          → addressed output naming it, e.g. "native.commandExecution".
-//	(a shell command, a file change,       It is not in reach, so the runtime derives a horizon
-//	an approval request)                   fault, after interrupting the affected turn.
+//	the turn completes                  → the final agent message, returned to this frame's slot
+//	Codex uses anything native          → after interrupting the affected turn, a return naming
+//	(a shell command, a file change,       the attempt, e.g. "native.commandExecution": an
+//	an approval request)                   observation for the parent, not a fault it triggers.
 //	                                       The provider launcher enforces OS file/exec restrictions.
 package main
 
@@ -150,7 +150,7 @@ func run() (string, error) {
 		if err := h.interrupt(c.Frame, thread, turn, from); err != nil {
 			return "", fmt.Errorf("native %s: %w", what, err)
 		}
-		return native(what), nil
+		return native(c.Frame, what), nil
 	}
 
 	// Walk the turn from its start. Tool calls already answered by a step are
@@ -229,9 +229,9 @@ func run() (string, error) {
 				if m.Params.Turn.Status != "completed" || final == "" || calls != len(c.Steps) {
 					return "", fmt.Errorf("turn ended %q with %d of %d tool calls answered", m.Params.Turn.Status, calls, len(c.Steps))
 				}
-				// The runtime reads one line: address the reply, so newlines
-				// survive JSON-escaped and text that looks like JSON stays a reply.
-				out, _ := json.Marshal(map[string]any{"to": "reply", "payload": final})
+				// The runtime reads one line: address the slot, so newlines
+				// survive JSON-escaped and text that looks like JSON stays text.
+				out, _ := json.Marshal(map[string]any{"to": c.Frame, "payload": final})
 				return string(out), nil
 			}
 		}
@@ -288,8 +288,10 @@ func (h *host) interrupt(frame, thread, turn string, from int) error {
 	return errors.New("interrupt was not confirmed; turn may still be active")
 }
 
-func native(what string) string {
-	out, _ := json.Marshal(map[string]any{"to": "native." + what, "payload": map[string]any{}})
+// native reports a native attempt as what it is: an observation returned to
+// the parent, not a name chosen so the runtime would fault it.
+func native(frame, what string) string {
+	out, _ := json.Marshal(map[string]any{"to": frame, "payload": "refused: the agent attempted native." + what + "; the turn was interrupted"})
 	return string(out)
 }
 

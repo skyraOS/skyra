@@ -5,7 +5,7 @@
 // skyra.
 //
 // Its whole policy: with no steps yet, ask echo to repeat the text; once echo
-// has answered, reply with what it said.
+// has answered, return what it said to the slot its frame discharges.
 package main
 
 import (
@@ -15,6 +15,7 @@ import (
 )
 
 type continuation struct {
+	Frame string `json:"frame"`
 	Input struct {
 		Text string `json:"text"`
 	} `json:"input"`
@@ -36,16 +37,20 @@ func main() {
 		os.Exit(1)
 	}
 	if len(c.Steps) == 0 {
-		call, _ := json.Marshal(map[string]any{"to": "echo", "payload": map[string]string{"text": c.Input.Text}})
-		fmt.Println(string(call))
+		emit("echo", map[string]string{"text": c.Input.Text})
 		return
 	}
 	last := c.Steps[len(c.Steps)-1]
 	if last.Fault != nil {
-		fmt.Printf("echo failed (%s): %s\n", last.Fault.Kind, last.Fault.Cause)
+		emit(c.Frame, fmt.Sprintf("echo failed (%s): %s", last.Fault.Kind, last.Fault.Cause))
 		return
 	}
 	var said string
 	_ = json.Unmarshal(last.Value, &said)
-	fmt.Printf("echo said %q\n", said)
+	emit(c.Frame, fmt.Sprintf("echo said %q", said))
+}
+
+func emit(to string, payload any) {
+	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
+	fmt.Println(string(b))
 }

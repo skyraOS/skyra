@@ -202,7 +202,9 @@ func (l *lineage) derive() [][]call {
 				open = map[string]int{}
 				continue
 			}
-			if len(turns) == 0 || !isTool(in.To) {
+			// A return refused by its own output contract addressed the
+			// emitter's slot, not a tool.
+			if len(turns) == 0 || !isTool(in.To) || strings.HasPrefix(r.Fault.Cause, "return: ") {
 				continue
 			}
 			t := len(turns) - 1
@@ -213,11 +215,11 @@ func (l *lineage) derive() [][]call {
 }
 
 // isTool reports whether an address is a tool the agent called, rather than
-// the conversation's own plumbing: the user side, the browser, the reply,
-// and the Codex adapter's steps.
+// the conversation's own plumbing: the user side, the browser, and the Codex
+// adapter's steps.
 func isTool(to string) bool {
 	switch to {
-	case "", "user", "browser", "codex", "reply":
+	case "", "user", "browser", "codex":
 		return false
 	}
 	return !strings.HasPrefix(to, "codex.")

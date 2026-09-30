@@ -17,6 +17,7 @@ type identity struct {
 
 func main() {
 	var c struct {
+		Frame string `json:"frame"`
 		Steps []struct {
 			Value string `json:"value"`
 		} `json:"steps"`
@@ -43,10 +44,16 @@ func main() {
 		}
 		for _, frame := range frames {
 			if st.Dev == frame.Device && st.Ino == frame.Inode {
-				fmt.Println("leaked-frame")
+				verdict(c.Frame, "leaked-frame")
 				return
 			}
 		}
 	}
-	fmt.Println("clean")
+	verdict(c.Frame, "clean")
+}
+
+// verdict returns to the slot this continuation's frame discharges.
+func verdict(frame, v string) {
+	b, _ := json.Marshal(map[string]string{"to": frame, "payload": v})
+	fmt.Println(string(b))
 }

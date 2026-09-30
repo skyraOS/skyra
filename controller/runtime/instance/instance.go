@@ -377,7 +377,7 @@ func startResident(x machine.StartResident, root string) (machine.Event, *os.Fil
 	}
 	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
 	resource := custody.Resource{Kind: "connection", Owner: x.Owner, Incarnation: incarnation}
-	out, _ := json.Marshal(map[string]any{"to": "reply", "payload": map[string]any{
+	out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{
 		"pid": cmd.Process.Pid, "incarnation": incarnation,
 		"profile": record.Sum([]byte(profile))}})
 	cmd.Process.Release()

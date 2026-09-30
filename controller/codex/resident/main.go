@@ -364,7 +364,10 @@ func decide(c continuation) (string, error) {
 		if d.Terminal == "" {
 			return ioCall(d.Incarnation, nil, d.Partial), nil
 		}
-		return emit("native."+d.Violation, map[string]any{}), nil
+		// The attempt is reported as what it is: an observation returned to
+		// the parent, which decides what it means. Blocking it is the
+		// sandbox's job; this is the report (next/24, improvements 2a).
+		return emit(c.Frame, map[string]any{"text": "", "refused": "native." + d.Violation, "thread": d.Thread, "incarnation": d.Incarnation, "activity_at": d.ActivityAt}), nil
 	}
 	for i, call := range d.Pending {
 		if d.Answered[id(call.ID)] {
@@ -388,7 +391,7 @@ func decide(c continuation) (string, error) {
 		if d.Terminal != "completed" || d.Final == "" {
 			return "", fmt.Errorf("turn ended %s without an answer", d.Terminal)
 		}
-		return emit("reply", map[string]any{"text": d.Final, "thread": d.Thread, "incarnation": d.Incarnation, "activity_at": d.ActivityAt}), nil
+		return emit(c.Frame, map[string]any{"text": d.Final, "thread": d.Thread, "incarnation": d.Incarnation, "activity_at": d.ActivityAt}), nil
 	}
 	return ioCall(d.Incarnation, nil, d.Partial), nil
 }

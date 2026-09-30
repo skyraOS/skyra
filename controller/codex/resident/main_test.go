@@ -159,3 +159,24 @@ func TestAToolOutsideReachIsAViolation(t *testing.T) {
 		t.Fatalf("a result from a different tool must not answer the call: %v", err)
 	}
 }
+
+// A native attempt is reported as what it is: once the turn is interrupted,
+// the adapter returns an observation of the attempt to its own slot. It does
+// not name an unregistered capability to make the runtime fault.
+func TestANativeAttemptIsReturnedAsAnObservation(t *testing.T) {
+	c := turnWithCalls(`read {"path":"x"}`)
+	delete(c.Tools, "read")
+	to, m := emitted(t, c)
+	if to != "codex.exchange" {
+		t.Fatalf("the attempt interrupts the turn first: %s", to)
+	}
+	c.Steps = append(c.Steps, step{To: to, State: "return", Payload: m["payload"], Value: value(map[string]any{
+		"lines":    []string{`{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"interrupted"}}}`},
+		"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
+	})})
+	to, m = emitted(t, c)
+	var r struct{ Text, Refused, Thread string }
+	if err := json.Unmarshal(m["payload"], &r); err != nil || to != "frame" || r.Refused != "native.dynamicTool.read" || r.Thread != "thread-1" {
+		t.Fatalf("the attempt is returned to the slot, naming what was attempted: %s %s", to, m["payload"])
+	}
+}

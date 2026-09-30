@@ -42,23 +42,25 @@ func TestInterpret(t *testing.T) {
 		in      string
 		state   record.State
 		to      string // invoke: the capability
-		payload string // invoke or return: the canonical payload
+		payload string // the canonical payload: an invoke's input, a return's value, a fault's observation
 		kind    string // fault: its kind
 		cause   string // fault: a substring of its cause
 	}{
 		{"addressed, in reach, fits", operator, `{"to":"echo","payload":{"text":"hi"}}`, record.Invoke, "echo", `{"text":"hi"}`, "", ""},
-		{"unaddressed text is a reply", leaf, `hello`, record.Return, "", `"hello"`, "", ""},
-		{"explicit reply", leaf, `{"to":"reply","payload":"hi"}`, record.Return, "", `"hi"`, "", ""},
-		{"unaddressed JSON is still just text", leaf, `{"text":"hi"}`, record.Return, "", `"{\"text\":\"hi\"}"`, "", ""},
-		{"a leaf addresses a capability", leaf, `{"to":"echo","payload":{"text":"x"}}`, record.Fault, "", "", record.Horizon, `"echo" is not in reach`},
-		{"out of reach", operator, `{"to":"ghost","payload":{}}`, record.Fault, "", "", record.Horizon, "not in reach"},
-		{"the operator has no reply", operator, `hello`, record.Fault, "", "", record.Horizon, "operator holds no reply"},
-		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", "", record.Contract, `unknown field "txt"`},
-		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", "", record.Contract, `missing required field "text"`},
-		{"reply does not fit", numeric, `hello`, record.Fault, "", "", record.Contract, "reply: want a number"},
-		{"address without payload", operator, `{"to":"echo"}`, record.Fault, "", "", record.Malformed, "exactly"},
-		{"address with extra fields", operator, `{"to":"echo","payload":{},"x":1}`, record.Fault, "", "", record.Malformed, "exactly"},
-		{"address is not a name", operator, `{"to":7,"payload":{}}`, record.Fault, "", "", record.Malformed, "exactly"},
+		{"addresses its own slot", leaf, `{"to":"r1","payload":"hi"}`, record.Return, "", `"hi"`, "", ""},
+		{"unaddressed text is a leaf fault, kept", leaf, `hello`, record.Fault, "", `"hello"`, record.Leaf, "addresses nothing"},
+		{"unaddressed JSON is a leaf fault, kept as text", leaf, `{"text":"hi"}`, record.Fault, "", `"{\"text\":\"hi\"}"`, record.Leaf, "addresses nothing"},
+		{"reply is not a name", leaf, `{"to":"reply","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"reply"}`, record.Horizon, `"reply" is not in reach`},
+		{"another frame's slot is not in reach", leaf, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Horizon, `"g0" is not in reach`},
+		{"a leaf addresses a capability", leaf, `{"to":"echo","payload":{"text":"x"}}`, record.Fault, "", `{"payload":{"text":"x"},"to":"echo"}`, record.Horizon, `"echo" is not in reach`},
+		{"out of reach", operator, `{"to":"ghost","payload":{}}`, record.Fault, "", `{"payload":{},"to":"ghost"}`, record.Horizon, "not in reach"},
+		{"the operator has no slot to return to", operator, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Horizon, `"g0" is not in reach`},
+		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", `{"payload":{"txt":"x"},"to":"echo"}`, record.Contract, `unknown field "txt"`},
+		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", `{"payload":{},"to":"echo"}`, record.Contract, `missing required field "text"`},
+		{"return does not fit", numeric, `{"to":"r1","payload":"hello"}`, record.Fault, "", `{"payload":"hello","to":"r1"}`, record.Contract, "return: want a number"},
+		{"address without payload", operator, `{"to":"echo"}`, record.Fault, "", `"{\"to\":\"echo\"}"`, record.Malformed, "exactly"},
+		{"address with extra fields", operator, `{"to":"echo","payload":{},"x":1}`, record.Fault, "", `"{\"to\":\"echo\",\"payload\":{},\"x\":1}"`, record.Malformed, "exactly"},
+		{"address is not a name", operator, `{"to":7,"payload":{}}`, record.Fault, "", `"{\"to\":7,\"payload\":{}}"`, record.Malformed, "exactly"},
 		{"no output", leaf, ``, record.Fault, "", "", record.Custody, "no output"},
 		{"not text", leaf, "\xff\xfe", record.Fault, "", "", record.Malformed, "UTF-8"},
 	}
@@ -100,7 +102,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 		first Effect // the first effect after the release
 	}{
 		{operator, `{"to":"echo","payload":{"text":"x"}}`, record.Invoke, Run{}},
-		{leaf, `x`, record.Return, Settle{}},
+		{leaf, `{"to":"r1","payload":"x"}`, record.Return, Settle{}},
 		{operator, `{"to":"ghost","payload":{}}`, record.Fault, Settle{}},
 	} {
 		s, _ := Step(Instance{Phase: Intake}, Received{Under: c.under, In: []byte(c.in)})
@@ -115,7 +117,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 	}
 
 	// A terminal state never executes, even if an event for Execute arrives.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`x`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`{"to":"r1","payload":"x"}`)})
 	s.Phase = Execute
 	_, effs := Step(s, Emitted{Out: []byte("x")})
 	if x, ok := effs[0].(Exit); !ok || x.Err == "" {
@@ -137,7 +139,7 @@ func TestStopReleasesOnlyItsConnection(t *testing.T) {
 		{Kind: "connection", Owner: "codex", Incarnation: "one"},
 		{Kind: "connection", Owner: "codex", Incarnation: "two"},
 	}}
-	s, effects := Step(s, Emitted{Out: []byte(`{"to":"reply","payload":{}}`), ReleasedResource: "one"})
+	s, effects := Step(s, Emitted{Out: []byte(`{"to":"f1","payload":{}}`), ReleasedResource: "one"})
 	if s.Phase != Handoff || len(s.Resources) != 1 || s.Resources[0].Incarnation != "two" {
 		t.Fatalf("resource release: %+v", s)
 	}
@@ -314,14 +316,15 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("an invoke's slot is opened before it is released: %#v", effs)
 	}
 
-	// Echo replies; the reply discharges echo's slot and wakes the agent's frame.
+	// Echo returns to its slot; the return discharges it and wakes the agent's frame.
 	b, _ = released(b, effs[1].(SendHorizon).Child)
-	b, _ = Step(b, Emitted{Out: []byte("hi")})
-	r, _ := Step(Instance{Phase: Intake}, Received{Under: b.Self, In: []byte("hi")})
+	echoReturn := []byte(`{"to":"` + b.Self.Frame + `","payload":"hi"}`)
+	b, _ = Step(b, Emitted{Out: echoReturn})
+	r, _ := Step(Instance{Phase: Intake}, Received{Under: b.Self, In: echoReturn})
 	_, effs = Step(b, Stamped{Stamp: r.Stamp, R: &r.R})
 	r, effs = released(r, effs[0].(SendHorizon).Child)
 	if !reflect.DeepEqual(effs, []Effect{Settle{r.Stamp}, GatherWaiter{}}) {
-		t.Fatalf("the reply discharges echo's slot, then reads the agent's round: %#v", effs)
+		t.Fatalf("the return discharges echo's slot, then reads the agent's round: %#v", effs)
 	}
 
 	agentRecord := a.R
@@ -369,11 +372,11 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("the agent resumes with the step it took and what came back: %s", effs[1].(Run).Stdin)
 	}
 
-	// Its reply discharges the agent's own slot, and wakes the operator.
-	final, _ := Step(Instance{Phase: Intake}, Received{Under: g.Self, In: []byte(`echo said "hi"`)})
+	// Its return discharges the agent's own slot, and wakes the operator.
+	final, _ := Step(Instance{Phase: Intake}, Received{Under: g.Self, In: []byte(`{"to":"` + a.Stamp + `","payload":"echo said \"hi\""}`)})
 	child, _ := Narrow(g.Self, final.R, final.Stamp)
 	if final.State != record.Return || child.Frame != a.Stamp || child.Resume.Frame != operator.Frame {
-		t.Fatalf("the agent's reply discharges its own frame, waited on by the operator: %+v", child)
+		t.Fatalf("the agent's return discharges its own frame, waited on by the operator: %+v", child)
 	}
 }
 
@@ -480,16 +483,16 @@ func TestAsyncSurfaceParks(t *testing.T) {
 	}
 
 	// The host resumes it in Execute with the event: an ordinary handoff.
-	s, effs = Step(s, Emitted{Out: []byte(`{"to":"reply","payload":"hi"}`)})
+	s, effs = Step(s, Emitted{Out: []byte(`{"to":"` + s.Self.Frame + `","payload":"hi"}`)})
 	if _, ok := effs[0].(Spawn); !ok {
 		t.Fatalf("a resumed instance hands the event off like any output: %#v", effs)
 	}
 }
 
-func TestRunTellsATargetItsReadGrants(t *testing.T) {
+func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 	s := horizon.Surface{Path: "/bin/tool"}
-	if env := runOf(horizon.Horizon{Surface: &s}, nil, "/floor").Env; len(env) != 1 {
-		t.Fatalf("no read grant, no SKYRA_READ: %v", env)
+	if env := runOf(horizon.Horizon{Surface: &s, Frame: "f1"}, nil, "/floor").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
+		t.Fatalf("a target is told its slot; no read grant, no SKYRA_READ: %v", env)
 	}
 	s.Authority.Read = []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}
 	env := runOf(horizon.Horizon{Surface: &s}, nil, "/floor").Env

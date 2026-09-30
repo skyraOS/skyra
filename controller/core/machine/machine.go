@@ -268,61 +268,62 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 }
 
 // interpret derives the state from the emitter's operands (thought 14). An
-// emitter supplies only which capability (optionally) and a payload:
+// emitter supplies only an address and a payload:
 //
-//	{"to": "<capability>", "payload": <JSON>}   addressed
-//	anything else                               unaddressed: its text is the payload for reply
+//	{"to": "<address>", "payload": <JSON>}
 //
-// It never says whether that is a call or a return. The runtime derives it:
+// It never says whether that is a call or a return. The runtime derives it
+// from where the emitter stands (improvements, items 1 and 2):
 //
-//	names a capability in reach, payload fits its input contract   → invoke
-//	names reply, or nothing, payload fits the return contract      → return
-//	not readable as operands                                       → fault (malformed)
-//	names a capability outside the Horizon                         → fault (horizon)
-//	payload does not fit the contract of what it names             → fault (contract)
+//	addresses the slot its frame discharges, payload fits its output contract   → return
+//	names a capability in reach, payload fits its input contract                → invoke
+//	names anything else                                                         → fault (horizon)
+//	addresses nothing                                                           → fault (leaf)
+//	not readable as operands                                                    → fault (malformed)
+//	payload does not fit the contract of what it addresses                      → fault (contract)
 //
-// It is total and pure, so replay derives the same state again.
+// No name is reserved: the slot is the frame's id, a stamp no capability can
+// be named. Every fault carries, as its payload, the observation of why it
+// faulted. It is total and pure, so replay derives the same state again.
 func interpret(h horizon.Horizon, out []byte) record.Record {
 	if len(out) == 0 {
-		return faulted(record.Custody, "no output")
+		return faulted(record.Custody, "no output", nil)
 	}
 	if !utf8.Valid(out) {
-		return faulted(record.Malformed, "output is not UTF-8 text")
+		return faulted(record.Malformed, "output is not UTF-8 text", nil)
 	}
-	to, payload := "reply", any(string(out))
-	if v, err := contract.Decode(out); err == nil {
-		if o, ok := v.(map[string]any); ok {
-			if _, addressed := o["to"]; addressed {
-				name, ok := o["to"].(string)
-				p, hasPayload := o["payload"]
-				if !ok || !hasPayload || len(o) != 2 {
-					return faulted(record.Malformed, `addressed output must be exactly {"to": <capability>, "payload": <JSON>}`)
-				}
-				to, payload = name, p
-			}
-		}
+	printed := contract.Canonical(string(out))
+	v, err := contract.Decode(out)
+	o, isObject := v.(map[string]any)
+	if _, addressed := o["to"]; err != nil || !isObject || !addressed {
+		return faulted(record.Leaf, "output addresses nothing", printed)
 	}
-	if to == "reply" {
-		if h.Surface == nil {
-			return faulted(record.Horizon, "the operator holds no reply")
-		}
+	to, isName := o["to"].(string)
+	payload, hasPayload := o["payload"]
+	if !isName || !hasPayload || len(o) != 2 {
+		return faulted(record.Malformed, `addressed output must be exactly {"to": <address>, "payload": <JSON>}`, printed)
+	}
+	attempt := contract.Canonical(o)
+	if h.Surface != nil && to == h.Frame {
 		if err := contract.Fits(h.Surface.Output, payload); err != nil {
-			return faulted(record.Contract, "reply: "+err.Error())
+			return faulted(record.Contract, "return: "+err.Error(), attempt)
 		}
 		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
 	}
 	target, ok := h.Reach[to]
 	if !ok {
-		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to))
+		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
 	if err := contract.Fits(target.Input, payload); err != nil {
-		return faulted(record.Contract, to+": "+err.Error())
+		return faulted(record.Contract, to+": "+err.Error(), attempt)
 	}
 	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
 }
 
-func faulted(kind, cause string) record.Record {
-	return record.Record{State: record.Fault, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
+// faulted is an intake fault. Its payload is the observation it was derived
+// from, so the parent can pass it on (next/24, "Faults carry their observation").
+func faulted(kind, cause string, observation json.RawMessage) record.Record {
+	return record.Record{State: record.Fault, Payload: observation, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
 }
 
 // accept is the child's half of Release, for every state: the Horizon must be
@@ -565,9 +566,12 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 
 // runOf is the Run effect for a Horizon: its surface, under the sandbox the
 // Horizon renders to, with an environment that names only the sockets its
-// surface was granted.
+// surface was granted, and the slot it returns to.
 func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
-	env := []string{"PATH=/usr/bin:/bin"}
+	// A target returns by addressing the slot its frame discharges. Being told
+	// it is information, not authority: intake derives the return from the
+	// emitter's own Horizon, whatever the target believes.
+	env := []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=" + h.Frame}
 	for _, sock := range h.Surface.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}

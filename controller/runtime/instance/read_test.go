@@ -64,11 +64,11 @@ func TestReadLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 		}
 		t.Helper()
 		e := run(machine.Run{Surface: surface, Stdin: []byte(`{"path":` + string(must(json.Marshal(path))) + `}`),
-			Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin", "SKYRA_READ=" + work}}, nil).(machine.Emitted)
+			Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work}}, nil).(machine.Emitted)
 		if e.Err != "" {
 			t.Fatalf("%s: %s", path, e.Err)
 		}
-		if json.Unmarshal(e.Out, &addressed) != nil || addressed.To != "reply" || json.Unmarshal(addressed.Payload, &out) != nil {
+		if json.Unmarshal(e.Out, &addressed) != nil || addressed.To != "f1" || json.Unmarshal(addressed.Payload, &out) != nil {
 			t.Fatalf("%s: %s", path, e.Out)
 		}
 		return out

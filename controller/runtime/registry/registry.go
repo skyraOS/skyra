@@ -53,9 +53,6 @@ func Load(file string) (map[string]horizon.Surface, error) {
 	dir := filepath.Dir(file)
 	reach := map[string]horizon.Surface{}
 	for name, e := range entries {
-		if name == "reply" {
-			return nil, fmt.Errorf("registry: %q is reserved", name)
-		}
 		var d Declared
 		if err := strict(resolve(dir, e.Contract), &d); err != nil {
 			return nil, fmt.Errorf("%s contract: %w", name, err)
