@@ -734,3 +734,202 @@ same treatment: a `result` or a `deps/` slot is a mark only.
 Direction 1 first: it is small, it closes the gap for every reader, and it
 removes the webhost's rule. Direction 2 waits until tamper-evidence of
 acceptance is needed, for example by the evaluation's adversarial suite.
+
+## 9. Nothing comes from nowhere: identity as the path of handoffs
+
+### The rule
+
+> **Every identifier is derived, and every derivation is recorded.** A hash
+> names exactly one thing in exactly one space, and it traces to an authored
+> origin: nothing in the system, including what the system itself authors,
+> comes from nowhere.
+
+Three corollaries:
+
+- **Each kind of thing owns a hash space.** A type, a record and a frame can
+  never share an identifier, even when their bytes are identical.
+- **Every step has two hashes.** A content id says *what* happened; a stamp
+  says *where* it happened. The first makes the same work look the same
+  across runs; the second proves the path.
+- **An identity is the path of handoffs that produced it.** A record's id
+  starts with its parent's id, so the id itself says "this proposal, handed
+  off from that one". Back is dropping a segment, forward is a prefix query,
+  and replay walks the ids.
+
+### What happens now
+
+**The registry comes from nowhere.** `registry.json` and each target's
+`contract.json` are read once (`boot.go`, `registry.Load`) and copied inline
+into the genesis record's `Reach`. A contract has no identity of its own, no
+author and no history. A field of a contract is not identifiable at all: `read`'s
+`path` and any other tool's `path` are the same anonymous `{"type":
+"string"}`. Codex and the human have no stable identity either: Codex is a
+registry name plus a binary hash that changes with every build, and the human
+is whatever surface is called `user` or `browser`.
+
+**Genesis is not unique.** Its record is `{Input: Sum(reach), State: invoke,
+Reach: reach}` (`boot.go`): no author, no time, no nonce. Two boots with the
+same registry produce the same genesis stamp, and, seeded the same way, the
+same first stamps after it, until something nondeterministic (a Codex reply)
+splits them. Stamps are unique within one history, not across histories.
+
+**The hash spaces overlap.** A frame's id *is* its invoke record's stamp;
+`records/`, `inputs/` and `frames/` are all keyed by bare sha256 with nothing
+saying which space a hash belongs to.
+
+**One hash does two jobs.** A stamp covers `Predecessor`, so it commits to the
+whole history before it. That proves the path, but it means that after two
+runs diverge every later stamp differs, including for steps that did exactly
+the same thing. There is no way to see that two runs converged again.
+
+**Identity says nothing about position.** A stamp is a flat 64-hex name.
+Where it sits (which frame, under which call) is found by loading records and
+following `Predecessor` back (`replay.go`), or by reading marks under
+`frames/` forward (item 8).
+
+### Direction
+
+**1. Domain-separated hash spaces.** Every hash is taken over a prefix that
+names its space:
+
+```text
+type id     = sha256("skyra/type\0"      + canonical declaration)
+content id  = sha256("skyra/content\0"   + canonical step, no predecessor)
+stamp       = sha256("skyra/record\0"    + canonical record)
+frame id    = sha256("skyra/frame\0"     + stamp of the invoke that opened it)
+```
+
+These are *spaces*, not separate stores. Every identifier is either a record
+in the one log or derived from one, so there is still one source of truth,
+and "nothing comes from nowhere" becomes checkable: every id in every space
+resolves to a record.
+
+**2. Types and principals are records.** A type is declared, and the
+declaration is committed like any other step:
+
+```text
+type record:  { predecessor: <stamp it was declared under>,
+                author:      <principal>,
+                shape:       { fields: { "path": <type id>, ... } } }
+```
+
+- **Every field is an observation type.** `read.output.path` is its own
+  type, whose shape points at a lower type by id. Two fields with the same
+  shape and different authors or meanings are different types.
+- **A contract is a type** `{input: <type id>, output: <type id>}`, so the
+  whole registry is a Merkle DAG of declarations.
+- **Primitives are declared at genesis.** `string`, `number`, `bool`,
+  `null`, `array` and `object` are type records authored by the runtime
+  principal. System-authored, but still recorded.
+- **Principals are records.** Codex, the human, and the runtime each have a
+  declaring record. A principal's stable id is the stamp of its **first**
+  declaration; a new Codex build is a successor record linked to it. The
+  stable id is the start of the chain, the version is its head. Nothing is an
+  assigned UUID.
+
+The registry file stops being a source. It is one input the operator commits
+at genesis, which becomes one record per type and per principal. Later
+registrations (item 6, self-extension) are more records in the same log,
+authored by whoever declared them.
+
+**3. Types are derived, never claimed.** The same rule as item 1: an emitter
+cannot say "this is a return", and it cannot say "this payload is type X"
+either. The runtime derives the type from the contract the payload was
+checked against, which the address selects, and records it as `type: <type
+id>` beside `state`.
+
+**4. Genesis is an authored act.** The operator (the human principal) authors
+genesis, and it carries what makes that act distinct: the time of the grant,
+or a nonce the operator commits to. Every history then starts from a unique,
+attributed origin, and every stamp is globally unique. Genesis is the one
+origin, and the design says so instead of leaving it implicit.
+
+**5. Two hashes per step.**
+
+| | Hashes | Answers |
+|---|---|---|
+| **content id** | the step alone: state, to, type, payload, fault; **no predecessor** | *is this the same thing?* Equal wherever two runs did the same thing |
+| **stamp** | content id + predecessor stamp | *is this the same path?* Proves execution, unique per step |
+
+Git makes the same split: a tree hash says the content is the same, a commit
+hash says the history is.
+
+**6. Identity is the path of handoffs.** A child's id starts with its
+parent's id:
+
+```text
+id(step) = <genesis> / <frame> / <frame> / … / <stamp>
+
+back:     drop the last segment                   → the parent
+forward:  every id that starts with id(X)/        → everything under X
+diff:     longest common prefix of two ids        → where two runs split
+          then compare content ids                → where they did the same work again
+```
+
+- **Segments are the frame stack, not every step.** Depth grows with
+  nesting (agent → codex → read), not with the number of steps, so an id
+  stays short. Steps within a frame are ordered by their `Predecessor`
+  links, which are already hashed into each record.
+- **Only the last segment has to be full.** It is the stamp, which commits
+  to the whole ancestry. Ancestor segments can be shortened (16 hex) for
+  locating; integrity comes from the full stamp.
+- **It is a tree, so the path is well defined.** Every handoff has exactly
+  one parent. A resolve joins many discharges, but it is carried by one
+  handoff, and the siblings it joins are named in its body (`Deps`).
+- **It can be the storage layout.** `records/<genesis>/<frame>/…/<stamp>`:
+  back is `..`, forward is `ls`. Most of today's marks under `frames/`
+  become the directory structure itself (see item 8).
+
+**7. Replay walks the ids.** Every segment of a record's id must match the
+frame stack its records' `Predecessor` links derive, and every forward edge
+(a mark, a directory entry) must equal a back edge some record commits to.
+A record filed under a parent it does not link to, or a mark no record backs,
+is a forgery replay catches. Back edges live in hashed bodies, forward edges
+in the path, and both are checked.
+
+### Where it fits the other items
+
+- **Items 1 and 2.** Unchanged in kind: a return is recognized by the slot it
+  addresses, the frame id. Decision 5 (record the recipient on returns) and
+  2b (the fault record drops the recipient) both change record encoding;
+  they fold into this item, so stamps change once, not three times.
+- **Item 5.** Contracts checked by `contract.Fits` become type records; the
+  check is the same, and the record now says which type it checked against.
+- **Item 6.** A registration is a type record authored by the agent, under
+  its own frame. Its provenance is its id.
+- **Item 8.** Records point back, marks point forward. Path identity makes
+  most forward marks structural, and direction 7 is item 8's "one definition
+  of the lineage" extended to ids.
+
+### Open questions
+
+- **Canonical encoding.** Hashing a declaration or a step needs one canonical
+  form. `contract.Canonical` covers payloads; records are encoded with
+  `json.Marshal` of a struct, which is deterministic but not specified. Pick
+  one and write it down before anything is hashed under a domain.
+- **What goes in the content id.** Codex replies carry timestamps and
+  incarnations, so two runs never produce the same Codex content id even when
+  they said the same thing. Is that right (they are different observations),
+  or does the content id need a narrower view?
+- **Nonce or time at genesis.** A time is informative but not unique on its
+  own; a nonce is unique but says nothing. Probably both.
+- **Existing lineages.** Every stamp changes. Migrate `.skyra` trees once, or
+  keep a version field and let old lineages replay under the old rules.
+- **Fan-out under one predecessor.** Item 8's orphan (a successor that
+  committed and died beside its parent's supervisor fault) shares a parent
+  segment with the fault. Path identity keeps both; direction 7 has to say
+  which one the lineage contains.
+
+### Order
+
+1. Canonical encoding and domain prefixes (direction 1). Small, and every
+   other direction hashes through it.
+2. Authored genesis (direction 4). Makes stamps globally unique.
+3. Content id beside the stamp (direction 5), with replay checking both.
+4. Path identity and the storage layout (directions 6 and 7), together with
+   item 8's direction 1.
+5. Types and principals as records (directions 2 and 3), which item 6 builds
+   on.
+
+Items 1 and 2 can land first without any of this: they do not change record
+encoding.
