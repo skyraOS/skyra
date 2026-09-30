@@ -1,6 +1,6 @@
 # Skyra: where we are
 
-Date: 2026-09-28  
+Date: 2026-09-30  
 Status: current summary of the whole project: the properties it is after, the
 patterns that produce them, what runs today, and what does not yet. The
 [README](README.md) is the front door and [`startup-doc.md`](startup-doc.md)
@@ -12,17 +12,19 @@ is how to run it. This file explains *why it works the way it does*.
 ## In one paragraph
 
 Skyra is an agent runtime whose principal is the **bounded, auditable agent**,
-not the process. A human grants an agent a **Horizon** once: an explicit set of
-what it may invoke. Everything inside that Horizon runs without approval,
-including tools the agent builds for itself. Anything outside it is refused by
-the operating system. Structurally, a single `skyra` binary runs **once per step
-and exits**. Each run takes custody of untrusted bytes, **derives** what they
-mean, commits a content-addressed record, and runs the next target under a macOS
-Seatbelt sandbox **rendered from that target's Horizon**. All durable state is a
-hash-linked record tree, and replaying it from genesis re-derives every
-decision byte for byte. Today it runs real Codex conversations in the browser and
-the terminal. Codex can call `echo` and `read`, each as its own sandboxed leaf,
-and every turn is a replayable lineage.
+not the process. A human grants a **Horizon** once: an explicit set of what an
+agent may invoke and touch. Everything inside it runs without approval,
+including tools the agent builds for itself; anything outside it is refused by
+the operating system. **Authority is never held, only derived**: at every step
+the runtime reads the durable state and the incoming proposal and derives what
+the step may do. A single `skyra` binary runs **once per step and exits**. Each
+run takes custody of untrusted bytes, derives what they mean from where the
+emitter stands, commits a content-addressed record, and runs the next program
+under a macOS Seatbelt profile **rendered from its Horizon**. All durable state
+is a hash-linked tree, and replaying it from genesis re-derives every decision
+byte for byte. Today it runs real Codex conversations in the browser, the
+terminal and a desktop app; Codex calls `echo` and `read`, and every turn is a
+replayable lineage.
 
 ---
 
@@ -33,76 +35,69 @@ Each prompt is cheap, but together they fail. People stop reading, approve by
 reflex, and then switch to full auto, which trades the prompts for **ambient
 authority**: a shell, the whole workspace and the network, inside a sandbox the
 agent *reports* about itself. That is **tool acceptance fatigue**. Self-extension
-makes it worse, because an agent that writes its own tools produces a stream of
-new code, and each piece wants its own approval.
+makes it worse: an agent that writes its own tools produces a stream of new
+code, and each piece wants its own approval.
 
 **The move is to put the approval on the right object.** A human can
 meaningfully decide *what an agent may touch*, once. They cannot meaningfully
 review every action inside that. So the human decides the Horizon. Anything
-created under it can only rearrange authority already granted: nothing can be
-created with more authority than its creator holds, and the OS checks this on
-every invocation. So nothing inside needs a prompt. The human is asked only when
-the agent reaches past the Horizon.
+created under it can only rearrange authority already granted, and the OS
+checks this on every invocation, so nothing inside needs a prompt. The human is
+asked only when the agent reaches past the Horizon.
 
 **The contribution is coupling, not invention.** Permissions, plans and audit
-logs all exist already. Skyra welds them into the execution model instead of
-bolting them on beside it. The full argument, from the six observed pains ("grips")
-to the invariants they force, is in
-[`grips-and-invariants.md`](grips-and-invariants.md).
+logs all exist. Skyra welds them into the execution model instead of bolting
+them on beside it. The full argument, from the six observed pains to the
+invariants they force, is in [`grips-and-invariants.md`](grips-and-invariants.md).
 
 ---
 
 ## The properties we are going for
 
-Each property below is something the system should make **true by construction**,
-not something a component promises. The rule for every one of them: a semantic
+Each is something the system should make **true by construction**. A semantic
 claim is never made unless a mechanism enforces it, or it is listed as a gap.
 
 | # | Property | Means | Enforced by | Status |
 |---|---|---|---|---|
-| **P1** | **The emitter is never the checker** | whatever a model or tool outputs is untrusted bytes. A *different* process interprets and commits it before anything acts on it | intake runs in the successor; `interpret` is the only path from bytes to state | built |
-| **P2** | **Authority only narrows, and the OS enforces it** | every step runs under a Horizon; a child's is always a subset of its parent's; the sandbox is generated from it per invocation | `machine.Narrow`, `horizon.Render`, `sandbox-exec` | built |
-| **P3** | **Truth is derived, not stored** | only observations are stored (the bytes each step received); everything else is re-derived by one pure function | `machine.Step` is pure; `replay` re-derives every record | built, with known gaps |
-| **P4** | **Custody** | at every moment each piece of work is held by exactly one live process or one durable commit | stamp, then release, then exit; a parent exits only after its successor stamps | built |
-| **P5** | **No live state to recover** | a crash before the commit means nothing happened; after it, the intent is on disk | one atomic commit per handoff; no server | built (restore itself is not) |
-| **P6** | **The runtime knows no actor** | Codex, the browser and the human have their semantics in adapters, never in the trusted core | package boundaries; a word-bounded audit ([next/20](next/20-boundry-crossing.md)) | built |
-| **P7** | **Code is never executed in the process that emitted it** | what step *t* emits is run by *t+1*, under a Horizon derived from that emission | leaves run in fresh sandboxed processes; Codex's native execution is sandboxed and interrupted | built for leaves; Codex is contained, not structurally prevented |
-| **P8** | **Frame ⊆ authority** | everything a model is shown is invokable; not everything invokable is shown. Visibility grants nothing | `tools` is derived from reach; any name outside reach is a horizon fault | built |
-| **P9** | **Approval-free self-extension** | an agent registers a tool it wrote, under a narrower Horizon, and runs it with zero prompts | registry at runtime, narrowed from the creator | **not built: the thesis demo** |
-| **P10** | **Recurrence is the resource** | a workflow that succeeded runs again warm: cheaper *and* more tightly guarded | memoized procedures keyed by input contract | designed, deferred |
+| **P1** | **The emitter is never the checker** | whatever a model or tool outputs is untrusted bytes; a different process derives and commits it before anything acts on it | intake runs in the successor; `interpret` is the only path from bytes to state | built |
+| **P2** | **Authority is derived, only narrows, and the OS enforces it** | every step runs under a Horizon derived from the tree and the proposal; a call shares its caller's Horizon unless it asks the room to narrow; nothing widens one | `machine.Narrow`, `machine.accept`, the room's `system.narrow`, `horizon.Render` | built |
+| **P3** | **Truth is derived, not stored** | only observations are stored; everything else is re-derived by one pure function | `machine.Step` is pure; `replay` re-derives every record | built, with known gaps |
+| **P4** | **Custody** | each piece of work is held by exactly one live process or one durable commit | stamp, release, exit; a parent exits only after its successor stamps | built |
+| **P5** | **Live state is durable state** | a crash loses nothing that cannot be read back; a Horizon, the parked work, its authority are all on disk | one atomic commit per handoff; Horizons committed; resume derived from the tree | built (restore after a host dies is not) |
+| **P6** | **The runtime knows no actor** | Codex, the browser and the human live in adapters, never in the trusted core | package boundaries; the audit in [next/20](next/20-boundry-crossing.md) | built |
+| **P7** | **No program starts another unrecorded** | exec is allowed only for the program being run; every other program starts through an emission the runtime recorded | the exec exclusion in every rendered profile, with an OS test | built |
+| **P8** | **Frame ⊆ authority** | everything a model is shown is invokable; visibility grants nothing | `tools` is derived from reach and references | built |
+| **P9** | **Approval-free self-extension** | an agent registers a tool it wrote under its own Horizon and runs it with zero prompts | `system.register`, a Starlark tool run by the runtime's checker | **not built: the thesis demo** |
+| **P10** | **Recurrence is the resource** | what was decided once is kept: checks learned at novelty, procedures remembered | checks and bindings as records; the log as the test suite | designed ([next/28](next/28-types-observations-checks.md)) |
 
-P1–P3 are the three invariants in the README. P4–P8 are the structural rules
-that keep those three true. P9 and P10 are what the whole thing is for.
+P1–P3 are the README's three invariants. P4–P8 keep them true. P9 and P10 are
+what the whole thing is for.
 
 ---
 
 ## The patterns, and how they produce the properties
 
-### 1. One binary, once per step
+### 1. One binary, once per step; a Horizon is the process
 
 There is no long-running controller. One `skyra` process runs one step and
-exits. Durable state is a tree on disk (`.skyra/`), and nothing else survives.
-
-**Why:** crash semantics (P5). A long-running controller could enforce the same
-rules, but its memory would be state that a crash can lose or leave half
-applied, and recovery would have to reconcile it with the disk. Here, a step is:
-read, authorize, one atomic write, execute. There is never live state to
-recover, only the tree.
+exits, and durable state lives in `.skyra/`. **A Horizon is our process**
+([next/27](next/27-a-horizon-is-a-process.md)): the kernel's abstraction over
+authority, a stack and durable state. OS processes are only the workers that
+carry out its steps, and they are disposable: a worker that dies ends one step,
+not the Horizon. The kernel is the ephemeral wrapper around every handoff.
 
 ```text
- INTAKE    receive unchecked bytes; interpret them as operands; derive the state; commit a record; reply with its stamp
- RELEASE   the parent reads the record back, checks it hashes to the stamp, narrows the Horizon, and sends
-           {Horizon + the frame stack as directory fds} over a Unix socket (SCM_RIGHTS)
- EXECUTE   run the target under a Seatbelt profile rendered from that Horizon. Its output is not parsed here
- HANDOFF   spawn a successor with the raw output; open a slot if it is an invoke; exit once the successor has stamped
+ INTAKE    receive unchecked bytes; derive the state from them and the Horizon they were emitted under;
+           commit a record; reply with its stamp
+ RELEASE   the parent reads the record back, checks it hashes to the stamp, derives the child's Horizon,
+           commits it, and sends {its hash + the frame stack as directory fds} over SCM_RIGHTS.
+           The child looks the Horizon up and refuses it unless its own commit derives exactly that Horizon
+ EXECUTE   run the program under a Seatbelt profile rendered from that Horizon. Its output is not parsed here
+ HANDOFF   spawn a successor with the raw output; open a slot if it is an invoke; exit once it has stamped
  SETTLE    a return or fault discharges the slot it answers, once
  GATHER    if every slot the waiting continuation opened is discharged, commit a resolve naming them all
- CLAIM     exactly one sibling wins the right to resume that continuation, in the same instance
+ CLAIM     exactly one sibling wins the right to resume that continuation
 ```
-
-Each instance's **target** is untrusted. Custody passes between the *trusted
-halves* of consecutive instances. The target never takes part in the protocol.
-It reads stdin and prints one line.
 
 ### 2. A pure core and an effectful shell
 
@@ -111,249 +106,218 @@ func Step(s Instance, e Event) (Instance, []Effect)   // machine: decides everyt
 func Drive(root, up, stack, s, e)                     // instance: performs effects, decides nothing
 ```
 
-- An **event** is a fact about something that already happened (`Received`,
-  `Released`, `Emitted`, `Stamped`, `Settled`, `Claimed`, `Parked`).
-- An **effect** is a request for something to happen (`StoreInput`, `Commit`,
-  `SendStamp`, `Run`, `Spawn`, `OpenDep`, `SendHorizon`, `Settle`, `TryClaim`,
-  `Park`, `Exit`…).
-- `Step` switches on the **derived state** first (invoke, return, fault,
-  resolve), then on the phase.
+Events are facts (`Received`, `Released`, `Emitted`, `Stamped`, `Settled`,
+`Claimed`, `Parked`); effects are requests (`Commit`, `Run`, `Spawn`,
+`SendHorizon`, `Settle`, `TryClaim`, `Park`…). `TestMachineIsPure` fails if
+`machine` imports anything that touches the OS, the clock or the tree. That
+purity is what lets replay feed recorded inputs back and get the same records.
 
-`TestMachineIsPure` fails if `machine` imports anything that could touch the
-OS, the clock, the tree or the network. That purity is what makes P3 possible:
-replay feeds the recorded inputs back through the same function and must get
-the same records.
+### 3. States derived from where the emitter stands (`interpret`)
 
-### 3. Operands, not operators (`interpret`)
-
-This is P1 taken all the way ([next/14](next/14-interpreted-not-stated.md)). A
-target never says "invoke", "return" or "fault". It supplies **operands** only:
+A program never says "invoke", "return" or "fault". It emits operands,
+`{"to": <address>, "payload": <JSON>}`, and the runtime derives the state
+([next/14](next/14-interpreted-not-stated.md), [next/24](next/24-the-room.md)):
 
 ```text
-{"to": "<capability>", "payload": <JSON>}   addressed
-anything else                               unaddressed: its text is the payload for reply
+addresses the slot its frame discharges (SKYRA_FRAME), fits its output contract   → return
+names a capability or reference in reach, fits its input contract                 → invoke
+names anything else                                                               → fault (horizon)
+addresses nothing                                                                 → fault (leaf)
+not UTF-8, or not exactly {to, payload}                                           → fault (malformed)
+does not fit the contract of what it addresses                                    → fault (contract)
+no output                                                                         → fault (custody)
 ```
 
-The runtime **derives** the state with one total, pure function:
-
-```text
-no output                                                 → fault (custody)
-not UTF-8, or a malformed address                         → fault (malformed)
-names a capability not in reach                           → fault (horizon)
-payload does not fit the contract of what it names        → fault (contract)
-names a capability in reach, payload fits                 → invoke
-names reply, or nothing, payload fits the return contract → return
-```
-
-What falls out:
-
-- **Return is invoking `reply`,** a single-use capability to discharge the one
-  slot your parent waits on. It works like continuation-passing style, or E's
-  promise resolvers.
-- **Unaddressed output defaults to `reply`, the least authority there is.**
-  Defaulting can never escalate anything. So a leaf's output is always a reply:
-  tools just print their data.
-- **The model cannot forge control flow.** Output that *says* "return success"
-  is not a return. Only a payload that fits the reply contract is.
-- **Exactly-once returns are structural,** because a slot's result file is
-  write-once.
-- **Unaddressed output is always a string.** A leaf whose return contract is an
-  object therefore addresses reply explicitly: `{"to":"reply","payload":{…}}`.
-  The `read` tool does this. It keeps the object contract checked, and means a
-  file's contents can only ever cross as a string inside the payload.
+- **No name is reserved.** The slot is the frame's id, a stamp no capability
+  can be named. The old `"reply"` word, which let an emitter state its own
+  operator, is gone.
+- **A leaf fault keeps what was printed.** A plain binary that knows nothing of
+  Skyra can be registered; its output arrives as the fault's observation, and
+  the parent decides whether it was a failure.
+- **Every fault carries its observation** as its payload: the bytes that did
+  not fit, the address outside the Horizon, what a program printed. A parent can
+  pass it on.
 - **A refused output is still committed,** as a fault. A stamp means custody,
   not approval.
 
-### 4. Contracts: one check for calls and returns
-
-Every surface declares an **input contract** and a **return contract**
-(JSON-types schemas: `object | array | string | number | bool | null`, with
-fields, required fields and items). Fit is strict: an unknown field does not
-fit. The key unification is that **the reply capability's input contract is the
-return contract**, so "is this call valid?" and "is this return valid?" are the
-same question: does the payload fit the contract of the capability it was sent
-to? Contracts live in each surface's `contract.json`, travel inside the Horizon,
-and are checked in the pure core, so replay reproduces every verdict.
-
-### 5. The Horizon: authority as a narrowing list
+### 4. The Horizon: one authority, shared, derived
 
 ```go
 type Horizon struct {
-    Stamp   string             // this frame's latest commit
-    Surface *Surface           // what this frame runs: path, pinned sha256, contracts, OS grants
-    Reach   map[string]Surface // what emissions under it may invoke. Empty reach: a leaf
-    Frame   string             // the slot this Horizon's reply discharges
-    Resume  *Horizon           // the continuation waiting on that slot
+    Stamp     string             // this frame's latest commit
+    Surface   *Surface           // what this frame runs: identity and contracts only
+    Reach     map[string]Surface // what emissions under it may invoke
+    Authority Authority          // the OS grants everything under it runs with
+    Refs      map[string]Grant   // references received from the room
+    Frame     string             // the slot a return discharges
+    Resume    *Horizon           // the continuation waiting on that slot
 }
 ```
 
-- **There is one list.** What an agent *cannot* touch is its complement, read
-  off the same list. Across many agents, the only composed question is where two
-  Horizons overlap, and that is set intersection over one primitive.
-- **Genesis holds the root reach**, loaded once from the operator's registry.
-  Every binary in it is pinned by content hash.
-- **`Narrow` only removes.** A child's reach is its own declared reach
-  *intersected with* its parent's. A registry `delegate` entry can attenuate a
-  tool's OS grants per edge, and `Narrow` refuses any attenuation that is not
-  inside the parent's grant.
-- **Reach and OS authority are separate.** A continuation that may invoke
-  `read` does not itself gain read access to the workspace. Only the `read`
-  process does.
-- **`Render(Horizon, floor)` turns the Horizon into a Seatbelt profile.** It
-  denies by default, allows exec of the surface's own binary and fixed loader
-  reads, and adds exactly the surface's `exec`, `read`, `write`, `mach` and
-  `connect` grants. It **always denies `floor`**, the run's `.skyra/`. The
-  floor is a parameter, not a Horizon field, so no Horizon can grant it.
-- **A target may be told about its grants** (`SKYRA_CONNECT`, `SKYRA_READ`),
-  but that is information, not authority. The profile is what enforces them.
+- **The Horizon is the authority boundary, not the call.** Every call shares its
+  caller's reach and grants. Being a leaf or a continuation is behaviour, not
+  authority. To contain a tool more tightly, its caller narrows it.
+- **The room is the root Horizon;** its reach is the registry table. Genesis is
+  its creation, authored by the operator and carrying a nonce, so two boots of
+  one registry are two histories. Every registry grant joins the room's one
+  authority.
+- **Narrowing goes through the room.** `system.narrow` is a facet of the room,
+  implemented by the runtime: it returns a reference to a narrowed Horizon for
+  one actor, the reference joins the caller's reach, and invoking it runs the
+  actor under less. A narrowing that asks for anything not held is a horizon
+  fault, derived at intake.
+- **A surface is identity plus contracts** ([next/25](next/25-surface-refactor.md)):
+  a binary pinned by hash, an input contract, an output contract. It declares
+  nothing about what it may reach.
+- **`Render(Horizon, floor)`** denies by default, adds the Horizon's grants,
+  and applies the exclusions no Horizon can grant or remove: `.skyra/` is always
+  denied, and exec is allowed for the program being run and nothing else.
+- **Committed, looked up, re-derived.** A Horizon is released by committing it;
+  the child is handed only its hash. The hash is a handle, not authority: the
+  child re-derives the Horizon from its own commit and refuses one that does not
+  match.
 
-### 6. Records, stamps, and the tree
+### 5. Records, stamps, and the tree
 
 ```text
 .skyra/
   records/<sha256>                  every record, content-addressed
   inputs/<sha256>                   the exact bytes each record was derived from
+  horizons/<sha256>                 every Horizon released
   frames/<F>/result                 write-once: what discharged F's slot
   frames/<F>/deps/<round>/<child>   a slot F opened, written before the child runs
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
 ```
 
-- **A stamp is `sha256(record)`,** a pointer, not a secret. The parent verifies
-  a successor by reading the record back from the tree. `tree.Load` refuses any
-  record that does not hash to its name.
-- **Records chain**: each names its predecessor (the stamp it was emitted
-  under) and the hash of its input bytes. That is top-down provenance. A resolve
-  names every discharge it waited on. That is bottom-up completion, so a resolve
-  hash names, verifies and could memoize a whole finished subtree.
-- **One commit per handoff.** Only intake, a supervisor fault and a resolve
-  write records. The release writes nothing.
-- **Replay** walks a lineage from genesis, re-derives every record from its
-  stored input with the pure machine, and requires byte-identical output.
-  `skyra replay DIR` does this for any conversation.
+A stamp is `sha256(record)`, a pointer, verified by reading the record back.
+Each record names its predecessor and the hash of its input bytes (top-down
+provenance); a resolve names every discharge it waited on (bottom-up). Only
+intake, a supervisor fault and a resolve write records. **Replay** walks a
+lineage from genesis and re-derives every record and every Horizon
+(`replay.HorizonAt`) with the pure machine.
 
-### 7. Custody travels as file descriptors
+### 6. Custody travels as file descriptors
 
-The release carries the Horizon as JSON **plus the frame stack as open
-directory fds** over `SCM_RIGHTS`. The fd *is* the capability: every write in a
-frame goes through its fd, so a step can only settle the frames it was handed.
-Descriptors are close-on-exec wherever they are created, received or inherited,
-because a sandboxed target that inherited a frame fd could list a directory its
-profile denies (Seatbelt checks paths, not fds already open). That was found and
-fixed, with an end-to-end test. A parent exits only after the successor has
-accepted custody (P4).
+The release carries the Horizon's hash **plus the frame stack as open directory
+fds** over `SCM_RIGHTS`. Every write in a frame goes through its fd, so a step
+can only settle the frames it was handed. Descriptors are close-on-exec
+everywhere, because a sandboxed program that inherited a frame fd could list a
+directory its profile denies. A parent exits only after the successor accepts
+custody (P4).
 
-### 8. Dependencies, slots and the join rule
+### 7. Dependencies, slots and the join rule
 
-- **An invoke opens a slot** in the invoker's frame *before* the child runs. **A
-  return or fault discharges exactly one.**
-- **Join rule:** all of a round's slots must be discharged before the
-  continuation resumes. It waits for all rather than failing fast, because there
-  is no cancellation. This is structured concurrency: no child outlives the
-  frame waiting on it.
-- **The join rule is enforced by hashing:** the resolve record must name every
-  discharge, so it cannot be written early.
-- **Siblings race; the claim decides.** Several children settling at once may
-  all see "nothing pending". A write-once fan-in claim lets exactly one of them
-  resume the continuation. The others exit.
-- **Faults are discharges too.** From the parent's side, every fault looks the
-  same: *my dependency was discharged with a fault*. The continuation decides
-  what to do with it.
+An invoke opens a slot in the invoker's frame before the child runs; a return
+or fault discharges exactly one. A continuation resumes only when every slot of
+its round is discharged (wait for all; there is no cancellation), and the
+resolve record must name every discharge, so it cannot be written early. When
+siblings race, a write-once claim lets exactly one resume the continuation.
+Faults are discharges too: the continuation decides what to do with one.
 
-### 9. Continuations are stateless
+### 8. Continuations are stateless
 
-A continuation is a surface with something in its reach, such as Codex's
-adapter or the user side. It keeps **nothing** between runs. Each run reads
-everything it knows on stdin:
+A continuation reads everything it knows on stdin and keeps nothing between
+runs:
 
 ```json
-{"frame": "<its frame>", "input": {...},
- "tools": {"<name>": <input contract>, ...},          // exactly its reach (P8)
+{"frame": "<the slot it returns to>", "input": {...},
+ "tools": {"<name or reference>": <input contract>, ...},
  "steps": [{"to": "...", "payload": {...}, "state": "return", "value": ...}, ...]}
 ```
 
-It prints one output, and `interpret` decides what that output is. Its "memory"
-is its lineage. This is why a continuation can resume in any process, after any
-crash, and why replay can reproduce it.
+Its memory is its lineage, so it can resume in any process, after any crash,
+and replay reproduces it. ([next/27](next/27-a-horizon-is-a-process.md) gives
+every program this one envelope; today a surface still declares
+`"continuation": true` to receive it.)
 
-### 10. Adapters: stateful actors behind stateless steps
+### 9. Adapters: stateful actors behind stateless steps
 
-Some things are truly stateful and asynchronous. The Codex app-server holds a
-turn open, and a browser comes and goes. The rule is that **the runtime knows no
-actor** (P6). Each actor's semantics live in an adapter.
-
-For Codex:
+The Codex app-server holds a turn open; a browser comes and goes. Each actor's
+semantics live in an adapter (P6).
 
 | Piece | Role |
 |---|---|
-| `codex.start` | a **resident** surface: the runtime launches one Codex app-server per conversation under a registered provider profile (private `HOME`/`CODEX_HOME`, private scratch, egress only through an allowlisting proxy to the model provider) and puts its connection **into custody as a resource**, identified by an incarnation |
-| `codex.exchange` / `codex.inspect` / `codex.stop` | `codexio`: one bounded, recorded operation on that granted connection (write these lines, read what is buffered). Each exchange's observation is a return, so every byte Codex said is in the lineage |
-| `codex` | `codexresident`: the stateless adapter. It **rebuilds the whole protocol state from its steps** on every run (initialized? thread? turn? pending tool calls? answered?) and emits exactly one next operation |
+| `codex.start` | a resident surface: the runtime launches one app-server per conversation under its registered profile (private home and scratch, egress only through an allowlisting proxy) and puts its connection into custody |
+| `codex.exchange` / `inspect` / `stop` | `codexio`: one bounded, recorded operation on that connection. Every byte Codex said is in the lineage |
+| `codex` | `codexresident`: stateless. It rebuilds the whole protocol state from its steps each run and emits exactly one next operation |
 
-What the adapter enforces:
-- The thread must come back with `approvalPolicy: never`, `readOnly`, and no
-  network.
-- Only its **model-facing tools** (`echo`, `read`, intersected with reach) are
-  offered as dynamic tools, and each call is emitted as an invoke of the tool it
-  names.
-- Any other provider request, or any native item (shell, file change), is a
-  **violation**. The adapter interrupts the exact turn, confirms it ended, and
-  emits `native.<kind>`, which intake derives as a horizon fault.
-- After 30 minutes idle it inspects, stops and starts a fresh process.
+The adapter offers Codex only its model-facing tools (`echo`, `read`), emits
+each tool call as an invoke of the tool it names, and returns a tool's result
+or fault to Codex within the same turn. Any other provider request or native
+item is a **violation**: the adapter interrupts the exact turn, confirms it
+ended, and **returns the attempt to its parent as an observation** (`refused`),
+so the conversation goes on in the same Codex thread. The app-server's profile
+renders none of the Horizon's shared grants: its native reads would be
+observations with no record.
 
-A tool's result, including a fault, goes back to Codex as `success: true/false`
-**within the same turn**, so Codex can adapt.
+### 10. Ingress by parking; the user outranks the agent
 
-### 11. Ingress by parking; the user outranks the agent
+The browser is an async surface. Invoking it **parks** the work with the
+webhost, which holds **a stamp and the descriptors, never authority**. When a
+message arrives, `skyra resume` derives the parked instance and its Horizon from
+the tree, refuses work that is not parked or was already resumed, and a
+successor checks the message like any output, addressed to the parked frame's
+slot. A human who types JSON is still text.
 
-A conversation waits on a human, which could take a second or an hour. The
-browser is an **async surface**. Invoking it **parks** the instance, meaning its
-state, payload and whole frame stack, with the webhost, which acknowledges
-custody before the instance exits. When a message arrives, the webhost resumes
-the instance with the message as the target's output. A successor intakes it
-like any other bytes: **the host is the emitter; skyra still checks.** A human
-who types JSON is still text.
+The user side is a continuation whose steps are the transcript, and Codex's
+parent: Codex can only return to it, and only the user side ends the
+conversation. Each conversation is its lineage: saved, listed, rebuilt from
+records, replayable. The browser UI, the TUI and the desktop app speak the same
+protocol to the same webhost.
 
-The **user side is a continuation whose steps are the transcript**, and it is
-Codex's *parent*. So the user outranks the agent structurally: Codex can only
-reply to it, only the user side can end the conversation, and a fault in a
-Codex turn discharges Codex's slot, is shown, and the conversation goes on.
-**Each conversation is its lineage**: it is saved, listed, rebuilt from records
-and replayable. The browser UI and the TUI speak the same WebSocket protocol to
-the same webhost. The TUI holds no runtime authority.
+### 11. Faults
 
-### 12. Faults and interrupts
+| Kind | Means |
+|---|---|
+| `custody` | the protocol broke: no output, a dead successor, a failed stamp |
+| `malformed` | the bytes are not operands |
+| `horizon` | addressed something outside the Horizon, or asked for more than it holds |
+| `contract` | the payload does not fit what it addressed |
+| `leaf` | addressed nothing; the output is kept |
 
-| | **Fault** | **Interrupt** (designed) |
-|---|---|---|
-| Means | something the runtime **proves** broke | something **durable memory lacks** |
-| Terminal? | yes: discharges the slot | no: resumable, the slot stays open |
-| Kinds | `custody` (protocol), `malformed` (bytes), `horizon` (tried to reach outside), `contract` (payload does not fit), `authority` (asks for more; designed) | `novelty` (a return shape nothing expects), `procedure` (a reachable tool with no known procedure) |
-| Routed to | the parent's continuation | an LLM, which produces what is missing |
+**Failure is not a fault.** A tool that could not do its job returns, for
+example `read` returning `{"error":"denied"}`. **Asking for more authority is a
+fault that climbs** (designed): like a page fault, it goes up until someone
+holds the authority, with the human above the room. Interrupts are designed
+next (section 13).
 
-**Failure is not a fault.** A tool that could not do its job returns, for example
-`read` returning `{"error":"denied"}`, and that return is checked like any other.
-Horizon faults go back to the agent, which can adapt. Authority faults are
-designed to climb to the human, who can grant a new, narrower Horizon.
-Escalation is renegotiation, never a grab.
+### 12. Observations
 
-### 13. Observations
+An observation is a value: the bytes a step received, kept verbatim and named by
+hash. Everything the runtime acts on is derived from them. `read` is the first
+program that brings observations in from the world, with provenance (path,
+whole-file sha256 and size, line range). **Observation passing**
+([next/21](next/21-observation-passing.md), proposed) would make provenance
+structural: a continuation may pass its children's observations up, but not
+author a replacement.
 
-Invariant 3 says only observations are stored. Concretely, an observation is
-**the bytes a step received**, kept verbatim in `inputs/` and named by hash:
-Codex's JSON-RPC lines, a tool's output, a human's message, the time an exchange
-was observed. Everything the runtime acts on (state, Horizon, the transcript,
-Codex's protocol state) is **derived** from those bytes.
+### 13. Designed next: types, checks and learned structure
 
-`read` is the first leaf that **brings observations in from the world**. Its
-reply carries provenance: path, the sha256 and size of the whole file, and the
-line range. A future `write` can refuse if the file changed since it was read.
+[next/28](next/28-types-observations-checks.md) settles how structure is
+learned:
 
-The next step is **observation passing** ([next/21](next/21-observation-passing.md),
-proposed). Observations would travel by content-addressed ID, with their author.
-A node may author observations for its children on the way down. A continuation
-returning upward may only *pass on* observations its children produced, and may
-not author a replacement. The provenance of a final answer then becomes
-structural: you can see which leaf actually said it.
+- **Types are contracts; observations are values.** Types compose: a field can
+  hold a value or a type, and filling slots (the args of the execve) makes a new
+  type. `coder` is Codex's `continue-conversation` with its input and its 5–7
+  tools filled. A continuation is a type, not a flag.
+- **The parent owns the check** on what its children return. There are no
+  preconditions: the runtime checks structure, and the callee defends itself in
+  its own code. Different parents can check the same contract differently.
+- **Novelty is when a check is written.** The first time a boundary is crossed
+  there is no check: a novelty interrupt locks the parent (typically an LLM) in
+  to write one, in **Starlark**, pure computation with no ambient authority, run
+  by a runtime-owned checker. It is kept; the next crossing uses it.
+- **Failures carry a trace and blame**, and the parent's handler picks a
+  restart: fault, substitute (checked again), or retry within the same turn.
+- **The log is the test suite.** A rewritten check runs against every recorded
+  verdict at its boundary; flipped verdicts are declared, never silent.
+- **Self-extension falls out of it**: an agent-written tool is Starlark source
+  in state, run by the same checker, so code is state, the floor holds, and the
+  exec exclusion holds.
+
+Identity is designed in [improvements item 9](improvements.md): domain-separated
+hashes, a content id beside every stamp, ids as the path of handoffs, types and
+principals as records.
 
 ---
 
@@ -361,36 +325,32 @@ structural: you can see which leaf actually said it.
 
 *"Read `README.md` and tell me what this project is"*, in `skyra tui`:
 
-1. **The human types.** The webhost resumes the parked user frame with the text.
-   A successor intakes it (a return from `browser`) and settles. The user
-   continuation resumes, reads its steps (the transcript), and emits
+1. **The human types.** The webhost resumes the parked browser invocation by
+   its stamp; `skyra resume` derives it from the tree. The message is intaken as
+   a return to that slot. The user continuation resumes and emits
    `{"to":"codex","payload":{"text":…,"thread":…,"incarnation":…}}`.
-2. **The runtime derives `invoke codex`,** narrows the Horizon (`codex`'s reach
-   ∩ the user's), opens a slot, and runs `codexresident` under a profile
-   rendered from that Horizon.
-3. **The adapter** rebuilds state from its steps, finds a live incarnation, and
-   emits `codex.inspect`, then `codex.exchange` with `turn/start`. Each is an
-   invoke of `codexio` on the connection in custody. Each observation is
-   recorded.
-4. **Codex asks for `read`** (`item/tool/call`, `{"path":"README.md"}`). The
-   adapter checks that `read` is offered and emits `{"to":"read","payload":{"path":"README.md"}}`.
-5. **Intake derives `invoke read`.** The read leaf runs in a fresh process under
-   `(allow file-read* (subpath <workspace>))` with `.skyra` denied. It replies
-   `{"to":"reply","payload":{"path":"README.md","sha256":…,"text":…}}`. Intake
-   checks the object against read's return contract and commits a return.
-6. **Settle → gather → claim:** the slot is discharged, the resolve is
-   committed, and the adapter resumes. It pairs the result with Codex's pending
-   call and delivers it as the JSON-RPC answer.
-7. **Codex finishes the turn.** The adapter emits `reply` with the final text.
-   The user continuation resumes, shows the answer, and parks on the browser
-   again.
-8. **Every step above is a record.** `skyra replay` re-derives all of them from
-   genesis, byte for byte.
+2. **The runtime derives `invoke codex`.** Codex runs under the conversation's
+   Horizon; the parent commits it and hands over its hash; the child re-derives
+   it before anything runs.
+3. **The adapter** rebuilds state from its steps and emits `codex.inspect`, then
+   `codex.exchange` with `turn/start`, each an invoke of `codexio` on the
+   connection in custody, each observation recorded.
+4. **Codex asks for `read`.** The adapter checks it is offered and emits
+   `{"to":"read","payload":{"path":"README.md"}}`.
+5. **Intake derives `invoke read`.** It runs in a fresh process under the
+   Horizon's profile (the workspace readable, `.skyra` denied, exec of nothing
+   else) and emits `{"to":<its slot>,"payload":{"path":…,"sha256":…,"text":…}}`.
+   Intake checks the object against read's output contract and commits a return.
+6. **Settle, gather, claim.** The adapter resumes, pairs the result with
+   Codex's pending call and delivers it.
+7. **Codex finishes.** The adapter returns the final text to its slot; the user
+   continuation shows it and parks on the browser again.
+8. **Every step is a record.** `skyra replay` re-derives all of them, byte for
+   byte.
 
-If Codex had asked for `/Users/you/.ssh/id_rsa`, step 5 would return
-`"error":"denied"`, and the denial would come from the kernel, not from the
-tool. If Codex had tried to run a shell, the adapter would have interrupted the
-turn and the runtime would have derived a horizon fault.
+Asking for `~/.ssh/id_rsa` returns `"error":"denied"`, from the kernel, not the
+tool. Asking Codex to run a shell interrupts the turn, and the attempt comes
+back to the user side as an observation.
 
 ---
 
@@ -399,54 +359,62 @@ turn and the runtime would have derived a horizon fault.
 | | Status |
 |---|---|
 | The step protocol, custody handoff, content-addressed hash-chained records | **built**, tested |
-| `interpret`: operands in, derived states out; typed faults | **built** |
-| Input and return contracts, strict fit, checked at intake | **built** |
-| Horizons that only narrow; per-edge `delegate` attenuation; per-invocation Seatbelt rendered from explicit grants; `.skyra/` always denied | **built**, with OS tests |
-| Dependencies, slots, resolve, fan-in claim; a continuation invokes, waits and resumes | **built** |
-| Replay that re-derives every record (intake, supervisor faults, resolves) | **built** |
-| Real Codex: one resident app-server per conversation, sandboxed, egress-proxied, its connection in custody, idle restart | **built** |
-| Codex native actions: interrupted and faulted; shell and out-of-grant file access blocked by the provider profile | **built** |
-| Model-facing tools `echo` and `read`; a tool's result or fault goes back to Codex in the same turn | **built** (read: 2026-09-28) |
-| Conversations as lineages: browser UI and TUI, multi-turn, saved, listed, deletable, replayable; the user outranks the agent | **built** |
-| About 5,400 lines of Go in the controller (standard library only), 89 tests | — |
+| `interpret`: states derived from the emitter's position; the slot is the return; typed faults that carry their observation | **built** (2026-09-30) |
+| Input and output contracts, strict structural fit at intake | **built** |
+| One authority per Horizon, shared by every call; profiles rendered per Horizon; `.skyra/` and exec excluded | **built** (2026-09-30), with OS tests |
+| The room: genesis authored with a nonce; `system.narrow` and references that join the caller's reach | **built** (2026-09-30) |
+| Horizons committed and looked up by hash; the child re-derives its Horizon | **built** (2026-09-30) |
+| Resume derived from the tree; the host holds a stamp, never authority | **built** (2026-09-30) |
+| Dependencies, slots, resolve, fan-in claim | **built** |
+| Replay re-deriving every record and every Horizon | **built** |
+| Real Codex: one resident app-server per conversation, sandboxed, egress-proxied, connection in custody, idle restart | **built** |
+| Codex native attempts: interrupted and returned as an observation; the conversation continues on the same thread | **built** (2026-09-30) |
+| `echo` and `read` as model-facing tools; a tool's result or fault back to Codex in the same turn | **built** |
+| Conversations as lineages in the browser, the TUI and the desktop app | **built** |
+| `skyra demo`: eight scenarios, each ending in a byte-identical replay | **built** |
+| About 6,300 lines of Go in the controller (standard library only), 72 test functions | — |
 
 ## What does not run yet
 
 | | Status |
 |---|---|
-| **Self-extension**: an agent registers a tool it wrote as a leaf under a narrower Horizon and runs it with zero approvals | **not built: the next milestone and the thesis demo.** The registry is read once, at genesis |
-| **Authority faults and escalation**: the agent asks, and the human grants a narrower Horizon | designed ([design/faults.md](design/faults.md)) |
-| **Observation passing** by ID with enforced provenance | proposed ([next/21](next/21-observation-passing.md)) |
-| **Stored procedures and memory** (invariant I, P10), novelty and procedure interrupts | designed, deferred past the evaluation |
-| **Restore**: a conversation continuing after its webhost stops | not built. Parked frames live in the webhost's memory, because fds cannot be written to disk |
-| **Tail calls** (passing `reply` on) and **fan-out** (several children in one round) | the slots support it; nothing emits it |
-| **Write tool**, search tool | not built. `read` sets up `write` with `expect_sha256` |
+| **Self-extension** (`system.register`): an agent registers a tool it wrote and runs it with zero approvals | **not built: the thesis demo.** Designed as Starlark run by the runtime's checker ([next/28](next/28-types-observations-checks.md)) |
+| **Checks, novelty interrupts, handlers** | designed ([next/28](next/28-types-observations-checks.md)); `core/machine` has no interrupt state yet |
+| **Faults that climb to the human**; the room's admin facet | designed ([next/24](next/24-the-room.md), [next/26](next/26-agents-and-facets.md)) |
+| **One stdin envelope** for every program; the `continuation` flag removed | designed ([next/27](next/27-a-horizon-is-a-process.md)) |
+| **Facets** declared at registration; calls into another agent's Horizon | designed ([next/26](next/26-agents-and-facets.md)) |
+| **Supervision and restart** from durable state | designed ([next/27](next/27-a-horizon-is-a-process.md)) |
+| **Identity**: canonical encoding, content ids, path ids, types as records | designed ([improvements item 9](improvements.md)) |
+| **Stored procedures and memory** (P10) | designed, deferred |
+| **Observation passing** by id with enforced provenance | proposed ([next/21](next/21-observation-passing.md)) |
+| **Restore** after a webhost dies; tail calls and fan-out; a write tool | not built |
+
+The complete list of changes, with what each became, is in
+[`next/proposal/`](next/proposal/README.md).
 
 ## Known gaps, stated honestly
 
-- **Resume trusts the webhost** ([next/20](next/20-boundry-crossing.md), finding
-  1). `skyra resume` takes the parked `machine.Instance`, including its Horizon,
-  back from the webhost's stdin without re-deriving it from the tree. The fix is
-  for the host to hold only the stamp and the fds, and for resume to re-derive
-  the Instance through the same `Narrow` chain replay uses.
-- **The floor covers only this run's `.skyra`.** Sibling conversations and
-  `~/.skyra/providers/` are not denied by the profile. The `skyra` command
-  therefore refuses a workspace that overlaps them. A state-root floor would
-  remove the need.
+- **A shared Horizon contains a tool only as tightly as its caller.** Under one
+  Horizon, `read` addressing `codex` derives an invoke, not a fault. That is the
+  deliberate cost of making the Horizon the unit of containment; the remedy is to
+  narrow, which is built but not yet used by the conversation path.
+- **The stack still travels as a copy.** A Horizon is committed with its
+  `Resume` chain, so the stack is durable, but the in-memory copy has not been
+  replaced by reading the stack from the tree.
+- **The webhost's orphan rule** (a record never released is dropped) is a local
+  rule; one definition of an accepted record, checked by replay, is
+  [improvements item 8](improvements.md).
+- **The floor covers only this run's `.skyra`.** The `skyra` command refuses a
+  workspace that overlaps other state; a state-root floor would remove the need.
 - **Records still store derived fields** (state, to, payload, fault). Replay
-  checks them as a commitment, but they are not yet pure observations.
-- **`drive` checks a binary's hash itself** before running it. It should report
-  the observed hash and let `Step` decide.
+  checks them, but they are not yet pure observations.
+- **`Args` is still on the surface.** The launcher passes the real app-server's
+  `--disable` flags through it; it becomes slots the owner fills (next/28).
 - **One output per step**, so one child per round.
-- **The provider profile is pinned to Codex 0.157.1.** An upgrade needs the
-  tool surface and the sandbox revalidated. Auth refresh is not supported inside
-  the sandbox.
-- **Everything a read returns is recorded and replayed forward** into every
-  later adapter step. That is bounded per read (2000 lines or 64 KiB), but not
-  per turn.
+- **The provider profile is pinned to Codex 0.157.1.**
 - **A Horizon bounds the blast radius; it does not judge intent.** A prompt
-  injection that misuses a tool the Horizon grants is not stopped. That is out of
-  scope, and the evaluation must separate the two cases.
+  injection that misuses a granted tool is not stopped; the evaluation must
+  separate the two cases.
 
 ---
 
@@ -457,18 +425,16 @@ turn and the runtime would have derived a horizon fault.
 > runtime on cost and task success and containing strictly more?**
 
 The baseline is the same Codex model in its own approval modes: *ask on
-request* (the fatigue end) and *full auto* (the ambient-authority end). Skyra
-should beat the first on **human interruptions per task** and the second on
-**containment**, and the claim is that it does both at once. The other metrics
-are overhead, task success, friction (authority faults per task), agent-built
-tools run with zero approvals, and containment against an adversarial suite
-(AgentDojo or our own). Details and open questions are in
-[`next/research-question.md`](next/research-question.md).
+request* and *full auto*. Skyra should beat the first on **human interruptions
+per task** and the second on **containment**, at once. Under a shared Horizon
+the unit of containment is the Horizon: the claim is that effects outside it
+succeed zero times, and the measure of narrowness is the narrowings a task needs.
+Details: [`next/research-question.md`](next/research-question.md).
 
 | When | Work |
 |---|---|
 | September | semantics: contracts, `interpret`, dependencies and resolve (**done**) |
-| October | Codex calling leaf tools under generated sandboxes (**done**); fault routing; **self-extension** |
+| October | Codex calling tools under generated sandboxes (**done**); the room and derived authority (**done**); checks and **self-extension** |
 | November | audit and replay; the baseline harness and task set |
 | December | evaluation and writeup |
 
@@ -479,10 +445,12 @@ tools run with zero approvals, and containment against an adversarial suite
 | To understand | Read |
 |---|---|
 | why any of this exists | [`grips-and-invariants.md`](grips-and-invariants.md) |
-| the code, package by package, and each decision's line | [`controller/README.md`](controller/README.md), starting at [`controller/core/machine/machine.go`](controller/core/machine/machine.go) |
-| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–22`](next/) |
-| faults, interrupts and memory | [`design/faults.md`](design/faults.md), [`design/durable-storage.md`](design/durable-storage.md) |
+| the code, package by package | [`controller/README.md`](controller/README.md), starting at [`controller/core/machine/machine.go`](controller/core/machine/machine.go) |
+| authority derived from state, the room, faults that climb | [`next/24-the-room.md`](next/24-the-room.md) |
+| agents, facets, narrowing | [`next/26-agents-and-facets.md`](next/26-agents-and-facets.md) |
+| a Horizon as the process | [`next/27-a-horizon-is-a-process.md`](next/27-a-horizon-is-a-process.md) |
+| types, checks, learned structure | [`next/28-types-observations-checks.md`](next/28-types-observations-checks.md) |
+| what is built and what is not, change by change | [`next/proposal/`](next/proposal/README.md) |
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
-| the Codex adapter and its sandbox | [`next/17`](next/17-app-server-custody.md), [`next/18`](next/18-app-server-spec-improvements.md), [`controller/codex/resident/`](controller/codex/resident/) |
-| the newest tool | [`next/22-read-tool.md`](next/22-read-tool.md) |
+| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–28`](next/) |
 | the predecessor, and what it taught | [How it got here](README.md#how-it-got-here); the code is in git history (last at `b243b03`) |
