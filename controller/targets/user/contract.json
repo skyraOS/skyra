@@ -5,5 +5,5 @@
     "fields": {"conversation": {"type": "string"}}
   },
   "output": {"type": "string"},
-  "reach": ["codex", "browser", "echo", "read", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"]
+  "continuation": true
 }

@@ -43,6 +43,9 @@ func Replay(root, head string) (int, error) {
 	}
 
 	h := horizon.Horizon{Stamp: chain[0], Reach: g.Reach, Frame: chain[0]}
+	if g.Authority != nil {
+		h.Authority = *g.Authority
+	}
 	for _, stamp := range chain[1:] {
 		rec, err := tree.Load(root, stamp)
 		if err != nil {
@@ -84,7 +87,7 @@ func Replay(root, head string) (int, error) {
 		switch {
 		case rec.Supervisor:
 			// It discharged the frame of the Horizon it was committed under.
-			h = horizon.Horizon{Stamp: stamp, Reach: map[string]horizon.Surface{}, Frame: h.Frame, Resume: h.Resume}
+			h = horizon.Horizon{Stamp: stamp, Reach: h.Reach, Authority: h.Authority, Frame: h.Frame, Resume: h.Resume}
 		case rec.State == record.Resolve:
 			resumed := *h.Resume
 			resumed.Stamp = stamp

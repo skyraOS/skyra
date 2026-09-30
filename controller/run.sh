@@ -41,5 +41,5 @@ scenario "codex (fake) asks for echo, through the actor host" -to codex -payload
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'
 scenario "echo probes .skyra/ from inside" -to echo -payload "{\"text\":\"hello\",\"probe\":\"$(cd "$(mktemp -d)" && pwd -P)/.skyra\"}"
-scenario "echo (a leaf) addresses echo"    -to echo -payload '{"text":"hello","misbehave":"yes"}'
+scenario "echo addresses what is outside the Horizon" -to echo -payload '{"text":"hello","misbehave":"yes"}'
 scenario "payload breaks echo's contract"  -to echo -payload '{"txt":"hello"}'

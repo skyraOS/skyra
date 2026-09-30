@@ -357,7 +357,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 		return s, []Effect{Park{Host: e.Self.Surface.Host, Payload: s.R.Payload}}
 	}
 	stdin := []byte(s.R.Payload)
-	if !e.Self.Surface.Leaf() {
+	if e.Self.Surface.Continuation {
 		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
 	}
 	if e.Self.Surface.Resident {
@@ -451,13 +451,16 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 }
 
 // Narrow computes the child's Horizon from the parent's and the child's
-// record. An invoke opens a new frame, waited on by the parent as it is now;
-// the child is granted what its surface asks for, and only if the parent holds
-// it. A return or fault reaches nothing: it discharges the parent's slot.
+// record. Every call shares its caller's Horizon (next/24): the child runs
+// with the same reach and the same grants. Nothing about the callee narrows
+// them; a narrowing is requested, through the room (next/26, not built).
+//
+// An invoke opens a new frame for the child, waited on by the parent as it is
+// now. A return or fault runs nothing: it discharges the parent's slot.
 func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
 	switch r.State {
 	case record.Return, record.Fault:
-		return horizon.Horizon{Stamp: stamp, Reach: map[string]horizon.Surface{}, Frame: parent.Frame, Resume: parent.Resume}, nil
+		return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Authority: parent.Authority, Frame: parent.Frame, Resume: parent.Resume}, nil
 	case record.Invoke:
 	default:
 		return horizon.Horizon{}, fmt.Errorf("no Horizon for a record in a state of %s", r.State)
@@ -466,20 +469,8 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 	if !ok {
 		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
-	reach := map[string]horizon.Surface{}
-	for _, name := range s.Reach {
-		if granted, ok := parent.Reach[name]; ok {
-			if limit, narrowed := s.Delegate[name]; narrowed {
-				if !granted.Authority.Allows(limit) {
-					return horizon.Horizon{}, fmt.Errorf("%q delegates authority outside %q's grant", r.To, name)
-				}
-				granted.Authority = limit
-			}
-			reach[name] = granted
-		}
-	}
 	waiter := parent
-	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: reach, Frame: stamp, Resume: &waiter}, nil
+	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
 }
 
 // 5. Settle: accept the Horizon, whose first frame is the slot this record
@@ -572,12 +563,12 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	// it is information, not authority: intake derives the return from the
 	// emitter's own Horizon, whatever the target believes.
 	env := []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=" + h.Frame}
-	for _, sock := range h.Surface.Authority.Connect {
+	for _, sock := range h.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}
 	// A target is told where its read grants are, as PATH lists directories.
 	// This is information, not authority: the rendered profile enforces them.
-	if reads := h.Surface.Authority.Read; len(reads) > 0 {
+	if reads := h.Authority.Read; len(reads) > 0 {
 		paths := reads[0].Path
 		for _, grant := range reads[1:] {
 			paths += ":" + grant.Path
@@ -608,6 +599,7 @@ func resourceOwner(h horizon.Horizon) string {
 
 // tools is what a continuation is shown: the input contract of everything in
 // its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
+// Which of them a model is offered is the adapter's choice, not the runtime's.
 func tools(h horizon.Horizon) map[string]*contract.Schema {
 	t := map[string]*contract.Schema{}
 	for name, s := range h.Reach {

@@ -19,7 +19,7 @@ var (
 	text   = &contract.Schema{Type: "string"}
 	echoIn = &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": text}}
 	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn, Output: text}
-	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Output: text, Reach: []string{"echo"}}
+	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Output: text, Continuation: true}
 	both   = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
 	// Horizons as the emitter holds them: the operator (no surface), and a leaf.
 	operator = horizon.Horizon{Stamp: "g0", Reach: both, Frame: "g0"}
@@ -240,7 +240,7 @@ func TestSilentTargetFaults(t *testing.T) {
 
 func TestHandoff(t *testing.T) {
 	s := executing(t)
-	out := []byte(`hi`)
+	out := []byte(`{"to":"` + s.Self.Frame + `","payload":"hi"}`)
 	s, effs := Step(s, Emitted{Out: out})
 	if !reflect.DeepEqual(effs, []Effect{Spawn{Under: s.Self, Out: out}}) {
 		t.Fatalf("the emission goes to a successor, uninterpreted: %#v", effs)
@@ -249,7 +249,10 @@ func TestHandoff(t *testing.T) {
 	// The successor commits exactly what a real successor would.
 	succ := intakeRecord(s.Self, string(out))
 	s2, effs := Step(s, Stamped{Stamp: record.Stamp(succ), R: &succ})
-	want := horizon.Horizon{Stamp: record.Stamp(succ), Reach: map[string]horizon.Surface{}, Frame: s.Self.Frame, Resume: s.Self.Resume}
+	if succ.State != record.Return {
+		t.Fatalf("the emission addressed the frame's slot: %+v", succ)
+	}
+	want := horizon.Horizon{Stamp: record.Stamp(succ), Reach: s.Self.Reach, Authority: s.Self.Authority, Frame: s.Self.Frame, Resume: s.Self.Resume}
 	if !reflect.DeepEqual(effs, []Effect{SendHorizon{Child: want, NewFrame: false}, Exit{}}) {
 		t.Fatalf("a verified return is released to discharge this frame's slot: %#v", effs)
 	}
@@ -387,53 +390,37 @@ func TestOutOfPhase(t *testing.T) {
 	}
 }
 
-func TestNarrow(t *testing.T) {
+// Every call shares its caller's Horizon (next/24): the same reach and the
+// same grants, whatever the callee is. Only the frame is new.
+func TestNarrowSharesTheCallersHorizon(t *testing.T) {
 	invoke := func(under horizon.Horizon, target string) record.Record {
 		return intakeRecord(under, `{"to":"`+target+`","payload":{"text":"x"}}`)
 	}
+	root := operator
+	root.Authority = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 
-	h, err := Narrow(operator, invoke(operator, "echo"), "r1")
-	if err != nil || len(h.Reach) != 0 || h.Surface.Path != echoS.Path {
-		t.Fatalf("a leaf must get its surface and nothing in reach: %+v %v", h, err)
+	for _, target := range []string{"echo", "agent"} {
+		h, err := Narrow(root, invoke(root, target), "r1")
+		if err != nil || h.Surface.Path != root.Reach[target].Path || !reflect.DeepEqual(h.Reach, root.Reach) || !reflect.DeepEqual(h.Authority, root.Authority) {
+			t.Fatalf("%s must run under its caller's reach and grants: %+v %v", target, h, err)
+		}
+		if h.Frame != "r1" || h.Resume == nil || h.Resume.Stamp != root.Stamp {
+			t.Fatalf("%s gets a new frame, waited on by its caller: %+v", target, h)
+		}
 	}
 
-	h, err = Narrow(operator, invoke(operator, "agent"), "r1")
-	if err != nil || len(h.Reach) != 1 || !reflect.DeepEqual(h.Reach["echo"], echoS) {
-		t.Fatalf("a non-leaf is granted what it asks for and its parent holds: %+v %v", h, err)
-	}
-
-	narrower := horizon.Horizon{Stamp: "g0", Reach: map[string]horizon.Surface{"agent": agentS}, Frame: "g0"}
-	h, err = Narrow(narrower, invoke(narrower, "agent"), "r1")
-	if err != nil || len(h.Reach) != 0 {
-		t.Fatalf("a Horizon must never widen: asked for echo, the parent does not hold it: %+v %v", h, err)
+	// A return or fault runs nothing: it discharges the caller's slot, under
+	// the same Horizon.
+	leafUnder, _ := Narrow(root, invoke(root, "echo"), "r1")
+	ret := intakeRecord(leafUnder, `{"to":"r1","payload":"x"}`)
+	h, err := Narrow(leafUnder, ret, "r2")
+	if err != nil || h.Frame != "r1" || h.Surface != nil || !reflect.DeepEqual(h.Authority, root.Authority) {
+		t.Fatalf("a return discharges the frame it ran in: %+v %v", h, err)
 	}
 
 	forged := record.Record{State: record.Invoke, To: "agent"}
 	if _, err := Narrow(horizon.Horizon{Stamp: "r1", Reach: map[string]horizon.Surface{}}, forged, "r2"); err == nil {
 		t.Fatal("narrow granted a target outside the parent's reach")
-	}
-}
-
-func TestNarrowAttenuatesDelegatedToolAuthority(t *testing.T) {
-	full := echoS
-	full.Authority.Read = []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}
-	caller := agentS
-	caller.Delegate = map[string]horizon.Authority{
-		"echo": {Read: []horizon.PathGrant{{Path: "/private/work/one.txt", Scope: "literal"}}},
-	}
-	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"agent": caller, "echo": full}}
-	invoke := intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`)
-	child, err := Narrow(root, invoke, "r1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(child.Surface.Authority.Read) != 0 || !reflect.DeepEqual(child.Reach["echo"].Authority, caller.Delegate["echo"]) {
-		t.Fatalf("caller must receive only the attenuated echo capability, not echo's direct read grant: %+v", child)
-	}
-	caller.Delegate["echo"] = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/workspace/secret", Scope: "literal"}}}
-	root.Reach["agent"] = caller
-	if _, err := Narrow(root, intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`), "r2"); err == nil {
-		t.Fatal("accepted a delegated path outside the tool ceiling")
 	}
 }
 
@@ -494,8 +481,8 @@ func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 	if env := runOf(horizon.Horizon{Surface: &s, Frame: "f1"}, nil, "/floor").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
 		t.Fatalf("a target is told its slot; no read grant, no SKYRA_READ: %v", env)
 	}
-	s.Authority.Read = []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}
-	env := runOf(horizon.Horizon{Surface: &s}, nil, "/floor").Env
+	grants := horizon.Authority{Read: []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}}
+	env := runOf(horizon.Horizon{Surface: &s, Authority: grants}, nil, "/floor").Env
 	if env[len(env)-1] != "SKYRA_READ=/work:/etc/x" {
 		t.Fatalf("%v", env)
 	}

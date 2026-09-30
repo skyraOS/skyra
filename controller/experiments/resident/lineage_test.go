@@ -41,7 +41,7 @@ func newJournal(t *testing.T) *journal {
 	for _, name := range ops {
 		reach[name] = horizon.Surface{Input: input, Output: output}
 	}
-	reach["adapter"] = horizon.Surface{Input: str, Output: str, Reach: ops}
+	reach["adapter"] = horizon.Surface{Input: str, Output: str, Continuation: true}
 	j := &journal{t: t, root: t.TempDir()}
 	if err := tree.Init(j.root); err != nil {
 		t.Fatal(err)

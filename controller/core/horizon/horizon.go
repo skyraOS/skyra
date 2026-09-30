@@ -27,11 +27,11 @@ type Resource struct {
 	Incarnation string `json:"incarnation"`
 }
 
-// Authority is the OS authority a surface can exercise directly. Reach is
-// separate: a continuation can delegate a registered tool's authority without
-// gaining that tool's file or process permissions itself.
+// Authority is the OS authority a Horizon grants to everything that runs
+// under it (next/24). Exec is not among it: a profile allows exec of the one
+// program being run and nothing else, so no grant can let a target start
+// another program without the runtime recording it.
 type Authority struct {
-	Exec    []PathGrant `json:"exec,omitempty"`
 	Read    []PathGrant `json:"read,omitempty"`
 	Write   []PathGrant `json:"write,omitempty"`
 	Mach    []string    `json:"mach,omitempty"`
@@ -41,8 +41,7 @@ type Authority struct {
 // Allows reports whether every direct grant in requested is contained in a
 // ceiling. It compares paths by components, never by string prefix.
 func (ceiling Authority) Allows(requested Authority) bool {
-	return pathsAllow(ceiling.Exec, requested.Exec) &&
-		pathsAllow(ceiling.Read, requested.Read) &&
+	return pathsAllow(ceiling.Read, requested.Read) &&
 		pathsAllow(ceiling.Write, requested.Write) &&
 		stringsAllow(ceiling.Mach, requested.Mach) && stringsAllow(ceiling.Connect, requested.Connect)
 }
@@ -80,15 +79,15 @@ func stringsAllow(ceiling, requested []string) bool {
 	return true
 }
 
-// Surface is a registered executable: what may run, pinned by content hash,
-// with the contracts the runtime checks its input and its reply against.
+// Surface is a registered executable: what a program is, not what it may do
+// (next/25). Its identity (the binary, pinned by content hash) and its
+// contracts. What it may reach and touch belongs to the Horizon it runs under.
 type Surface struct {
 	Path               string           `json:"path"`
 	SHA256             string           `json:"sha256"`
 	Input              *contract.Schema `json:"input"`                          // what invoking it must fit
-	Output             *contract.Schema `json:"output"`                         // what its reply must fit: the reply capability's input contract
-	Reach              []string         `json:"reach,omitempty"`                // what it may be granted, if its parent holds it. Empty: a leaf
-	Authority          Authority        `json:"authority,omitempty"`            // direct OS grants, pinned in the registry
+	Output             *contract.Schema `json:"output"`                         // what its return must fit
+	Continuation       bool             `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
 	Resident           bool             `json:"resident,omitempty"`             // launch and retain a stream connection in custody
 	Connection         bool             `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
 	CloseConnection    bool             `json:"close_connection,omitempty"`     // release that connection after this operation
@@ -98,37 +97,33 @@ type Surface struct {
 	ProxyHosts         []string         `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
 	ProxyPath          string           `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
 	ProxySHA256        string           `json:"proxy_sha256,omitempty"`
-	// Delegate attenuates the listed children's direct grants. An absent entry
-	// passes the full grant already in this frame's Reach; it never adds one.
-	Delegate map[string]Authority `json:"delegate,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.
 	Host string `json:"host,omitempty"`
 }
 
-// Leaf reports whether the surface can only reply.
-func (s Surface) Leaf() bool { return len(s.Reach) == 0 }
-
 // Horizon is everything a step knows besides the bytes. It is the release
-// (D6): the child's authority, sent by the parent after it verifies the child's
-// commit. The data travels as JSON. The frame stack travels beside it as
-// directory fds over SCM_RIGHTS, and those fds are the capability.
+// (D6), sent by the parent after it verifies the child's commit. The data
+// travels as JSON. The frame stack travels beside it as directory fds over
+// SCM_RIGHTS.
 //
-// Reach is the registry as this frame sees it: the surfaces its emissions may
-// invoke. There is no global registry lookup. Genesis holds the root reach,
-// and every child's reach is a subset of its parent's.
+// Reach and Authority are the Horizon proper (next/24): what emissions under
+// it may invoke, and the OS grants everything under it runs with. Every call
+// shares its caller's; genesis holds the root's, the room's. There is no
+// global registry lookup.
 //
-// Every Horizon also holds reply: the right to discharge Frame's slot, once.
-// Resume is the continuation waiting on that slot, as it was when it emitted:
-// its Stamp is the round that opened the slot. The operator's Horizon has no
-// Resume.
+// The rest places a step in the stack: Frame is the slot its return
+// discharges, and Resume the continuation waiting on it, as it was when it
+// emitted (its Stamp is the round that opened the slot). The operator's
+// Horizon has no Resume.
 type Horizon struct {
-	Stamp   string             `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
-	Surface *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
-	Reach   map[string]Surface `json:"reach"`             // what emissions under this Horizon may invoke
-	Frame   string             `json:"frame"`             // the frame whose slot this Horizon's reply discharges
-	Resume  *Horizon           `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
+	Stamp     string             `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
+	Surface   *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
+	Reach     map[string]Surface `json:"reach"`             // what emissions under this Horizon may invoke
+	Authority Authority          `json:"authority"`         // the OS grants everything under this Horizon runs with
+	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
+	Resume    *Horizon           `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
 }
 
 // Depth is the number of frames in the stack that travels with this Horizon.
@@ -150,10 +145,12 @@ func (h Horizon) Names() []string {
 	return n
 }
 
-// Render turns a Horizon into a Seatbelt profile (D7). Everything is denied
-// unless listed, and floor (the .skyra/ directory) is always denied, whatever
-// the Horizon says. The floor is a parameter, not a Horizon field, so no
-// Horizon can grant it.
+// Render turns a Horizon into a Seatbelt profile (D7): the Horizon's grants,
+// the same for everything under it, plus the exclusions no Horizon can grant
+// or remove (next/24). Everything is denied unless listed. The floor (the
+// .skyra/ directory) is always denied, and exec is allowed for the one program
+// being run and nothing else. The floor is a parameter, not a Horizon field,
+// so no Horizon can grant it.
 func Render(h Horizon, floor string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
@@ -167,19 +164,16 @@ func Render(h Horizon, floor string) string {
 	for _, path := range []string{"/", "/dev/null", "/dev/random", "/dev/urandom", h.Surface.Path} {
 		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", path)
 	}
-	for _, grant := range h.Surface.Authority.Exec {
-		renderPath(&b, "process-exec", grant)
-	}
-	for _, grant := range h.Surface.Authority.Read {
+	for _, grant := range h.Authority.Read {
 		renderPath(&b, "file-read*", grant)
 	}
-	for _, grant := range h.Surface.Authority.Write {
+	for _, grant := range h.Authority.Write {
 		renderPath(&b, "file-write*", grant)
 	}
-	for _, service := range h.Surface.Authority.Mach {
+	for _, service := range h.Authority.Mach {
 		fmt.Fprintf(&b, "(allow mach-lookup (global-name %q))\n", service)
 	}
-	for _, sock := range h.Surface.Authority.Connect {
+	for _, sock := range h.Authority.Connect {
 		fmt.Fprintf(&b, "(allow network-outbound (remote unix-socket (path-literal %q)))\n", sock)
 	}
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)

@@ -6,5 +6,5 @@
   "output": {"type":"object","required":["text","thread","incarnation","activity_at"],"fields":{
     "text":{"type":"string"},"refused":{"type":"string"},"thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
   }},
-  "reach":["codex.start","codex.exchange","codex.inspect","codex.stop","echo","read"]
+  "continuation": true
 }

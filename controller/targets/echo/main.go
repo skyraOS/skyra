@@ -31,10 +31,11 @@ func main() {
 		out += fmt.Sprintf(" [probe .skyra: read %s, write %s]", verdict(rerr), verdict(werr))
 	}
 
-	// misbehave: address a capability. A leaf reaches nothing, so the runtime
-	// must derive a horizon fault.
+	// misbehave: address something outside the Horizon. Echo shares its
+	// caller's reach, and nothing in it is called shell, so the runtime must
+	// derive a horizon fault.
 	if in.Misbehave != "" {
-		fmt.Println(`{"to":"echo","payload":{"text":"again"}}`)
+		fmt.Println(`{"to":"shell","payload":{"command":"ls"}}`)
 		return
 	}
 	b, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": out})

@@ -52,9 +52,8 @@ func TestReadLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	surface := horizon.Surface{Path: bin, SHA256: record.Sum(data),
-		Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}}}
-	h := horizon.Horizon{Surface: &surface}
+	surface := horizon.Surface{Path: bin, SHA256: record.Sum(data)}
+	h := horizon.Horizon{Surface: &surface, Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}}}
 	read := func(path string) (out struct {
 		Kind, Error, Text string
 	}) {

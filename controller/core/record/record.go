@@ -54,6 +54,7 @@ type Record struct {
 	Round       string                     `json:"round,omitempty"`      // resolve: the round whose slots are all discharged
 	Deps        []string                   `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
 	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
+	Authority   *horizon.Authority         `json:"authority,omitempty"`  // genesis only: the grants everything under the root shares
 	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
 

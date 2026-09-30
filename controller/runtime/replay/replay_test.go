@@ -39,10 +39,11 @@ func buildLineage(t *testing.T, root string) string {
 	}
 	h := horizon.Horizon{Stamp: g0, Reach: map[string]horizon.Surface{"echo": echoS}, Frame: g0}
 	var head string
-	for _, in := range []string{
-		`{"to":"echo","payload":{"text":"hi"}}`,
-		`hi`,
+	for _, in := range []func() string{
+		func() string { return `{"to":"echo","payload":{"text":"hi"}}` },
+		func() string { return `{"to":"` + h.Frame + `","payload":"hi"}` }, // echo returns to its slot
 	} {
+		in := in()
 		if _, err := tree.Put(root, "inputs", []byte(in)); err != nil {
 			t.Fatal(err)
 		}
@@ -73,12 +74,13 @@ func TestReplayCatchesForgedRecord(t *testing.T) {
 	head := buildLineage(t, root)
 	g, _ := tree.Load(root, head)
 
-	// Forge a successor to frame 1 claiming echo (a leaf) was allowed to invoke.
-	// It is a well-formed, correctly hashed record, but step would never derive it.
-	in := []byte(`{"to":"echo","payload":{"text":"x"}}`)
+	// Forge a successor to frame 1 claiming echo invoked something outside its
+	// Horizon. It is a well-formed, correctly hashed record, but step would
+	// never derive it: it derives a horizon fault.
+	in := []byte(`{"to":"shell","payload":{"text":"x"}}`)
 	tree.Put(root, "inputs", in)
 	forged, err := tree.Commit(root, record.Record{Predecessor: g.Predecessor, Input: record.Sum(in), State: record.Invoke,
-		To: "echo", Payload: []byte(`{"text":"x"}`)})
+		To: "shell", Payload: []byte(`{"text":"x"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +124,7 @@ func TestReplayDerivesSupervisorFaults(t *testing.T) {
 	}
 }
 
-var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Output: echoS.Output, Reach: []string{"echo"}}
+var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Output: echoS.Output, Continuation: true}
 
 // commitStep stores an input and commits the record derived from it.
 func commitStep(t *testing.T, root string, in []byte, r record.Record) string {

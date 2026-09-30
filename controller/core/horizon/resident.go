@@ -18,6 +18,12 @@ type ResidentPaths struct {
 // this invocation's private paths and its single proxy endpoint. The network
 // destinations beyond that endpoint are controlled by the registered proxy
 // allowlist, which is also carried by the Surface.
+//
+// It renders none of the Horizon's shared grants. The app-server is the one
+// program whose authority is its pinned profile template, not its Horizon:
+// its native reads would be observations with no record. That exclusion lasts
+// until the resident fields leave the surface (next/25, item 3) and the
+// app-server's Horizon is narrowed through the room (next/26).
 func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	if h.Surface == nil || h.Surface.ResidentProfile != "darwin-appserver-v1" || p.ProxyPort < 1 || p.ProxyPort > 65535 {
 		return "", fmt.Errorf("invalid resident profile or proxy")
@@ -52,21 +58,6 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	}
 	for _, service := range []string{"com.apple.trustd.agent", "com.apple.trustd", "com.apple.system.notification_center", "com.apple.SystemConfiguration.DNSConfiguration", "com.apple.bsd.dirhelper", "com.apple.system.opendirectoryd.membership", "com.apple.ocspd", "com.apple.system.opendirectoryd.libinfo", "com.apple.SystemConfiguration.configd", "com.apple.networkd", "com.apple.SecurityServer"} {
 		fmt.Fprintf(&b, "(allow mach-lookup (global-name %q))\n", service)
-	}
-	for _, grant := range h.Surface.Authority.Exec {
-		renderPath(&b, "process-exec", grant)
-	}
-	for _, grant := range h.Surface.Authority.Read {
-		renderPath(&b, "file-read*", grant)
-	}
-	for _, grant := range h.Surface.Authority.Write {
-		renderPath(&b, "file-write*", grant)
-	}
-	for _, service := range h.Surface.Authority.Mach {
-		fmt.Fprintf(&b, "(allow mach-lookup (global-name %q))\n", service)
-	}
-	for _, sock := range h.Surface.Authority.Connect {
-		fmt.Fprintf(&b, "(allow network-outbound (remote unix-socket (path-literal %q)))\n", sock)
 	}
 	fmt.Fprintf(&b, "(allow network-outbound (remote ip %q))\n", fmt.Sprintf("localhost:%d", p.ProxyPort))
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
