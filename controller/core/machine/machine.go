@@ -63,6 +63,9 @@ type Instance struct {
 	Next      []byte             // a resumed continuation's input, while the claim is decided
 	Held      record.Record      // the resolve record, while the claim is decided
 	Resources []horizon.Resource // non-frame descriptors carried beside the stack
+	Gathered  *Settled           // the waiter's rounds, while its round is routed
+	Routing   *RouteRun          // how the round's discharge is routed, while it is
+	Sending   bool               // the claim's winner emits Next, a route's send, instead of resuming the waiter
 }
 
 type Phase string
@@ -73,6 +76,8 @@ const (
 	Execute Phase = "execute" // the target is running; waiting for its output
 	Handoff Phase = "handoff" // the successor is intaking the output; waiting for its stamp
 	Gather  Phase = "gather"  // a slot was discharged; waiting to read what the waiter still waits on
+	Lookup  Phase = "lookup"  // a returned discharge is routed: waiting for its route (next/30)
+	Route   Phase = "route"   // the route runner is running: waiting for its decision
 	Claim   Phase = "claim"   // a resolve was committed; waiting for the fan-in claim
 	Done    Phase = "done"
 )
@@ -108,13 +113,20 @@ type Settled struct { // → Gather: the waiting frame's record and every round 
 	Frame  record.Record
 	Rounds []Round
 }
-type Claimed struct{ Won bool }  // → Claim: whether this instance won the fan-in claim
+type Claimed struct{ Won bool } // → Claim: whether this instance won the fan-in claim
+type RouteLooked struct {       // → Lookup: the route recorded for the key, and the declared one (nil: none)
+	Recorded []byte
+	Declared []byte
+}
 type Parked struct{ Err string } // → Execute (async): whether the host took custody of the frame
 
-// Round is one emission of a continuation and the slots it opened.
+// Round is one emission of a continuation and the slots it opened. Opened is
+// what the resolve that opened it observed (nil for the frame's first round):
+// whether the round before was routed, and how.
 type Round struct {
 	Stamp    string
 	Children []Child
+	Opened   *Observation
 }
 
 // Child is one slot: the invoke that opened it, and what discharged it (nil: still open).
@@ -125,14 +137,15 @@ type Child struct {
 	Discharge *record.Record
 }
 
-func (Received) event() {}
-func (Released) event() {}
-func (Emitted) event()  {}
-func (Started) event()  {}
-func (Stamped) event()  {}
-func (Settled) event()  {}
-func (Claimed) event()  {}
-func (Parked) event()   {}
+func (Received) event()    {}
+func (Released) event()    {}
+func (Emitted) event()     {}
+func (Started) event()     {}
+func (Stamped) event()     {}
+func (Settled) event()     {}
+func (Claimed) event()     {}
+func (RouteLooked) event() {}
+func (Parked) event()      {}
 
 // Effects are what Step asks the shell to do, in order. SendStamp, Run,
 // Spawn, GatherWaiter and TryClaim each end with the shell waiting for the
@@ -169,8 +182,16 @@ type SendHorizon struct {                  // issue the successor's Release: its
 type Settle struct{ Result string }         // discharge this instance's frame's slot, once
 type GatherWaiter struct{}                  // read the waiting frame's rounds, then wait for Settled
 type TryClaim struct{ Round, Stamp string } // the fan-in claim on the waiting frame, then wait for Claimed
-type Pop struct{}                           // drop the discharged frame: the resumed continuation holds the rest
-type Park struct {                          // hand this instance, its payload and its frame stack to an actor host, then wait for Parked
+type LookupRoute struct {                   // the route for a key, recorded or declared (by hash), then wait for RouteLooked
+	Key      RouteKey
+	Declared string
+}
+type RecordRun struct { // index a route run under its key: the log is the test suite (F8)
+	Key           RouteKey
+	Input, Output string
+}
+type Pop struct{}  // drop the discharged frame: the resumed continuation holds the rest
+type Park struct { // hand this instance, its payload and its frame stack to an actor host, then wait for Parked
 	Host    string
 	Payload []byte
 }
@@ -188,6 +209,8 @@ func (SendHorizon) effect()   {}
 func (Settle) effect()        {}
 func (GatherWaiter) effect()  {}
 func (TryClaim) effect()      {}
+func (LookupRoute) effect()   {}
+func (RecordRun) effect()     {}
 func (Pop) effect()           {}
 func (Park) effect()          {}
 func (Exit) effect()          {}
@@ -243,6 +266,14 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Claimed:
 			if s.Phase == Claim {
 				return claim(s, ev)
+			}
+		case RouteLooked:
+			if s.Phase == Lookup {
+				return lookedUp(s, ev)
+			}
+		case Emitted:
+			if s.Phase == Route {
+				return routed(s, ev)
 			}
 		}
 	}
@@ -556,26 +587,49 @@ func discharged(s Instance, effs ...Effect) (Instance, []Effect) {
 
 // 6. Gather: the waiting continuation resumes only when every slot its round
 // opened is discharged (the join rule; wait for all). The resolve record names
-// every discharge, so it cannot be formed early.
+// every discharge, so it cannot be formed early. Then the round is routed
+// (next/30): a return goes through its parent's route, which decides whether
+// it wakes the parent.
 func gather(s Instance, e Settled) (Instance, []Effect) {
 	waiter := s.Self.Resume
 	if record.Stamp(e.Frame) != waiter.Frame || len(e.Rounds) == 0 || e.Rounds[len(e.Rounds)-1].Stamp != waiter.Stamp {
 		s.Phase = Done
 		return s, []Effect{Exit{"gathered rounds do not belong to the waiting continuation"}}
 	}
-	round := e.Rounds[len(e.Rounds)-1]
-	var results []string
-	for _, c := range round.Children {
+	for _, c := range e.Rounds[len(e.Rounds)-1].Children {
 		if c.Discharge == nil {
 			s.Phase = Done // a sibling's discharge will be the last one
 			return s, []Effect{Exit{}}
 		}
+	}
+	s.Gathered = &e
+	run := routable(*waiter, e)
+	if run == nil || run.Decision != "" {
+		return resolve(s, run)
+	}
+	s.Routing, s.Phase = run, Lookup
+	return s, []Effect{LookupRoute{Key: keyOf(*waiter, *run), Declared: waiter.Surface.Routes[run.Binding]}}
+}
+
+// resolve commits the resolve record for the gathered round, with how it was
+// routed in its observation, and makes the fan-in claim. The winner resumes
+// the waiter, or, for a send, emits the route's envelope in its place.
+func resolve(s Instance, run *RouteRun, effs ...Effect) (Instance, []Effect) {
+	e, waiter := *s.Gathered, s.Self.Resume
+	round := e.Rounds[len(e.Rounds)-1]
+	var results []string
+	for _, c := range round.Children {
 		results = append(results, c.Result)
 	}
-	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results})
+	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results, Route: run})
 	r, _ := Resolved(s.Stamp, obs)
-	s.Held, s.Next, s.Phase = r, continuation(e, tools(*waiter)), Claim
-	return s, []Effect{StoreInput{obs}, Commit{r}, TryClaim{Round: round.Stamp, Stamp: record.Stamp(r)}}
+	s.Held, s.Phase = r, Claim
+	if run != nil && run.Decision == Send {
+		s.Next, s.Sending = run.Send, true
+	} else {
+		s.Next = continuation(e, *waiter, run)
+	}
+	return s, append(effs, StoreInput{obs}, Commit{r}, TryClaim{Round: round.Stamp, Stamp: record.Stamp(r)})
 }
 
 // 7. Claim: the winner resumes the waiting continuation in this instance: it
@@ -592,15 +646,25 @@ func claim(s Instance, e Claimed) (Instance, []Effect) {
 		return s, []Effect{Exit{}}
 	}
 	s.State, s.R, s.Stamp, s.Self, s.Phase = record.Resolve, s.Held, resumed.Stamp, resumed, Execute
+	if s.Sending {
+		// The route speaks for the waiter: its envelope is handed off as if
+		// the waiter had emitted it, under the waiter's Horizon, and opens
+		// the waiter's next round. The waiter does not run.
+		s.Out, s.Phase = s.Next, Handoff
+		return s, []Effect{Pop{}, Spawn{Under: resumed, Out: s.Next}}
+	}
 	return s, []Effect{Pop{}, runOf(resumed, s.Next, s.Floor)}
 }
 
 // Observation is what a resolve observed: the round whose slots are all
-// discharged, and the discharges, in slot order.
+// discharged, the discharges, in slot order, and how the round was routed.
+// The route run is observed, never a record field: types are derived, and
+// the record's encoding does not change (next/30).
 type Observation struct {
-	Frame      string   `json:"frame"`
-	Round      string   `json:"round"`
-	Discharges []string `json:"discharges"`
+	Frame      string    `json:"frame"`
+	Round      string    `json:"round"`
+	Discharges []string  `json:"discharges"`
+	Route      *RouteRun `json:"route,omitempty"`
 }
 
 // Resolved derives a resolve record from its observation. It is stored as the
@@ -686,21 +750,43 @@ type Continuation struct {
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
-// discharged the slot.
+// discharged the slot. A returned step also says how its parent's route took
+// it (next/30), always as names and presentations, never hashes.
 type StepView struct {
-	To      string            `json:"to"`
-	Payload json.RawMessage   `json:"payload"`
-	State   record.State      `json:"state"`
-	Value   json.RawMessage   `json:"value,omitempty"`
-	Fault   *record.FaultInfo `json:"fault,omitempty"`
+	To        string            `json:"to"`
+	Payload   json.RawMessage   `json:"payload"`
+	State     record.State      `json:"state"`
+	Value     json.RawMessage   `json:"value,omitempty"`
+	Fault     *record.FaultInfo `json:"fault,omitempty"`
+	By        string            `json:"by,omitempty"`        // "route": the runtime invoked this for the parent, by its route
+	Sent      string            `json:"sent,omitempty"`      // the route sent this return on, to this name
+	Interrupt string            `json:"interrupt,omitempty"` // why this return woke the parent: novelty, route or depth
+	Type      string            `json:"type,omitempty"`      // an interrupting return's type, as its presentation
 }
 
-func continuation(e Settled, tools map[string]*contract.Schema) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools, Steps: []StepView{}}
-	for _, round := range e.Rounds {
+// continuation is what the waiter reads when it resumes. current is how the
+// round being resolved was routed; an earlier round's routing is in the
+// observation of the resolve that closed it.
+func continuation(e Settled, waiter horizon.Horizon, current *RouteRun) []byte {
+	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools(waiter), Steps: []StepView{}}
+	for i, round := range e.Rounds {
+		closed := current
+		if i+1 < len(e.Rounds) {
+			closed = nil
+			if o := e.Rounds[i+1].Opened; o != nil {
+				closed = o.Route
+			}
+		}
 		for _, child := range round.Children {
-			c.Steps = append(c.Steps, StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,
-				State: child.Discharge.State, Value: child.Discharge.Payload, Fault: child.Discharge.Fault})
+			v := StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,
+				State: child.Discharge.State, Value: child.Discharge.Payload, Fault: child.Discharge.Fault}
+			if sentBy(round) {
+				v.By = "route"
+			}
+			if closed != nil && closed.Child == child.Result {
+				viewed(&v, waiter, child, *closed)
+			}
+			c.Steps = append(c.Steps, v)
 		}
 	}
 	b, _ := json.Marshal(c)

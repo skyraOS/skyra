@@ -221,6 +221,15 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if e, err = gather(root, stack[1], *s.Self.Resume); err != nil {
 					return s, err
 				}
+			case machine.LookupRoute:
+				var err error
+				if e, err = lookupRoute(root, x); err != nil {
+					return s, err
+				}
+			case machine.RecordRun:
+				if err := tree.RecordRun(root, x.Key.ID(), x.Input, x.Output); err != nil {
+					return s, err
+				}
 			case machine.TryClaim:
 				won, err := tree.Claim(stack[1], x.Round, x.Stamp)
 				if err != nil {
@@ -292,8 +301,42 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 		if prev.State != record.Resolve || prev.Frame != waiter.Frame {
 			return nil, fmt.Errorf("round %s is not a resolve of frame %s", record.Short(round), record.Short(waiter.Frame))
 		}
+		obs, err := tree.Get(root, "inputs", prev.Input) // how the round before was routed (next/30)
+		if err != nil {
+			return nil, err
+		}
+		var opened machine.Observation
+		if err := json.Unmarshal(obs, &opened); err != nil {
+			return nil, err
+		}
+		rounds[0].Opened = &opened
 		round = prev.Round
 	}
+}
+
+// lookupRoute reads the route recorded for a key, and the declared one by
+// hash. The machine decides which runs.
+func lookupRoute(root string, x machine.LookupRoute) (machine.Event, error) {
+	var looked machine.RouteLooked
+	entry, err := tree.Route(root, x.Key.ID())
+	if err != nil {
+		return nil, err
+	}
+	if entry != nil {
+		var e machine.RouteEntry
+		if err := json.Unmarshal(entry, &e); err != nil {
+			return nil, err
+		}
+		if looked.Recorded, err = tree.Get(root, "routes", e.Source); err != nil {
+			return nil, err
+		}
+	}
+	if x.Declared != "" {
+		if looked.Declared, err = tree.Get(root, "routes", x.Declared); err != nil {
+			return nil, err
+		}
+	}
+	return looked, nil
 }
 
 // run performs a Run effect: check the binary's content hash, run it under

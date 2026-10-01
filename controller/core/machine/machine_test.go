@@ -367,8 +367,14 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("a foreign round must stop the instance: %#v", effs)
 	}
 
-	// Every slot discharged: commit a resolve naming every discharge, then claim.
+	// Every slot discharged: echo's return is routed (next/30). The agent has
+	// no route for it, so it is novel: commit a resolve naming every
+	// discharge, then claim.
 	g, effs := Step(r, round(true))
+	if look, ok := effs[0].(LookupRoute); !ok || look.Key.Binding != "echo" || look.Declared != "" || g.Phase != Lookup {
+		t.Fatalf("a returned discharge is routed: %#v", effs)
+	}
+	g, effs = Step(g, RouteLooked{})
 	res := effs[1].(Commit).R
 	if res.State != record.Resolve || res.Frame != a.Stamp || res.Round != a.Stamp || !reflect.DeepEqual(res.Deps, []string{r.Stamp}) || res.Predecessor != r.Stamp {
 		t.Fatalf("resolve record: %+v", res)
@@ -388,7 +394,8 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	if g.State != record.Resolve || g.Phase != Execute || g.Self.Frame != a.Stamp || g.Self.Stamp != record.Stamp(res) || effs[0] != (Pop{}) {
 		t.Fatalf("the winner takes custody of the resumed agent: %+v %#v", g, effs)
 	}
-	if err := json.Unmarshal(effs[1].(Run).Stdin, &c); err != nil || len(c.Steps) != 1 || c.Steps[0].To != "echo" || c.Steps[0].State != record.Return || string(c.Steps[0].Value) != `"hi"` {
+	if err := json.Unmarshal(effs[1].(Run).Stdin, &c); err != nil || len(c.Steps) != 1 || c.Steps[0].To != "echo" || c.Steps[0].State != record.Return || string(c.Steps[0].Value) != `"hi"` ||
+		c.Steps[0].Interrupt != Novelty || c.Steps[0].Type != "echo → string" {
 		t.Fatalf("the agent resumes with the step it took and what came back: %s", effs[1].(Run).Stdin)
 	}
 

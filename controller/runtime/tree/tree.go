@@ -7,6 +7,7 @@
 //	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before the child ran
 //	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
 //	routes/<hash>                     a route's Starlark source (next/30), declared or recorded
+//	route-table/<key>/<n>             the routes recorded for a key; route-runs/<key>/<input>, its runs
 //
 // A round is the stamp F's continuation emitted under: F itself, then each
 // resolve record. Every write inside a frame goes through its directory fd,
@@ -267,4 +268,98 @@ func syncDir(dir string) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// The route table (next/30), outside every frame, since a route outlives the
+// frame it was written in. key is a machine.RouteKey's ID.
+//
+//	route-table/<key>/<n>        write-once: the nth route recorded for key, as its entry; the highest n is the route
+//	route-runs/<key>/<input>     write-once: a route run under key, its runner input's hash → its output's hash
+
+// PutRoute records a route entry under key, after every entry already there.
+func PutRoute(root, key string, entry []byte) error {
+	dir := filepath.Join(root, "route-table", key)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	for {
+		n, err := routeCount(dir)
+		if err != nil {
+			return err
+		}
+		won, err := writeOnce(d, fmt.Sprintf("%08d", n+1), string(entry))
+		if err != nil || won {
+			return err
+		}
+	}
+}
+
+// Route reads the latest route entry recorded under key, or nil.
+func Route(root, key string) ([]byte, error) {
+	dir := filepath.Join(root, "route-table", key)
+	n, err := routeCount(dir)
+	if err != nil || n == 0 {
+		return nil, err
+	}
+	return os.ReadFile(filepath.Join(dir, fmt.Sprintf("%08d", n)))
+}
+
+func routeCount(dir string) (int, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	n := 0
+	for _, e := range entries {
+		if e.Name()[0] != '.' {
+			n++
+		}
+	}
+	return n, err
+}
+
+// RecordRun indexes a route run under key. The same run recorded twice is
+// one run: a route is deterministic.
+func RecordRun(root, key, input, output string) error {
+	dir := filepath.Join(root, "route-runs", key)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	_, err = writeOnce(d, input, output)
+	return err
+}
+
+// Runs lists every route run recorded under key, as [input hash, output hash],
+// sorted by input.
+func Runs(root, key string) ([][2]string, error) {
+	dir := filepath.Join(root, "route-runs", key)
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var runs [][2]string
+	for _, e := range entries {
+		if e.Name()[0] == '.' {
+			continue
+		}
+		out, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, [2]string{e.Name(), string(out)})
+	}
+	return runs, nil
 }
