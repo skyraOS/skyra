@@ -99,4 +99,4 @@ The initial experiment established that external OS enforcement can be added
 through today's host without waiting for resident custody. Launch/config
 isolation and adapter interruption are now integrated. Egress restriction,
 auth refresh, authority-derived grants, and resident custody remain unfinished.
-Already running processes are not migrated; see `startup-doc.md` for restart.
+Already running processes are not migrated; see `docs/startup-doc.md` for restart.

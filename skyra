@@ -41,7 +41,7 @@ usage: skyra [command]
   build         build every binary into build/
 
 Ports: SKYRA_WS_PORT (default 8080), SKYRA_UI_PORT (default 3000).
-Setup and troubleshooting: $ROOT/startup-doc.md
+Setup and troubleshooting: $ROOT/docs/startup-doc.md
 EOF
 }
 
@@ -326,7 +326,7 @@ doctor() {
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
   warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"
-  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see startup-doc.md"
+  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see docs/startup-doc.md"
   warn "port $WS_PORT free" 'port_free "$WS_PORT"' "set SKYRA_WS_PORT"
   warn "port $UI_PORT free" 'port_free "$UI_PORT"' "set SKYRA_UI_PORT"
   [ "$ok" = 1 ] || die "fix the FAIL lines above"

@@ -1,7 +1,8 @@
 // Command echo is the untrusted target, a leaf. It reads its payload on stdin
-// and prints its text. It knows nothing about custody, records, Horizons or
-// Moves, and shares no code with skyra: a tool just prints its data, and the
-// runtime interprets it (thought 14).
+// and returns its text, addressed to the slot the runtime names in
+// SKYRA_FRAME. It knows nothing about custody, records, Horizons or Moves, and
+// shares no code with skyra: it supplies operands, and the runtime interprets
+// them (thought 14).
 package main
 
 import (
@@ -30,12 +31,15 @@ func main() {
 		out += fmt.Sprintf(" [probe .skyra: read %s, write %s]", verdict(rerr), verdict(werr))
 	}
 
-	// misbehave: address a capability. A leaf reaches nothing, so the runtime
-	// must derive a horizon fault.
+	// misbehave: address something outside the Horizon. Echo shares its
+	// caller's reach, and nothing in it is called shell, so the runtime must
+	// derive a horizon fault.
 	if in.Misbehave != "" {
-		out = `{"to":"echo","payload":{"text":"again"}}`
+		fmt.Println(`{"to":"shell","payload":{"command":"ls"}}`)
+		return
 	}
-	fmt.Println(out)
+	b, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": out})
+	fmt.Println(string(b))
 }
 
 func verdict(err error) string {

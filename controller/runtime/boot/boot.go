@@ -5,6 +5,8 @@
 package boot
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,14 +39,25 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	if err := tree.Init(root); err != nil {
 		return Outcome{}, err
 	}
-	reach, err := registry.Load(registryFile)
+	reach, authority, err := registry.Load(registryFile)
 	if err != nil {
 		return Outcome{}, err
 	}
+	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
+		reach[name] = facet
+	}
 
-	// Genesis: the root Horizon's reach comes from the operator.
-	reachBytes, _ := json.Marshal(reach)
-	g0, err := tree.Commit(root, record.Record{Input: record.Sum(reachBytes), State: record.Invoke, Reach: reach}) // frame 0: the operator's, in invoke
+	// Genesis: the room. The root Horizon's reach and authority come from the
+	// operator, and everything under it shares them until a narrowing. It is
+	// the one origin with no predecessor, so it is authored, and it carries a
+	// nonce: two boots of the same registry are two histories, never one.
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return Outcome{}, err
+	}
+	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
+	g0, err := tree.Commit(root, record.Record{Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
+		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -52,7 +65,7 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	if err != nil {
 		return Outcome{}, err
 	}
-	h0 := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+	h0 := horizon.Horizon{Stamp: g0, Reach: reach, Authority: authority, Frame: g0}
 	trace.Logf("genesis  committed %s  root reach %v", record.Short(g0), h0.Names())
 
 	// Boot is an instance whose target is the operator: it is already live

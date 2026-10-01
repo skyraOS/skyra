@@ -75,7 +75,7 @@ func TestResumeFramesDoNotReachTarget(t *testing.T) {
 		return path
 	}
 	text := map[string]string{"type": "string"}
-	probeContract := writeJSON("probe.json", map[string]any{"input": text, "output": text, "reach": []string{"browser"}})
+	probeContract := writeJSON("probe.json", map[string]any{"input": text, "output": text, "continuation": true})
 	browserContract := writeJSON("browser.json", map[string]any{"input": text, "output": text})
 	registry := writeJSON("registry.json", map[string]any{
 		"probe":   map[string]string{"path": probe, "contract": probeContract},
@@ -134,7 +134,7 @@ func TestResumeFramesDoNotReachTarget(t *testing.T) {
 		identities = append(identities, map[string]any{"device": s.Dev, "inode": s.Ino})
 	}
 	ids, _ := json.Marshal(identities)
-	event, _ := json.Marshal(map[string]string{"to": "reply", "payload": string(ids)})
+	event, _ := json.Marshal(map[string]string{"to": f.Stamp, "payload": string(ids)})
 	if err := park.Resume(skyra, f, event, log); err != nil {
 		t.Fatal(err)
 	}

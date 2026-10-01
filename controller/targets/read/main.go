@@ -60,9 +60,10 @@ func main() {
 		os.Exit(1)
 	}
 	root, _, _ := strings.Cut(os.Getenv("SKYRA_READ"), ":")
-	// Unaddressed output is a string for reply; the observation is an object,
-	// so it names reply. File contents only ever travel inside it, as a string.
-	out, _ := json.Marshal(map[string]any{"to": "reply", "payload": observe(root, in)})
+	// A return addresses the slot this frame discharges, which the runtime
+	// names in SKYRA_FRAME. File contents only ever travel inside the
+	// observation, as a string.
+	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": observe(root, in)})
 	fmt.Println(string(out))
 }
 

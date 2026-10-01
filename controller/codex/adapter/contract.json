@@ -8,5 +8,5 @@
     }
   },
   "output": {"type": "string"},
-  "reach": ["echo"]
+  "continuation": true
 }

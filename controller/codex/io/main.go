@@ -47,7 +47,7 @@ func main() {
 	}
 	defer file.Close()
 	o := operate(file, q)
-	b, _ := json.Marshal(map[string]any{"to": "reply", "payload": o})
+	b, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": o})
 	fmt.Println(string(b))
 }
 

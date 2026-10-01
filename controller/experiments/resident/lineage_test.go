@@ -41,7 +41,7 @@ func newJournal(t *testing.T) *journal {
 	for _, name := range ops {
 		reach[name] = horizon.Surface{Input: input, Output: output}
 	}
-	reach["adapter"] = horizon.Surface{Input: str, Output: str, Reach: ops}
+	reach["adapter"] = horizon.Surface{Input: str, Output: str, Continuation: true}
 	j := &journal{t: t, root: t.TempDir()}
 	if err := tree.Init(j.root); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func (j *journal) returned(o observation) {
 	if o.Lines == nil {
 		o.Lines = []string{}
 	}
-	j.intake(map[string]any{"to": "reply", "payload": o}, record.Return)
+	j.intake(map[string]any{"to": j.h.Frame, "payload": o}, record.Return)
 	in, _ := json.Marshal(machine.Observation{Frame: j.wait.Frame, Round: j.wait.Stamp, Discharges: []string{j.head}})
 	r, err := machine.Resolved(j.head, in)
 	if err != nil {
@@ -110,7 +110,7 @@ func (j *journal) returned(o observation) {
 }
 
 func (j *journal) verify() {
-	j.intake(map[string]any{"to": "reply", "payload": "complete"}, record.Return)
+	j.intake(map[string]any{"to": j.h.Frame, "payload": "complete"}, record.Return)
 	n, err := replay.Replay(j.root, j.head)
 	if err != nil {
 		j.t.Fatal(err)

@@ -13,10 +13,10 @@
 //	Codex asks for a dynamic tool       → addressed output {"to": tool, "payload": args}
 //	                                      (the runtime derives an invoke, or a fault)
 //	a step came back                    → the tool call's JSON-RPC result
-//	the turn completes                  → the final agent message, as plain text (a reply)
-//	Codex uses anything native          → addressed output naming it, e.g. "native.commandExecution".
-//	(a shell command, a file change,       It is not in reach, so the runtime derives a horizon
-//	an approval request)                   fault, after interrupting the affected turn.
+//	the turn completes                  → the final agent message, returned to this frame's slot
+//	Codex uses anything native          → after interrupting the affected turn, a return naming
+//	(a shell command, a file change,       the attempt, e.g. "native.commandExecution": an
+//	an approval request)                   observation for the parent, not a fault it triggers.
 //	                                       The provider launcher enforces OS file/exec restrictions.
 package main
 
@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -97,7 +98,7 @@ func run() (string, error) {
 		threadID = "conversation:" + c.Input.Conversation + ":thread"
 	}
 	seq, err = h.deliver(threadID, request(threadID, "thread/start", map[string]any{
-		"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": dynamicTools(c.Tools),
+		"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": dynamicTools(c),
 		"developerInstructions": "Only the registered dynamic tools may perform effects."}))
 	if err != nil {
 		return "", err
@@ -150,7 +151,7 @@ func run() (string, error) {
 		if err := h.interrupt(c.Frame, thread, turn, from); err != nil {
 			return "", fmt.Errorf("native %s: %w", what, err)
 		}
-		return native(what), nil
+		return native(c.Frame, what), nil
 	}
 
 	// Walk the turn from its start. Tool calls already answered by a step are
@@ -197,7 +198,7 @@ func run() (string, error) {
 			request := len(m.ID) > 0
 			switch {
 			case request && m.Method == "item/tool/call":
-				if _, registered := c.Tools[m.Params.Tool]; !registered {
+				if !offered(c, m.Params.Tool) {
 					return reject("dynamicTool." + m.Params.Tool)
 				}
 				if calls < len(c.Steps) {
@@ -229,9 +230,9 @@ func run() (string, error) {
 				if m.Params.Turn.Status != "completed" || final == "" || calls != len(c.Steps) {
 					return "", fmt.Errorf("turn ended %q with %d of %d tool calls answered", m.Params.Turn.Status, calls, len(c.Steps))
 				}
-				// The runtime reads one line: address the reply, so newlines
-				// survive JSON-escaped and text that looks like JSON stays a reply.
-				out, _ := json.Marshal(map[string]any{"to": "reply", "payload": final})
+				// The runtime reads one line: address the slot, so newlines
+				// survive JSON-escaped and text that looks like JSON stays text.
+				out, _ := json.Marshal(map[string]any{"to": c.Frame, "payload": final})
 				return string(out), nil
 			}
 		}
@@ -288,8 +289,10 @@ func (h *host) interrupt(frame, thread, turn string, from int) error {
 	return errors.New("interrupt was not confirmed; turn may still be active")
 }
 
-func native(what string) string {
-	out, _ := json.Marshal(map[string]any{"to": "native." + what, "payload": map[string]any{}})
+// native reports a native attempt as what it is: an observation returned to
+// the parent, not a name chosen so the runtime would fault it.
+func native(frame, what string) string {
+	out, _ := json.Marshal(map[string]any{"to": frame, "payload": "refused: the agent attempted native." + what + "; the turn was interrupted"})
 	return string(out)
 }
 
@@ -313,11 +316,25 @@ func toolResult(id json.RawMessage, state string, value json.RawMessage, fault *
 		"contentItems": []any{map[string]string{"type": "inputText", "text": text}}}}
 }
 
-// dynamicTools turns the input contracts in reach into Codex tool definitions.
-func dynamicTools(tools map[string]*schema) []any {
-	var defs []any
-	for name, s := range tools {
-		defs = append(defs, map[string]any{"name": name, "description": "Skyra capability " + name, "inputSchema": jsonSchema(s)})
+// modelTools are the capabilities Codex is shown. Under a shared Horizon
+// (next/24) reach holds every surface in the room, this adapter and the room's
+// facets included, so only these are offered, and only when they are in reach.
+var modelTools = []string{"echo"}
+
+func offered(c continuation, name string) bool {
+	return slices.Contains(modelTools, name) && c.Tools[name] != nil
+}
+
+// dynamicTools turns the model-facing tools in reach into Codex tool
+// definitions, in a fixed order. A resumed round delivers thread/start again
+// under the same id, and the host refuses a line that differs from the first
+// delivery, so the same continuation must produce the same bytes every time.
+func dynamicTools(c continuation) []any {
+	defs := []any{}
+	for _, name := range slices.Sorted(slices.Values(modelTools)) {
+		if offered(c, name) {
+			defs = append(defs, map[string]any{"name": name, "description": "Skyra capability " + name, "inputSchema": jsonSchema(c.Tools[name])})
+		}
 	}
 	return defs
 }

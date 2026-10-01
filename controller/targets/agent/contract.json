@@ -5,5 +5,5 @@
     "fields": {"text": {"type": "string"}}
   },
   "output": {"type": "string"},
-  "reach": ["echo"]
+  "continuation": true
 }

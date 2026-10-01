@@ -150,8 +150,3 @@ export const selectConversations = (s: StoreState): ConversationView[] =>
 
 export const selectActiveConversation = (s: StoreState): ConversationView | null =>
   s.selectedConversation ? s.conversations[s.selectedConversation] ?? null : null;
-
-export const selectRequest =
-  (requestId: string | null) =>
-  (s: StoreState): RequestRecord | null =>
-    requestId ? s.requests[requestId] ?? null : null;

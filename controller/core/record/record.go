@@ -20,7 +20,7 @@ type State string
 const (
 	Resolve State = "resolve" // every dependency of a frame is discharged; its continuation resumes
 	Invoke  State = "invoke"  // a capability in reach, with a payload that fits its input contract
-	Return  State = "return"  // the reply capability, with a payload that fits the return contract
+	Return  State = "return"  // the slot the emitter's frame discharges, with a payload that fits its output contract
 	Fault   State = "fault"   // the runtime proved something broke
 )
 
@@ -31,6 +31,7 @@ const (
 	Horizon   = "horizon"   // it names a capability outside its Horizon
 	Contract  = "contract"  // the payload does not fit the capability's input contract
 	Custody   = "custody"   // the protocol broke: no output, a dead successor, a failed stamp
+	Leaf      = "leaf"      // the output addresses nothing: it did not follow the protocol, and is kept as the fault's observation
 )
 
 type FaultInfo struct {
@@ -47,12 +48,15 @@ type Record struct {
 	Input       string                     `json:"input"`                // sha256 of the exact bytes observed
 	State       State                      `json:"state"`                // derived
 	To          string                     `json:"to,omitempty"`         // invoke: the capability
-	Payload     json.RawMessage            `json:"payload,omitempty"`    // invoke: its input; return: the value. Canonical JSON
+	Payload     json.RawMessage            `json:"payload,omitempty"`    // invoke: its input; return: the value; fault: the observation it was derived from. Canonical JSON
 	Fault       *FaultInfo                 `json:"fault,omitempty"`      // fault: kind and cause
 	Frame       string                     `json:"frame,omitempty"`      // resolve: the frame that resumes
 	Round       string                     `json:"round,omitempty"`      // resolve: the round whose slots are all discharged
 	Deps        []string                   `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
 	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
+	Authority   *horizon.Authority         `json:"authority,omitempty"`  // genesis only: the grants everything under the root shares
+	Author      string                     `json:"author,omitempty"`     // genesis only: who created the room (next/24: the one authored origin)
+	Nonce       string                     `json:"nonce,omitempty"`      // genesis only: makes this act, and every stamp after it, unique
 	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
 

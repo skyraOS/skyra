@@ -10,7 +10,7 @@
 // It follows the browser surface's registered procedure and decides nothing:
 //
 //	a frame is parked      show its transcript; wait for the human
-//	the human sends text   resume the frame with {"to":"reply","payload":TEXT}:
+//	the human sends text   resume the frame with {"to":<its slot>,"payload":TEXT}:
 //	                       the runtime checks it like any output
 //	the human closes       resume it with "/close": the user side ends the conversation
 //	the human opens one    seed a new conversation, as the operator
@@ -310,8 +310,9 @@ func (h *webhost) handle(raw []byte) {
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		// The event goes back in as a reply: whatever the human typed is only text.
-		event, _ := json.Marshal(map[string]string{"to": "reply", "payload": text})
+		// The event goes back in as a return, addressed to the parked frame's
+		// slot: whatever the human typed is only text.
+		event, _ := json.Marshal(map[string]string{"to": f.Stamp, "payload": text}) // a parked invoke's frame is its own stamp
 		if err := park.Resume(h.skyra, f, event, h.log); err != nil {
 			h.mu.Lock()
 			conv.phase = "failed"

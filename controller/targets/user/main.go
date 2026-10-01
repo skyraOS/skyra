@@ -6,8 +6,8 @@
 // Its whole policy, one output per step:
 //
 //	the human just said something           → ask codex, in this conversation
-//	the human said /close                   → reply "closed": the conversation ends
-//	the channel to the human faulted        → reply with the fault: the conversation ends.
+//	the human said /close                   → return "closed": the conversation ends
+//	the channel to the human faulted        → return the fault: the conversation ends.
 //	                                          Nobody is there to show it to, so it never retries
 //	anything else (the start, Codex's
 //	answer, or a fault in Codex's turn)     → show the transcript to the human, and wait for them
@@ -39,6 +39,7 @@ type entry struct {
 
 func main() {
 	var c struct {
+		Frame string `json:"frame"`
 		Input struct {
 			Conversation string `json:"conversation"`
 		} `json:"input"`
@@ -58,12 +59,15 @@ func main() {
 		_ = json.Unmarshal(s.Value, &text)
 		if s.To == "codex" && s.Fault == nil {
 			var answer struct {
-				Text, Thread, Incarnation string
-				ActivityAt                int64 `json:"activity_at"`
+				Text, Refused, Thread, Incarnation string
+				ActivityAt                         int64 `json:"activity_at"`
 			}
-			if json.Unmarshal(s.Value, &answer) == nil && answer.Text != "" {
+			if json.Unmarshal(s.Value, &answer) == nil && (answer.Text != "" || answer.Refused != "") {
 				text, thread, incarnation = answer.Text, answer.Thread, answer.Incarnation
 				activityAt = answer.ActivityAt
+				if answer.Refused != "" {
+					text = fmt.Sprintf("⚠ the agent attempted %s; the turn was interrupted", answer.Refused)
+				}
 			}
 		}
 		switch {
@@ -93,9 +97,9 @@ func main() {
 	switch {
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault != nil:
 		f := c.Steps[last].Fault
-		fmt.Printf("ended: the browser faulted (%s): %s\n", f.Kind, f.Cause)
+		emit(c.Frame, fmt.Sprintf("ended: the browser faulted (%s): %s", f.Kind, f.Cause))
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil && said == "/close":
-		fmt.Println("closed")
+		emit(c.Frame, "closed")
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil:
 		emit("codex", map[string]any{"conversation": c.Input.Conversation, "text": said, "thread": thread, "incarnation": incarnation, "activity_at": activityAt})
 	default:

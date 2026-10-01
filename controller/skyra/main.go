@@ -9,6 +9,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -17,11 +18,13 @@ import (
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/boot"
+	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/instance"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
+	"skyra/controller/runtime/tree"
 )
 
 func main() {
@@ -102,16 +105,59 @@ func realDir(p string) (string, error) {
 }
 
 // resume continues a parked instance: the host hands back its frame stack as
-// fds 3.., and on stdin the instance and the outside event, as its target's
-// output.
+// fds 3.., and on stdin the parked stamp and the outside event, as its
+// target's output. The host holds a reference and descriptors, never
+// authority: the instance, its Horizon and the floor are derived here, from
+// the tree (next/20, finding 1).
 func resume(root string) error {
 	var r park.Resumed
 	if err := json.NewDecoder(os.Stdin).Decode(&r); err != nil {
 		return err
 	}
-	stack := handshake.Inherited(3, r.Instance.Self.Depth()+len(r.Instance.Resources))
-	trace.Who = "resume " + record.Short(r.Instance.Stamp)
+	stack := handshake.Inherited(3, r.Frames+len(r.Resources))
+	s, err := parked(root, r)
+	if err != nil {
+		for _, f := range stack {
+			f.Close()
+		}
+		return fmt.Errorf("resume %s: %w", record.Short(r.Stamp), err)
+	}
+	if err := custody.Validate(r.Resources, stack[r.Frames:]); err != nil {
+		return err
+	}
+	trace.Who = "resume " + record.Short(r.Stamp)
 	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
-	_, err := instance.Drive(root, nil, stack, r.Instance, machine.Emitted{Out: []byte(r.Out)})
+	_, err = instance.Drive(root, nil, stack, s, machine.Emitted{Out: []byte(r.Out)})
 	return err
+}
+
+// parked derives the instance a host is resuming. It must be an invoke of an
+// async surface that was released and never handed on: not another step, and
+// not one already resumed.
+func parked(root string, r park.Resumed) (machine.Instance, error) {
+	rec, err := tree.Load(root, r.Stamp)
+	if err != nil {
+		return machine.Instance{}, err
+	}
+	self, err := replay.HorizonAt(root, r.Stamp)
+	if err != nil {
+		return machine.Instance{}, err
+	}
+	switch {
+	case rec.State != record.Invoke || self.Surface == nil || self.Surface.Host == "":
+		return machine.Instance{}, errors.New("not a parked invocation")
+	case self.Depth() != r.Frames:
+		return machine.Instance{}, fmt.Errorf("carries %d frames, its Horizon has %d", r.Frames, self.Depth())
+	}
+	if _, err := tree.Result(root, self.Frame); err == nil {
+		return machine.Instance{}, errors.New("already settled")
+	}
+	handed, err := tree.HasSuccessor(root, r.Stamp)
+	if err != nil {
+		return machine.Instance{}, err
+	}
+	if handed {
+		return machine.Instance{}, errors.New("already resumed")
+	}
+	return machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, R: rec, Stamp: r.Stamp, Self: self, Resources: r.Resources}, nil
 }

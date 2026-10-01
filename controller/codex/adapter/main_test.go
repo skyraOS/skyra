@@ -56,3 +56,37 @@ func TestInterruptFailsWhenHostDies(t *testing.T) {
 		t.Fatal("unconfirmed interruption reported success")
 	}
 }
+
+// Under a shared Horizon the adapter sees the whole room in reach. It must
+// offer Codex only its model-facing tools, and produce the same thread/start
+// bytes on every run: a resumed round delivers the line again under the same
+// id, and the host refuses one that differs from the first delivery.
+func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
+	object := &schema{Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}}
+	c := continuation{Frame: "f", Tools: map[string]*schema{
+		"echo": object, "agent": object, "codex": object, "system.narrow": {Type: "object"},
+		"z-tool": object, "a-tool": object,
+	}}
+	first, _ := json.Marshal(request("f:thread", "thread/start", map[string]any{"dynamicTools": dynamicTools(c)}))
+	for i := 0; i < 200; i++ {
+		again, _ := json.Marshal(request("f:thread", "thread/start", map[string]any{"dynamicTools": dynamicTools(c)}))
+		if string(again) != string(first) {
+			t.Fatalf("thread/start differs between runs:\n%s\n%s", first, again)
+		}
+	}
+	var tools []struct{ Name string }
+	json.Unmarshal(mustMarshal(dynamicTools(c)), &tools)
+	if len(tools) != 1 || tools[0].Name != "echo" {
+		t.Fatalf("only model-facing tools are offered: %+v", tools)
+	}
+	for _, name := range []string{"agent", "codex", "system.narrow", "a-tool"} {
+		if offered(c, name) {
+			t.Fatalf("%s is in reach but must not be offered to the model", name)
+		}
+	}
+	if !offered(c, "echo") || offered(continuation{Tools: map[string]*schema{}}, "echo") {
+		t.Fatal("echo is offered only when it is in reach")
+	}
+}
+
+func mustMarshal(v any) []byte { b, _ := json.Marshal(v); return b }

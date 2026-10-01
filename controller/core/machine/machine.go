@@ -268,68 +268,87 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 }
 
 // interpret derives the state from the emitter's operands (thought 14). An
-// emitter supplies only which capability (optionally) and a payload:
+// emitter supplies only an address and a payload:
 //
-//	{"to": "<capability>", "payload": <JSON>}   addressed
-//	anything else                               unaddressed: its text is the payload for reply
+//	{"to": "<address>", "payload": <JSON>}
 //
-// It never says whether that is a call or a return. The runtime derives it:
+// It never says whether that is a call or a return. The runtime derives it
+// from where the emitter stands (improvements, items 1 and 2):
 //
-//	names a capability in reach, payload fits its input contract   → invoke
-//	names reply, or nothing, payload fits the return contract      → return
-//	not readable as operands                                       → fault (malformed)
-//	names a capability outside the Horizon                         → fault (horizon)
-//	payload does not fit the contract of what it names             → fault (contract)
+//	addresses the slot its frame discharges, payload fits its output contract   → return
+//	names a capability in reach, payload fits its input contract                → invoke
+//	names anything else                                                         → fault (horizon)
+//	addresses nothing                                                           → fault (leaf)
+//	not readable as operands                                                    → fault (malformed)
+//	payload does not fit the contract of what it addresses                      → fault (contract)
 //
-// It is total and pure, so replay derives the same state again.
+// No name is reserved: the slot is the frame's id, a stamp no capability can
+// be named. Every fault carries, as its payload, the observation of why it
+// faulted. It is total and pure, so replay derives the same state again.
 func interpret(h horizon.Horizon, out []byte) record.Record {
 	if len(out) == 0 {
-		return faulted(record.Custody, "no output")
+		return faulted(record.Custody, "no output", nil)
 	}
 	if !utf8.Valid(out) {
-		return faulted(record.Malformed, "output is not UTF-8 text")
+		return faulted(record.Malformed, "output is not UTF-8 text", nil)
 	}
-	to, payload := "reply", any(string(out))
-	if v, err := contract.Decode(out); err == nil {
-		if o, ok := v.(map[string]any); ok {
-			if _, addressed := o["to"]; addressed {
-				name, ok := o["to"].(string)
-				p, hasPayload := o["payload"]
-				if !ok || !hasPayload || len(o) != 2 {
-					return faulted(record.Malformed, `addressed output must be exactly {"to": <capability>, "payload": <JSON>}`)
-				}
-				to, payload = name, p
-			}
-		}
+	printed := contract.Canonical(string(out))
+	v, err := contract.Decode(out)
+	o, isObject := v.(map[string]any)
+	if _, addressed := o["to"]; err != nil || !isObject || !addressed {
+		return faulted(record.Leaf, "output addresses nothing", printed)
 	}
-	if to == "reply" {
-		if h.Surface == nil {
-			return faulted(record.Horizon, "the operator holds no reply")
-		}
+	to, isName := o["to"].(string)
+	payload, hasPayload := o["payload"]
+	if !isName || !hasPayload || len(o) != 2 {
+		return faulted(record.Malformed, `addressed output must be exactly {"to": <address>, "payload": <JSON>}`, printed)
+	}
+	attempt := contract.Canonical(o)
+	if h.Surface != nil && to == h.Frame {
 		if err := contract.Fits(h.Surface.Output, payload); err != nil {
-			return faulted(record.Contract, "reply: "+err.Error())
+			return faulted(record.Contract, "return: "+err.Error(), attempt)
 		}
 		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
 	}
 	target, ok := h.Reach[to]
+	if g, isRef := h.Refs[to]; isRef && !ok {
+		target, ok = h.Reach[g.Actor]
+	}
 	if !ok {
-		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to))
+		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
 	if err := contract.Fits(target.Input, payload); err != nil {
-		return faulted(record.Contract, to+": "+err.Error())
+		return faulted(record.Contract, to+": "+err.Error(), attempt)
+	}
+	if target.System == "narrow" {
+		if _, err := narrowing(h, contract.Canonical(payload)); err != nil {
+			return faulted(record.Horizon, to+": "+err.Error(), attempt)
+		}
 	}
 	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
 }
 
-func faulted(kind, cause string) record.Record {
-	return record.Record{State: record.Fault, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
+// faulted is an intake fault. Its payload is the observation it was derived
+// from, so the parent can pass it on (next/24, "Faults carry their observation").
+func faulted(kind, cause string, observation json.RawMessage) record.Record {
+	return record.Record{State: record.Fault, Payload: observation, Fault: &record.FaultInfo{Kind: kind, Cause: cause}}
 }
 
-// accept is the child's half of Release, for every state: the Horizon must be
-// for this commit and come with its whole frame stack, or the instance stops.
+// accept is the child's half of Release, for every state: the Horizon it
+// looked up must be for this commit, must be exactly what this commit derives
+// from the Horizon it was emitted under, and must come with its whole frame
+// stack, or the instance stops. Authority is derived, never taken on trust
+// (next/24): the id is only a handle.
 func accept(s Instance, e Released) error {
 	if e.Self.Stamp != s.Stamp {
 		return errors.New("release is not for this commit")
+	}
+	want, err := Narrow(s.Under, s.R, s.Stamp)
+	if err != nil {
+		return fmt.Errorf("release cannot be derived: %w", err)
+	}
+	if a, b := encode(want), encode(e.Self); a != b {
+		return errors.New("release is not what this commit derives")
 	}
 	if e.Frames != e.Self.Depth() {
 		return fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, e.Self.Depth())
@@ -338,6 +357,11 @@ func accept(s Instance, e Released) error {
 		return errors.New("too many custody resources")
 	}
 	return nil
+}
+
+func encode(h horizon.Horizon) string {
+	b, _ := json.Marshal(h)
+	return string(b)
 }
 
 // 2. Release, invoke: accept the Horizon and run exactly the committed
@@ -350,13 +374,17 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	s.Self, s.Phase = e.Self, Execute
 	s.Resources = append([]horizon.Resource(nil), e.Resources...)
+	if e.Self.Surface.System != "" {
+		// A facet of the room: nothing runs; its result is derived.
+		return execute(s, Emitted{Out: runFacet(s)})
+	}
 	if e.Self.Surface.Host != "" {
 		// An async surface: nothing runs here. The host takes custody and
 		// resumes this instance, in Execute, with the event as the output.
 		return s, []Effect{Park{Host: e.Self.Surface.Host, Payload: s.R.Payload}}
 	}
 	stdin := []byte(s.R.Payload)
-	if !e.Self.Surface.Leaf() {
+	if e.Self.Surface.Continuation {
 		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
 	}
 	if e.Self.Surface.Resident {
@@ -450,35 +478,51 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 }
 
 // Narrow computes the child's Horizon from the parent's and the child's
-// record. An invoke opens a new frame, waited on by the parent as it is now;
-// the child is granted what its surface asks for, and only if the parent holds
-// it. A return or fault reaches nothing: it discharges the parent's slot.
+// record. Every call shares its caller's Horizon (next/24): the child runs
+// with the same reach, references and grants. Nothing about the callee
+// narrows them; a narrowing is requested, through the room (next/26):
+//
+//	invoke system.narrow   the caller's Horizon, and the waiting caller is
+//	                       recorded as holding a new reference: the grant
+//	                       its payload derives, named by this invoke's stamp
+//	invoke a reference     the actor, under the narrowed Horizon it names
+//
+// An invoke opens a new frame for the child, waited on by the parent as it is
+// now. A return or fault runs nothing: it discharges the parent's slot.
 func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
 	switch r.State {
 	case record.Return, record.Fault:
-		return horizon.Horizon{Stamp: stamp, Reach: map[string]horizon.Surface{}, Frame: parent.Frame, Resume: parent.Resume}, nil
+		return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: parent.Frame, Resume: parent.Resume}, nil
 	case record.Invoke:
 	default:
 		return horizon.Horizon{}, fmt.Errorf("no Horizon for a record in a state of %s", r.State)
+	}
+	waiter := parent
+	if g, isRef := parent.Refs[r.To]; isRef {
+		if _, named := parent.Reach[r.To]; !named {
+			s, ok := parent.Reach[g.Actor]
+			if !ok {
+				return horizon.Horizon{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
+			}
+			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Frame: stamp, Resume: &waiter}, nil
+		}
 	}
 	s, ok := parent.Reach[r.To]
 	if !ok {
 		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
-	reach := map[string]horizon.Surface{}
-	for _, name := range s.Reach {
-		if granted, ok := parent.Reach[name]; ok {
-			if limit, narrowed := s.Delegate[name]; narrowed {
-				if !granted.Authority.Allows(limit) {
-					return horizon.Horizon{}, fmt.Errorf("%q delegates authority outside %q's grant", r.To, name)
-				}
-				granted.Authority = limit
-			}
-			reach[name] = granted
+	if s.System == "narrow" {
+		g, err := narrowing(parent, r.Payload)
+		if err != nil {
+			return horizon.Horizon{}, err
 		}
+		refs := map[string]horizon.Grant{stamp: g}
+		for name, held := range parent.Refs {
+			refs[name] = held
+		}
+		waiter.Refs = refs
 	}
-	waiter := parent
-	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: reach, Frame: stamp, Resume: &waiter}, nil
+	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
 }
 
 // 5. Settle: accept the Horizon, whose first frame is the slot this record
@@ -565,15 +609,18 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 
 // runOf is the Run effect for a Horizon: its surface, under the sandbox the
 // Horizon renders to, with an environment that names only the sockets its
-// surface was granted.
+// surface was granted, and the slot it returns to.
 func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
-	env := []string{"PATH=/usr/bin:/bin"}
-	for _, sock := range h.Surface.Authority.Connect {
+	// A target returns by addressing the slot its frame discharges. Being told
+	// it is information, not authority: intake derives the return from the
+	// emitter's own Horizon, whatever the target believes.
+	env := []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=" + h.Frame}
+	for _, sock := range h.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}
 	// A target is told where its read grants are, as PATH lists directories.
 	// This is information, not authority: the rendered profile enforces them.
-	if reads := h.Surface.Authority.Read; len(reads) > 0 {
+	if reads := h.Authority.Read; len(reads) > 0 {
 		paths := reads[0].Path
 		for _, grant := range reads[1:] {
 			paths += ":" + grant.Path
@@ -604,10 +651,16 @@ func resourceOwner(h horizon.Horizon) string {
 
 // tools is what a continuation is shown: the input contract of everything in
 // its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
+// Which of them a model is offered is the adapter's choice, not the runtime's.
 func tools(h horizon.Horizon) map[string]*contract.Schema {
 	t := map[string]*contract.Schema{}
 	for name, s := range h.Reach {
 		t[name] = s.Input
+	}
+	for ref, g := range h.Refs {
+		if s, ok := h.Reach[g.Actor]; ok {
+			t[ref] = s.Input
+		}
 	}
 	return t
 }
