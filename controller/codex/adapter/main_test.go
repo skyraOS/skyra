@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,23 @@ func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 	}
 	if !offered(c, "echo") || offered(continuation{Tools: map[string]*schema{}}, "echo") {
 		t.Fatal("echo is offered only when it is in reach")
+	}
+	// system.route is offered as system_route when it is in reach (next/30).
+	c.Tools["system.route"] = &schema{Type: "object"}
+	json.Unmarshal(mustMarshal(dynamicTools(c)), &tools)
+	if len(tools) != 2 || tools[0].Name != "echo" || tools[1].Name != "system_route" || offered(c, "system.route") {
+		t.Fatalf("system.route is offered by a name without dots: %+v", tools)
+	}
+}
+
+// A novel step's tool result carries the route contract, after the value.
+func TestANovelStepCarriesTheRouteContract(t *testing.T) {
+	r := toolResult(json.RawMessage(`1`), "return", json.RawMessage(`"hi"`), nil)
+	novel(r, 0, "echo → string", json.RawMessage(`{"faults":[]}`))
+	items := r["result"].(map[string]any)["contentItems"].([]any)
+	text := items[1].(map[string]string)["text"]
+	if len(items) != 2 || items[0].(map[string]string)["text"] != "hi" || !strings.Contains(text, "echo → string") || !strings.Contains(text, `{"faults":[]}`) || !strings.Contains(text, `"step": 0`) {
+		t.Fatalf("%+v", items)
 	}
 }
 

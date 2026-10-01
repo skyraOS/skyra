@@ -230,6 +230,20 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err := tree.RecordRun(root, x.Key.ID(), x.Input, x.Output); err != nil {
 					return s, err
 				}
+			case machine.LoadRuns:
+				var err error
+				if e, err = loadRuns(root, x.Key); err != nil {
+					return s, err
+				}
+			case machine.PutRoute:
+				if _, err := tree.Put(root, "routes", x.Source); err != nil {
+					return s, err
+				}
+				entry, _ := json.Marshal(x.Entry)
+				if err := tree.PutRoute(root, x.Key.ID(), entry); err != nil {
+					return s, err
+				}
+				trace.Logf("route    recorded for %s → %s", x.Key.Binding, record.Short(x.Entry.Source))
 			case machine.TryClaim:
 				won, err := tree.Claim(stack[1], x.Round, x.Stamp)
 				if err != nil {
@@ -337,6 +351,28 @@ func lookupRoute(root string, x machine.LookupRoute) (machine.Event, error) {
 		}
 	}
 	return looked, nil
+}
+
+// loadRuns reads every route run recorded under a key: the log a rewritten
+// route is tested against (next/30, F8).
+func loadRuns(root string, key machine.RouteKey) (machine.Event, error) {
+	runs, err := tree.Runs(root, key.ID())
+	if err != nil {
+		return nil, err
+	}
+	var loaded machine.RunsLoaded
+	for _, r := range runs {
+		in, err := tree.Get(root, "inputs", r[0])
+		if err != nil {
+			return nil, err
+		}
+		out, err := tree.Get(root, "inputs", r[1])
+		if err != nil {
+			return nil, err
+		}
+		loaded.Runs = append(loaded.Runs, machine.RecordedRun{Input: in, Output: out})
+	}
+	return loaded, nil
 }
 
 // run performs a Run effect: check the binary's content hash, run it under

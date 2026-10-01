@@ -66,6 +66,7 @@ type Instance struct {
 	Gathered  *Settled           // the waiter's rounds, while its round is routed
 	Routing   *RouteRun          // how the round's discharge is routed, while it is
 	Sending   bool               // the claim's winner emits Next, a route's send, instead of resuming the waiter
+	Writing   *Writing           // system.route: the route being written, while it is tested against the log
 }
 
 type Phase string
@@ -79,6 +80,9 @@ const (
 	Lookup  Phase = "lookup"  // a returned discharge is routed: waiting for its route (next/30)
 	Route   Phase = "route"   // the route runner is running: waiting for its decision
 	Claim   Phase = "claim"   // a resolve was committed; waiting for the fan-in claim
+	Facet   Phase = "facet"   // system.route: waiting for the caller's rounds
+	Cases   Phase = "cases"   // system.route: waiting for the recorded runs of the route's key
+	Retest  Phase = "retest"  // system.route: the runner reruns a recorded case under the new source
 	Done    Phase = "done"
 )
 
@@ -113,8 +117,9 @@ type Settled struct { // → Gather: the waiting frame's record and every round 
 	Frame  record.Record
 	Rounds []Round
 }
-type Claimed struct{ Won bool } // → Claim: whether this instance won the fan-in claim
-type RouteLooked struct {       // → Lookup: the route recorded for the key, and the declared one (nil: none)
+type Claimed struct{ Won bool }              // → Claim: whether this instance won the fan-in claim
+type RunsLoaded struct{ Runs []RecordedRun } // → Cases: every run recorded under a key
+type RouteLooked struct {                    // → Lookup: the route recorded for the key, and the declared one (nil: none)
 	Recorded []byte
 	Declared []byte
 }
@@ -145,6 +150,7 @@ func (Stamped) event()     {}
 func (Settled) event()     {}
 func (Claimed) event()     {}
 func (RouteLooked) event() {}
+func (RunsLoaded) event()  {}
 func (Parked) event()      {}
 
 // Effects are what Step asks the shell to do, in order. SendStamp, Run,
@@ -186,6 +192,12 @@ type LookupRoute struct {                   // the route for a key, recorded or 
 	Key      RouteKey
 	Declared string
 }
+type LoadRuns struct{ Key RouteKey } // every run recorded under a key, then wait for RunsLoaded
+type PutRoute struct {               // store a route's source and record it under its key
+	Key    RouteKey
+	Source []byte
+	Entry  RouteEntry
+}
 type RecordRun struct { // index a route run under its key: the log is the test suite (F8)
 	Key           RouteKey
 	Input, Output string
@@ -211,6 +223,8 @@ func (GatherWaiter) effect()  {}
 func (TryClaim) effect()      {}
 func (LookupRoute) effect()   {}
 func (RecordRun) effect()     {}
+func (LoadRuns) effect()      {}
+func (PutRoute) effect()      {}
 func (Pop) effect()           {}
 func (Park) effect()          {}
 func (Exit) effect()          {}
@@ -228,11 +242,22 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 	switch s.State {
 	case record.Invoke, record.Resolve:
 		switch ev := e.(type) {
+		case Settled:
+			if s.Phase == Facet {
+				return writeRoute(s, ev)
+			}
+		case RunsLoaded:
+			if s.Phase == Cases {
+				return retest(s, ev)
+			}
 		case Released:
 			if s.Phase == Release && s.State == record.Invoke {
 				return release(s, ev)
 			}
 		case Emitted:
+			if s.Phase == Retest {
+				return retested(s, ev)
+			}
 			if s.Phase == Execute {
 				return execute(s, ev)
 			}
@@ -412,6 +437,11 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	s.Self, s.Phase = e.Self, Execute
 	s.Resources = append([]horizon.Resource(nil), e.Resources...)
+	if e.Self.Surface.System == "route" {
+		// system.route reads the caller's rounds to resolve the step it names.
+		s.Phase = Facet
+		return s, []Effect{GatherWaiter{}}
+	}
 	if e.Self.Surface.System != "" {
 		// A facet of the room: nothing runs; its result is derived.
 		return execute(s, Emitted{Out: runFacet(s)})
@@ -747,6 +777,7 @@ type Continuation struct {
 	Input json.RawMessage             `json:"input"`
 	Tools map[string]*contract.Schema `json:"tools"`
 	Steps []StepView                  `json:"steps"`
+	Route *RouteContract              `json:"route,omitempty"` // when a step is novel: what a route may test and decide (next/30)
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -787,6 +818,10 @@ func continuation(e Settled, waiter horizon.Horizon, current *RouteRun) []byte {
 				viewed(&v, waiter, child, *closed)
 			}
 			c.Steps = append(c.Steps, v)
+			if v.Interrupt == Novelty && c.Route == nil {
+				rc := routeContract(waiter)
+				c.Route = &rc
+			}
 		}
 	}
 	b, _ := json.Marshal(c)

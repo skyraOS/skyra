@@ -61,7 +61,7 @@ func main() {
 					} `json:"contentItems"`
 				}
 				_ = json.Unmarshal(m.Result, &result)
-				if len(result.ContentItems) == 1 {
+				if len(result.ContentItems) >= 1 { // a novel step's route contract is a second item
 					complete(t, "tool:"+result.ContentItems[0].Text)
 				}
 			}

@@ -31,6 +31,13 @@ const (
 	// shown it: the runtime runs it, under an empty Horizon, when a return is
 	// routed.
 	RouteRunner = "system.route-runner"
+	// RouteFacet records a route (next/30): the caller names a step it was
+	// shown, never a hash, and the runtime binds the source to that step's
+	// type. It is tested against every recorded run of the type first (F8).
+	//
+	//	{"to": "system.route", "payload": {"step": <index into steps>, "source": "<starlark>", "accept": [<case>, ...]}}
+	//	   → returns {"ok": true, "flips": [...]}, {"ok": false, "flips": [...]} or {"ok": false, "error": "..."}
+	RouteFacet = "system.route"
 )
 
 // Runner is the route runner's surface, pinned by the runtime: its binary and
@@ -51,11 +58,17 @@ var (
 		}},
 	}}
 	narrowOut = &contract.Schema{Type: "object", Required: []string{"reference"}, Fields: map[string]*contract.Schema{"reference": str}}
+	routeIn   = &contract.Schema{Type: "object", Required: []string{"step", "source"}, Fields: map[string]*contract.Schema{
+		"step": {Type: "number"}, "source": str, "accept": {Type: "array", Items: &contract.Schema{Type: "number"}},
+	}}
 )
 
 // RoomFacets are the room's facets, as surfaces genesis puts in the root reach.
 func RoomFacets() map[string]horizon.Surface {
-	return map[string]horizon.Surface{NarrowFacet: {System: "narrow", Input: narrowIn, Output: narrowOut}}
+	return map[string]horizon.Surface{
+		NarrowFacet: {System: "narrow", Input: narrowIn, Output: narrowOut},
+		RouteFacet:  {System: "route", Input: routeIn}, // its result carries returns: no output contract (F9)
+	}
 }
 
 // narrowing derives the Grant a system.narrow payload asks for under h, or

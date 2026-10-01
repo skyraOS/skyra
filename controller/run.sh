@@ -51,6 +51,7 @@ scenario "route: send echo's answer on, then interrupt"  -to relay  -payload '{"
 scenario "route: refuse echo's answer"                   -to refuse -payload '{"text":"hello"}'
 scenario "route: a send outside the agent's reach"       -to astray -payload '{"text":"hello"}'
 scenario "route: sends in a row end at the chain's depth" -to loop  -payload '{"text":"hello"}'
+scenario "route: the agent writes a route at its novelty interrupt" -to agent -payload '{"text":"route:hello"}'
 scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'

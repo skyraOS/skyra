@@ -10,6 +10,11 @@
 // With text "narrow:<text>", it first asks the room for echo under a narrowed
 // Horizon (no reach, no grants), then asks echo through the reference it got
 // back (next/26).
+//
+// With text "route:<text>", it writes a route at its novelty interrupt
+// (next/30): echo's first return is novel, so it records a route that wakes
+// it only when echo's answer changed, and sends an unchanged answer on
+// instead. Then it asks echo the same thing again.
 package main
 
 import (
@@ -25,15 +30,24 @@ type continuation struct {
 		Text string `json:"text"`
 	} `json:"input"`
 	Steps []struct {
-		To    string          `json:"to"`
-		State string          `json:"state"`
-		Value json.RawMessage `json:"value"`
-		Fault *struct {
+		To        string          `json:"to"`
+		State     string          `json:"state"`
+		Value     json.RawMessage `json:"value"`
+		Interrupt string          `json:"interrupt"`
+		Fault     *struct {
 			Kind  string `json:"kind"`
 			Cause string `json:"cause"`
 		} `json:"fault"`
 	} `json:"steps"`
 }
+
+// unchanged is the route the agent writes for echo: interrupt when the answer
+// changed, otherwise send it on to echo, marked, so it is not delivered as is.
+const unchanged = `def route():
+    if skyra.changed("$"):
+        return skyra.interrupt()
+    return skyra.send("echo", {"text": "unchanged: " + skyra.get("$")})
+`
 
 func main() {
 	var c continuation
@@ -42,6 +56,20 @@ func main() {
 		os.Exit(1)
 	}
 	narrowed, isNarrow := strings.CutPrefix(c.Input.Text, "narrow:")
+	routed, isRoute := strings.CutPrefix(c.Input.Text, "route:")
+	if isRoute {
+		switch {
+		case len(c.Steps) == 0:
+			emit("echo", map[string]string{"text": routed})
+			return
+		case len(c.Steps) == 1 && c.Steps[0].Interrupt == "novelty":
+			emit("system.route", map[string]any{"step": 0, "source": unchanged})
+			return
+		case len(c.Steps) == 2:
+			emit("echo", map[string]string{"text": routed})
+			return
+		}
+	}
 	if len(c.Steps) == 0 && isNarrow {
 		emit("system.narrow", map[string]any{"actor": "echo", "reach": []string{}, "authority": map[string]any{}})
 		return
