@@ -36,6 +36,8 @@ func intakeRecord(h horizon.Horizon, in string) record.Record {
 func TestInterpret(t *testing.T) {
 	numeric := leaf
 	numeric.Surface = &horizon.Surface{Path: "/bin/n", Input: echoIn, Output: &contract.Schema{Type: "number"}}
+	untyped := leaf
+	untyped.Surface = &horizon.Surface{Path: "/bin/u", Input: echoIn}
 	cases := []struct {
 		name    string
 		under   horizon.Horizon
@@ -58,6 +60,7 @@ func TestInterpret(t *testing.T) {
 		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", `{"payload":{"txt":"x"},"to":"echo"}`, record.Contract, `unknown field "txt"`},
 		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", `{"payload":{},"to":"echo"}`, record.Contract, `missing required field "text"`},
 		{"return does not fit", numeric, `{"to":"r1","payload":"hello"}`, record.Fault, "", `{"payload":"hello","to":"r1"}`, record.Contract, "return: want a number"},
+		{"no output contract: any return", untyped, `{"to":"r1","payload":{"any":["thing"]}}`, record.Return, "", `{"any":["thing"]}`, "", ""},
 		{"address without payload", operator, `{"to":"echo"}`, record.Fault, "", `"{\"to\":\"echo\"}"`, record.Malformed, "exactly"},
 		{"address with extra fields", operator, `{"to":"echo","payload":{},"x":1}`, record.Fault, "", `"{\"to\":\"echo\",\"payload\":{},\"x\":1}"`, record.Malformed, "exactly"},
 		{"address is not a name", operator, `{"to":7,"payload":{}}`, record.Fault, "", `"{\"to\":7,\"payload\":{}}"`, record.Malformed, "exactly"},

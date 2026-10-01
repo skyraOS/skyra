@@ -48,7 +48,7 @@ type Entry struct {
 // and how it reads its input. Nothing about what it may reach.
 type Declared struct {
 	Input        *contract.Schema `json:"input"`
-	Output       *contract.Schema `json:"output"`
+	Output       *contract.Schema `json:"output,omitempty"` // optional (next/30, F9)
 	Continuation bool             `json:"continuation,omitempty"`
 }
 
@@ -113,8 +113,10 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if err := d.Input.Check(); err != nil {
 			return nil, room, fmt.Errorf("%s input contract: %w", name, err)
 		}
-		if err := d.Output.Check(); err != nil {
-			return nil, room, fmt.Errorf("%s output contract: %w", name, err)
+		if d.Output != nil { // optional: a return's type is computed from it (next/30)
+			if err := d.Output.Check(); err != nil {
+				return nil, room, fmt.Errorf("%s output contract: %w", name, err)
+			}
 		}
 		if e.Host != "" {
 			if e.Path != "" || e.Resident || e.Connection || len(e.Args) > 0 || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
