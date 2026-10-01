@@ -1,6 +1,6 @@
 # 26 — Agents and facets: proposal
 
-Status (2026-09-30): **Implemented in part.** D1 (`system.narrow` only), D2 and D3 (for `system.narrow`'s reference only) built (`8ba6f4c`). The c-list decision was taken as proposed, but a reference is written as the narrow invoke's stamp, not `<horizon id>/<facet>/<contract>`. **Not built:** `system.register`, the admin facet, D4, D5, D6.
+Status (2026-09-30): **Implemented in part.** D1 (`system.narrow` only), D2 and D3 (for `system.narrow`'s reference only) built (`8ba6f4c`). The c-list decision was taken as proposed, but a reference is written as a name, `system.ref.<n>` (it was the narrow invoke's stamp until next/30's F1: hashes never reach a model), not `<horizon id>/<facet>/<contract>`. **Not built:** `system.register`, the admin facet, D4, D5, D6.
 
 The implementation plan for [26](../26-agents-and-facets.md). Ids refer to
 the [list](README.md). After 24 and 25's C1–C3.

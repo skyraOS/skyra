@@ -484,7 +484,7 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 //
 //	invoke system.narrow   the caller's Horizon, and the waiting caller is
 //	                       recorded as holding a new reference: the grant
-//	                       its payload derives, named by this invoke's stamp
+//	                       its payload derives, named system.ref.<n>
 //	invoke a reference     the actor, under the narrowed Horizon it names
 //
 // An invoke opens a new frame for the child, waited on by the parent as it is
@@ -516,7 +516,7 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 		if err != nil {
 			return horizon.Horizon{}, err
 		}
-		refs := map[string]horizon.Grant{stamp: g}
+		refs := map[string]horizon.Grant{refName(parent.Refs): g}
 		for name, held := range parent.Refs {
 			refs[name] = held
 		}

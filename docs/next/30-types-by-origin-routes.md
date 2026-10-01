@@ -137,6 +137,23 @@ shown today, to be audited (F1):
 | the novelty interrupt | the return's type | the model writing the route: shown as its presentation |
 | observations by hash (21) | observation hashes | whoever passes them on |
 
+### The audit (F1, 2026-10-01)
+
+Every place a hash reaches a model or an external actor today, read from the
+code, with a fix or an accepted exception:
+
+| Where | What crosses | To whom | Verdict |
+|---|---|---|---|
+| `machine.runOf`: `SKYRA_FRAME` | the frame id | every target's environment (a worker) | **Accepted.** A target addresses its return with it. `echo`, `codex/io` and `read` copy it into `to`, which the runtime reads, never a model |
+| `Continuation.Frame` | the frame id | a continuation's stdin (a worker) | **Accepted.** `targets/agent` and `targets/user` use it only as the `to` of their return. `codex/adapter` and `codex/resident` do not put it in the turn input (that is `input.text`) or in a tool result |
+| `codex/adapter`, `codex/resident`: JSON-RPC ids | `<frame>:thread`, `<frame>:turn`, `<frame>:tool:<n>`, `<frame>:interrupt` | the Codex app-server (an external actor) | **Accepted exception.** They are protocol correlation ids, and the actor host dedups deliveries by them, so they must be unique per frame and stable across a resumed step. The app-server echoes them in responses and does not put them in the model's context. To fix with 29's actor state, where the host can map ids |
+| `system.narrow`: the reference | was the invoke's stamp | the continuation, as a step's value and a tool name (`Continuation.Tools`) | **Fixed.** A reference is now named `system.ref.<n>`, a counter in the runtime's namespace, unique in the Horizon that holds it |
+| `StepView.Value`, `StepView.Fault` | a child's return, and fault causes | a continuation; Codex's tool results | **Accepted.** No runtime-authored cause quotes a stamp. A return can carry a hash only if a target put one there, and the only one that did was the reference, now fixed |
+| `codex/resident` start: `profile`, `incarnation` | the profile's sha256; a pid-and-time label | the caller's step value (`targets/user`, a worker) | **Accepted.** Not forwarded to the model: `targets/user` shows the human text only |
+| `hosts/web`: `calls[].stamp`, parked frame ids | invoke and fault stamps | the browser (the human, outside the boundary) | **Accepted exception.** The human is not a model, and the page keys its calls by stamp. Recorded: the page is outside the boundary |
+| observation hashes in payloads (21) | — | — | **None passed today.** No target or adapter puts an observation hash in a payload |
+| the novelty interrupt, the route contract (F7) | — | the model writing a route | **By construction:** a presentation, step indexes and names. A test asserts no 64-hex string appears in a `route` field |
+
 Hashes inside a payload are references to observations already recorded (21).
 The type of what a reference points at was fixed when it was recorded; the
 actor can pass it on, not change it.

@@ -87,12 +87,25 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 }
 
 // runFacet is what a facet of the room emits when it runs: nothing executes,
-// the result is derived. system.narrow returns the reference, which is the
-// stamp of its own invoke: unique, and meaningful only in the reach it was
+// the result is derived. system.narrow returns the reference: the name the
+// waiting caller now holds it under, meaningful only in the reach it was
 // recorded into.
 func runFacet(s Instance) []byte {
-	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": map[string]string{"reference": s.Stamp}})
+	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": map[string]string{"reference": refName(s.Self.Refs)}})
 	return out
+}
+
+// refName names the next reference a Horizon holding refs receives. It is a
+// counter, not the invoke's stamp, because a continuation is shown its
+// references and hashes never reach a model (next/30). It is in the runtime's
+// namespace, which no registry may name, so it never shadows a surface.
+func refName(refs map[string]horizon.Grant) string {
+	for n := len(refs) + 1; ; n++ {
+		name := fmt.Sprintf("%sref.%d", SystemPrefix, n)
+		if _, held := refs[name]; !held {
+			return name
+		}
+	}
 }
 
 // kept is a reach restricted to the names a grant keeps.

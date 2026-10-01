@@ -30,7 +30,7 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 		t.Fatalf("system.narrow is invoked like any capability: %+v", s.R)
 	}
 	facet := selfOf(t, s)
-	ref := s.Stamp
+	ref := "system.ref.1" // a name, never the invoke's stamp: a continuation is shown it (next/30)
 	if g := facet.Resume.Refs[ref]; g.Actor != "echo" || len(g.Reach) != 0 || !reflect.DeepEqual(g.Authority, horizon.Authority{}) {
 		t.Fatalf("the waiting caller is recorded as holding the reference: %+v", facet.Resume.Refs)
 	}
@@ -83,7 +83,7 @@ func TestNarrowingCannotWiden(t *testing.T) {
 		"a name not in reach":           {`{"to":"system.narrow","payload":{"actor":"echo","reach":["shell"]}}`, `keeps "shell"`},
 		"an actor not in reach":         {`{"to":"system.narrow","payload":{"actor":"shell"}}`, `"shell" is not an actor`},
 		"the room itself":               {`{"to":"system.narrow","payload":{"actor":"system.narrow"}}`, "not an actor"},
-		"a reference never recorded":    {`{"to":"` + strings.Repeat("a", 64) + `","payload":{"text":"x"}}`, "not in reach"},
+		"a reference never recorded":    {`{"to":"system.ref.1","payload":{"text":"x"}}`, "not in reach"},
 	} {
 		r := intakeRecord(root, c.in)
 		if r.State != record.Fault || r.Fault.Kind != record.Horizon || !strings.Contains(r.Fault.Cause, c.cause) {
