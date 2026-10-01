@@ -95,3 +95,25 @@ func TestNarrowingCannotWiden(t *testing.T) {
 		t.Fatalf("a subset of the Horizon may be kept: %+v", r.Fault)
 	}
 }
+
+// The route runner is the runtime's: in reach, so every Horizon carries it,
+// but never invocable, never shown as a tool, and kept by every narrowing.
+func TestTheRouteRunnerIsTheRuntimes(t *testing.T) {
+	root := operator
+	root.Reach = map[string]horizon.Surface{"echo": echoS, RouteRunner: Runner("/bin/route", "r")}
+	for name, facet := range RoomFacets() {
+		root.Reach[name] = facet
+	}
+	if r := intakeRecord(root, `{"to":"system.route-runner","payload":{}}`); r.State != record.Fault || r.Fault.Kind != record.Horizon {
+		t.Fatalf("the runner cannot be invoked: %+v", r)
+	}
+	if _, shown := tools(root)[RouteRunner]; shown {
+		t.Fatal("the runner is no one's tool")
+	}
+	if r := intakeRecord(root, `{"to":"system.narrow","payload":{"actor":"system.route-runner"}}`); r.State != record.Fault {
+		t.Fatalf("the runner cannot be narrowed to: %+v", r)
+	}
+	if k := kept(root.Reach, nil); k[RouteRunner].System != "runner" || len(k) != 1 {
+		t.Fatalf("a narrowing keeps the runner: %v", k)
+	}
+}

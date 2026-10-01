@@ -46,6 +46,9 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
 		reach[name] = facet
 	}
+	if runner, ok := routeRunner(); ok { // pinned by the runtime, never by the registry
+		reach[machine.RouteRunner] = runner
+	}
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
 	// operator, and everything under it shares them until a narrowing. It is
@@ -127,6 +130,25 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 		fmt.Printf("answer: fault (%s): %s\n", out.Discharge.Fault.Kind, out.Discharge.Fault.Cause)
 	}
 	return out, nil
+}
+
+// routeRunner pins the route runner (next/30): the route binary beside the
+// skyra binary, by content hash. Without one, no route can run, and a
+// route that exists is a fault decision.
+func routeRunner() (horizon.Surface, bool) {
+	self, err := os.Executable()
+	if err != nil {
+		return horizon.Surface{}, false
+	}
+	path, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(self), "route"))
+	if err != nil {
+		return horizon.Surface{}, false
+	}
+	bin, err := os.ReadFile(path)
+	if err != nil {
+		return horizon.Surface{}, false
+	}
+	return machine.Runner(path, record.Sum(bin)), true
 }
 
 // wait blocks until the operator's frame is discharged, woken by the

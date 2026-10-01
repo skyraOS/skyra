@@ -25,7 +25,19 @@ import (
 const (
 	SystemPrefix = "system."
 	NarrowFacet  = "system.narrow"
+	// RouteRunner is the route runner (next/30): a runtime-owned surface with a
+	// binary, since it runs Starlark. It sits in the room's reach so every
+	// Horizon carries it, but nothing may invoke it and no continuation is
+	// shown it: the runtime runs it, under an empty Horizon, when a return is
+	// routed.
+	RouteRunner = "system.route-runner"
 )
+
+// Runner is the route runner's surface, pinned by the runtime: its binary and
+// that binary's sha256. No registry may name it.
+func Runner(path, sha256 string) horizon.Surface {
+	return horizon.Surface{Path: path, SHA256: sha256, System: "runner"}
+}
 
 var (
 	str      = &contract.Schema{Type: "string"}
@@ -108,9 +120,14 @@ func refName(refs map[string]horizon.Grant) string {
 	}
 }
 
-// kept is a reach restricted to the names a grant keeps.
+// kept is a reach restricted to the names a grant keeps. The route runner is
+// always kept: it grants nothing, and without it the actor's own children
+// could never be routed.
 func kept(reach map[string]horizon.Surface, names []string) map[string]horizon.Surface {
 	out := map[string]horizon.Surface{}
+	if r, ok := reach[RouteRunner]; ok {
+		out[RouteRunner] = r
+	}
 	for _, name := range names {
 		if s, ok := reach[name]; ok {
 			out[name] = s

@@ -317,6 +317,9 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 	if !ok {
 		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
+	if target.System == "runner" {
+		return faulted(record.Horizon, fmt.Sprintf("%q is the runtime's: only it runs routes", to), attempt)
+	}
 	if err := contract.Fits(target.Input, payload); err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
 	}
@@ -650,12 +653,15 @@ func resourceOwner(h horizon.Horizon) string {
 }
 
 // tools is what a continuation is shown: the input contract of everything in
-// its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
+// its reach but the route runner. What it sees is exactly what it may invoke
+// (frame ⊆ authority).
 // Which of them a model is offered is the adapter's choice, not the runtime's.
 func tools(h horizon.Horizon) map[string]*contract.Schema {
 	t := map[string]*contract.Schema{}
 	for name, s := range h.Reach {
-		t[name] = s.Input
+		if s.System != "runner" { // the runtime runs it; it is no one's tool
+			t[name] = s.Input
+		}
 	}
 	for ref, g := range h.Refs {
 		if s, ok := h.Reach[g.Actor]; ok {
