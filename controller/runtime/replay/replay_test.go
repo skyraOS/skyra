@@ -15,8 +15,7 @@ import (
 )
 
 var echoS = horizon.Surface{Path: "/bin/echo-target", SHA256: "e",
-	Input:  &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": {Type: "string"}}},
-	Output: &contract.Schema{Type: "string"}}
+	Input: &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": {Type: "string"}}}}
 
 // intakeRecord runs the Intake step and returns what it commits.
 func intakeRecord(h horizon.Horizon, in string) record.Record {
@@ -124,7 +123,7 @@ func TestReplayDerivesSupervisorFaults(t *testing.T) {
 	}
 }
 
-var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Output: echoS.Output, Continuation: true}
+var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Continuation: true}
 
 // commitStep stores an input and commits the record derived from it.
 func commitStep(t *testing.T, root string, in []byte, r record.Record) string {

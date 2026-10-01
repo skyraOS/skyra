@@ -35,7 +35,7 @@ func TestResumeDerivesTheParkedInstance(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := &contract.Schema{Type: "string"}
-	reach := map[string]horizon.Surface{"browser": {Host: "/tmp/park.sock", Input: text, Output: text}}
+	reach := map[string]horizon.Surface{"browser": {Host: "/tmp/park.sock", Input: text}}
 	room := horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach, Authority: &room, Author: "operator", Nonce: "n"})
 	if err != nil {

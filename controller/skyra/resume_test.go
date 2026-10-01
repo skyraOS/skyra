@@ -75,8 +75,8 @@ func TestResumeFramesDoNotReachTarget(t *testing.T) {
 		return path
 	}
 	text := map[string]string{"type": "string"}
-	probeContract := writeJSON("probe.json", map[string]any{"input": text, "output": text, "continuation": true})
-	browserContract := writeJSON("browser.json", map[string]any{"input": text, "output": text})
+	probeContract := writeJSON("probe.json", map[string]any{"input": text, "continuation": true})
+	browserContract := writeJSON("browser.json", map[string]any{"input": text})
 	registry := writeJSON("registry.json", map[string]any{
 		"probe":   map[string]string{"path": probe, "contract": probeContract},
 		"browser": map[string]string{"host": sock, "contract": browserContract},

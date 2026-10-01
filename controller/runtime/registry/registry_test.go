@@ -14,7 +14,7 @@ func TestLoadNormalizesAndRejectsGrants(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "tool"), []byte("tool"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "contract.json"), []byte(`{"input":{"type":"string"},"output":{"type":"string"}}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "contract.json"), []byte(`{"input":{"type":"string"}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(dir, filepath.Join(dir, "alias")); err != nil {
@@ -60,9 +60,10 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 		}
 	}
 	for name, body := range map[string]string{
-		"leaf.json":         `{"input":{"type":"string"},"output":{"type":"string"}}`,
-		"continuation.json": `{"input":{"type":"string"},"output":{"type":"string"},"continuation":true}`,
-		"reach.json":        `{"input":{"type":"string"},"output":{"type":"string"},"reach":["a"]}`,
+		"leaf.json":         `{"input":{"type":"string"}}`,
+		"continuation.json": `{"input":{"type":"string"},"continuation":true}`,
+		"reach.json":        `{"input":{"type":"string"},"reach":["a"]}`,
+		"output.json":       `{"input":{"type":"string"},"output":{"type":"string"}}`,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -96,6 +97,9 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 	if _, _, err := load(`{"a": {"path": "a", "contract": "reach.json"}}`); err == nil {
 		t.Fatal("a contract declared its own reach")
 	}
+	if _, _, err := load(`{"a": {"path": "a", "contract": "output.json"}}`); err == nil {
+		t.Fatal("a contract declared an output: a return's type is computed (next/30)")
+	}
 	if _, _, err := load(`{"a": {"path": "a", "contract": "leaf.json", "delegate": {}}}`); err == nil {
 		t.Fatal("delegate is not a registry field any more")
 	}
@@ -108,8 +112,8 @@ func TestLoadDeclaredRoutes(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
 		"a": "a", "b": "b",
-		"leaf.json":         `{"input":{"type":"string"},"output":{"type":"string"}}`,
-		"continuation.json": `{"input":{"type":"string"},"output":{"type":"string"},"continuation":true}`,
+		"leaf.json":         `{"input":{"type":"string"}}`,
+		"continuation.json": `{"input":{"type":"string"},"continuation":true}`,
 		"a.star":            "def route():\n  return skyra.interrupt()\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o700); err != nil {

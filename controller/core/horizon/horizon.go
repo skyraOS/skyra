@@ -89,7 +89,6 @@ type Surface struct {
 	Path               string           `json:"path"`
 	SHA256             string           `json:"sha256"`
 	Input              *contract.Schema `json:"input"`                          // what invoking it must fit
-	Output             *contract.Schema `json:"output"`                         // what its return must fit, if declared: optional (next/30)
 	Continuation       bool             `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
 	System             string           `json:"system,omitempty"`               // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
 	Resident           bool             `json:"resident,omitempty"`             // launch and retain a stream connection in custody

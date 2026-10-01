@@ -331,7 +331,7 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 // It never says whether that is a call or a return. The runtime derives it
 // from where the emitter stands (improvements, items 1 and 2):
 //
-//	addresses the slot its frame discharges (fits its output contract, if any)  → return
+//	addresses the slot its frame discharges                                     → return
 //	names a capability in reach, payload fits its input contract                → invoke
 //	names anything else                                                         → fault (horizon)
 //	addresses nothing                                                           → fault (leaf)
@@ -361,13 +361,7 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 	}
 	attempt := contract.Canonical(o)
 	if h.Surface != nil && to == h.Frame {
-		// The type of a return is computed from it (next/30); a surface that
-		// still declares an output contract keeps the structural check.
-		if h.Surface.Output != nil {
-			if err := contract.Fits(h.Surface.Output, payload); err != nil {
-				return faulted(record.Contract, "return: "+err.Error(), attempt)
-			}
-		}
+		// Any JSON value: its type is computed from it, not declared (next/30).
 		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
 	}
 	target, ok := h.Reach[to]

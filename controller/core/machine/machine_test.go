@@ -18,8 +18,8 @@ import (
 var (
 	text   = &contract.Schema{Type: "string"}
 	echoIn = &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": text}}
-	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn, Output: text}
-	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Output: text, Continuation: true}
+	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn}
+	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Continuation: true}
 	both   = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
 	// Horizons as the emitter holds them: the operator (no surface), and a leaf.
 	operator = horizon.Horizon{Stamp: "g0", Reach: both, Frame: "g0"}
@@ -34,10 +34,6 @@ func intakeRecord(h horizon.Horizon, in string) record.Record {
 
 // The emitter supplies operands; interpret derives the state.
 func TestInterpret(t *testing.T) {
-	numeric := leaf
-	numeric.Surface = &horizon.Surface{Path: "/bin/n", Input: echoIn, Output: &contract.Schema{Type: "number"}}
-	untyped := leaf
-	untyped.Surface = &horizon.Surface{Path: "/bin/u", Input: echoIn}
 	cases := []struct {
 		name    string
 		under   horizon.Horizon
@@ -59,8 +55,7 @@ func TestInterpret(t *testing.T) {
 		{"the operator has no slot to return to", operator, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Horizon, `"g0" is not in reach`},
 		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", `{"payload":{"txt":"x"},"to":"echo"}`, record.Contract, `unknown field "txt"`},
 		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", `{"payload":{},"to":"echo"}`, record.Contract, `missing required field "text"`},
-		{"return does not fit", numeric, `{"to":"r1","payload":"hello"}`, record.Fault, "", `{"payload":"hello","to":"r1"}`, record.Contract, "return: want a number"},
-		{"no output contract: any return", untyped, `{"to":"r1","payload":{"any":["thing"]}}`, record.Return, "", `{"any":["thing"]}`, "", ""},
+		{"a return is any JSON: its type is computed", leaf, `{"to":"r1","payload":{"any":["thing"]}}`, record.Return, "", `{"any":["thing"]}`, "", ""},
 		{"address without payload", operator, `{"to":"echo"}`, record.Fault, "", `"{\"to\":\"echo\"}"`, record.Malformed, "exactly"},
 		{"address with extra fields", operator, `{"to":"echo","payload":{},"x":1}`, record.Fault, "", `"{\"to\":\"echo\",\"payload\":{},\"x\":1}"`, record.Malformed, "exactly"},
 		{"address is not a name", operator, `{"to":7,"payload":{}}`, record.Fault, "", `"{\"to\":7,\"payload\":{}}"`, record.Malformed, "exactly"},
@@ -478,7 +473,7 @@ func TestMachineIsPure(t *testing.T) {
 // An async surface is parked with its host instead of run: the host takes
 // custody, and a refusal leaves custody here, as a fault on this frame.
 func TestAsyncSurfaceParks(t *testing.T) {
-	browserS := horizon.Surface{Host: "/tmp/park.sock", Input: echoIn, Output: text}
+	browserS := horizon.Surface{Host: "/tmp/park.sock", Input: echoIn}
 	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"browser": browserS}}
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: root, In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
 	s, effs := released(s, selfOf(t, s))

@@ -57,8 +57,7 @@ var (
 			"read": grants, "write": grants, "mach": strs, "connect": strs,
 		}},
 	}}
-	narrowOut = &contract.Schema{Type: "object", Required: []string{"reference"}, Fields: map[string]*contract.Schema{"reference": str}}
-	routeIn   = &contract.Schema{Type: "object", Required: []string{"step", "source"}, Fields: map[string]*contract.Schema{
+	routeIn = &contract.Schema{Type: "object", Required: []string{"step", "source"}, Fields: map[string]*contract.Schema{
 		"step": {Type: "number"}, "source": str, "accept": {Type: "array", Items: &contract.Schema{Type: "number"}},
 	}}
 )
@@ -66,8 +65,8 @@ var (
 // RoomFacets are the room's facets, as surfaces genesis puts in the root reach.
 func RoomFacets() map[string]horizon.Surface {
 	return map[string]horizon.Surface{
-		NarrowFacet: {System: "narrow", Input: narrowIn, Output: narrowOut},
-		RouteFacet:  {System: "route", Input: routeIn}, // its result carries returns: no output contract (F9)
+		NarrowFacet: {System: "narrow", Input: narrowIn},
+		RouteFacet:  {System: "route", Input: routeIn},
 	}
 }
 

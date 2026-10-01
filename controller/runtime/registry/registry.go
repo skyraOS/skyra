@@ -44,11 +44,11 @@ type Entry struct {
 	Routes map[string]string `json:"routes,omitempty"`
 }
 
-// Declared is what a program's contract file says about it: its contracts,
-// and how it reads its input. Nothing about what it may reach.
+// Declared is what a program's contract file says about it: its input
+// contract, and how it reads its input. A return's type is computed, not
+// declared (next/30). Nothing about what it may reach.
 type Declared struct {
 	Input        *contract.Schema `json:"input"`
-	Output       *contract.Schema `json:"output,omitempty"` // optional (next/30, F9)
 	Continuation bool             `json:"continuation,omitempty"`
 }
 
@@ -113,16 +113,11 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if err := d.Input.Check(); err != nil {
 			return nil, room, fmt.Errorf("%s input contract: %w", name, err)
 		}
-		if d.Output != nil { // optional: a return's type is computed from it (next/30)
-			if err := d.Output.Check(); err != nil {
-				return nil, room, fmt.Errorf("%s output contract: %w", name, err)
-			}
-		}
 		if e.Host != "" {
 			if e.Path != "" || e.Resident || e.Connection || len(e.Args) > 0 || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
 				return nil, room, fmt.Errorf("%s: an async surface cannot carry executable authority", name)
 			}
-			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input, Output: d.Output}
+			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input}
 			continue
 		}
 		if e.Path == "" {
@@ -180,7 +175,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			proxySHA = record.Sum(proxy)
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Output: d.Output, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA}
+		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA}
 	}
 	return reach, room, nil
 }

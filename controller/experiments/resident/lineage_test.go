@@ -33,15 +33,12 @@ func newJournal(t *testing.T) *journal {
 	input := &contract.Schema{Type: "object", Required: []string{"op", "owner", "incarnation", "deliver", "read_lines", "wait_ms"}, Fields: map[string]*contract.Schema{
 		"op": str, "owner": str, "incarnation": str, "deliver": arr, "read_lines": num, "wait_ms": num, "prefix": str,
 	}}
-	output := &contract.Schema{Type: "object", Required: []string{"lines", "partial", "delivery", "read", "observed_at", "peer_eof", "error"}, Fields: map[string]*contract.Schema{
-		"lines": arr, "partial": str, "delivery": str, "read": str, "observed_at": num, "peer_eof": {Type: "bool"}, "error": str,
-	}}
 	reach := map[string]horizon.Surface{}
 	ops := []string{"start", "exchange", "tool", "park", "stop"}
 	for _, name := range ops {
-		reach[name] = horizon.Surface{Input: input, Output: output}
+		reach[name] = horizon.Surface{Input: input}
 	}
-	reach["adapter"] = horizon.Surface{Input: str, Output: str, Continuation: true}
+	reach["adapter"] = horizon.Surface{Input: str, Continuation: true}
 	j := &journal{t: t, root: t.TempDir()}
 	if err := tree.Init(j.root); err != nil {
 		t.Fatal(err)
