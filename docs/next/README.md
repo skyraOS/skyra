@@ -31,24 +31,28 @@ became) or **not in the proposal**.
    Think is a read-only conversation whose compaction writes a spec and its
    contract proposal; act is write-only, one function per LLM invocation, under
    a limit of k continuations per node. Proposed.
+7. **[`30-types-by-origin-routes.md`](30-types-by-origin-routes.md)**: the
+   runtime computes types, `origin{shape}` by hash; models write routes. A
+   novelty interrupt produces a route, Starlark run once per return. Replaces
+   28's checks. Not built (section F).
 
 ## Not in the proposal
 
-7. **[`27-a-horizon-is-a-process.md`](27-a-horizon-is-a-process.md)**: a
+8. **[`27-a-horizon-is-a-process.md`](27-a-horizon-is-a-process.md)**: a
    Horizon is our process; OS processes are its workers. Near and far invokes,
    the creator supervises, one stdin envelope for every program.
-8. **[`28-types-observations-checks.md`](28-types-observations-checks.md)**:
+9. **[`28-types-observations-checks.md`](28-types-observations-checks.md)**:
    types are contracts, observations are values. The parent owns the check on
    its children, written in Starlark at a novelty interrupt and kept; the log
    is the test suite; agent-written tools as Starlark.
-9. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
+10. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
    runtime owns control flow, an actor owns its state. The kernel provisions
    where an actor's state and methods live, in no Horizon; a novelty interrupt
    shows three interfaces. The Codex adapter as the example.
-10. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
+11. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
     travel by hash; continuations pass their children's observations up instead
     of authoring a replacement.
-11. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
+12. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
     crossing of the trusted boundary must answer. A standing rule.
-12. **[`research-question.md`](research-question.md)**: the question, the
+13. **[`research-question.md`](research-question.md)**: the question, the
     metrics, the baseline, and the September–December plan.
