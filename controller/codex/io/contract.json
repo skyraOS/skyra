@@ -3,11 +3,5 @@
     "incarnation":{"type":"string"},"op":{"type":"string"},
     "deliver":{"type":"array","items":{"type":"string"}},
     "wait_ms":{"type":"number"},"prefix":{"type":"string"}
-  }},
-  "output": {"type":"object","required":["lines","partial","delivery","read","observed_at","peer_eof","error"],"fields":{
-    "lines":{"type":"array","items":{"type":"string"}},
-    "partial":{"type":"string"},"delivery":{"type":"string"},
-    "read":{"type":"string"},"observed_at":{"type":"number"},
-    "peer_eof":{"type":"bool"},"error":{"type":"string"}
   }}
 }

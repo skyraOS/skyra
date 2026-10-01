@@ -7,6 +7,5 @@
       "probe": {"type": "string"},
       "misbehave": {"type": "string"}
     }
-  },
-  "output": {"type": "string"}
+  }
 }

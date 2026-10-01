@@ -3,8 +3,5 @@
     "text":{"type":"string"},"conversation":{"type":"string"},
     "thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
   }},
-  "output": {"type":"object","required":["text","thread","incarnation","activity_at"],"fields":{
-    "text":{"type":"string"},"refused":{"type":"string"},"thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
-  }},
   "continuation": true
 }

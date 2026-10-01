@@ -1,6 +1,3 @@
 {
-  "input": {"type":"object","fields":{}},
-  "output": {"type":"object","required":["pid","incarnation","profile"],"fields":{
-    "pid":{"type":"number"},"incarnation":{"type":"string"},"profile":{"type":"string"}
-  }}
+  "input": {"type":"object","fields":{}}
 }

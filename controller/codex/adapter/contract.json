@@ -7,6 +7,5 @@
       "conversation": {"type": "string"}
     }
   },
-  "output": {"type": "string"},
   "continuation": true
 }

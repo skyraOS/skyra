@@ -4,6 +4,5 @@
     "required": ["conversation"],
     "fields": {"conversation": {"type": "string"}}
   },
-  "output": {"type": "string"},
   "continuation": true
 }

@@ -4,6 +4,5 @@
     "required": ["text"],
     "fields": {"text": {"type": "string"}}
   },
-  "output": {"type": "string"},
   "continuation": true
 }
