@@ -6,6 +6,7 @@
 //	frames/<F>/result                 write-once: the record that discharged F's slot
 //	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before the child ran
 //	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
+//	routes/<hash>                     a route's Starlark source (next/30), declared or recorded
 //
 // A round is the stamp F's continuation emitted under: F itself, then each
 // resolve record. Every write inside a frame goes through its directory fd,
@@ -26,7 +27,7 @@ import (
 
 // Init creates the tree's directories.
 func Init(root string) error {
-	for _, d := range []string{"records", "inputs", "horizons", "frames"} {
+	for _, d := range []string{"records", "inputs", "horizons", "frames", "routes"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return err
 		}

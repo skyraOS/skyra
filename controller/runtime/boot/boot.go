@@ -39,9 +39,14 @@ func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (O
 	if err := tree.Init(root); err != nil {
 		return Outcome{}, err
 	}
-	reach, authority, err := registry.Load(registryFile)
+	reach, authority, routes, err := registry.LoadWithRoutes(registryFile)
 	if err != nil {
 		return Outcome{}, err
+	}
+	for _, src := range routes { // declared routes, by hash, where the runtime looks them up
+		if _, err := tree.Put(root, "routes", src); err != nil {
+			return Outcome{}, err
+		}
 	}
 	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
 		reach[name] = facet

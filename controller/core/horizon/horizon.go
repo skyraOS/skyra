@@ -101,6 +101,10 @@ type Surface struct {
 	ProxyHosts         []string         `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
 	ProxyPath          string           `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
 	ProxySHA256        string           `json:"proxy_sha256,omitempty"`
+	// Routes are the routes a deterministic parent declared at registration
+	// (next/30): child name → the hash of a Starlark source in the tree. They
+	// are part of the surface, so its identity.
+	Routes map[string]string `json:"routes,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.

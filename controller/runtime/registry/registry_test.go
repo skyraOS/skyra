@@ -100,3 +100,47 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 		t.Fatal("delegate is not a registry field any more")
 	}
 }
+
+// A continuation declares its routes per child (next/30): each source is
+// returned by hash, and the surface names it by that hash, so it is part of
+// the surface's identity. Only a continuation has children to route.
+func TestLoadDeclaredRoutes(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"a": "a", "b": "b",
+		"leaf.json":         `{"input":{"type":"string"},"output":{"type":"string"}}`,
+		"continuation.json": `{"input":{"type":"string"},"output":{"type":"string"},"continuation":true}`,
+		"a.star":            "def route():\n  return skyra.interrupt()\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := filepath.Join(dir, "registry.json")
+	load := func(body string) (map[string]horizon.Surface, map[string][]byte, error) {
+		t.Helper()
+		if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		reach, _, sources, err := LoadWithRoutes(file)
+		return reach, sources, err
+	}
+	reach, sources, err := load(`{"a": {"path": "a", "contract": "leaf.json"}, "b": {"path": "b", "contract": "continuation.json", "routes": {"a": "a.star"}}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := reach["b"].Routes["a"]
+	if string(sources[h]) != "def route():\n  return skyra.interrupt()\n" || len(sources) != 1 || reach["a"].Routes != nil {
+		t.Fatalf("a declared route is returned by hash and named by the surface: %v %v", reach["b"].Routes, sources)
+	}
+	plain, _, _ := load(`{"a": {"path": "a", "contract": "leaf.json"}, "b": {"path": "b", "contract": "continuation.json"}}`)
+	if horizon.Identity(plain["b"]) == horizon.Identity(reach["b"]) {
+		t.Fatal("declared routes are part of the surface's identity")
+	}
+	if _, _, err := load(`{"a": {"path": "a", "contract": "leaf.json", "routes": {"a": "a.star"}}}`); err == nil {
+		t.Fatal("a leaf declared routes")
+	}
+	if _, _, err := load(`{"b": {"path": "b", "contract": "continuation.json", "routes": {"ghost": "a.star"}}}`); err == nil {
+		t.Fatal("a route for a child that is not registered")
+	}
+}
