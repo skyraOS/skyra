@@ -287,3 +287,16 @@ func Key(path, key string) string {
 	}
 	return path + "[" + strconv.Quote(key) + "]"
 }
+
+// Type is a return's type (next/30): the actor that returned it, the contract
+// it was invoked through, and the shape of what it returned. The arguments
+// are hex hashes; the actor is its identity, never its name.
+func Type(actor, contract, shape string) string {
+	var b bytes.Buffer
+	b.WriteString("skyra/type/v1")
+	part(&b, []byte(actor))
+	part(&b, []byte(contract))
+	part(&b, []byte(shape))
+	h := sha256.Sum256(b.Bytes())
+	return hex.EncodeToString(h[:])
+}

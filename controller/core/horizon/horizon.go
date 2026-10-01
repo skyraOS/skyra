@@ -3,6 +3,9 @@
 package horizon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -195,4 +198,20 @@ func renderPath(b *strings.Builder, operation string, grant PathGrant) {
 		return // invalid input grants nothing; registry rejects it at genesis
 	}
 	fmt.Fprintf(b, "(allow %s (%s %q))\n", operation, grant.Scope, grant.Path)
+}
+
+// Identity is a surface's identity: the hash of its canonical encoding. It
+// covers a binary (its sha256) and a host surface alike, and any change to a
+// registration is a new identity (next/30). Names are labels, never part of it.
+func Identity(s Surface) string {
+	b, _ := json.Marshal(s)
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+
+// ContractHash is the hash of an input contract's canonical encoding.
+func ContractHash(s *contract.Schema) string {
+	b, _ := json.Marshal(s)
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
