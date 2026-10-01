@@ -34,7 +34,7 @@ became) or **not in the proposal**.
 7. **[`30-types-by-origin-routes.md`](30-types-by-origin-routes.md)**: the
    runtime computes types, `origin{shape}` by hash; models write routes. A
    novelty interrupt produces a route, Starlark run once per return. Replaces
-   28's checks. Not built (section F).
+   28's checks. Built (section F, branch `self-extension`).
 
 ## Not in the proposal
 

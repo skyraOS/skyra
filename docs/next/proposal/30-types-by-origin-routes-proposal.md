@@ -1,6 +1,8 @@
 # 30 — Types by origin, and routes: proposal
 
-Status (2026-10-01): **Not built.** Section F of the [list](README.md).
+Status (2026-10-01): **Built**, F1–F9, on branch `self-extension`
+(`12cf4f6`..`8cce174`). Section F of the [list](README.md). What was decided,
+and where the build differs from this plan, is under [As built](#as-built).
 
 The implementation plan for [30](../30-types-by-origin-routes.md). Read 30
 first; this page says how to build it, in what order, and what to ask before
@@ -32,15 +34,15 @@ building. Ids refer to section F of the list.
 These change what gets built. Each has a proposed default; **confirm with the
 human before the step that needs it**, and do not guess past one.
 
-| # | Decision | Proposed default | Needed by |
-|---|---|---|---|
-| 1 | Scalar kinds in a shape | JSON's four (string, number, bool, null), as 30's encoding says | F2 |
-| 2 | An array's shape | the distinct element shapes, sorted; independent of length and order | F2 |
-| 3 | The actor's identity | the hash of the child's canonical `horizon.Surface` encoding: covers binaries (`sha256`) and host surfaces alike, and any change to a registration is a new identity | F3 |
-| 4 | When routes run | at gather, after the join rule is met: see F6 | F6 |
-| 5 | What a send's return does | it is routed again, up to a fixed chain depth (8), then it wakes the parent | F6 |
-| 6 | Which previous return | the last return of this (binding, type) in the same frame; across frames later | F6 |
-| 7 | `for` in routes | allowed (Starlark's default; it terminates over a finite value) | F4 |
+| # | Decision | Proposed default | Needed by | Taken (2026-10-01) |
+|---|---|---|---|---|
+| 1 | Scalar kinds in a shape | JSON's four (string, number, bool, null), as 30's encoding says | F2 | as proposed |
+| 2 | An array's shape | the distinct element shapes, sorted; independent of length and order | F2 | as proposed |
+| 3 | The actor's identity | the hash of the child's canonical `horizon.Surface` encoding: covers binaries (`sha256`) and host surfaces alike, and any change to a registration is a new identity | F3 | as proposed |
+| 4 | When routes run | at gather, after the join rule is met: see F6 | F6 | as proposed |
+| 5 | What a send's return does | it is routed again, up to a fixed chain depth (8), then it wakes the parent | F6 | as proposed, with **wake renamed interrupt**: raised by the runtime, never by the parent (29). `skyra.wake()` is `skyra.interrupt()`. An interrupt has a kind, shown in the step's view: `novelty`, `route` (the route asked), `depth` (the chain hit 8) |
+| 6 | Which previous return | the last return of this (binding, type) in the same frame; across frames later | F6 | as proposed |
+| 7 | `for` in routes | allowed (Starlark's default; it terminates over a finite value) | F4 | **`if` only**: `for` and comprehensions are refused |
 
 ## F1: the hash audit
 
@@ -155,7 +157,7 @@ Starlark, so it cannot live in the controller.
   ```
 - **Output:** it returns to its slot (`SKYRA_FRAME`) with one decision:
   ```json
-  {"wake": true} | {"send": {"to": "<name>", "payload": <json>}} | {"fault": "<cause>"}
+  {"interrupt": true} | {"send": {"to": "<name>", "payload": <json>}} | {"fault": "<cause>"}
   ```
   Its output contract says exactly that.
 - **Starlark:** `syntax.FileOptions{}` (no `While`, no `Recursion`, no
@@ -164,7 +166,7 @@ Starlark, so it cannot live in the controller.
   The source must define `def route():`; the runner calls it once and requires
   one decision back. Decision 7 says whether `for` stays allowed.
 - **The `skyra` module** (`starlarkstruct.Module`, predeclared): `get(path)`,
-  `previous()`, `changed(path)`, `diff()`, `wake()`, `send(to, payload)`,
+  `previous()`, `changed(path)`, `diff()`, `interrupt()`, `send(to, payload)`,
   `fault(cause)`. `send` refuses a `to` not in `targets`. JSON converts to
   frozen Starlark values (dict, list, string, int or float, bool, None) and
   back; `changed` and `diff` use a `Diff` with the same semantics as F2's
@@ -234,7 +236,7 @@ each, byte-identical. Add a `run.sh` scenario for the send case.
   "route": {
     "conditions": {"get": "path -> value of that path's kind", "previous": "-> the previous return of this type, or None",
                    "changed": "path -> bool", "diff": "-> float, the ratio of changed leaves"},
-    "decisions":  {"wake": "-> deliver the return to you", "send": "to, payload -> send to a name in your Horizon",
+    "decisions":  {"interrupt": "-> deliver the return to you", "send": "to, payload -> send to a name in your Horizon",
                    "fault": "cause -> refuse, carrying the return"},
     "horizon":    {"reach": {"<name>": <input contract>, ...}, "refs": ["<name>", ...],
                    "authority": {"read": [{"path", "scope"}], "write": [...], "mach": [...], "connect": [...]}},
@@ -295,3 +297,80 @@ one keeps the structural check, until every target has moved. Remove
 - How much a string changed (edit distance).
 - Input types computed instead of declared, and novelty at an input (29).
 - Storing types in records: with E.
+
+## As built
+
+Built 2026-10-01 on branch `self-extension`, with every Go test and every
+`run.sh` scenario passing, each ending in a byte-identical replay. The route
+runner's tests run in its own module: `(cd controller/targets/route && go test .)`.
+
+| Step | Commit | Where |
+|---|---|---|
+| F1 | `12cf4f6` | the audit table in [30](../30-types-by-origin-routes.md#the-audit-f1-2026-10-01); `machine.refName` |
+| F2 | `4f7db10` | `core/contract/shape.go` |
+| F3 | `f496bbd` | `contract.Type`, `horizon.Identity`, `machine.TypeOf` |
+| F4 | `3b1932a` | `targets/route/` (module `skyra/route`), `machine.Runner`, `boot.routeRunner` |
+| F5 | `82515e1` | `registry.LoadWithRoutes`, `horizon.Surface.Routes` |
+| F6 | `5256b2c` | `core/machine/route.go`, `instance.lookupRoute`, `tree.Route`, `tree.RecordRun`, `replay.routed` |
+| F7, F8 | `5b1d0f3` | `core/machine/write.go`, `targets/agent`, `codex/adapter` |
+| F9 | `00db79a`, `2d974a0`, `8cce174` | `interpret`, every `contract.json`, `horizon.Surface` |
+
+Where the build differs from the plan, and why:
+
+- **F1 found one leak and fixed it.** A `system.narrow` reference was its
+  invoke's stamp, shown to the continuation as a value and a tool name. It is
+  now `system.ref.<n>`. Two exceptions are accepted and recorded in 30: the
+  Codex JSON-RPC correlation ids, which carry the frame id to the app-server,
+  and the stamps the web host shows the human.
+- **The runner imports `core/contract`** (through a `replace` of the root
+  module) instead of copying `Diff`, so a route's `diff()` and `changed()` are
+  the runtime's, and no pinning test between two copies is needed. The
+  controller stays standard-library Go.
+- **Recursion is refused when the function is called**, not at compile time:
+  that is how `go.starlark.net` checks it. `while`, `for` and comprehensions
+  are refused before the route runs. The step cap bounds steps, not memory.
+- **The runner is in the room's reach** as `system.route-runner`, so every
+  Horizon carries it: never invocable, never shown as a tool or in a route
+  contract, and kept by every narrowing, which otherwise could leave an
+  actor unable to route its children.
+- **There is no `RunRoute` effect.** At gather the machine asks the shell for
+  the route (`LookupRoute`, then the event `RouteLooked`), then runs the runner
+  with the ordinary `Run` effect under an empty Horizon, its slot the
+  discharge being routed. The decision is derived purely by `machine.Decided`.
+- **A route run is not a record.** It is observed in the resolve's
+  observation (`Observation.Route`): the source, the runner's input and
+  output by hash, the decision. The record encoding does not change (ground
+  rules), and replay re-derives the decision from the stored output and
+  checks that a send is exactly the next record's input.
+- **A send is emitted as the waiter.** The resolve commits, and the claim's
+  winner hands the envelope off under the resumed waiter's Horizon, so it
+  opens the waiter's next round through the ordinary handoff. A send that
+  would not be an invoke under the parent's Horizon (outside reach, off
+  contract, to a facet, to the parent's own slot) is delivered to the parent
+  as the fault it would be, rather than faulting the parent's own frame.
+- **What is routed, in v1:** a continuation's single-child round whose child
+  returned. Faults, fan-out rounds (none exist yet: a continuation emits once
+  per round), returns from the room's facets, and the operator are delivered
+  as before, with no interrupt kind.
+- **A reference's binding is its actor's name**, so its routes and its
+  presentation never carry a reference.
+- **A route's refusal is a fault of kind `route`** in the step's view, the
+  return as its value. A route that fails (does not compile, runs too long,
+  decides twice) is a `route` fault too, as F4 says.
+- **The step view's fields:** `by` (`"route"`: the runtime invoked this
+  step), `sent` (the name the route sent this return to), `interrupt` (its
+  kind) and `type` (the presentation). `novel: true` is `interrupt: "novelty"`.
+- **`system.route` returns** `{"ok": true, "flips": [...]}`, or
+  `{"ok": false, "flips": [...], "error": ...}` when the route changes
+  recorded decisions, or `{"ok": false, "error": ...}` for a step that is not
+  an actor's return. `accept` must name exactly the flipped cases. The route
+  table is `route-table/<key>/<n>` and the runs `route-runs/<key>/<input>`.
+- **F8 is part of `system.route`**, not a separate step.
+- **F9's first half came before F6:** `system.route`'s result carries
+  returns, which no output contract can describe.
+- **Codex:** the adapter offers `system.route` as `system_route` (a dynamic
+  tool name has no dots), and a novel step's tool result carries the route
+  contract as a second content item. `codex/resident` does not offer it yet.
+- **The demo agent** routes on `$`, since echo returns a string, not
+  `{text}`: an unchanged answer is sent back to echo, marked, instead of
+  being delivered as is.

@@ -97,21 +97,21 @@ The implementation plan, with the decisions to confirm first, is
 
 | Id | Change | Where | Status |
 |---|---|---|---|
-| F1 | Audit where hashes reach a model or an external actor. The invariant: hashes go to workers, never to models | `machine.runOf`, `Continuation`, `StepView`, `targets/agent`, `codex/adapter`, `codex/resident`, `hosts/web` | Not built |
-| F2 | `Shape`, `Content`, `Diff` and `Present` over decoded JSON: two hashes per node, a pinned injective encoding | `core/contract/shape.go` | Not built |
-| F3 | The type of a return, `H(actor identity, contract, shape)`, derived on demand, never stored in a record | `core/contract`, `core/machine` | Not built |
-| F4 | The Starlark route runner, its own module, under an empty Horizon; no `while`, no recursion, a step cap; the `skyra` package | `targets/route` (new module), `core/machine/room.go` | Not built |
-| F5 | Routes declared at registration, per binding, for deterministic parents | `runtime/registry`, `horizon.Surface.Routes` | Not built |
-| F6 | Routing at discharge: wake, send or fault, at gather; a send is an invoke under the parent's Horizon | `core/machine` (`gather`, a `RunRoute` effect) | Not built |
-| F7 | The novelty interrupt (`novel` and a presentation in `StepView`) and the room's `system.route` facet | `core/machine`, `room.go`, `targets/agent` | Not built |
-| F8 | The log as the test suite: a rewritten route runs against its recorded cases; flips are declared | `core/machine`, `runtime/tree` | Not built |
-| F9 | The declared `"output"` contract becomes optional, then goes | `contract.json` files, `registry`, `interpret`, `horizon.Surface` | Not built |
+| F1 | Audit where hashes reach a model or an external actor. The invariant: hashes go to workers, never to models | `machine.runOf`, `Continuation`, `StepView`, `targets/agent`, `codex/adapter`, `codex/resident`, `hosts/web` | Built (`12cf4f6`). One leak fixed: references are `system.ref.<n>`. Two exceptions accepted, recorded in 30 |
+| F2 | `Shape`, `Content`, `Diff` and `Present` over decoded JSON: two hashes per node, a pinned injective encoding | `core/contract/shape.go` | Built (`4f7db10`) |
+| F3 | The type of a return, `H(actor identity, contract, shape)`, derived on demand, never stored in a record | `core/contract`, `core/machine` | Built (`f496bbd`) |
+| F4 | The Starlark route runner, its own module, under an empty Horizon; no `while`, no recursion, a step cap; the `skyra` package | `targets/route` (new module), `core/machine/room.go` | Built (`3b1932a`). `if` only (decision 7); the runner imports `core/contract` |
+| F5 | Routes declared at registration, per binding, for deterministic parents | `runtime/registry`, `horizon.Surface.Routes` | Built (`82515e1`) |
+| F6 | Routing at discharge: interrupt, send or fault, at gather; a send is an invoke under the parent's Horizon | `core/machine` (`gather`, a `RunRoute` effect) | Built (`5256b2c`). "Wake" is named interrupt (kinds `novelty`, `route`, `depth`); no `RunRoute` effect: `LookupRoute`, then `Run` |
+| F7 | The novelty interrupt (`novel` and a presentation in `StepView`) and the room's `system.route` facet | `core/machine`, `room.go`, `targets/agent` | Built (`5b1d0f3`) |
+| F8 | The log as the test suite: a rewritten route runs against its recorded cases; flips are declared | `core/machine`, `runtime/tree` | Built (`5b1d0f3`), inside `system.route` |
+| F9 | The declared `"output"` contract becomes optional, then goes | `contract.json` files, `registry`, `interpret`, `horizon.Surface` | Built (`00db79a`, `2d974a0`, `8cce174`): `Surface.Output` is gone |
 
 ## Status
 
-**Implemented:** A (all), B3, B4, B6, B7, B8, B10, C1, C2, D2.
+**Implemented:** A (all), B3, B4, B6, B7, B8, B10, C1, C2, D2, F (all).
 **In part:** B1, B2, D1, D3.
-**Not built:** B5, B9, B11, C4, D4, D5, D6, E1–E7, F1–F9. **Deferred:** C3.
+**Not built:** B5, B9, B11, C4, D4, D5, D6, E1–E7. **Deferred:** C3.
 
 Every Go test and every `skyra demo` scenario pass, each ending in a
 byte-identical replay. A fake-Codex conversation driven through the webhost
@@ -139,7 +139,7 @@ the per-document proposals say the same for their documents.
 6. ✗ **E**: identity, one encoding change for all of it.
 7. ✗ **C4** and **D6**, with improvements item 4: Codex as an agent, the loop
    operator.
-8. ✗ **F**: F1 first; then F2–F3 (types), F4–F5 (routes), F6 (routing), F7
+8. ✓ **F** (2026-10-01, branch `self-extension`): F1 first; then F2–F3 (types), F4–F5 (routes), F6 (routing), F7
    (the interrupt), F8, F9. Self-extension (28, `system.register`) follows.
 
 ## Per document
@@ -152,7 +152,7 @@ the per-document proposals say the same for their documents.
 | [24](../24-the-room.md) | [24-the-room-proposal](24-the-room-proposal.md) | implementation plan | **In part**: status line added; see B |
 | [25](../25-surface-refactor.md) | [25-surface-refactor-proposal](25-surface-refactor-proposal.md) | implementation plan | **In part**: item 1 built; item 2 corrected and deferred; item 3 not built |
 | [26](../26-agents-and-facets.md) | [26-agents-and-facets-proposal](26-agents-and-facets-proposal.md) | implementation plan | **In part**: `system.narrow` and its references built; see D |
-| [30](../30-types-by-origin-routes.md) | [30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md) | new; supersedes 28's checks and handlers | Not built: see F |
+| [30](../30-types-by-origin-routes.md) | [30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md) | new; supersedes 28's checks and handlers | **Built**: see F |
 | [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
 | [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
 | [README](../README.md) | [README-proposal](README-proposal.md) | the index | Applied in the working tree, uncommitted |

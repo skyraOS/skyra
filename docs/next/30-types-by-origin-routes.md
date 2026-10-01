@@ -4,7 +4,11 @@ Proposal: **In the proposal**, section F of [next/proposal](proposal/README.md);
 the implementation plan is [30-types-by-origin-routes-proposal](proposal/30-types-by-origin-routes-proposal.md).
 
 Date: 2026-10-01  
-Status: agreed in discussion, not built. Builds on [21](21-observation-passing.md),
+Status: **built** on branch `self-extension` (2026-10-01), F1–F9 of the
+[proposal](proposal/30-types-by-origin-routes-proposal.md#as-built), which
+records the decisions taken and where the build differs. "Wake" is named
+**interrupt** throughout: the runtime raises it, never the parent (29).
+Builds on [21](21-observation-passing.md),
 [24](24-the-room.md), [28](28-types-observations-checks.md) and
 [29](29-actors-own-their-state.md). Replaces 28's checks with routes: the
 parent does not judge a return, it says where the return goes. Replaces the
@@ -17,7 +21,7 @@ declared output contract with a type the runtime computes.
 > identified by a hash the runtime authors. A model never sees the hash; it
 > sees the type's presentation. A return whose type the parent has never seen
 > is a novelty interrupt, and a novelty interrupt produces a route: given this
-> type, send this observation to this target, or wake me. The route is kept,
+> type, send this observation to this target, or interrupt me. The route is kept,
 > so the next return of that type does not interrupt.
 
 Three layers, and where meaning lives:
@@ -194,15 +198,16 @@ says *whether to wake*, from the content diff:
 
 ```python
 # route for (watcher, twitter.search → {text: string, media: [{url: string}]})
-if skyra.previous() == None or skyra.changed("$.text") or skyra.diff() > 0.3:
-    return skyra.wake()                       # wake the parent with this return
-return skyra.send("log", {"line": skyra.get("$.text")})
+def route():
+    if skyra.previous() == None or skyra.changed("$.text") or skyra.diff() > 0.3:
+        return skyra.interrupt()                  # wake the parent with this return
+    return skyra.send("log", {"line": skyra.get("$.text")})
 ```
 
 This is "what to wake me up for next time": the model, at the interrupt,
 writes down when it wants to see this type again.
 
-- **A route returns one decision:** wake the parent, send an observation to a
+- **A route returns one decision:** interrupt the parent, send an observation to a
   target, or fault. A send is the envelope every actor already emits,
   `{"to": ..., "payload": ...}`; the runtime derives invoke or fault from `to`
   exactly as it does today (A1), under the parent's Horizon.
@@ -236,7 +241,7 @@ A predeclared module, and a route's only way to touch the system:
 | `skyra.previous()` | the previous return at this binding and type, or `None` |
 | `skyra.changed(path)` | whether the content at `path` differs from the previous return |
 | `skyra.diff()` | the ratio of changed leaves |
-| `skyra.wake()` | deliver the return to the parent |
+| `skyra.interrupt()` | deliver the return to the parent: an interrupt of kind `route` |
 | `skyra.send(to, payload)` | send an observation to a target in the parent's reach |
 | `skyra.fault(cause)` | refuse, carrying the return as the observation |
 
@@ -253,9 +258,9 @@ things, all as presentations, never hashes:
 |---|---|---|
 | 1 | **The return** | its presentation: every path with its leaf kind, `$.text: string`, `$.media[]: {url: string}`, under `actor.contract`. These are what a condition can test |
 | 2 | **The conditions** | `get(path)` → a value of that path's kind; `previous()` → the previous return of this type, or `None`; `changed(path)` → bool; `diff()` → float, the ratio of changed leaves |
-| 3 | **The decisions** | `wake()`, `send(to, payload)`, `fault(cause)`; a route returns exactly one |
+| 3 | **The decisions** | `interrupt()`, `send(to, payload)`, `fault(cause)`; a route returns exactly one |
 | 4 | **Its Horizon** | the whole Horizon, with its hashes left out: every name in reach with its input contract, every reference by name, and its authority (read and write grants with their scope, mach names, connect sockets) |
-| 5 | **What can happen to it** | 29's first interface: the fault kinds (`malformed`, `horizon`, `contract`, `custody`, `leaf`) and the novelty interrupt |
+| 5 | **What can happen to it** | 29's first interface: the fault kinds (`malformed`, `horizon`, `contract`, `custody`, `leaf`) and the interrupt kinds: `novelty` (no route for this type), `route` (the route asked) and `depth` (eight sends in a row) |
 
 - **The whole Horizon, for now.** Today a continuation is shown only the input
   contracts in its reach (`machine.tools`). The route contract shows the
@@ -284,7 +289,7 @@ parent as author.
 | `contract.json` `"output"` | declared by the registrant | not needed: the type is computed from the return |
 | `interpret` | a return fits the child's output contract | a return addressing the slot is committed; its type is computed from it |
 | `core/machine` | a discharge wakes the parent | a discharge is routed: a route, or a novelty interrupt that wakes the parent |
-| 28's checks and handlers | a check judges, a handler picks a restart | one route: wake, send or fault |
+| 28's checks and handlers | a check judges, a handler picks a restart | one route: interrupt, send or fault |
 | a new runtime-owned surface | — | the Starlark route runner with the `skyra` package |
 | the room's facets | `system.narrow` | plus `system.route`: how a parent records a route |
 | records | — | types, routes and route runs, with improvements item 9's encoding |
@@ -329,18 +334,14 @@ parent as author.
 
 ## Open questions
 
-- **Scalar kinds.** The encoding above keeps JSON's four scalar kinds as leaf
-  shapes. The alternative is every non-hash leaf a string, which makes `1`
-  and `"1"` one shape.
-- **`for` over the return.** Starlark allows `for` over a finite value and
-  comprehensions by default; they terminate. Whether a route may use them, or
-  only `if`.
-- **Which previous return.** The last return at this binding and type in this
-  frame, or across frames (the last time this parent ever saw this type).
-  Across frames needs an index over the log.
-- **What a send's result does.** When a route sends to a target, whether that
-  target's return is routed again (a chain, which can cycle: 29's termination
-  question), or always wakes the parent.
+- **Scalar kinds.** *Decided (2026-10-01):* JSON's four scalar kinds are leaf
+  shapes, so `1` and `"1"` are two shapes.
+- **`for` over the return.** *Decided:* only `if`. `for` and comprehensions
+  are refused before a route runs, like `while`.
+- **Which previous return.** *Decided for v1:* the last return at this binding
+  and type in this frame. Across frames needs an index over the log.
+- **What a send's result does.** *Decided:* it is routed again, up to eight
+  sends in a row at one waiter; the next return is a `depth` interrupt.
 - **Inputs.** Input contracts stay declared for now. Whether an input type is
   also computed, and who answers novelty at an input (29).
 - **Observation reach.** Whether a payload may reference any recorded
