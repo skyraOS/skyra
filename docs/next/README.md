@@ -59,3 +59,6 @@ became) or **not in the proposal**.
 14. **[`31-the-sky-dreams.md`](31-the-sky-dreams.md)**: the desktop sky as a
     machine hallucination of the tree. Every pixel derived from a record;
     Rest, Work and Dream; replay as the dream. Proposed.
+15. **[`32-the-public-horizon.md`](32-the-public-horizon.md)**: the website's
+    live mode without a model. A stranger's request is a run under a read-only
+    public root; its records come back to replay. Proposed.

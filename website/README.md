@@ -49,11 +49,29 @@ committed with its head hash, which is the "publish the head hash when the run
 is recorded" from the plan. Re-recording changes every hash (genesis carries a
 nonce), so record once per change worth showing.
 
-## Hosting
+## Hosting: the Mac mini
 
-Any static host works (GitHub Pages, Cloudflare Pages). `assets/replay.wasm`
-and `assets/wasm_exec.js` are build outputs: run `build.sh` before deploying, or
-commit them.
+```sh
+website/deploy.sh     # build here, publish to the ssh host `skyra`
+```
+
+`deploy.sh` builds the site, copies only the published files (pages,
+`assets/`, `runs/`) to `~/site/www` on the mini, and runs `deploy/install.sh`
+there: Caddy (installed with Homebrew if missing) serves them on
+`127.0.0.1:8080` with compression, under a launchd agent
+(`com.skyra.site`) that starts it at login and restarts it if it stops. Logs
+are in `~/site/`.
+
+It listens on loopback only, so nothing is public until a tunnel connects to
+it (Cloudflare Tunnel or Tailscale Funnel; not chosen yet). To look at it from
+this machine meanwhile:
+
+```sh
+ssh -L 8080:127.0.0.1:8080 skyra    # then open http://localhost:8080
+```
+
+The public, read-only ingress that would sit beside it is
+[next/32](../docs/next/32-the-public-horizon.md).
 
 ## Not built yet
 
