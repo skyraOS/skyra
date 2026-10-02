@@ -305,7 +305,7 @@ pre {
 .list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--ink); }
 .list li { padding: 18px 0; border-bottom: 1px solid var(--grid-major); }
 .list li p { margin: 4px 0 0; font-size: 16px; }
-.list a { font-weight: 600; }
+.list a, .list strong { font-weight: 600; color: var(--ink); }
 
 .fault { color: var(--fault); }
 

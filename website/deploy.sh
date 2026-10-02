@@ -15,5 +15,5 @@ ssh "$host" 'mkdir -p ~/site/www'
 rsync -a --delete \
   --include='*.html' --include='assets/***' --include='runs/***' --exclude='*' \
   "$here/" "$host:site/www/"
-scp -q "$here/deploy/Caddyfile" "$here/deploy/com.skyra.site.plist" "$host:site/"
+scp -q "$here/deploy/Caddyfile" "$here/deploy/com.skyra.site.plist" "$here/deploy/com.skyra.tailscaled.plist" "$host:site/"
 ssh "$host" 'sh -s' < "$here/deploy/install.sh"

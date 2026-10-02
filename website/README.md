@@ -62,9 +62,19 @@ there: Caddy (installed with Homebrew if missing) serves them on
 (`com.skyra.site`) that starts it at login and restarts it if it stops. Logs
 are in `~/site/`.
 
-It listens on loopback only, so nothing is public until a tunnel connects to
-it (Cloudflare Tunnel or Tailscale Funnel; not chosen yet). To look at it from
-this machine meanwhile:
+It listens on loopback only. The public way in is **Tailscale Funnel**, with no
+domain: a second launchd agent (`com.skyra.tailscaled`) runs `tailscaled` as
+the login user in userspace networking (no root), its state and socket under
+`~/site/tailscale`, as the node `skyra-site`. Once, on the mini:
+
+```sh
+ts="tailscale --socket=$HOME/site/tailscale/tailscaled.sock"
+$ts up --hostname=skyra-site   # prints a login link
+$ts funnel --bg 8080           # https://skyra-site.<tailnet>.ts.net → Caddy
+```
+
+Funnel keeps its config in Tailscale's state, so deploys do not touch it. To
+look at the site over ssh instead:
 
 ```sh
 ssh -L 8080:127.0.0.1:8080 skyra    # then open http://localhost:8080
