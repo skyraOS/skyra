@@ -68,9 +68,9 @@ the login user in userspace networking (no root), its state and socket under
 `~/site/tailscale`, as the node `skyra-site`. Once, on the mini:
 
 ```sh
-ts="tailscale --socket=$HOME/site/tailscale/tailscaled.sock"
-$ts up --hostname=skyra-site   # prints a login link
-$ts funnel --bg 8080           # https://skyra-site.<tailnet>.ts.net → Caddy
+alias ts="tailscale --socket=$HOME/site/tailscale/tailscaled.sock"
+ts up --hostname=skyra-site   # prints a login link
+ts funnel --bg 8080           # https://skyra-site.<tailnet>.ts.net → Caddy
 ```
 
 Funnel keeps its config in Tailscale's state, so deploys do not touch it. To
