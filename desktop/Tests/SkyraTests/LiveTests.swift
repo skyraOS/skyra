@@ -25,12 +25,53 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
     #expect(c.entries.first?.isUser == true)
     #expect(c.entries.first?.text == "Call the echo tool with the text hi.")
     print("agent:", c.entries.last?.text ?? "")
+    // Its Horizons: the room, which the user side and Codex ran under, reaching echo.
+    let room = try #require(c.horizons?.first)
+    #expect(room.root && room.actors.contains("user") && room.actors.contains("codex"))
+    #expect(room.reach.contains { $0.name == "echo" })
 
     // A second message continues the same conversation.
     s.draft = "again"
     s.submit()
     try await until { (s.current?.entries.count ?? 0) >= 4 && s.current?.phase == .ready }
     #expect(s.selected == c.conversation)
+    s.delete(c.conversation)
+    try await until { s.selected == nil }
+}
+
+// The agent writes to its scratch space and reads it back; it cannot write
+// out of it. (The fake Codex reads "write:PATH=TEXT" and "read:PATH" as calls.)
+@MainActor
+@Test(.enabled(if: env["SKYRA_TEST_WS"] != nil))
+func theAgentWritesToItsScratchSpaceAndReadsItBack() async throws {
+    let s = Session()
+    s.connect(URL(string: env["SKYRA_TEST_WS"]!)!, token: env["SKYRA_TEST_TOKEN"] ?? "")
+    defer { s.disconnect() }
+    try await until { s.connected && !s.incarnation.isEmpty }
+
+    func say(_ text: String) async throws -> Conversation {
+        let before = s.current?.entries.count ?? 0
+        s.draft = text
+        s.submit()
+        try await until { (s.current?.entries.count ?? 0) > before + 1 && s.current?.phase == .ready }
+        return try #require(s.current)
+    }
+    var c = try await say("write:notes/plan.md=from the scratch space")
+    let wrote = try #require(c.entries.compactMap(\.call).last)
+    #expect(wrote.to == "write" && wrote.state == "returned")
+
+    c = try await say("read:scratch:notes/plan.md")
+    #expect(c.entries.last?.text.contains("from the scratch space") == true)
+
+    // roots names the workspace and this conversation's scratch space.
+    c = try await say("roots")
+    let seen = c.entries.last?.text ?? ""
+    #expect(seen.contains("workspace") && seen.contains("\(c.conversation)/scratch"))
+
+    c = try await say("write:../escape.md=no")
+    #expect(c.entries.last?.text.contains("outside_scratch") == true)
+    #expect(c.horizons?.first?.reach.contains { $0.name == "write" } == true)
+
     s.delete(c.conversation)
     try await until { s.selected == nil }
 }

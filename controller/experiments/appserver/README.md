@@ -51,6 +51,15 @@ refresh and long-running credentials are not tested.
 
 ## Results
 
+Re-verified on macOS 15.6 with Codex 0.160.0 on 2026-10-02: `tool_surface.py`
+(exactly one direct function, no skill inventory), the non-live `probe.py`
+checks (initialization, read-only config, outside read and write denied,
+shell spawn and native command denied) and the deterministic `integration.py`
+suite all pass. 0.160.0 fetches its model catalog from the configured
+provider at startup, so `tool_surface.py` now passes `--capture-port` to the
+launcher: bootstrap fetches the catalog through the egress proxy as in
+production, and only afterwards does inference go to the capture server.
+
 Verified on macOS 15.6 with Codex 0.157.1 on 2026-09-27:
 
 - App-server initialization, an allowed in-process file read and a scratch

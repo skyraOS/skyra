@@ -61,7 +61,7 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  local builds="skyra:skyra echo:targets/echo read:targets/read agent:targets/agent user:targets/user
+  local builds="skyra:skyra echo:targets/echo read:targets/read write:targets/write roots:targets/roots agent:targets/agent user:targets/user
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
   go build -o "$BUILD/tui" ./tui
@@ -113,6 +113,8 @@ registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
  'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
+ 'roots':{'path':str(build/'roots'),'contract':str(root/'controller/targets/roots/contract.json')},
+ 'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
  'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.start':start,
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
@@ -124,6 +126,22 @@ registry={
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
+# Each built binary is registered by a copy stored under its own hash. A
+# conversation pins its binaries' hashes at genesis, so a rebuild must never
+# change a file one points at: it adds new copies and leaves the old ones.
+import hashlib, shutil, tempfile
+def pinned(path):
+    p=Path(path)
+    digest=hashlib.sha256(p.read_bytes()).hexdigest()
+    dest=build/'pinned'/digest/p.name
+    if not dest.exists():
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        fd,tmp=tempfile.mkstemp(dir=dest.parent); os.close(fd)
+        shutil.copy2(p,tmp); os.replace(tmp,dest)
+    return str(dest)
+for entry in registry.values():
+    if 'path' in entry and Path(entry['path']).parent==build:
+        entry['path']=pinned(entry['path'])
 Path(os.environ['SKYRA_REGISTRY_FILE']).write_text(json.dumps(registry,sort_keys=True))
 PY
   echo "$file"
@@ -326,7 +344,7 @@ doctor() {
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
   warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"
-  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.157.1, file login and matching model cache; see docs/startup-doc.md"
+  warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.160.0, file login and matching model cache; see docs/startup-doc.md"
   warn "port $WS_PORT free" 'port_free "$WS_PORT"' "set SKYRA_WS_PORT"
   warn "port $UI_PORT free" 'port_free "$UI_PORT"' "set SKYRA_UI_PORT"
   [ "$ok" = 1 ] || die "fix the FAIL lines above"

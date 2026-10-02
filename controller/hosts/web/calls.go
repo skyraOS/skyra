@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
@@ -34,9 +35,11 @@ type call struct {
 type lineage struct {
 	root string
 
-	mu      sync.Mutex
-	records map[string]lrec
-	turns   [][]call
+	mu       sync.Mutex
+	records  map[string]lrec
+	turns    [][]call
+	released map[string]horizon.Horizon // every Horizon released in it, by id
+	horizons []horizonView
 }
 
 type lrec struct {
@@ -45,11 +48,11 @@ type lrec struct {
 }
 
 func newLineage(root string) *lineage {
-	return &lineage{root: root, records: map[string]lrec{}}
+	return &lineage{root: root, records: map[string]lrec{}, released: map[string]horizon.Horizon{}}
 }
 
-// refresh loads records committed since the last call and re-derives the
-// turns. It reports whether the turns changed.
+// refresh loads records committed and Horizons released since the last call
+// and re-derives the turns and Horizons. It reports whether either changed.
 func (l *lineage) refresh() bool {
 	files, err := os.ReadDir(filepath.Join(l.root, "records"))
 	if err != nil {
@@ -57,7 +60,7 @@ func (l *lineage) refresh() bool {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	added := false
+	added := l.loadHorizons()
 	for _, f := range files {
 		name := f.Name()
 		if strings.HasPrefix(name, ".") {
@@ -83,7 +86,54 @@ func (l *lineage) refresh() bool {
 	turns := l.derive()
 	changed := !sameTurns(turns, l.turns)
 	l.turns = turns
-	return changed
+	var genesis *record.Record
+	for _, x := range l.records {
+		if x.r.Predecessor == "" {
+			genesis = &x.r
+		}
+	}
+	var released []horizon.Horizon
+	for _, h := range l.released {
+		released = append(released, h)
+	}
+	views := horizons(genesis, released)
+	before, _ := json.Marshal(l.horizons)
+	after, _ := json.Marshal(views)
+	l.horizons = views
+	return changed || string(before) != string(after)
+}
+
+// loadHorizons loads Horizons released since the last call. Caller holds mu.
+// A conversation recorded before Horizons were stored has none: it is drawn
+// from its genesis alone.
+func (l *lineage) loadHorizons() bool {
+	files, _ := os.ReadDir(filepath.Join(l.root, "horizons"))
+	added := false
+	for _, f := range files {
+		id := f.Name()
+		if _, ok := l.released[id]; ok || strings.HasPrefix(id, ".") {
+			continue
+		}
+		h, err := tree.LoadHorizon(l.root, id)
+		if err != nil {
+			continue
+		}
+		l.released[id] = h
+		added = true
+	}
+	return added
+}
+
+func (l *lineage) horizonsNow() []horizonView {
+	if l == nil {
+		return []horizonView{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.horizons == nil {
+		return []horizonView{}
+	}
+	return l.horizons
 }
 
 func (l *lineage) snapshot() [][]call {

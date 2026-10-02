@@ -1,7 +1,7 @@
 // Command skyra is the stateless controller. It owns only argv: which mode,
 // and the operator's flags.
 //
-//	skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON | -text TEXT]
+//	skyra boot -root DIR -registry FILE [-scratch DIR] [-to CAPABILITY] [-payload JSON | -text TEXT]
 //	skyra instance DIR   (internal: started only by a parent holding fd 3)
 //	skyra replay DIR     re-derive a finished lineage from its records
 //	skyra resume DIR     (internal: started only by an actor host holding a parked frame)
@@ -38,6 +38,7 @@ func main() {
 		fs := flag.NewFlagSet("boot", flag.ExitOnError)
 		root := fs.String("root", "", "state directory (.skyra)")
 		reg := fs.String("registry", "", "the operator's registry of surfaces and their contracts")
+		scratch := fs.String("scratch", "", "a directory everything in the room may read and write, and run nothing from")
 		to := fs.String("to", "echo", "the capability the seed addresses")
 		payload := fs.String("payload", `{"text":"hello"}`, "the seed's payload (JSON)")
 		text := fs.String("text", "", "shorthand for -payload '{\"text\": TEXT}'")
@@ -53,7 +54,7 @@ func main() {
 		}
 		var real string
 		if real, err = realDir(*root); err == nil {
-			_, err = boot.Run(real, *reg, *to, json.RawMessage(*payload), *detach)
+			_, err = boot.Run(real, *reg, *scratch, *to, json.RawMessage(*payload), *detach)
 		}
 	case "replay":
 		if len(os.Args) != 3 {

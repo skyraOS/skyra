@@ -722,6 +722,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 		}
 		env = append(env, "SKYRA_READ="+paths)
 	}
+	if s := h.Authority.Scratch; s != "" {
+		env = append(env, "SKYRA_SCRATCH="+s)
+	}
 	r := Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
 	if h.Surface.Connection {
 		r.ConnectionOwner = resourceOwner(h)

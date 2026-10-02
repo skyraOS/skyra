@@ -54,7 +54,7 @@ var (
 		"actor": str,
 		"reach": strs,
 		"authority": {Type: "object", Fields: map[string]*contract.Schema{
-			"read": grants, "write": grants, "mach": strs, "connect": strs,
+			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
 	}}
 	routeIn = &contract.Schema{Type: "object", Required: []string{"step", "source"}, Fields: map[string]*contract.Schema{

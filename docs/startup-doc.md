@@ -4,7 +4,7 @@ Everything needed to get Skyra running on a fresh machine. **Keep this current:*
 when anything about setup changes, update this file in the same commit.
 
 **Current setup: 2026-09-28.** macOS 15.6 (Apple Silicon), Go 1.25.0,
-Node 26.0.0, Python 3.9, Codex CLI **0.157.1**.
+Node 26.0.0, Python 3.9, Codex CLI **0.160.0**.
 
 The controller launches one Codex app-server per conversation under a registered
 Seatbelt profile, with direct dynamic tools, private state and an allowlisted
@@ -41,7 +41,7 @@ python3 controller/experiments/appserver/integration.py --live  # real model usa
 | **Go 1.25+** | builds everything; standard library only, no other Go dependencies | `brew install go` |
 | **Node 20+** | browser UI (Next.js) | `brew install node` |
 | **Python 3.9+** | provider configuration and sandbox launcher | `brew install python` |
-| **Codex CLI 0.157.1**, logged in | verified direct-tool configuration for real chat | `npm install -g @openai/codex@0.157.1`, then `codex login` |
+| **Codex CLI 0.160.0**, logged in | verified direct-tool configuration for real chat | `npm install -g @openai/codex@0.160.0`, then `codex login` |
 
 After login, start `codex` once to fetch model metadata, then exit it.
 `skyra doctor` checks for a file-based login and matching `~/.codex/models_cache.json`.
@@ -129,7 +129,7 @@ disables built-in goals, clock, questions and collaboration, and suppresses
 skill discovery. The code-mode helper has no execute grant. The adapter also
 rejects calls naming tools absent from its registered tool set.
 
-This configuration is verified for Codex **0.157.1** and requires that version's
+This configuration is verified for Codex **0.160.0** and requires that version's
 `~/.codex/models_cache.json`. Missing or mismatched metadata fails startup;
 refresh it using the installed Codex outside Skyra. A Codex upgrade requires
 rerunning `controller/experiments/appserver/tool_surface.py` and validating the

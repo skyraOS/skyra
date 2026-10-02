@@ -106,12 +106,32 @@ The implementation plan, with the decisions to confirm first, is
 | F7 | The novelty interrupt (`novel` and a presentation in `StepView`) and the room's `system.route` facet | `core/machine`, `room.go`, `targets/agent` | Built (`5b1d0f3`) |
 | F8 | The log as the test suite: a rewritten route runs against its recorded cases; flips are declared | `core/machine`, `runtime/tree` | Built (`5b1d0f3`), inside `system.route` |
 | F9 | The declared `"output"` contract becomes optional, then goes | `contract.json` files, `registry`, `interpret`, `horizon.Surface` | Built (`00db79a`, `2d974a0`, `8cce174`): `Surface.Output` is gone |
+| F10 | **A route never runs with more authority than it was written with.** Store the author's authority in `RouteEntry` at `system.route`; at lookup, run a route only if the current Horizon's authority and reach are within the author's, else the return is novel. Today routes are keyed by `horizon.Identity(surface)`, so a route written under a narrowed Horizon, or under a prompt injection, fires silently in every later frame of that surface, including broader Horizons | `core/machine/write.go` (`RouteEntry`, `recorded`), `route.go` (`lookedUp`), `runtime/instance` (`lookupRoute`), `runtime/tree` | Not built. Review finding, 2026-10-01 |
+| F11 | Replay re-runs each route: the runner over the stored input, and the decision compared. Also check the run's `previous` and `targets` against the frame. Today replay re-derives the decision from the runner's stored output only, and 30 says replay runs it again | `runtime/replay` (`routed`) | Not built. Review finding, 2026-10-01 |
+| F12 | `system.route`'s `accept` names flipped cases by their runner input's hash, not by index: indexes come from a directory listing and shift when another frame records a run between the refusal and the retry | `core/machine/write.go` (`FlipView`, `recorded`), `routeIn` | Not built. Review finding, 2026-10-01 |
+| F13 | Replay checks `route-table/` against the `system.route` records that wrote it, so a route lookup (novel or a hit) is verifiable. With E | `runtime/replay`, `runtime/tree` | Not built. Review finding, 2026-10-01 |
+| F14 | Say which invariant holds: frame ids reach the Codex app-server (an external actor) in JSON-RPC ids, an accepted exception. Either the rule is "never to a model", and 30 says so, or the exception is fixed with 29's actor state | `docs/next/30-types-by-origin-routes.md`, `codex/adapter`, `codex/resident` | Not built. Review finding, 2026-10-01 |
+
+### G. Every return is routed (30)
+
+The rule, agreed 2026-10-02 ([30, "Every return is routed"](../30-types-by-origin-routes.md#every-return-is-routed)):
+when the runtime derives a return, it computes the return's type and runs the
+receiver's route for that type; the route's decision is the next transition;
+with no route, the default route interrupts, of kind novelty. **F10 comes
+first:** without it, the rule routes every return through F10's hole.
+
+| Id | Change | Where | Status |
+|---|---|---|---|
+| G1 | One lookup: the receiver's route for the type, else the default route (interrupt, kind `novelty`). Declared routes (F5) are recorded into the same table at registration, so "recorded before declared" goes | `route.go` (`lookedUp`), `runtime/instance` (`lookupRoute`), `runtime/registry` (`LoadWithRoutes`), `runtime/tree` | Not built. After F10 |
+| G2 | Delete `routable`'s exceptions: a facet's return and a return at the operator are routed, and reach the default. The operator's default hands the return to the human, as today. `MaxChain` stays the one gate outside routes | `route.go` (`routable`), `core/machine` (`gather`) | Not built |
+| G3 | A fault is routed: `TypeOf` types a fault discharge from what the route is given (kind, cause, observation), and a route branches on its kind. Faults that climb to the human become a route that sends upward | `route.go` (`TypeOf`, `Decided`), `targets/route` (the return a fault presents), `replay` | Not built. Open: whether the fault's kind is part of its type |
+| G4 | Fan-out: each child's return is routed on its own; the round ends when every route has decided, and the parent is woken once if any interrupted, with every interrupt | `core/machine` (`gather`, `resolve`) | Not built. Waits for fan-out rounds (one output per step today) |
 
 ## Status
 
-**Implemented:** A (all), B3, B4, B6, B7, B8, B10, C1, C2, D2, F (all).
+**Implemented:** A (all), B3, B4, B6, B7, B8, B10, C1, C2, D2, F1–F9.
 **In part:** B1, B2, D1, D3.
-**Not built:** B5, B9, B11, C4, D4, D5, D6, E1–E7. **Deferred:** C3.
+**Not built:** B5, B9, B11, C4, D4, D5, D6, E1–E7, F10–F14 (review findings; F10 first), G1–G4. **Deferred:** C3.
 
 Every Go test and every `skyra demo` scenario pass, each ending in a
 byte-identical replay. A fake-Codex conversation driven through the webhost
@@ -141,6 +161,8 @@ the per-document proposals say the same for their documents.
    operator.
 8. ✓ **F** (2026-10-01, branch `self-extension`): F1 first; then F2–F3 (types), F4–F5 (routes), F6 (routing), F7
    (the interrupt), F8, F9. Self-extension (28, `system.register`) follows.
+9. ✗ **G** (agreed 2026-10-02): F10 first; then G1 (one lookup, the default
+   route), G2 (no exceptions), G3 (faults routed); G4 with fan-out.
 
 ## Per document
 

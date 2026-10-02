@@ -26,6 +26,11 @@ type preparedResident struct {
 	proxy         *exec.Cmd
 }
 
+// PinnedCodex is the one Codex version the resident profile is verified for
+// (codex/provider/launch.py pins the same). Changing it means rerunning
+// experiments/appserver/tool_surface.py and the OS probes first.
+const PinnedCodex = "0.160.0"
+
 func (p *preparedResident) abort() {
 	if p == nil {
 		return
@@ -67,8 +72,8 @@ func prepareAppserver(x machine.StartResident, root string) (p *preparedResident
 		return nil, errors.New("registered proxy changed")
 	}
 	version, err := exec.Command(s.Path, "--version").Output()
-	if err != nil || strings.TrimSpace(string(version)) != "codex-cli 0.157.1" {
-		return nil, errors.New("resident profile is verified for Codex 0.157.1")
+	if err != nil || strings.TrimSpace(string(version)) != "codex-cli "+PinnedCodex {
+		return nil, errors.New("resident profile is verified for Codex " + PinnedCodex)
 	}
 	base := filepath.Join(filepath.Dir(root), "providers")
 	if err = os.MkdirAll(base, 0700); err != nil {
@@ -229,7 +234,7 @@ func bootstrapCatalog(s horizon.Surface, p *preparedResident, run string) error 
 		ClientVersion string           `json:"client_version"`
 		Models        []map[string]any `json:"models"`
 	}
-	if json.Unmarshal(cache, &metadata) != nil || metadata.ClientVersion != "0.157.1" || len(metadata.Models) == 0 {
+	if json.Unmarshal(cache, &metadata) != nil || metadata.ClientVersion != PinnedCodex || len(metadata.Models) == 0 {
 		return errors.New("isolated model metadata does not match pinned Codex")
 	}
 	for _, model := range metadata.Models {

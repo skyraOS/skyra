@@ -352,6 +352,8 @@ Where the build differs from the plan, and why:
   returned. Faults, fan-out rounds (none exist yet: a continuation emits once
   per round), returns from the room's facets, and the operator are delivered
   as before, with no interrupt kind.
+  Superseded by the rule that every return is routed (2026-10-02), section G
+  of the [list](README.md#g-every-return-is-routed-30).
 - **A reference's binding is its actor's name**, so its routes and its
   presentation never carry a reference.
 - **A route's refusal is a fault of kind `route`** in the step's view, the
@@ -374,3 +376,93 @@ Where the build differs from the plan, and why:
 - **The demo agent** routes on `$`, since echo returns a string, not
   `{text}`: an unchanged answer is sent back to echo, marked, instead of
   being delivered as is.
+
+## Review findings
+
+Reviewed 2026-10-01, after `180514c`. Every Go test and all 13 `run.sh`
+scenarios pass, each ending in a byte-identical replay; the shape encoding
+matches this plan exactly. These are open, as F10–F14 in the [list](README.md).
+**F10 comes first:** nothing should build on `system.route` until it is in.
+
+### F10: a route never runs with more authority than it was written with
+
+**The issue.** A route is keyed by `RouteKey{Parent: horizon.Identity(*caller.Surface), ...}`
+(`write.go`, `route.go`), and `horizon.Identity` hashes the surface only, not
+the Horizon. So a route applies to every later frame of that surface: other
+conversations, and broader Horizons than the one it was written under.
+
+**The failure.** The agent runs under a narrowed Horizon while it reads
+untrusted text, and a prompt injection has it write a route. Later the same
+agent runs with `write` in reach. The route fires there, with no interrupt, and
+can now send to `write`. Sends are still bounded by the parent's current
+Horizon, so this is not escalation past the parent; it is a decision made with
+less authority, possibly under attack, acting later with more. The
+adversarial suite will find it.
+
+**Why it happened.** The runtime hashes authority on the way down and values
+on the way up ([30, "Hashed down, hashed up"](../30-types-by-origin-routes.md#hashed-down-hashed-up)).
+A route key takes its type from the upward side but leaves out the downward
+side: the parent's surface is in the key, its Horizon is not. The rule 30 now
+states, every kept decision is keyed by both directions, is what F10 restores.
+
+**The fix.**
+- `RouteEntry` gains the author's authority: its Horizon's reach (names),
+  references (names) and `Authority`, as written at `system.route`.
+- At lookup (`lookedUp`, after `LookupRoute`), a recorded route runs only if
+  the waiter's current reach is a subset of the author's and its `Authority`
+  is allowed by the author's (`Authority.Allows`). Otherwise the return is
+  novel, as if no route were recorded, and the parent may write one under its
+  current Horizon.
+- Declared routes (F5) are unaffected: the registrant wrote them with the
+  surface, under the operator's authority.
+- 30 states the rule ("Hashed down, hashed up"): **a route never runs with
+  more authority than it was written with.** Mark it built there when F10
+  lands.
+- **Tests:** a route written under a narrowed Horizon does not run under the
+  full one (novelty); it does run under the same or a narrower one; replay of
+  each.
+
+### F11: replay re-runs routes
+
+`replay.routed` re-derives the decision from the runner's **stored** emission
+and checks the source and the return. It does not re-run the Starlark, and it
+does not check `previous` or `targets`. That is how replay treats every target,
+but 30 says "the same return … give the same decision, so replay runs it
+again", and routes are the one place re-running is possible: deterministic,
+cheap, with no authority.
+
+- Replay runs the runner over the stored input and requires byte-identical
+  output.
+- It re-derives `previous` from the frame's earlier rounds and `targets` from
+  the waiter's Horizon, and requires both to match the stored input.
+- If re-running at replay is not wanted, correct 30 instead.
+
+### F12: `accept` by input hash, not index
+
+`accept` names flipped cases by index into the runs `LoadRuns` returns, which
+come from a directory listing of `route-runs/<key>/`. A run another frame
+records between the refusal and the retry shifts the indexes. Usually the
+retry is then refused again, but it can also accept a different set of
+cases than the parent saw. Name each case by its runner input's hash in
+`FlipView`, and take `accept` as a list of those. A model never sees it as a
+hash it can use: it is an opaque case id, echoed back.
+
+### F13: verify the route table
+
+`route-table/` is side state: replay does not check it against the
+`system.route` records that wrote it, so whether a return was really novel, or
+which route was recorded when it was routed, cannot be verified. Replay should
+rebuild the table from the `system.route` returns (`"ok": true`) and their
+inputs, and check every route run's source against it. Belongs with E.
+
+### F14: which invariant holds
+
+The F1 audit accepts frame ids in Codex's JSON-RPC correlation ids. They reach
+the app-server, an external actor, which 30's invariant forbids ("never to a
+model or to an external actor"). The model does not see them. Either:
+
+- the invariant is **hashes never reach a model**, and 30 says so, with the
+  app-server's correlation ids as the recorded case; or
+- the exception is fixed with 29's actor state, where the host maps its own ids.
+
+A decision for the human, not the implementer.

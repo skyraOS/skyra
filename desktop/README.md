@@ -26,12 +26,20 @@ Quitting the app stops the webhost; the Codex actor host keeps running
 | ⌘N | New conversation |
 | ⌘D | Close the conversation on screen |
 | ⇧⌘⌫ | Delete the conversation on screen (also: the trash on a hovered row, or right-click) |
-| ⌘O | Change the workspace (restarts the backend) |
+| ⌘O | Change the workspace (restarts the backend); also the folder in the header, which lists the folders granted before |
 | ⇧⌘R | Restart the backend |
+| Double-click the conversation | Arrange it: drag to move it, an edge or corner to resize it; double-click or Esc when done, Reset to put it back in its column. The placement is kept between launches |
 
 The sky is the TUI's (`tui/wallpaper.go`, `tui/satellites.go`), ported to a
 `Canvas`: the same stars in the same places (the tests pin the hash), and
-satellites that leave their orbit for the pointer. It stops when the window is
+satellites that leave their orbit for the pointer. Over it, the conversation
+on screen's Horizons, as the webhost reads them from its lineage: each a faint
+region as wide as what it reaches, each surface in reach one star (its name
+shows under the pointer), shared stars where Horizons overlap, and a call's
+light flying to the star it invokes. Under the pointer, away from the
+conversation, a Horizon draws its constellation: its lines traced one at a
+time, its stars lit and named. The backdrop warps a little around the
+pointer, nearer stars more. It stops when the window is
 hidden and with Reduce Motion, and slows to ten frames a second when the app
 is in the background.
 

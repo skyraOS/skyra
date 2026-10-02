@@ -148,3 +148,26 @@ func TestLoadDeclaredRoutes(t *testing.T) {
 		t.Fatal("a route for a child that is not registered")
 	}
 }
+
+// Every contract the repository ships loads the way genesis loads it: a
+// contract that does not is a room that never boots.
+func TestEveryShippedContractLoads(t *testing.T) {
+	var files []string
+	for _, pattern := range []string{"../../targets/*/contract.json", "../../codex/*/contract.json", "../../codex/*/*-contract.json"} {
+		m, _ := filepath.Glob(pattern)
+		files = append(files, m...)
+	}
+	if len(files) < 5 {
+		t.Fatalf("found only %v", files)
+	}
+	for _, f := range files {
+		var d Declared
+		if err := strict(f, &d); err != nil {
+			t.Errorf("%s: %v", f, err)
+			continue
+		}
+		if err := d.Input.Check(); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+}

@@ -109,3 +109,45 @@ struct Star {
         return stars
     }
 }
+
+/// The pointer as the field feels it: a soft swell under the pointer, as if
+/// the sky bowed toward the viewer there, and a slight tilt of the whole field
+/// away from it. Nearer stars move more, so the sky reads as having depth.
+/// The lens follows the pointer a little late and fades in and out, so the
+/// field never jumps. Only the sky's backdrop warps: the satellites, the core
+/// and everything over the sky hold still.
+struct Lens {
+    static let radius = 150.0 // points: the swell's reach
+    static let swell = 0.14 // share of its distance from the pointer a near star is pushed out, at most
+    static let tilt = 6.0 // points a near star drifts with the pointer at the sky's edge
+    static let lag = 3.0 // frames to close most of the gap to the pointer
+    static let fade = 6.0 // frames to fade most of the way in or out
+
+    private(set) var at: CGPoint?
+    private(set) var strength = 0.0
+
+    /// Eases toward the pointer over df frames; nil when there is none.
+    mutating func follow(_ pointer: CGPoint?, _ df: Double) {
+        let k = 1 - exp(-df / Lens.lag), fade = 1 - exp(-df / Lens.fade)
+        if let p = pointer {
+            at = at.map { CGPoint(x: $0.x + (p.x - $0.x) * k, y: $0.y + (p.y - $0.y) * k) } ?? p
+            strength += (1 - strength) * fade
+        } else {
+            strength -= strength * fade
+            if strength < 0.001 { (strength, at) = (0, nil) }
+        }
+    }
+
+    /// Where a point at depth (0 far, 1 near) appears on a sky of size, and
+    /// how much larger it looks there.
+    func warp(_ p: CGPoint, depth: Double, in size: CGSize) -> (CGPoint, Double) {
+        guard let c = at, strength > 0, depth > 0 else { return (p, 1) }
+        let s = strength * depth
+        let tx = -(c.x / size.width - 0.5) * 2 * Lens.tilt * s
+        let ty = -(c.y / size.height - 0.5) * 2 * Lens.tilt * s
+        let dx = p.x - c.x, dy = p.y - c.y
+        let bump = exp(-(dx * dx + dy * dy) / (Lens.radius * Lens.radius))
+        let push = Lens.swell * bump * s
+        return (CGPoint(x: p.x + dx * push + tx, y: p.y + dy * push + ty), 1 + 0.35 * bump * s)
+    }
+}

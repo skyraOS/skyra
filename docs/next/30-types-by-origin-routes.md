@@ -6,7 +6,8 @@ the implementation plan is [30-types-by-origin-routes-proposal](proposal/30-type
 Date: 2026-10-01  
 Status: **built** on branch `self-extension` (2026-10-01), F1–F9 of the
 [proposal](proposal/30-types-by-origin-routes-proposal.md#as-built), which
-records the decisions taken and where the build differs. "Wake" is named
+records the decisions taken and where the build differs. **Every return is
+routed** (2026-10-02) is agreed and not built: section G. "Wake" is named
 **interrupt** throughout: the runtime raises it, never the parent (29).
 Builds on [21](21-observation-passing.md),
 [24](24-the-room.md), [28](28-types-observations-checks.md) and
@@ -23,6 +24,14 @@ declared output contract with a type the runtime computes.
 > is a novelty interrupt, and a novelty interrupt produces a route: given this
 > type, send this observation to this target, or interrupt me. The route is kept,
 > so the next return of that type does not interrupt.
+
+And the transition it gives (2026-10-02, [below](#every-return-is-routed)):
+
+> **Every return is routed.** When the runtime derives a return, it computes
+> the return's type (the actor, the contract it was invoked through, the shape
+> of what it returned) and runs the receiver's route for that type. The
+> route's decision is the next transition. With no route, the default route
+> runs: interrupt, of kind novelty.
 
 Three layers, and where meaning lives:
 
@@ -121,6 +130,33 @@ A content hash says *whether* a string changed, not *how much*: `"hi"` →
 changed is a separate measure over the strings themselves, which the runtime
 has; it is not in v1.
 
+## Hashed down, hashed up
+
+The runtime hashes in both directions, and each direction hashes something
+different:
+
+| Direction | What is hashed | Each hash commits to | Shape |
+|---|---|---|---|
+| **Down** | authority: Horizons committed and handed over by hash; records linked by `Predecessor` | its **parent** | a hash **chain**, as git's parent commits |
+| **Up** | values: shape and content hashes, types; a resolve naming its discharges | its **children** | a **Merkle tree** |
+
+Going down, the runtime hashes what is **permitted**; coming up, what was
+**found**. Every node is pinned from both sides: by where it came from and by
+what it holds. These are an attribute grammar's two kinds of attribute
+(Knuth, 1968): inherited, flowing down, and synthesized, flowing up.
+
+> **The rule: every decision the runtime keeps is keyed by both directions:
+> the authority it runs under, and the values it acts on.**
+
+A route is where the two meet. Its key, `(parent, binding, type)`, takes the
+type from the upward side, but the parent only as its surface's identity, not
+its Horizon: the downward hash, the authority, is missing. That is review
+finding F10: a route written under a narrowed Horizon, or under a prompt
+injection, also fires under broader ones. The fix puts the downward side back:
+**a route never runs with more authority than it was written with.** The same
+rule applies to what comes next: a tool registered by `system.register` brings
+its bytes up and takes its grants down, and is keyed by both.
+
 ## Hashes never reach a model
 
 The security boundary is the entry point to the system, and it rests on one
@@ -188,6 +224,54 @@ not seen it. One interrupt per distinct shape is the cost, paid once.
 
 A deterministic parent (the Codex adapter, `user`, `agent`) cannot answer an
 interrupt, so it declares its routes at registration.
+
+## Every return is routed
+
+Agreed 2026-10-02; not built. Section G of the
+[proposal](proposal/README.md#g-every-return-is-routed-30), after F10.
+
+As built, routing is one path among several: only a continuation's
+single-child round whose child returned is routed, a recorded route is looked
+up before a declared one, novelty is its own branch, and faults, facet
+returns and the operator wake the parent "as before". The rule removes the
+exceptions. There is one return path:
+
+```text
+return derived ─▶ type (actor, contract, shape) ─▶ the receiver's route for that type, or the default
+                                                   └─▶ its decision is the next transition: interrupt | send | fault
+```
+
+| As built | Under the rule |
+|---|---|
+| `routable` admits only single-child continuation returns | every return is routed |
+| recorded route, else declared route, else a novelty branch | one lookup: the receiver's route for the type, else the **default route**. A declared route is a route recorded at registration |
+| a fault wakes the parent outside routing | a fault is a return with a fault type, routed like any other. A fault that climbs to the human is a route that sends upward, not a mechanism of its own |
+| a facet's return (`system.route`, `system.narrow`) is not routed | routed. No one writes routes for facets, so the default runs and interrupts: the same behaviour, without the exception |
+| the operator is a special case at the root | a receiver whose default route hands the return to the human |
+| novelty is a path | novelty is the default route's interrupt; its kind tells the model it is being asked for a route |
+
+What the rule does not change:
+
+- **A type is derived, not stored.** "Compute the type" is a derivation at
+  routing and again at replay. Writing the type into a record waits for the
+  encoding change (improvements item 9, section E).
+- **Depth stays the runtime's.** `MaxChain` is not a decision a route makes;
+  it is the bound on routes that send forever, outside the rule.
+
+What it needs first:
+
+- **The receiver's route is the receiver at its authority.** "The receiver's
+  route for that type" must mean a route written with no less authority than
+  the receiver holds now, or the rule routes every return through F10's hole.
+  F10 comes first.
+- **Fan-out.** Each child's return in a round is routed on its own. The round
+  ends when every child's route has decided, and the parent is woken once if
+  any of them interrupted, with every interrupt. No fan-out rounds exist yet
+  (one output per step), so this is the rule stated now and built with fan-out.
+- **A fault's type.** A fault's shape is the shape of what the route is
+  given: its kind, its cause and the observation it carries. The kind is a
+  leaf value, not part of the shape, so a route branches on it; whether the
+  kind belongs in the type is open.
 
 ## Routes
 
@@ -342,6 +426,10 @@ parent as author.
   and type in this frame. Across frames needs an index over the log.
 - **What a send's result does.** *Decided:* it is routed again, up to eight
   sends in a row at one waiter; the next return is a `depth` interrupt.
+- **What is routed.** *Decided (2026-10-02):* every return, faults and facet
+  returns included; with no route, the default interrupts
+  ([Every return is routed](#every-return-is-routed)). Open: whether a
+  fault's kind is part of its type.
 - **Inputs.** Input contracts stay declared for now. Whether an input type is
   also computed, and who answers novelty at an input (29).
 - **Observation reach.** Whether a payload may reference any recorded

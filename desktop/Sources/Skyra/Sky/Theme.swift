@@ -47,6 +47,13 @@ enum Theme {
     static let glintPeak = RGB(176, 192, 214)
     static let satellite = RGB(132, 188, 196)
 
+    // Horizons: a region's light, its edge, and a surface's star.
+    static let roomLight = RGB(5, 9, 13)
+    static let narrowLight = RGB(8, 6, 14)
+    static let horizonEdge = RGB(70, 104, 118)
+    static let surfaceFloor = RGB(40, 58, 70)
+    static let surfacePeak = RGB(150, 200, 208)
+
     // The title, from receded (a conversation is on screen) through open to lit.
     static let titleWordReceded = RGB(28, 34, 44)
     static let titleWordOpen = RGB(74, 84, 100)

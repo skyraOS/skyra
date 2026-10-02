@@ -180,3 +180,18 @@ func TestANativeAttemptIsReturnedAsAnObservation(t *testing.T) {
 		t.Fatalf("the attempt is returned to the slot, naming what was attempted: %s %s", to, m["payload"])
 	}
 }
+
+// A failed turn ends with Codex's own reason, such as a usage limit: the human
+// needs it, not only the status.
+func TestAFailedTurnCarriesCodexsReason(t *testing.T) {
+	c := turnWithCalls()
+	reason := "You've hit your usage limit. Try again at Oct 3rd, 2026 11:01 PM."
+	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}),
+		Value: value(map[string]any{"lines": []string{
+			`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"failed","error":{"message":` + string(value(reason)) + `,"codexErrorInfo":"usageLimitExceeded"}}}}`,
+		}, "delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": ""})})
+	_, err := decide(c)
+	if err == nil || !strings.Contains(err.Error(), "turn ended failed: "+reason) {
+		t.Fatalf("got %v", err)
+	}
+}

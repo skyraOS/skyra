@@ -26,6 +26,7 @@ enum CallMotion {
 
 struct CallLight {
     let key: String
+    var to: String? = nil // the surface called
     let fault: Bool
     let angle: Double
     let at: Double // frame it launched
@@ -39,10 +40,21 @@ struct CallLight {
         fault ? f - at > CallMotion.outEdge + CallMotion.arc : f > homeStart + CallMotion.home
     }
 
-    /// Where the light is at frame f, in dots; nil once it is gone.
-    func place(_ size: Point, _ f: Double) -> Point? {
+    /// Where the light is at frame f, in dots; nil once it is gone. With a
+    /// target, the called surface's star, it flies there instead of to the
+    /// inner orbit, circles the star while the call runs, and comes home.
+    func place(_ size: Point, _ f: Double, target: Point? = nil) -> Point? {
         let u = f - at
         guard u >= 0 else { return nil }
+        if !fault, let target {
+            let core = Orbit.center(size)
+            let ridden = max(0, min(f, homeStart) - at - CallMotion.out)
+            let a = angle + 0.15 * ridden
+            let around = target + Point(cos(a), sin(a)) * (2.5 * Sky.smoothstep(0, 4, ridden))
+            if f < homeStart { return u < CallMotion.out ? core + (target - core) * Sky.smoothstep(0, 1, u / CallMotion.out) : around }
+            let v = (f - homeStart) / CallMotion.home
+            return v < 1 ? around + (core - around) * Sky.smoothstep(0, 1, v) : nil
+        }
         if fault {
             guard u <= CallMotion.outEdge + CallMotion.flare else { return nil }
             return onRing(size, 1, angle, CallMotion.edge * Sky.smoothstep(0, 1, u / CallMotion.outEdge))
@@ -80,14 +92,14 @@ final class CallLights {
             seen[key] = call.state
             if quiet { continue }
             if before == nil {
-                launch(key, call.state, f)
+                launch(key, call.state, f, to: call.to)
             } else if before == "running" && call.state != "running" {
                 settle(key, f)
             }
         }
     }
 
-    func launch(_ key: String, _ state: String, _ f: Double) {
+    func launch(_ key: String, _ state: String, _ f: Double, to: String? = nil) {
         guard !lights.contains(where: { $0.key == key }) else { return }
         prune(f)
         guard lights.count < CallMotion.maxLights else { return }
@@ -97,7 +109,7 @@ final class CallLights {
             angle = CallMotion.angles[launched % CallMotion.angles.count]
             launched += 1
         }
-        lights.append(CallLight(key: key, fault: fault, angle: angle, at: f, home: state == "returned" ? f : nil))
+        lights.append(CallLight(key: key, to: to, fault: fault, angle: angle, at: f, home: state == "returned" ? f : nil))
     }
 
     func settle(_ key: String, _ f: Double) {

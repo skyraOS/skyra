@@ -117,3 +117,105 @@ private func call(_ stamp: String, _ state: String) -> Entry {
     #expect(light.place(size, CallMotion.outEdge + CallMotion.flare + 1) == nil)
     #expect(c.busy(CallMotion.outEdge + CallMotion.arc - 1))
 }
+
+@Test func theLensBendsNearStarsAndLetsGo() {
+    let sky = CGSize(width: 1000, height: 600), star = CGPoint(x: 560, y: 300)
+    var lens = Lens()
+    #expect(lens.warp(star, depth: 1, in: sky) == (star, 1)) // no pointer, no bend
+
+    for _ in 0..<60 { lens.follow(CGPoint(x: 500, y: 300), 1) }
+    let (near, grown) = lens.warp(star, depth: 1, in: sky)
+    let (far, _) = lens.warp(star, depth: 0.3, in: sky)
+    #expect(near.x > far.x && far.x > star.x) // pushed away from the pointer, nearer stars more
+    #expect(grown > 1)
+    #expect(near.distance(to: star) < 12) // barely
+
+    for _ in 0..<120 { lens.follow(nil, 1) }
+    #expect(lens.warp(star, depth: 1, in: sky) == (star, 1))
+}
+
+private extension CGPoint {
+    func distance(to p: CGPoint) -> Double { hypot(x - p.x, y - p.y) }
+}
+
+private func horizon(_ id: String, root: Bool = false, _ names: [String], actors: [String] = []) -> HorizonView {
+    HorizonView(id: id, root: root, actors: actors, reach: names.map { .init(name: $0, id: "surface-" + $0) }, grants: 0)
+}
+
+@Test func eachSurfaceIsOneStarWhereItsHorizonsMeet() {
+    let sky = CGSize(width: 1200, height: 800)
+    let room = horizon("room", root: true, ["user", "codex", "read", "echo", "browser", "system.narrow"], actors: ["user", "codex"])
+    let narrow = horizon("narrow", ["read"], actors: ["codex"])
+    let map = HorizonMap.layout([room, narrow], in: sky)
+
+    #expect(map.regions.count == 2)
+    #expect(map.stars.count == 6) // read is in both, and is one star
+    let read = map.star(named: "read")!
+    #expect(read.shared == 2)
+
+    // The narrowing holds less, so it is smaller and inside the room; the
+    // star they share is in the narrowing.
+    let (r, n) = (map.regions[0], map.regions[1])
+    #expect(n.radii.width < r.radii.width)
+    #expect(hypot(n.center.x - r.center.x, n.center.y - r.center.y) < r.radii.width)
+    #expect(hypot((read.at.x - n.center.x) / n.radii.width, (read.at.y - n.center.y) / n.radii.height) <= 1)
+
+    // Stars keep apart, stay on the sky, and the layout is the same every time.
+    for (i, a) in map.stars.enumerated() {
+        #expect(sky.width - 24 >= a.at.x && a.at.x >= 24 && sky.height - 24 >= a.at.y && a.at.y >= 24)
+        for b in map.stars[(i + 1)...] { #expect(hypot(a.at.x - b.at.x, a.at.y - b.at.y) > HorizonMap.spacing - 1) }
+    }
+    #expect(HorizonMap.layout([room, narrow], in: sky) == map)
+    #expect(HorizonMap.layout([], in: sky).stars.isEmpty)
+}
+
+@Test func aCallFliesToItsSurfacesStarAndHome() {
+    let size = Point(300, 200), star = Point(220, 60)
+    let light = CallLight(key: "k", to: "read", fault: false, angle: -0.6, at: 0, home: 40)
+    #expect(light.place(size, 0, target: star)! == Orbit.center(size))
+    #expect(light.place(size, 20, target: star)!.distance(star) <= 2.6) // circling it while the call runs
+    #expect(light.place(size, 200, target: star) == nil) // home
+}
+
+@Test func aHorizonsConstellationJoinsItsStarsOutward() {
+    let sky = CGSize(width: 1200, height: 800)
+    let room = horizon("room", root: true, ["user", "codex", "read", "echo", "browser", "system.narrow"])
+    let narrow = horizon("narrow", ["read", "echo"])
+    let map = HorizonMap.layout([room, narrow], in: sky)
+    let (r, n) = (map.regions[0], map.regions[1])
+
+    // Every star joined once, each line reaching a new star from one already drawn.
+    for region in [r, n] {
+        #expect(region.edges.count == region.stars.count - 1)
+        var drawn: Set<Int> = [region.edges.first!.a]
+        for e in region.edges {
+            #expect(drawn.contains(e.a) && !drawn.contains(e.b))
+            drawn.insert(e.b)
+        }
+        #expect(drawn == Set(region.stars))
+    }
+    // The narrowing is the Horizon at its center; the room is beyond it.
+    #expect(map.region(at: n.center)?.id == "narrow")
+    #expect(map.region(at: CGPoint(x: r.center.x + r.radii.width * 0.98, y: r.center.y))?.id ?? "room" != "narrow")
+    #expect(map.region(at: .zero) == nil)
+}
+
+@Test func aConstellationTracesInAndFadesBeforeAnother() {
+    var c = Constellation()
+    for _ in 0..<20 { c.follow("a", 1) }
+    #expect(c.shown == "a" && c.alpha > 0.9 && c.traced > 5)
+    c.follow("b", 1)
+    #expect(c.shown == "a") // fades out first
+    for _ in 0..<40 { c.follow("b", 1) }
+    #expect(c.shown == "b" && c.traced > 0 && c.traced < 40 * Constellation.speed)
+    for _ in 0..<40 { c.follow(nil, 1) }
+    #expect(c.shown == nil && c.alpha == 0)
+}
+
+@Test func oneSurfaceUnderTwoNamesIsOneStarNamedByBoth() {
+    let same = HorizonView.Member(name: "codex.inspect", id: "surface-io")
+    let room = HorizonView(id: "room", root: true, actors: [], reach: [.init(name: "codex.exchange", id: "surface-io"), same], grants: 0)
+    let map = HorizonMap.layout([room], in: CGSize(width: 1000, height: 700))
+    #expect(map.stars.count == 1 && map.stars[0].name == "codex.exchange · codex.inspect")
+    #expect(map.star(named: "codex.inspect") == map.star(named: "codex.exchange"))
+}

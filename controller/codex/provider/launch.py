@@ -19,12 +19,16 @@ FEATURES = ['apps', 'plugins', 'hooks', 'daemon_auto_start', 'browser_use',
             'shell_tool', 'skill_search', 'view_image', 'request_permissions_tool',
             'send_message_to_user_async', 'token_budget']
 EGRESS_HOSTS = ('chatgpt.com', 'api.openai.com', 'auth.openai.com')
+# The one Codex version the isolation is verified for. Changing it means
+# rerunning controller/experiments/appserver/tool_surface.py and the probes;
+# runtime/instance/appserver.go pins the same version.
+CODEX_VERSION = '0.160.0'
 
 
 def verified_version(binary):
     version = subprocess.check_output([str(binary), '--version'], text=True).strip().split()[-1]
-    if version != '0.157.1':
-        raise RuntimeError('direct tool isolation is verified for Codex 0.157.1; validate the tool-surface test before upgrading')
+    if version != CODEX_VERSION:
+        raise RuntimeError(f'direct tool isolation is verified for Codex {CODEX_VERSION}, not {version}; validate the tool-surface test before changing the pin')
     return version
 
 
@@ -46,7 +50,12 @@ def direct_catalog(binary, cache_file=None):
     return {'models': cache['models']}
 
 
-def configuration(run):
+def configuration(run, capture_port=None):
+    if capture_port is not None:
+        # Test only: inference goes to a local capture server, never a model.
+        return ('model_provider = "capture"\n' + configuration(run) +
+                f'[model_providers.capture]\nname = "capture"\nbase_url = "http://127.0.0.1:{capture_port}/v1"\n'
+                'wire_api = "responses"\nrequires_openai_auth = false\n[features]\nenable_request_compression = false\n')
     return 'model_catalog_json = ' + json.dumps(str(run / 'models.json')) + '\n' + 'cli_auth_credentials_store = "file"\nweb_search = "disabled"\nsandbox_mode = "read-only"\napproval_policy = "never"\n[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n'
 
 
@@ -86,7 +95,7 @@ def actor_argv(run, binary):
     return argv
 
 
-def bootstrap_catalog(run, binary, env):
+def bootstrap_catalog(run, binary, env, capture_port=None):
     with (run / 'bootstrap.stderr').open('ab') as log:
         actor = subprocess.Popen(actor_argv(run, binary), env=env, cwd=run / 'work',
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log)
@@ -109,7 +118,7 @@ def bootstrap_catalog(run, binary, env):
             if not cache_file.exists():
                 raise RuntimeError('isolated Codex bootstrap did not write model metadata')
             (run / 'models.json').write_text(json.dumps(direct_catalog(binary, cache_file)))
-            (run / 'home' / 'config.toml').write_text(configuration(run))
+            (run / 'home' / 'config.toml').write_text(configuration(run, capture_port))
         finally:
             actor.terminate()
             try:
@@ -119,7 +128,7 @@ def bootstrap_catalog(run, binary, env):
                 actor.wait()
 
 
-def launch(run):
+def launch(run, capture_port=None):
     manifest = json.loads((run / 'launch.json').read_text())
     binary = Path(manifest['binary'])
     auth = (Path.home() / '.codex/auth.json').resolve(strict=True)
@@ -143,12 +152,14 @@ def launch(run):
         port = int(ready_file.read_text())
         if proxy.poll() is not None:
             raise RuntimeError('egress proxy exited after binding')
-        (run / 'actor.sb').write_text(render(binary, run / 'home', run / 'tmp', run / 'work', auth, port))
+        (run / 'actor.sb').write_text(render(binary, run / 'home', run / 'tmp', run / 'work', auth, port, capture_port))
         env = environment(run, port)
         # Validate the actual restrictive profile before the host sees an actor.
         subprocess.run(['/usr/bin/sandbox-exec', '-f', str(run / 'actor.sb'), str(binary), '--version'],
                        env=env, cwd=run / 'work', stdout=subprocess.DEVNULL, check=True)
-        bootstrap_catalog(run, binary, env)
+        # The catalog comes from the provider through the proxy, as in
+        # production, even when a capture server takes inference afterwards.
+        bootstrap_catalog(run, binary, env, capture_port)
         actor = subprocess.Popen(actor_argv(run, binary), env=env, cwd=run / 'work',
                                  stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
         # The actor alone owns the protocol pipes. The launcher only supervises
@@ -226,6 +237,7 @@ def main():
     action.add_argument('--ready', type=Path)
     action.add_argument('--check', action='store_true')
     parser.add_argument('--codex', type=Path)
+    parser.add_argument('--capture-port', type=int, help='test only: send inference to a local capture server')
     args = parser.parse_args()
     if args.check:
         if sys.platform != 'darwin' or not Path('/usr/bin/sandbox-exec').is_file():
@@ -233,11 +245,11 @@ def main():
         if not (Path.home() / '.codex/auth.json').is_file():
             raise RuntimeError('run codex login with file-based credentials first')
         verified_version((args.codex or native_binary()).resolve(strict=True))
-        print('Codex 0.157.1 login ready; model metadata is generated in each isolated provider home')
+        print(f'Codex {CODEX_VERSION} login ready; model metadata is generated in each isolated provider home')
     elif args.prepare:
         print(prepare(args.prepare, args.codex))
     elif args.launch:
-        sys.exit(launch(args.launch.resolve(strict=True)))
+        sys.exit(launch(args.launch.resolve(strict=True), args.capture_port))
     else:
         ready(args.ready)
 

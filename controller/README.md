@@ -82,6 +82,8 @@ OS, the tree or the network.
 |---|---|
 | [`echo`](targets/echo/) | An untrusted leaf. Prints its text |
 | [`read`](targets/read/) | An untrusted leaf. Reads a range of a UTF-8 file, or lists a directory, under a workspace read grant; replies with a typed observation (path, sha256, lines, text) |
+| [`write`](targets/write/) | An untrusted leaf. Writes UTF-8 text to a file in the Horizon's scratch space (`SKYRA_SCRATCH`), never through a link and never out of it; read reads it back as `scratch:PATH` |
+| [`roots`](targets/roots/) | An untrusted leaf. Replies with the paths its Horizon lets it see: the workspace (where a relative read resolves), every read grant, and the scratch space. Opens nothing |
 | [`agent`](targets/agent/) | A fake continuation: calls echo, then replies with what it said |
 | [`user`](targets/user/) | The user's side of a conversation: a continuation whose steps are the transcript |
 | [`browser`](targets/browser/) | The browser's contract: an async surface, served by the web host |
@@ -103,6 +105,16 @@ OS, the tree or the network.
 | [`web`](hosts/web/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records |
 | [`actor`](hosts/actor/) | Legacy universal actor host, retained for the demo and earlier tests; current chat does not launch it |
 
+### Binaries are registered by hash
+
+A conversation pins each surface's binary by sha256 at genesis, and a binary
+that no longer matches is a custody fault. So the launcher never registers a
+file a rebuild overwrites: `./skyra` copies each built binary to
+`build/controller/pinned/<sha256>/<name>` and registers that copy. A rebuild
+adds copies and leaves running and saved conversations their own. (The route
+runner, found next to the `skyra` binary, is not built by the launcher yet; it
+will need the same.)
+
 ### Authority in the registry
 
 A surface carries no authority (next/25). A registry entry may bring grants
@@ -114,6 +126,17 @@ Horizon shares until a narrowing. Exec is not a grant: a profile allows exec
 of the program being run and nothing else. Paths are resolved at registry
 load. Legacy top-level `connect` entries are folded into `authority.connect`.
 No entry may be named `system.*`: those are the room's facets.
+
+A Horizon may also carry a **scratch** directory (`authority.scratch`): read
+and write for everything under it, and, like everywhere, no exec but the
+program being run, so nothing written there can be run. It is not a registry
+grant: `skyra boot -scratch DIR` puts it in the room at genesis, and the web
+host gives each conversation its own, `conversations/<id>/scratch`, beside its
+`.skyra/` and deleted with it. It is a field of its own, not a read and a
+write grant, so the workspace stays the first read grant (where a relative
+read resolves), and a narrowing drops it by leaving it out. OS tests check
+that a script written there can be read back but not run, and that nothing
+can be written outside it.
 
 A profile grants the program's own binary, fixed system loader reads, and the
 Horizon's grants. A target is told its slot in `SKYRA_FRAME` and its read
@@ -266,8 +289,10 @@ sandbox that prohibits applying Seatbelt profiles.
 - **One output per step**, so one child per round: fan-out is supported by the
   slots and the claim, but nothing emits two children yet.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
-- **The provider profile is pinned to Codex 0.157.1.** A new version needs a
-  fresh validation of startup, tool exposure, file effects and egress.
+- **The provider profile is pinned to Codex 0.160.0** (`launch.CODEX_VERSION`,
+  `instance.PinnedCodex`). A new version needs a fresh validation of startup,
+  tool exposure, file effects and egress: `tool_surface.py`, `probe.py` and
+  `integration.py` in `experiments/appserver/`.
 
 ## Improvements to carry forward
 

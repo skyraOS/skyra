@@ -21,6 +21,9 @@ final class Backend {
     private(set) var workspace: URL?
     /// The deterministic fake Codex: no model, no login.
     private(set) var fake: Bool
+    /// Workspaces granted before, newest first, the current one included:
+    /// each was approved once, so switching back needs no new approval.
+    private(set) var recent: [URL]
     /// The grant sheet is up: asked for, or no workspace yet.
     var showGrant = false
 
@@ -33,7 +36,11 @@ final class Backend {
         let d = UserDefaults.standard
         workspace = d.string(forKey: "workspace").map { URL(fileURLWithPath: $0, isDirectory: true) }
         fake = d.bool(forKey: "fake")
+        recent = (d.stringArray(forKey: "recentWorkspaces") ?? []).map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let workspace, !recent.contains(workspace) { recent.insert(workspace, at: 0) }
     }
+
+    static let recentLimit = 6
 
     /// Grants a workspace (and mode) and restarts the backend under it.
     func grant(_ url: URL, fake: Bool) {
@@ -41,6 +48,8 @@ final class Backend {
         self.fake = fake
         UserDefaults.standard.set(url.path, forKey: "workspace")
         UserDefaults.standard.set(fake, forKey: "fake")
+        recent = Array(([url] + recent.filter { $0 != url }).prefix(Self.recentLimit))
+        UserDefaults.standard.set(recent.map(\.path), forKey: "recentWorkspaces")
         restart()
     }
 

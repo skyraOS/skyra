@@ -30,11 +30,9 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     launcher = str(REPO / 'controller/codex/provider/launch.py')
     prepared = Path(subprocess.check_output([sys.executable, launcher, '--prepare', str(run / 'providers')], text=True).strip())
-    config = prepared / 'home/config.toml'
-    config.write_text('model_provider = "capture"\n' + config.read_text() + f'\n[model_providers.capture]\nname = "capture"\nbase_url = "http://127.0.0.1:{server.server_port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[features]\nenable_request_compression = false\n')
     subprocess.run(['go', 'build', '-o', str(run / 'host'), './controller/hosts/actor'], cwd=REPO, check=True)
     log = (run / 'host.log').open('w'); sock = run / 'host.sock'
-    proc = subprocess.Popen([str(run / 'host'), '-sock', str(sock), '-state', str(run / 'state'), '--', sys.executable, launcher, '--launch', str(prepared)], stdout=log, stderr=log, start_new_session=True)
+    proc = subprocess.Popen([str(run / 'host'), '-sock', str(sock), '-state', str(run / 'state'), '--', sys.executable, launcher, '--launch', str(prepared), '--capture-port', str(server.server_port)], stdout=log, stderr=log, start_new_session=True)
     h = None
     try:
         subprocess.run([sys.executable, launcher, '--ready', str(sock)], check=True, timeout=25)

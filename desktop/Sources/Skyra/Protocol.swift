@@ -34,7 +34,24 @@ struct Conversation: Decodable, Equatable, Identifiable {
     let conversation: String
     let phase: Phase
     let entries: [Entry]
+    let horizons: [HorizonView]? // absent from a webhost that predates them
     var id: String { conversation }
+}
+
+/// One Horizon of a conversation, as the webhost reads it from the lineage:
+/// what it reaches and how many OS grants it carries. Frames released under
+/// the same reach and authority are one Horizon.
+struct HorizonView: Decodable, Equatable {
+    struct Member: Decodable, Equatable {
+        let name: String
+        let id: String // the surface's identity: the same surface in any Horizon
+    }
+
+    let id: String
+    let root: Bool // the room
+    let actors: [String] // the surfaces that ran under it
+    let reach: [Member]
+    let grants: Int
 }
 
 enum ServerMessage: Decodable, Equatable {

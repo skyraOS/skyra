@@ -51,7 +51,10 @@ type message struct {
 		ThreadID, TurnID, Tool string
 		Arguments              json.RawMessage             `json:"arguments"`
 		Item                   struct{ Type, Text string } `json:"item"`
-		Turn                   struct{ ID, Status string } `json:"turn"`
+		Turn                   struct {
+			ID, Status string
+			Error      struct{ Message string } `json:"error"`
+		} `json:"turn"`
 	} `json:"params"`
 }
 type derived struct {
@@ -59,7 +62,7 @@ type derived struct {
 	Initialized, SentInitialize, SentThread, SentTurn, SentInterrupt bool
 	NeedInspect, SentInspect, Inspected, NeedStop, Stopped, Lost     bool
 	InspectAt, ActivityAt                                            int64
-	Terminal                                                         string
+	Terminal, TerminalError                                          string // how the turn ended, and Codex's reason when it failed
 	Pending                                                          []message
 	Answered                                                         map[string]bool
 	Results                                                          []step // model-tool steps, in the order Codex's calls were invoked
@@ -72,7 +75,15 @@ var modelTools = map[string]string{
 	"echo": "Skyra echo",
 	"read": "Read a UTF-8 text file, or list a directory, in the workspace. Paths are relative to the workspace root; \".\" lists the root. " +
 		"Returns at most 2000 lines or 64 KiB: when truncated is true, call again with start_line set to end_line + 1. " +
-		"sha256 and size describe the whole file. A failure is reported in error (not_found, denied, not_text, too_large).",
+		"sha256 and size describe the whole file. A failure is reported in error (not_found, denied, not_text, too_large). " +
+		"A path starting \"scratch:\" reads your scratch space instead (\"scratch:\" alone lists it).",
+	"roots": "Show the absolute paths you may see: workspace (where a relative read path resolves; it is read-only), " +
+		"every path you may read, and scratch (your own folder for this conversation, read and write; read it as \"scratch:PATH\"). " +
+		"Anything outside these is denied. To list what is in them, use read with \".\" or \"scratch:\".",
+	"write": "Write UTF-8 text to a file in your scratch space: a folder of your own for this conversation, for notes, drafts and intermediate results. " +
+		"The path is relative to the scratch space and cannot leave it; folders are created as needed. append: true adds to the end instead of replacing. " +
+		"Nothing in the scratch space can be run, by you or any tool. Read it back with read and the path in read_as (\"scratch:<path>\"). " +
+		"The workspace itself is read-only. A failure is reported in error (outside_scratch, symlink, not_text, too_large, denied).",
 }
 
 func offered(c continuation, name string) bool {
@@ -303,7 +314,7 @@ func decide(c continuation) (string, error) {
 					}
 				case "turn/completed":
 					if d.Turn != "" && m.Params.Turn.ID == d.Turn {
-						d.Terminal = m.Params.Turn.Status
+						d.Terminal, d.TerminalError = m.Params.Turn.Status, m.Params.Turn.Error.Message
 					}
 				case "turn/started":
 				case "":
@@ -389,6 +400,11 @@ func decide(c continuation) (string, error) {
 	}
 	if d.Terminal != "" {
 		if d.Terminal != "completed" || d.Final == "" {
+			if d.TerminalError != "" {
+				// Codex's own reason (a usage limit, a provider error): the human
+				// needs it more than the status.
+				return "", fmt.Errorf("turn ended %s: %s", d.Terminal, d.TerminalError)
+			}
 			return "", fmt.Errorf("turn ended %s without an answer", d.Terminal)
 		}
 		return emit(c.Frame, map[string]any{"text": d.Final, "thread": d.Thread, "incarnation": d.Incarnation, "activity_at": d.ActivityAt}), nil

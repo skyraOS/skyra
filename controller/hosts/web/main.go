@@ -374,7 +374,11 @@ func (h *webhost) deleteConversation(id string) error {
 func (h *webhost) seed(id string) {
 	root := filepath.Join(h.dir, id, ".skyra")
 	payload, _ := json.Marshal(map[string]string{"conversation": id})
-	cmd := exec.Command(h.skyra, "boot", "-root", root, "-registry", h.registry, "-to", "user", "-payload", string(payload), "-detach")
+	// Each conversation gets its own scratch space beside its records: the
+	// agent may write and read it, run nothing from it, and it goes when the
+	// conversation is deleted.
+	scratch := filepath.Join(h.dir, id, "scratch")
+	cmd := exec.Command(h.skyra, "boot", "-root", root, "-registry", h.registry, "-scratch", scratch, "-to", "user", "-payload", string(payload), "-detach")
 	cmd.Stdout, cmd.Stderr = h.log, h.log
 	if err := cmd.Run(); err != nil {
 		h.mu.Lock()
@@ -422,7 +426,7 @@ func (h *webhost) broadcast() {
 	views := []map[string]any{}
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.lineage.snapshot())
-		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "pendingRequestId": nil})
+		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": nil})
 	}
 	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": []any{}}
 	h.mu.Unlock()

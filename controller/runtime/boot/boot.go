@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,14 +35,21 @@ type Outcome struct {
 
 // Run boots: genesis from the operator's registry, then the operator emits
 // the seed (addressed to a capability in the root reach), then boot waits for
-// its frame to resolve, prints the lineage, and replays it.
-func Run(root, registryFile, to string, payload json.RawMessage, detach bool) (Outcome, error) {
+// its frame to resolve, prints the lineage, and replays it. A scratch
+// directory, when given, joins the room's authority: everything under the
+// root may read and write it, and run nothing from it.
+func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach bool) (Outcome, error) {
 	if err := tree.Init(root); err != nil {
 		return Outcome{}, err
 	}
 	reach, authority, routes, err := registry.LoadWithRoutes(registryFile)
 	if err != nil {
 		return Outcome{}, err
+	}
+	if scratch != "" {
+		if authority.Scratch, err = scratchDir(root, scratch); err != nil {
+			return Outcome{}, err
+		}
 	}
 	for _, src := range routes { // declared routes, by hash, where the runtime looks them up
 		if _, err := tree.Put(root, "routes", src); err != nil {
@@ -216,4 +224,26 @@ func Head(root string) (string, error) {
 		return "", errors.New("the lineage has not finished: the operator's frame is still waiting")
 	}
 	return "", errors.New("no genesis frame")
+}
+
+// scratchDir creates a scratch directory and returns its real path. It may
+// not hold the state directory or sit inside it: the floor is never granted.
+func scratchDir(root, dir string) (string, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	for _, pair := range [][2]string{{real, root}, {root, real}} {
+		if rel, err := filepath.Rel(pair[0], pair[1]); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("scratch %s overlaps the state directory %s", real, root)
+		}
+	}
+	return real, nil
 }

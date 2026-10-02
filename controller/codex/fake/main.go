@@ -141,6 +141,16 @@ func main() {
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t
 				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "read", "arguments": map[string]string{"path": strings.TrimPrefix(t.text, "read:")}}})
+			case t.text == "roots":
+				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
+				pending[string(id)] = t
+				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "roots", "arguments": map[string]string{}}})
+			case strings.HasPrefix(t.text, "write:"):
+				// write:PATH=TEXT writes TEXT to PATH in the scratch space.
+				path, text, _ := strings.Cut(strings.TrimPrefix(t.text, "write:"), "=")
+				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
+				pending[string(id)] = t
+				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "write", "arguments": map[string]string{"path": path, "text": text}}})
 			case strings.HasPrefix(t.text, "tool:") || t.text == "taint-child":
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t

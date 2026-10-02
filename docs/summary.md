@@ -1,6 +1,6 @@
 # Skyra: where we are
 
-Date: 2026-09-30  
+Date: 2026-10-01  
 Status: current summary of the whole project: the properties it is after, the
 patterns that produce them, what runs today, and what does not yet. The
 [README](../README.md) is the front door and [`startup-doc.md`](startup-doc.md)
@@ -22,9 +22,13 @@ run takes custody of untrusted bytes, derives what they mean from where the
 emitter stands, commits a content-addressed record, and runs the next program
 under a macOS Seatbelt profile **rendered from its Horizon**. All durable state
 is a hash-linked tree, and replaying it from genesis re-derives every decision
-byte for byte. Today it runs real Codex conversations in the browser, the
-terminal and a desktop app; Codex calls `echo` and `read`, and every turn is a
-replayable lineage.
+byte for byte. **The runtime computes the type of every return** (its origin
+and its shape, by hash), and a parent's **route** decides where a return of
+that type goes; a type the parent has never seen is a **novelty interrupt**,
+and what the parent writes there is kept, so the model is called once per kind
+of return, not once per return. Today it runs real Codex conversations in the
+browser, the terminal and a desktop app; Codex calls `echo` and `read`, and
+every turn is a replayable lineage.
 
 ---
 
@@ -67,11 +71,12 @@ claim is never made unless a mechanism enforces it, or it is listed as a gap.
 | **P6** | **The runtime knows no actor** | Codex, the browser and the human live in adapters, never in the trusted core | package boundaries; the audit in [next/20](next/20-boundry-crossing.md) | built |
 | **P7** | **No program starts another unrecorded** | exec is allowed only for the program being run; every other program starts through an emission the runtime recorded | the exec exclusion in every rendered profile, with an OS test | built |
 | **P8** | **Frame ⊆ authority** | everything a model is shown is invokable; visibility grants nothing | `tools` is derived from reach and references | built |
-| **P9** | **Approval-free self-extension** | an agent registers a tool it wrote under its own Horizon and runs it with zero prompts | `system.register`, a Starlark tool run by the runtime's checker | **not built: the thesis demo** |
-| **P10** | **Recurrence is the resource** | what was decided once is kept: checks learned at novelty, procedures remembered | checks and bindings as records; the log as the test suite | designed ([next/28](next/28-types-observations-checks.md)) |
+| **P9** | **Approval-free self-extension** | an agent registers a tool it wrote under its own Horizon and runs it with zero prompts | `system.register`, a Starlark tool run by the runtime, as routes are | **not built: the thesis demo** |
+| **P10** | **Recurrence is the resource** | what was decided once is kept: a route written at a novelty interrupt handles every later return of that type without the model | types computed by the runtime; routes keyed by type; the log as the test suite ([next/30](next/30-types-by-origin-routes.md)) | **built** (2026-10-01), with open review findings (F10–F14) |
+| **P11** | **Hashes never reach a model** | a model sees names and presentations; hashes go only to workers the runtime starts | the F1 audit; the route contract strips every hash; references are `system.ref.<n>` | built, with one accepted exception (F14) |
 
-P1–P3 are the README's three invariants. P4–P8 keep them true. P9 and P10 are
-what the whole thing is for.
+P1–P3 are the README's three invariants. P4–P8 and P11 keep them true. P9 and
+P10 are what the whole thing is for.
 
 ---
 
@@ -107,8 +112,9 @@ func Drive(root, up, stack, s, e)                     // instance: performs effe
 ```
 
 Events are facts (`Received`, `Released`, `Emitted`, `Stamped`, `Settled`,
-`Claimed`, `Parked`); effects are requests (`Commit`, `Run`, `Spawn`,
-`SendHorizon`, `Settle`, `TryClaim`, `Park`…). `TestMachineIsPure` fails if
+`Claimed`, `RouteLooked`, `RunsLoaded`, `Parked`); effects are requests
+(`Commit`, `Run`, `Spawn`, `SendHorizon`, `Settle`, `TryClaim`, `LookupRoute`,
+`RecordRun`, `LoadRuns`, `PutRoute`, `Park`…). `TestMachineIsPure` fails if
 `machine` imports anything that touches the OS, the clock or the tree. That
 purity is what lets replay feed recorded inputs back and get the same records.
 
@@ -119,7 +125,7 @@ A program never says "invoke", "return" or "fault". It emits operands,
 (next/14, [next/24](next/24-the-room.md)):
 
 ```text
-addresses the slot its frame discharges (SKYRA_FRAME), fits its output contract   → return
+addresses the slot its frame discharges (SKYRA_FRAME), any JSON                  → return
 names a capability or reference in reach, fits its input contract                 → invoke
 names anything else                                                               → fault (horizon)
 addresses nothing                                                                 → fault (leaf)
@@ -139,6 +145,8 @@ no output                                                                       
   pass it on.
 - **A refused output is still committed,** as a fault. A stamp means custody,
   not approval.
+- **A return declares nothing.** There is no output contract any more: the
+  runtime computes a return's type from the return itself (section 13).
 
 ### 4. The Horizon: one authority, shared, derived
 
@@ -167,8 +175,8 @@ type Horizon struct {
   actor under less. A narrowing that asks for anything not held is a horizon
   fault, derived at intake.
 - **A surface is identity plus contracts** ([next/25](next/25-surface-refactor.md)):
-  a binary pinned by hash, an input contract, an output contract. It declares
-  nothing about what it may reach.
+  a binary pinned by hash and an input contract. It declares nothing about what
+  it may reach, and nothing about what it returns.
 - **`Render(Horizon, floor)`** denies by default, adds the Horizon's grants,
   and applies the exclusions no Horizon can grant or remove: `.skyra/` is always
   denied, and exec is allowed for the program being run and nothing else.
@@ -187,6 +195,8 @@ type Horizon struct {
   frames/<F>/result                 write-once: what discharged F's slot
   frames/<F>/deps/<round>/<child>   a slot F opened, written before the child runs
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
+  route-table/<key>/<n>             write-once: the routes recorded for (parent, binding, type); the highest n wins
+  route-runs/<key>/<input>          write-once: every route run under a key, input → output: the test suite
 ```
 
 A stamp is `sha256(record)`, a pointer, verified by reading the record back.
@@ -213,6 +223,9 @@ its round is discharged (wait for all; there is no cancellation), and the
 resolve record must name every discharge, so it cannot be written early. When
 siblings race, a write-once claim lets exactly one resume the continuation.
 Faults are discharges too: the continuation decides what to do with one.
+**At gather, a returned discharge is routed** (section 13) before the
+continuation is woken: its parent's route may interrupt it, send the return on
+for it, or refuse it.
 
 ### 8. Continuations are stateless
 
@@ -222,8 +235,15 @@ runs:
 ```json
 {"frame": "<the slot it returns to>", "input": {...},
  "tools": {"<name or reference>": <input contract>, ...},
- "steps": [{"to": "...", "payload": {...}, "state": "return", "value": ...}, ...]}
+ "steps": [{"to": "...", "payload": {...}, "state": "return", "value": ...,
+            "interrupt": "novelty", "type": "echo → string"}, ...],
+ "route": { ...the route contract, when a step is novel... }}
 ```
+
+A step also says how its parent's route took it: `by` (the runtime invoked it
+for the route), `sent` (where the route sent it), `interrupt` (why it woke the
+continuation: `novelty`, `route` or `depth`) and `type` (the return's
+presentation). Never a hash.
 
 Its memory is its lineage, so it can resume in any process, after any crash,
 and replay reproduces it. ([next/27](next/27-a-horizon-is-a-process.md) gives
@@ -291,33 +311,51 @@ whole-file sha256 and size, line range). **Observation passing**
 structural: a continuation may pass its children's observations up, but not
 author a replacement.
 
-### 13. Designed next: types, checks and learned structure
+### 13. Types by origin, and routes (built 2026-10-01)
 
-[next/28](next/28-types-observations-checks.md) settles how structure is
-learned:
+[next/30](next/30-types-by-origin-routes.md) replaced 28's checks. **The
+runtime computes types; models write routes.**
 
-- **Types are contracts; observations are values.** Types compose: a field can
-  hold a value or a type, and filling slots (the args of the execve) makes a new
-  type. `coder` is Codex's `continue-conversation` with its input and its 5–7
-  tools filled. A continuation is a type, not a flag.
-- **The parent owns the check** on what its children return. There are no
-  preconditions: the runtime checks structure, and the callee defends itself in
-  its own code. Different parents can check the same contract differently.
-- **Novelty is when a check is written.** The first time a boundary is crossed
-  there is no check: a novelty interrupt locks the parent (typically an LLM) in
-  to write one, in **Starlark**, pure computation with no ambient authority, run
-  by a runtime-owned checker. It is kept; the next crossing uses it.
-- **Failures carry a trace and blame**, and the parent's handler picks a
-  restart: fault, substitute (checked again), or retry within the same turn.
-- **The log is the test suite.** A rewritten check runs against every recorded
-  verdict at its boundary; flipped verdicts are declared, never silent.
-- **Self-extension falls out of it**: an agent-written tool is Starlark source
-  in state, run by the same checker, so code is state, the floor holds, and the
-  exec exclusion holds.
+- **JSON is the floor.** An actor returns a JSON value and declares nothing
+  else. The runtime walks every return once, bottom-up, and gives every node two
+  hashes: its **shape** (keys and leaf kinds; arrays independent of length) and
+  its **content** (leaf values in). The encoding is pinned by golden hashes
+  (`core/contract/shape.go`).
+- **A type is origin plus shape:** `H(actor identity, contract, shape)`. The
+  actor is its registration's identity, never its name, so re-registering a
+  different program under an old name makes new types. Same shape from two
+  origins is two types: text from one actor never becomes another's argument
+  without a route.
+- **A model sees presentations, never hashes:** `echo → string`,
+  `twitter.search → {media: [{url: string}], text: string}`.
+- **A novelty interrupt produces a route.** When a return's type has no route
+  at (parent, binding, type), the runtime interrupts the parent, which is shown
+  the **route contract** (the return's presentation, the conditions it can
+  test, the decisions it can make, its Horizon without hashes, and what can
+  happen to it) and writes a route through the room's `system.route` facet,
+  naming the step it was shown.
+- **A route is Starlark, one invocation, `if` only** (no `for`, `while` or
+  recursion; a step cap), run by the runtime-owned route runner under an empty
+  Horizon. Through the `skyra` package it reads the return (`get`), the
+  previous return of its type (`previous`, `changed`, `diff`), and returns one
+  decision: `interrupt()`, `send(to, payload)` or `fault(cause)`. Routes are
+  **keyed on type and decide on content**: the key says which route runs, the
+  content diff says whether to wake the parent.
+- **A send is an invoke under the parent's Horizon,** so a route can do only
+  what its parent could. Its return is routed again, up to 8 in a row; then a
+  `depth` interrupt.
+- **Interrupts are raised by the runtime, never by an actor** (next/29), with
+  a kind: `novelty`, `route`, `depth`.
+- **The log is the test suite.** Every route run is indexed under its key. A
+  rewritten route is run over every recorded case first; a changed decision is
+  a flip, and the route is refused unless the parent accepts each flip.
+- **Deterministic parents declare routes at registration** (`"routes"` in the
+  registry), since they cannot answer an interrupt.
 
-Identity is designed in [improvements item 9](improvements.md): domain-separated
-hashes, a content id beside every stamp, ids as the path of handoffs, types and
-principals as records.
+[next/28](next/28-types-observations-checks.md) still holds what routes did not
+replace: types that compose, slots as the args of the execve, failures with
+blame. [next/29](next/29-actors-own-their-state.md) designs actor state and
+novelty at an input. Identity is designed in [improvements item 9](improvements.md).
 
 ---
 
@@ -340,9 +378,10 @@ principals as records.
 5. **Intake derives `invoke read`.** It runs in a fresh process under the
    Horizon's profile (the workspace readable, `.skyra` denied, exec of nothing
    else) and emits `{"to":<its slot>,"payload":{"path":…,"sha256":…,"text":…}}`.
-   Intake checks the object against read's output contract and commits a return.
-6. **Settle, gather, claim.** The adapter resumes, pairs the result with
-   Codex's pending call and delivers it.
+   Intake commits a return; its type is computed from it.
+6. **Settle, gather, route, claim.** The adapter has no route for `read`'s
+   type, so it is interrupted (as it was before routes) and resumes, pairs the
+   result with Codex's pending call and delivers it.
 7. **Codex finishes.** The adapter returns the final text to its slot; the user
    continuation shows it and parks on the browser again.
 8. **Every step is a record.** `skyra replay` re-derives all of them, byte for
@@ -360,7 +399,11 @@ back to the user side as an observation.
 |---|---|
 | The step protocol, custody handoff, content-addressed hash-chained records | **built**, tested |
 | `interpret`: states derived from the emitter's position; the slot is the return; typed faults that carry their observation | **built** (2026-09-30) |
-| Input and output contracts, strict structural fit at intake | **built** |
+| Input contracts, strict structural fit at intake; output contracts removed | **built** (outputs removed 2026-10-01) |
+| Types computed from every return: shape and content hashes, diffs, presentations; type = actor identity + contract + shape | **built** (2026-10-01) |
+| Routes: the Starlark route runner, routes declared at registration, routing at gather (interrupt, send, fault), the chain's depth | **built** (2026-10-01) |
+| The novelty interrupt, the route contract, `system.route`, flips checked against the log | **built** (2026-10-01); the demo agent and the Codex adapter can write routes |
+| The hash audit: no hash in what a model reads; references named `system.ref.<n>` | **built** (2026-10-01), one accepted exception |
 | One authority per Horizon, shared by every call; profiles rendered per Horizon; `.skyra/` and exec excluded | **built** (2026-09-30), with OS tests |
 | The room: genesis authored with a nonce; `system.narrow` and references that join the caller's reach | **built** (2026-09-30) |
 | Horizons committed and looked up by hash; the child re-derives its Horizon | **built** (2026-09-30) |
@@ -371,15 +414,18 @@ back to the user side as an observation.
 | Codex native attempts: interrupted and returned as an observation; the conversation continues on the same thread | **built** (2026-09-30) |
 | `echo` and `read` as model-facing tools; a tool's result or fault back to Codex in the same turn | **built** |
 | Conversations as lineages in the browser, the TUI and the desktop app | **built** |
-| `skyra demo`: eight scenarios, each ending in a byte-identical replay | **built** |
-| About 6,300 lines of Go in the controller (standard library only), 72 test functions | — |
+| `run.sh`: fourteen scenarios, six of them routes, each ending in a byte-identical replay | **built** |
+| About 7,700 lines of Go in the controller (standard library only), plus the route runner (its own module, `go.starlark.net`); 96 test functions | — |
 
 ## What does not run yet
 
 | | Status |
 |---|---|
-| **Self-extension** (`system.register`): an agent registers a tool it wrote and runs it with zero approvals | **not built: the thesis demo.** Designed as Starlark run by the runtime's checker ([next/28](next/28-types-observations-checks.md)) |
-| **Checks, novelty interrupts, handlers** | designed ([next/28](next/28-types-observations-checks.md)); `core/machine` has no interrupt state yet |
+| **Self-extension** (`system.register`): an agent registers a tool it wrote and runs it with zero approvals | **not built: the thesis demo.** A tool is Starlark source in state, run by the runtime the way routes are ([next/28](next/28-types-observations-checks.md), [next/30](next/30-types-by-origin-routes.md)) |
+| **Route review findings** F10–F14: a route bounded by its author's authority (**F10, first**); replay re-running routes; flips named by hash; the route table verified; which hash invariant holds | open ([next/proposal/30](next/proposal/30-types-by-origin-routes-proposal.md#review-findings)) |
+| **Every return is routed** (section G): one lookup with a default route; faults and facet returns routed; fan-out | agreed 2026-10-02, not built ([next/30](next/30-types-by-origin-routes.md#every-return-is-routed)) |
+| **Routing beyond v1**: `previous` across frames, how much a string changed | not built |
+| **Actor state** and novelty at an input | designed ([next/29](next/29-actors-own-their-state.md)) |
 | **Faults that climb to the human**; the room's admin facet | designed ([next/24](next/24-the-room.md), [next/26](next/26-agents-and-facets.md)) |
 | **One stdin envelope** for every program; the `continuation` flag removed | designed ([next/27](next/27-a-horizon-is-a-process.md)) |
 | **Facets** declared at registration; calls into another agent's Horizon | designed ([next/26](next/26-agents-and-facets.md)) |
@@ -412,6 +458,16 @@ The complete list of changes, with what each became, is in
   `--disable` flags through it; it becomes slots the owner fills (next/28).
 - **One output per step**, so one child per round.
 - **The provider profile is pinned to Codex 0.157.1.**
+- **A route can outrun its author** (F10, open). Routes are keyed by the
+  parent's surface, not its Horizon, so a route written under a narrowed
+  Horizon, or under a prompt injection, also fires under broader ones and in
+  other conversations. Sends stay inside the parent's current Horizon; the fix
+  bounds a route by the authority it was written with.
+- **Replay does not re-run routes** (F11, open): it re-derives each decision
+  from the runner's stored output.
+- **Only a single-child round's return is routed.** Faults and the room's
+  facets wake the parent as before. The agreed rule is that every return is
+  routed, with a default route that interrupts (section G, after F10).
 - **A Horizon bounds the blast radius; it does not judge intent.** A prompt
   injection that misuses a granted tool is not stopped; the evaluation must
   separate the two cases.
@@ -431,10 +487,26 @@ the unit of containment is the Horizon: the claim is that effects outside it
 succeed zero times, and the measure of narrowness is the narrowings a task needs.
 Details: [`next/research-question.md`](next/research-question.md).
 
+Routes add two measures, structural on purpose (they do not judge whether a
+model was right, which is the labs' work), to be written into next/30:
+
+- **Model calls per kind of return ↓.** Novelty is paid once per (parent,
+  binding, type), so calls grow with a task's **variety, not its size**: a
+  self-similar tree pays about one interrupt per level on its first descent,
+  then routes carry the rest.
+- **Overturn rate.** Quality is a parent's judgement, held or overturned by the
+  levels above it: routes rewritten with declared flips, faults sent back up,
+  the human intervening at the root. It is read against how much is noticed,
+  which improves as models and people do.
+
+dnav3 measured the first kind of curve (passes-to-closure `[4 3 3 2 2 2]`, July
+2026) with the model always in the loop; routes take it out of the loop for any
+kind it has seen.
+
 | When | Work |
 |---|---|
 | September | semantics: contracts, `interpret`, dependencies and resolve (**done**) |
-| October | Codex calling tools under generated sandboxes (**done**); the room and derived authority (**done**); checks and **self-extension** |
+| October | Codex calling tools under generated sandboxes (**done**); the room and derived authority (**done**); types and routes (**done**, F10 open); **self-extension** |
 | November | audit and replay; the baseline harness and task set |
 | December | evaluation and writeup |
 
@@ -449,8 +521,9 @@ Details: [`next/research-question.md`](next/research-question.md).
 | authority derived from state, the room, faults that climb | [`next/24-the-room.md`](next/24-the-room.md) |
 | agents, facets, narrowing | [`next/26-agents-and-facets.md`](next/26-agents-and-facets.md) |
 | a Horizon as the process | [`next/27-a-horizon-is-a-process.md`](next/27-a-horizon-is-a-process.md) |
-| types, checks, learned structure | [`next/28-types-observations-checks.md`](next/28-types-observations-checks.md) |
+| types by origin, routes, the novelty interrupt | [`next/30-types-by-origin-routes.md`](next/30-types-by-origin-routes.md) |
+| types that compose, slots, blame; actor state | [`next/28`](next/28-types-observations-checks.md), [`next/29`](next/29-actors-own-their-state.md) |
 | what is built and what is not, change by change | [`next/proposal/`](next/proposal/README.md) |
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
-| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–28`](next/) |
+| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–30`](next/) |
 | the predecessor, and what it taught | [How it got here](../README.md#how-it-got-here); the code is in git history (last at `b243b03`) |

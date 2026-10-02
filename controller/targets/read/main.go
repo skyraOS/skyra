@@ -63,16 +63,30 @@ func main() {
 	// A return addresses the slot this frame discharges, which the runtime
 	// names in SKYRA_FRAME. File contents only ever travel inside the
 	// observation, as a string.
-	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": observe(root, in)})
+	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": observe(root, os.Getenv("SKYRA_SCRATCH"), in)})
 	fmt.Println(string(out))
 }
 
 // observe reads what in names. A relative path is resolved against root, the
-// first read grant the runtime told this leaf about.
-func observe(root string, in input) result {
+// first read grant the runtime told this leaf about; a "scratch:" path against
+// the scratch space, which it may not leave.
+func observe(root, scratch string, in input) result {
 	r := result{Path: in.Path, Kind: "file"}
 	path := in.Path
-	if !filepath.IsAbs(path) {
+	if name, ok := strings.CutPrefix(path, "scratch:"); ok {
+		if scratch == "" {
+			r.Error = "no_scratch: this leaf holds no scratch space"
+			return r
+		}
+		if name == "" || name == "." {
+			return list(r, scratch)
+		}
+		if !filepath.IsLocal(name) {
+			r.Error = "outside_scratch: a scratch: path must be relative and stay inside the scratch space"
+			return r
+		}
+		path = filepath.Join(scratch, name)
+	} else if !filepath.IsAbs(path) {
 		if root == "" {
 			r.Error = "no_root: this leaf holds no read grant to resolve a relative path against"
 			return r

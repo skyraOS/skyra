@@ -30,10 +30,12 @@ struct ConversationView: View {
                         }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 36) // as deep as the edge fade: at rest, nothing is faded
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.never)
+                // No hard cut: the words fade into the sky at every edge.
+                .mask { EdgeFade(vertical: 36, horizontal: 18) }
                 .onChange(of: c.entries.count, initial: true) { _, _ in
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
                 }
@@ -156,5 +158,28 @@ struct Working: View {
             .padding(.vertical, 12)
         }
         .accessibilityLabel("The agent is working")
+    }
+}
+
+/// A mask that is opaque in the middle and fades to clear over the given
+/// distance at each edge: content scrolling past an edge dissolves instead of
+/// being cut.
+struct EdgeFade: View {
+    let vertical: Double
+    let horizontal: Double
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: vertical)
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: vertical)
+        }
+        .mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: horizontal)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: horizontal)
+            }
+        }
     }
 }

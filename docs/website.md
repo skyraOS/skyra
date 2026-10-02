@@ -169,7 +169,7 @@ operator (the headless Mac)
   enforced by the OS and which are only detected.
 - **Operations.** Cloudflare Tunnel or Tailscale Funnel, no open ports; launchd
   to restart the host; sleep off; the Codex binary pinned (the provider only
-  accepts 0.157.1).
+  accepts 0.160.0).
 
 ## Order of work
 

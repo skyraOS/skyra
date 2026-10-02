@@ -7,13 +7,23 @@ final class SkyModel {
     var pointer: CGPoint? // in the sky's points; nil when outside
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
     let calls = CallLights()
-    var column: ClosedRange<Double>? // the reading column, in the sky's points: the sky is quieter there
+    var column: ClosedRange<Double>? // the reading column, in the sky's points: how wide the docked log is
+    var horizons: [HorizonView] = [] // the conversation on screen's
+    var logRect: CGRect? // the conversation log, in the sky's points: a Horizon under it is not traced
+    var origin = CGPoint.zero // the canvas's origin in the sky's points: the canvas runs under the title bar
 
     fileprivate let start = Date()
     fileprivate var stars: [Star] = []
     fileprivate var starsFor = CGSize.zero
     fileprivate var sim: SkySim?
     fileprivate var titleOpen = 1.0
+    fileprivate var lens = Lens()
+    fileprivate var map = HorizonMap()
+    fileprivate var mapFor: ([HorizonView], CGSize) = ([], .zero)
+    fileprivate var constellation = Constellation()
+
+    /// The pointer in the canvas's points.
+    fileprivate var local: CGPoint? { pointer.map { CGPoint(x: $0.x - origin.x, y: $0.y - origin.y) } }
     fileprivate var lastFrame = 0.0
 
     /// Frames since launch, ten a second, as the TUI counts them.
@@ -25,10 +35,19 @@ final class SkyModel {
             stars = Star.field(width: Int(size.width / (2 * Sky.dot)), height: Int(size.height / (4 * Sky.dot)))
             sim = nil
         }
+        if mapFor.0 != horizons || mapFor.1 != size {
+            mapFor = (horizons, size)
+            map = HorizonMap.layout(horizons, in: size)
+        }
         let dots = Point(size.width / Sky.dot, size.height / Sky.dot)
         if sim == nil { sim = SkySim(size: dots, frame: f, dt: 1.0 / 6) }
-        let pointer = pointer.map { Point($0.x / Sky.dot, $0.y / Sky.dot) }
-        sim?.advance(to: f, pointer: pointer)
+        let at = local
+        sim?.advance(to: f, pointer: at.map { Point($0.x / Sky.dot, $0.y / Sky.dot) })
+        lens.follow(at, max(0, f - lastFrame))
+        // The Horizon under the pointer draws its constellation, unless the
+        // conversation log is over it.
+        let over = pointer.map { p in logRect?.contains(p) ?? false } ?? true
+        constellation.follow(over ? nil : at.flatMap { map.region(at: $0)?.id }, max(0, f - lastFrame))
         // The title eases over two seconds toward open or receded.
         let step = max(0, f - lastFrame) * 0.05
         titleOpen = titleOpen < titleOpenTarget ? min(titleOpenTarget, titleOpen + step) : max(titleOpenTarget, titleOpen - step)
@@ -55,6 +74,11 @@ struct SkyView: View {
         }
         .background(Theme.sky.color)
         .ignoresSafeArea()
+        .background {
+            GeometryReader { p in
+                Color.clear.onChange(of: p.frame(in: .named("sky")).origin, initial: true) { _, o in model.origin = o }
+            }
+        }
         .accessibilityHidden(true)
     }
 
@@ -72,15 +96,20 @@ struct SkyView: View {
         // it, and adding to a transparent canvas would paint them dark.
         g.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.sky.color))
         light(&g, size, f, cam)
+        regions(&g, size, f)
         // While a call's light is out, meteors and glints wait.
         let busy = model.calls.busy(f)
+        // Under Horizons, the field is dust: the stars that mean something are the surfaces.
+        let field = model.map.stars.isEmpty ? 1.0 : 0.5
 
         for star in model.stars {
-            let p = CGPoint(x: (star.base.x + star.depth * cam.x) * d, y: (star.base.y + star.depth * cam.y) * d)
-            let c = star.color(frame, glints: !busy).color
+            // A '+' does not sway, but it is part of the field the pointer bends.
+            let (p, scale) = model.lens.warp(CGPoint(x: (star.base.x + star.depth * cam.x) * d, y: (star.base.y + star.depth * cam.y) * d),
+                                             depth: star.kind == .plus ? 0.5 : star.depth, in: size)
+            let c = star.color(frame, glints: !busy).color.opacity(field)
             switch star.kind {
             case .star:
-                let r = star.peak == Theme.starBright ? 1.5 : 1.2
+                let r = (star.peak == Theme.starBright ? 1.5 : 1.2) * scale
                 g.fill(Path(ellipseIn: CGRect(x: p.x - r * 3, y: p.y - r * 3, width: r * 6, height: r * 6)), with: .color(c.opacity(0.12)))
                 g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(c))
             case .plus:
@@ -92,6 +121,8 @@ struct SkyView: View {
                 g.fill(Path(ellipseIn: CGRect(x: p.x - 0.7, y: p.y - 0.7, width: 1.4, height: 1.4)), with: .color(c))
             }
         }
+
+        surfaces(&g, size, f)
 
         // The TUI leaves out the core and satellites on a small terminal.
         let full = w >= 560 && h >= 288
@@ -134,19 +165,13 @@ struct SkyView: View {
             drawCalls(&g, dots, f)
         }
 
-        // The sky is quieter under the words.
-        if let col = model.column, col.upperBound > col.lowerBound {
-            let feather = 40.0
-            let rect = CGRect(x: col.lowerBound - feather, y: 0, width: col.upperBound - col.lowerBound + 2 * feather, height: h)
-            let k = feather / rect.width
-            let stops: [Gradient.Stop] = [
-                .init(color: Theme.sky.color(0), location: 0),
-                .init(color: Theme.sky.color(0.36), location: min(0.5, k * 1.6)),
-                .init(color: Theme.sky.color(0.36), location: max(0.5, 1 - k * 1.6)),
-                .init(color: Theme.sky.color(0), location: 1),
-            ]
-            g.fill(Path(rect), with: .linearGradient(Gradient(stops: stops), startPoint: CGPoint(x: rect.minX, y: 0),
-                                                     endPoint: CGPoint(x: rect.maxX, y: 0)))
+        // The sky is quieter under the words: the log's own shape, docked or
+        // floating, with soft edges.
+        if let log = model.logRect, log.width > 0, log.height > 0 {
+            let r = log.offsetBy(dx: -model.origin.x, dy: -model.origin.y)
+            var quiet = g
+            quiet.addFilter(.blur(radius: 22))
+            quiet.fill(Path(roundedRect: r.insetBy(dx: 6, dy: 6), cornerRadius: 18), with: .color(Theme.sky.color(0.4)))
         }
 
         // The title: near-sky tones, lit when a satellite or meteor passes.
@@ -187,10 +212,15 @@ struct SkyView: View {
                     disc(at(onRing(dots, 1, a, CallMotion.edge)), 1.3, Theme.sky.lerp(Theme.amber, k * w).color)
                 }
             }
-            guard let head = l.place(dots, f) else { continue }
+            // A call to a surface the sky shows flies to its star.
+            let target = l.to.flatMap { model.map.star(named: $0) }.map { s -> Point in
+                let (p, _) = model.lens.warp(s.at, depth: 0.9, in: CGSize(width: dots.x * d, height: dots.y * d))
+                return Point(p.x / d, p.y / d)
+            }
+            guard let head = l.place(dots, f, target: target) else { continue }
             let alpha = l.fault && u > 0 ? max(0, 1 - u / CallMotion.flare) : 1
             for i in 1..<8 {
-                if let p = l.place(dots, f - Double(i) * 0.35) {
+                if let p = l.place(dots, f - Double(i) * 0.35, target: target) {
                     disc(at(p), 1.2, Theme.tailFloor.lerp(Theme.satellite, pow(0.66, Double(i))).color(alpha))
                 }
             }
@@ -198,6 +228,69 @@ struct SkyView: View {
             let c = Theme.glintPeak.lerp(Theme.amber, flare)
             disc(at(head), 6, c.color(0.18 * alpha))
             disc(at(head), 1.8 + flare * 1.4, c.color(alpha))
+        }
+    }
+
+    /// Each Horizon: a faint light the size of what it holds, brighter for
+    /// each surface that ran under it, and a dotted edge. The room is teal;
+    /// a narrowing violet.
+    private func regions(_ g: inout GraphicsContext, _ size: CGSize, _ f: Double) {
+        var add = g
+        add.blendMode = .plusLighter
+        for r in model.map.regions {
+            let (c, _) = model.lens.warp(r.center, depth: 0.5, in: size)
+            let strength = min(1.4, 0.7 + 0.15 * Double(r.actors))
+            glow(&add, c, CGSize(width: r.radii.width * 0.9, height: r.radii.height * 0.9), r.root ? Theme.roomLight : Theme.narrowLight, strength)
+            let edge = Path(ellipseIn: CGRect(x: c.x - r.radii.width, y: c.y - r.radii.height, width: r.radii.width * 2, height: r.radii.height * 2))
+            g.stroke(edge, with: .color(Theme.horizonEdge.color(r.root ? 0.07 : 0.11)), style: StrokeStyle(lineWidth: 0.8, dash: [1.5, 7]))
+        }
+    }
+
+    /// Each surface in reach: a star that breathes, brighter where Horizons
+    /// share it, its name shown while the pointer is near. The Horizon under
+    /// the pointer is drawn as a constellation: its lines traced one at a
+    /// time, its stars lit and named.
+    private func surfaces(_ g: inout GraphicsContext, _ size: CGSize, _ f: Double) {
+        let at = model.map.stars.map { model.lens.warp($0.at, depth: 0.9, in: size) }
+        let figure = model.map.regions.first { $0.id == model.constellation.shown }
+        let lit = model.constellation.alpha
+        var members = Set<Int>()
+        if let figure, lit > 0 {
+            members = Set(figure.stars)
+            var lines = Path()
+            var head: CGPoint?
+            for (k, e) in figure.edges.enumerated() {
+                let t = min(1, model.constellation.traced - Double(k))
+                if t <= 0 { break }
+                let a = at[e.a].0, b = at[e.b].0
+                let end = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+                lines.move(to: a)
+                lines.addLine(to: end)
+                if t < 1 { head = end }
+            }
+            var glow = g
+            glow.addFilter(.blur(radius: 3))
+            glow.stroke(lines, with: .color(Theme.surfacePeak.color(0.18 * lit)), lineWidth: 2.5)
+            g.stroke(lines, with: .color(Theme.surfacePeak.color(0.45 * lit)), lineWidth: 0.7)
+            if let head {
+                g.fill(Path(ellipseIn: CGRect(x: head.x - 4, y: head.y - 4, width: 8, height: 8)), with: .color(Theme.glintPeak.color(0.25 * lit)))
+                g.fill(Path(ellipseIn: CGRect(x: head.x - 1.2, y: head.y - 1.2, width: 2.4, height: 2.4)), with: .color(Theme.glintPeak.color(lit)))
+            }
+        }
+        for (i, s) in model.map.stars.enumerated() {
+            let (p, scale) = at[i]
+            let inFigure = members.contains(i) ? lit : 0
+            let breath = (1 + sin(2 * .pi * f / 520 + s.phase)) / 2
+            let c = Theme.surfaceFloor.lerp(Theme.surfacePeak, 0.5 + 0.25 * breath + 0.1 * Double(s.shared - 1) + 0.3 * inFigure)
+            let r = 1.8 * scale * (1 + 0.25 * inFigure)
+            g.fill(Path(ellipseIn: CGRect(x: p.x - r * 4, y: p.y - r * 4, width: r * 8, height: r * 8)), with: .color(c.color(0.14 + 0.1 * inFigure)))
+            g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(c.color))
+            let near = model.local.map { hypot($0.x - p.x, $0.y - p.y) < 18 } ?? false
+            if near || inFigure > 0 {
+                let lc = Theme.labelFloor.lerp(Theme.labelPeak, near ? 1 : inFigure).lerp(Theme.surfacePeak, 0.5 * inFigure)
+                g.draw(Text(s.name).font(.system(size: 10, design: .monospaced)).foregroundStyle(lc.color),
+                       at: CGPoint(x: p.x, y: p.y + 12), anchor: .top)
+            }
         }
     }
 
@@ -210,10 +303,12 @@ struct SkyView: View {
         let breath = 0.8 + 0.2 * sin(2 * .pi * f / 600)
         let orbit = CGFloat(2 * Double.pi * f / 4800)
         let v = CGPoint(x: m.x + w * 0.16 * cos(orbit), y: m.y + h * 0.22 * sin(orbit))
+        let (mm, _) = model.lens.warp(m, depth: 0.3, in: size)
+        let (vv, _) = model.lens.warp(v, depth: 0.3, in: size)
         var add = g
         add.blendMode = .plusLighter
-        glow(&add, m, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight, breath)
-        glow(&add, v, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight, 0.85)
+        glow(&add, mm, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight, breath)
+        glow(&add, vv, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight, 0.85)
     }
 
     /// A Gaussian light, exp(-(x²+y²)) over radii, added to what is below.

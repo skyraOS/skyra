@@ -1,4 +1,4 @@
-"""Codex provider launch grants, verified on macOS 15.6 / Codex 0.157.1."""
+"""Codex provider launch grants, verified on macOS 15.6 / Codex 0.160.0 (launch.CODEX_VERSION)."""
 import json
 from pathlib import Path
 import shutil
@@ -14,7 +14,7 @@ def native_binary():
     return matches[0].resolve()
 
 
-def render(binary, home, scratch, work, auth, proxy_port=None):
+def render(binary, home, scratch, work, auth, proxy_port=None, capture_port=None):
     # Operator bootstrap grants, not yet derived from Horizon fields. Network
     # remains broadly available for inference; egress restriction is separate.
     rules = ["(version 1)", "(deny default)", "(allow process-fork)",
@@ -58,4 +58,10 @@ def render(binary, home, scratch, work, auth, proxy_port=None):
         if not isinstance(proxy_port, int) or not 1 <= proxy_port <= 65535:
             raise ValueError('invalid egress proxy port')
         rules.append(f'(allow network-outbound (remote ip "localhost:{proxy_port}"))')
+    if capture_port is not None:
+        # Test only (tool_surface.py): a local server that captures the
+        # inference request in place of the provider.
+        if not isinstance(capture_port, int) or not 1 <= capture_port <= 65535:
+            raise ValueError('invalid capture port')
+        rules.append(f'(allow network-outbound (remote ip "localhost:{capture_port}"))')
     return "\n".join(rules) + "\n"

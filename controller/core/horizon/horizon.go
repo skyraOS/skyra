@@ -34,11 +34,19 @@ type Resource struct {
 // under it (next/24). Exec is not among it: a profile allows exec of the one
 // program being run and nothing else, so no grant can let a target start
 // another program without the runtime recording it.
+//
+// Scratch is a directory everything under the Horizon may read and write: a
+// place to put work, not a place to run it. Nothing written there can be
+// executed, by the same rule that holds everywhere: a profile allows exec of
+// the program being run and nothing else. It is its own field, not a read
+// and a write grant, so the workspace stays the first read grant (where a
+// relative read resolves) and a narrowing can drop it by name.
 type Authority struct {
 	Read    []PathGrant `json:"read,omitempty"`
 	Write   []PathGrant `json:"write,omitempty"`
 	Mach    []string    `json:"mach,omitempty"`
 	Connect []string    `json:"connect,omitempty"` // outbound Unix socket paths
+	Scratch string      `json:"scratch,omitempty"` // an absolute directory, read and write
 }
 
 // Allows reports whether every direct grant in requested is contained in a
@@ -46,7 +54,8 @@ type Authority struct {
 func (ceiling Authority) Allows(requested Authority) bool {
 	return pathsAllow(ceiling.Read, requested.Read) &&
 		pathsAllow(ceiling.Write, requested.Write) &&
-		stringsAllow(ceiling.Mach, requested.Mach) && stringsAllow(ceiling.Connect, requested.Connect)
+		stringsAllow(ceiling.Mach, requested.Mach) && stringsAllow(ceiling.Connect, requested.Connect) &&
+		(requested.Scratch == "" || requested.Scratch == ceiling.Scratch)
 }
 
 func pathsAllow(ceiling, requested []PathGrant) bool {
@@ -185,6 +194,10 @@ func Render(h Horizon, floor string) string {
 	}
 	for _, grant := range h.Authority.Write {
 		renderPath(&b, "file-write*", grant)
+	}
+	if s := h.Authority.Scratch; s != "" {
+		renderPath(&b, "file-read*", PathGrant{Path: s, Scope: "subpath"})
+		renderPath(&b, "file-write*", PathGrant{Path: s, Scope: "subpath"})
 	}
 	for _, service := range h.Authority.Mach {
 		fmt.Fprintf(&b, "(allow mach-lookup (global-name %q))\n", service)
