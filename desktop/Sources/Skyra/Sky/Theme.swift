@@ -47,6 +47,15 @@ enum Theme {
     static let glintPeak = RGB(176, 192, 214)
     static let satellite = RGB(132, 188, 196)
 
+    // The nebula: slow lobes of pigment, added to the sky where they overlap.
+    static let nebulaDeep = RGB(3, 12, 17)
+    static let nebulaIndigo = RGB(8, 8, 24)
+    static let nebulaMagenta = RGB(16, 6, 20)
+    static let nebulaOchre = RGB(13, 9, 5)
+
+    // The flow's filaments, by band: teal, violet, warm.
+    static let filaments = [RGB(96, 168, 178), RGB(128, 112, 182), RGB(176, 140, 104)]
+
     // Horizons: a region's light, its edge, and a surface's star.
     static let roomLight = RGB(5, 9, 13)
     static let narrowLight = RGB(8, 6, 14)
@@ -63,7 +72,12 @@ enum Theme {
     static let titleMarkLit = RGB(150, 208, 214)
 
     static func title(open: Double, lit: Double) -> (mark: Color, word: Color) {
-        (titleMarkReceded.lerp(titleMarkOpen, open).lerp(titleMarkLit, lit).color,
-         titleWordReceded.lerp(titleWordOpen, open).lerp(titleWordLit, lit).color)
+        let (mark, word) = titleRGB(open: open, lit: lit)
+        return (mark.color, word.color)
+    }
+
+    static func titleRGB(open: Double, lit: Double) -> (mark: RGB, word: RGB) {
+        (titleMarkReceded.lerp(titleMarkOpen, open).lerp(titleMarkLit, lit),
+         titleWordReceded.lerp(titleWordOpen, open).lerp(titleWordLit, lit))
     }
 }

@@ -56,3 +56,6 @@ became) or **not in the proposal**.
     crossing of the trusted boundary must answer. A standing rule.
 13. **[`research-question.md`](research-question.md)**: the question, the
     metrics, the baseline, and the September–December plan.
+14. **[`31-the-sky-dreams.md`](31-the-sky-dreams.md)**: the desktop sky as a
+    machine hallucination of the tree. Every pixel derived from a record;
+    Rest, Work and Dream; replay as the dream. Proposed.

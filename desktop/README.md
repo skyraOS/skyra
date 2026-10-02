@@ -30,9 +30,14 @@ Quitting the app stops the webhost; the Codex actor host keeps running
 | ⇧⌘R | Restart the backend |
 | Double-click the conversation | Arrange it: drag to move it, an edge or corner to resize it; double-click or Esc when done, Reset to put it back in its column. The placement is kept between launches |
 
-The sky is the TUI's (`tui/wallpaper.go`, `tui/satellites.go`), ported to a
-`Canvas`: the same stars in the same places (the tests pin the hash), and
-satellites that leave their orbit for the pointer. Over it, the conversation
+The sky is the TUI's (`tui/wallpaper.go`, `tui/satellites.go`), drawn with
+Metal at the display's own rate (120 frames a second on ProMotion): the same
+stars in the same places (the tests pin the hash), and satellites that leave
+their orbit for the pointer. Under them, a nebula of slow lights and
+filaments drifting through a field the pointer stirs ([next/31](../docs/next/31-the-sky-dreams.md)).
+Each frame is painted into a draw list (`Sky/SkyPaint.swift`) and drawn in a
+few instanced passes (`Sky/SkyRenderer.swift`); the tests draw frames
+offscreen and read them back. Over it, the conversation
 on screen's Horizons, as the webhost reads them from its lineage: each a faint
 region as wide as what it reaches, each surface in reach one star (its name
 shows under the pointer), shared stars where Horizons overlap, and a call's
