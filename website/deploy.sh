@@ -9,6 +9,12 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 host=${DEPLOY_HOST:-skyra}
 
+# The mini is only reachable on the home network: say so, and change nothing.
+if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" true 2>/dev/null; then
+  echo "deploy: cannot reach $host (away from the home network?); nothing was deployed" >&2
+  exit 1
+fi
+
 "$here/build.sh"
 
 ssh "$host" 'mkdir -p ~/site/www'
