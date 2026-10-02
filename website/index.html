@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyra · Michael Scanlon</title>
+<meta name="description" content="Skyra: agents that extend themselves without asking. Grant the boundary once; the OS holds the line, and every step is recorded so you can replay it yourself.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="mark" href="index.html">Michael Scanlon · <b>SKY-001</b></a>
+    <nav aria-label="Pages">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="skyra.html">Skyra</a>
+      <a href="verify.html">Verify a run</a>
+      <a href="writing.html">Writing</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <span class="section">Section A · Thesis</span>
+      <h1>Grant the boundary once. Let the OS hold the line.</h1>
+      <p class="lede">
+        Skyra is a runtime for coding agents. A person grants an agent a
+        <strong>Horizon</strong> once: an explicit set of what it may invoke.
+        After that the agent works, and extends itself, without asking, because
+        the operating system enforces the Horizon on every call and nothing an
+        agent says can widen it. Every step is a hash-chained record, so a run
+        can be replayed and checked byte for byte.
+      </p>
+      <div class="actions">
+        <a class="btn primary" href="verify.html">Replay a run in your browser</a>
+        <a class="btn" href="skyra.html">How it works</a>
+      </div>
+    </section>
+
+    <section aria-labelledby="records">
+      <span class="section">Section B · Records</span>
+      <h2 id="records">A run is a chain of records.</h2>
+      <p>
+        Codex is asked a question, calls a tool inside its Horizon, and answers.
+        Each box is one committed record: what state the system was in, and the
+        first characters of the hash it is stored under.
+      </p>
+      <ol class="strip" id="home-strip" aria-label="The records of one run">
+        <li data-state="invoke"><b>genesis</b><span class="to">the room</span><span>…</span></li>
+        <li data-state="invoke"><b>invoke</b><span class="to">codex</span><span>…</span></li>
+        <li data-state="invoke"><b>invoke</b><span class="to">echo</span><span>…</span></li>
+        <li data-state="return"><b>return</b><span class="to">"hello"</span><span>…</span></li>
+        <li data-state="resolve"><b>resolve</b><span class="to">codex resumes</span><span>…</span></li>
+        <li data-state="return"><b>return</b><span class="to">the answer</span><span>…</span></li>
+        <li data-state="resolve"><b>resolve</b><span class="to">the room</span><span>…</span></li>
+      </ol>
+      <div class="dim" aria-hidden="true"><i></i><span>Horizon · granted once</span></div>
+      <p>
+        No step asks for approval. A step that reaches past the Horizon becomes a
+        fault, which is recorded too. On the <a href="verify.html">Verify page</a>
+        your browser re-derives every one of these records with the same code that
+        produced them, then lets you change a byte and watch the check fail.
+      </p>
+    </section>
+  </main>
+
+  <div class="title-block" aria-label="Title block">
+    <div>Dwg no.</div><div>SKY-001</div>
+    <div>Sheet</div><div>1 of 5 · Home</div>
+    <div>Replay</div><div id="home-replay">5 runs recorded</div>
+    <div>Drawn by</div><div>Michael Scanlon</div>
+    <div>Head</div><div class="head mono" id="home-head">see Verify</div>
+  </div>
+</div>
+<script>
+  // Fill the strip and title block from the recorded run, when the page is served.
+  fetch("runs/answered.json").then(r => r.json()).then(b => {
+    const recs = {};
+    for (const [k, v] of Object.entries(b.objects)) if (k.startsWith("records/")) recs[k.slice(8)] = JSON.parse(v);
+    const chain = [];
+    for (let s = b.head; s && recs[s]; s = recs[s].predecessor) chain.unshift(s);
+    const lis = document.querySelectorAll("#home-strip li");
+    chain.forEach((s, i) => { if (lis[i]) lis[i].lastElementChild.textContent = s.slice(0, 8); });
+    document.getElementById("home-head").textContent = b.head.slice(0, 16) + "…";
+  }).catch(() => {});
+</script>
+</body>
+</html>

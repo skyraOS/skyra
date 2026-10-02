@@ -19,37 +19,55 @@ import (
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
-	"skyra/controller/runtime/tree"
 )
 
-// Replay walks from head back to genesis, then forward, and returns the
-// number of records in the chain.
-func Replay(root, head string) (int, error) {
-	_, n, err := walk(root, head)
+// Store is where replay reads a lineage from: the tree on disk (Replay), or
+// bytes handed over whole, as the website does in a visitor's browser. A
+// store is not trusted: everything read from one must hash to its name.
+type Store interface {
+	Get(kind, hash string) ([]byte, error)
+}
+
+// Lineage is Replay over any store: it walks from head back to genesis, then
+// forward, and returns the number of records in the chain.
+func Lineage(s Store, head string) (int, error) {
+	_, n, err := walk(s, head)
 	return n, err
 }
 
-// HorizonAt derives, from the tree alone, the Horizon the record at stamp
-// released: the one whatever it runs, or whatever is emitted under it, runs
-// under. Every record on the way is re-derived, as Replay does. Authority is
-// never taken from anyone who holds the work (next/24, next/20 finding 1).
-func HorizonAt(root, stamp string) (horizon.Horizon, error) {
-	h, _, err := walk(root, stamp)
-	return h, err
+// get reads kind/h from the store and checks that it hashes to its name.
+func get(s Store, kind, h string) ([]byte, error) {
+	b, err := s.Get(kind, h)
+	if err != nil {
+		return nil, err
+	}
+	if record.Sum(b) != h {
+		return nil, fmt.Errorf("%s/%s does not hash to its name", kind, record.Short(h))
+	}
+	return b, nil
 }
 
-func walk(root, head string) (horizon.Horizon, int, error) {
+func load(s Store, stamp string) (record.Record, error) {
+	b, err := get(s, "records", stamp)
+	if err != nil {
+		return record.Record{}, err
+	}
+	var r record.Record
+	return r, json.Unmarshal(b, &r)
+}
+
+func walk(root Store, head string) (horizon.Horizon, int, error) {
 	var none horizon.Horizon
 	var chain []string
 	for s := head; s != ""; {
-		r, err := tree.Load(root, s)
+		r, err := load(root, s)
 		if err != nil {
 			return none, 0, err
 		}
 		chain = append([]string{s}, chain...)
 		s = r.Predecessor
 	}
-	g, err := tree.Load(root, chain[0])
+	g, err := load(root, chain[0])
 	if err != nil {
 		return none, 0, err
 	}
@@ -63,11 +81,11 @@ func walk(root, head string) (horizon.Horizon, int, error) {
 	}
 	var sent []byte // a route's send: exactly what the next record must have received
 	for _, stamp := range chain[1:] {
-		rec, err := tree.Load(root, stamp)
+		rec, err := load(root, stamp)
 		if err != nil {
 			return none, 0, err
 		}
-		in, err := tree.Get(root, "inputs", rec.Input)
+		in, err := get(root, "inputs", rec.Input)
 		if err != nil {
 			return none, 0, err
 		}
@@ -130,12 +148,12 @@ func walk(root, head string) (horizon.Horizon, int, error) {
 // discharge this resolve follows, over that discharge's return, and its
 // decision is what step derives from the runner's stored emission. It returns
 // a send's envelope, which the next record must have received.
-func routed(root string, waiter horizon.Horizon, discharge string, run machine.RouteRun) ([]byte, error) {
+func routed(root Store, waiter horizon.Horizon, discharge string, run machine.RouteRun) ([]byte, error) {
 	if run.Child != discharge {
 		return nil, errors.New("its route ran on another discharge")
 	}
 	if run.Input != "" {
-		b, err := tree.Get(root, "inputs", run.Input)
+		b, err := get(root, "inputs", run.Input)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +161,7 @@ func routed(root string, waiter horizon.Horizon, discharge string, run machine.R
 		if err := json.Unmarshal(b, &in); err != nil {
 			return nil, err
 		}
-		d, err := tree.Load(root, discharge)
+		d, err := load(root, discharge)
 		if err != nil {
 			return nil, err
 		}
@@ -155,9 +173,9 @@ func routed(root string, waiter horizon.Horizon, discharge string, run machine.R
 		var out, failed []byte
 		var err error
 		if run.Output != "" {
-			out, err = tree.Get(root, "inputs", run.Output)
+			out, err = get(root, "inputs", run.Output)
 		} else {
-			failed, err = tree.Get(root, "inputs", run.Failed)
+			failed, err = get(root, "inputs", run.Failed)
 		}
 		if err != nil {
 			return nil, err
