@@ -20,7 +20,7 @@ type State string
 const (
 	Resolve State = "resolve" // every dependency of a frame is discharged; its continuation resumes
 	Invoke  State = "invoke"  // a capability in reach, with a payload that fits its input contract
-	Return  State = "return"  // the slot the emitter's frame discharges, with any JSON payload: its type is computed (next/30)
+	Return  State = "return"  // the slot the emitter's frame discharges, with any JSON payload: a return declares no contract
 	Fault   State = "fault"   // the runtime proved something broke
 )
 

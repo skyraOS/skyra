@@ -362,14 +362,12 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("a foreign round must stop the instance: %#v", effs)
 	}
 
-	// Every slot discharged: echo's return is routed (next/30). The agent has
-	// no route for it, so it is novel: commit a resolve naming every
-	// discharge, then claim.
+	// Every slot discharged: commit a resolve naming every discharge, then
+	// claim. Nothing is looked up between gather and resolve (next/32).
 	g, effs := Step(r, round(true))
-	if look, ok := effs[0].(LookupRoute); !ok || look.Key.Binding != "echo" || look.Declared != "" || g.Phase != Lookup {
-		t.Fatalf("a returned discharge is routed: %#v", effs)
+	if g.Phase != Claim || len(effs) != 3 {
+		t.Fatalf("gather resolves at once: %#v", effs)
 	}
-	g, effs = Step(g, RouteLooked{})
 	res := effs[1].(Commit).R
 	if res.State != record.Resolve || res.Frame != a.Stamp || res.Round != a.Stamp || !reflect.DeepEqual(res.Deps, []string{r.Stamp}) || res.Predecessor != r.Stamp {
 		t.Fatalf("resolve record: %+v", res)
@@ -389,8 +387,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	if g.State != record.Resolve || g.Phase != Execute || g.Self.Frame != a.Stamp || g.Self.Stamp != record.Stamp(res) || effs[0] != (Pop{}) {
 		t.Fatalf("the winner takes custody of the resumed agent: %+v %#v", g, effs)
 	}
-	if err := json.Unmarshal(effs[1].(Run).Stdin, &c); err != nil || len(c.Steps) != 1 || c.Steps[0].To != "echo" || c.Steps[0].State != record.Return || string(c.Steps[0].Value) != `"hi"` ||
-		c.Steps[0].Interrupt != Novelty || c.Steps[0].Type != "echo → string" {
+	if err := json.Unmarshal(effs[1].(Run).Stdin, &c); err != nil || len(c.Steps) != 1 || c.Steps[0].To != "echo" || c.Steps[0].State != record.Return || string(c.Steps[0].Value) != `"hi"` {
 		t.Fatalf("the agent resumes with the step it took and what came back: %s", effs[1].(Run).Stdin)
 	}
 
@@ -406,6 +403,26 @@ func TestOutOfPhase(t *testing.T) {
 	_, effs := Step(Instance{Phase: Intake}, Emitted{Out: []byte("x")})
 	if x, ok := effs[0].(Exit); !ok || !strings.Contains(x.Err, "not valid in phase") {
 		t.Fatalf("an event in the wrong phase must stop the instance: %#v", effs)
+	}
+}
+
+// The phases routes had are gone (next/32, H1): where the route runner's
+// decision, system.route's rounds and its retests were taken, Step now
+// refuses them like any event out of phase.
+func TestRemovedRoutePhasesAreRefused(t *testing.T) {
+	for name, c := range map[string]struct {
+		s Instance
+		e Event
+	}{
+		"a decision after gather":           {Instance{State: record.Return, Phase: Claim}, Emitted{Out: []byte("x")}},
+		"a route looked up after gather":    {Instance{State: record.Return, Phase: Claim}, Settled{}},
+		"rounds read by an invoke's facet":  {Instance{State: record.Invoke, Phase: Execute}, Settled{}},
+		"a retest of a recorded run":        {Instance{State: record.Invoke, Phase: Handoff}, Emitted{Out: []byte("x")}},
+		"a return's gather in a dead phase": {Instance{State: record.Fault, Phase: Done}, Emitted{Out: []byte("x")}},
+	} {
+		if _, effs := Step(c.s, c.e); len(effs) != 1 || !strings.Contains(effs[0].(Exit).Err, "not valid in phase") {
+			t.Errorf("%s: %#v", name, effs)
+		}
 	}
 }
 

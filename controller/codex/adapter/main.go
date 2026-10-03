@@ -55,10 +55,7 @@ type continuation struct {
 			Kind  string `json:"kind"`
 			Cause string `json:"cause"`
 		} `json:"fault"`
-		Interrupt string `json:"interrupt"` // novelty: no route for this return's type yet (next/30)
-		Type      string `json:"type"`      // its type's presentation
 	} `json:"steps"`
-	Route json.RawMessage `json:"route"` // the route contract, when a step is novel
 }
 
 func main() {
@@ -208,9 +205,6 @@ func run() (string, error) {
 				if calls < len(c.Steps) {
 					step := c.Steps[calls]
 					result := toolResult(m.ID, step.State, step.Value, step.Fault)
-					if step.Interrupt == "novelty" {
-						novel(result, calls, step.Type, c.Route)
-					}
 					if _, err := h.deliver(fmt.Sprintf("%s:tool:%d", c.Frame, calls), result); err != nil {
 						return "", err
 					}
@@ -325,21 +319,11 @@ func toolResult(id json.RawMessage, state string, value json.RawMessage, fault *
 		"contentItems": []any{map[string]string{"type": "inputText", "text": text}}}}
 }
 
-// novel adds the route contract to a novel step's tool result (next/30): the
-// return's type is new, and the model may record what to do with the next one.
-// It is derived from the continuation alone, so a redelivery is the same bytes.
-func novel(result map[string]any, step int, typ string, route json.RawMessage) {
-	r := result["result"].(map[string]any)
-	text := fmt.Sprintf("[skyra] This return's type is new: %s. To decide what happens to the next return of this type, "+
-		"call system_route with {\"step\": %d, \"source\": <a Starlark route>}. The route contract: %s", typ, step, route)
-	r["contentItems"] = append(r["contentItems"].([]any), map[string]string{"type": "inputText", "text": text})
-}
-
 // modelTools are the capabilities Codex is shown, by the name it is shown
 // (a dynamic tool name has no dots). Under a shared Horizon (next/24) reach
 // holds every surface in the room, this adapter and the room's facets
 // included, so only these are offered, and only when they are in reach.
-var modelTools = map[string]string{"echo": "echo", "system_route": "system.route"}
+var modelTools = map[string]string{"echo": "echo"}
 
 func offered(c continuation, name string) bool {
 	return modelTools[name] != "" && c.Tools[modelTools[name]] != nil

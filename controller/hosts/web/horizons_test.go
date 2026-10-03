@@ -17,8 +17,7 @@ func TestHorizonsFromTheLineage(t *testing.T) {
 	user := horizon.Surface{Path: "/bin/user", SHA256: "u", Continuation: true}
 	codex := horizon.Surface{Path: "/bin/codex", SHA256: "c", Continuation: true}
 	read := horizon.Surface{Path: "/bin/read", SHA256: "r"}
-	runner := horizon.Surface{Path: "/bin/runner", SHA256: "x", System: "runner"}
-	room := map[string]horizon.Surface{"user": user, "codex": codex, "read": read, "system.route-runner": runner}
+	room := map[string]horizon.Surface{"user": user, "codex": codex, "read": read}
 	authority := horizon.Authority{Read: []horizon.PathGrant{{Path: "/work", Scope: "subpath"}}}
 	g0 := commit(t, root, "", "genesis", record.Record{State: record.Invoke, Reach: room, Authority: &authority})
 
@@ -36,7 +35,7 @@ func TestHorizonsFromTheLineage(t *testing.T) {
 		{Stamp: g0 + "1", Surface: &user, Reach: room, Authority: authority, Frame: g0 + "1"},
 		{Stamp: g0 + "2", Surface: &codex, Reach: room, Authority: authority, Frame: g0 + "2"},
 		{Stamp: g0 + "3", Surface: &user, Reach: room, Authority: authority, Refs: map[string]horizon.Grant{"system.ref.1": narrow}, Frame: g0 + "3"},
-		{Stamp: g0 + "4", Surface: &codex, Reach: map[string]horizon.Surface{"read": read, "system.route-runner": runner}, Authority: authority, Frame: g0 + "4"},
+		{Stamp: g0 + "4", Surface: &codex, Reach: map[string]horizon.Surface{"read": read}, Authority: authority, Frame: g0 + "4"},
 	} {
 		if _, err := tree.PutHorizon(root, h); err != nil {
 			t.Fatal(err)

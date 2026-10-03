@@ -142,7 +142,7 @@ Horizon's `extend-reach`, which needs no approval: an actor can only extend itse
 | Id | Change | Where | Status |
 |---|---|---|---|
 | H0 | The documents: 30 and its proposal marked superseded where 32 replaces them; G superseded; `summary.md` P9, P10; the root README's fan-out claim | `docs/`, `README.md` | **Built** |
-| H1 | Remove the route and type machinery from the kernel, the route runner, and their scenarios | `core/machine` (`route.go`, `write.go`, phases), `core/contract/shape.go`, `registry`, `tree`, `replay`, `boot`, `targets/route`, `run.sh` | Not built |
+| H1 | Remove the route and type machinery from the kernel, the route runner, and their scenarios | `core/machine` (`route.go`, `write.go`, phases), `core/contract/shape.go`, `registry`, `tree`, `replay`, `boot`, `targets/route`, `run.sh` | **Built**. `shape.go` waits in history for H5 |
 | H2 | Fan-out: one emission, N successors, each taking one instruction; the emitter supervises all N, opening every slot before releasing any | `core/machine` (`handoff`), `runtime/instance` | Not built |
 | H3 | The Horizon as the actor `system`; contracts by (target, schema), selected by fit; `extend-reach(schema)`: an actor extends only itself | `core/machine` (`room.go`, `interpret`, `Narrow`), `core/horizon`, `replay` | Not built |
 | H4 | `strand`: the hashes from an observation back to the invoke, through the contract the requester names | `core/machine` (`room.go`), `runtime/instance` | Not built |

@@ -109,10 +109,6 @@ type Surface struct {
 	ProxyHosts         []string         `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
 	ProxyPath          string           `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
 	ProxySHA256        string           `json:"proxy_sha256,omitempty"`
-	// Routes are the routes a deterministic parent declared at registration
-	// (next/30): child name → the hash of a Starlark source in the tree. They
-	// are part of the surface, so its identity.
-	Routes map[string]string `json:"routes,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.
@@ -220,13 +216,6 @@ func renderPath(b *strings.Builder, operation string, grant PathGrant) {
 // covers a binary (its sha256) and a host surface alike, and any change to a
 // registration is a new identity (next/30). Names are labels, never part of it.
 func Identity(s Surface) string {
-	b, _ := json.Marshal(s)
-	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:])
-}
-
-// ContractHash is the hash of an input contract's canonical encoding.
-func ContractHash(s *contract.Schema) string {
 	b, _ := json.Marshal(s)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])

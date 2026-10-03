@@ -38,15 +38,11 @@ type Entry struct {
 	ResidentProfile    string            `json:"resident_profile,omitempty"`
 	ProxyHosts         []string          `json:"proxy_hosts,omitempty"`
 	ProxyPath          string            `json:"proxy_path,omitempty"`
-	// Routes are a deterministic parent's routes (next/30), one per child it
-	// invokes: child name → a Starlark file. A declared route covers every
-	// type at its binding, so it branches on content with if.
-	Routes map[string]string `json:"routes,omitempty"`
 }
 
 // Declared is what a program's contract file says about it: its input
-// contract, and how it reads its input. A return's type is computed, not
-// declared (next/30). Nothing about what it may reach.
+// contract, and how it reads its input. Nothing about what it returns, and
+// nothing about what it may reach.
 type Declared struct {
 	Input        *contract.Schema `json:"input"`
 	Continuation bool             `json:"continuation,omitempty"`
@@ -56,46 +52,11 @@ type Declared struct {
 // content hash, and returns the room: its reach, and the authority everything
 // under it shares.
 func Load(file string) (map[string]horizon.Surface, horizon.Authority, error) {
-	reach, room, _, err := LoadWithRoutes(file)
-	return reach, room, err
-}
-
-// LoadWithRoutes is Load, and the sources of every declared route by hash, to
-// be stored in the tree. A surface names its routes by those hashes.
-func LoadWithRoutes(file string) (map[string]horizon.Surface, horizon.Authority, map[string][]byte, error) {
-	var room horizon.Authority
 	var entries map[string]Entry
 	if err := strict(file, &entries); err != nil {
-		return nil, room, nil, fmt.Errorf("registry: %w", err)
+		return nil, horizon.Authority{}, fmt.Errorf("registry: %w", err)
 	}
-	reach, room, err := load(file, entries)
-	if err != nil {
-		return nil, room, nil, err
-	}
-	sources := map[string][]byte{}
-	for name, e := range entries {
-		if len(e.Routes) == 0 {
-			continue
-		}
-		s := reach[name]
-		if !s.Continuation {
-			return nil, room, nil, fmt.Errorf("%s: only a continuation invokes children, so only it declares routes", name)
-		}
-		s.Routes = map[string]string{}
-		for child, path := range e.Routes {
-			if _, ok := entries[child]; !ok {
-				return nil, room, nil, fmt.Errorf("%s: a route for %q, which is not registered", name, child)
-			}
-			src, err := os.ReadFile(resolve(filepath.Dir(file), path))
-			if err != nil {
-				return nil, room, nil, fmt.Errorf("%s route for %s: %w", name, child, err)
-			}
-			s.Routes[child] = record.Sum(src)
-			sources[s.Routes[child]] = src
-		}
-		reach[name] = s
-	}
-	return reach, room, sources, nil
+	return load(file, entries)
 }
 
 func load(file string, entries map[string]Entry) (map[string]horizon.Surface, horizon.Authority, error) {

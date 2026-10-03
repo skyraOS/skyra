@@ -25,26 +25,7 @@ import (
 const (
 	SystemPrefix = "system."
 	NarrowFacet  = "system.narrow"
-	// RouteRunner is the route runner (next/30): a runtime-owned surface with a
-	// binary, since it runs Starlark. It sits in the room's reach so every
-	// Horizon carries it, but nothing may invoke it and no continuation is
-	// shown it: the runtime runs it, under an empty Horizon, when a return is
-	// routed.
-	RouteRunner = "system.route-runner"
-	// RouteFacet records a route (next/30): the caller names a step it was
-	// shown, never a hash, and the runtime binds the source to that step's
-	// type. It is tested against every recorded run of the type first (F8).
-	//
-	//	{"to": "system.route", "payload": {"step": <index into steps>, "source": "<starlark>", "accept": [<case>, ...]}}
-	//	   → returns {"ok": true, "flips": [...]}, {"ok": false, "flips": [...]} or {"ok": false, "error": "..."}
-	RouteFacet = "system.route"
 )
-
-// Runner is the route runner's surface, pinned by the runtime: its binary and
-// that binary's sha256. No registry may name it.
-func Runner(path, sha256 string) horizon.Surface {
-	return horizon.Surface{Path: path, SHA256: sha256, System: "runner"}
-}
 
 var (
 	str      = &contract.Schema{Type: "string"}
@@ -57,16 +38,12 @@ var (
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
 	}}
-	routeIn = &contract.Schema{Type: "object", Required: []string{"step", "source"}, Fields: map[string]*contract.Schema{
-		"step": {Type: "number"}, "source": str, "accept": {Type: "array", Items: &contract.Schema{Type: "number"}},
-	}}
 )
 
 // RoomFacets are the room's facets, as surfaces genesis puts in the root reach.
 func RoomFacets() map[string]horizon.Surface {
 	return map[string]horizon.Surface{
 		NarrowFacet: {System: "narrow", Input: narrowIn},
-		RouteFacet:  {System: "route", Input: routeIn},
 	}
 }
 
@@ -121,7 +98,7 @@ func runFacet(s Instance) []byte {
 
 // refName names the next reference a Horizon holding refs receives. It is a
 // counter, not the invoke's stamp, because a continuation is shown its
-// references and hashes never reach a model (next/30). It is in the runtime's
+// references and hashes never reach a model (next/30, F1). It is in the runtime's
 // namespace, which no registry may name, so it never shadows a surface.
 func refName(refs map[string]horizon.Grant) string {
 	for n := len(refs) + 1; ; n++ {
@@ -132,14 +109,9 @@ func refName(refs map[string]horizon.Grant) string {
 	}
 }
 
-// kept is a reach restricted to the names a grant keeps. The route runner is
-// always kept: it grants nothing, and without it the actor's own children
-// could never be routed.
+// kept is a reach restricted to the names a grant keeps.
 func kept(reach map[string]horizon.Surface, names []string) map[string]horizon.Surface {
 	out := map[string]horizon.Surface{}
-	if r, ok := reach[RouteRunner]; ok {
-		out[RouteRunner] = r
-	}
 	for _, name := range names {
 		if s, ok := reach[name]; ok {
 			out[name] = s

@@ -23,9 +23,7 @@ record tree in `.skyra/`.
 | | Built | Where |
 |---|---|---|
 | **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": address, "payload": JSON}`, and `interpret` derives the state from where it stands: its own slot is a return, a name in reach an invoke; anything else is a typed fault (`malformed`, `horizon`, `contract`, `leaf`, `custody`) that carries the observation it was derived from | `machine.interpret` |
-| **Input contracts** | Every surface declares an input contract, and how it reads its input (`continuation`). It declares nothing about what it may reach, and nothing about what it returns: a return's type is computed (next/30). Fit is strict | `core/contract/`, `targets/*/contract.json` |
-| **Types by origin** (next/30) | The runtime computes a return's type: the actor's identity (its surface's hash), the contract it was invoked through, and the shape of what it returned, two hashes per node under a pinned encoding. A model sees the presentation (`echo → {text: string}`), never a hash | `contract.Shape`, `machine.TypeOf` |
-| **Routes** (next/30) | At gather, a continuation's returned discharge runs through its route for (parent, binding, type), a Starlark program run once in the route runner under an empty Horizon: interrupt the parent, send on under its Horizon, or refuse. No route is a novelty interrupt, shown with the route contract; the parent answers with `system.route`, tested against every recorded run first. A deterministic parent declares its routes at registration | `machine/route.go`, `machine/write.go`, `targets/route/` |
+| **Input contracts** | Every surface declares an input contract, and how it reads its input (`continuation`). It declares nothing about what it may reach, and nothing about what it returns. Fit is strict | `core/contract/`, `targets/*/contract.json` |
 | **One authority per Horizon** | Reach and OS grants belong to the Horizon, and every call shares its caller's (next/24). The sandbox is rendered from the Horizon, the same for everything under it, plus the exclusions: `.skyra/` is always denied, and exec is allowed only for the program being run | `machine.Narrow`, `horizon.Render` |
 | **Narrowing through the room** | The room's facet `system.narrow` returns a reference to a narrowed Horizon for one actor; the reference joins the caller's reach, and invoking it runs the actor under the narrower authority. A narrowing that asks for anything not held is a horizon fault (next/26) | `machine/room.go` |
 | **Horizons committed, looked up, re-derived** | A Horizon is released by committing it; the child is handed its hash, looks it up, and refuses it unless its own commit derives exactly that Horizon | `tree.PutHorizon`, `machine.accept` |
@@ -44,10 +42,7 @@ record tree in `.skyra/`.
 Five groups, by what a package is. Imports only run downward: `core/` imports
 nothing outside itself, `runtime/` builds on `core/`, the web host builds on
 `runtime/`, and the programs under `targets/` and `codex/` share no code with
-any of them. The one exception is the route runner, `targets/route/`, which is
-the runtime's, not a target: its own module (it needs `go.starlark.net`, and
-the controller stays standard-library Go), importing `core/contract` so a
-route's `diff()` is the runtime's `Diff`. `core/` is pure,
+any of them. `core/` is pure,
 and `TestMachineIsPure` fails if `machine` imports anything that touches the
 OS, the tree or the network.
 
@@ -55,7 +50,7 @@ OS, the tree or the network.
 
 | Package | Owns |
 |---|---|
-| [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads; shapes, contents, diffs, presentations and types (next/30) |
+| [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads |
 | [`horizon`](core/horizon/) | Authority: `Surface` (identity and contracts), `Horizon` (reach, references, grants; the frame a return discharges and the continuation waiting on it), `Render` (the Seatbelt profile) |
 | [`record`](core/record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` |
 | [`machine`](core/machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, resolve, routing, the room's facets. **Pure, enforced** |
@@ -65,7 +60,7 @@ OS, the tree or the network.
 | Package | Owns |
 |---|---|
 | [`instance`](runtime/instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions |
-| [`tree`](runtime/tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims, route sources, the route table and its runs. The only package that touches `.skyra/` |
+| [`tree`](runtime/tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` |
 | [`replay`](runtime/replay/) | Re-derives a lineage from genesis with the machine; reads the tree, writes nothing |
 | [`boot`](runtime/boot/) | The operator: genesis, the seed, then waits for its frame (kqueue) |
 | [`registry`](runtime/registry/) | The operator's registry: surfaces, binaries (pinned by hash), contracts |
@@ -111,9 +106,7 @@ A conversation pins each surface's binary by sha256 at genesis, and a binary
 that no longer matches is a custody fault. So the launcher never registers a
 file a rebuild overwrites: `./skyra` copies each built binary to
 `build/controller/pinned/<sha256>/<name>` and registers that copy. A rebuild
-adds copies and leaves running and saved conversations their own. (The route
-runner, found next to the `skyra` binary, is not built by the launcher yet; it
-will need the same.)
+adds copies and leaves running and saved conversations their own.
 
 ### Authority in the registry
 
@@ -168,10 +161,8 @@ intake ─┬─ invoke  → release → execute → handoff              run th
 | Release | `Released`: the Horizon, and the number of frame fds that came with it | invoke: `Run`. Return or fault: `Settle`, then `GatherWaiter` (or `Exit` if only the operator waits) |
 | Execute | `Emitted`: the target's one line | `Spawn`; a silent or failed target: a supervisor fault, which discharges this frame's slot |
 | Handoff | `Stamped`: the successor's stamp and record | invoke: `OpenDep`, `SendHorizon` (new frame). Return or fault: `SendHorizon` (same stack). Then `Exit` |
-| Gather | `Settled`: the waiting frame's record and every round it opened | a slot still open: `Exit`. All discharged, and a continuation's child returned: `LookupRoute`. Otherwise: `StoreInput`, `Commit` (resolve), `TryClaim` |
-| Lookup | `RouteLooked`: the recorded and declared routes | none: a novelty interrupt, then resolve. A route: `StoreInput`, `Run` (the route runner) |
-| Route | `Emitted`: the runner's decision | `StoreInput`, `RecordRun`, then resolve, with the decision in its observation |
-| Claim | `Claimed` | lost: `Exit`. Won: `Pop`, `Run` (the waiting continuation, resumed in this instance), or for a route's send, `Spawn` (the envelope, emitted as the waiter) |
+| Gather | `Settled`: the waiting frame's record and every round it opened | a slot still open: `Exit`. All discharged: `StoreInput`, `Commit` (resolve), `TryClaim` |
+| Claim | `Claimed` | lost: `Exit`. Won: `Pop`, `Run` (the waiting continuation, resumed in this instance) |
 
 ### Operands, and what `interpret` derives
 

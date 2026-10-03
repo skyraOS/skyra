@@ -42,7 +42,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	if err := tree.Init(root); err != nil {
 		return Outcome{}, err
 	}
-	reach, authority, routes, err := registry.LoadWithRoutes(registryFile)
+	reach, authority, err := registry.Load(registryFile)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -51,16 +51,8 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 			return Outcome{}, err
 		}
 	}
-	for _, src := range routes { // declared routes, by hash, where the runtime looks them up
-		if _, err := tree.Put(root, "routes", src); err != nil {
-			return Outcome{}, err
-		}
-	}
 	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
 		reach[name] = facet
-	}
-	if runner, ok := routeRunner(); ok { // pinned by the runtime, never by the registry
-		reach[machine.RouteRunner] = runner
 	}
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
@@ -143,25 +135,6 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		fmt.Printf("answer: fault (%s): %s\n", out.Discharge.Fault.Kind, out.Discharge.Fault.Cause)
 	}
 	return out, nil
-}
-
-// routeRunner pins the route runner (next/30): the route binary beside the
-// skyra binary, by content hash. Without one, no route can run, and a
-// route that exists is a fault decision.
-func routeRunner() (horizon.Surface, bool) {
-	self, err := os.Executable()
-	if err != nil {
-		return horizon.Surface{}, false
-	}
-	path, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(self), "route"))
-	if err != nil {
-		return horizon.Surface{}, false
-	}
-	bin, err := os.ReadFile(path)
-	if err != nil {
-		return horizon.Surface{}, false
-	}
-	return machine.Runner(path, record.Sum(bin)), true
 }
 
 // wait blocks until the operator's frame is discharged, woken by the

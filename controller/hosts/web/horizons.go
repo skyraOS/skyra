@@ -52,17 +52,6 @@ func (p proper) view() horizonView {
 	return v
 }
 
-// shown is a reach as a client sees it: the route runner is nobody's tool.
-func shown(reach map[string]horizon.Surface) map[string]horizon.Surface {
-	out := map[string]horizon.Surface{}
-	for name, s := range reach {
-		if s.System != "runner" {
-			out[name] = s
-		}
-	}
-	return out
-}
-
 // horizons derives a conversation's Horizons from the room genesis recorded
 // and every Horizon released in it, including those a reference names before
 // anything runs under them. The root comes first, then the rest by id.
@@ -86,7 +75,7 @@ func horizons(genesis *record.Record, released []horizon.Horizon) []horizonView 
 	}
 	root := ""
 	if genesis != nil && genesis.Reach != nil {
-		p := proper{shown(genesis.Reach), authorityOf(genesis.Authority)}
+		p := proper{genesis.Reach, authorityOf(genesis.Authority)}
 		root = p.id()
 		for name, s := range genesis.Reach {
 			names[horizon.Identity(s)] = name
@@ -105,7 +94,7 @@ func horizons(genesis *record.Record, released []horizon.Horizon) []horizonView 
 		if h.Surface != nil {
 			actor = names[horizon.Identity(*h.Surface)]
 		}
-		add(proper{shown(h.Reach), h.Authority}, actor)
+		add(proper{h.Reach, h.Authority}, actor)
 		for _, g := range h.Refs {
 			kept := map[string]horizon.Surface{}
 			for _, name := range g.Reach {
@@ -113,7 +102,7 @@ func horizons(genesis *record.Record, released []horizon.Horizon) []horizonView 
 					kept[name] = s
 				}
 			}
-			add(proper{shown(kept), g.Authority}, "")
+			add(proper{kept, g.Authority}, "")
 		}
 	}
 	out := []horizonView{}
