@@ -384,7 +384,15 @@ scenarios pass, each ending in a byte-identical replay; the shape encoding
 matches this plan exactly. These are open, as F10–F14 in the [list](README.md).
 **F10 comes first:** nothing should build on `system.route` until it is in.
 
+**Dissolved by [32](../32-procedures.md)** (2026-10-03): F10–F13 are about the
+route table, the route runner and `system.route`, which H1 removes. F10 holds
+by construction: a procedure exists only in the Horizon that remembered it, and
+every instruction it emits is checked at intake there. F14 stays a decision for
+the human.
+
 ### F10: a route never runs with more authority than it was written with
+
+**Dissolved by 32.**
 
 **The issue.** A route is keyed by `RouteKey{Parent: horizon.Identity(*caller.Surface), ...}`
 (`write.go`, `route.go`), and `horizon.Identity` hashes the surface only, not
@@ -424,6 +432,8 @@ states, every kept decision is keyed by both directions, is what F10 restores.
 
 ### F11: replay re-runs routes
 
+**Dissolved by 32.**
+
 `replay.routed` re-derives the decision from the runner's **stored** emission
 and checks the source and the return. It does not re-run the Starlark, and it
 does not check `previous` or `targets`. That is how replay treats every target,
@@ -439,6 +449,8 @@ cheap, with no authority.
 
 ### F12: `accept` by input hash, not index
 
+**Dissolved by 32.**
+
 `accept` names flipped cases by index into the runs `LoadRuns` returns, which
 come from a directory listing of `route-runs/<key>/`. A run another frame
 records between the refusal and the retry shifts the indexes. Usually the
@@ -448,6 +460,8 @@ cases than the parent saw. Name each case by its runner input's hash in
 hash it can use: it is an opaque case id, echoed back.
 
 ### F13: verify the route table
+
+**Dissolved by 32.**
 
 `route-table/` is side state: replay does not check it against the
 `system.route` records that wrote it, so whether a return was really novel, or

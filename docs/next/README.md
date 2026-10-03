@@ -35,27 +35,34 @@ became) or **not in the proposal**.
    runtime computes types, `origin{shape}` by hash; models write routes. A
    novelty interrupt produces a route, Starlark run once per return. Replaces
    28's checks. Built (section F, branch `self-extension`).
+8. **[`32-procedures.md`](32-procedures.md)**: a procedure is a header and
+   a body, a Merkle DAG of calls. The kernel never sees one: the interpreter
+   actor holds procedures in its own state and releases their instructions.
+   `remember` compiles a strand into one and names it with the Horizon's
+   `extend-reach`, which needs no approval: a Horizon grows only by
+   composition. Types move to the interpreter; the model writes refinements
+   on the edges. In the proposal as section H; not built.
 
 ## Not in the proposal
 
-8. **[`27-a-horizon-is-a-process.md`](27-a-horizon-is-a-process.md)**: a
+9. **[`27-a-horizon-is-a-process.md`](27-a-horizon-is-a-process.md)**: a
    Horizon is our process; OS processes are its workers. Near and far invokes,
    the creator supervises, one stdin envelope for every program.
-9. **[`28-types-observations-checks.md`](28-types-observations-checks.md)**:
+10. **[`28-types-observations-checks.md`](28-types-observations-checks.md)**:
    types are contracts, observations are values. The parent owns the check on
    its children, written in Starlark at a novelty interrupt and kept; the log
    is the test suite; agent-written tools as Starlark.
-10. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
+11. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
    runtime owns control flow, an actor owns its state. The kernel provisions
    where an actor's state and methods live, in no Horizon; a novelty interrupt
    shows three interfaces. The Codex adapter as the example.
-11. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
+12. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
     travel by hash; continuations pass their children's observations up instead
     of authoring a replacement.
-12. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
+13. **[`20-boundry-crossing.md`](20-boundry-crossing.md)**: the rule every new
     crossing of the trusted boundary must answer. A standing rule.
-13. **[`research-question.md`](research-question.md)**: the question, the
+14. **[`research-question.md`](research-question.md)**: the question, the
     metrics, the baseline, and the September–December plan.
-14. **[`31-the-sky-dreams.md`](31-the-sky-dreams.md)**: the desktop sky as a
+15. **[`31-the-sky-dreams.md`](31-the-sky-dreams.md)**: the desktop sky as a
     machine hallucination of the tree. Every pixel derived from a record;
     Rest, Work and Dream; replay as the dream. Proposed.

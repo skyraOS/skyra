@@ -192,7 +192,7 @@ handles, and puts every decision in one replayable function.
 | Ingress: an outside event resumes a frame parked with its host (next/16) | **built**; the host holds a stamp, never authority |
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
-| Tail calls, fan-out of several children at once | the slots support it; nothing emits it yet |
+| Tail calls, fan-out of several children at once | **not built**: one emission is one successor, and a round's size is never committed (fan-out is H2 of [next/32](docs/next/32-procedures.md)) |
 | Self-extension: an agent registers a tool it wrote under its own Horizon, and runs it with no approval (`system.register`) | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
 | Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`docs/design/faults.md`](docs/design/faults.md)) | designed, not built |
 | Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |

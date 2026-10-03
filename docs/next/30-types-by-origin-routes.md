@@ -6,8 +6,11 @@ the implementation plan is [30-types-by-origin-routes-proposal](proposal/30-type
 Date: 2026-10-01  
 Status: **built** on branch `self-extension` (2026-10-01), F1–F9 of the
 [proposal](proposal/30-types-by-origin-routes-proposal.md#as-built), which
-records the decisions taken and where the build differs. **Every return is
-routed** (2026-10-02) is agreed and not built: section G. "Wake" is named
+records the decisions taken and where the build differs. **Superseded by
+[32](32-procedures.md)** (2026-10-03): the type and route machinery leaves the
+kernel and is removed in H1; routes become refinements on the edges of a
+procedure, and base types move to the interpreter. **Every return is
+routed** (2026-10-02) was agreed and never built: section G, superseded. "Wake" is named
 **interrupt** throughout: the runtime raises it, never the parent (29).
 Builds on [21](21-observation-passing.md),
 [24](24-the-room.md), [28](28-types-observations-checks.md) and
@@ -227,7 +230,8 @@ interrupt, so it declares its routes at registration.
 
 ## Every return is routed
 
-Agreed 2026-10-02; not built. Section G of the
+**Superseded by [32](32-procedures.md)** (2026-10-03): nothing in this section
+is built, and routes leave the kernel. Agreed 2026-10-02; not built. Section G of the
 [proposal](proposal/README.md#g-every-return-is-routed-30), after F10.
 
 As built, routing is one path among several: only a continuation's

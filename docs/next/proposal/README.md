@@ -114,6 +114,9 @@ The implementation plan, with the decisions to confirm first, is
 
 ### G. Every return is routed (30)
 
+**Superseded by H** (2026-10-03): routes dissolve into procedures, and the
+route machinery leaves the kernel. Nothing in G is built.
+
 The rule, agreed 2026-10-02 ([30, "Every return is routed"](../30-types-by-origin-routes.md#every-return-is-routed)):
 when the runtime derives a return, it computes the return's type and runs the
 receiver's route for that type; the route's decision is the next transition;
@@ -126,6 +129,28 @@ first:** without it, the rule routes every return through F10's hole.
 | G2 | Delete `routable`'s exceptions: a facet's return and a return at the operator are routed, and reach the default. The operator's default hands the return to the human, as today. `MaxChain` stays the one gate outside routes | `route.go` (`routable`), `core/machine` (`gather`) | Not built |
 | G3 | A fault is routed: `TypeOf` types a fault discharge from what the route is given (kind, cause, observation), and a route branches on its kind. Faults that climb to the human become a route that sends upward | `route.go` (`TypeOf`, `Decided`), `targets/route` (the return a fault presents), `replay` | Not built. Open: whether the fault's kind is part of its type |
 | G4 | Fan-out: each child's return is routed on its own; the round ends when every route has decided, and the parent is woken once if any interrupted, with every interrupt | `core/machine` (`gather`, `resolve`) | Not built. Waits for fan-out rounds (one output per step today) |
+
+### H. Procedures (32)
+
+Agreed 2026-10-03 ([32](../32-procedures.md)); the plan is
+[32-procedures-proposal](32-procedures-proposal.md). Supersedes G and F10.
+The kernel keeps instructions and authority, and never sees a procedure;
+routes and types leave it. The interpreter is an actor holding procedures in
+its own state; `remember` builds one from a strand and names it with the
+Horizon's `extend-reach`, which needs no approval: an actor can only extend itself. One representation per contract; versioning is later.
+
+| Id | Change | Where | Status |
+|---|---|---|---|
+| H0 | The documents: 30 and its proposal marked superseded where 32 replaces them; G superseded; `summary.md` P9, P10; the root README's fan-out claim | `docs/`, `README.md` | **Built** |
+| H1 | Remove the route and type machinery from the kernel, the route runner, and their scenarios | `core/machine` (`route.go`, `write.go`, phases), `core/contract/shape.go`, `registry`, `tree`, `replay`, `boot`, `targets/route`, `run.sh` | Not built |
+| H2 | Fan-out: one emission, N successors, each taking one instruction; the emitter supervises all N, opening every slot before releasing any | `core/machine` (`handoff`), `runtime/instance` | Not built |
+| H3 | The Horizon as the actor `system`; contracts by (target, schema), selected by fit; `extend-reach(schema)`: an actor extends only itself | `core/machine` (`room.go`, `interpret`, `Narrow`), `core/horizon`, `replay` | Not built |
+| H4 | `strand`: the hashes from an observation back to the invoke, through the contract the requester names | `core/machine` (`room.go`), `runtime/instance` | Not built |
+| H5 | An actor sees only its own state; the interpreter: procedures and positions in `.skyra/interpreter/`; base types | `controller/interp` (new module), `horizon.Render`, `boot` | Not built |
+| H6 | `remember`: a strand compiled to procedures, named by `extend-reach` | `controller/interp`, the registry | Not built |
+| H7 | Running a remembered procedure: dispatch, base types as the default refinement, falling back to the model at the refused edge | `controller/interp` | Not built |
+| H8 | The demo (P9): scripted and with Codex; the research metric | `run.sh`, `targets/agent`, `codex/adapter` | Not built |
+| H9 | Refinements in CEL, written by the model at `remember` | `controller/interp` | Not built |
 
 ## Status
 
@@ -161,8 +186,10 @@ the per-document proposals say the same for their documents.
    operator.
 8. ✓ **F** (2026-10-01, branch `self-extension`): F1 first; then F2–F3 (types), F4–F5 (routes), F6 (routing), F7
    (the interrupt), F8, F9. Self-extension (28, `system.register`) follows.
-9. ✗ **G** (agreed 2026-10-02): F10 first; then G1 (one lookup, the default
-   route), G2 (no exceptions), G3 (faults routed); G4 with fan-out.
+9. ~~**G**~~ (agreed 2026-10-02): superseded by H, as is F10.
+10. ✗ **H** (agreed 2026-10-03): H0, H1 (remove), H2 (fan-out), H3–H4 (the
+    Horizon's syscalls), H5 (the interpreter), H6–H7 (remember, and running
+    what it built), H8 (the demo), H9 (CEL refinements).
 
 ## Per document
 
@@ -175,6 +202,7 @@ the per-document proposals say the same for their documents.
 | [25](../25-surface-refactor.md) | [25-surface-refactor-proposal](25-surface-refactor-proposal.md) | implementation plan | **In part**: item 1 built; item 2 corrected and deferred; item 3 not built |
 | [26](../26-agents-and-facets.md) | [26-agents-and-facets-proposal](26-agents-and-facets-proposal.md) | implementation plan | **In part**: `system.narrow` and its references built; see D |
 | [30](../30-types-by-origin-routes.md) | [30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md) | new; supersedes 28's checks and handlers | **Built**: see F |
+| [32](../32-procedures.md) | [32-procedures-proposal](32-procedures-proposal.md) | new; supersedes G, F10, and 30's type and route machinery | Not built: see H |
 | [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
 | [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
 | [README](../README.md) | [README-proposal](README-proposal.md) | the index | Applied in the working tree, uncommitted |
