@@ -10,6 +10,12 @@
 // With text "narrow:<text>", it first asks the room for echo under a narrowed
 // Horizon (no reach, no grants), then asks echo through the reference it got
 // back (next/26).
+//
+// With text "fan:<a>,<b>,...", it asks echo for every part in one emission
+// (fan-out, next/32): a JSON array of instructions, one slot each. A part
+// written "!<name>" asks <name> instead, which is out of reach: that one
+// instruction faults, and its siblings still run. Once every slot is
+// discharged, it returns what came back, in the order it asked.
 package main
 
 import (
@@ -42,6 +48,10 @@ func main() {
 		os.Exit(1)
 	}
 	narrowed, isNarrow := strings.CutPrefix(c.Input.Text, "narrow:")
+	if parts, isFan := strings.CutPrefix(c.Input.Text, "fan:"); isFan {
+		fan(c, strings.Split(parts, ","))
+		return
+	}
 	if len(c.Steps) == 0 && isNarrow {
 		emit("system.narrow", map[string]any{"actor": "echo", "reach": []string{}, "authority": map[string]any{}})
 		return
@@ -64,6 +74,36 @@ func main() {
 	var said string
 	_ = json.Unmarshal(last.Value, &said)
 	emit(c.Frame, fmt.Sprintf("echo said %q", said))
+}
+
+// fan asks for every part at once, then answers with every step, in order.
+func fan(c continuation, parts []string) {
+	if len(c.Steps) == 0 {
+		var all []any
+		for _, p := range parts {
+			if name, astray := strings.CutPrefix(p, "!"); astray {
+				all = append(all, map[string]any{"to": name, "payload": map[string]string{"text": p}})
+				continue
+			}
+			all = append(all, map[string]any{"to": "echo", "payload": map[string]string{"text": p}})
+		}
+		b, _ := json.Marshal(all)
+		fmt.Println(string(b))
+		return
+	}
+	var said []string
+	for _, s := range c.Steps {
+		if s.Fault != nil {
+			var attempt struct{ To string } // a fault's value is the attempt it was derived from
+			_ = json.Unmarshal(s.Value, &attempt)
+			said = append(said, fmt.Sprintf("%s failed (%s)", attempt.To, s.Fault.Kind))
+			continue
+		}
+		var v string
+		_ = json.Unmarshal(s.Value, &v)
+		said = append(said, fmt.Sprintf("%s said %q", s.To, v))
+	}
+	emit(c.Frame, strings.Join(said, "; "))
 }
 
 func emit(to string, payload any) {

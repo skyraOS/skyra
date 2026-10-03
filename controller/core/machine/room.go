@@ -47,6 +47,10 @@ func RoomFacets() map[string]horizon.Surface {
 	}
 }
 
+// changesWaiter reports whether invoking s changes the Horizon of the caller
+// waiting on it: system.narrow records a reference there.
+func changesWaiter(s horizon.Surface) bool { return s.System == "narrow" }
+
 // narrowing derives the Grant a system.narrow payload asks for under h, or
 // says why it reaches past the Horizon. It is checked at intake, so a
 // narrowing that asks for anything not held is a horizon fault.

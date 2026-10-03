@@ -38,6 +38,9 @@ scenario() {
 
 scenario "agent: a continuation calls echo, waits, resumes" -to agent -payload '{"text":"hello"}'
 scenario "agent narrows echo through the room, then calls it" -to agent -payload '{"text":"narrow:hello"}'
+# Fan-out (next/32, H2): one emission, two instructions, one round of two slots.
+scenario "fan-out: the agent asks echo twice in one emission" -to agent -payload '{"text":"fan:hello,world"}'
+scenario "fan-out: one instruction out of reach faults, its sibling runs" -to agent -payload '{"text":"fan:hello,!shell"}'
 scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'

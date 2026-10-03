@@ -4,7 +4,7 @@
 //
 //	horizons/<id>                     a Horizon, committed when it is released: the child looks it up by its hash
 //	frames/<F>/result                 write-once: the record that discharged F's slot
-//	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before the child ran
+//	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before any child ran; holds its position
 //	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
 //
 // A round is the stamp F's continuation emitted under: F itself, then each
@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"syscall"
 
 	"skyra/controller/core/horizon"
@@ -98,6 +100,16 @@ func PutHorizon(root string, h horizon.Horizon) (string, error) {
 		return "", err
 	}
 	return Put(root, "horizons", b)
+}
+
+// Released reports whether h was committed: whether some parent released it.
+func Released(root string, h horizon.Horizon) bool {
+	b, err := json.Marshal(h)
+	if err != nil {
+		return false
+	}
+	_, err = Get(root, "horizons", record.Sum(b))
+	return err == nil
 }
 
 // LoadHorizon reads a Horizon by id, refusing it unless it hashes to that id.
@@ -209,7 +221,9 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 
 // OpenDep opens a slot for a child in a frame, through the frame's fd, before
 // the child is released: a child never runs without a slot waiting for it.
-func OpenDep(frame *os.File, round, child string) error {
+// The slot holds the child's position in the emission that opened the round,
+// so the round's steps come back in the order they were emitted.
+func OpenDep(frame *os.File, round, child string, pos int) error {
 	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
 		return err
 	}
@@ -221,6 +235,16 @@ func OpenDep(frame *os.File, round, child string) error {
 	if err != nil {
 		return err
 	}
+	if pos > 0 {
+		if _, err := f.WriteString(strconv.Itoa(pos)); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
 	if err := f.Close(); err != nil {
 		return err
 	}
@@ -230,21 +254,41 @@ func OpenDep(frame *os.File, round, child string) error {
 	return frame.Sync()
 }
 
-// Children lists the slots a round opened in a frame, sorted, read through the
-// frame's fd.
+// Children lists the slots a round opened in a frame, in the order they were
+// emitted, read through the frame's fd. A slot with no position is the first.
 func Children(frame *os.File, round string) ([]string, error) {
 	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(filepath.Join("deps", round))
+	dir := filepath.Join("deps", round)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	var names []string
-	for _, e := range entries {
-		names = append(names, e.Name())
+	type slot struct {
+		name string
+		pos  int
 	}
-	return names, nil // ReadDir sorts by name
+	var slots []slot
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		pos := 0
+		if len(b) > 0 {
+			if pos, err = strconv.Atoi(string(b)); err != nil {
+				return nil, fmt.Errorf("slot %s: %w", record.Short(e.Name()), err)
+			}
+		}
+		slots = append(slots, slot{e.Name(), pos})
+	}
+	sort.SliceStable(slots, func(i, j int) bool { return slots[i].pos < slots[j].pos })
+	names := make([]string, len(slots))
+	for i, s := range slots {
+		names[i] = s.name
+	}
+	return names, nil
 }
 
 // Claim is the fan-in claim: of every sibling that finds a round fully

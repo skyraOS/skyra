@@ -61,11 +61,11 @@ func Run(root string) error {
 // so on down to the operator's frame.
 func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, e machine.Event) (machine.Instance, error) {
 	var (
-		down  *net.UnixConn // handshake with the successor
-		child *exec.Cmd
+		downs    []*net.UnixConn // handshakes with the successors, in instruction order
+		children []*exec.Cmd
 	)
 	defer func() {
-		if down != nil {
+		for _, down := range downs {
 			down.Close()
 		}
 		for _, f := range stack {
@@ -174,15 +174,18 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					stack = append(stack, file)
 				}
 			case machine.Spawn:
-				var err error
-				if down, child, e, err = spawn(root, x); err != nil {
+				down, child, ev, err := spawn(root, x)
+				if err != nil {
 					return s, err
 				}
+				downs, children, e = append(downs, down), append(children, child), ev
 			case machine.KillSuccessor:
-				trace.Logf("handoff  killing successor")
-				child.Process.Kill()
+				trace.Logf("handoff  killing %d successor(s)", len(children))
+				for _, child := range children {
+					child.Process.Kill()
+				}
 			case machine.OpenDep:
-				if err := tree.OpenDep(stack[0], x.Round, x.Child); err != nil {
+				if err := tree.OpenDep(stack[0], x.Round, x.Child, x.Pos); err != nil {
 					return s, err
 				}
 			case machine.SendHorizon:
@@ -199,6 +202,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err != nil {
 					return s, err
 				}
+				down, child := downs[x.Index], children[x.Index]
 				if err := handshake.Send(down, handshake.Release{Horizon: id, Resources: s.Resources}, frames...); err != nil {
 					return s, err
 				}

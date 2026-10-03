@@ -159,8 +159,8 @@ intake ─┬─ invoke  → release → execute → handoff              run th
 |---|---|---|
 | Intake | `Received`: the bytes, and the Horizon they were emitted under | `StoreInput`, `Commit`, `SendStamp` |
 | Release | `Released`: the Horizon, and the number of frame fds that came with it | invoke: `Run`. Return or fault: `Settle`, then `GatherWaiter` (or `Exit` if only the operator waits) |
-| Execute | `Emitted`: the target's one line | `Spawn`; a silent or failed target: a supervisor fault, which discharges this frame's slot |
-| Handoff | `Stamped`: the successor's stamp and record | invoke: `OpenDep`, `SendHorizon` (new frame). Return or fault: `SendHorizon` (same stack). Then `Exit` |
+| Execute | `Emitted`: the target's one line | `Spawn`, for its first instruction (a JSON array is several: fan-out); a silent or failed target: a supervisor fault, which discharges this frame's slot |
+| Handoff | `Stamped`: a successor's stamp and record | the next instruction: `Spawn`. Every one stamped: `OpenDep` for every new frame, then `SendHorizon` for each (invoke: new frame; return or fault: same stack; in a fan-out a fault holds a frame of its own). Then `Exit` |
 | Gather | `Settled`: the waiting frame's record and every round it opened | a slot still open: `Exit`. All discharged: `StoreInput`, `Commit` (resolve), `TryClaim` |
 | Claim | `Claimed` | lost: `Exit`. Won: `Pop`, `Run` (the waiting continuation, resumed in this instance) |
 
@@ -277,8 +277,12 @@ sandbox that prohibits applying Seatbelt profiles.
 - **`system.register` is not built.** Narrowing through the room is; adding a
   tool an agent wrote to its reach needs the tool's bytes in the tree for
   replay (improvements item 6).
-- **One output per step**, so one child per round: fan-out is supported by the
-  slots and the claim, but nothing emits two children yet.
+- **Fan-out is not for everyone yet** (next/32, H2). An emission that is a
+  JSON array is that many instructions, one successor each, every slot opened
+  before any is released. A fan-out cannot return, cannot carry a resident
+  connection, and cannot hold an invoke that changes the waiter's Horizon
+  (`system.narrow`): those are emitted alone. The scripted agent fans out;
+  Codex and the human still emit one instruction at a time.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
 - **The provider profile is pinned to Codex 0.160.0** (`launch.CODEX_VERSION`,
   `instance.PinnedCodex`). A new version needs a fresh validation of startup,

@@ -523,3 +523,171 @@ func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 		t.Fatalf("%v", env)
 	}
 }
+
+// fanOut has the agent emit several instructions at once and returns the
+// agent's instance after its handoff, each successor's intake, and the
+// handoff's effects.
+func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Effect) {
+	t.Helper()
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ = released(a, selfOf(t, a))
+	emission := []byte("[" + strings.Join(instructions, ",") + "]")
+	a, effs := Step(a, Emitted{Out: emission})
+	var kids []Instance
+	for i, in := range instructions {
+		spawn, ok := effs[0].(Spawn)
+		if !ok || string(spawn.Out) != in {
+			t.Fatalf("instruction %d is spawned with exactly its bytes: %#v", i, effs)
+		}
+		k, _ := Step(Instance{Phase: Intake}, Received{Under: a.Self, In: spawn.Out})
+		kids = append(kids, k)
+		a, effs = Step(a, Stamped{Stamp: k.Stamp, R: &k.R})
+		if i < len(instructions)-1 {
+			for _, e := range effs {
+				if _, released := e.(SendHorizon); released {
+					t.Fatalf("a successor is released before every instruction is stamped: %#v", effs)
+				}
+			}
+		}
+	}
+	return a, kids, effs
+}
+
+// Fan-out (next/32, H2): one emission, N successors, each taking one
+// instruction; every slot is opened before any successor is released, and
+// the waiter resumes once, with every step in the order it was emitted.
+func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
+	first, second := `{"to":"echo","payload":{"text":"b"}}`, `{"to":"echo","payload":{"text":"a"}}`
+	a, kids, effs := fanOut(t, first, second)
+	want := []Effect{
+		OpenDep{Round: a.Self.Stamp, Child: kids[0].Stamp, Pos: 0},
+		OpenDep{Round: a.Self.Stamp, Child: kids[1].Stamp, Pos: 1},
+	}
+	if len(effs) != 5 || !reflect.DeepEqual(effs[:2], want) {
+		t.Fatalf("every slot opens before any release: %#v", effs)
+	}
+	for i := range kids {
+		sh := effs[2+i].(SendHorizon)
+		if sh.Index != i || !sh.NewFrame || sh.Child.Frame != kids[i].Stamp || sh.Child.Resume.Stamp != a.Self.Stamp {
+			t.Fatalf("successor %d is released into a frame of its own, in the agent's round: %#v", i, sh)
+		}
+	}
+	if effs[4] != (Exit{}) {
+		t.Fatalf("then the emitter exits: %#v", effs)
+	}
+
+	// Both return. Gather sees the whole round; only once both are
+	// discharged does it resolve, naming both in instruction order.
+	var returns []Instance
+	var children []Child
+	for i, k := range kids {
+		self := effs[2+i].(SendHorizon).Child
+		k, _ = released(k, self)
+		out := []byte(`{"to":"` + self.Frame + `","payload":"` + []string{"b", "a"}[i] + `"}`)
+		k, _ = Step(k, Emitted{Out: out})
+		r, _ := Step(Instance{Phase: Intake}, Received{Under: k.Self, In: out})
+		_, hand := Step(k, Stamped{Stamp: r.Stamp, R: &r.R})
+		r, _ = released(r, hand[0].(SendHorizon).Child)
+		returns = append(returns, r)
+		children = append(children, Child{Stamp: kids[i].Stamp, Invoke: kids[i].R, Result: r.Stamp, Discharge: &r.R})
+	}
+	open := Settled{Frame: a.R, Rounds: []Round{{Stamp: a.Self.Stamp, Children: []Child{children[0], {Stamp: kids[1].Stamp, Invoke: kids[1].R}}}}}
+	if _, effs := Step(returns[0], open); !reflect.DeepEqual(effs, []Effect{Exit{}}) {
+		t.Fatalf("a round with an open slot does not resolve: %#v", effs)
+	}
+	full := Settled{Frame: a.R, Rounds: []Round{{Stamp: a.Self.Stamp, Children: children}}}
+	g, effs := Step(returns[1], full)
+	res := effs[1].(Commit).R
+	if !reflect.DeepEqual(res.Deps, []string{returns[0].Stamp, returns[1].Stamp}) {
+		t.Fatalf("the resolve names every discharge, in instruction order: %+v", res)
+	}
+	g, effs = Step(g, Claimed{Won: true})
+	var c Continuation
+	if err := json.Unmarshal(effs[1].(Run).Stdin, &c); err != nil || len(c.Steps) != 2 || string(c.Steps[0].Value) != `"b"` || string(c.Steps[1].Value) != `"a"` {
+		t.Fatalf("the agent resumes once, with both steps in the order it emitted them: %s", effs[1].(Run).Stdin)
+	}
+}
+
+// One instruction out of reach faults that one, not its sibling: the fault
+// holds a slot of its own in the round and discharges it.
+func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
+	a, kids, effs := fanOut(t, `{"to":"echo","payload":{"text":"a"}}`, `{"to":"shell","payload":{"text":"a"}}`)
+	if kids[0].State != record.Invoke || kids[1].State != record.Fault || kids[1].R.Fault.Kind != record.Horizon {
+		t.Fatalf("only the instruction out of reach faults: %+v %+v", kids[0].R, kids[1].R)
+	}
+	if len(effs) != 5 || effs[1] != (OpenDep{Round: a.Self.Stamp, Child: kids[1].Stamp, Pos: 1}) {
+		t.Fatalf("the fault holds a slot of its own: %#v", effs)
+	}
+	self := effs[3].(SendHorizon).Child
+	f, effs := released(kids[1], self)
+	if !reflect.DeepEqual(effs, []Effect{Settle{kids[1].Stamp}, GatherWaiter{}}) || f.Self.Resume.Frame != a.Self.Frame {
+		t.Fatalf("the fault discharges its own slot, then reads the agent's round: %#v", effs)
+	}
+	// Alone, the same fault discharges the emitter's own slot, as always.
+	alone, _ := Narrow(a.Self, kids[1].R, kids[1].Stamp)
+	if alone.Frame != a.Self.Frame {
+		t.Fatalf("a lone fault discharges the emitter's slot: %+v", alone)
+	}
+}
+
+// What cannot share an emission is refused before any successor is
+// released: a return, and an invoke that changes the waiter's Horizon.
+func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
+	room := operator
+	room.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	for name, f := range RoomFacets() {
+		room.Reach[name] = f
+	}
+	echo := `{"to":"echo","payload":{"text":"a"}}`
+	for name, other := range map[string]string{
+		"a return":    `{"to":"FRAME","payload":"done"}`,
+		"a narrowing": `{"to":"system.narrow","payload":{"actor":"echo"}}`,
+	} {
+		ag, _ := Step(Instance{Phase: Intake}, Received{Under: room, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+		self, _ := Narrow(room, ag.R, ag.Stamp)
+		ag, _ = released(ag, self)
+		other = strings.ReplaceAll(other, "FRAME", ag.Self.Frame)
+		ag, effs := Step(ag, Emitted{Out: []byte("[" + echo + "," + other + "]")})
+		for _, in := range []string{echo, other} {
+			k, _ := Step(Instance{Phase: Intake}, Received{Under: ag.Self, In: effs[0].(Spawn).Out})
+			if string(effs[0].(Spawn).Out) != in {
+				t.Fatalf("%s: spawned %s", name, effs[0].(Spawn).Out)
+			}
+			ag, effs = Step(ag, Stamped{Stamp: k.Stamp, R: &k.R})
+		}
+		if _, killed := effs[0].(KillSuccessor); !killed {
+			t.Fatalf("%s: every successor is killed: %#v", name, effs)
+		}
+		for _, e := range effs {
+			if _, ok := e.(SendHorizon); ok {
+				t.Fatalf("%s: nothing is released: %#v", name, effs)
+			}
+		}
+	}
+}
+
+// An emission that is a JSON array is that many instructions; anything else
+// is one. An empty array, or too many, is no emission at all.
+func TestInstructions(t *testing.T) {
+	for in, n := range map[string]int{
+		`{"to":"echo","payload":{}}`:   1,
+		`[{"to":"a"}, 7 ,"x"]`:         3,
+		`[{"to":"echo","payload":{}}]`: 1,
+		`[not json`:                    1,
+		`hello`:                        1,
+	} {
+		outs, err := Instructions([]byte(in))
+		if err != nil || len(outs) != n {
+			t.Errorf("%s: %d instructions, %v", in, len(outs), err)
+		}
+	}
+	if outs, _ := Instructions([]byte(`[{"to": "a"},  "x"]`)); string(outs[0]) != `{"to": "a"}` || string(outs[1]) != `"x"` {
+		t.Fatalf("each instruction is its exact bytes: %q", outs)
+	}
+	if _, err := Instructions([]byte(`[]`)); err == nil {
+		t.Fatal("an empty array is no instruction")
+	}
+	if _, err := Instructions([]byte("[" + strings.Repeat("1,", MaxFanOut) + "1]")); err == nil {
+		t.Fatal("more than MaxFanOut instructions")
+	}
+}

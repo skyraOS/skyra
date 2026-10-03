@@ -23,7 +23,9 @@
 //     Horizon. .skyra/ is always denied.
 //  4. Handoff  pass the target's output, unparsed, to a new successor; check its
 //     stamp, open a slot for it if it is an invoke, release it, and exit
-//     without waiting for it.
+//     without waiting for it. An emission that is a JSON array is that many
+//     instructions (fan-out, next/32): one successor each, every slot opened
+//     before any successor is released.
 //  5. Settle   a return or fault discharges the slot its reply names, once.
 //  6. Gather   read what the waiting continuation is still waiting on. If
 //     every slot of its round is discharged, commit a resolve record
@@ -42,6 +44,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"skyra/controller/core/contract"
@@ -59,7 +62,9 @@ type Instance struct {
 	Stamp     string             // hash of R
 	Self      horizon.Horizon    // this instance's own Horizon, once released
 	Out       []byte             // the target's emission, while it is handed off
-	Child     string             // the successor's stamp, once verified and released
+	Outs      [][]byte           // the instructions it carries, one per successor (fan-out: several)
+	Kids      []Kid              // the successors stamped and verified so far, in instruction order
+	Child     string             // the first successor's stamp, once every one is verified and released
 	Next      []byte             // a resumed continuation's input, while the claim is decided
 	Held      record.Record      // the resolve record, while the claim is decided
 	Resources []horizon.Resource // non-frame descriptors carried beside the stack
@@ -76,6 +81,18 @@ const (
 	Claim   Phase = "claim"   // a resolve was committed; waiting for the fan-in claim
 	Done    Phase = "done"
 )
+
+// Kid is a successor this instance supervises during handoff: its stamp, its
+// record, and the Horizon it will be released with.
+type Kid struct {
+	Stamp   string
+	R       record.Record
+	Horizon horizon.Horizon
+}
+
+// MaxFanOut bounds the instructions one emission may carry: every successor
+// holds a slot, a process and its frame descriptors until it is released.
+const MaxFanOut = 32
 
 // Events are what the world reports to Step. Each phase accepts exactly one.
 type Event interface{ event() }
@@ -160,11 +177,15 @@ type Spawn struct { // start the successor, forward the bytes, then wait for Sta
 	Under horizon.Horizon
 	Out   []byte
 }
-type KillSuccessor struct{}
-type OpenDep struct{ Round, Child string } // open a slot in this instance's frame, before the child is released
-type SendHorizon struct {                  // issue the successor's Release: its Horizon plus its frame stack
+type KillSuccessor struct{} // kill every successor spawned so far
+type OpenDep struct {       // open a slot in this instance's frame, before any child is released
+	Round, Child string
+	Pos          int // the instruction's position in the emission: a round's steps come back in this order
+}
+type SendHorizon struct { // issue a successor's Release: its Horizon plus its frame stack
 	Child    horizon.Horizon
 	NewFrame bool // true: push a new frame for the child; false: hand on this instance's stack
+	Index    int  // which successor, in instruction order
 }
 type Settle struct{ Result string }         // discharge this instance's frame's slot, once
 type GatherWaiter struct{}                  // read the waiting frame's rounds, then wait for Settled
@@ -346,7 +367,10 @@ func accept(s Instance, e Released) error {
 		return fmt.Errorf("release cannot be derived: %w", err)
 	}
 	if a, b := encode(want), encode(e.Self); a != b {
-		return errors.New("release is not what this commit derives")
+		// One instruction of several: a fault holds a slot of its own.
+		if alt, _ := Fanned(s.Under, s.R, s.Stamp); s.R.State != record.Fault || encode(alt) != b {
+			return errors.New("release is not what this commit derives")
+		}
 	}
 	if e.Frames != e.Self.Depth() {
 		return fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, e.Self.Depth())
@@ -406,9 +430,9 @@ func parked(s Instance, e Parked) (Instance, []Effect) {
 }
 
 // 3. Execute: the target ran exactly the committed surface, under a sandbox
-// rendered from the Horizon. Its output is handed off unparsed. A target that
-// failed or exited without output is faulted by this instance, which still
-// holds custody.
+// rendered from the Horizon. Its output is handed off unparsed, one
+// successor per instruction it carries. A target that failed or exited
+// without output is faulted by this instance, which still holds custody.
 func execute(s Instance, e Emitted) (Instance, []Effect) {
 	if e.ReleasedResource != "" {
 		found := false
@@ -429,33 +453,111 @@ func execute(s Instance, e Emitted) (Instance, []Effect) {
 	if len(e.Out) == 0 {
 		return fault(s, "target exited without emitting")
 	}
-	s.Out, s.Phase = e.Out, Handoff
-	return s, []Effect{Spawn{Under: s.Self, Out: e.Out}}
+	outs, err := Instructions(e.Out)
+	if err != nil {
+		return fault(s, err.Error())
+	}
+	if len(outs) > 1 && len(s.Resources) > 0 {
+		// Custody of a connection passes to exactly one successor.
+		return fault(s, "an emission of several instructions cannot carry custody of a resource")
+	}
+	s.Out, s.Outs, s.Kids, s.Phase = e.Out, outs, nil, Handoff
+	return s, []Effect{Spawn{Under: s.Self, Out: outs[0]}}
 }
 
-// 4. Handoff: the successor has committed. Issue its Release (check the stamp,
-// narrow the Horizon); if it is an invoke, open its slot first; send it, and
-// exit. The release is the last write.
+// Instructions splits an emission into the instructions it carries (next/32,
+// decision 1). An emission that is a JSON array is that many instructions,
+// each taken by its own successor as its exact bytes; anything else is one
+// instruction, the emission itself, interpreted at intake as whatever it is.
+// It is pure, so replay could split the same emission the same way.
+func Instructions(out []byte) ([][]byte, error) {
+	if t := strings.TrimSpace(string(out)); !strings.HasPrefix(t, "[") {
+		return [][]byte{out}, nil
+	}
+	var parts []json.RawMessage
+	if err := json.Unmarshal(out, &parts); err != nil {
+		return [][]byte{out}, nil // not an array after all: one instruction, which intake faults
+	}
+	switch {
+	case len(parts) == 0:
+		return nil, errors.New("target emitted no instruction: an empty array")
+	case len(parts) > MaxFanOut:
+		return nil, fmt.Errorf("target emitted %d instructions; at most %d fan out at once", len(parts), MaxFanOut)
+	}
+	outs := make([][]byte, len(parts))
+	for i, p := range parts {
+		outs[i] = p
+	}
+	return outs, nil
+}
+
+// 4. Handoff: a successor has committed. Check its stamp and compute its
+// Horizon; spawn the next instruction's successor, until every one is
+// stamped. Then open every new slot, and only then release every successor,
+// so no child runs before the round's size is on disk and gather never sees
+// a partial round. The releases are the last writes.
 func handoff(s Instance, e Stamped) (Instance, []Effect) {
 	if e.Err != "" {
-		return fault(s, "successor died before stamping: "+e.Err)
+		if len(s.Kids) == 0 {
+			return fault(s, "successor died before stamping: "+e.Err)
+		}
+		return killAndFault(s, "successor died before stamping: "+e.Err)
 	}
-	child, err := issueRelease(s.Self, s.Out, s.Stamp, e)
+	fanned := len(s.Outs) > 1
+	child, err := issueRelease(s.Self, s.Outs[len(s.Kids)], s.Stamp, e, fanned)
 	if err != nil {
 		return killAndFault(s, err.Error())
 	}
-	s.Child, s.Phase = e.Stamp, Done
-	if e.R.State == record.Invoke {
-		return s, []Effect{OpenDep{Round: s.Self.Stamp, Child: e.Stamp}, SendHorizon{Child: child, NewFrame: true}, Exit{}}
+	s.Kids = append(s.Kids, Kid{Stamp: e.Stamp, R: *e.R, Horizon: child})
+	if len(s.Kids) < len(s.Outs) {
+		return s, []Effect{Spawn{Under: s.Self, Out: s.Outs[len(s.Kids)]}}
 	}
-	return s, []Effect{SendHorizon{Child: child, NewFrame: false}, Exit{}}
+	if fanned {
+		if err := alone(s.Kids); err != nil {
+			return killAndFault(s, err.Error())
+		}
+	}
+	s.Child, s.Phase = s.Kids[0].Stamp, Done
+	var effs []Effect
+	for i, k := range s.Kids {
+		if opensSlot(k) {
+			effs = append(effs, OpenDep{Round: s.Self.Stamp, Child: k.Stamp, Pos: i})
+		}
+	}
+	for i, k := range s.Kids {
+		effs = append(effs, SendHorizon{Child: k.Horizon, NewFrame: opensSlot(k), Index: i})
+	}
+	return s, append(effs, Exit{})
+}
+
+// opensSlot: the successor runs in a frame of its own, which waits in the
+// emitter's round.
+func opensSlot(k Kid) bool { return k.Horizon.Frame == k.Stamp }
+
+// alone refuses what cannot share an emission with another instruction: a
+// return discharges the emitter's own slot, which its siblings' round waits
+// on, and an invoke that changes the Horizon of whoever waits (system.narrow)
+// would change it once per sibling, each on its own copy.
+func alone(kids []Kid) error {
+	for _, k := range kids {
+		switch {
+		case k.R.State == record.Return:
+			return errors.New("an emission of several instructions cannot return")
+		case k.R.State == record.Invoke && k.Horizon.Surface != nil && changesWaiter(*k.Horizon.Surface):
+			return fmt.Errorf("%s changes the Horizon of whoever waits on it, so it is emitted alone", k.R.To)
+		}
+	}
+	return nil
 }
 
 // issueRelease is the parent's half of Release: check the successor's stamp,
 // then compute its Horizon.
-func issueRelease(parent horizon.Horizon, emitted []byte, parentStamp string, e Stamped) (horizon.Horizon, error) {
+func issueRelease(parent horizon.Horizon, emitted []byte, parentStamp string, e Stamped, fanned bool) (horizon.Horizon, error) {
 	if err := checkSuccessor(e.R, emitted, parentStamp); err != nil {
 		return horizon.Horizon{}, fmt.Errorf("stamp failed verification: %w", err)
+	}
+	if fanned {
+		return Fanned(parent, *e.R, e.Stamp)
 	}
 	return Narrow(parent, *e.R, e.Stamp)
 }
@@ -521,6 +623,19 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 		waiter.Refs = refs
 	}
 	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
+}
+
+// Fanned is Narrow for a successor that took one instruction of several
+// (next/32, H2). An invoke opens its frame as always. A fault holds a slot of
+// its own in the emitter's round and discharges it, so its siblings still run
+// and the emitter resumes with the fault among its steps; alone, the same
+// fault discharges the emitter's own slot.
+func Fanned(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
+	if r.State != record.Fault {
+		return Narrow(parent, r, stamp)
+	}
+	waiter := parent
+	return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
 }
 
 // 5. Settle: accept the Horizon, whose first frame is the slot this record
