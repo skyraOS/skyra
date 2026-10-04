@@ -7,7 +7,8 @@ becomes `remember`, which ends in the Horizon's `extend-reach`. Supersedes
 section G and review finding F10.
 
 Date: 2026-10-03  
-Status: agreed in discussion, not built. Builds on [24](24-the-room.md),
+Status: agreed in discussion, and **built** (2026-10-03, section H, `02bd1b9`…`9ee7e68`;
+where the build differs, the list's Status column says so). Builds on [24](24-the-room.md),
 [26](26-agents-and-facets.md), [27](27-a-horizon-is-a-process.md),
 [29](29-actors-own-their-state.md), [30](30-types-by-origin-routes.md) and
 [act](act.md). Changes what 28 calls an agent-written tool, and what 30's
@@ -726,7 +727,7 @@ general:
 
 | Where | Today | Here |
 |---|---|---|
-| fan-out | not built: one emission is one successor, and a round's size is never committed | one emission is N instructions; the machine spawns N successors, each takes one, and the emitter supervises all N, opening every slot before releasing any |
+| fan-out | was not built: one emission was one successor, and a round's size was never committed | one emission is N instructions; the machine spawns N successors, each takes one, and the emitter supervises all N, opening every slot before releasing any |
 | syscalls | the room's facets: `system.narrow`, `system.route` | the Horizon as the actor `system`, its contracts `narrow`, `strand`, `extend-reach`; `system.route` leaves |
 | contracts | one input contract per name in reach | a target holds a set of contracts, each identified by (target, schema), selected by fit |
 | the floor | `.skyra/` is denied to every target | an actor can only see its own state: its own directory under `.skyra/` |

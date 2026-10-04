@@ -1,7 +1,9 @@
 # 32 — Procedures: proposal
 
-Status (2026-10-03): **proposed, not built.** Section H of the
-[list](README.md). Supersedes section G and review finding F10.
+Status (2026-10-03): **built**, H0–H9, `02bd1b9`…`9ee7e68` on branch
+`sky-horizons`; the Status column of section H in the [list](README.md) says
+what each step became, and where the build differs from this plan. Real Codex
+was not run against H8. Supersedes section G and review finding F10.
 
 The implementation plan for [32](../32-procedures.md). Read 32 first; this
 page says how to build it, in what order, and what was decided before

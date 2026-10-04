@@ -193,8 +193,8 @@ handles, and puts every decision in one replayable function.
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **not built**: one emission is one successor, and a round's size is never committed (fan-out is H2 of [next/32](docs/next/32-procedures.md)) |
-| Self-extension: an agent registers a tool it wrote under its own Horizon, and runs it with no approval (`system.register`) | **not built**; the registry is fixed at genesis ([`registry.go`](controller/runtime/registry/registry.go)) |
-| Stored procedures: remembered sequences of calls within a Horizon, run without approval ([`docs/design/faults.md`](docs/design/faults.md)) | designed, not built |
+| Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/next/32-procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
+| Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/next/32-procedures.md)) | **built** |
 | Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
@@ -208,9 +208,11 @@ never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
 under its own generated sandbox. What comes next:
 
-- **Self-extension.** An agent writes a tool, registers it as a leaf whose
-  Horizon is a subset of its own, and calls it with no human in the loop; the
-  same tool reaching further is a fault. This is the demo the thesis needs.
+- **Self-extension with real Codex.** The demo runs scripted and with a fake
+  Codex ([next/32](docs/next/32-procedures.md)): a strand remembered as a
+  procedure runs with no model step and no approval, and the same procedure
+  reaching further is a fault. Next: real Codex, and Codex writing its own
+  refinements.
 - **Faults that route by kind, within a turn.** A horizon fault goes back to
   the agent as an observation; an authority fault escalates to the user, who
   holds the authority and can grant it.

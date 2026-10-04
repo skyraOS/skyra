@@ -41,7 +41,7 @@ became) or **not in the proposal**.
    `remember` compiles a strand into one and names it with the Horizon's
    `extend-reach`, which needs no approval: a Horizon grows only by
    composition. Types move to the interpreter; the model writes refinements
-   on the edges. In the proposal as section H; not built.
+   on the edges. Section H of the proposal; built (2026-10-03).
 
 ## Not in the proposal
 
