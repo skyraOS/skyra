@@ -114,6 +114,10 @@ type Surface struct {
 	// decision 24): the one part of .skyra/ its sandbox may read and write.
 	// An actor can only see its own state.
 	State string `json:"state,omitempty"`
+	// Bundle pins operator-provisioned procedure definitions. Bootstrap passes
+	// it to the actor's installer before genesis; targets gain no file grant.
+	BundlePath   string `json:"bundle_path,omitempty"`
+	BundleSHA256 string `json:"bundle_sha256,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.
@@ -240,7 +244,7 @@ func StateDir(h Horizon, floor string) string {
 // ValidState reports whether a name may be an actor's state directory: one
 // plain path segment that is none of the kernel's own directories.
 func ValidState(name string) bool {
-	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames"}, name) {
+	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames", "acceptances"}, name) {
 		return false
 	}
 	for i, c := range name {

@@ -38,6 +38,18 @@ type entry struct {
 }
 
 func main() {
+	var raw json.RawMessage
+	if err := json.NewDecoder(os.Stdin).Decode(&raw); err != nil {
+		fmt.Fprintln(os.Stderr, "user:", err)
+		os.Exit(1)
+	}
+	if handled, err := operation(raw); handled || err != nil {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "user:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	var c struct {
 		Frame string `json:"frame"`
 		Input struct {
@@ -45,7 +57,7 @@ func main() {
 		} `json:"input"`
 		Steps []step `json:"steps"`
 	}
-	if err := json.NewDecoder(os.Stdin).Decode(&c); err != nil {
+	if err := json.Unmarshal(raw, &c); err != nil {
 		fmt.Fprintln(os.Stderr, "user:", err)
 		os.Exit(1)
 	}

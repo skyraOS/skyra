@@ -1,6 +1,6 @@
 # Skyra: where we are
 
-Date: 2026-10-01  
+Date: 2026-10-03
 Status: current summary of the whole project: the properties it is after, the
 patterns that produce them, what runs today, and what does not yet. The
 [README](../README.md) is the front door and [`startup-doc.md`](startup-doc.md)
@@ -22,13 +22,17 @@ run takes custody of untrusted bytes, derives what they mean from where the
 emitter stands, commits a content-addressed record, and runs the next program
 under a macOS Seatbelt profile **rendered from its Horizon**. All durable state
 is a hash-linked tree, and replaying it from genesis re-derives every decision
-byte for byte. **The runtime computes the type of every return** (its origin
-and its shape, by hash), and a parent's **route** decides where a return of
-that type goes; a type the parent has never seen is a **novelty interrupt**,
-and what the parent writes there is kept, so the model is called once per kind
-of return, not once per return. Today it runs real Codex conversations in the
-browser, the terminal and a desktop app; Codex calls `echo` and `read`, and
-every turn is a replayable lineage.
+byte for byte. An agent can now **remember a strand as a procedure**: the
+interpreter compiles work that already ran into a reusable program, installs
+its contract only in the Horizon that remembered it, and runs it again without
+the model while its refinements hold. Procedures are the emerging application
+programming model: contracts are their callable interfaces, invocations are
+their executions, actors provide bounded effects, and Horizons define which
+compositions are expressible. Today Skyra runs real Codex conversations in the
+browser, terminal and desktop app; remembered procedures are built and tested
+with the scripted agent and fake Codex. Moving the conversation application
+itself onto procedures, with state reconstructed from lineage endpoints, is
+proposed in [next/proposal/33](next/proposal/33-procedure-adapter-extraction-proposal.md).
 
 ---
 
@@ -73,10 +77,12 @@ claim is never made unless a mechanism enforces it, or it is listed as a gap.
 | **P8** | **Frame ⊆ authority** | everything a model is shown is invokable; visibility grants nothing | `tools` is derived from reach and references | built |
 | **P9** | **Approval-free self-extension** | an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with zero prompts | `remember` compiles the strand; the interpreter names it with the Horizon's `extend-reach`, which needs no approval ([next/32](next/32-procedures.md)) | **built** (section H, 2026-10-03): the scripted demo and the fake Codex in `run.sh`; real Codex not yet run |
 | **P10** | **Recurrence is the resource** | what was decided once is kept: a remembered procedure runs again on new input without the model, inside its refinement | procedures and refinements in the interpreter; base types computed only for what is remembered ([next/32](next/32-procedures.md)); replaces routes keyed by type ([next/30](next/30-types-by-origin-routes.md)) | **built** (section H, 2026-10-03): procedures run inside their refinements with no model step; `skyra metric` reads it from the records. Routes (2026-10-01) are removed |
-| **P11** | **Hashes never reach a model** | a model sees names and presentations; hashes go only to workers the runtime starts | the F1 audit; the route contract strips every hash; references are `system.ref.<n>` | built, with one accepted exception (F14) |
+| **P11** | **Hashes never reach a model** | a model sees names and presentations; hashes go only to workers the runtime starts | adapter projections; references are shown by names such as `system.ref.<n>`; Codex names a remembered call by its turn-local index | built, with the JSON-RPC correlation-id exception documented in F14 |
+| **P12** | **An actor's state is its accepted lineage** | an actor can reconstruct its logical state from an immutable first invocation and its latest accepted endpoint, under its Horizon and versioned projector | explicit-anchor `system.strand`, monotonic accepted checkpoints and deterministic projection ([proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md)) | proposed; checkpoint publication and recovery are the first experiment |
 
 P1–P3 are the README's three invariants. P4–P8 and P11 keep them true. P9 and
-P10 are what the whole thing is for.
+P10 are what the whole thing is for. P12 is the state model proposal 33 makes
+explicit; it is not yet an implementation claim.
 
 ---
 
@@ -112,9 +118,9 @@ func Drive(root, up, stack, s, e)                     // instance: performs effe
 ```
 
 Events are facts (`Received`, `Released`, `Emitted`, `Stamped`, `Settled`,
-`Claimed`, `RouteLooked`, `RunsLoaded`, `Parked`); effects are requests
-(`Commit`, `Run`, `Spawn`, `SendHorizon`, `Settle`, `TryClaim`, `LookupRoute`,
-`RecordRun`, `LoadRuns`, `PutRoute`, `Park`…). `TestMachineIsPure` fails if
+`Claimed`, `StrandRead`, `Parked`); effects are requests
+(`Commit`, `Run`, `Spawn`, `SendHorizon`, `Settle`, `TryClaim`, `ReadStrand`,
+`Park`…). `TestMachineIsPure` fails if
 `machine` imports anything that touches the OS, the clock or the tree. That
 purity is what lets replay feed recorded inputs back and get the same records.
 
@@ -195,8 +201,8 @@ type Horizon struct {
   frames/<F>/result                 write-once: what discharged F's slot
   frames/<F>/deps/<round>/<child>   a slot F opened, written before the child runs
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
-  route-table/<key>/<n>             write-once: the routes recorded for (parent, binding, type); the highest n wins
-  route-runs/<key>/<input>          write-once: every route run under a key, input → output: the test suite
+  interpreter/procedures/<key>      procedure bodies owned by the interpreter actor
+  interpreter/frames/<frame>        durable procedure positions
 ```
 
 A stamp is `sha256(record)`, a pointer, verified by reading the record back.
@@ -223,9 +229,9 @@ its round is discharged (wait for all; there is no cancellation), and the
 resolve record must name every discharge, so it cannot be written early. When
 siblings race, a write-once claim lets exactly one resume the continuation.
 Faults are discharges too: the continuation decides what to do with one.
-**At gather, a returned discharge is routed** (section 13) before the
-continuation is woken: its parent's route may interrupt it, send the return on
-for it, or refuse it.
+An emission may fan out to several children; every slot is opened before any
+child is released, and the continuation resumes once all of them discharge.
+The interpreter uses this to run independent ready procedure nodes together.
 
 ### 8. Continuations are stateless
 
@@ -236,14 +242,13 @@ runs:
 {"frame": "<the slot it returns to>", "input": {...},
  "tools": {"<name or reference>": <input contract>, ...},
  "steps": [{"to": "...", "payload": {...}, "state": "return", "value": ...,
-            "interrupt": "novelty", "type": "echo → string"}, ...],
- "route": { ...the route contract, when a step is novel... }}
+            "observation": "<discharge stamp>"}, ...],
+ "contract": { ...the contract this frame was invoked through... }}
 ```
 
-A step also says how its parent's route took it: `by` (the runtime invoked it
-for the route), `sent` (where the route sent it), `interrupt` (why it woke the
-continuation: `novelty`, `route` or `depth`) and `type` (the return's
-presentation). Never a hash.
+The discharge stamp is available to trusted workers so `remember` can name the
+strand to compile; adapters do not show it to a model. A model names one of its
+own calls by a turn-local index, and the adapter resolves that index.
 
 Its memory is its lineage, so it can resume in any process, after any crash,
 and replay reproduces it. ([next/27](next/27-a-horizon-is-a-process.md) gives
@@ -298,8 +303,8 @@ protocol to the same webhost.
 **Failure is not a fault.** A tool that could not do its job returns, for
 example `read` returning `{"error":"denied"}`. **Asking for more authority is a
 fault that climbs** (designed): like a page fault, it goes up until someone
-holds the authority, with the human above the room. Interrupts are designed
-next (section 13).
+holds the authority, with the human above the room. The application-level
+handling for that escalation remains designed rather than built.
 
 ### 12. Observations
 
@@ -311,51 +316,67 @@ whole-file sha256 and size, line range). **Observation passing**
 structural: a continuation may pass its children's observations up, but not
 author a replacement.
 
-### 13. Types by origin, and routes (built 2026-10-01)
+### 13. The procedure interface (built 2026-10-03)
 
-[next/30](next/30-types-by-origin-routes.md) replaced 28's checks. **The
-runtime computes types; models write routes.**
+[next/32](next/32-procedures.md) supersedes the type-and-route design in 30.
+Types, routes, the Starlark runner and novelty interrupts have left the kernel.
+Their replacement is a general programming interface implemented by the
+interpreter actor:
 
-- **JSON is the floor.** An actor returns a JSON value and declares nothing
-  else. The runtime walks every return once, bottom-up, and gives every node two
-  hashes: its **shape** (keys and leaf kinds; arrays independent of length) and
-  its **content** (leaf values in). The encoding is pinned by golden hashes
-  (`core/contract/shape.go`).
-- **A type is origin plus shape:** `H(actor identity, contract, shape)`. The
-  actor is its registration's identity, never its name, so re-registering a
-  different program under an old name makes new types. Same shape from two
-  origins is two types: text from one actor never becomes another's argument
-  without a route.
-- **A model sees presentations, never hashes:** `echo → string`,
-  `twitter.search → {media: [{url: string}], text: string}`.
-- **A novelty interrupt produces a route.** When a return's type has no route
-  at (parent, binding, type), the runtime interrupts the parent, which is shown
-  the **route contract** (the return's presentation, the conditions it can
-  test, the decisions it can make, its Horizon without hashes, and what can
-  happen to it) and writes a route through the room's `system.route` facet,
-  naming the step it was shown.
-- **A route is Starlark, one invocation, `if` only** (no `for`, `while` or
-  recursion; a step cap), run by the runtime-owned route runner under an empty
-  Horizon. Through the `skyra` package it reads the return (`get`), the
-  previous return of its type (`previous`, `changed`, `diff`), and returns one
-  decision: `interrupt()`, `send(to, payload)` or `fault(cause)`. Routes are
-  **keyed on type and decide on content**: the key says which route runs, the
-  content diff says whether to wake the parent.
-- **A send is an invoke under the parent's Horizon,** so a route can do only
-  what its parent could. Its return is routed again, up to 8 in a row; then a
-  `depth` interrupt.
-- **Interrupts are raised by the runtime, never by an actor** (next/29), with
-  a kind: `novelty`, `route`, `depth`.
-- **The log is the test suite.** Every route run is indexed under its key. A
-  rewritten route is run over every recorded case first; a changed decision is
-  a flip, and the route is refused unless the parent accepts each flip.
-- **Deterministic parents declare routes at registration** (`"routes"` in the
-  registry), since they cannot answer an interrupt.
+```text
+caller → contract → procedure → actors → recorded outcome
+```
 
-[next/28](next/28-types-observations-checks.md) still holds what routes did not
-replace: types that compose, slots as the args of the execve, failures with
-blame. [next/29](next/29-actors-own-their-state.md) designs actor state and
-novelty at an input. Identity is designed in [improvements item 9](improvements.md).
+- **A contract is the callable interface.** A procedure is exposed as an input
+  contract of the interpreter. The kernel sees an ordinary invoke and selects
+  a contract by `(target, schema)` and structural fit; it knows nothing about
+  procedures.
+- **A procedure is the program.** It is a durable composition of calls,
+  bindings, fan-out and returns. Its body and each running frame's position are
+  held in the interpreter's actor state. Procedures may call other procedures
+  exactly as they call any contract.
+- **An invocation is the execution.** It gives one run an identity, frame,
+  Horizon and lineage. Proposal 33 makes a conversation an enclosing,
+  long-lived invocation whose turns remain descendants of the same anchor.
+- **A Horizon is the programming environment.** It is the complete set of
+  contracts a procedure can compose at that point. Every emitted instruction
+  is checked at intake, and Horizons only narrow.
+- **Actors are effectful primitives.** They own protocols, storage access,
+  provider operations and live resource custody. Procedures own workflow and
+  application policy.
+- **A strand is reconstructable history.** `system.strand` walks from an
+  observation back to the invocation made through a named contract, preserving
+  Horizon opacity. `remember` compiles that bounded trace into a procedure.
+
+`remember` is itself an interpreter contract. The caller supplies the trusted
+worker with the observation and original contract; the kernel returns the
+authorized strand; the interpreter compiles its calls and bindings; then
+`system.extend-reach` installs the resulting contract in the caller's Horizon.
+An actor can extend only itself, and extension adds a contract, never
+authority. A procedure therefore exists only in the Horizon that remembered
+it, while every later emission is still checked under the Horizon in which it
+runs.
+
+Remembered procedures have base refinements derived from the original calls
+and values. When the originating actor exposes `refine`, it may generalize
+those edges with bounded CEL predicates. If a refinement refuses, execution
+falls back to the original actor through `resume` when available. While the
+refinements hold, recurrence costs no model call.
+
+Proposal 33 extends the same interface from remembered work to authored
+application workflows such as `conversation.list`, `load`, `create`, `send`,
+`close` and `delete`. Its state rule is:
+
+```text
+ActorState = Project(Strand(Horizon, first_invocation, accepted_endpoint))
+```
+
+The first invocation is immutable identity; the accepted endpoint is the
+actor's causal frontier. Together they are sufficient to reconstruct recorded
+logical state when every state-relevant fact is in lineage and the projector
+is versioned. They do not recreate live descriptors, processes, unjoined child
+results or unobserved external effects. Explicit-anchor strand reads,
+checkpoint advancement and crash-gap reconciliation are proposed, not built.
 
 ---
 
@@ -378,10 +399,10 @@ novelty at an input. Identity is designed in [improvements item 9](improvements.
 5. **Intake derives `invoke read`.** It runs in a fresh process under the
    Horizon's profile (the workspace readable, `.skyra` denied, exec of nothing
    else) and emits `{"to":<its slot>,"payload":{"path":…,"sha256":…,"text":…}}`.
-   Intake commits a return; its type is computed from it.
-6. **Settle, gather, route, claim.** The adapter has no route for `read`'s
-   type, so it is interrupted (as it was before routes) and resumes, pairs the
-   result with Codex's pending call and delivers it.
+   Intake commits the derived return.
+6. **Settle, gather, claim.** The return discharges the adapter's slot; once
+   its round is complete, exactly one claimant resumes it. The adapter pairs
+   the result with Codex's pending call and delivers it.
 7. **Codex finishes.** The adapter returns the final text to its slot; the user
    continuation shows it and parks on the browser again.
 8. **Every step is a record.** `skyra replay` re-derives all of them, byte for
@@ -400,9 +421,12 @@ back to the user side as an observation.
 | The step protocol, custody handoff, content-addressed hash-chained records | **built**, tested |
 | `interpret`: states derived from the emitter's position; the slot is the return; typed faults that carry their observation | **built** (2026-09-30) |
 | Input contracts, strict structural fit at intake; output contracts removed | **built** (outputs removed 2026-10-01) |
-| Types computed from every return: shape and content hashes, diffs, presentations; type = actor identity + contract + shape | **built** (2026-10-01) |
-| Routes: the Starlark route runner, routes declared at registration, routing at gather (interrupt, send, fault), the chain's depth | **built** (2026-10-01) |
-| The novelty interrupt, the route contract, `system.route`, flips checked against the log | **built** (2026-10-01); the demo agent and the Codex adapter can write routes |
+| Fan-out: one emission may supervise several successors; all slots open before release and results resume in emission order | **built** (2026-10-03) |
+| The Horizon as `system`; contracts selected by `(target, schema)`; `system.extend-reach` lets an actor add only its own contract | **built** (2026-10-03) |
+| Bounded `system.strand` reads, preserving requester-Horizon visibility and narrowed-child opacity | **built** (2026-10-03) |
+| Interpreter actor: installed procedures, durable frame positions, bindings, `each`, procedure-to-procedure calls | **built** (2026-10-03) |
+| `remember`: compile a completed strand and expose it only in the remembering Horizon | **built** (2026-10-03) |
+| Remembered procedure execution with base refinements, model fallback and bounded CEL refinements | **built** (2026-10-03) |
 | The hash audit: no hash in what a model reads; references named `system.ref.<n>` | **built** (2026-10-01), one accepted exception |
 | One authority per Horizon, shared by every call; profiles rendered per Horizon; `.skyra/` and exec excluded | **built** (2026-09-30), with OS tests |
 | The room: genesis authored with a nonce; `system.narrow` and references that join the caller's reach | **built** (2026-09-30) |
@@ -414,26 +438,24 @@ back to the user side as an observation.
 | Codex native attempts: interrupted and returned as an observation; the conversation continues on the same thread | **built** (2026-09-30) |
 | `echo` and `read` as model-facing tools; a tool's result or fault back to Codex in the same turn | **built** |
 | Conversations as lineages in the browser, the TUI and the desktop app | **built** |
-| `run.sh`: fourteen scenarios, six of them routes, each ending in a byte-identical replay | **built** |
-| About 7,700 lines of Go in the controller (standard library only), plus the route runner (its own module, `go.starlark.net`); 96 test functions | — |
+| `run.sh`: scenarios for authority, fan-out, procedures and Codex behavior, each ending in a byte-identical replay | **built** |
 
 ## What does not run yet
 
 | | Status |
 |---|---|
-| **Self-extension** (`system.register`): an agent registers a tool it wrote and runs it with zero approvals | **not built: the thesis demo.** A tool is Starlark source in state, run by the runtime the way routes are ([next/28](next/28-types-observations-checks.md), [next/30](next/30-types-by-origin-routes.md)) |
-| **Route review findings** F10–F14: a route bounded by its author's authority (**F10, first**); replay re-running routes; flips named by hash; the route table verified; which hash invariant holds | open ([next/proposal/30](next/proposal/30-types-by-origin-routes-proposal.md#review-findings)) |
-| **Every return is routed** (section G): one lookup with a default route; faults and facet returns routed; fan-out | agreed 2026-10-02, not built ([next/30](next/30-types-by-origin-routes.md#every-return-is-routed)) |
-| **Routing beyond v1**: `previous` across frames, how much a string changed | not built |
-| **Actor state** and novelty at an input | designed ([next/29](next/29-actors-own-their-state.md)) |
+| **Procedure-native conversation application**: list/load/create/send/close/delete enter through interpreter contracts rather than webhost/user/Codex lifecycle code | proposed ([proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md)) |
+| **Actor reconstruction from lineage endpoints**: explicit immutable invocation anchor plus monotonic accepted endpoint; checkpoint publication and crash reconciliation | proposed; first experiment in proposal 33 |
+| **Authored workflow control**: versioned bundles, conditional nodes, explicit fault handlers and an event-driven repeat/resume construct | proposed for the conversation application |
+| **Provider/session extraction**: bounded Codex operations, durable provider-home identity and safe recovery of the same enclosing invocation | proposed; real restart/resume must be proven |
 | **Faults that climb to the human**; the room's admin facet | designed ([next/24](next/24-the-room.md), [next/26](next/26-agents-and-facets.md)) |
 | **One stdin envelope** for every program; the `continuation` flag removed | designed ([next/27](next/27-a-horizon-is-a-process.md)) |
 | **Facets** declared at registration; calls into another agent's Horizon | designed ([next/26](next/26-agents-and-facets.md)) |
 | **Supervision and restart** from durable state | designed ([next/27](next/27-a-horizon-is-a-process.md)) |
-| **Identity**: canonical encoding, content ids, path ids, types as records | designed ([improvements item 9](improvements.md)) |
-| **Stored procedures and memory** (P10) | designed, deferred |
+| **Identity**: canonical encoding, content ids and path ids | designed ([improvements item 9](improvements.md)) |
+| **Real Codex authoring refinements** | not built; real Codex is offered procedures and `remember`, but H8 was exercised with fake Codex |
 | **Observation passing** by id with enforced provenance | proposed ([next/21](next/21-observation-passing.md)) |
-| **Restore** after a webhost dies; tail calls and fan-out; a write tool | not built |
+| **Restore** after a webhost dies; tail calls; a write tool | not built; fan-out is built |
 
 The complete list of changes, with what each became, is in
 [`next/proposal/`](next/proposal/README.md).
@@ -456,18 +478,20 @@ The complete list of changes, with what each became, is in
   checks them, but they are not yet pure observations.
 - **`Args` is still on the surface.** The launcher passes the real app-server's
   `--disable` flags through it; it becomes slots the owner fills (next/28).
-- **One output per step**, so one child per round.
-- **The provider profile is pinned to Codex 0.157.1.**
-- **A route can outrun its author** (F10, open). Routes are keyed by the
-  parent's surface, not its Horizon, so a route written under a narrowed
-  Horizon, or under a prompt injection, also fires under broader ones and in
-  other conversations. Sends stay inside the parent's current Horizon; the fix
-  bounds a route by the authority it was written with.
-- **Replay does not re-run routes** (F11, open): it re-derives each decision
-  from the runner's stored output.
-- **Only a single-child round's return is routed.** Faults and the room's
-  facets wake the parent as before. The agreed rule is that every return is
-  routed, with a default route that interrupts (section G, after F10).
+- **Some emissions must remain singular.** A fan-out cannot return, carry a
+  resident connection or contain `narrow`/`extend-reach`, because those cases
+  require one owner or would make the waiting Horizon nondeterministic.
+- **The provider profile is pinned to Codex 0.160.0.**
+- **Procedure versioning is incomplete.** There is one remembered
+  representation per contract; authored bundles, migrations and versioned
+  source/node/position formats are proposal 33 work.
+- **The procedure language is still a finite DAG.** It has bindings and
+  `each`, but no conditional branch, explicit fault handler or durable
+  event-driven repetition yet.
+- **An interpreter frame position is durable actor state, but actor-state
+  recovery is not yet reduced to lineage endpoints.** Proposal 33 must define
+  who advances an accepted checkpoint, how stale writers are refused and how a
+  crash after acceptance but before publication is reconciled.
 - **A Horizon bounds the blast radius; it does not judge intent.** A prompt
   injection that misuses a granted tool is not stopped; the evaluation must
   separate the two cases.
@@ -487,26 +511,28 @@ the unit of containment is the Horizon: the claim is that effects outside it
 succeed zero times, and the measure of narrowness is the narrowings a task needs.
 Details: [`next/research-question.md`](next/research-question.md).
 
-Routes add two measures, structural on purpose (they do not judge whether a
-model was right, which is the labs' work), to be written into next/30:
+Procedures add structural measures without pretending to judge whether the
+model's answer is good:
 
-- **Model calls per kind of return ↓.** Novelty is paid once per (parent,
-  binding, type), so calls grow with a task's **variety, not its size**: a
-  self-similar tree pays about one interrupt per level on its first descent,
-  then routes carry the rest.
-- **Overturn rate.** Quality is a parent's judgement, held or overturned by the
-  levels above it: routes rewritten with declared flips, faults sent back up,
-  the human intervening at the root. It is read against how much is noticed,
-  which improves as models and people do.
+- **Model calls displaced by recurrence.** Count procedure runs, successful
+  refined edges and fallbacks to the originating model. Repeated accepted
+  structure should cost procedure execution rather than another inference.
+- **Remembered coverage.** Measure how much later work runs inside remembered
+  procedures, and where their refinements refuse. Work should increasingly be
+  paid for by novelty rather than total task length.
+- **Authority preservation.** A remembered procedure invoked under a narrower
+  Horizon must either complete inside it or fault at intake; it must never
+  recover the authority of the run from which it was compiled.
 
-dnav3 measured the first kind of curve (passes-to-closure `[4 3 3 2 2 2]`, July
-2026) with the model always in the loop; routes take it out of the loop for any
-kind it has seen.
+`skyra metric` reads the procedure measures from records. Proposal 33 adds a
+second research direction: how much long-horizon application state can be
+reconstructed from an invocation anchor and accepted endpoint without a
+parallel mutable database.
 
 | When | Work |
 |---|---|
 | September | semantics: contracts, `interpret`, dependencies and resolve (**done**) |
-| October | Codex calling tools under generated sandboxes (**done**); the room and derived authority (**done**); types and routes (**done**, F10 open); **self-extension** |
+| October | Codex calling tools under generated sandboxes (**done**); the room and derived authority (**done**); fan-out and remembered procedures (**done**); procedure-native conversations and endpoint reconstruction (**proposed**) |
 | November | audit and replay; the baseline harness and task set |
 | December | evaluation and writeup |
 
@@ -521,9 +547,10 @@ kind it has seen.
 | authority derived from state, the room, faults that climb | [`next/24-the-room.md`](next/24-the-room.md) |
 | agents, facets, narrowing | [`next/26-agents-and-facets.md`](next/26-agents-and-facets.md) |
 | a Horizon as the process | [`next/27-a-horizon-is-a-process.md`](next/27-a-horizon-is-a-process.md) |
-| types by origin, routes, the novelty interrupt | [`next/30-types-by-origin-routes.md`](next/30-types-by-origin-routes.md) |
+| procedures, remembering and refinements | [`next/32-procedures.md`](next/32-procedures.md), [`proposal/32`](next/proposal/32-procedures-proposal.md) |
+| procedure-native conversations and lineage endpoint reconstruction | [`proposal/33`](next/proposal/33-procedure-adapter-extraction-proposal.md) |
 | types that compose, slots, blame; actor state | [`next/28`](next/28-types-observations-checks.md), [`next/29`](next/29-actors-own-their-state.md) |
 | what is built and what is not, change by change | [`next/proposal/`](next/proposal/README.md) |
 | the boundary rules every new crossing must answer | [`next/20-boundry-crossing.md`](next/20-boundry-crossing.md) |
-| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–30`](next/) |
+| the reasoning, in the order it happened | [`design/thoughts/01–13`](design/thoughts/), then [`next/14–32`](next/) |
 | the predecessor, and what it taught | [How it got here](../README.md#how-it-got-here); the code is in git history (last at `b243b03`) |

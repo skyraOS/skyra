@@ -62,8 +62,10 @@ func Run(root string) error {
 // so on down to the operator's frame.
 func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, e machine.Event) (machine.Instance, error) {
 	var (
-		downs    []*net.UnixConn // handshakes with the successors, in instruction order
-		children []*exec.Cmd
+		downs           []*net.UnixConn // handshakes with the successors, in instruction order
+		children        []*exec.Cmd
+		accepting       string // release awaiting the machine's validation
+		acceptingRecord record.Record
 	)
 	defer func() {
 		for _, down := range downs {
@@ -76,6 +78,21 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 	for e != nil {
 		var effs []machine.Effect
 		s, effs = machine.Step(s, e)
+		if accepting != "" {
+			for _, eff := range effs {
+				if stop, ok := eff.(machine.Exit); ok && stop.Err != "" {
+					_ = handshake.Send(up, handshake.Accepted{Error: stop.Err})
+					return s, errors.New(stop.Err)
+				}
+			}
+			if err := tree.Accept(root, acceptingRecord, accepting); err != nil {
+				return s, err
+			}
+			if err := handshake.Send(up, handshake.Accepted{}); err != nil {
+				return s, err
+			}
+			accepting = ""
+		}
 		e = nil
 		for _, eff := range effs {
 			switch x := eff.(type) {
@@ -129,9 +146,8 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					return s, err
 				}
 				stack = files
-				if err := handshake.Send(up, handshake.Accepted{}); err != nil {
-					return s, err
-				}
+				accepting = release.Horizon
+				acceptingRecord = s.R
 				trace.Logf("release  Horizon %s looked up (reach %v, %d frames, %d resources)", record.Short(release.Horizon), h.Names(), h.Depth(), len(release.Resources))
 				e = machine.Released{Self: h, Frames: h.Depth(), Resources: release.Resources}
 			case machine.Run:
@@ -227,7 +243,13 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					return s, err
 				}
 			case machine.ReadStrand:
-				st, err := replay.ReadStrand(root, x.Observation, x.Target, x.Schema, x.Origin)
+				var st any
+				var err error
+				if x.Invocation != "" {
+					st, err = replay.ReadTreeInRoom(root, x.Invocation, x.Observations, x.Target, x.Schema, x.Origin, x.Room)
+				} else {
+					st, err = replay.ReadStrand(root, x.Observation, x.Target, x.Schema, x.Origin)
+				}
 				switch {
 				case replay.Refused(err):
 					e = machine.StrandRead{Refused: err.Error()}
@@ -235,7 +257,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					return s, err
 				default:
 					b, _ := json.Marshal(st)
-					trace.Logf("strand   %d records from %s up to its invoke", len(st.Records), record.Short(x.Observation))
+					trace.Logf("strand   returned %d bytes of recorded work", len(b))
 					e = machine.StrandRead{Strand: b}
 				}
 			case machine.TryClaim:

@@ -8,18 +8,13 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"skyra/controller/codex/proceduretools"
 	"slices"
 	"strings"
 	"time"
 )
 
-type schema struct {
-	Title    string             `json:"title,omitempty"`
-	Type     string             `json:"type"`
-	Fields   map[string]*schema `json:"fields,omitempty"`
-	Required []string           `json:"required,omitempty"`
-	Items    *schema            `json:"items,omitempty"`
-}
+type schema = proceduretools.Schema
 type step struct {
 	To          string                        `json:"to"`
 	Payload     json.RawMessage               `json:"payload"`
@@ -112,56 +107,14 @@ func tools(c continuation) []tool {
 			ts = append(ts, tool{name: name, description: modelTools[name], target: name, schema: c.Tools[name]})
 		}
 	}
-	interp := interpreter(c)
-	if interp == "" {
-		return ts
+	reserved := make([]string, 0, len(ts))
+	for _, t := range ts {
+		reserved = append(reserved, t.name)
 	}
-	ts = append(ts,
-		tool{name: "remember", target: interp, kind: "remember", description: "Remember how one of your tool calls in this turn was done, as a procedure: " +
-			"call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, " +
-			"and with no approval. Only a call that itself called tools can be remembered.",
-			schema: &schema{Type: "object", Required: []string{"call"}, Fields: map[string]*schema{"call": {Type: "number"}}}},
-		tool{name: "procedure", target: interp, kind: "procedure", description: "Run a remembered procedure on new input: input is what you would give the call it was remembered from.",
-			schema: &schema{Type: "object", Required: []string{"input"}, Fields: map[string]*schema{"input": {Type: "any"}}}})
-	for _, s := range contractsOf(c, interp)[1:] {
-		if name := toolName(s.Title); name != "" && !slices.ContainsFunc(ts, func(t tool) bool { return t.name == name }) {
-			ts = append(ts, tool{name: name, target: interp, schema: s, description: "A remembered procedure: " + s.Title})
-		}
+	for _, t := range proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember how one of your tool calls in this turn was done, as a procedure: call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, and with no approval. Only a call that itself called tools can be remembered.") {
+		ts = append(ts, tool{name: t.Name, target: t.Target, kind: t.Kind, description: t.Description, schema: t.Schema})
 	}
 	return ts
-}
-
-// interpreter is the name in reach that holds remember, or "".
-func interpreter(c continuation) string {
-	for _, name := range slices.Sorted(maps.Keys(c.Tools)) {
-		if s := c.Tools[name]; s != nil && s.Title == "remember" {
-			return name
-		}
-	}
-	return ""
-}
-
-func contractsOf(c continuation, name string) []*schema {
-	if all, ok := c.Contracts[name]; ok {
-		return all
-	}
-	if s := c.Tools[name]; s != nil {
-		return []*schema{s}
-	}
-	return nil
-}
-
-// toolName is a title as a dynamic tool name, or "" if it cannot be one.
-func toolName(title string) string {
-	if title == "" || len(title) > 64 {
-		return ""
-	}
-	for _, r := range title {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
-			return ""
-		}
-	}
-	return title
 }
 
 func lookup(c continuation, name string) (tool, bool) {
@@ -182,93 +135,11 @@ func offered(c continuation, name string) bool {
 // turn's tool steps, in the order Codex's calls were invoked.
 func toolEmission(c continuation, results []step, name string, args json.RawMessage) string {
 	t, _ := lookup(c, name)
-	var payload any = args
-	switch t.kind {
-	case "remember":
-		var a struct {
-			Call *int `json:"call"`
-		}
-		if json.Unmarshal(args, &a) != nil || a.Call == nil || *a.Call < 0 || *a.Call >= len(results) {
-			payload = map[string]any{"remember": map[string]any{}} // no such call: intake refuses it
-			break
-		}
-		s := results[*a.Call]
-		payload = map[string]any{"remember": map[string]any{"observation": s.Observation,
-			"contract": map[string]any{"target": s.To, "schema": selected(contractsOf(c, s.To), s.Payload)}}}
-	case "procedure":
-		var a struct {
-			Input json.RawMessage `json:"input"`
-		}
-		_ = json.Unmarshal(args, &a)
-		payload = a.Input
+	calls := make([]proceduretools.Call, len(results))
+	for i, s := range results {
+		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	return emit(t.target, payload)
-}
-
-// selected is the one contract a payload fits, as the kernel selected it.
-func selected(contracts []*schema, payload json.RawMessage) *schema {
-	var v any
-	d := json.NewDecoder(strings.NewReader(string(payload)))
-	d.UseNumber()
-	if d.Decode(&v) != nil {
-		return nil
-	}
-	var fit []*schema
-	for _, c := range contracts {
-		if fits(c, v) {
-			fit = append(fit, c)
-		}
-	}
-	if len(fit) != 1 {
-		return nil
-	}
-	return fit[0]
-}
-
-func fits(s *schema, v any) bool {
-	switch s.Type {
-	case "object":
-		o, ok := v.(map[string]any)
-		if !ok {
-			return false
-		}
-		for k, e := range o {
-			if f := s.Fields[k]; f == nil || !fits(f, e) {
-				return false
-			}
-		}
-		for _, r := range s.Required {
-			if _, ok := o[r]; !ok {
-				return false
-			}
-		}
-		return true
-	case "array":
-		a, ok := v.([]any)
-		if !ok {
-			return false
-		}
-		for _, e := range a {
-			if !fits(s.Items, e) {
-				return false
-			}
-		}
-		return true
-	case "string":
-		_, ok := v.(string)
-		return ok
-	case "number":
-		_, ok := v.(json.Number)
-		return ok
-	case "bool":
-		_, ok := v.(bool)
-		return ok
-	case "null":
-		return v == nil
-	case "any":
-		return true
-	}
-	return false
+	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts))
 }
 
 func main() {
@@ -601,28 +472,5 @@ func toolResult(id json.RawMessage, s step) map[string]any {
 	}
 	return map[string]any{"id": id, "result": map[string]any{"success": success, "contentItems": []any{map[string]string{"type": "inputText", "text": text}}}}
 }
-func jsonSchema(s *schema) map[string]any {
-	if s == nil {
-		return map[string]any{}
-	}
-	switch s.Type {
-	case "object":
-		p := map[string]any{}
-		for k, v := range s.Fields {
-			p[k] = jsonSchema(v)
-		}
-		r := s.Required
-		if r == nil {
-			r = []string{}
-		}
-		return map[string]any{"type": "object", "properties": p, "required": r, "additionalProperties": false}
-	case "array":
-		return map[string]any{"type": "array", "items": jsonSchema(s.Items)}
-	case "bool":
-		return map[string]any{"type": "boolean"}
-	case "any":
-		return map[string]any{}
-	default:
-		return map[string]any{"type": s.Type}
-	}
-}
+
+var jsonSchema = proceduretools.JSONSchema

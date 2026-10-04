@@ -1,13 +1,60 @@
 package registry
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"skyra/controller/core/horizon"
+	"skyra/controller/core/record"
 )
+
+func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("interp", "installer binary")
+	write("contract.json", `{"input":{"type":"string"},"continuation":true}`)
+	entry := Entry{Path: "interp", Contract: "contract.json", State: true, Bundle: "bundle.json"}
+	loadEntry := func() (horizon.Surface, error) {
+		t.Helper()
+		b, _ := json.Marshal(map[string]Entry{"interpreter": entry})
+		write("registry.json", string(b))
+		reach, _, err := Load(filepath.Join(dir, "registry.json"))
+		return reach["interpreter"], err
+	}
+	body := `{"version":1,"procedures":[{"contract":{"type":"object","required":["load"],"fields":{"load":{"type":"string"}}},"nodes":[]}]}`
+	write("bundle.json", body)
+	s, err := loadEntry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Contracts) != 1 || !filepath.IsAbs(s.BundlePath) || s.BundleSHA256 != record.Sum([]byte(body)) {
+		t.Fatalf("bundle not pinned with reach: %+v", s)
+	}
+	entry.State = false
+	if _, err := loadEntry(); err == nil {
+		t.Fatal("accepted stateless installer")
+	}
+	entry.State = true
+	for _, invalid := range []string{
+		`{"version":2,"procedures":[{"contract":{"type":"object"}}]}`,
+		`{"version":1,"procedures":[]}`,
+		`{"version":1,"procedures":[{"contract":{"type":"string"}}]}`,
+		`{"version":1,"procedures":[{"contract":{"type":"object"}},{"contract":{"type":"object"}}]}`,
+	} {
+		write("bundle.json", invalid)
+		if _, err := loadEntry(); err == nil {
+			t.Fatalf("accepted invalid bundle: %s", invalid)
+		}
+	}
+}
 
 func TestLoadNormalizesAndRejectsGrants(t *testing.T) {
 	dir := t.TempDir()

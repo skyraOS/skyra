@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -56,6 +57,26 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		if s.State != "" {
 			if err := os.MkdirAll(filepath.Join(root, s.State), 0o700); err != nil {
 				return Outcome{}, err
+			}
+			if s.BundlePath != "" {
+				bundle, err := os.ReadFile(s.BundlePath)
+				if err != nil {
+					return Outcome{}, err
+				}
+				if record.Sum(bundle) != s.BundleSHA256 {
+					return Outcome{}, errors.New("registered procedure bundle changed")
+				}
+				binary, err := os.ReadFile(s.Path)
+				if err != nil {
+					return Outcome{}, err
+				}
+				if record.Sum(binary) != s.SHA256 {
+					return Outcome{}, errors.New("registered installer binary changed")
+				}
+				cmd := exec.Command(s.Path, "install-bundle", filepath.Join(root, s.State), s.BundlePath)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return Outcome{}, fmt.Errorf("provision %s: %w: %s", s.State, err, out)
+				}
 			}
 		}
 	}

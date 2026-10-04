@@ -103,6 +103,7 @@ OS, the tree or the network.
 | [`provider`](codex/provider/) | Launches each Codex process under its Seatbelt profile, with an allowlisted egress proxy (Python) |
 | [`fake`](codex/fake/) | A deterministic fake app-server, for the demo and tests |
 | [`adapter`](codex/adapter/) | Legacy Codex adapter, retained for the demo and earlier tests |
+| [`proceduretools`](codex/proceduretools/) | Pure procedure discovery, model-call argument translation and schema projection shared by both Codex transports |
 
 **[`interp/`](interp/): the interpreter, an actor, its own module (next/32)**
 
@@ -113,6 +114,13 @@ OS, the tree or the network.
 | [`remember`](interp/remember/) | Compiles a strand into procedures: each continuation's control into nodes, round after round; bindings by provenance (the input, then what earlier calls returned; the rest constants); a frame whose return the model authored stays a call to it. `remember`'s body, embedded in the binary: `strand`, compile, then `extend-reach` per contract, refusing a second representation before anything is stored |
 | [`refine`](interp/refine/) | Refinements in CEL (`cel.dev/cel-go`, this module's only dependency): a fixed environment (`input`, `input_type`, `returns`, `types`), pure functions, no `map` or `filter`, a cost bounded by CEL's estimator, and no error on its own strand, even one `&&` or `||` absorbed |
 | [`types`](interp/types/) | Base types, moved from the kernel: shapes, contents, presentations. Nothing is typed unless it is remembered |
+
+The staged [conversation reconstruction bundle](interp/workflows/conversations/)
+adds authored procedures, accepted-frontier checkpoints and bounded multi-leaf
+history reads for proposal 33. Registry entries may specify a pinned `bundle`
+for a stateful continuation; boot installs it before genesis and publishes
+its contracts together. Production conversation and client routing remain
+on the existing path; the bundle README records the remaining migration.
 
 **[`hosts/`](hosts/): the only long-lived processes, outside the step**
 

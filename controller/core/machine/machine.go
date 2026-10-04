@@ -196,10 +196,13 @@ type Settle struct{ Result string }         // discharge this instance's frame's
 type GatherWaiter struct{}                  // read the waiting frame's rounds, then wait for Settled
 type TryClaim struct{ Round, Stamp string } // the fan-in claim on the waiting frame, then wait for Claimed
 type ReadStrand struct {                    // walk the tree from an observation up to the invoke made through a contract, then wait for StrandRead
-	Observation string
-	Target      string
-	Schema      *contract.Schema
-	Origin      string // the requester's Horizon: the walk stays inside it
+	Observation  string
+	Invocation   string // tree mode: retained root, with a nonempty accepted frontier
+	Observations []string
+	Target       string
+	Schema       *contract.Schema
+	Origin       string // the requester's Horizon: the walk stays inside it
+	Room         string // the enclosing genesis; different boots are not one Horizon
 }
 type Pop struct{}  // drop the discharged frame: the resumed continuation holds the rest
 type Park struct { // hand this instance, its payload and its frame stack to an actor host, then wait for Parked

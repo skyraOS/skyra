@@ -1,0 +1,47 @@
+{
+  "type": "snapshot",
+  "uiIncarnation": "webhost-example",
+  "revision": 12,
+  "conversations": [
+    {
+      "conversation": "c-example",
+      "phase": "ready",
+      "entries": [
+        {
+          "role": "user",
+          "text": "Hello",
+          "ts": 0,
+          "requestId": "r-example"
+        },
+        {
+          "role": "call",
+          "text": "echo Hello",
+          "ts": 1,
+          "requestId": "r-example",
+          "call": {
+            "to": "echo",
+            "arg": "Hello",
+            "state": "returned",
+            "result": "Hello",
+            "stamp": "example-invoke-stamp"
+          }
+        },
+        {
+          "role": "agent",
+          "text": "Hello",
+          "ts": 2,
+          "requestId": "r-example"
+        }
+      ],
+      "pendingRequestId": null,
+      "horizons": []
+    }
+  ],
+  "requests": [
+    {
+      "requestId": "r-example",
+      "status": "returned",
+      "ts": 2
+    }
+  ]
+}

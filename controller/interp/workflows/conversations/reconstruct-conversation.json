@@ -1,0 +1,114 @@
+{
+  "contract": {
+    "title": "reconstruct-conversation",
+    "type": "object",
+    "required": [
+      "reconstruct-conversation"
+    ],
+    "fields": {
+      "reconstruct-conversation": {
+        "type": "object",
+        "required": [
+          "conversation",
+          "availability"
+        ],
+        "fields": {
+          "conversation": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "any"
+          }
+        }
+      }
+    }
+  },
+  "order": [
+    "checkpoint",
+    "strand",
+    "view"
+  ],
+  "nodes": {
+    "checkpoint": {
+      "call": "user",
+      "in": {
+        "read-checkpoint": {
+          "conversation": {
+            "$": [
+              "input",
+              "reconstruct-conversation",
+              "conversation"
+            ]
+          }
+        }
+      }
+    },
+    "strand": {
+      "call": "system",
+      "after": [
+        "checkpoint"
+      ],
+      "in": {
+        "strand": {
+          "invocation": {
+            "$": [
+              "checkpoint",
+              "root_invocation"
+            ]
+          },
+          "observations": {
+            "$": [
+              "checkpoint",
+              "leaves"
+            ]
+          },
+          "contract": {
+            "$": [
+              "checkpoint",
+              "contract"
+            ]
+          }
+        }
+      }
+    },
+    "view": {
+      "call": "user",
+      "after": [
+        "strand"
+      ],
+      "in": {
+        "project-state": {
+          "conversation": {
+            "$": [
+              "input",
+              "reconstruct-conversation",
+              "conversation"
+            ]
+          },
+          "availability": {
+            "$": [
+              "input",
+              "reconstruct-conversation",
+              "availability"
+            ]
+          },
+          "checkpoint": {
+            "$": [
+              "checkpoint"
+            ]
+          },
+          "strand": {
+            "$": [
+              "strand"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "return": {
+    "$": [
+      "view"
+    ]
+  }
+}

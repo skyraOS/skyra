@@ -1,0 +1,72 @@
+{
+  "input": {
+    "title": "reconstruct-conversation",
+    "type": "object",
+    "required": [
+      "reconstruct-conversation"
+    ],
+    "fields": {
+      "reconstruct-conversation": {
+        "type": "object",
+        "required": [
+          "conversation",
+          "availability"
+        ],
+        "fields": {
+          "conversation": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "any"
+          }
+        }
+      }
+    }
+  },
+  "contracts": [
+    {
+      "title": "reconstruct-state",
+      "type": "object",
+      "required": [
+        "reconstruct-state"
+      ],
+      "fields": {
+        "reconstruct-state": {
+          "type": "object",
+          "required": [
+            "uiIncarnation",
+            "revision",
+            "conversations"
+          ],
+          "fields": {
+            "uiIncarnation": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "number"
+            },
+            "conversations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "conversation",
+                  "availability"
+                ],
+                "fields": {
+                  "conversation": {
+                    "type": "string"
+                  },
+                  "availability": {
+                    "type": "any"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "continuation": true
+}

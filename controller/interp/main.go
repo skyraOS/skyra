@@ -48,7 +48,9 @@ type envelope struct {
 
 func main() {
 	var err error
-	if len(os.Args) == 4 && os.Args[1] == "install" {
+	if len(os.Args) == 4 && os.Args[1] == "install-bundle" {
+		err = installBundle(os.Args[2], os.Args[3])
+	} else if len(os.Args) == 4 && os.Args[1] == "install" {
 		err = install(os.Args[2], os.Args[3])
 	} else {
 		var out []byte

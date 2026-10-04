@@ -13,6 +13,24 @@ code changes where the document owns them, and edits to the document where
 the new design supersedes it. This page is the complete list, each change
 once, with an id the per-document proposals refer to.
 
+New implementation proposals:
+
+- [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
+  list, load, create, send, close, delete and refresh enter through the
+  interpreter; Codex exports the underlying operations. Includes the code
+  migration, workflow-control additions and state/custody boundaries.
+  A conversation is its enclosing invocation; Horizon strand reads rebuild
+  its state from retained root-invocation/accepted-leaf-set checkpoints,
+  without a separate conversation database.
+  The user adapter retains that checkpoint and calls the Horizon syscall;
+  interpreter procedures compose future work, not state reconstruction.
+  Caching is deferred.
+  Proposed (2026-10-03).
+- [34 — Actor constellations](34-actor-constellations-proposal.md): actors
+  drawn as constellations of their input contracts; application actions
+  select interpreter procedures and reconstructed state matches the app's
+  full snapshot input. Aligned with 33. Proposed (2026-10-03).
+
 ## The design in one paragraph
 
 Authority is derived from state plus proposal at every step. A Horizon is an

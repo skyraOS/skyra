@@ -28,7 +28,7 @@ import (
 
 // Init creates the tree's directories.
 func Init(root string) error {
-	for _, d := range []string{"records", "inputs", "horizons", "frames"} {
+	for _, d := range []string{"records", "inputs", "horizons", "frames", "acceptances"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return err
 		}

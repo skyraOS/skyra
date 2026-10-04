@@ -1,8 +1,115 @@
 {
   "input": {
     "type": "object",
-    "required": ["conversation"],
-    "fields": {"conversation": {"type": "string"}}
+    "required": [
+      "conversation"
+    ],
+    "fields": {
+      "conversation": {
+        "type": "string"
+      }
+    }
   },
-  "continuation": true
+  "continuation": true,
+  "contracts": [
+    {
+      "title": "read-checkpoint",
+      "type": "object",
+      "required": [
+        "read-checkpoint"
+      ],
+      "fields": {
+        "read-checkpoint": {
+          "type": "object",
+          "required": [
+            "conversation"
+          ],
+          "fields": {
+            "conversation": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "project-state",
+      "type": "object",
+      "required": [
+        "project-state"
+      ],
+      "fields": {
+        "project-state": {
+          "type": "object",
+          "required": [
+            "conversation",
+            "availability",
+            "checkpoint",
+            "strand"
+          ],
+          "fields": {
+            "conversation": {
+              "type": "string"
+            },
+            "availability": {
+              "type": "object",
+              "required": [
+                "input_live",
+                "turn_live",
+                "recovery_required"
+              ],
+              "fields": {
+                "input_live": {
+                  "type": "bool"
+                },
+                "turn_live": {
+                  "type": "bool"
+                },
+                "recovery_required": {
+                  "type": "bool"
+                }
+              }
+            },
+            "checkpoint": {
+              "type": "any"
+            },
+            "strand": {
+              "type": "any"
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "project-app-state",
+      "type": "object",
+      "required": [
+        "project-app-state"
+      ],
+      "fields": {
+        "project-app-state": {
+          "type": "object",
+          "required": [
+            "uiIncarnation",
+            "revision",
+            "views"
+          ],
+          "fields": {
+            "uiIncarnation": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "number"
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "any"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

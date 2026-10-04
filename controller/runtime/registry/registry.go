@@ -38,7 +38,8 @@ type Entry struct {
 	ResidentProfile    string            `json:"resident_profile,omitempty"`
 	ProxyHosts         []string          `json:"proxy_hosts,omitempty"`
 	ProxyPath          string            `json:"proxy_path,omitempty"`
-	State              bool              `json:"state,omitempty"` // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	State              bool              `json:"state,omitempty"`  // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle             string            `json:"bundle,omitempty"` // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -80,6 +81,47 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			if err := c.Check(); err != nil {
 				return nil, room, fmt.Errorf("%s contract %d: %w", name, i+1, err)
 			}
+		}
+		var bundlePath, bundleSHA string
+		if e.Bundle != "" {
+			if !e.State || !d.Continuation || e.Host != "" || e.Resident || e.Connection {
+				return nil, room, fmt.Errorf("%s: a bundle needs a stateful continuation", name)
+			}
+			var err error
+			bundlePath, err = filepath.Abs(resolve(dir, e.Bundle))
+			if err != nil {
+				return nil, room, err
+			}
+			bundlePath, err = filepath.EvalSymlinks(bundlePath)
+			if err != nil {
+				return nil, room, err
+			}
+			b, err := os.ReadFile(bundlePath)
+			if err != nil {
+				return nil, room, err
+			}
+			var bundle struct {
+				Version    int
+				Procedures []struct{ Contract *contract.Schema }
+			}
+			if err := json.Unmarshal(b, &bundle); err != nil {
+				return nil, room, err
+			}
+			if bundle.Version != 1 || len(bundle.Procedures) == 0 {
+				return nil, room, fmt.Errorf("%s: invalid procedure bundle", name)
+			}
+			for _, p := range bundle.Procedures {
+				if err := p.Contract.Check(); err != nil {
+					return nil, room, err
+				}
+				for _, held := range append([]*contract.Schema{d.Input}, d.Contracts...) {
+					if string(contract.Canonical(held)) == string(contract.Canonical(p.Contract)) {
+						return nil, room, fmt.Errorf("%s: bundle repeats a declared contract", name)
+					}
+				}
+				d.Contracts = append(d.Contracts, p.Contract)
+			}
+			bundleSHA = record.Sum(b)
 		}
 		if e.Host != "" {
 			if e.Path != "" || e.Resident || e.Connection || len(e.Args) > 0 || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
@@ -150,7 +192,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			state = name
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state}
+		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
 	return reach, room, nil
 }

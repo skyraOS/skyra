@@ -290,3 +290,38 @@ func TestStrandIsReadThenReturned(t *testing.T) {
 		t.Fatalf("only a refusal exactly as the runtime writes it carries a kind: %+v", forged.Fault)
 	}
 }
+
+func TestStrandReconstructionForms(t *testing.T) {
+	h := room()
+	anchor := strings.Repeat("ab", 32)
+	leaf := strings.Repeat("cd", 32)
+	schema := `{"type":"object","required":["text"],"fields":{"text":{"type":"string"}}}`
+	contract := `"contract":{"target":"agent","schema":` + schema + `}`
+	cases := []struct {
+		args  string
+		valid bool
+	}{
+		{`"observation":"` + leaf + `",` + contract, true},
+		{`"invocation":"` + anchor + `","observations":["` + anchor + `"],` + contract, true},
+		{`"invocation":"` + anchor + `","observations":["` + leaf + `","` + anchor + `"],` + contract, true},
+		{contract, false},
+		{`"invocation":"` + anchor + `",` + contract, false},
+		{`"observations":["` + leaf + `"],` + contract, false},
+		{`"invocation":"` + anchor + `","observations":[],` + contract, false},
+		{`"observation":"` + leaf + `","invocation":"` + anchor + `","observations":["` + leaf + `"],` + contract, false},
+		{`"observation":"` + leaf + `","observations":[],` + contract, false},
+		{`"invocation":"bad","observations":["` + leaf + `"],` + contract, false},
+		{`"invocation":"` + anchor + `","observations":["bad"],` + contract, false},
+	}
+	for _, c := range cases {
+		r := intakeRecord(h, `{"to":"system","payload":{"strand":{`+c.args+`}}}`)
+		if (r.State == record.Invoke) != c.valid {
+			t.Errorf("%s: %+v", c.args, r)
+		}
+	}
+	args := json.RawMessage(`{"invocation":"` + anchor + `","observations":["` + leaf + `"],` + contract + `}`)
+	read, err := stranding(h, args)
+	if err != nil || read.Invocation != anchor || !reflect.DeepEqual(read.Observations, []string{leaf}) || read.Room != h.Frame {
+		t.Fatalf("tree effect: %+v %v", read, err)
+	}
+}
