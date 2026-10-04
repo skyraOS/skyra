@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Tailscale for the site's Funnel, as the login user and without root:
+     userspace networking, its state and socket under ~/site/tailscale.
+     install.sh fills in HOME. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>com.skyra.tailscaled</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/tailscaled</string>
+		<string>--tun=userspace-networking</string>
+		<string>--statedir=HOME/site/tailscale</string>
+		<string>--socket=HOME/site/tailscale/tailscaled.sock</string>
+	</array>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key><true/>
+	<key>StandardErrorPath</key><string>HOME/site/tailscale/tailscaled.log</string>
+</dict>
+</plist>

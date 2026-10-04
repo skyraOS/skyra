@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyra · Michael Scanlon</title>
+<meta name="description" content="The problem Skyra answers, its three invariants, how a step works, and where it is.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="mark" href="index.html">Michael Scanlon · <b>SKY-001</b></a>
+    <nav aria-label="Pages">
+      <a href="index.html">Home</a>
+      <a href="skyra.html" aria-current="page">Skyra</a>
+      <a href="verify.html">Verify a run</a>
+      <a href="writing.html">Writing</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <span class="section">Section A · The problem</span>
+      <h1>Approval fatigue is the failure.</h1>
+      <p class="lede">
+        Coding agents ask before they act: allow this command, this tool, this
+        file? Each prompt is cheap. Together they teach people to stop reading
+        and click yes, and then to switch on full-auto, which trades the prompts
+        for ambient authority: a shell, the whole workspace and the network,
+        inside a sandbox the agent <em>reports</em> about itself.
+      </p>
+      <p>
+        Self-extension makes it worse. An agent that writes its own tools produces
+        a stream of new code, and each piece wants its own approval. Skyra moves
+        the approval: the person grants a <strong>Horizon</strong> once, and
+        everything inside it runs without asking, including tools the agent
+        builds for itself, because nothing can be created with more authority
+        than its creator holds and the OS enforces the boundary on every call.
+        Asking is kept for the one case that needs a person: reaching past the Horizon.
+      </p>
+    </section>
+
+    <section aria-labelledby="inv">
+      <span class="section">Section B · Invariants</span>
+      <h2 id="inv">Three invariants.</h2>
+      <div class="cols">
+        <div class="box">
+          <span class="num">01</span>
+          <h3>The emitter is never the checker.</h3>
+          <p>Whatever a model or tool outputs is untrusted bytes. A different process interprets and commits it before anything acts on it. Nothing an agent emits puts the system into a state by saying so.</p>
+        </div>
+        <div class="box">
+          <span class="num">02</span>
+          <h3>Authority only narrows, and the OS enforces it.</h3>
+          <p>Every step runs under a Horizon. A call shares its caller's unless it asks the room to narrow it; nothing widens one. The macOS sandbox profile is generated from the Horizon, and the runtime's own state is always denied.</p>
+        </div>
+        <div class="box">
+          <span class="num">03</span>
+          <h3>Truth is derived, not stored.</h3>
+          <p>Only observations are stored: the bytes received, what a target emitted. Everything else is re-derived by one pure function, so replaying the chain from genesis is the definition of correctness.</p>
+        </div>
+      </div>
+      <div class="dim" aria-hidden="true"><i></i><span>Enforced by the OS · detected · derived</span></div>
+    </section>
+
+    <section aria-labelledby="step">
+      <span class="section">Section C · A step</span>
+      <h2 id="step">One process per step, then it exits.</h2>
+      <p>
+        There is no long-running server. One <code>skyra</code> binary runs once
+        per step. All durable state is a content-addressed, hash-chained record
+        tree. A crash before the write means nothing happened; after it, the intent
+        is recorded and is faulted or resumed on restore. There is never live state
+        to recover, only the tree.
+      </p>
+      <div class="box">
+<pre>INTAKE    receive unchecked bytes, derive the state, commit a record, reply with its stamp
+RELEASE   the parent checks the record hashes to the stamp, derives the child's Horizon,
+          and passes it with the frame stack as directory fds over a Unix socket
+EXECUTE   run the target under a Seatbelt profile rendered from that Horizon
+HANDOFF   spawn a successor with the raw output; exit once it has stamped
+SETTLE    a return or fault discharges the slot it answers, once
+GATHER    when every slot a continuation opened is discharged, commit a resolve
+CLAIM     and exactly one sibling resumes that continuation</pre>
+      </div>
+      <p style="margin-top:24px">
+        Every decision lives in one pure function,
+        <code>machine.Step(state, event) → (state, effects)</code>, and a test fails
+        if it imports anything that touches the OS. No target ever says
+        <em>invoke</em>, <em>return</em> or <em>fault</em>: it prints operands, and
+        the runtime derives the state from where the emitter stands.
+      </p>
+    </section>
+
+    <section aria-labelledby="status">
+      <span class="section">Section D · Status</span>
+      <h2 id="status">Where it is.</h2>
+      <p>Kept to what is true today. Enforced means the OS stops it; detected means it is caught and recorded after the fact.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Part</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Step protocol, custody handoff, content-addressed records</td><td class="status">built</td></tr>
+            <tr><td>One authority per Horizon; narrowing through <code>system.narrow</code>; sandbox rendered from the Horizon; <code>.skyra/</code> denied</td><td class="status">built · enforced</td></tr>
+            <tr><td>Replay re-derives every record from genesis, faults and resolves included</td><td class="status">built</td></tr>
+            <tr><td>Types computed by the runtime; routes written by models at a novelty interrupt</td><td class="status">built</td></tr>
+            <tr><td>Real Codex through a stateless adapter, under Seatbelt</td><td class="status">built</td></tr>
+            <tr><td>Codex's native command execution</td><td class="status">detected · interrupts the turn</td></tr>
+            <tr><td>A route runs with no more authority than it was written with</td><td class="status">not built · next</td></tr>
+            <tr><td>Self-extension: an agent registers a tool it wrote and runs it with no approval</td><td class="status">not built</td></tr>
+            <tr><td>Evaluation against Codex's own approval modes</td><td class="status">planned · Nov–Dec</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="title-block" aria-label="Title block">
+    <div>Dwg no.</div><div>SKY-001</div>
+    <div>Sheet</div><div>2 of 5 · Skyra</div>
+    <div>Code</div><div>Go, standard library only</div>
+    <div>Drawn by</div><div>Michael Scanlon</div>
+  </div>
+</div>
+</body>
+</html>

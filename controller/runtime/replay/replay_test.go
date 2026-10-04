@@ -198,3 +198,39 @@ func TestReplayCatchesForgedResolve(t *testing.T) {
 		t.Fatalf("replay accepted a resolve of a frame that was not waiting: %v", err)
 	}
 }
+
+// memory is a lineage handed over whole, as the website hands it to the browser.
+type memory map[string][]byte
+
+func (m memory) Get(kind, h string) ([]byte, error) {
+	b, ok := m[kind+"/"+h]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return b, nil
+}
+
+func TestLineageReplaysAStoreInMemory(t *testing.T) {
+	root := t.TempDir()
+	head := buildLineage(t, root)
+	m := memory{}
+	for _, kind := range []string{"records", "inputs"} {
+		entries, _ := os.ReadDir(filepath.Join(root, kind))
+		for _, e := range entries {
+			b, _ := os.ReadFile(filepath.Join(root, kind, e.Name()))
+			m[kind+"/"+e.Name()] = b
+		}
+	}
+	if n, err := Lineage(m, head); err != nil || n != 3 {
+		t.Fatalf("lineage = %d, %v; want 3 records, no error", n, err)
+	}
+
+	// One byte changed in a stored input: it no longer hashes to its name.
+	r, _ := tree.Load(root, head)
+	in := append([]byte(nil), m["inputs/"+r.Input]...)
+	in[len(in)-2] ^= 1
+	m["inputs/"+r.Input] = in
+	if _, err := Lineage(m, head); err == nil || !strings.Contains(err.Error(), "does not hash to its name") {
+		t.Fatalf("lineage accepted a changed input: %v", err)
+	}
+}

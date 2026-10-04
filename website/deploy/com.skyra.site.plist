@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The site's Caddy, kept running by launchd. deploy.sh fills in HOME. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>com.skyra.site</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/caddy</string>
+		<string>run</string>
+		<string>--config</string><string>HOME/site/Caddyfile</string>
+		<string>--adapter</string><string>caddyfile</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>SITE_ROOT</key><string>HOME/site/www</string>
+		<key>SITE_LOG</key><string>HOME/site/access.log</string>
+	</dict>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key><true/>
+	<key>StandardErrorPath</key><string>HOME/site/caddy.log</string>
+</dict>
+</plist>

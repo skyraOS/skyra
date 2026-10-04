@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify a Run · Skyra</title>
+<meta name="description" content="Replay a recorded Skyra run in your browser with the controller's own replay, compiled to WebAssembly. Then change one byte and watch the check fail.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+  .runs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; }
+  .note { min-height: 3.1em; }
+  .detail { margin-top: 24px; display: grid; gap: 16px; }
+  .detail[hidden] { display: none; }
+  .bytes { display: grid; gap: 6px; }
+  .bytes .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+  .bytes textarea {
+    width: 100%;
+    min-height: 92px;
+    resize: vertical;
+    padding: 10px 12px;
+    font: 400 13px/1.55 var(--mono);
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 0;
+  }
+  .bytes textarea[data-changed="true"] { border-color: var(--fault); }
+  .hash-ok { color: var(--line); }
+  .hash-bad { color: var(--fault); }
+  .verdict { font: 500 14px/1.5 var(--mono); color: var(--ink); margin: 14px 0 0; max-width: none; overflow-wrap: anywhere; }
+  .verdict.bad { color: var(--fault); }
+  #status { font: 400 13px/1.4 var(--mono); color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="mark" href="index.html">Michael Scanlon · <b>SKY-001</b></a>
+    <nav aria-label="Pages">
+      <a href="index.html">Home</a>
+      <a href="skyra.html">Skyra</a>
+      <a href="verify.html" aria-current="page">Verify a run</a>
+      <a href="writing.html">Writing</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <span class="section">Section A · Verify</span>
+      <h1>Replay a run yourself.</h1>
+      <p class="lede">
+        This page loads a recorded run and re-derives every record in your
+        browser with <code>machine.Step</code>, the same function that committed
+        them on the Mac, compiled to WebAssembly. Each record must hash to the
+        stamp it is stored under and be exactly what the step derives from its
+        input. Then change one byte and watch the check fail.
+      </p>
+      <p id="status" role="status">Loading replay (about 3.7 MB)…</p>
+    </section>
+
+    <section aria-labelledby="run-title">
+      <span class="section">Section B · The run</span>
+      <div class="runs" id="runs" role="group" aria-label="Recorded runs"></div>
+      <h2 id="run-title">&nbsp;</h2>
+      <p class="note" id="run-note"></p>
+
+      <ol class="strip" id="strip" aria-label="Records, genesis first. Select one to see its bytes."></ol>
+      <p class="verdict" id="verdict" aria-live="polite"></p>
+
+      <div class="actions">
+        <button class="btn primary" id="replay" disabled>Replay</button>
+        <button class="btn" id="flip" disabled>Change one byte</button>
+        <button class="btn" id="reset" disabled>Restore the run</button>
+      </div>
+
+      <div class="detail" id="detail" hidden>
+        <div class="dim" aria-hidden="true"><i></i><span id="detail-dim">Record</span></div>
+        <div class="bytes">
+          <div class="row"><span class="label">The record, stored under its stamp</span><span class="mono" id="rec-hash"></span></div>
+          <textarea id="rec-bytes" spellcheck="false" aria-label="The record's stored bytes"></textarea>
+        </div>
+        <div class="bytes" id="input-wrap">
+          <div class="row"><span class="label">The input it was derived from</span><span class="mono" id="in-hash"></span></div>
+          <textarea id="in-bytes" spellcheck="false" aria-label="The input's stored bytes"></textarea>
+        </div>
+        <p class="mono" style="font-size:13px;max-width:none">Edit either one: the run is replayed again as you type.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="proves">
+      <span class="section">Section C · What the hash proves</span>
+      <h2 id="proves">Integrity, not provenance.</h2>
+      <div class="cols">
+        <div class="box">
+          <span class="num">Proves</span>
+          <p>
+            Each record stores its predecessor's stamp and the hash of the exact
+            bytes it observed, so the head hash commits to every record and every
+            input before it. If replay reaches the head, nothing was changed, and
+            every state was derived by this function from these observations.
+          </p>
+        </div>
+        <div class="box">
+          <span class="num">Does not prove</span>
+          <p>
+            That the observations came from a real model. A consistent chain can
+            be built offline. These runs use a deterministic fake Codex app-server,
+            and say so. Each head hash is published in the repository when its run
+            is recorded, which shows the record existed then and was not edited later.
+          </p>
+        </div>
+      </div>
+      <p style="margin-top:24px">
+        What runs here is <code>controller/runtime/replay</code> and
+        <code>controller/core</code>, built with <code>GOOS=js GOARCH=wasm</code>.
+        Nothing is checked on a server. The bundles are in
+        <a href="runs/index.json"><code>runs/</code></a>; open one and read it.
+      </p>
+    </section>
+  </main>
+
+  <div class="title-block" aria-label="Title block">
+    <div>Dwg no.</div><div id="tb-dwg">SKY-001</div>
+    <div>Sheet</div><div>3 of 5 · Verify</div>
+    <div>Run</div><div id="tb-run">–</div>
+    <div>Recorded</div><div id="tb-recorded">–</div>
+    <div>Replay</div><div id="tb-replay">–</div>
+    <div>Drawn by</div><div>Michael Scanlon</div>
+    <div>Head</div><div class="head" id="tb-head">–</div>
+  </div>
+</div>
+<script src="assets/wasm_exec.js"></script>
+<script src="assets/verify.js"></script>
+</body>
+</html>

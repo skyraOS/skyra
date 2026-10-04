@@ -1,3 +1,5 @@
+//go:build !js
+
 package replay
 
 import (
@@ -48,7 +50,7 @@ func refusal(format string, args ...any) error { return refused(fmt.Sprintf(form
 // the way is re-derived from genesis, as replay does; records are immutable,
 // so the same walk gives the same strand.
 func ReadStrand(root, observation, target string, schema *contract.Schema, origin string) (Strand, error) {
-	w := walker{root: root, seen: map[string]horizon.Horizon{}}
+	w := walker{s: dir(root), seen: map[string]horizon.Horizon{}}
 	st := Strand{Records: map[string]record.Record{}, Opaque: map[string]string{}}
 
 	// frame is the Horizon of the frame a record belongs to: the one an

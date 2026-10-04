@@ -1,0 +1,28 @@
+# The static site on the Mac mini. Caddy serves only the published files in
+# $SITE_ROOT, on loopback: whatever puts it on the internet (a tunnel) ends TLS
+# and connects here. There is no admin API.
+{
+	admin off
+	auto_https off
+}
+
+http://:8080 {
+	bind 127.0.0.1
+	root * {$SITE_ROOT}
+	encode zstd gzip
+	file_server
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+	# A run is re-recorded under the same name; always check for a new one.
+	@runs path /runs/*
+	header @runs Cache-Control "no-cache"
+
+	log {
+		output file {$SITE_LOG}
+	}
+}

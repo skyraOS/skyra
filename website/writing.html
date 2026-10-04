@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Writing · Skyra</title>
+<meta name="description" content="Design notes behind Skyra: why it exists, the research question, and how the runtime was reasoned out.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="mark" href="index.html">Michael Scanlon · <b>SKY-001</b></a>
+    <nav aria-label="Pages">
+      <a href="index.html">Home</a>
+      <a href="skyra.html">Skyra</a>
+      <a href="verify.html">Verify a run</a>
+      <a href="writing.html" aria-current="page">Writing</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <span class="section">Section A · Writing</span>
+      <h1>The reasoning, written down.</h1>
+      <p class="lede">Skyra was designed one note at a time. The notes live in the repository, which is private for now; these are the ones worth reading first. <a href="mailto:mjr.scanlon@gmail.com">Ask</a> and I will send any of them.</p>
+    </section>
+
+    <section aria-labelledby="start">
+      <span class="section">Section B · Start here</span>
+      <h2 id="start">Why it exists.</h2>
+      <ul class="list">
+        <li><strong>Grips and invariants</strong><p>The six pains that drove the design, and the invariants they force.</p></li>
+        <li><strong>The research question</strong><p>Can approval move from every action to one grant, while matching a conventional runtime on cost and success and containing strictly more? The metrics, the baseline, the plan.</p></li>
+        <li><strong>Where the project is</strong><p>Properties, patterns, and what runs today.</p></li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="notes">
+      <span class="section">Section C · Design notes</span>
+      <h2 id="notes">How it was reasoned out.</h2>
+      <ul class="list">
+        <li><strong>The room</strong><p>Authority derived from state and proposal. A Horizon is an execution context, shared unless narrowed; faults climb to whoever can grant.</p></li>
+        <li><strong>A Horizon is a process</strong><p>The Horizon is the process; OS processes are its workers.</p></li>
+        <li><strong>Types by origin, and routes</strong><p>The runtime computes types; models write routes once per kind of return, at a novelty interrupt.</p></li>
+        <li><strong>Crossing the boundary</strong><p>The questions every new crossing of the trusted boundary has to answer.</p></li>
+        <li><strong>The sky dreams</strong><p>The desktop sky as a projection of the record tree: every pixel derived from a record.</p></li>
+        <li><strong>The controller, package by package</strong><p>Every design decision mapped to the line that implements it.</p></li>
+      </ul>
+    </section>
+  </main>
+
+  <div class="title-block" aria-label="Title block">
+    <div>Dwg no.</div><div>SKY-001</div>
+    <div>Sheet</div><div>4 of 5 · Writing</div>
+    <div>Drawn by</div><div>Michael Scanlon</div>
+  </div>
+</div>
+</body>
+</html>

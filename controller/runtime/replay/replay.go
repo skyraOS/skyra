@@ -21,44 +21,69 @@ import (
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
-	"skyra/controller/runtime/tree"
 )
 
-// Replay walks from head back to genesis, then forward, and returns the
-// number of records re-derived: the chain, and every sibling a resolve names.
-func Replay(root, head string) (int, error) {
-	w := walker{root: root, seen: map[string]horizon.Horizon{}}
+// Store is where replay reads a lineage from: the tree on disk (Replay), or
+// bytes handed over whole, as the website does in a visitor's browser. A
+// store is not trusted: everything read from one must hash to its name.
+type Store interface {
+	Get(kind, hash string) ([]byte, error)
+}
+
+// Lineage is Replay over any store: it walks from head back to genesis, then
+// forward, and returns the number of records re-derived: the chain, and every
+// sibling a resolve names.
+func Lineage(s Store, head string) (int, error) {
+	w := walker{s: s, seen: map[string]horizon.Horizon{}}
 	if _, err := w.at(head); err != nil {
 		return 0, err
 	}
 	return len(w.seen), nil
 }
 
-// HorizonAt derives, from the tree alone, the Horizon the record at stamp
-// released: the one whatever it runs, or whatever is emitted under it, runs
-// under. Every record on the way is re-derived, as Replay does. Authority is
-// never taken from anyone who holds the work (next/24, next/20 finding 1).
-func HorizonAt(root, stamp string) (horizon.Horizon, error) {
-	w := walker{root: root, seen: map[string]horizon.Horizon{}}
-	return w.at(stamp)
-}
-
 // Walker re-derives Horizons for many records, each record once: for a
 // reader that asks about a whole tree (skyra metric).
 type Walker struct{ w walker }
 
-// NewWalker is a Walker over a tree.
-func NewWalker(root string) *Walker {
-	return &Walker{walker{root: root, seen: map[string]horizon.Horizon{}}}
-}
-
 // At is the Horizon the record at stamp released, as HorizonAt.
 func (w *Walker) At(stamp string) (horizon.Horizon, error) { return w.w.at(stamp) }
+
+// get reads kind/h from the store and checks that it hashes to its name.
+func get(s Store, kind, h string) ([]byte, error) {
+	b, err := s.Get(kind, h)
+	if err != nil {
+		return nil, err
+	}
+	if record.Sum(b) != h {
+		return nil, fmt.Errorf("%s/%s does not hash to its name", kind, record.Short(h))
+	}
+	return b, nil
+}
+
+func load(s Store, stamp string) (record.Record, error) {
+	b, err := get(s, "records", stamp)
+	if err != nil {
+		return record.Record{}, err
+	}
+	var r record.Record
+	return r, json.Unmarshal(b, &r)
+}
+
+// released reports whether a Horizon was committed: the release a parent
+// committed for a child.
+func released(s Store, h horizon.Horizon) bool {
+	b, err := json.Marshal(h)
+	if err != nil {
+		return false
+	}
+	_, err = get(s, "horizons", record.Sum(b))
+	return err == nil
+}
 
 // walker re-derives records, each once: seen holds the Horizon each record
 // released, so siblings that share a chain share its re-derivation.
 type walker struct {
-	root string
+	s    Store
 	seen map[string]horizon.Horizon
 }
 
@@ -72,7 +97,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		if _, done := w.seen[s]; done {
 			break
 		}
-		r, err := tree.Load(w.root, s)
+		r, err := load(w.s, s)
 		if err != nil {
 			return none, err
 		}
@@ -83,7 +108,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 	if s != "" {
 		h = w.seen[s]
 	} else {
-		g, err := tree.Load(w.root, chain[0])
+		g, err := load(w.s, chain[0])
 		if err != nil {
 			return none, err
 		}
@@ -98,11 +123,11 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		chain = chain[1:]
 	}
 	for _, stamp := range chain {
-		rec, err := tree.Load(w.root, stamp)
+		rec, err := load(w.s, stamp)
 		if err != nil {
 			return none, err
 		}
-		in, err := tree.Get(w.root, "inputs", rec.Input)
+		in, err := get(w.s, "inputs", rec.Input)
 		if err != nil {
 			return none, err
 		}
@@ -167,7 +192,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 			// a slot of its own. The release its parent committed says which
 			// it was.
 			if rec.State != record.Return {
-				if alt, _ := machine.Fanned(h, rec, stamp); tree.Released(w.root, alt) {
+				if alt, _ := machine.Fanned(h, rec, stamp); released(w.s, alt) {
 					next = alt
 				}
 			}
