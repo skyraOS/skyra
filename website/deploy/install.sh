@@ -15,7 +15,17 @@ mkdir -p "$agents"
 sed "s#HOME/#$HOME/#g" "$HOME/site/com.skyra.site.plist" > "$agents/com.skyra.site.plist"
 uid=$(id -u)
 launchctl bootout "gui/$uid/com.skyra.site" 2>/dev/null || true
-launchctl bootstrap "gui/$uid" "$agents/com.skyra.site.plist"
+# launchd can still be unloading the old service when bootout returns.
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if launchctl bootstrap "gui/$uid" "$agents/com.skyra.site.plist"; then
+    break
+  fi
+  if [ "$attempt" -eq 10 ]; then
+    echo "could not start com.skyra.site after unloading it" >&2
+    exit 1
+  fi
+  sleep 0.5
+done
 
 # Tailscale is started once and left running: restarting it on every deploy
 # would drop the Funnel's connections for nothing.
