@@ -44,10 +44,12 @@
       <span class="section">Section C · Design notes</span>
       <h2 id="notes">How it was reasoned out.</h2>
       <ul class="list">
+        <li><strong>Procedures</strong><p>Self-extension: a strand that already ran is remembered as a procedure, run by an interpreter actor the kernel never knows about. A Horizon grows only by composition.</p></li>
         <li><strong>The room</strong><p>Authority derived from state and proposal. A Horizon is an execution context, shared unless narrowed; faults climb to whoever can grant.</p></li>
         <li><strong>A Horizon is a process</strong><p>The Horizon is the process; OS processes are its workers.</p></li>
-        <li><strong>Types by origin, and routes</strong><p>The runtime computes types; models write routes once per kind of return, at a novelty interrupt.</p></li>
+        <li><strong>Types by origin, and routes</strong><p>The runtime computes types; models write routes at a novelty interrupt. Superseded by Procedures.</p></li>
         <li><strong>Crossing the boundary</strong><p>The questions every new crossing of the trusted boundary has to answer.</p></li>
+        <li><strong>The public Horizon</strong><p>Ingress from strangers, read-only: no model, no interpreter, nothing that writes.</p></li>
         <li><strong>The sky dreams</strong><p>The desktop sky as a projection of the record tree: every pixel derived from a record.</p></li>
         <li><strong>The controller, package by package</strong><p>Every design decision mapped to the line that implements it.</p></li>
       </ul>

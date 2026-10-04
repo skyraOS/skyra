@@ -33,6 +33,12 @@ assets/verify.js loads a bundle, calls skyraVerify, draws the strip, and lets th
                  visitor edit any record's or input's bytes and replay again
 ```
 
+The strip shows the head's predecessor chain. The verdict also counts the
+fan-out siblings re-derived at each resolve. The `remember` demo marks the
+completed procedure frame and counts the calls that finish without an agent
+step; its agent is scripted. The record ticks finish within three seconds
+(immediately when reduced motion is requested).
+
 The replay that runs in the browser is the controller's own: `replay.Lineage`
 reads through a `Store`, and on the Mac that store is the tree on disk
 (`replay.Replay`). Nothing is reimplemented in JavaScript.

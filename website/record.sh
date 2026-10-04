@@ -23,7 +23,7 @@ go build -o "$stage/bin/agent" ./targets/agent
 go build -o "$stage/bin/codex" ./codex/adapter
 go build -o "$stage/bin/host" ./hosts/actor
 go build -o "$stage/bin/fake-codex" ./codex/fake
-(cd targets/route && go build -o "$stage/bin/route" .)
+(cd interp && go build -o "$stage/bin/interp" .)
 
 sock=$stage/fake.sock
 "$stage/bin/host" -sock "$sock" -state "$(mktemp -d)" -- "$stage/bin/fake-codex" 2>/dev/null &
@@ -35,6 +35,7 @@ cat > "$stage/bin/registry.json" <<JSON
 {
   "echo":  {"path": "echo",  "contract": "$ctl/targets/echo/contract.json"},
   "agent": {"path": "agent", "contract": "$ctl/targets/agent/contract.json"},
+  "interpreter": {"path": "interp", "contract": "$ctl/interp/examples/greet-contract.json", "state": true},
   "codex": {"path": "codex", "contract": "$ctl/codex/adapter/contract.json", "connect": ["$sock"]}
 }
 JSON
@@ -61,7 +62,7 @@ run outside "A call outside the Horizon, faulted at intake" \
   -to echo -payload '{"text":"hello","misbehave":"yes"}'
 
 run probe "A probe of .skyra/ from inside, denied by the OS" \
-  "The target tries to read the runtime's own state directory. The sandbox profile generated from its Horizon always denies it; the probe's failure is in the record." \
+  "The target tries to read the runtime's own state directory. The sandbox profile generated from its Horizon denies it: an actor sees only its own state, and echo has none. The probe's failure is in the record." \
   -to echo -payload "{\"text\":\"hello\",\"probe\":\"$stage/runs/probe/.skyra\"}"
 
 run contract "A payload that breaks its contract" \
@@ -72,11 +73,15 @@ run continuation "A continuation that waits and resumes" \
   "An agent calls echo and waits. When echo's slot is discharged, a resolve record resumes the agent, which returns its own answer." \
   -to agent -payload '{"text":"hello"}'
 
+run remember "Work remembered as a procedure, run with no agent" \
+  "An agent does a task: it calls echo twice in one emission, then once more. The work is remembered: the interpreter reads the strand, compiles it, and adds the contract to itself with no approval. Called on new input, the procedure runs with no agent in its frame. From a narrowed Horizon without echo it faults at intake; the same contract is not remembered twice; input outside its refinement goes back to the agent. The agent is scripted, not a model, and says so." \
+  -to agent -payload '{"text":"remember:hello"}'
+
 # The index the Verify page lists, in this order.
 cd "$here/runs"
 printf '[' > index.json
 sep=
-for n in answered outside probe contract continuation; do
+for n in remember answered outside probe contract continuation; do
   printf '%s"%s"' "$sep" "$n" >> index.json
   sep=,
 done

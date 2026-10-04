@@ -48,10 +48,11 @@ type Step struct {
 }
 
 type result struct {
-	Head  string `json:"head"`
-	Chain []Step `json:"chain"`
-	OK    bool   `json:"ok"`    // the head replays
-	Error string `json:"error"` // why it does not, or why the chain could not be read
+	Head    string `json:"head"`
+	Chain   []Step `json:"chain"`
+	Records int    `json:"records"` // includes the siblings checked at resolves
+	OK      bool   `json:"ok"`      // the head replays
+	Error   string `json:"error"`   // why it does not, or why the chain could not be read
 }
 
 func verify(raw string) result {
@@ -96,7 +97,8 @@ func verify(raw string) result {
 	}
 	res.Chain = chain
 	if res.Error == "" {
-		_, err := replay.Lineage(o, b.Head)
+		n, err := replay.Lineage(o, b.Head)
+		res.Records = n
 		res.OK = err == nil
 		if err != nil {
 			res.Error = err.Error()

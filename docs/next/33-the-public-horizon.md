@@ -7,17 +7,17 @@ that writes.
 Date: 2026-10-02  
 Status: proposed. The static site it sits beside is built and deployed to the
 Mac mini (`website/deploy.sh`: Caddy on loopback, kept up by launchd; the
-tunnel is not chosen). Builds on [20](20-boundry-crossing.md) (the rule for a
+tunnel is Tailscale Funnel). Builds on [20](20-boundry-crossing.md) (the rule for a
 new crossing), [24](24-the-room.md) (roots, Horizons) and 16 (ingress by
-parking).
+parking), and [32](32-procedures.md) (procedures and system syscalls).
 
 ## The idea
 
 The website's live mode put Codex behind a public endpoint. That brings
 everything a public model needs: prompt injection as the normal case, a spend
-cap, F10 (a route outranking its author) closed first, and native execution
+cap, and native execution
 that is only detected. All of it goes away if the public Horizon holds **no
-model and nothing that writes**:
+model, no interpreter, and nothing that writes**:
 
 > A stranger's request is a run. It is committed under a Horizon that can only
 > read what is already published, and its records are handed back so the
@@ -41,9 +41,12 @@ in its reach leads there.
 | `roots` | reports what the Horizon can see (the existing target) | none |
 | `replay` | new: given a head in the public tree, re-derives it and returns the verdict and the bundle `website/export` writes | `read`: the public tree only |
 
-No `write`, no `codex`, no `connect`, no network. `system.narrow` stays (it
-only drops). `system.route` and `system.register` are not in reach: nothing
-here writes a route or a tool.
+No `write`, no `codex`, no interpreter, no `connect`, no network. Syscalls go
+to `system`: `{"to":"system","payload":{"narrow":{…}}}` only narrows.
+The public root exposes only that syscall's contract, not `strand` or
+`extend-reach`. No actor here remembers work or adds a contract. Every
+instruction still passes intake under the public Horizon; composition
+cannot give a procedure more authority than its caller holds.
 
 The sandbox is what enforces this; the targets check nothing. A request to read
 `~/.ssh`, `../../.skyra` or the personal tree is either a horizon fault at
@@ -101,8 +104,8 @@ free to run: no model is called.
 
 ## Open
 
-- **Tunnel:** Cloudflare (a domain of the operator's) or Tailscale Funnel (no
-  domain, a `ts.net` name).
+- **Tunnel:** the static site already uses Tailscale Funnel (a `ts.net` name);
+  public ingress would use the same tunnel and Caddy route.
 - **Is server-side `replay` worth having** when the browser replays anyway? It
   is a second opinion, and it lets a short link (`/verify?head=…`) fetch a
   bundle by head. Without it, the host returns the bundle itself and the

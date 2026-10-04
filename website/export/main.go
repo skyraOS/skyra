@@ -97,7 +97,9 @@ func run(root, head, name, title, note, recorded, out string) error {
 	return nil
 }
 
-// leaf is the one record no other record follows.
+// leaf is the one record no other record follows: not as its predecessor,
+// and not as a discharge a resolve names. With fan-out, a sibling's last
+// record is followed only by the resolve that joins its round.
 func leaf(root string) (string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, "records"))
 	if err != nil {
@@ -110,6 +112,9 @@ func leaf(root string) (string, error) {
 			return "", err
 		}
 		followed[r.Predecessor] = true
+		for _, d := range r.Deps {
+			followed[d] = true
+		}
 	}
 	var leaves []string
 	for _, e := range entries {

@@ -77,6 +77,8 @@ function draw(animate) {
   const strip = $("strip");
   strip.replaceChildren();
   const chain = result.chain || [];
+  const demo = procedureDemo();
+  $("tb-procedure").textContent = demo.metric;
   chain.forEach((s, i) => {
     const li = document.createElement("li");
     li.dataset.state = i === 0 ? "genesis" : s.state;
@@ -91,9 +93,16 @@ function draw(animate) {
     const tick = document.createElement("span");
     tick.className = "tick";
     const btn = document.createElement("button");
-    btn.setAttribute("aria-label", `Record ${i + 1}: ${s.describe}. Show its bytes.`);
+    const procedure = demo.labels.has(s.stamp);
+    btn.setAttribute("aria-label", `Record ${i + 1}: ${s.describe}.${procedure ? " Procedure: no agent step." : ""} Show its bytes.`);
     btn.addEventListener("click", () => select(i));
     li.append(state, to, stamp, tick, btn);
+    if (procedure) {
+      const label = document.createElement("span");
+      label.className = "procedure";
+      label.textContent = "procedure · no agent step";
+      li.append(label);
+    }
     if (i === selected) li.setAttribute("aria-current", "true");
     strip.append(li);
   });
@@ -109,12 +118,15 @@ function draw(animate) {
     const v = $("verdict");
     if (result.ok) {
       v.className = "verdict";
-      v.textContent = `${chain.length} records re-derived from genesis, byte-identical. Head ${result.head}.`;
+      const siblings = result.records - chain.length;
+      v.textContent = `${result.records} records re-derived from genesis, byte-identical` +
+        (siblings ? ` (${chain.length} in the head chain + ${siblings} fan-out sibling records)` : "") +
+        `. Head ${result.head}.`;
     } else {
       v.className = "verdict bad";
       v.textContent = `Replay fails: ${result.error}`;
     }
-    $("tb-replay").textContent = `${ok} / ${chain.length} identical`;
+    $("tb-replay").textContent = result.ok ? `${result.records} / ${result.records} identical` : `${ok} / ${chain.length} head-chain records identical`;
     $("tb-replay").className = result.ok ? "" : "bad";
     $("tb-head").textContent = result.head || "–";
     $("tb-head").className = result.ok ? "head" : "bad";
@@ -126,8 +138,54 @@ function draw(animate) {
     finish();
     return;
   }
-  chain.forEach((_, i) => setTimeout(() => { if (token === drawToken) mark(i); }, 140 * (i + 1)));
-  setTimeout(() => { if (token === drawToken) finish(); }, 140 * (chain.length + 1));
+  const interval = Math.min(140, 3000 / (chain.length + 1));
+  chain.forEach((_, i) => setTimeout(() => { if (token === drawToken) mark(i); }, interval * (i + 1)));
+  setTimeout(() => { if (token === drawToken) finish(); }, interval * (chain.length + 1));
+}
+
+// In the scripted remember demo, inspect the completed calls, including their
+// fan-out siblings. Only a successful replay gets a procedure annotation.
+function procedureDemo() {
+  const labels = new Set();
+  if (original.name !== "remember") return { labels, metric: "–" };
+  if (!result.ok) return { labels, metric: "Replay required" };
+  const records = new Map(Object.entries(working.objects)
+    .filter(([key]) => key.startsWith("records/"))
+    .map(([key, raw]) => [key.slice(8), JSON.parse(raw)]));
+  const refs = new Set();
+  for (const [stamp, r] of records) {
+    if (r.state !== "invoke" || r.to !== "system" || r.payload?.narrow?.actor !== "interpreter") continue;
+    for (const ret of records.values()) {
+      if (ret.state !== "return" || !ret.payload?.reference) continue;
+      const input = JSON.parse(working.objects["inputs/" + ret.input]);
+      if (input.to === stamp) refs.add(ret.payload.reference);
+    }
+  }
+  const calls = [...records].filter(([, r]) => r.state === "invoke" &&
+    (r.to === "interpreter" || refs.has(r.to)) && typeof r.payload?.text === "string");
+  let completed = 0;
+  for (const [frame] of calls) {
+    const end = [...records].find(([, r]) => r.state === "return" &&
+      JSON.parse(working.objects["inputs/" + r.input]).to === frame);
+    if (!end) continue;
+    const strand = new Set();
+    const visit = (stamp) => {
+      if (strand.has(stamp)) return;
+      strand.add(stamp);
+      if (stamp === frame) return;
+      const r = records.get(stamp);
+      if (r.predecessor) visit(r.predecessor);
+      for (const dep of r.deps || []) visit(dep);
+    };
+    visit(end[0]);
+    if ([...strand].some((stamp) => {
+      const r = records.get(stamp);
+      return r.state === "fault" || (r.state === "invoke" && ["agent", "codex"].includes(r.to));
+    })) continue;
+    completed++;
+    for (const stamp of strand) labels.add(stamp);
+  }
+  return { labels, metric: `${completed} of ${calls.length} calls: zero model steps, zero approvals` };
 }
 
 function summary(s) {
