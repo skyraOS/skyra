@@ -1,9 +1,11 @@
 package proc
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Running a procedure (32, "Running a procedure"). On each resume:
@@ -137,6 +139,7 @@ func Plan(p Procedure, nodes map[string]Node, input json.RawMessage, pos Positio
 	next.Values = values
 	if len(next.Emit) > 0 {
 		alone(&next)
+		distinct(next.Emit)
 		return next, nil
 	}
 	for _, id := range order {
@@ -158,8 +161,13 @@ func (n Next) Emission() []byte {
 	if len(n.Emit) == 1 {
 		return n.Emit[0]
 	}
-	b, _ := json.Marshal(n.Emit)
-	return b
+	// Joined as written: json.Marshal would compact each instruction, and
+	// with it the spaces that keep repeats distinct.
+	parts := make([][]byte, len(n.Emit))
+	for i, e := range n.Emit {
+		parts[i] = e
+	}
+	return append(append([]byte("["), bytes.Join(parts, []byte(","))...), ']')
 }
 
 func ready(n Node, values map[string]any) bool {
@@ -188,6 +196,25 @@ func callee(n Node, env Env) (string, error) {
 func instruction(to string, payload any) json.RawMessage {
 	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	return b
+}
+
+// distinct makes every instruction of a round its own bytes. Under one
+// predecessor the kernel content-addresses what it receives, so two identical
+// instructions would be one record, and it refuses them; every call runs
+// (decision 13), so the k-th repeat carries k spaces inside its object,
+// which no reading of it notices.
+func distinct(emit []json.RawMessage) {
+	for i := range emit {
+		k := 0
+		for _, earlier := range emit[:i] {
+			if bytes.Equal(bytes.TrimRight(earlier[:len(earlier)-1], " "), emit[i][:len(emit[i])-1]) {
+				k++
+			}
+		}
+		if k > 0 {
+			emit[i] = append(append(slices.Clone(emit[i][:len(emit[i])-1]), bytes.Repeat([]byte(" "), k)...), '}')
+		}
+	}
 }
 
 // alone keeps a syscall that changes the Horizon of whoever waits (narrow,

@@ -85,6 +85,16 @@ func Short(stamp string) string {
 	return stamp[:8]
 }
 
+// brief is a payload short enough for one line: a long one (a strand) is
+// cut, with its size.
+func brief(p json.RawMessage) string {
+	const most = 240
+	if len(p) <= most {
+		return string(p)
+	}
+	return fmt.Sprintf("%s… (%d bytes)", p[:200], len(p))
+}
+
 // Describe is a one-line reading of a record, led by its state.
 func Describe(r Record) string {
 	if r.Predecessor == "" {
@@ -92,9 +102,9 @@ func Describe(r Record) string {
 	}
 	switch r.State {
 	case Invoke:
-		return fmt.Sprintf("invoke %s %s", r.To, r.Payload)
+		return fmt.Sprintf("invoke %s %s", r.To, brief(r.Payload))
 	case Return:
-		return fmt.Sprintf("return %s", r.Payload)
+		return fmt.Sprintf("return %s", brief(r.Payload))
 	case Resolve:
 		return fmt.Sprintf("resolve %s: %d of %d slots discharged", Short(r.Frame), len(r.Deps), len(r.Deps))
 	case Fault:

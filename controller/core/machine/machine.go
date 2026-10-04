@@ -541,6 +541,12 @@ func Instructions(out []byte) ([][]byte, error) {
 	}
 	outs := make([][]byte, len(parts))
 	for i, p := range parts {
+		for _, earlier := range outs[:i] {
+			if string(earlier) == string(p) {
+				// Under one predecessor, the same bytes are the same record.
+				return nil, errors.New("an emission carries the same instruction twice: they would be one record")
+			}
+		}
 		outs[i] = p
 	}
 	return outs, nil
@@ -939,13 +945,16 @@ type Continuation struct {
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
-// discharged the slot.
+// discharged the slot. Observation is the discharge's stamp: a worker passes
+// an observation on by it (next/21), and remembers by it (next/32). It is a
+// hash, so an adapter never shows it to a model.
 type StepView struct {
-	To      string            `json:"to"`
-	Payload json.RawMessage   `json:"payload"`
-	State   record.State      `json:"state"`
-	Value   json.RawMessage   `json:"value,omitempty"`
-	Fault   *record.FaultInfo `json:"fault,omitempty"`
+	To          string            `json:"to"`
+	Payload     json.RawMessage   `json:"payload"`
+	State       record.State      `json:"state"`
+	Value       json.RawMessage   `json:"value,omitempty"`
+	Fault       *record.FaultInfo `json:"fault,omitempty"`
+	Observation string            `json:"observation,omitempty"`
 }
 
 // continuation is what the waiter reads when it resumes: every step of every
@@ -958,7 +967,7 @@ func continuation(e Settled, waiter horizon.Horizon) []byte {
 	for _, round := range e.Rounds {
 		for _, child := range round.Children {
 			c.Steps = append(c.Steps, StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,
-				State: child.Discharge.State, Value: child.Discharge.Payload, Fault: child.Discharge.Fault})
+				State: child.Discharge.State, Value: child.Discharge.Payload, Fault: child.Discharge.Fault, Observation: child.Result})
 		}
 	}
 	b, _ := json.Marshal(c)

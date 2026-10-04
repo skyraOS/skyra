@@ -53,6 +53,8 @@ echo
 echo "══ interpreter: a hand-installed procedure fans out through the kernel ══"
 ./bin/interp install "$root/interpreter" interp/examples/greet.json
 ./bin/skyra boot -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}' || true
+# remember (next/32, H6): a worker remembers the agent's strand, then calls the procedure it became.
+scenario "remember: the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
 scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'

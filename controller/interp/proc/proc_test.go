@@ -259,3 +259,22 @@ func TestResumeFromStateAfterACrash(t *testing.T) {
 		t.Fatalf("it goes on where the last one stopped: %s %v", next.Emission(), err)
 	}
 }
+
+// An each over repeated items calls each of them: identical instructions in
+// one round are made distinct bytes, so each is its own record.
+func TestRepeatedCallsAreEachTheirOwn(t *testing.T) {
+	src := Source{Contract: greet, Nodes: map[string]SourceNode{
+		"each": {Call: raw(`"echo"`), In: raw(`{"text":` + string(b("item")) + `}`), Each: b("input", "names")},
+	}, Return: b("each")}
+	emissions, next := drive(t, src, `{"names":["a","a","a"],"greeting":"hi"}`)
+	var ins []json.RawMessage
+	if err := json.Unmarshal([]byte(emissions[0]), &ins); err != nil || len(ins) != 3 {
+		t.Fatalf("%s", emissions[0])
+	}
+	if string(ins[0]) == string(ins[1]) || string(ins[1]) == string(ins[2]) || string(ins[0]) == string(ins[2]) {
+		t.Fatalf("every call is its own bytes: %s", emissions[0])
+	}
+	if string(next.Return) != `["a","a","a"]` {
+		t.Fatalf("and every call ran: %s", next.Return)
+	}
+}

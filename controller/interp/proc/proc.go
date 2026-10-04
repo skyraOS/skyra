@@ -266,3 +266,26 @@ func title(c *Schema) string {
 	}
 	return "the contract"
 }
+
+// Remembering is a remember frame's work after it compiled its strand: the
+// contracts it stored procedures for, in the order it extends itself with
+// them (bottom up, the requested one last).
+type Remembering struct {
+	Contracts []*Schema `json:"contracts"`
+	Originals []string  `json:"originals"` // the actor each was remembered from
+}
+
+// Remembering reads a remember frame's work, if it has compiled.
+func (s Store) Remembering(frame string) (Remembering, bool, error) {
+	var r Remembering
+	err := s.read("remembering", frame, &r)
+	if errors.Is(err, os.ErrNotExist) {
+		return r, false, nil
+	}
+	return r, err == nil, err
+}
+
+// SetRemembering records a remember frame's work.
+func (s Store) SetRemembering(frame string, r Remembering) error {
+	return s.write("remembering", frame, r)
+}

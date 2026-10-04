@@ -685,6 +685,15 @@ func TestInstructions(t *testing.T) {
 	if _, err := Instructions([]byte(`[]`)); err == nil {
 		t.Fatal("an empty array is no instruction")
 	}
+	if _, err := Instructions([]byte(`[{"to":"a"},{"to":"a"}]`)); err == nil {
+		t.Fatal("the same instruction twice would be one record")
+	}
+	if _, err := Instructions([]byte(`[{"to":"a"},  {"to":"a"} ]`)); err == nil {
+		t.Fatal("whitespace outside an instruction is not part of it: still the same")
+	}
+	if outs, err := Instructions([]byte(`[{"to":"a"},{"to":"a" }]`)); err != nil || len(outs) != 2 {
+		t.Fatal("instructions are compared as bytes: whitespace inside one makes two records")
+	}
 	if _, err := Instructions([]byte("[" + strings.Repeat("1,", MaxFanOut) + "1]")); err == nil {
 		t.Fatal("more than MaxFanOut instructions")
 	}

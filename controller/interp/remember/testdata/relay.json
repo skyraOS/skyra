@@ -1,0 +1,104 @@
+{
+ "observation": "bc0cd8ddfff6642d6470394a088f725efcdb002b9d247805a5342204effc231b",
+ "strand": {
+  "chain": [
+   "bc0cd8ddfff6642d6470394a088f725efcdb002b9d247805a5342204effc231b",
+   "9972e318a6345c890aeb26cfe6ddd14685d89c0248e92dcda477cd781239600c",
+   "3063ad57d93b31b75d2dd4abf8c93c31764c5e5aff303431b111ec094c464ba6",
+   "bcc0f245f1a10522236351052b0b5722f3a7f8741e24b098a9ca20b2c28101f4",
+   "16beea29e24f0f08479f1ee385dea033c1e926a0a0726f579a127dc82284c082",
+   "4f643bc4c304de65f506c1e81ca94ec1f30375e40cf192e14de6f35c050da1f0",
+   "38fe6e68e0acf83eadfd3f3de5e950b5ac81b9c0ce0ea524d942fa6278ae774c",
+   "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec"
+  ],
+  "records": {
+   "16beea29e24f0f08479f1ee385dea033c1e926a0a0726f579a127dc82284c082": {
+    "deps": [
+     "d21519e0dbfcad67dd33e9b8e4938084032ede203d7c7a474c1dd9f01ec3edd6",
+     "4f643bc4c304de65f506c1e81ca94ec1f30375e40cf192e14de6f35c050da1f0"
+    ],
+    "frame": "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec",
+    "input": "4b06317be78c31c9e9fef5ccce178d5a3b43ad985c223a5041d7cb61bfa317e5",
+    "predecessor": "4f643bc4c304de65f506c1e81ca94ec1f30375e40cf192e14de6f35c050da1f0",
+    "round": "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec",
+    "state": "resolve"
+   },
+   "3063ad57d93b31b75d2dd4abf8c93c31764c5e5aff303431b111ec094c464ba6": {
+    "input": "c9cc606c86af99462b36e1d6bd3c1e112350fffffa03cd2ff1c747efc28cf573",
+    "payload": "relay:hello",
+    "predecessor": "bcc0f245f1a10522236351052b0b5722f3a7f8741e24b098a9ca20b2c28101f4",
+    "state": "return"
+   },
+   "38fe6e68e0acf83eadfd3f3de5e950b5ac81b9c0ce0ea524d942fa6278ae774c": {
+    "input": "5e7db78f2fbd24ab32fc2290df4d30fb95ca6e35662796bd0697560132de33e0",
+    "payload": {
+     "text": "relayed"
+    },
+    "predecessor": "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec",
+    "state": "invoke",
+    "to": "echo"
+   },
+   "4f643bc4c304de65f506c1e81ca94ec1f30375e40cf192e14de6f35c050da1f0": {
+    "input": "fda63b1ab901dd51ca7c099e4e4c65da840a05f9f75df10bbfa42aca7517dfad",
+    "payload": "relayed",
+    "predecessor": "38fe6e68e0acf83eadfd3f3de5e950b5ac81b9c0ce0ea524d942fa6278ae774c",
+    "state": "return"
+   },
+   "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec": {
+    "input": "615b602cd5287f79204395717b90ca970675860623533727d95ae7aff0ae12d8",
+    "payload": {
+     "text": "relay:hello"
+    },
+    "predecessor": "2c18e8ca550f72d329ab3e9f4289170aef441fcb0e17dbf1d9d5e8440926ec6d",
+    "state": "invoke",
+    "to": "agent"
+   },
+   "9972e318a6345c890aeb26cfe6ddd14685d89c0248e92dcda477cd781239600c": {
+    "deps": [
+     "3063ad57d93b31b75d2dd4abf8c93c31764c5e5aff303431b111ec094c464ba6"
+    ],
+    "frame": "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec",
+    "input": "e1138f3733c770f76d7ebdc34d8c885a6cc5ae2cc9e732c49cfd407d26d75e48",
+    "predecessor": "3063ad57d93b31b75d2dd4abf8c93c31764c5e5aff303431b111ec094c464ba6",
+    "round": "16beea29e24f0f08479f1ee385dea033c1e926a0a0726f579a127dc82284c082",
+    "state": "resolve"
+   },
+   "9a40110ef75e679af1ae9988d0087fe6fe6c3cb5161cce1738e6b242666aaf5f": {
+    "input": "6d4eafadc640d0523be75df5f9fe115edb2bf624bd09cf4094397ec8d1ee3bdd",
+    "payload": {
+     "text": "relay:hello"
+    },
+    "predecessor": "8f6fcb2c8a6d2c5c50ee81f88613e5bdc29170582298dd94679dd950e15259ec",
+    "state": "invoke",
+    "to": "echo"
+   },
+   "bc0cd8ddfff6642d6470394a088f725efcdb002b9d247805a5342204effc231b": {
+    "input": "660deb0192197c62812888d759e2310bf59eccfcc9876d6c2a5029e000dceb4b",
+    "payload": {
+     "again": "relay:hello",
+     "echoes": [
+      "relay:hello",
+      "relayed"
+     ]
+    },
+    "predecessor": "9972e318a6345c890aeb26cfe6ddd14685d89c0248e92dcda477cd781239600c",
+    "state": "return"
+   },
+   "bcc0f245f1a10522236351052b0b5722f3a7f8741e24b098a9ca20b2c28101f4": {
+    "input": "6d4eafadc640d0523be75df5f9fe115edb2bf624bd09cf4094397ec8d1ee3bdd",
+    "payload": {
+     "text": "relay:hello"
+    },
+    "predecessor": "16beea29e24f0f08479f1ee385dea033c1e926a0a0726f579a127dc82284c082",
+    "state": "invoke",
+    "to": "echo"
+   },
+   "d21519e0dbfcad67dd33e9b8e4938084032ede203d7c7a474c1dd9f01ec3edd6": {
+    "input": "dd84be96fada53e93f00ee0c9dd416a3b091a735a5ebef8d4feab06fa5e7d04b",
+    "payload": "relay:hello",
+    "predecessor": "9a40110ef75e679af1ae9988d0087fe6fe6c3cb5161cce1738e6b242666aaf5f",
+    "state": "return"
+   }
+  }
+ }
+}

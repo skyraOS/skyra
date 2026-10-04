@@ -20,6 +20,17 @@
 // With text "extend:<text>", it adds a contract to itself (system,
 // extend-reach: next/32), "shout", then invokes itself through it. Run
 // against shout, it returns its input in capitals.
+//
+// With text "relay:<text>", it does a task (next/32, H8): it asks echo for
+// its whole input and for "relayed" in one emission, then echo again for
+// what the first said, and returns everything that came back, authoring
+// nothing.
+//
+// With text "remember:<text>", it is a worker that remembers (next/32, H6,
+// H8): it asks agent to relay, remembers that strand through agent's
+// contract, calls the procedure on new input (no agent runs), calls it again
+// from a Horizon narrowed to keep it but drop echo, tries to remember the
+// same contract a second time, and returns what each step gave back.
 package main
 
 import (
@@ -38,11 +49,13 @@ type continuation struct {
 		Text  string `json:"text"`
 		Shout string `json:"shout"`
 	} `json:"input"`
+	Tools map[string]json.RawMessage `json:"tools"`
 	Steps []struct {
-		To    string          `json:"to"`
-		State string          `json:"state"`
-		Value json.RawMessage `json:"value"`
-		Fault *struct {
+		To          string          `json:"to"`
+		State       string          `json:"state"`
+		Value       json.RawMessage `json:"value"`
+		Observation string          `json:"observation"`
+		Fault       *struct {
 			Kind  string `json:"kind"`
 			Cause string `json:"cause"`
 		} `json:"fault"`
@@ -57,6 +70,14 @@ func main() {
 	}
 	if c.Contract != nil && c.Contract.Title == "shout" {
 		emit(c.Frame, strings.ToUpper(c.Input.Shout))
+		return
+	}
+	if _, isRelay := strings.CutPrefix(c.Input.Text, "relay:"); isRelay {
+		relay(c)
+		return
+	}
+	if word, isRemember := strings.CutPrefix(c.Input.Text, "remember:"); isRemember {
+		remember(c, word)
 		return
 	}
 	if word, isExtend := strings.CutPrefix(c.Input.Text, "extend:"); isExtend {
@@ -90,6 +111,62 @@ func main() {
 	var said string
 	_ = json.Unmarshal(last.Value, &said)
 	emit(c.Frame, fmt.Sprintf("echo said %q", said))
+}
+
+// relay is a task whose result is made only of what came back: control, so
+// remember can compile all of it.
+func relay(c continuation) {
+	echo := func(text any) map[string]any {
+		return map[string]any{"to": "echo", "payload": map[string]any{"text": text}}
+	}
+	switch len(c.Steps) {
+	case 0:
+		b, _ := json.Marshal([]any{echo(c.Input.Text), echo("relayed")})
+		fmt.Println(string(b))
+	case 2:
+		var first string
+		_ = json.Unmarshal(c.Steps[0].Value, &first)
+		b, _ := json.Marshal(echo(first))
+		fmt.Println(string(b))
+	default:
+		emit(c.Frame, map[string]any{"echoes": []json.RawMessage{c.Steps[0].Value, c.Steps[1].Value}, "again": c.Steps[2].Value})
+	}
+}
+
+// remember is the worker that remembers: it carries the observation's hash,
+// which only a worker may (next/32).
+func remember(c continuation, word string) {
+	remembering := map[string]any{"remember": map[string]any{
+		"observation": "", "contract": map[string]any{"target": "agent", "schema": c.Tools["agent"]}}}
+	switch len(c.Steps) {
+	case 0:
+		emit("agent", map[string]string{"text": "relay:" + word})
+	case 1:
+		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
+		emit("interpreter", remembering)
+	case 2:
+		emit("interpreter", map[string]string{"text": "relay:" + word + ", again"})
+	case 3:
+		emit("system", map[string]any{"narrow": map[string]any{"actor": "interpreter", "reach": []string{"interpreter"}}})
+	case 4:
+		var got struct{ Reference string }
+		_ = json.Unmarshal(c.Steps[3].Value, &got)
+		emit(got.Reference, map[string]string{"text": "relay:" + word + ", narrowed"})
+	case 5:
+		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
+		emit("interpreter", remembering)
+	default:
+		said := map[string]any{}
+		for i, name := range []string{"task", "remembered", "procedure", "narrow", "narrowed", "again"} {
+			s := c.Steps[i]
+			if s.Fault != nil {
+				said[name] = fmt.Sprintf("fault (%s): %s", s.Fault.Kind, s.Fault.Cause)
+				continue
+			}
+			said[name] = s.Value
+		}
+		emit(c.Frame, said)
+	}
 }
 
 // extend adds the shout contract to itself, invokes itself through it, and
