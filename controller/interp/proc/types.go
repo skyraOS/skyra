@@ -19,6 +19,11 @@ func InputType(c *Schema, input any) string {
 	return types.Input(c.Canonical(), input).Hash
 }
 
+// InputShown is the same, as a model reads it.
+func InputShown(c *Schema, input any) string {
+	return types.Input(c.Canonical(), input).Presentation
+}
+
 // Present is a value's base type as a model reads it, never a hash.
 func Present(call json.RawMessage, value any) string {
 	return types.Of(CallName(call), nil, value).Presentation

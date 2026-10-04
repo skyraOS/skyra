@@ -61,8 +61,10 @@ type Header struct {
 // the model writes refinements (H9), it is the base types themselves
 // (decision 10): the input's, and every resumed edge's.
 type Refinement struct {
-	Input string            `json:"input,omitempty"` // the input's base type hash
-	Edges map[string]string `json:"edges,omitempty"` // node → the base type hash of what it returned
+	Input      string            `json:"input,omitempty"`       // the input's base type hash
+	Edges      map[string]string `json:"edges,omitempty"`       // node → the base type hash of what it returned
+	InputShown string            `json:"input_shown,omitempty"` // the same, as a model reads them: never a hash
+	EdgesShown map[string]string `json:"edges_shown,omitempty"`
 }
 
 // Procedure is a header, a return and a body: the nodes the procedure runs,
@@ -125,6 +127,7 @@ type Store struct{ Dir string }
 type Position struct {
 	Procedure string   `json:"procedure"`
 	Rounds    [][]Call `json:"rounds"`
+	Fallback  bool     `json:"fallback,omitempty"` // a refinement refused: the original actor was invoked, last
 }
 
 // Call is one emitted instruction: a node, and for each, its element.

@@ -158,7 +158,8 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 		return nil, false, err
 	}
 	src := proc.Source{Contract: schema, Original: original, Nodes: map[string]proc.SourceNode{},
-		Refinement: &proc.Refinement{Input: proc.InputType(schema, input), Edges: map[string]string{}}}
+		Refinement: &proc.Refinement{Input: proc.InputType(schema, input), Edges: map[string]string{},
+			InputShown: proc.InputShown(schema, input), EdgesShown: map[string]string{}}}
 	var below []proc.Source
 	var seen []known
 	var prev []string
@@ -207,6 +208,7 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 			src.Nodes[name] = proc.SourceNode{Call: call, In: in, After: prev}
 			src.Order = append(src.Order, name)
 			src.Refinement.Edges[name] = proc.EdgeType(call, value)
+			src.Refinement.EdgesShown[name] = proc.Present(call, value)
 			seen = append(seen, known{name, value})
 			this = append(this, name)
 		}

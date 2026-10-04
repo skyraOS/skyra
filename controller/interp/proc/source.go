@@ -114,16 +114,30 @@ func Compile(src Source) (Procedure, map[string]Node, error) {
 	if p.Return, err = rename(src.Return, ids); err != nil {
 		return Procedure{}, nil, err
 	}
-	if p.Header.Refinement != nil && p.Header.Refinement.Edges != nil {
-		edges := map[string]string{}
-		for name, t := range p.Header.Refinement.Edges {
-			id, ok := ids[name]
-			if !ok {
-				return Procedure{}, nil, fmt.Errorf("a refinement on %q, which is no node", name)
+	if r := p.Header.Refinement; r != nil {
+		byID := func(m map[string]string) (map[string]string, error) {
+			if m == nil {
+				return nil, nil
 			}
-			edges[id] = t
+			out := map[string]string{}
+			for name, t := range m {
+				id, ok := ids[name]
+				if !ok {
+					return nil, fmt.Errorf("a refinement on %q, which is no node", name)
+				}
+				out[id] = t
+			}
+			return out, nil
 		}
-		p.Header.Refinement = &Refinement{Input: p.Header.Refinement.Input, Edges: edges}
+		edges, err := byID(r.Edges)
+		if err != nil {
+			return Procedure{}, nil, err
+		}
+		shown, err := byID(r.EdgesShown)
+		if err != nil {
+			return Procedure{}, nil, err
+		}
+		p.Header.Refinement = &Refinement{Input: r.Input, Edges: edges, InputShown: r.InputShown, EdgesShown: shown}
 	}
 	return p, nodes, nil
 }

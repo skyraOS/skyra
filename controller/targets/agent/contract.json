@@ -4,5 +4,19 @@
     "required": ["text"],
     "fields": {"text": {"type": "string"}}
   },
+  "contracts": [
+    {
+      "title": "look",
+      "type": "object",
+      "required": ["path"],
+      "fields": {"path": {"type": "string"}}
+    },
+    {
+      "title": "resume",
+      "type": "object",
+      "required": ["resume"],
+      "fields": {"resume": {"type": "any"}}
+    }
+  ],
   "continuation": true
 }

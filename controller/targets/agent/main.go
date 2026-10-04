@@ -31,6 +31,14 @@
 // contract, calls the procedure on new input (no agent runs), calls it again
 // from a Horizon narrowed to keep it but drop echo, tries to remember the
 // same contract a second time, and returns what each step gave back.
+//
+// Run against look (next/32, H7), it reads a path and returns what read
+// observed. Run against resume, it is the original actor a procedure fell
+// back to: it continues from the edge that refused, with what already ran,
+// rather than starting over. With text "look:<dir>", it is a worker that
+// remembers a look at <dir>/a.txt, looks at <dir>/b.txt through the
+// procedure (the same base types: no agent runs), then at <dir>/sub, whose
+// listing is not what the procedure was compiled for: the agent resumes.
 package main
 
 import (
@@ -46,11 +54,23 @@ type continuation struct {
 		Title string `json:"title"`
 	} `json:"contract"` // the contract it is executed against, when it has several
 	Input struct {
-		Text  string `json:"text"`
-		Shout string `json:"shout"`
+		Text   string `json:"text"`
+		Shout  string `json:"shout"`
+		Path   string `json:"path"`
+		Resume *struct {
+			Ran []struct {
+				Value json.RawMessage `json:"value"`
+				Type  string          `json:"type"`
+			} `json:"ran"`
+			Refused struct {
+				At  string `json:"at"`
+				Why string `json:"why"`
+			} `json:"refused"`
+		} `json:"resume"`
 	} `json:"input"`
-	Tools map[string]json.RawMessage `json:"tools"`
-	Steps []struct {
+	Tools     map[string]json.RawMessage   `json:"tools"`
+	Contracts map[string][]json.RawMessage `json:"contracts"`
+	Steps     []struct {
 		To          string          `json:"to"`
 		State       string          `json:"state"`
 		Value       json.RawMessage `json:"value"`
@@ -68,8 +88,30 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agent:", err)
 		os.Exit(1)
 	}
-	if c.Contract != nil && c.Contract.Title == "shout" {
-		emit(c.Frame, strings.ToUpper(c.Input.Shout))
+	if c.Contract != nil {
+		switch c.Contract.Title {
+		case "shout":
+			emit(c.Frame, strings.ToUpper(c.Input.Shout))
+			return
+		case "look":
+			if len(c.Steps) == 0 {
+				emit("read", map[string]string{"path": c.Input.Path})
+				return
+			}
+			emit(c.Frame, c.Steps[0].Value) // what read observed, passed up
+			return
+		case "resume":
+			r := c.Input.Resume
+			var seen []json.RawMessage
+			for _, s := range r.Ran {
+				seen = append(seen, s.Value)
+			}
+			emit(c.Frame, map[string]any{"resumed at": r.Refused.At, "because": r.Refused.Why, "from what ran": seen})
+			return
+		}
+	}
+	if dir, isLook := strings.CutPrefix(c.Input.Text, "look:"); isLook {
+		look(c, dir)
 		return
 	}
 	if _, isRelay := strings.CutPrefix(c.Input.Text, "relay:"); isRelay {
@@ -164,6 +206,38 @@ func remember(c continuation, word string) {
 				continue
 			}
 			said[name] = s.Value
+		}
+		emit(c.Frame, said)
+	}
+}
+
+// look is the worker that remembers a look and runs it on new paths.
+func look(c continuation, dir string) {
+	var lookContract json.RawMessage
+	for _, s := range c.Contracts["agent"] {
+		var t struct{ Title string }
+		if json.Unmarshal(s, &t) == nil && t.Title == "look" {
+			lookContract = s
+		}
+	}
+	switch len(c.Steps) {
+	case 0:
+		emit("agent", map[string]string{"path": dir + "/a.txt"})
+	case 1:
+		emit("interpreter", map[string]any{"remember": map[string]any{
+			"observation": c.Steps[0].Observation, "contract": map[string]any{"target": "agent", "schema": lookContract}}})
+	case 2:
+		emit("interpreter", map[string]string{"path": dir + "/b.txt"})
+	case 3:
+		emit("interpreter", map[string]string{"path": dir + "/sub"})
+	default:
+		said := map[string]any{}
+		for i, name := range []string{"a.txt, by the agent", "remembered", "b.txt, by the procedure", "sub, by the procedure"} {
+			if f := c.Steps[i].Fault; f != nil {
+				said[name] = fmt.Sprintf("fault (%s): %s", f.Kind, f.Cause)
+				continue
+			}
+			said[name] = c.Steps[i].Value
 		}
 		emit(c.Frame, said)
 	}
