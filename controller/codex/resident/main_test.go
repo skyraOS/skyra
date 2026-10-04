@@ -195,3 +195,39 @@ func TestAFailedTurnCarriesCodexsReason(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// With the interpreter in reach (next/32), Codex is offered remember, which
+// names one of its own tool calls by index, procedure, and one tool per
+// procedure that exists, by title; read and the rest stay as they were. A
+// call is mapped to the instruction the adapter, a worker, derives for it.
+func TestRememberAndProceduresAreOffered(t *testing.T) {
+	text := &schema{Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
+	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "any"}}}
+	look := &schema{Title: "look", Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
+	c := continuation{Frame: "f", Tools: map[string]*schema{"read": text, "interpreter": remember, "codex.exchange": text},
+		Contracts: map[string][]*schema{"interpreter": {remember, look}}}
+	var names []string
+	for _, tl := range tools(c) {
+		names = append(names, tl.name)
+	}
+	if strings.Join(names, " ") != "read remember procedure look" {
+		t.Fatalf("tools: %v", names)
+	}
+	results := []step{{To: "read", Payload: json.RawMessage(`{"path":"a"}`), State: "return", Observation: "obs"}}
+	got := toolEmission(c, results, "remember", json.RawMessage(`{"call":0}`))
+	want := `{"payload":{"remember":{"contract":{"schema":{"type":"object","fields":{"path":{"type":"string"}},"required":["path"]},"target":"read"},"observation":"obs"}},"to":"interpreter"}`
+	if got != want {
+		t.Fatalf("remember:\n got %s\nwant %s", got, want)
+	}
+	if got := toolEmission(c, results, "procedure", json.RawMessage(`{"input":{"path":"b"}}`)); got != `{"payload":{"path":"b"},"to":"interpreter"}` {
+		t.Fatalf("procedure: %s", got)
+	}
+	if got := toolEmission(c, results, "remember", json.RawMessage(`{"call":3}`)); !strings.Contains(got, `{"remember":{}}`) {
+		t.Fatalf("a call that does not exist is left for intake to refuse: %s", got)
+	}
+	// Without the interpreter, nothing changes.
+	delete(c.Tools, "interpreter")
+	if names := tools(c); len(names) != 1 || names[0].name != "read" {
+		t.Fatalf("without the interpreter: %v", names)
+	}
+}

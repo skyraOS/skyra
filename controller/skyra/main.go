@@ -4,6 +4,7 @@
 //	skyra boot -root DIR -registry FILE [-scratch DIR] [-to CAPABILITY] [-payload JSON | -text TEXT]
 //	skyra instance DIR   (internal: started only by a parent holding fd 3)
 //	skyra replay DIR     re-derive a finished lineage from its records
+//	skyra metric DIR     the research metric, from the records (next/32)
 //	skyra resume DIR     (internal: started only by an actor host holding a parked frame)
 package main
 
@@ -21,6 +22,7 @@ import (
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/instance"
+	"skyra/controller/runtime/metric"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
@@ -67,6 +69,15 @@ func main() {
 			if n, err = replay.Replay(os.Args[2], head); err == nil {
 				fmt.Printf("replay: %d records re-derived from genesis by step, byte-identical\n", n)
 			}
+		}
+	case "metric":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("usage: skyra metric DIR")
+			break
+		}
+		var m metric.Metric
+		if m, err = metric.Read(os.Args[2]); err == nil {
+			fmt.Println(m)
 		}
 	case "resume":
 		// Started only by an actor host, holding a parked frame stack as fds 3..

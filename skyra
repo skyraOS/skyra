@@ -64,6 +64,8 @@ controller_build() {
   local builds="skyra:skyra echo:targets/echo read:targets/read write:targets/write roots:targets/roots agent:targets/agent user:targets/user
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
+  # The interpreter is its own module (next/32).
+  (cd "$ROOT/controller/interp" && go build -o "$BUILD/controller/interp" .)
   go build -o "$BUILD/tui" ./tui
 }
 
@@ -124,6 +126,8 @@ registry={
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
                'connection':True,'close_connection':True,'resource_owner_depth':depth},
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
+ # The interpreter (next/32): remember, and the procedures it builds, in its own state.
+ 'interpreter':{'path':str(build/'interp'),'contract':str(root/'controller/interp/contract.json'),'state':True},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
 # Each built binary is registered by a copy stored under its own hash. A

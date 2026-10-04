@@ -43,6 +43,18 @@ func HorizonAt(root, stamp string) (horizon.Horizon, error) {
 	return w.at(stamp)
 }
 
+// Walker re-derives Horizons for many records, each record once: for a
+// reader that asks about a whole tree (skyra metric).
+type Walker struct{ w walker }
+
+// NewWalker is a Walker over a tree.
+func NewWalker(root string) *Walker {
+	return &Walker{walker{root: root, seen: map[string]horizon.Horizon{}}}
+}
+
+// At is the Horizon the record at stamp released, as HorizonAt.
+func (w *Walker) At(stamp string) (horizon.Horizon, error) { return w.w.at(stamp) }
+
 // walker re-derives records, each once: seen holds the Horizon each record
 // released, so siblings that share a chain share its re-derivation.
 type walker struct {

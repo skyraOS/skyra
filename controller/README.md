@@ -13,6 +13,7 @@ go test ./controller/...  # transitions, replay, and custody
 skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
 skyra ask "TEXT"          # one question to real Codex, printed with its lineage
 skyra replay DIR          # re-derive any finished conversation or run from its records
+skyra metric DIR          # the research metric: procedures remembered, and calls to them with no model step
 ```
 
 One `skyra` binary runs **once per step**, then exits. Every decision is made
@@ -30,6 +31,8 @@ record tree in `.skyra/`.
 | **`strand`** (next/32) | A syscall that hands the requester the stamps from an observation up to the invoke made through a contract it names, found by climbing frames, with every record of the work beneath: each resolve's discharges and the chains that led to them. A call into a narrowed child appears as one call and its return. Refused (a horizon fault) when no such invoke caused the observation, or when the walk would leave the requester's Horizon | `replay.ReadStrand`, `machine.stranded` |
 | **Remember** (next/32) | A worker that holds `remember` (the interpreter's registered contract) passes an observation (a step's `observation` stamp) and the contract that requested it; the interpreter reads the strand, compiles it into a procedure under that contract, and adds `(interpreter, contract)` to its own reach with `extend-reach`, with no approval. Calling it runs the remembered calls with no model step | `interp/`, `targets/agent` (`remember:`) |
 | **Running what was remembered** (next/32) | One representation per contract: inside its refinement the compiled body runs, with no model; until the model writes refinements, the refinement is the base types, at entry and at every edge where the model was resumed. Outside it, the interpreter invokes the actor the procedure was remembered from, an ordinary instruction: from the start for a different input, or at the edge that refused, through the actor's `resume` contract when it holds one, shown the command, what already ran and why, as names and presentations | `interp` (`runProcedure`, `fallback`), `targets/agent` (`look:`) |
+| **The thesis demo (P9)** (next/32) | In `run.sh`: the agent does a task; a worker remembers it; the procedure runs on new input with no model step and no approval; from a Horizon that keeps it but drops `echo` it faults at intake; the same contract is not remembered twice; an actor cannot extend itself with what it holds. Codex (fake) remembers a call of its own and calls the procedure. `skyra metric` reads the research metric from the records | `targets/agent`, `codex/fake`, `runtime/metric` |
+| **Codex and remember** (next/32) | With the interpreter in reach, both Codex adapters offer `remember` (one of the turn's own calls, by index: the adapter, a worker, turns it into the observation's stamp and its contract), `procedure` (input to the interpreter, which selects by fit), and one tool per procedure that exists at `thread/start`, by title. The launcher registers the interpreter | `codex/resident`, `codex/adapter`, `../skyra` |
 | **Contracts by (target, schema)** (next/32) | A name in reach holds a set of contracts: its registered one, and any it added to itself. At intake the payload selects the one it fits; none, or more than one (ambiguous), is a contract fault. A continuation is shown every contract, and told which one it is executed against | `machine.Selected`, `horizon.Surface.All` |
 | **Horizons committed, looked up, re-derived** | A Horizon is released by committing it; the child is handed its hash, looks it up, and refuses it unless its own commit derives exactly that Horizon | `tree.PutHorizon`, `machine.accept` |
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
@@ -73,6 +76,7 @@ OS, the tree or the network.
 | [`handshake`](runtime/handshake/) | The parent ↔ successor socket: messages plus the frame stack as fds |
 | [`custody`](runtime/custody/) | The manifest of non-frame descriptors carried beside a lineage |
 | [`park`](runtime/park/) | Parking a frame with a host, and resuming it |
+| [`metric`](runtime/metric/) | The research metric (next/32), from the records alone: procedures remembered per task, and calls to them with zero model steps and zero approvals |
 | [`trace`](runtime/trace/) | The process's log lines on stderr |
 
 **[`skyra/`](skyra/)**: the command: argv and flags only.

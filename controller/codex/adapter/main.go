@@ -34,10 +34,11 @@ import (
 )
 
 type schema struct {
+	Title    string             `json:"title,omitempty"`
 	Type     string             `json:"type"`
-	Fields   map[string]*schema `json:"fields"`
-	Required []string           `json:"required"`
-	Items    *schema            `json:"items"`
+	Fields   map[string]*schema `json:"fields,omitempty"`
+	Required []string           `json:"required,omitempty"`
+	Items    *schema            `json:"items,omitempty"`
 }
 
 type continuation struct {
@@ -46,12 +47,15 @@ type continuation struct {
 		Text         string `json:"text"`
 		Conversation string `json:"conversation"` // optional: turns of one conversation share a Codex thread
 	} `json:"input"`
-	Tools map[string]*schema `json:"tools"`
-	Steps []struct {
-		To    string          `json:"to"`
-		State string          `json:"state"`
-		Value json.RawMessage `json:"value"`
-		Fault *struct {
+	Tools     map[string]*schema   `json:"tools"`
+	Contracts map[string][]*schema `json:"contracts"`
+	Steps     []struct {
+		To          string          `json:"to"`
+		Payload     json.RawMessage `json:"payload"`
+		State       string          `json:"state"`
+		Value       json.RawMessage `json:"value"`
+		Observation string          `json:"observation"`
+		Fault       *struct {
 			Kind  string `json:"kind"`
 			Cause string `json:"cause"`
 		} `json:"fault"`
@@ -215,8 +219,11 @@ func run() (string, error) {
 				if len(args) == 0 {
 					args = json.RawMessage(`{}`)
 				}
-				out, _ := json.Marshal(map[string]any{"to": modelTools[m.Params.Tool], "payload": args})
-				return string(out), nil
+				out, err := toolEmission(c, m.Params.Tool, args)
+				if err != nil {
+					return "", err
+				}
+				return out, nil
 			case request:
 				return reject(m.Method) // an approval or any other request: never granted
 			case m.Method == "item/started" || m.Method == "item/completed":
@@ -321,24 +328,190 @@ func toolResult(id json.RawMessage, state string, value json.RawMessage, fault *
 
 // modelTools are the capabilities Codex is shown, by the name it is shown
 // (a dynamic tool name has no dots). Under a shared Horizon (next/24) reach
-// holds every surface in the room, this adapter and the room's facets
+// holds every surface in the room, this adapter and the Horizon's syscalls
 // included, so only these are offered, and only when they are in reach.
-var modelTools = map[string]string{"echo": "echo"}
+var modelTools = map[string]string{"echo": "echo", "agent": "agent"}
 
-func offered(c continuation, name string) bool {
-	return modelTools[name] != "" && c.Tools[modelTools[name]] != nil
+// tool is one tool Codex is offered: its name, what it says, its schema, and
+// the name in reach a call to it invokes.
+type tool struct {
+	name, description, target string
+	schema                    *schema
+	kind                      string // "": a call with the model's arguments; remember; procedure
 }
 
-// dynamicTools turns the model-facing tools in reach into Codex tool
-// definitions, in a fixed order. A resumed round delivers thread/start again
-// under the same id, and the host refuses a line that differs from the first
-// delivery, so the same continuation must produce the same bytes every time.
+// tools is everything Codex is offered, in a fixed order (next/32): the model
+// tools in reach; when the interpreter is in reach, remember (by the index of
+// one of this turn's own calls: the adapter, a worker, holds its observation)
+// and procedure (its input goes to the interpreter, which runs the procedure
+// whose contract it fits); and one tool per procedure that exists when the
+// thread starts, labelled by its contract's title, never a hash. Codex's
+// tools are fixed at thread/start, so a procedure remembered in this turn is
+// called through procedure.
+func tools(c continuation) []tool {
+	var ts []tool
+	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
+		if c.Tools[modelTools[name]] != nil {
+			ts = append(ts, tool{name: name, description: "Skyra capability " + modelTools[name], target: modelTools[name], schema: c.Tools[modelTools[name]]})
+		}
+	}
+	interp := interpreter(c)
+	if interp == "" {
+		return ts
+	}
+	ts = append(ts,
+		tool{name: "remember", target: interp, kind: "remember", description: "Remember how one of your calls in this turn was done, as a procedure: " +
+			"call is its index among your calls, from 0. Calling the procedure later runs the same calls on new input, without you.",
+			schema: &schema{Type: "object", Required: []string{"call"}, Fields: map[string]*schema{"call": {Type: "number"}}}},
+		tool{name: "procedure", target: interp, kind: "procedure", description: "Run a remembered procedure on new input: input is what you would give the call it was remembered from.",
+			schema: &schema{Type: "object", Required: []string{"input"}, Fields: map[string]*schema{"input": {Type: "any"}}}})
+	for _, c := range contractsOf(c, interp)[1:] {
+		if name := toolName(c.Title); name != "" && !slices.ContainsFunc(ts, func(t tool) bool { return t.name == name }) {
+			ts = append(ts, tool{name: name, target: interp, schema: c, description: "A remembered procedure: " + c.Title})
+		}
+	}
+	return ts
+}
+
+// interpreter is the name in reach that holds remember, or "".
+func interpreter(c continuation) string {
+	for _, name := range slices.Sorted(maps.Keys(c.Tools)) {
+		if s := c.Tools[name]; s != nil && s.Title == "remember" {
+			return name
+		}
+	}
+	return ""
+}
+
+func contractsOf(c continuation, name string) []*schema {
+	if all, ok := c.Contracts[name]; ok {
+		return all
+	}
+	if s := c.Tools[name]; s != nil {
+		return []*schema{s}
+	}
+	return nil
+}
+
+// toolName is a title as a dynamic tool name, or "" if it cannot be one.
+func toolName(title string) string {
+	if title == "" || len(title) > 64 {
+		return ""
+	}
+	for _, r := range title {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return ""
+		}
+	}
+	return title
+}
+
+func offered(c continuation, name string) bool {
+	return slices.ContainsFunc(tools(c), func(t tool) bool { return t.name == name })
+}
+
+// toolEmission is the instruction a tool call becomes.
+func toolEmission(c continuation, name string, args json.RawMessage) (string, error) {
+	i := slices.IndexFunc(tools(c), func(t tool) bool { return t.name == name })
+	t := tools(c)[i]
+	var payload any = args
+	switch t.kind {
+	case "remember":
+		var a struct {
+			Call *int `json:"call"`
+		}
+		if json.Unmarshal(args, &a) != nil || a.Call == nil || *a.Call < 0 || *a.Call >= len(c.Steps) {
+			payload = map[string]any{"remember": map[string]any{}} // no such call: intake refuses it
+			break
+		}
+		s := c.Steps[*a.Call]
+		payload = map[string]any{"remember": map[string]any{"observation": s.Observation,
+			"contract": map[string]any{"target": s.To, "schema": selected(contractsOf(c, s.To), s.Payload)}}}
+	case "procedure":
+		var a struct {
+			Input json.RawMessage `json:"input"`
+		}
+		_ = json.Unmarshal(args, &a)
+		payload = a.Input
+	}
+	out, err := json.Marshal(map[string]any{"to": t.target, "payload": payload})
+	return string(out), err
+}
+
+// selected is the one contract a payload fits, as the kernel selected it.
+func selected(contracts []*schema, payload json.RawMessage) *schema {
+	var v any
+	d := json.NewDecoder(strings.NewReader(string(payload)))
+	d.UseNumber()
+	if d.Decode(&v) != nil {
+		return nil
+	}
+	var fit []*schema
+	for _, c := range contracts {
+		if fits(c, v) {
+			fit = append(fit, c)
+		}
+	}
+	if len(fit) != 1 {
+		return nil
+	}
+	return fit[0]
+}
+
+func fits(s *schema, v any) bool {
+	switch s.Type {
+	case "object":
+		o, ok := v.(map[string]any)
+		if !ok {
+			return false
+		}
+		for k, e := range o {
+			if f := s.Fields[k]; f == nil || !fits(f, e) {
+				return false
+			}
+		}
+		for _, r := range s.Required {
+			if _, ok := o[r]; !ok {
+				return false
+			}
+		}
+		return true
+	case "array":
+		a, ok := v.([]any)
+		if !ok {
+			return false
+		}
+		for _, e := range a {
+			if !fits(s.Items, e) {
+				return false
+			}
+		}
+		return true
+	case "string":
+		_, ok := v.(string)
+		return ok
+	case "number":
+		_, ok := v.(json.Number)
+		return ok
+	case "bool":
+		_, ok := v.(bool)
+		return ok
+	case "null":
+		return v == nil
+	case "any":
+		return true
+	}
+	return false
+}
+
+// dynamicTools turns the tools Codex is offered into Codex tool definitions,
+// in a fixed order. A resumed round delivers thread/start again under the
+// same id, and the host refuses a line that differs from the first delivery,
+// so the same continuation must produce the same bytes every time.
 func dynamicTools(c continuation) []any {
 	defs := []any{}
-	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if offered(c, name) {
-			defs = append(defs, map[string]any{"name": name, "description": "Skyra capability " + modelTools[name], "inputSchema": jsonSchema(c.Tools[modelTools[name]])})
-		}
+	for _, t := range tools(c) {
+		defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 	}
 	return defs
 }
@@ -362,6 +535,8 @@ func jsonSchema(s *schema) map[string]any {
 		return map[string]any{"type": "array", "items": jsonSchema(s.Items)}
 	case "bool":
 		return map[string]any{"type": "boolean"}
+	case "any":
+		return map[string]any{}
 	}
 	return map[string]any{"type": s.Type}
 }

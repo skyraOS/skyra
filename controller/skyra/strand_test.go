@@ -16,6 +16,7 @@ import (
 	"skyra/controller/core/contract"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/boot"
+	"skyra/controller/runtime/metric"
 	"skyra/controller/runtime/registry"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/tree"
@@ -39,11 +40,20 @@ func room(t *testing.T) (func(text string) string, *contract.Schema, *contract.S
 			t.Fatalf("build %s: %v\n%s", source, err, out)
 		}
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "interp"), ".")
+	build.Dir = "../interp" // its own module
+	out, err := build.CombinedOutput()
+	cancel()
+	if err != nil {
+		t.Fatalf("build the interpreter: %v\n%s", err, out)
+	}
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	reg := filepath.Join(dir, "registry.json")
 	body, _ := json.Marshal(map[string]any{
-		"echo":  map[string]string{"path": "echo", "contract": abs("../targets/echo/contract.json")},
-		"agent": map[string]string{"path": "agent", "contract": abs("../targets/agent/contract.json")},
+		"echo":        map[string]string{"path": "echo", "contract": abs("../targets/echo/contract.json")},
+		"agent":       map[string]string{"path": "agent", "contract": abs("../targets/agent/contract.json")},
+		"interpreter": map[string]any{"path": "interp", "contract": abs("../interp/contract.json"), "state": true},
 	})
 	if err := os.WriteFile(reg, body, 0o600); err != nil {
 		t.Fatal(err)
@@ -148,4 +158,33 @@ func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
 	if _, err := replay.ReadStrand(root, obs, "agent", agentIn, call); !replay.Refused(err) {
 		t.Fatalf("a requester inside the narrowed child cannot read the agent's strand: %v", err)
 	}
+}
+
+// The research metric (next/32, H8), read from the records of the thesis
+// demo: one procedure remembered for the one task, a second remember of the
+// same contract refused, and of the two calls to it, the one that returned
+// ran with zero model steps and zero approvals (the other, from a Horizon
+// without echo, faulted).
+func TestTheMetricFromTheRecords(t *testing.T) {
+	run, _, _ := room(t)
+	root := run("remember:hello")
+	m, err := metric.Read(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Tasks != 1 || m.Remembers != 2 || !reflect.DeepEqual(m.Remembered, []string{"agent"}) || m.Calls != 2 || m.Unattended != 1 {
+		t.Fatalf("%+v", m)
+	}
+	if n, err := replay.Replay(root, mustHead(t, root)); err != nil || n < 40 {
+		t.Fatalf("and it all replays: %d %v", n, err)
+	}
+}
+
+func mustHead(t *testing.T, root string) string {
+	t.Helper()
+	head, err := boot.Head(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return head
 }

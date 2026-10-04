@@ -32,6 +32,9 @@
 // from a Horizon narrowed to keep it but drop echo, tries to remember the
 // same contract a second time, and returns what each step gave back.
 //
+// With text "redundant:", it tries to extend itself with the contract it
+// already holds: a contract fault at intake, which discharges its frame.
+//
 // Run against look (next/32, H7), it reads a path and returns what read
 // observed. Run against resume, it is the original actor a procedure fell
 // back to: it continues from the edge that refused, with what already ran,
@@ -120,6 +123,10 @@ func main() {
 	}
 	if word, isRemember := strings.CutPrefix(c.Input.Text, "remember:"); isRemember {
 		remember(c, word)
+		return
+	}
+	if c.Input.Text == "redundant:" {
+		emit("system", map[string]any{"extend-reach": map[string]any{"schema": c.Tools["agent"]}})
 		return
 	}
 	if word, isExtend := strings.CutPrefix(c.Input.Text, "extend:"); isExtend {

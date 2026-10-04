@@ -122,6 +122,21 @@ func LoadHorizon(root, id string) (horizon.Horizon, error) {
 	return h, json.Unmarshal(b, &h)
 }
 
+// Stamps lists every record in the tree.
+func Stamps(root string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "records"))
+	if err != nil {
+		return nil, err
+	}
+	var stamps []string
+	for _, e := range entries {
+		if e.Name()[0] != '.' {
+			stamps = append(stamps, e.Name())
+		}
+	}
+	return stamps, nil
+}
+
 // Load reads a record by stamp, refusing it unless it hashes to that stamp.
 func Load(root, stamp string) (record.Record, error) {
 	b, err := Get(root, "records", stamp)

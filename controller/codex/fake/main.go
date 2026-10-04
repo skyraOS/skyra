@@ -40,6 +40,19 @@ func main() {
 	}
 	threads, turns := 0, 0
 	pending := map[string]turn{}
+	// A scripted turn (remember:<x>, next/32): calls made one after another,
+	// each after the last one's result, then an answer made of every result.
+	type call struct {
+		tool string
+		args any
+	}
+	script := map[string][]call{}
+	results := map[string][]string{}
+	toolCall := func(t turn, n int, c call) {
+		id := json.RawMessage(fmt.Sprintf("\"call-%s-%d\"", t.id, n))
+		pending[string(id)] = t
+		send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": c.tool, "arguments": c.args}})
+	}
 	var held *turn
 	history := map[string][]string{}
 	mode := ""
@@ -62,6 +75,16 @@ func main() {
 				}
 				_ = json.Unmarshal(m.Result, &result)
 				if len(result.ContentItems) >= 1 {
+					if rest, scripted := script[t.id]; scripted {
+						results[t.id] = append(results[t.id], result.ContentItems[0].Text)
+						if len(rest) > 0 {
+							script[t.id] = rest[1:]
+							toolCall(t, len(results[t.id]), rest[0])
+						} else {
+							complete(t, strings.Join(results[t.id], " | "))
+						}
+						continue
+					}
 					complete(t, "tool:"+result.ContentItems[0].Text)
 				}
 			}
@@ -165,6 +188,15 @@ func main() {
 			case t.text == "unknown":
 				send(map[string]any{"id": "unknown", "method": "approval/unknown", "params": map[string]string{"threadId": t.thread, "turnId": t.id}})
 				complete(t, "must reject")
+			case strings.HasPrefix(t.text, "remember:"):
+				x := strings.TrimPrefix(t.text, "remember:")
+				calls := []call{
+					{"agent", map[string]string{"text": "relay:" + x}},
+					{"remember", map[string]int{"call": 0}},
+					{"procedure", map[string]any{"input": map[string]string{"text": "relay:" + x + ", again"}}},
+				}
+				script[t.id] = calls[1:]
+				toolCall(t, 0, calls[0])
 			case t.text == "history":
 				complete(t, strings.Join(history[t.thread], "|"))
 			default:

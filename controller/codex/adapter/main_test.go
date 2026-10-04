@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -76,10 +77,10 @@ func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 	}
 	var tools []struct{ Name string }
 	json.Unmarshal(mustMarshal(dynamicTools(c)), &tools)
-	if len(tools) != 1 || tools[0].Name != "echo" {
+	if len(tools) != 2 || tools[0].Name != "agent" || tools[1].Name != "echo" {
 		t.Fatalf("only model-facing tools are offered: %+v", tools)
 	}
-	for _, name := range []string{"agent", "codex", "system.narrow", "a-tool"} {
+	for _, name := range []string{"codex", "system.narrow", "a-tool"} {
 		if offered(c, name) {
 			t.Fatalf("%s is in reach but must not be offered to the model", name)
 		}
@@ -90,3 +91,44 @@ func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 }
 
 func mustMarshal(v any) []byte { b, _ := json.Marshal(v); return b }
+
+// With the interpreter in reach (next/32), Codex is offered remember, which
+// names one of its own calls by index, procedure, and one tool per procedure
+// that exists, by title. The adapter, a worker, turns remember into the
+// observation's stamp and the contract the call went through.
+func TestRememberAndProceduresAreOffered(t *testing.T) {
+	object := &schema{Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}}
+	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "any"}}}
+	look := &schema{Title: "look", Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
+	c := continuation{Frame: "f", Tools: map[string]*schema{"echo": object, "agent": object, "interpreter": remember},
+		Contracts: map[string][]*schema{"interpreter": {remember, look}}}
+	var names []string
+	for _, tl := range tools(c) {
+		names = append(names, tl.name)
+	}
+	if strings.Join(names, " ") != "agent echo remember procedure look" {
+		t.Fatalf("tools: %v", names)
+	}
+	c.Steps = append(c.Steps, struct {
+		To          string          `json:"to"`
+		Payload     json.RawMessage `json:"payload"`
+		State       string          `json:"state"`
+		Value       json.RawMessage `json:"value"`
+		Observation string          `json:"observation"`
+		Fault       *struct {
+			Kind  string `json:"kind"`
+			Cause string `json:"cause"`
+		} `json:"fault"`
+	}{To: "agent", Payload: json.RawMessage(`{"text":"relay:x"}`), State: "return", Observation: "obs"})
+	out, err := toolEmission(c, "remember", json.RawMessage(`{"call":0}`))
+	want := `{"payload":{"remember":{"contract":{"schema":{"type":"object","fields":{"text":{"type":"string"}},"required":["text"]},"target":"agent"},"observation":"obs"}},"to":"interpreter"}`
+	if err != nil || out != want {
+		t.Fatalf("remember:\n got %s\nwant %s", out, want)
+	}
+	if out, _ := toolEmission(c, "procedure", json.RawMessage(`{"input":{"text":"new"}}`)); out != `{"payload":{"text":"new"},"to":"interpreter"}` {
+		t.Fatalf("procedure: %s", out)
+	}
+	if out, _ := toolEmission(c, "look", json.RawMessage(`{"path":"p"}`)); out != `{"payload":{"path":"p"},"to":"interpreter"}` {
+		t.Fatalf("a titled procedure: %s", out)
+	}
+}

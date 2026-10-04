@@ -54,6 +54,7 @@ scenario "fan-out: the agent asks echo twice in one emission" -to agent -payload
 scenario "fan-out: one instruction out of reach faults, its sibling runs" -to agent -payload '{"text":"fan:hello,!shell"}'
 # The Horizon's syscalls (next/32, H3): the agent adds a contract to itself, then calls itself through it.
 scenario "extend-reach: the agent adds a contract to itself and is invoked through it" -to agent -payload '{"text":"extend:hello"}'
+scenario "extend-reach: a contract the actor already holds is refused" -to agent -payload '{"text":"redundant:"}'
 # The interpreter (next/32, H5): a procedure installed by hand in its own state runs through the
 # kernel, its fork and its each fanned out in one emission. The kernel sees only instructions.
 root=$(cd "$(mktemp -d)" && pwd -P)/.skyra
@@ -61,13 +62,21 @@ echo
 echo "══ interpreter: a hand-installed procedure fans out through the kernel ══"
 ./bin/interp install "$root/interpreter" interp/examples/greet.json
 ./bin/skyra boot -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}' || true
-# remember (next/32, H6): a worker remembers the agent's strand, then calls the procedure it became.
-scenario "remember: the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
+# The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's strand, then calls the
+# procedure it became: no model step, no approval. From a Horizon without echo it faults at intake;
+# the same contract is not remembered twice; an actor cannot extend itself with what it holds.
+scenario "remember (P9): the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
+./bin/skyra metric "$root"
 # Running what was remembered (next/32, H7): inside its base types the procedure runs alone;
 # a listing where a file was read is outside them, and the agent resumes at that edge.
 scenario "refinement: a procedure runs inside its base types, and falls back at the edge that refused" -to agent -payload "{\"text\":\"look:$look\"}"
+./bin/skyra metric "$root"
 scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
+# Codex remembers (next/32, H8): remember is in its Horizon's reach, so it is offered. Codex has the
+# agent relay, remembers that call, and calls the procedure it became: no agent runs for it.
+scenario "codex (fake) remembers a call of its own and calls the procedure" -to codex -payload '{"text":"remember:hello"}'
+./bin/skyra metric "$root"
 scenario "echo hello"                      -to echo -payload '{"text":"hello"}'
 scenario "echo probes .skyra/ from inside" -to echo -payload "{\"text\":\"hello\",\"probe\":\"$(cd "$(mktemp -d)" && pwd -P)/.skyra\"}"
 scenario "echo addresses what is outside the Horizon" -to echo -payload '{"text":"hello","misbehave":"yes"}'

@@ -14,17 +14,19 @@ import (
 )
 
 type schema struct {
+	Title    string             `json:"title,omitempty"`
 	Type     string             `json:"type"`
-	Fields   map[string]*schema `json:"fields"`
-	Required []string           `json:"required"`
-	Items    *schema            `json:"items"`
+	Fields   map[string]*schema `json:"fields,omitempty"`
+	Required []string           `json:"required,omitempty"`
+	Items    *schema            `json:"items,omitempty"`
 }
 type step struct {
-	To      string                        `json:"to"`
-	Payload json.RawMessage               `json:"payload"`
-	State   string                        `json:"state"`
-	Value   json.RawMessage               `json:"value"`
-	Fault   *struct{ Kind, Cause string } `json:"fault"`
+	To          string                        `json:"to"`
+	Payload     json.RawMessage               `json:"payload"`
+	State       string                        `json:"state"`
+	Value       json.RawMessage               `json:"value"`
+	Observation string                        `json:"observation"`
+	Fault       *struct{ Kind, Cause string } `json:"fault"`
 }
 type continuation struct {
 	Frame string `json:"frame"`
@@ -32,8 +34,9 @@ type continuation struct {
 		Text, Conversation, Thread, Incarnation string
 		ActivityAt                              int64 `json:"activity_at"`
 	} `json:"input"`
-	Tools map[string]*schema `json:"tools"`
-	Steps []step             `json:"steps"`
+	Tools     map[string]*schema   `json:"tools"`
+	Contracts map[string][]*schema `json:"contracts"`
+	Steps     []step               `json:"steps"`
 }
 type observation struct {
 	Lines                   []string `json:"lines"`
@@ -86,9 +89,186 @@ var modelTools = map[string]string{
 		"The workspace itself is read-only. A failure is reported in error (outside_scratch, symlink, not_text, too_large, denied).",
 }
 
+// tool is one tool Codex is offered: its name, what it says, its schema, and
+// the name in reach a call to it invokes.
+type tool struct {
+	name, description, target string
+	schema                    *schema
+	kind                      string // "": a call with the model's arguments; remember; procedure
+}
+
+// tools is everything Codex is offered, in a fixed order (next/32): the model
+// tools in reach; when the interpreter is in reach, remember (by the index of
+// one of this turn's own calls: the adapter, a worker, holds its observation)
+// and procedure (its input goes to the interpreter, which runs the procedure
+// whose contract it fits); and one tool per procedure that exists when the
+// thread starts, labelled by its contract's title, never a hash. Codex's
+// tools are fixed at thread/start, so a procedure remembered in this thread
+// is called through procedure.
+func tools(c continuation) []tool {
+	var ts []tool
+	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
+		if c.Tools[name] != nil {
+			ts = append(ts, tool{name: name, description: modelTools[name], target: name, schema: c.Tools[name]})
+		}
+	}
+	interp := interpreter(c)
+	if interp == "" {
+		return ts
+	}
+	ts = append(ts,
+		tool{name: "remember", target: interp, kind: "remember", description: "Remember how one of your tool calls in this turn was done, as a procedure: " +
+			"call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, " +
+			"and with no approval. Only a call that itself called tools can be remembered.",
+			schema: &schema{Type: "object", Required: []string{"call"}, Fields: map[string]*schema{"call": {Type: "number"}}}},
+		tool{name: "procedure", target: interp, kind: "procedure", description: "Run a remembered procedure on new input: input is what you would give the call it was remembered from.",
+			schema: &schema{Type: "object", Required: []string{"input"}, Fields: map[string]*schema{"input": {Type: "any"}}}})
+	for _, s := range contractsOf(c, interp)[1:] {
+		if name := toolName(s.Title); name != "" && !slices.ContainsFunc(ts, func(t tool) bool { return t.name == name }) {
+			ts = append(ts, tool{name: name, target: interp, schema: s, description: "A remembered procedure: " + s.Title})
+		}
+	}
+	return ts
+}
+
+// interpreter is the name in reach that holds remember, or "".
+func interpreter(c continuation) string {
+	for _, name := range slices.Sorted(maps.Keys(c.Tools)) {
+		if s := c.Tools[name]; s != nil && s.Title == "remember" {
+			return name
+		}
+	}
+	return ""
+}
+
+func contractsOf(c continuation, name string) []*schema {
+	if all, ok := c.Contracts[name]; ok {
+		return all
+	}
+	if s := c.Tools[name]; s != nil {
+		return []*schema{s}
+	}
+	return nil
+}
+
+// toolName is a title as a dynamic tool name, or "" if it cannot be one.
+func toolName(title string) string {
+	if title == "" || len(title) > 64 {
+		return ""
+	}
+	for _, r := range title {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return ""
+		}
+	}
+	return title
+}
+
+func lookup(c continuation, name string) (tool, bool) {
+	ts := tools(c)
+	i := slices.IndexFunc(ts, func(t tool) bool { return t.name == name })
+	if i < 0 {
+		return tool{}, false
+	}
+	return ts[i], true
+}
+
 func offered(c continuation, name string) bool {
-	_, ok := modelTools[name]
-	return ok && c.Tools[name] != nil
+	_, ok := lookup(c, name)
+	return ok
+}
+
+// toolEmission is the instruction a tool call becomes. results are this
+// turn's tool steps, in the order Codex's calls were invoked.
+func toolEmission(c continuation, results []step, name string, args json.RawMessage) string {
+	t, _ := lookup(c, name)
+	var payload any = args
+	switch t.kind {
+	case "remember":
+		var a struct {
+			Call *int `json:"call"`
+		}
+		if json.Unmarshal(args, &a) != nil || a.Call == nil || *a.Call < 0 || *a.Call >= len(results) {
+			payload = map[string]any{"remember": map[string]any{}} // no such call: intake refuses it
+			break
+		}
+		s := results[*a.Call]
+		payload = map[string]any{"remember": map[string]any{"observation": s.Observation,
+			"contract": map[string]any{"target": s.To, "schema": selected(contractsOf(c, s.To), s.Payload)}}}
+	case "procedure":
+		var a struct {
+			Input json.RawMessage `json:"input"`
+		}
+		_ = json.Unmarshal(args, &a)
+		payload = a.Input
+	}
+	return emit(t.target, payload)
+}
+
+// selected is the one contract a payload fits, as the kernel selected it.
+func selected(contracts []*schema, payload json.RawMessage) *schema {
+	var v any
+	d := json.NewDecoder(strings.NewReader(string(payload)))
+	d.UseNumber()
+	if d.Decode(&v) != nil {
+		return nil
+	}
+	var fit []*schema
+	for _, c := range contracts {
+		if fits(c, v) {
+			fit = append(fit, c)
+		}
+	}
+	if len(fit) != 1 {
+		return nil
+	}
+	return fit[0]
+}
+
+func fits(s *schema, v any) bool {
+	switch s.Type {
+	case "object":
+		o, ok := v.(map[string]any)
+		if !ok {
+			return false
+		}
+		for k, e := range o {
+			if f := s.Fields[k]; f == nil || !fits(f, e) {
+				return false
+			}
+		}
+		for _, r := range s.Required {
+			if _, ok := o[r]; !ok {
+				return false
+			}
+		}
+		return true
+	case "array":
+		a, ok := v.([]any)
+		if !ok {
+			return false
+		}
+		for _, e := range a {
+			if !fits(s.Items, e) {
+				return false
+			}
+		}
+		return true
+	case "string":
+		_, ok := v.(string)
+		return ok
+	case "number":
+		_, ok := v.(json.Number)
+		return ok
+	case "bool":
+		_, ok := v.(bool)
+		return ok
+	case "null":
+		return v == nil
+	case "any":
+		return true
+	}
+	return false
 }
 
 func main() {
@@ -140,7 +320,7 @@ func decide(c continuation) (string, error) {
 		d.Thread = ""
 	}
 	for _, s := range c.Steps {
-		if _, tool := modelTools[s.To]; tool {
+		if !strings.HasPrefix(s.To, "codex.") {
 			// A tool's return or fault is an observation for Codex, in the same turn.
 			d.Results = append(d.Results, s)
 			continue
@@ -341,14 +521,12 @@ func decide(c continuation) (string, error) {
 		return ioCall(d.Incarnation, nil, d.Partial), nil
 	}
 	if !d.SentThread && d.Thread == "" {
-		tools := []any{}
-		for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-			if offered(c, name) {
-				tools = append(tools, map[string]any{"name": name, "description": modelTools[name], "inputSchema": jsonSchema(c.Tools[name])})
-			}
+		defs := []any{}
+		for _, t := range tools(c) {
+			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
 		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
-		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": tools, "developerInstructions": "Only registered dynamic tools may perform effects."})
+		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": defs, "developerInstructions": "Only registered dynamic tools may perform effects."})
 		return ioCall(d.Incarnation, []string{string(initialized), start}, d.Partial), nil
 	}
 	if d.Thread == "" {
@@ -389,9 +567,9 @@ func decide(c continuation) (string, error) {
 			if len(args) == 0 {
 				args = json.RawMessage(`{}`)
 			}
-			return emit(call.Params.Tool, args), nil
+			return toolEmission(c, d.Results, call.Params.Tool, args), nil
 		}
-		if d.Results[i].To != call.Params.Tool {
+		if t, _ := lookup(c, call.Params.Tool); d.Results[i].To != t.target {
 			return "", fmt.Errorf("tool call %s asked for %s, but step %d invoked %s", id(call.ID), call.Params.Tool, i, d.Results[i].To)
 		}
 		result := toolResult(call.ID, d.Results[i])
@@ -442,6 +620,8 @@ func jsonSchema(s *schema) map[string]any {
 		return map[string]any{"type": "array", "items": jsonSchema(s.Items)}
 	case "bool":
 		return map[string]any{"type": "boolean"}
+	case "any":
+		return map[string]any{}
 	default:
 		return map[string]any{"type": s.Type}
 	}
