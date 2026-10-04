@@ -18,9 +18,11 @@ import (
 )
 
 // Schema is a JSON type. Fit is structural and strict: an object's unknown
-// fields do not fit.
+// fields do not fit. Its title names it where a name is shown (a tool
+// offered to a model, a procedure's header); fit ignores it.
 type Schema struct {
-	Type     string             `json:"type"`               // object | array | string | number | bool | null
+	Title    string             `json:"title,omitempty"`    // what it is called, never part of fit
+	Type     string             `json:"type"`               // object | array | string | number | bool | null | any
 	Fields   map[string]*Schema `json:"fields,omitempty"`   // object: its known fields
 	Required []string           `json:"required,omitempty"` // object: fields that must be present
 	Items    *Schema            `json:"items,omitempty"`    // array: every element
@@ -47,7 +49,7 @@ func (s *Schema) Check() error {
 		if err := s.Items.Check(); err != nil {
 			return fmt.Errorf("items: %w", err)
 		}
-	case "string", "number", "bool", "null":
+	case "string", "number", "bool", "null", "any":
 	default:
 		return fmt.Errorf("unknown type %q", s.Type)
 	}
@@ -135,6 +137,8 @@ func Fits(s *Schema, v any) error {
 		if v != nil {
 			return fmt.Errorf("want null, got %s", kind(v))
 		}
+	case "any":
+		// Any JSON value: a syscall that takes a schema, or a value it passes on.
 	default:
 		return fmt.Errorf("unknown type %q", s.Type)
 	}

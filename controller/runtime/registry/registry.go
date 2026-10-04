@@ -64,8 +64,8 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 	dir := filepath.Dir(file)
 	reach := map[string]horizon.Surface{}
 	for name, e := range entries {
-		if strings.HasPrefix(name, "system.") {
-			return nil, room, fmt.Errorf("%s: the room's facets are the runtime's, never registered", name)
+		if name == "system" || strings.HasPrefix(name, "system.") {
+			return nil, room, fmt.Errorf("%s: the Horizon's syscalls are the runtime's, never registered", name)
 		}
 		var d Declared
 		if err := strict(resolve(dir, e.Contract), &d); err != nil {

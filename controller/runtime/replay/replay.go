@@ -151,9 +151,10 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 			if err != nil {
 				return none, err
 			}
-			// One instruction of several: a fault holds a slot of its own.
-			// The release its parent committed says which it was.
-			if rec.State == record.Fault {
+			// One instruction of several: an invoke is forked, a fault holds
+			// a slot of its own. The release its parent committed says which
+			// it was.
+			if rec.State != record.Return {
 				if alt, _ := machine.Fanned(h, rec, stamp); tree.Released(w.root, alt) {
 					next = alt
 				}

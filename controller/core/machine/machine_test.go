@@ -635,13 +635,11 @@ func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
 func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
 	room := operator
 	room.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
-	for name, f := range RoomFacets() {
-		room.Reach[name] = f
-	}
+	room.Reach[System] = Syscalls()
 	echo := `{"to":"echo","payload":{"text":"a"}}`
 	for name, other := range map[string]string{
 		"a return":    `{"to":"FRAME","payload":"done"}`,
-		"a narrowing": `{"to":"system.narrow","payload":{"actor":"echo"}}`,
+		"a narrowing": `{"to":"system","payload":{"narrow":{"actor":"echo"}}}`,
 	} {
 		ag, _ := Step(Instance{Phase: Intake}, Received{Under: room, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 		self, _ := Narrow(room, ag.R, ag.Stamp)

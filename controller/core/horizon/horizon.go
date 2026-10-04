@@ -95,24 +95,36 @@ func stringsAllow(ceiling, requested []string) bool {
 // (next/25). Its identity (the binary, pinned by content hash) and its
 // contracts. What it may reach and touch belongs to the Horizon it runs under.
 type Surface struct {
-	Path               string           `json:"path"`
-	SHA256             string           `json:"sha256"`
-	Input              *contract.Schema `json:"input"`                          // what invoking it must fit
-	Continuation       bool             `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
-	System             string           `json:"system,omitempty"`               // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
-	Resident           bool             `json:"resident,omitempty"`             // launch and retain a stream connection in custody
-	Connection         bool             `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
-	CloseConnection    bool             `json:"close_connection,omitempty"`     // release that connection after this operation
-	Args               []string         `json:"args,omitempty"`                 // fixed arguments for a resident target
-	ResourceOwnerDepth int              `json:"resource_owner_depth,omitempty"` // ancestor frame identifying the resident connection
-	ResidentProfile    string           `json:"resident_profile,omitempty"`     // named runtime-rendered profile template
-	ProxyHosts         []string         `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
-	ProxyPath          string           `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
-	ProxySHA256        string           `json:"proxy_sha256,omitempty"`
+	Path               string             `json:"path"`
+	SHA256             string             `json:"sha256"`
+	Input              *contract.Schema   `json:"input"`                          // what invoking it must fit: its registered contract
+	Contracts          []*contract.Schema `json:"contracts,omitempty"`            // its other contracts: a syscall's, or one the actor added to itself (next/32)
+	Continuation       bool               `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
+	System             string             `json:"system,omitempty"`               // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
+	Resident           bool               `json:"resident,omitempty"`             // launch and retain a stream connection in custody
+	Connection         bool               `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
+	CloseConnection    bool               `json:"close_connection,omitempty"`     // release that connection after this operation
+	Args               []string           `json:"args,omitempty"`                 // fixed arguments for a resident target
+	ResourceOwnerDepth int                `json:"resource_owner_depth,omitempty"` // ancestor frame identifying the resident connection
+	ResidentProfile    string             `json:"resident_profile,omitempty"`     // named runtime-rendered profile template
+	ProxyHosts         []string           `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
+	ProxyPath          string             `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
+	ProxySHA256        string             `json:"proxy_sha256,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.
 	Host string `json:"host,omitempty"`
+}
+
+// All is every contract of a surface, the registered one first. A contract
+// is identified by (target, schema): an invoke names the target, and the
+// payload selects the one contract it fits (next/32, decision 20).
+func (s Surface) All() []*contract.Schema {
+	var all []*contract.Schema
+	if s.Input != nil {
+		all = append(all, s.Input)
+	}
+	return append(all, s.Contracts...)
 }
 
 // Horizon is everything a step knows besides the bytes. It is the release
@@ -135,6 +147,9 @@ type Horizon struct {
 	Reach     map[string]Surface `json:"reach"`             // what emissions under this Horizon may invoke
 	Authority Authority          `json:"authority"`         // the OS grants everything under this Horizon runs with
 	Refs      map[string]Grant   `json:"refs,omitempty"`    // references received from the room: each names a narrowed Horizon for one actor (next/26)
+	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a reference, its actor): who an extend-reach extends
+	Origin    string             `json:"origin,omitempty"`  // the invoke that created this Horizon by a narrowing; "" for the room's. Frames that share it share one Horizon
+	Forked    bool               `json:"forked,omitempty"`  // this frame, or one below it in this Horizon, is one of several siblings (fan-out)
 	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
 	Resume    *Horizon           `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
 }

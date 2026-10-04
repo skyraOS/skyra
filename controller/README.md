@@ -25,7 +25,8 @@ record tree in `.skyra/`.
 | **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": address, "payload": JSON}`, and `interpret` derives the state from where it stands: its own slot is a return, a name in reach an invoke; anything else is a typed fault (`malformed`, `horizon`, `contract`, `leaf`, `custody`) that carries the observation it was derived from | `machine.interpret` |
 | **Input contracts** | Every surface declares an input contract, and how it reads its input (`continuation`). It declares nothing about what it may reach, and nothing about what it returns. Fit is strict | `core/contract/`, `targets/*/contract.json` |
 | **One authority per Horizon** | Reach and OS grants belong to the Horizon, and every call shares its caller's (next/24). The sandbox is rendered from the Horizon, the same for everything under it, plus the exclusions: `.skyra/` is always denied, and exec is allowed only for the program being run | `machine.Narrow`, `horizon.Render` |
-| **Narrowing through the room** | The room's facet `system.narrow` returns a reference to a narrowed Horizon for one actor; the reference joins the caller's reach, and invoking it runs the actor under the narrower authority. A narrowing that asks for anything not held is a horizon fault (next/26) | `machine/room.go` |
+| **The Horizon as an actor** (next/32) | Every Horizon holds `system`, whose contracts are the syscalls: `{"to": "system", "payload": {"narrow": …}}` returns a reference to a narrowed Horizon for one actor, which joins the caller's reach; invoking it runs the actor under the narrower authority. `extend-reach` adds a contract to the emitter's own reach entry, throughout its Horizon, with no approval: the actor is derived from the emitter, never named. A narrowing that asks for anything not held is a horizon fault (next/26) | `machine/room.go` |
+| **Contracts by (target, schema)** (next/32) | A name in reach holds a set of contracts: its registered one, and any it added to itself. At intake the payload selects the one it fits; none, or more than one (ambiguous), is a contract fault. A continuation is shown every contract, and told which one it is executed against | `machine.Selected`, `horizon.Surface.All` |
 | **Horizons committed, looked up, re-derived** | A Horizon is released by committing it; the child is handed its hash, looks it up, and refuses it unless its own commit derives exactly that Horizon | `tree.PutHorizon`, `machine.accept` |
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a return discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
@@ -53,7 +54,7 @@ OS, the tree or the network.
 | [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads |
 | [`horizon`](core/horizon/) | Authority: `Surface` (identity and contracts), `Horizon` (reach, references, grants; the frame a return discharges and the continuation waiting on it), `Render` (the Seatbelt profile) |
 | [`record`](core/record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` |
-| [`machine`](core/machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, resolve, routing, the room's facets. **Pure, enforced** |
+| [`machine`](core/machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, fan-out, resolve, the Horizon's syscalls. **Pure, enforced** |
 
 **[`runtime/`](runtime/): the I/O around the core, inside one step**
 
@@ -118,7 +119,7 @@ room's one authority, which genesis records and everything under the root
 Horizon shares until a narrowing. Exec is not a grant: a profile allows exec
 of the program being run and nothing else. Paths are resolved at registry
 load. Legacy top-level `connect` entries are folded into `authority.connect`.
-No entry may be named `system.*`: those are the room's facets.
+No entry may be named `system` or `system.*`: those are the Horizon's syscalls and references.
 
 A Horizon may also carry a **scratch** directory (`authority.scratch`): read
 and write for everything under it, and, like everywhere, no exec but the
@@ -281,7 +282,8 @@ sandbox that prohibits applying Seatbelt profiles.
   JSON array is that many instructions, one successor each, every slot opened
   before any is released. A fan-out cannot return, cannot carry a resident
   connection, and cannot hold an invoke that changes the waiter's Horizon
-  (`system.narrow`): those are emitted alone. The scripted agent fans out;
+  (`narrow`, `extend-reach`): those are emitted alone, and a branch of a
+  fan-out cannot extend the Horizon its siblings share. The scripted agent fans out;
   Codex and the human still emit one instruction at a time.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
 - **The provider profile is pinned to Codex 0.160.0** (`launch.CODEX_VERSION`,

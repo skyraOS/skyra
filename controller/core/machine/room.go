@@ -2,29 +2,42 @@ package machine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
+	"skyra/controller/core/record"
 )
 
-// The room's facets (next/26). The room is the root Horizon; a caller never
-// invokes it, only a facet of it, as an ordinary invoke with an ordinary
-// frame. The runtime implements the facets itself, because what they do,
-// create a Horizon, is a derivation, not a program. No registry may name one.
+// The Horizon as an actor (next/32, decisions 16, 21). Every Horizon holds the
+// name system, and its contracts are the syscalls: a syscall is an ordinary
+// emission to it, as a Unix process calls the kernel without knowing which
+// container it runs in. The runtime answers them itself, because what they
+// do (create a Horizon, read its history, add a contract to it) changes or
+// reads Horizon state, which only the kernel holds. No registry may name
+// system, or anything under system.
 //
-//	{"to": "system.narrow", "payload": {"actor": "<name in reach>", "reach": [...], "authority": {...}}}
+//	{"to": "system", "payload": {"narrow": {"actor": "<name in reach>", "reach": [...], "authority": {...}}}}
 //	   → returns {"reference": "<ref>"}: a narrowed Horizon for that actor, now in the caller's reach
 //	{"to": "<ref>", "payload": <the actor's input>}
 //	   → an ordinary invoke of the actor, under the narrowed Horizon
+//	{"to": "system", "payload": {"extend-reach": {"schema": <a contract>}}}
+//	   → returns {"ok": true}: the emitter's own reach entry holds one more contract,
+//	     throughout its Horizon
 //
 // A narrowing may only drop what is held. "reach" and "authority" are what
-// the actor keeps; left out, it keeps all of the caller's.
+// the actor keeps; left out, it keeps all of the caller's. An extension adds a
+// contract, never authority: the actor is the emitter, derived, never named,
+// so an actor can only extend itself (decision 17).
 const (
+	System       = "system"
 	SystemPrefix = "system."
-	NarrowFacet  = "system.narrow"
+
+	Narrowing = "narrow"
+	Extending = "extend-reach"
 )
 
 var (
@@ -38,22 +51,69 @@ var (
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
 	}}
+	extendIn = &contract.Schema{Type: "object", Required: []string{"schema"}, Fields: map[string]*contract.Schema{
+		"schema": {Type: "any"},
+	}}
 )
 
-// RoomFacets are the room's facets, as surfaces genesis puts in the root reach.
-func RoomFacets() map[string]horizon.Surface {
-	return map[string]horizon.Surface{
-		NarrowFacet: {System: "narrow", Input: narrowIn},
-	}
+// call is a syscall's contract: an object naming exactly that syscall.
+func call(name string, in *contract.Schema) *contract.Schema {
+	return &contract.Schema{Title: name, Type: "object", Required: []string{name}, Fields: map[string]*contract.Schema{name: in}}
 }
 
-// changesWaiter reports whether invoking s changes the Horizon of the caller
-// waiting on it: system.narrow records a reference there.
-func changesWaiter(s horizon.Surface) bool { return s.System == "narrow" }
+// Syscalls is the surface every Horizon holds under the name system: no
+// binary, and one contract per syscall.
+func Syscalls() horizon.Surface {
+	return horizon.Surface{System: "horizon", Contracts: []*contract.Schema{
+		call(Narrowing, narrowIn),
+		call(Extending, extendIn),
+	}}
+}
 
-// narrowing derives the Grant a system.narrow payload asks for under h, or
-// says why it reaches past the Horizon. It is checked at intake, so a
-// narrowing that asks for anything not held is a horizon fault.
+// IsSystem reports whether a name is the runtime's: system, a syscall's
+// reference, or anything else under system.
+func IsSystem(name string) bool { return name == System || strings.HasPrefix(name, SystemPrefix) }
+
+// syscall is the syscall a payload to system names, and its arguments.
+func syscall(payload json.RawMessage) (string, json.RawMessage) {
+	var o map[string]json.RawMessage
+	if json.Unmarshal(payload, &o) != nil || len(o) != 1 {
+		return "", nil
+	}
+	for name, args := range o {
+		return name, args
+	}
+	return "", nil
+}
+
+// changesWaiter reports whether an invoke changes the Horizon of the caller
+// waiting on it: narrow records a reference there, extend-reach a contract.
+func changesWaiter(r record.Record, s horizon.Surface) bool {
+	if s.System != "horizon" {
+		return false
+	}
+	name, _ := syscall(r.Payload)
+	return name == Narrowing || name == Extending
+}
+
+// checkSyscall checks a syscall's arguments against the Horizon it was
+// emitted under, at intake: a narrowing that asks for anything not held, or
+// an extension that is not the emitter's to make, is a fault, of this kind.
+func checkSyscall(h horizon.Horizon, payload json.RawMessage) (string, error) {
+	switch name, args := syscall(payload); name {
+	case Narrowing:
+		if _, err := narrowing(h, args); err != nil {
+			return record.Horizon, err
+		}
+	case Extending:
+		return extending(h, args)
+	}
+	return "", nil
+}
+
+// narrowing derives the Grant a narrow payload asks for under h, or says why
+// it reaches past the Horizon. It is checked at intake, so a narrowing that
+// asks for anything not held is a horizon fault.
 func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error) {
 	var ask struct {
 		Actor     string             `json:"actor"`
@@ -63,7 +123,7 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return horizon.Grant{}, err
 	}
-	if _, ok := h.Reach[ask.Actor]; !ok || strings.HasPrefix(ask.Actor, SystemPrefix) {
+	if _, ok := h.Reach[ask.Actor]; !ok || IsSystem(ask.Actor) {
 		return horizon.Grant{}, fmt.Errorf("%q is not an actor in reach", ask.Actor)
 	}
 	g := horizon.Grant{Actor: ask.Actor, Authority: h.Authority}
@@ -91,19 +151,100 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 	return g, nil
 }
 
-// runFacet is what a facet of the room emits when it runs: nothing executes,
-// the result is derived. system.narrow returns the reference: the name the
-// waiting caller now holds it under, meaningful only in the reach it was
-// recorded into.
+// extending checks an extend-reach payload under h, the emitter's Horizon
+// (decision 17): the actor is the emitter, the name its invoke resolved to;
+// the schema is one the kernel can check; and (actor, schema) is not
+// already there. It returns the fault kind for what fails.
+func extending(h horizon.Horizon, payload json.RawMessage) (string, error) {
+	_, err := extension(h, payload)
+	switch {
+	case err == nil:
+		return "", nil
+	case errors.Is(err, errNotTheEmitters):
+		return record.Horizon, err
+	}
+	return record.Contract, err
+}
+
+var errNotTheEmitters = errors.New("not the emitter's to extend")
+
+// extension derives the contract an extend-reach adds, under h.
+func extension(h horizon.Horizon, payload json.RawMessage) (*contract.Schema, error) {
+	var ask struct {
+		Schema json.RawMessage `json:"schema"`
+	}
+	if err := json.Unmarshal(payload, &ask); err != nil {
+		return nil, err
+	}
+	d := json.NewDecoder(strings.NewReader(string(ask.Schema)))
+	d.DisallowUnknownFields()
+	var s contract.Schema
+	if err := d.Decode(&s); err != nil {
+		return nil, fmt.Errorf("schema: %w", err)
+	}
+	if err := s.Check(); err != nil {
+		return nil, fmt.Errorf("schema: %w", err)
+	}
+	switch {
+	case h.Surface == nil || h.Name == "":
+		return nil, fmt.Errorf("%w: only an actor extends itself", errNotTheEmitters)
+	case h.Forked:
+		// Its siblings hold this Horizon too, without the extension: whoever
+		// resolves the round last would decide whether the waiter has it.
+		return nil, fmt.Errorf("%w: one of several siblings cannot extend the Horizon they share", errNotTheEmitters)
+	}
+	actor, ok := h.Reach[h.Name]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q is not in its own Horizon's reach", errNotTheEmitters, h.Name)
+	}
+	want := string(contract.Canonical(&s))
+	for _, c := range actor.All() {
+		if string(contract.Canonical(c)) == want {
+			return nil, fmt.Errorf("%s already holds this contract", h.Name)
+		}
+	}
+	return &s, nil
+}
+
+// extended is a Horizon and every frame below it that shares its Horizon
+// (the same origin), with one more contract on actor's reach entry. Maps are
+// copied, never written in place: other frames share them.
+func extended(h horizon.Horizon, origin, actor string, s *contract.Schema) horizon.Horizon {
+	if h.Origin == origin {
+		if entry, ok := h.Reach[actor]; ok {
+			reach := make(map[string]horizon.Surface, len(h.Reach))
+			for name, surface := range h.Reach {
+				reach[name] = surface
+			}
+			entry.Contracts = append(slices.Clone(entry.Contracts), s)
+			reach[actor] = entry
+			h.Reach = reach
+		}
+	}
+	if h.Resume != nil {
+		below := extended(*h.Resume, origin, actor, s)
+		h.Resume = &below
+	}
+	return h
+}
+
+// runFacet is what a syscall emits when it runs: nothing executes, the result
+// is derived. narrow returns the reference: the name the waiting caller now
+// holds it under, meaningful only in the reach it was recorded into.
 func runFacet(s Instance) []byte {
-	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": map[string]string{"reference": refName(s.Self.Refs)}})
+	var result any = map[string]bool{"ok": true}
+	if name, _ := syscall(s.R.Payload); name == Narrowing {
+		result = map[string]string{"reference": refName(s.Self.Refs)}
+	}
+	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": result})
 	return out
 }
 
 // refName names the next reference a Horizon holding refs receives. It is a
 // counter, not the invoke's stamp, because a continuation is shown its
-// references and hashes never reach a model (next/30, F1). It is in the runtime's
-// namespace, which no registry may name, so it never shadows a surface.
+// references and hashes never reach a model (next/30, F1). It is in the
+// runtime's namespace, which no registry may name, so it never shadows a
+// surface.
 func refName(refs map[string]horizon.Grant) string {
 	for n := len(refs) + 1; ; n++ {
 		name := fmt.Sprintf("%sref.%d", SystemPrefix, n)
@@ -113,9 +254,14 @@ func refName(refs map[string]horizon.Grant) string {
 	}
 }
 
-// kept is a reach restricted to the names a grant keeps.
+// kept is a reach restricted to the names a grant keeps. Every Horizon holds
+// system: its syscalls are the Horizon's own (decision 16), and none of them
+// can add authority.
 func kept(reach map[string]horizon.Surface, names []string) map[string]horizon.Surface {
 	out := map[string]horizon.Surface{}
+	if s, ok := reach[System]; ok {
+		out[System] = s
+	}
 	for _, name := range names {
 		if s, ok := reach[name]; ok {
 			out[name] = s

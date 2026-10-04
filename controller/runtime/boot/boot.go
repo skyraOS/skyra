@@ -51,9 +51,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 			return Outcome{}, err
 		}
 	}
-	for name, facet := range machine.RoomFacets() { // the room's own facets, in its reach
-		reach[name] = facet
-	}
+	reach[machine.System] = machine.Syscalls() // the Horizon's own contracts: its syscalls (next/32)
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
 	// operator, and everything under it shares them until a narrowing. It is

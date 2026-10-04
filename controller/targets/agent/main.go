@@ -7,7 +7,7 @@
 // Its whole policy: with no steps yet, ask echo to repeat the text; once echo
 // has answered, return what it said to the slot its frame discharges.
 //
-// With text "narrow:<text>", it first asks the room for echo under a narrowed
+// With text "narrow:<text>", it first asks its Horizon (system, narrow) for echo under a narrowed
 // Horizon (no reach, no grants), then asks echo through the reference it got
 // back (next/26).
 //
@@ -16,6 +16,10 @@
 // written "!<name>" asks <name> instead, which is out of reach: that one
 // instruction faults, and its siblings still run. Once every slot is
 // discharged, it returns what came back, in the order it asked.
+//
+// With text "extend:<text>", it adds a contract to itself (system,
+// extend-reach: next/32), "shout", then invokes itself through it. Run
+// against shout, it returns its input in capitals.
 package main
 
 import (
@@ -26,9 +30,13 @@ import (
 )
 
 type continuation struct {
-	Frame string `json:"frame"`
+	Frame    string `json:"frame"`
+	Contract *struct {
+		Title string `json:"title"`
+	} `json:"contract"` // the contract it is executed against, when it has several
 	Input struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Shout string `json:"shout"`
 	} `json:"input"`
 	Steps []struct {
 		To    string          `json:"to"`
@@ -47,13 +55,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agent:", err)
 		os.Exit(1)
 	}
+	if c.Contract != nil && c.Contract.Title == "shout" {
+		emit(c.Frame, strings.ToUpper(c.Input.Shout))
+		return
+	}
+	if word, isExtend := strings.CutPrefix(c.Input.Text, "extend:"); isExtend {
+		extend(c, word)
+		return
+	}
 	narrowed, isNarrow := strings.CutPrefix(c.Input.Text, "narrow:")
 	if parts, isFan := strings.CutPrefix(c.Input.Text, "fan:"); isFan {
 		fan(c, strings.Split(parts, ","))
 		return
 	}
 	if len(c.Steps) == 0 && isNarrow {
-		emit("system.narrow", map[string]any{"actor": "echo", "reach": []string{}, "authority": map[string]any{}})
+		emit("system", map[string]any{"narrow": map[string]any{"actor": "echo", "reach": []string{}, "authority": map[string]any{}}})
 		return
 	}
 	if len(c.Steps) == 0 {
@@ -74,6 +90,27 @@ func main() {
 	var said string
 	_ = json.Unmarshal(last.Value, &said)
 	emit(c.Frame, fmt.Sprintf("echo said %q", said))
+}
+
+// extend adds the shout contract to itself, invokes itself through it, and
+// returns what it said.
+func extend(c continuation, word string) {
+	switch len(c.Steps) {
+	case 0:
+		emit("system", map[string]any{"extend-reach": map[string]any{"schema": map[string]any{
+			"title": "shout", "type": "object", "required": []string{"shout"},
+			"fields": map[string]any{"shout": map[string]string{"type": "string"}}}}})
+	case 1:
+		if f := c.Steps[0].Fault; f != nil {
+			emit(c.Frame, fmt.Sprintf("extend-reach failed (%s): %s", f.Kind, f.Cause))
+			return
+		}
+		emit("agent", map[string]string{"shout": word})
+	default:
+		var said string
+		_ = json.Unmarshal(c.Steps[1].Value, &said)
+		emit(c.Frame, fmt.Sprintf("agent, through shout, said %q", said))
+	}
 }
 
 // fan asks for every part at once, then answers with every step, in order.

@@ -297,11 +297,11 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 // from where the emitter stands (improvements, items 1 and 2):
 //
 //	addresses the slot its frame discharges                                     → return
-//	names a capability in reach, payload fits its input contract                → invoke
+//	names a capability in reach, payload fits exactly one of its contracts      → invoke
 //	names anything else                                                         → fault (horizon)
 //	addresses nothing                                                           → fault (leaf)
 //	not readable as operands                                                    → fault (malformed)
-//	payload does not fit the contract of what it addresses                      → fault (contract)
+//	payload fits none of the contracts of what it addresses, or more than one   → fault (contract)
 //
 // No name is reserved: the slot is the frame's id, a stamp no capability can
 // be named. Every fault carries, as its payload, the observation of why it
@@ -336,15 +336,44 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 	if !ok {
 		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
-	if err := contract.Fits(target.Input, payload); err != nil {
+	if _, err := Selected(target, payload); err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
 	}
-	if target.System == "narrow" {
-		if _, err := narrowing(h, contract.Canonical(payload)); err != nil {
-			return faulted(record.Horizon, to+": "+err.Error(), attempt)
+	if target.System == "horizon" {
+		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
+			return faulted(kind, to+": "+err.Error(), attempt)
 		}
 	}
 	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
+}
+
+// Selected is the one contract of a target that a payload fits (next/32,
+// decisions 20, 27). A contract is (target, schema): the invoke names the
+// target, and fit picks the schema. None fits, or more than one does, is a
+// contract fault; the kernel never reasons about whether two schemas overlap,
+// it refuses when an ambiguity actually occurs.
+func Selected(target horizon.Surface, payload any) (*contract.Schema, error) {
+	var fit []*contract.Schema
+	var first error
+	closest := false // the error kept is from a contract whose required fields the payload has
+	for _, c := range target.All() {
+		if err := contract.Fits(c, payload); err != nil {
+			if near := hasRequired(c, payload); first == nil || near && !closest {
+				first, closest = err, near
+			}
+			continue
+		}
+		fit = append(fit, c)
+	}
+	switch {
+	case len(fit) == 1:
+		return fit[0], nil
+	case len(fit) > 1:
+		return nil, fmt.Errorf("ambiguous: the payload fits %d of its contracts", len(fit))
+	case first == nil:
+		return nil, errors.New("no contract")
+	}
+	return nil, first
 }
 
 // faulted is an intake fault. Its payload is the observation it was derived
@@ -367,8 +396,9 @@ func accept(s Instance, e Released) error {
 		return fmt.Errorf("release cannot be derived: %w", err)
 	}
 	if a, b := encode(want), encode(e.Self); a != b {
-		// One instruction of several: a fault holds a slot of its own.
-		if alt, _ := Fanned(s.Under, s.R, s.Stamp); s.R.State != record.Fault || encode(alt) != b {
+		// One instruction of several: an invoke is forked, a fault holds a
+		// slot of its own.
+		if alt, _ := Fanned(s.Under, s.R, s.Stamp); encode(alt) != b {
 			return errors.New("release is not what this commit derives")
 		}
 	}
@@ -407,7 +437,8 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	stdin := []byte(s.R.Payload)
 	if e.Self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Tools: tools(e.Self), Steps: []StepView{}})
+		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
+			Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
 	}
 	if e.Self.Surface.Resident {
 		owner := resourceOwner(e.Self)
@@ -543,7 +574,7 @@ func alone(kids []Kid) error {
 		switch {
 		case k.R.State == record.Return:
 			return errors.New("an emission of several instructions cannot return")
-		case k.R.State == record.Invoke && k.Horizon.Surface != nil && changesWaiter(*k.Horizon.Surface):
+		case k.R.State == record.Invoke && k.Horizon.Surface != nil && changesWaiter(k.R, *k.Horizon.Surface):
 			return fmt.Errorf("%s changes the Horizon of whoever waits on it, so it is emitted alone", k.R.To)
 		}
 	}
@@ -582,10 +613,13 @@ func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error 
 // with the same reach, references and grants. Nothing about the callee
 // narrows them; a narrowing is requested, through the room (next/26):
 //
-//	invoke system.narrow   the caller's Horizon, and the waiting caller is
-//	                       recorded as holding a new reference: the grant
-//	                       its payload derives, named system.ref.<n>
-//	invoke a reference     the actor, under the narrowed Horizon it names
+//	invoke system, narrow        the caller's Horizon, and the waiting caller is
+//	                             recorded as holding a new reference: the grant
+//	                             its payload derives, named system.ref.<n>
+//	invoke system, extend-reach  the caller's Horizon, and the waiting caller's
+//	                             reach entry for itself holds one more contract,
+//	                             in every frame below that shares its Horizon
+//	invoke a reference           the actor, under the narrowed Horizon it names
 //
 // An invoke opens a new frame for the child, waited on by the parent as it is
 // now. A return or fault runs nothing: it discharges the parent's slot.
@@ -604,25 +638,37 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 			if !ok {
 				return horizon.Horizon{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
 			}
-			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Frame: stamp, Resume: &waiter}, nil
+			// A Horizon of its own: created by this invoke, so named by it.
+			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority,
+				Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 		}
 	}
 	s, ok := parent.Reach[r.To]
 	if !ok {
 		return horizon.Horizon{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
-	if s.System == "narrow" {
-		g, err := narrowing(parent, r.Payload)
-		if err != nil {
-			return horizon.Horizon{}, err
+	if s.System == "horizon" {
+		switch name, args := syscall(r.Payload); name {
+		case Narrowing:
+			g, err := narrowing(parent, args)
+			if err != nil {
+				return horizon.Horizon{}, err
+			}
+			refs := map[string]horizon.Grant{refName(parent.Refs): g}
+			for name, held := range parent.Refs {
+				refs[name] = held
+			}
+			waiter.Refs = refs
+		case Extending:
+			c, err := extension(parent, args)
+			if err != nil {
+				return horizon.Horizon{}, err
+			}
+			waiter = extended(parent, parent.Origin, parent.Name, c)
 		}
-		refs := map[string]horizon.Grant{refName(parent.Refs): g}
-		for name, held := range parent.Refs {
-			refs[name] = held
-		}
-		waiter.Refs = refs
 	}
-	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
+	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority,
+		Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several
@@ -632,7 +678,11 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 // fault discharges the emitter's own slot.
 func Fanned(parent horizon.Horizon, r record.Record, stamp string) (horizon.Horizon, error) {
 	if r.State != record.Fault {
-		return Narrow(parent, r, stamp)
+		h, err := Narrow(parent, r, stamp)
+		if r.State == record.Invoke {
+			h.Forked = true // its siblings share this Horizon, each on its own copy
+		}
+		return h, err
 	}
 	waiter := parent
 	return horizon.Horizon{Stamp: stamp, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority, Frame: stamp, Resume: &waiter}, nil
@@ -720,6 +770,21 @@ type Observation struct {
 	Discharges []string `json:"discharges"`
 }
 
+// hasRequired reports whether a payload is an object holding every field a
+// contract requires: the contract it was most likely meant for.
+func hasRequired(c *contract.Schema, payload any) bool {
+	o, ok := payload.(map[string]any)
+	if !ok || c.Type != "object" {
+		return false
+	}
+	for _, r := range c.Required {
+		if _, ok := o[r]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // Resolved derives a resolve record from its observation. It is stored as the
 // record's input, so replay derives it again.
 func Resolved(predecessor string, obs []byte) (record.Record, error) {
@@ -776,30 +841,74 @@ func resourceOwner(h horizon.Horizon) string {
 	return h.Frame
 }
 
-// tools is what a continuation is shown: the input contract of everything in
+// tools is what a continuation is shown: the first contract of everything in
 // its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
 // Which of them a model is offered is the adapter's choice, not the runtime's.
 func tools(h horizon.Horizon) map[string]*contract.Schema {
 	t := map[string]*contract.Schema{}
-	for name, s := range h.Reach {
-		t[name] = s.Input
-	}
-	for ref, g := range h.Refs {
-		if s, ok := h.Reach[g.Actor]; ok {
-			t[ref] = s.Input
+	for name, s := range shownReach(h) {
+		if all := s.All(); len(all) > 0 {
+			t[name] = all[0]
 		}
 	}
 	return t
 }
 
+// contracts is every contract of each name in reach that holds more than
+// one, so a continuation sees all of them (next/32, H3).
+func contracts(h horizon.Horizon) map[string][]*contract.Schema {
+	var c map[string][]*contract.Schema
+	for name, s := range shownReach(h) {
+		if all := s.All(); len(all) > 1 {
+			if c == nil {
+				c = map[string][]*contract.Schema{}
+			}
+			c[name] = all
+		}
+	}
+	return c
+}
+
+// shownReach is a Horizon's reach as a continuation sees it: every name,
+// and every reference it holds, as the actor it stands for.
+func shownReach(h horizon.Horizon) map[string]horizon.Surface {
+	r := map[string]horizon.Surface{}
+	for name, s := range h.Reach {
+		r[name] = s
+	}
+	for ref, g := range h.Refs {
+		if s, ok := h.Reach[g.Actor]; ok {
+			r[ref] = s
+		}
+	}
+	return r
+}
+
+// against is the contract a program is executed against, named in its
+// envelope when its surface has more than one: the one its input fits.
+func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
+	if len(s.All()) < 2 {
+		return nil
+	}
+	v, err := contract.Decode(input)
+	if err != nil {
+		return nil
+	}
+	c, _ := Selected(s, v)
+	return c
+}
+
 // Continuation is what a continuation reads on stdin: the frame it runs in,
-// the payload it was invoked with, the tools it may invoke, and every step it
-// has taken, with what came back. It is stateless: everything it knows is here.
+// the payload it was invoked with, the contract it is executed against (when
+// it has more than one), the tools it may invoke, and every step it has
+// taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Frame string                      `json:"frame"`
-	Input json.RawMessage             `json:"input"`
-	Tools map[string]*contract.Schema `json:"tools"`
-	Steps []StepView                  `json:"steps"`
+	Frame     string                        `json:"frame"`
+	Input     json.RawMessage               `json:"input"`
+	Contract  *contract.Schema              `json:"contract,omitempty"`
+	Tools     map[string]*contract.Schema   `json:"tools"`
+	Contracts map[string][]*contract.Schema `json:"contracts,omitempty"`
+	Steps     []StepView                    `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -815,7 +924,10 @@ type StepView struct {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools(waiter), Steps: []StepView{}}
+	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	if waiter.Surface != nil {
+		c.Contract = against(*waiter.Surface, e.Frame.Payload)
+	}
 	for _, round := range e.Rounds {
 		for _, child := range round.Children {
 			c.Steps = append(c.Steps, StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,
