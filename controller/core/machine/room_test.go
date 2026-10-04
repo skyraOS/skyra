@@ -238,3 +238,55 @@ func TestAPayloadFittingTwoContractsIsRefused(t *testing.T) {
 		t.Fatalf("one fitting only the new contract is selected: %+v", r.Fault)
 	}
 }
+
+// strand (next/32, H4) is read from the tree: intake checks what the
+// requester names, release asks the shell to walk, and the walk's strand is
+// the syscall's result. A refusal is a horizon fault of the syscall's frame,
+// derived again by replay from its observation.
+func TestStrandIsReadThenReturned(t *testing.T) {
+	root := room()
+	agent, _ := Narrow(root, intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`), "a1")
+	obs := strings.Repeat("ab", 32)
+	ask := func(observation, target, schema string) string {
+		return `{"to":"system","payload":{"strand":{"observation":"` + observation + `","contract":{"target":"` + target + `","schema":` + schema + `}}}}`
+	}
+	echoContract := `{"type":"object","required":["text"],"fields":{"text":{"type":"string"}}}`
+	for name, c := range map[string]struct{ in, cause string }{
+		"not a stamp":            {ask("x", "echo", echoContract), "not a stamp"},
+		"a target not in reach":  {ask(obs, "shell", echoContract), `"shell" is not an actor`},
+		"a contract it lacks":    {ask(obs, "echo", shout), "no such contract"},
+		"the Horizon's syscalls": {ask(obs, "system", shout), "not an actor"},
+	} {
+		if r := intakeRecord(agent, c.in); r.State != record.Fault || r.Fault.Kind != record.Horizon || !strings.Contains(r.Fault.Cause, c.cause) {
+			t.Errorf("%s: %+v", name, r.Fault)
+		}
+	}
+
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: agent, In: []byte(ask(obs, "echo", echoContract))})
+	if s.State != record.Invoke {
+		t.Fatalf("a strand of a contract the requester holds is an invoke: %+v", s.R.Fault)
+	}
+	s, effs := released(s, selfOf(t, s))
+	read, ok := effs[0].(ReadStrand)
+	if !ok || read.Observation != obs || read.Target != "echo" || read.Schema != echoS.Input || read.Origin != "" {
+		t.Fatalf("release asks the shell to walk the tree: %#v", effs)
+	}
+
+	_, effs = Step(s, StrandRead{Strand: []byte(`{"chain":["c"]}`)})
+	spawn := effs[0].(Spawn)
+	if ret := intakeRecord(spawn.Under, string(spawn.Out)); ret.State != record.Return || string(ret.Payload) != `{"chain":["c"]}` {
+		t.Fatalf("the strand is the syscall's return: %+v %s", ret, spawn.Out)
+	}
+
+	_, effs = Step(s, StrandRead{Refused: "no invoke"})
+	f := effs[1].(Commit).R
+	if f.State != record.Fault || f.Fault.Kind != record.Horizon || f.Fault.Cause != "strand: no invoke" || !f.Supervisor {
+		t.Fatalf("a refusal is a horizon fault of the syscall's frame: %+v", f.Fault)
+	}
+	if again := Observed(f.Predecessor, effs[0].(StoreInput).In); record.Stamp(again) != record.Stamp(f) {
+		t.Fatal("replay derives the refusal's kind from its observation")
+	}
+	if forged := Observed("p", []byte(`{"refused":{"kind":"horizon","cause":"x"},"extra":1}`)); forged.Fault.Kind != record.Custody {
+		t.Fatalf("only a refusal exactly as the runtime writes it carries a kind: %+v", forged.Fault)
+	}
+}

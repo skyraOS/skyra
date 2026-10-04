@@ -127,6 +127,10 @@ type Settled struct { // → Gather: the waiting frame's record and every round 
 }
 type Claimed struct{ Won bool }  // → Claim: whether this instance won the fan-in claim
 type Parked struct{ Err string } // → Execute (async): whether the host took custody of the frame
+type StrandRead struct {         // → Execute (strand): the strand, or why the walk refused it
+	Strand  json.RawMessage
+	Refused string
+}
 
 // Round is one emission of a continuation and the slots it opened.
 type Round struct {
@@ -142,14 +146,15 @@ type Child struct {
 	Discharge *record.Record
 }
 
-func (Received) event() {}
-func (Released) event() {}
-func (Emitted) event()  {}
-func (Started) event()  {}
-func (Stamped) event()  {}
-func (Settled) event()  {}
-func (Claimed) event()  {}
-func (Parked) event()   {}
+func (Received) event()   {}
+func (Released) event()   {}
+func (Emitted) event()    {}
+func (Started) event()    {}
+func (Stamped) event()    {}
+func (Settled) event()    {}
+func (Claimed) event()    {}
+func (Parked) event()     {}
+func (StrandRead) event() {}
 
 // Effects are what Step asks the shell to do, in order. SendStamp, Run,
 // Spawn, GatherWaiter and TryClaim each end with the shell waiting for the
@@ -190,8 +195,14 @@ type SendHorizon struct { // issue a successor's Release: its Horizon plus its f
 type Settle struct{ Result string }         // discharge this instance's frame's slot, once
 type GatherWaiter struct{}                  // read the waiting frame's rounds, then wait for Settled
 type TryClaim struct{ Round, Stamp string } // the fan-in claim on the waiting frame, then wait for Claimed
-type Pop struct{}                           // drop the discharged frame: the resumed continuation holds the rest
-type Park struct {                          // hand this instance, its payload and its frame stack to an actor host, then wait for Parked
+type ReadStrand struct {                    // walk the tree from an observation up to the invoke made through a contract, then wait for StrandRead
+	Observation string
+	Target      string
+	Schema      *contract.Schema
+	Origin      string // the requester's Horizon: the walk stays inside it
+}
+type Pop struct{}  // drop the discharged frame: the resumed continuation holds the rest
+type Park struct { // hand this instance, its payload and its frame stack to an actor host, then wait for Parked
 	Host    string
 	Payload []byte
 }
@@ -209,6 +220,7 @@ func (SendHorizon) effect()   {}
 func (Settle) effect()        {}
 func (GatherWaiter) effect()  {}
 func (TryClaim) effect()      {}
+func (ReadStrand) effect()    {}
 func (Pop) effect()           {}
 func (Park) effect()          {}
 func (Exit) effect()          {}
@@ -245,6 +257,10 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Parked:
 			if s.Phase == Execute && s.Self.Surface != nil && s.Self.Surface.Host != "" {
 				return parked(s, ev)
+			}
+		case StrandRead:
+			if s.Phase == Execute && s.State == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "horizon" {
+				return stranded(s, ev)
 			}
 		case Stamped:
 			if s.Phase == Handoff {
@@ -427,7 +443,15 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	s.Self, s.Phase = e.Self, Execute
 	s.Resources = append([]horizon.Resource(nil), e.Resources...)
 	if e.Self.Surface.System != "" {
-		// A facet of the room: nothing runs; its result is derived.
+		// A syscall: nothing runs; its result is derived. A strand is read
+		// from the tree first.
+		if name, args := syscall(s.R.Payload); name == Stranding {
+			read, err := stranding(*e.Self.Resume, args)
+			if err != nil {
+				return refuse(s, record.Horizon, err.Error())
+			}
+			return s, []Effect{read}
+		}
 		return execute(s, Emitted{Out: runFacet(s)})
 	}
 	if e.Self.Surface.Host != "" {
@@ -938,6 +962,29 @@ func continuation(e Settled, waiter horizon.Horizon) []byte {
 	return b
 }
 
+// stranded: the walk found the strand, which is the syscall's result, or
+// refused it, which is a horizon fault of the syscall's frame.
+func stranded(s Instance, e StrandRead) (Instance, []Effect) {
+	if e.Refused != "" {
+		return refuse(s, record.Horizon, "strand: "+e.Refused)
+	}
+	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": e.Strand})
+	return execute(s, Emitted{Out: out})
+}
+
+// refuse is a syscall's refusal: a supervisor fault of the syscall's own
+// frame, of the kind the syscall derived. Its observation says so, so replay
+// derives the same kind (Observed).
+func refuse(s Instance, kind, cause string) (Instance, []Effect) {
+	return fault(s, string(Refusal(kind, cause)))
+}
+
+// Refusal is the observation of a syscall's refusal.
+func Refusal(kind, cause string) []byte {
+	b, _ := json.Marshal(map[string]any{"refused": record.FaultInfo{Kind: kind, Cause: cause}})
+	return b
+}
+
 // fault is the "maybe commit": this instance still holds custody, so it
 // records what it observed, discharges its own frame's slot with the fault that
 // observation derives, and wakes whoever waits on that slot.
@@ -950,9 +997,19 @@ func fault(s Instance, observed string) (Instance, []Effect) {
 
 // Observed derives a supervisor's fault record from what it observed. The
 // observation is stored as the record's input, so replay derives it again.
+// What a supervisor observes is custody breaking, unless it is a syscall's
+// refusal, which carries its kind. Every other observation begins with the
+// supervisor's own words, never with JSON, so no target can forge one.
 func Observed(stamp string, observation []byte) record.Record {
-	return record.Record{Predecessor: stamp, Input: record.Sum(observation), State: record.Fault,
-		Fault: &record.FaultInfo{Kind: record.Custody, Cause: string(observation)}, Supervisor: true}
+	info := record.FaultInfo{Kind: record.Custody, Cause: string(observation)}
+	var r struct {
+		Refused *record.FaultInfo `json:"refused"`
+	}
+	if json.Unmarshal(observation, &r) == nil && r.Refused != nil && r.Refused.Kind == record.Horizon &&
+		string(Refusal(r.Refused.Kind, r.Refused.Cause)) == string(observation) {
+		info = *r.Refused
+	}
+	return record.Record{Predecessor: stamp, Input: record.Sum(observation), State: record.Fault, Fault: &info, Supervisor: true}
 }
 
 func killAndFault(s Instance, reason string) (Instance, []Effect) {

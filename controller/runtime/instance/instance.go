@@ -25,6 +25,7 @@ import (
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/park"
+	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
 )
@@ -224,6 +225,18 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				var err error
 				if e, err = gather(root, stack[1], *s.Self.Resume); err != nil {
 					return s, err
+				}
+			case machine.ReadStrand:
+				st, err := replay.ReadStrand(root, x.Observation, x.Target, x.Schema, x.Origin)
+				switch {
+				case replay.Refused(err):
+					e = machine.StrandRead{Refused: err.Error()}
+				case err != nil:
+					return s, err
+				default:
+					b, _ := json.Marshal(st)
+					trace.Logf("strand   %d records from %s up to its invoke", len(st.Records), record.Short(x.Observation))
+					e = machine.StrandRead{Strand: b}
 				}
 			case machine.TryClaim:
 				won, err := tree.Claim(stack[1], x.Round, x.Stamp)

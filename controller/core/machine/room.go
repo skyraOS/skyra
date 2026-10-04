@@ -27,6 +27,9 @@ import (
 //	{"to": "system", "payload": {"extend-reach": {"schema": <a contract>}}}
 //	   → returns {"ok": true}: the emitter's own reach entry holds one more contract,
 //	     throughout its Horizon
+//	{"to": "system", "payload": {"strand": {"observation": <stamp>, "contract": {"target": <name>, "schema": <a contract>}}}}
+//	   → returns the strand: the stamps from the observation up to the invoke made
+//	     through that contract, with every record of the work beneath it (H4)
 //
 // A narrowing may only drop what is held. "reach" and "authority" are what
 // the actor keeps; left out, it keeps all of the caller's. An extension adds a
@@ -38,6 +41,7 @@ const (
 
 	Narrowing = "narrow"
 	Extending = "extend-reach"
+	Stranding = "strand"
 )
 
 var (
@@ -54,6 +58,12 @@ var (
 	extendIn = &contract.Schema{Type: "object", Required: []string{"schema"}, Fields: map[string]*contract.Schema{
 		"schema": {Type: "any"},
 	}}
+	strandIn = &contract.Schema{Type: "object", Required: []string{"observation", "contract"}, Fields: map[string]*contract.Schema{
+		"observation": str,
+		"contract": {Type: "object", Required: []string{"target", "schema"}, Fields: map[string]*contract.Schema{
+			"target": str, "schema": {Type: "any"},
+		}},
+	}}
 )
 
 // call is a syscall's contract: an object naming exactly that syscall.
@@ -67,6 +77,7 @@ func Syscalls() horizon.Surface {
 	return horizon.Surface{System: "horizon", Contracts: []*contract.Schema{
 		call(Narrowing, narrowIn),
 		call(Extending, extendIn),
+		call(Stranding, strandIn),
 	}}
 }
 
@@ -107,8 +118,58 @@ func checkSyscall(h horizon.Horizon, payload json.RawMessage) (string, error) {
 		}
 	case Extending:
 		return extending(h, args)
+	case Stranding:
+		if _, err := stranding(h, args); err != nil {
+			return record.Horizon, err
+		}
 	}
 	return "", nil
+}
+
+// stranding checks a strand payload under h at intake: the observation is a
+// stamp, and the contract it names is one the requester holds. Whether the
+// observation was requested through it is the walk's to find (ReadStrand).
+func stranding(h horizon.Horizon, payload json.RawMessage) (ReadStrand, error) {
+	var ask struct {
+		Observation string `json:"observation"`
+		Contract    struct {
+			Target string          `json:"target"`
+			Schema json.RawMessage `json:"schema"`
+		} `json:"contract"`
+	}
+	if err := json.Unmarshal(payload, &ask); err != nil {
+		return ReadStrand{}, err
+	}
+	if !isStamp(ask.Observation) {
+		return ReadStrand{}, fmt.Errorf("observation %q is not a stamp", ask.Observation)
+	}
+	target, ok := h.Reach[ask.Contract.Target]
+	if !ok || IsSystem(ask.Contract.Target) {
+		return ReadStrand{}, fmt.Errorf("%q is not an actor in reach", ask.Contract.Target)
+	}
+	named, err := schemaOf(ask.Contract.Schema)
+	if err != nil {
+		return ReadStrand{}, err
+	}
+	want := string(contract.Canonical(named))
+	for _, c := range target.All() {
+		if string(contract.Canonical(c)) == want {
+			return ReadStrand{Observation: ask.Observation, Target: ask.Contract.Target, Schema: c, Origin: h.Origin}, nil
+		}
+	}
+	return ReadStrand{}, fmt.Errorf("%s holds no such contract", ask.Contract.Target)
+}
+
+func isStamp(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // narrowing derives the Grant a narrow payload asks for under h, or says why
@@ -176,14 +237,9 @@ func extension(h horizon.Horizon, payload json.RawMessage) (*contract.Schema, er
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return nil, err
 	}
-	d := json.NewDecoder(strings.NewReader(string(ask.Schema)))
-	d.DisallowUnknownFields()
-	var s contract.Schema
-	if err := d.Decode(&s); err != nil {
-		return nil, fmt.Errorf("schema: %w", err)
-	}
-	if err := s.Check(); err != nil {
-		return nil, fmt.Errorf("schema: %w", err)
+	s, err := schemaOf(ask.Schema)
+	if err != nil {
+		return nil, err
 	}
 	switch {
 	case h.Surface == nil || h.Name == "":
@@ -197,11 +253,26 @@ func extension(h horizon.Horizon, payload json.RawMessage) (*contract.Schema, er
 	if !ok {
 		return nil, fmt.Errorf("%w: %q is not in its own Horizon's reach", errNotTheEmitters, h.Name)
 	}
-	want := string(contract.Canonical(&s))
+	want := string(contract.Canonical(s))
 	for _, c := range actor.All() {
 		if string(contract.Canonical(c)) == want {
 			return nil, fmt.Errorf("%s already holds this contract", h.Name)
 		}
+	}
+	return s, nil
+}
+
+// schemaOf reads a contract a syscall names: strictly, and well formed. Two
+// contracts are the same when they read to the same schema.
+func schemaOf(b json.RawMessage) (*contract.Schema, error) {
+	d := json.NewDecoder(strings.NewReader(string(b)))
+	d.DisallowUnknownFields()
+	var s contract.Schema
+	if err := d.Decode(&s); err != nil {
+		return nil, fmt.Errorf("schema: %w", err)
+	}
+	if err := s.Check(); err != nil {
+		return nil, fmt.Errorf("schema: %w", err)
 	}
 	return &s, nil
 }
