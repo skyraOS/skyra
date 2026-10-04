@@ -1,0 +1,22 @@
+{
+  "input": {
+    "title": "remember",
+    "type": "object",
+    "required": ["remember"],
+    "fields": {
+      "remember": {
+        "type": "object",
+        "required": ["observation", "contract"],
+        "fields": {
+          "observation": {"type": "string"},
+          "contract": {
+            "type": "object",
+            "required": ["target", "schema"],
+            "fields": {"target": {"type": "string"}, "schema": {"type": "any"}}
+          }
+        }
+      }
+    }
+  },
+  "continuation": true
+}

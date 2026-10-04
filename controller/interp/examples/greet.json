@@ -1,0 +1,15 @@
+{
+  "contract": {
+    "title": "greet",
+    "type": "object",
+    "required": ["names", "greeting"],
+    "fields": {"names": {"type": "array", "items": {"type": "string"}}, "greeting": {"type": "string"}}
+  },
+  "order": ["each", "fork", "then"],
+  "nodes": {
+    "each": {"call": "echo", "in": {"text": {"$": ["item"]}}, "each": {"$": ["input", "names"]}},
+    "fork": {"call": "echo", "in": {"text": {"$": ["input", "greeting"]}}},
+    "then": {"call": "echo", "in": {"text": {"$": ["fork"]}}, "after": ["fork"]}
+  },
+  "return": {"greeting": {"$": ["then"]}, "names": {"$": ["each"]}}
+}

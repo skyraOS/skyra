@@ -169,3 +169,71 @@ func TestRenderedProfileScratchIsReadWriteNeverExec(t *testing.T) {
 		})
 	}
 }
+
+func TestOSStateHelper(t *testing.T) {
+	dir := os.Getenv("SKYRA_TEST_STATE_DIR")
+	if dir == "" {
+		return
+	}
+	verdict := func(err error) string {
+		if err != nil {
+			return "denied"
+		}
+		return "allowed"
+	}
+	werr := os.WriteFile(filepath.Join(dir, "probe"), []byte("x"), 0o600)
+	_, rerr := os.ReadFile(filepath.Join(dir, "probe"))
+	os.Stdout.WriteString(verdict(werr) + "," + verdict(rerr))
+}
+
+// An actor can only see its own state (next/32, decision 24): its sandbox
+// reads and writes its own directory under the floor, and the rest of the
+// floor stays denied, a sibling actor's directory included.
+func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Seatbelt is macOS only")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if self, err = filepath.EvalSymlinks(self); err != nil {
+		t.Fatal(err)
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor := filepath.Join(base, ".skyra")
+	for _, d := range []string{"interpreter", "other", "records"} {
+		if err := os.MkdirAll(filepath.Join(floor, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A read grant that covers the whole floor changes nothing.
+	h := Horizon{Surface: &Surface{Path: self, State: "interpreter"}, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
+	if got := StateDir(h, floor); got != filepath.Join(floor, "interpreter") {
+		t.Fatalf("state dir: %s", got)
+	}
+	for dir, want := range map[string]string{
+		"interpreter": "allowed,allowed",
+		"other":       "denied,denied",
+		"records":     "denied,denied",
+	} {
+		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", Render(h, floor), self, "-test.run=^TestOSStateHelper$")
+		cmd.Env = []string{"SKYRA_TEST_STATE_DIR=" + filepath.Join(floor, dir)}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: sandboxed helper: %v: %s", dir, err, out)
+		}
+		if !strings.HasPrefix(string(out), want) {
+			t.Errorf("%s: got %q, want %s", dir, out, want)
+		}
+	}
+	// No state named, or a name that is the kernel's: nothing of the floor.
+	for _, name := range []string{"", "records", "../x", "Interp"} {
+		if StateDir(Horizon{Surface: &Surface{Path: self, State: name}}, floor) != "" {
+			t.Errorf("%q is no actor's state", name)
+		}
+	}
+}

@@ -843,6 +843,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	if s := h.Authority.Scratch; s != "" {
 		env = append(env, "SKYRA_SCRATCH="+s)
 	}
+	if dir := horizon.StateDir(h, floor); dir != "" {
+		env = append(env, "SKYRA_STATE="+dir) // the actor's own state (next/32): the profile grants it
+	}
 	r := Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
 	if h.Surface.Connection {
 		r.ConnectionOwner = resourceOwner(h)

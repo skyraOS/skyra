@@ -1,0 +1,30 @@
+{
+  "input": {
+    "title": "remember",
+    "type": "object",
+    "required": ["remember"],
+    "fields": {
+      "remember": {
+        "type": "object",
+        "required": ["observation", "contract"],
+        "fields": {
+          "observation": {"type": "string"},
+          "contract": {
+            "type": "object",
+            "required": ["target", "schema"],
+            "fields": {"target": {"type": "string"}, "schema": {"type": "any"}}
+          }
+        }
+      }
+    }
+  },
+  "contracts": [
+    {
+      "title": "greet",
+      "type": "object",
+      "required": ["names", "greeting"],
+      "fields": {"names": {"type": "array", "items": {"type": "string"}}, "greeting": {"type": "string"}}
+    }
+  ],
+  "continuation": true
+}

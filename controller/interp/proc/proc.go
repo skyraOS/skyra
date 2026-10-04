@@ -1,0 +1,268 @@
+// Package proc is the interpreter's program (next/32, "Nodes"): procedures,
+// their nodes, and the store they are kept in, the interpreter's own state.
+//
+// A procedure is a header, a return and a body. The body names nodes by
+// hash; a node is a call and its immediate dependencies:
+//
+//	{"call": <target> | <binding to a target>, "in": <template>, "each": <binding to a list>, "after": [<node>, ...]}
+//
+// A node's id is the hash of its canonical bytes, which cover its after, so a
+// procedure's body commits to the whole DAG, and two procedures that share
+// calls share their nodes, as git shares trees. There is no code in a
+// procedure, only wiring: which calls happen, and whose output feeds whose
+// input.
+package proc
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+)
+
+// Schema is a contract, as the kernel encodes it: field for field, so the
+// canonical bytes of a contract are the same here as there.
+type Schema struct {
+	Title    string             `json:"title,omitempty"`
+	Type     string             `json:"type"`
+	Fields   map[string]*Schema `json:"fields,omitempty"`
+	Required []string           `json:"required,omitempty"`
+	Items    *Schema            `json:"items,omitempty"`
+}
+
+// Canonical is a contract's canonical bytes.
+func (s *Schema) Canonical() []byte {
+	b, _ := json.Marshal(s)
+	return b
+}
+
+// Key is a contract's stable identity: a procedure is kept under the
+// contract it implements (decision 24).
+func Key(s *Schema) string {
+	h := sha256.Sum256(s.Canonical())
+	return hex.EncodeToString(h[:])
+}
+
+// Header is what a procedure is for: the contract it implements, the actor
+// it was remembered from (the fallback outside its refinement, H7), and its
+// refinement.
+type Header struct {
+	Contract   *Schema     `json:"contract"`
+	Original   string      `json:"original,omitempty"`
+	Refinement *Refinement `json:"refinement,omitempty"`
+}
+
+// Refinement is the inputs and returns a compiled body is valid for. Until
+// the model writes refinements (H9), it is the base types themselves
+// (decision 10): the input's, and every resumed edge's.
+type Refinement struct {
+	Input string            `json:"input,omitempty"` // the input's base type hash
+	Edges map[string]string `json:"edges,omitempty"` // node → the base type hash of what it returned
+}
+
+// Procedure is a header, a return and a body: the nodes the procedure runs,
+// by hash, sinks first. Every node any of them depends on runs too.
+type Procedure struct {
+	Header Header          `json:"header"`
+	Return json.RawMessage `json:"return"`
+	Body   []string        `json:"body"`
+}
+
+// Node is a call and its immediate dependencies.
+type Node struct {
+	Call  json.RawMessage `json:"call"`
+	In    json.RawMessage `json:"in"`
+	Each  json.RawMessage `json:"each,omitempty"`
+	After []string        `json:"after"`
+}
+
+// ID is a node's hash: its canonical bytes, its after included.
+func (n Node) ID() string {
+	b, _ := json.Marshal(canonicalNode(n))
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+
+func canonicalNode(n Node) Node {
+	c := Node{Call: canon(n.Call), In: canon(n.In), Each: canon(n.Each), After: slices.Clone(n.After)}
+	if c.After == nil {
+		c.After = []string{}
+	}
+	slices.Sort(c.After)
+	return c
+}
+
+// canon re-encodes JSON with object keys sorted and numbers as written.
+func canon(b json.RawMessage) json.RawMessage {
+	if len(b) == 0 {
+		return nil
+	}
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	var v any
+	if d.Decode(&v) != nil {
+		return b
+	}
+	out, _ := json.Marshal(v)
+	return out
+}
+
+// Store is the interpreter's own state, under SKYRA_STATE: procedures by the
+// contract they implement, nodes by hash, and where each running frame is.
+//
+//	procedures/<key>   a procedure, under its contract's key
+//	nodes/<id>         a node, under its hash
+//	frames/<frame>     a running frame's position: the procedure, and every round it emitted
+type Store struct{ Dir string }
+
+// Position is where a running frame is: the procedure it runs, and the
+// calls of every round it emitted, in emission order.
+type Position struct {
+	Procedure string   `json:"procedure"`
+	Rounds    [][]Call `json:"rounds"`
+}
+
+// Call is one emitted instruction: a node, and for each, its element.
+type Call struct {
+	Node  string `json:"node"`
+	Index int    `json:"index"` // -1: not an each
+}
+
+func (s Store) path(kind, name string) (string, error) {
+	if !hexName(name) {
+		return "", fmt.Errorf("%q is not a name in the store", name)
+	}
+	return filepath.Join(s.Dir, kind, name), nil
+}
+
+func hexName(n string) bool {
+	if len(n) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(n)
+	return err == nil
+}
+
+func (s Store) write(kind, name string, v any) error {
+	p, err := s.path(kind, name)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
+}
+
+func (s Store) read(kind, name string, v any) error {
+	p, err := s.path(kind, name)
+	if err != nil {
+		return err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
+}
+
+// ErrNone is a store with no procedure for a contract.
+var ErrNone = errors.New("no procedure for this contract")
+
+// Procedure reads the procedure for a contract, and every node it runs.
+func (s Store) Procedure(c *Schema) (Procedure, map[string]Node, error) {
+	var p Procedure
+	if err := s.read("procedures", Key(c), &p); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return p, nil, ErrNone
+		}
+		return p, nil, err
+	}
+	nodes := map[string]Node{}
+	var load func(id string) error
+	load = func(id string) error {
+		if _, ok := nodes[id]; ok {
+			return nil
+		}
+		var n Node
+		if err := s.read("nodes", id, &n); err != nil {
+			return fmt.Errorf("node %s: %w", id[:8], err)
+		}
+		if n.ID() != id {
+			return fmt.Errorf("node %s does not hash to its name", id[:8])
+		}
+		nodes[id] = n
+		for _, a := range n.After {
+			if err := load(a); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, id := range p.Body {
+		if err := load(id); err != nil {
+			return p, nil, err
+		}
+	}
+	return p, nodes, nil
+}
+
+// Has reports whether a procedure exists for a contract.
+func (s Store) Has(c *Schema) bool {
+	p, err := s.path("procedures", Key(c))
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(p)
+	return err == nil
+}
+
+// Put stores a procedure and its nodes. A contract has one representation
+// (decision 28): a second is refused.
+func (s Store) Put(p Procedure, nodes map[string]Node) error {
+	if s.Has(p.Header.Contract) {
+		return fmt.Errorf("%s already has a procedure: one representation per contract", title(p.Header.Contract))
+	}
+	for id, n := range nodes {
+		if n.ID() != id {
+			return fmt.Errorf("node %s does not hash to its name", id[:8])
+		}
+		if err := s.write("nodes", id, n); err != nil {
+			return err
+		}
+	}
+	return s.write("procedures", Key(p.Header.Contract), p)
+}
+
+// Position reads where a frame is; a frame not begun is at no round.
+func (s Store) Position(frame string) (Position, error) {
+	var p Position
+	err := s.read("frames", frame, &p)
+	if errors.Is(err, os.ErrNotExist) {
+		return Position{}, nil
+	}
+	return p, err
+}
+
+// SetPosition records where a frame is: written before each emission.
+func (s Store) SetPosition(frame string, p Position) error { return s.write("frames", frame, p) }
+
+func title(c *Schema) string {
+	if c != nil && c.Title != "" {
+		return c.Title
+	}
+	return "the contract"
+}

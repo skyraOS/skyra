@@ -38,14 +38,16 @@ type Entry struct {
 	ResidentProfile    string            `json:"resident_profile,omitempty"`
 	ProxyHosts         []string          `json:"proxy_hosts,omitempty"`
 	ProxyPath          string            `json:"proxy_path,omitempty"`
+	State              bool              `json:"state,omitempty"` // the actor keeps state of its own, in .skyra/<name>/ (next/32)
 }
 
 // Declared is what a program's contract file says about it: its input
 // contract, and how it reads its input. Nothing about what it returns, and
 // nothing about what it may reach.
 type Declared struct {
-	Input        *contract.Schema `json:"input"`
-	Continuation bool             `json:"continuation,omitempty"`
+	Input        *contract.Schema   `json:"input"`
+	Contracts    []*contract.Schema `json:"contracts,omitempty"` // its other contracts: one program, several entry points (next/32)
+	Continuation bool               `json:"continuation,omitempty"`
 }
 
 // Load reads the registry and every contract it names, pins each binary by
@@ -73,6 +75,11 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		}
 		if err := d.Input.Check(); err != nil {
 			return nil, room, fmt.Errorf("%s input contract: %w", name, err)
+		}
+		for i, c := range d.Contracts {
+			if err := c.Check(); err != nil {
+				return nil, room, fmt.Errorf("%s contract %d: %w", name, i+1, err)
+			}
 		}
 		if e.Host != "" {
 			if e.Path != "" || e.Resident || e.Connection || len(e.Args) > 0 || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
@@ -136,7 +143,14 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			proxySHA = record.Sum(proxy)
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA}
+		var state string
+		if e.State {
+			if !horizon.ValidState(name) {
+				return nil, room, fmt.Errorf("%s: a name that keeps state is one plain lowercase segment, none of the kernel's", name)
+			}
+			state = name
+		}
+		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state}
 	}
 	return reach, room, nil
 }

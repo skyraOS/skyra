@@ -52,6 +52,13 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		}
 	}
 	reach[machine.System] = machine.Syscalls() // the Horizon's own contracts: its syscalls (next/32)
+	for _, s := range reach {                  // each actor's own state, the one part of the floor its sandbox may touch
+		if s.State != "" {
+			if err := os.MkdirAll(filepath.Join(root, s.State), 0o700); err != nil {
+				return Outcome{}, err
+			}
+		}
+	}
 
 	// Genesis: the room. The root Horizon's reach and authority come from the
 	// operator, and everything under it shares them until a narrowing. It is

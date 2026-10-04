@@ -110,6 +110,10 @@ type Surface struct {
 	ProxyHosts         []string           `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
 	ProxyPath          string             `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
 	ProxySHA256        string             `json:"proxy_sha256,omitempty"`
+	// State names the actor's own directory under the floor (next/32,
+	// decision 24): the one part of .skyra/ its sandbox may read and write.
+	// An actor can only see its own state.
+	State string `json:"state,omitempty"`
 	// Host, when set, makes the surface async (next/16): its invocations are
 	// parked with the actor host on this socket, which holds custody until an
 	// outside event completes them. There is no binary to run.
@@ -184,9 +188,10 @@ func (h Horizon) Names() []string {
 // Render turns a Horizon into a Seatbelt profile (D7): the Horizon's grants,
 // the same for everything under it, plus the exclusions no Horizon can grant
 // or remove (next/24). Everything is denied unless listed. The floor (the
-// .skyra/ directory) is always denied, and exec is allowed for the one program
-// being run and nothing else. The floor is a parameter, not a Horizon field,
-// so no Horizon can grant it.
+// .skyra/ directory) is always denied but for the running actor's own state
+// directory (next/32), and exec is allowed for the one program being run and
+// nothing else. The floor is a parameter, not a Horizon field, so no Horizon
+// can grant it.
 func Render(h Horizon, floor string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
@@ -217,7 +222,33 @@ func Render(h Horizon, floor string) string {
 		fmt.Fprintf(&b, "(allow network-outbound (remote unix-socket (path-literal %q)))\n", sock)
 	}
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
+	if dir := StateDir(h, floor); dir != "" {
+		// After the floor's deny, so it wins for this one directory.
+		fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %q))\n", dir)
+	}
 	return b.String()
+}
+
+// StateDir is the running actor's own directory under the floor, or "".
+func StateDir(h Horizon, floor string) string {
+	if h.Surface == nil || !ValidState(h.Surface.State) {
+		return ""
+	}
+	return filepath.Join(floor, h.Surface.State)
+}
+
+// ValidState reports whether a name may be an actor's state directory: one
+// plain path segment that is none of the kernel's own directories.
+func ValidState(name string) bool {
+	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames"}, name) {
+		return false
+	}
+	for i, c := range name {
+		if !(c >= 'a' && c <= 'z' || i > 0 && (c >= '0' && c <= '9' || c == '-' || c == '_')) {
+			return false
+		}
+	}
+	return true
 }
 
 func renderPath(b *strings.Builder, operation string, grant PathGrant) {

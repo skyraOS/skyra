@@ -9,6 +9,7 @@ The design is in [`../docs/design/`](../docs/design/) and [`../docs/next/`](../d
 ```sh
 ./run.sh                  # every scenario, each ending in a replay check
 go test ./controller/...  # transitions, replay, and custody
+(cd interp && go test ./...)  # the interpreter, its own module
 skyra                     # from anywhere: chat with real Codex in the browser (see ../startup-doc.md)
 skyra ask "TEXT"          # one question to real Codex, printed with its lineage
 skyra replay DIR          # re-derive any finished conversation or run from its records
@@ -41,10 +42,11 @@ record tree in `.skyra/`.
 
 ## Packages
 
-Five groups, by what a package is. Imports only run downward: `core/` imports
+Six groups, by what a package is. Imports only run downward: `core/` imports
 nothing outside itself, `runtime/` builds on `core/`, the web host builds on
-`runtime/`, and the programs under `targets/` and `codex/` share no code with
-any of them. `core/` is pure,
+`runtime/`, and the programs under `targets/`, `codex/` and `interp/` share no
+code with any of them; `interp/` is its own module, so its dependencies never
+reach the controller's standard-library Go. `core/` is pure,
 and `TestMachineIsPure` fails if `machine` imports anything that touches the
 OS, the tree or the network.
 
@@ -95,6 +97,14 @@ OS, the tree or the network.
 | [`fake`](codex/fake/) | A deterministic fake app-server, for the demo and tests |
 | [`adapter`](codex/adapter/) | Legacy Codex adapter, retained for the demo and earlier tests |
 
+**[`interp/`](interp/): the interpreter, an actor, its own module (next/32)**
+
+| Package | What it is |
+|---|---|
+| [`interp`](interp/) | The interpreter: runs procedures from its own state (`.skyra/interpreter/`, `SKYRA_STATE`), one resume per exec, against the contract it was invoked through. Emits every call now ready as one emission; records where its frame is before each. `interp install DIR SOURCE` installs a procedure by hand |
+| [`proc`](interp/proc/) | Procedures: a header, a return and a body of content-addressed nodes (`{call, in, each, after}`); bindings by provenance; the planner |
+| [`types`](interp/types/) | Base types, moved from the kernel: shapes, contents, presentations. Nothing is typed unless it is remembered |
+
 **[`hosts/`](hosts/): the only long-lived processes, outside the step**
 
 | Package | What it is |
@@ -134,7 +144,10 @@ that a script written there can be read back but not run, and that nothing
 can be written outside it.
 
 A profile grants the program's own binary, fixed system loader reads, and the
-Horizon's grants. A target is told its slot in `SKYRA_FRAME` and its read
+Horizon's grants. An entry marked `"state": true` keeps state of its own: its
+sandbox may read and write `.skyra/<name>/`, created at genesis and named in
+`SKYRA_STATE`, and nothing else of the floor (next/32). An actor can only see
+its own state. A target is told its slot in `SKYRA_FRAME` and its read
 grants in `SKYRA_READ` (colon-separated, like `PATH`); that is information,
 and the profile is what enforces it. OS tests check that a file outside
 `read` is denied, that the same file is readable when granted, and that exec
