@@ -23,10 +23,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 
 	"skyra/interp/proc"
+	"skyra/interp/refine"
 	"skyra/interp/remember"
 	"skyra/interp/types"
 )
@@ -86,14 +88,17 @@ func run() ([]byte, error) {
 }
 
 // runRemember is remember's body (decision 8), embedded in this binary: a
-// syscall for the strand, the compile, then one extend-reach per contract a
-// procedure was stored for. The interpreter extends itself; an actor can
-// only extend itself.
+// syscall for the strand, the compile, the refinements, then one
+// extend-reach per contract a procedure was stored for. The interpreter
+// extends itself; an actor can only extend itself.
 //
 //	no steps        → system strand: the observation, and the contract that requested it
 //	the strand      → compile it; refuse a contract that already has a procedure, before
-//	                  anything is stored; store every procedure; extend-reach the first
-//	each extension  → extend-reach the next, or return what was remembered
+//	                  anything is stored; store every procedure, under its base types
+//	then, for each  → ask the actor it was remembered from to write its refinements, when
+//	                  it holds a refine contract; check the answer; a refusal is shown, and it
+//	                  may try again (MaxAttempts); a valid answer replaces the base types
+//	then            → extend-reach each contract, and return what was remembered
 func runRemember(store proc.Store, e envelope) ([]byte, error) {
 	var ask struct {
 		Remember struct {
@@ -116,23 +121,21 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 			"contract": map[string]any{"target": r.Contract.Target, "schema": r.Contract.Schema}}}), nil
 	}
 	last := e.Steps[len(e.Steps)-1]
-	if last.State != "return" {
-		cause := last.State
-		if last.Fault != nil {
-			cause = last.Fault.Cause
-		}
-		if len(e.Steps) > 1 {
-			cause = "extend-reach: " + cause
-		}
-		return refused(cause)
+	cause := last.State
+	if last.Fault != nil {
+		cause = last.Fault.Cause
 	}
-	done, compiled, err := store.Remembering(e.Frame)
+	rec, compiled, err := store.Remembering(e.Frame)
 	if err != nil {
 		return nil, err
 	}
-	if !compiled {
+	switch {
+	case !compiled:
 		if len(e.Steps) != 1 {
-			return nil, errors.New("extensions before a compile")
+			return nil, errors.New("a remember frame went on without a compile")
+		}
+		if last.State != "return" {
+			return refused(cause)
 		}
 		var st remember.Strand
 		if err := json.Unmarshal(last.Value, &st); err != nil {
@@ -143,7 +146,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		if self == "" {
 			return refused("the interpreter is not in its own reach")
 		}
-		srcs, err := remember.Compile(st, r.Observation, r.Contract.Target, r.Contract.Schema, reach, self)
+		compiled, err := remember.Compile(st, r.Observation, r.Contract.Target, r.Contract.Schema, reach, self)
 		var why remember.Refused
 		if errors.As(err, &why) {
 			return refused(string(why))
@@ -154,43 +157,206 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		// One representation per contract (decision 28), refused before
 		// anything is stored, so no Horizon is given a procedure another
 		// Horizon remembered.
-		for i, src := range srcs {
-			if store.Has(src.Contract) {
-				return refused(fmt.Sprintf("%s (from %s) already has a procedure: one representation per contract", titleOf(src.Contract), src.Original))
+		for i, c := range compiled {
+			if store.Has(c.Source.Contract) {
+				return refused(fmt.Sprintf("%s (from %s) already has a procedure: one representation per contract", titleOf(c.Source.Contract), c.Source.Original))
 			}
-			for _, other := range srcs[:i] {
-				if proc.Same(other.Contract, src.Contract) {
-					return refused(fmt.Sprintf("%s is remembered twice in one strand", titleOf(src.Contract)))
+			for _, other := range compiled[:i] {
+				if proc.Same(other.Source.Contract, c.Source.Contract) {
+					return refused(fmt.Sprintf("%s is remembered twice in one strand", titleOf(c.Source.Contract)))
 				}
 			}
 		}
-		for _, src := range srcs {
-			p, nodes, err := proc.Compile(src)
+		for _, c := range compiled {
+			p, nodes, err := proc.Compile(c.Source)
 			if err != nil {
 				return nil, err
 			}
 			if err := store.Put(p, nodes); err != nil {
 				return nil, err
 			}
-			done.Contracts = append(done.Contracts, src.Contract)
-			done.Originals = append(done.Originals, src.Original)
+			ev, _ := json.Marshal(c.Evidence)
+			rec.Contracts = append(rec.Contracts, c.Source.Contract)
+			rec.Originals = append(rec.Originals, c.Source.Original)
+			rec.Evidence = append(rec.Evidence, ev)
 		}
-		if err := store.SetRemembering(e.Frame, done); err != nil {
+	case rec.Asked == "refine":
+		accepted := false
+		if last.State == "return" {
+			ref, err := refinements(store, rec, last.Value)
+			if err == nil {
+				if err := store.SetRefinement(rec.Contracts[rec.Refining], ref); err != nil {
+					return nil, err
+				}
+				accepted = true
+			} else {
+				rec.Attempts++
+				rec.Refused = err.Error()
+			}
+		}
+		// Accepted, given up on, or unanswerable: the next one. A procedure
+		// without refinements keeps its base types (decision 10).
+		if accepted || last.State != "return" || rec.Attempts >= MaxAttempts {
+			rec.Refining, rec.Attempts, rec.Refused = rec.Refining+1, 0, ""
+		}
+	case rec.Asked == "extend":
+		if last.State != "return" {
+			return refused("extend-reach: " + cause)
+		}
+		rec.Extended++
+	}
+
+	for rec.Refining < len(rec.Contracts) && !refinable(reachOf(e)[rec.Originals[rec.Refining]]) {
+		rec.Refining++
+	}
+	var next []byte
+	switch {
+	case rec.Refining < len(rec.Contracts):
+		rec.Asked = "refine"
+		next = instruction(rec.Originals[rec.Refining], map[string]any{"refine": refineAsk(rec)})
+	case rec.Extended < len(rec.Contracts):
+		rec.Asked = "extend"
+		next = instruction("system", map[string]any{"extend-reach": map[string]any{"schema": rec.Contracts[rec.Extended]}})
+	default:
+		var names []string
+		for i, c := range rec.Contracts {
+			name := c.Title
+			if name == "" {
+				name = rec.Originals[i] // an untitled contract is named by the actor it was remembered from
+			}
+			names = append(names, name)
+		}
+		return addressed(e.Frame, map[string]any{"remembered": names}), nil
+	}
+	if err := store.SetRemembering(e.Frame, rec); err != nil {
+		return nil, err
+	}
+	return next, nil
+}
+
+// MaxAttempts is how often the model may write refinements for one procedure
+// before it keeps its base types.
+const MaxAttempts = 3
+
+// refinable reports whether an actor holds a refine contract: one titled
+// refine, taking {"refine": ...}.
+func refinable(contracts []*proc.Schema) bool {
+	for _, c := range contracts {
+		if c.Title == "refine" && c.Fields["refine"] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// refineAsk is what the model that was there is shown (32, "The walk, and
+// the refinement"): its own command, the rounds it ran, the result it
+// returned, the base types of each and the constants, as names and
+// presentations, never hashes; and why its last answer was refused.
+func refineAsk(rec proc.Remembering) map[string]any {
+	var ev remember.Evidence
+	_ = json.Unmarshal(rec.Evidence[rec.Refining], &ev)
+	contract := rec.Contracts[rec.Refining].Title
+	if contract == "" {
+		contract = "your contract, " + rec.Originals[rec.Refining]
+	}
+	ask := map[string]any{
+		"contract":    contract,
+		"command":     ev.Input,
+		"input_type":  ev.InputType,
+		"rounds":      ev.Rounds,
+		"result":      ev.Result,
+		"constants":   ev.Constants,
+		"environment": refine.Environment,
+		"write": "Write the refinements: the inputs and returns for which these decisions still hold. Anything outside them comes back to you. " +
+			"Answer with {\"header\": <CEL over input>, \"edges\": {<node>: <CEL over the returns so far>}}. The constants are fixed on every run: " +
+			"refine the edges where they should not apply. An edge you leave out keeps its default: the same base type as here.",
+	}
+	if rec.Refused != "" {
+		ask["refused"] = rec.Refused
+	}
+	return ask
+}
+
+// refinements checks the model's answer for the procedure being refined, and
+// returns the refinement it makes: each predicate type-checks, has a bounded
+// cost, accepts its own strand, and hits no error on it.
+func refinements(store proc.Store, rec proc.Remembering, answer json.RawMessage) (*proc.Refinement, error) {
+	var a struct {
+		Header string            `json:"header"`
+		Edges  map[string]string `json:"edges"`
+	}
+	if err := json.Unmarshal(answer, &a); err != nil {
+		var text string // an answer written as text that holds the JSON
+		if json.Unmarshal(answer, &text) != nil || json.Unmarshal([]byte(text), &a) != nil {
+			return nil, errors.New(`the answer is not {"header": ..., "edges": {...}}`)
+		}
+	}
+	var ev remember.Evidence
+	if err := json.Unmarshal(rec.Evidence[rec.Refining], &ev); err != nil {
+		return nil, err
+	}
+	p, _, err := store.Procedure(rec.Contracts[rec.Refining])
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]string{}
+	for id, name := range p.Names {
+		ids[name] = id
+	}
+	ref := proc.Refinement{}
+	if p.Header.Refinement != nil {
+		ref = *p.Header.Refinement
+	}
+	ref.Header, ref.On = "", nil
+	if a.Header != "" {
+		if err := accepts("the header", a.Header, refine.Vars{Input: ev.Input, InputType: ev.InputType}); err != nil {
 			return nil, err
 		}
+		ref.Header = a.Header
 	}
-	if next := len(e.Steps) - 1; next < len(done.Contracts) {
-		return instruction("system", map[string]any{"extend-reach": map[string]any{"schema": done.Contracts[next]}}), nil
-	}
-	var names []string
-	for i, c := range done.Contracts {
-		name := c.Title
-		if name == "" && i < len(done.Originals) {
-			name = done.Originals[i] // an untitled contract is named by the actor it was remembered from
+	returns, shown := map[string]any{}, map[string]string{}
+	for _, round := range ev.Rounds {
+		for _, c := range round {
+			returns[c.Node], shown[c.Node] = c.Value, c.Type
 		}
-		names = append(names, name)
+		for _, c := range round {
+			src, ok := a.Edges[c.Node]
+			if !ok {
+				continue
+			}
+			vars := refine.Vars{Input: ev.Input, InputType: ev.InputType, Returns: maps.Clone(returns), Types: maps.Clone(shown)}
+			if err := accepts("the edge "+c.Node, src, vars); err != nil {
+				return nil, err
+			}
+			if ref.On == nil {
+				ref.On = map[string]string{}
+			}
+			ref.On[ids[c.Node]] = src
+		}
 	}
-	return addressed(e.Frame, map[string]any{"remembered": names}), nil
+	for name := range a.Edges {
+		if _, ok := ids[name]; !ok {
+			return nil, fmt.Errorf("there is no node %q", name)
+		}
+	}
+	return &ref, nil
+}
+
+// accepts checks one refinement against its own strand.
+func accepts(what, src string, v refine.Vars) error {
+	prg, err := refine.Compile(src)
+	if err != nil {
+		return fmt.Errorf("%s %s", what, err)
+	}
+	ok, err := prg.Eval(v)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%s hits an error on its own strand: %v", what, err)
+	case !ok:
+		return fmt.Errorf("%s refuses the strand it was compiled from", what)
+	}
+	return nil
 }
 
 // reachOf is every contract each name in the envelope holds.
@@ -267,9 +433,10 @@ func runProcedure(store proc.Store, e envelope, c *proc.Schema) ([]byte, error) 
 		return nil, err
 	}
 	ref := p.Header.Refinement
-	if len(e.Steps) == 0 && ref != nil && ref.Input != "" && proc.InputType(c, in) != ref.Input {
-		why := fmt.Sprintf("the input is %s; this procedure was compiled for %s", proc.InputShown(c, in), ref.InputShown)
-		return fallback(store, e, pos, p, nodes, edge{at: "input", why: why})
+	if len(e.Steps) == 0 && ref != nil {
+		if why := refusedInput(ref, c, in); why != "" {
+			return fallback(store, e, pos, p, nodes, edge{at: "input", why: why})
+		}
 	}
 	next, err := proc.Plan(p, nodes, e.Input, pos, e.Steps)
 	if err != nil {
@@ -282,7 +449,7 @@ func runProcedure(store proc.Store, e envelope, c *proc.Schema) ([]byte, error) 
 		}
 		return fallback(store, e, pos, p, nodes, edge{at: proc.CallName(nodes[st.Node].Call), why: fmt.Sprintf("%s returned %s", st.Step.To, cause)})
 	}
-	if refused := refusedEdge(ref, nodes, next.Values); refused != nil {
+	if refused := refusedEdge(p, nodes, next.Values); refused != nil {
 		return fallback(store, e, pos, p, nodes, *refused)
 	}
 	if next.Return != nil {
@@ -298,23 +465,60 @@ func runProcedure(store proc.Store, e envelope, c *proc.Schema) ([]byte, error) 
 // edge is where a refinement refused, and why, as names and presentations.
 type edge struct{ at, why string }
 
-// refusedEdge checks the default refinement (decision 10) on every node that
-// has returned: the base type of what it returned must be the strand's.
-func refusedEdge(ref *proc.Refinement, nodes map[string]proc.Node, values map[string]any) *edge {
+// refusedInput checks the input: the header refinement the model wrote, or
+// else its base type (decision 10). It says why it refused, or "".
+func refusedInput(ref *proc.Refinement, c *proc.Schema, in any) string {
+	if ref.Header != "" {
+		prg, err := refine.Compile(ref.Header)
+		if err == nil {
+			var ok bool
+			if ok, err = prg.Eval(refine.Vars{Input: in, InputType: proc.InputShown(c, in)}); err == nil && ok {
+				return ""
+			}
+		}
+		if err != nil {
+			return fmt.Sprintf("the input refinement %s: %v", ref.Header, err)
+		}
+		return fmt.Sprintf("the input refinement %s is false for this input", ref.Header)
+	}
+	if ref.Input != "" && proc.InputType(c, in) != ref.Input {
+		return fmt.Sprintf("the input is %s; this procedure was compiled for %s", proc.InputShown(c, in), ref.InputShown)
+	}
+	return ""
+}
+
+// refusedEdge checks every node that has returned: its refinement, where the
+// model wrote one, else the base type of what it returned (decision 10),
+// which must be the strand's.
+func refusedEdge(p proc.Procedure, nodes map[string]proc.Node, values map[string]any) *edge {
+	ref := p.Header.Refinement
 	if ref == nil {
 		return nil
 	}
-	ids := make([]string, 0, len(ref.Edges))
-	for id := range ref.Edges {
-		ids = append(ids, id)
+	returns, shown := map[string]any{}, map[string]string{}
+	for id, v := range values {
+		if name, ok := p.Names[id]; ok {
+			returns[name], shown[name] = v, proc.Present(nodes[id].Call, v)
+		}
 	}
-	slices.Sort(ids)
+	ids := slices.Sorted(maps.Keys(values))
 	for _, id := range ids {
-		v, done := values[id]
-		if !done {
+		v, call := values[id], nodes[id].Call
+		if src, ok := ref.On[id]; ok {
+			prg, err := refine.Compile(src)
+			ok := false
+			if err == nil {
+				ok, err = prg.Eval(refine.Vars{Returns: returns, Types: shown})
+			}
+			switch {
+			case err != nil:
+				return &edge{at: proc.CallName(call), why: fmt.Sprintf("the refinement on %s, %s: %v", p.Names[id], src, err)}
+			case !ok:
+				return &edge{at: proc.CallName(call), why: fmt.Sprintf("the refinement on %s, %s, is false: %s returned %s", p.Names[id], src, proc.CallName(call), proc.Present(call, v))}
+			}
 			continue
 		}
-		if call := nodes[id].Call; proc.EdgeType(call, v) != ref.Edges[id] {
+		if want, ok := ref.Edges[id]; ok && proc.EdgeType(call, v) != want {
 			return &edge{at: proc.CallName(call), why: fmt.Sprintf("%s returned %s; this procedure was compiled for %s",
 				proc.CallName(call), proc.Present(call, v), ref.EdgesShown[id])}
 		}

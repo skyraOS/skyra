@@ -55,7 +55,13 @@ func TestTheAgentsStrandCompiles(t *testing.T) {
 	if len(srcs) != 1 {
 		t.Fatalf("one continuation, one procedure: %d", len(srcs))
 	}
-	src := srcs[0]
+	src, ev := srcs[0].Source, srcs[0].Evidence
+	if len(ev.Rounds) != 2 || len(ev.Rounds[0]) != 2 || ev.Rounds[0][1].Type != "echo → string" || ev.InputType != "input → {text: string}" {
+		t.Fatalf("the evidence is the strand as names and presentations: %+v", ev)
+	}
+	if len(ev.Constants) != 1 || ev.Constants[0] != "relayed" {
+		t.Fatalf("the constants the procedure keeps: %v", ev.Constants)
+	}
 	if src.Original != "agent" || !proc.Same(src.Contract, agentIn) || strings.Join(src.Order, " ") != "r0c0 r0c1 r1c0" {
 		t.Fatalf("the agent's contract, remembered from the agent, three calls: %+v", src)
 	}

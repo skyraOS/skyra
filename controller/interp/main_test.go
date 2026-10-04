@@ -280,3 +280,97 @@ func TestAFaultFallsBack(t *testing.T) {
 		t.Fatalf("a faulted call falls back to the original actor: %s %v", out, err)
 	}
 }
+
+var refineContract = &proc.Schema{Title: "refine", Type: "object", Required: []string{"refine"}, Fields: map[string]*proc.Schema{"refine": {Type: "any"}}}
+
+// At remember the model that was there writes the refinements (H9): it is
+// shown its command, rounds, result, base types and constants; an answer that
+// fails a check is refused and shown to it, and it tries again; a valid one
+// replaces the base types, before the interpreter extends itself.
+func TestTheModelWritesTheRefinements(t *testing.T) {
+	store := proc.Store{Dir: t.TempDir()}
+	st, obs := fixture(t)
+	contracts := map[string][]*proc.Schema{"agent": {agentIn, refineContract}}
+	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Tools: tools(), Contracts: contracts, Steps: []proc.Step{ret(st)}}
+	out, err := runRemember(store, e)
+	ins := emitted(t, out)
+	if err != nil || ins[0].To != "agent" || !strings.Contains(string(ins[0].Payload), `"refine"`) {
+		t.Fatalf("after the compile, the agent is asked for its refinements: %s %v", out, err)
+	}
+	var shown struct {
+		Refine struct {
+			Rounds    [][]struct{ Node, To, Type string }
+			Constants []any
+			InputType string `json:"input_type"`
+			Refused   string
+		}
+	}
+	_ = json.Unmarshal(ins[0].Payload, &shown)
+	if len(shown.Refine.Rounds) != 2 || shown.Refine.Rounds[0][0].Node != "r0c0" || shown.Refine.InputType != "input → {text: string}" ||
+		len(shown.Refine.Constants) != 1 || shown.Refine.Refused != "" || strings.Contains(string(ins[0].Payload), obs) {
+		t.Fatalf("it is shown names and presentations, never a hash: %s", ins[0].Payload)
+	}
+	for _, bad := range []struct{ answer, why string }{
+		{`{"header":"input.txt.startsWith(\"relay:\")"}`, "error on its own strand"},
+		{`{"header":"input.text.startsWith(\"other:\")"}`, "refuses the strand it was compiled from"},
+	} {
+		e.Steps = append(e.Steps, ret(json.RawMessage(bad.answer)))
+		out, _ = runRemember(store, e)
+		_ = json.Unmarshal(emitted(t, out)[0].Payload, &shown)
+		if !strings.Contains(shown.Refine.Refused, bad.why) {
+			t.Fatalf("%s: refused and shown: %s", bad.answer, out)
+		}
+	}
+	e.Steps = append(e.Steps, ret(json.RawMessage(`{"header":"input.text.startsWith(\"relay:\")","edges":{"r0c1":"returns.r0c1 == \"relayed\""}}`)))
+	out, _ = runRemember(store, e)
+	if !strings.Contains(string(out), `"extend-reach"`) {
+		t.Fatalf("a valid answer is kept, then the interpreter extends itself: %s", out)
+	}
+	p, _, _ := store.Procedure(agentIn)
+	if ref := p.Header.Refinement; ref.Header != `input.text.startsWith("relay:")` || len(ref.On) != 1 || ref.Input == "" {
+		t.Fatalf("the refinement replaces the base types where present: %+v", ref)
+	}
+
+	// Inside the refinement it runs compiled; outside it, the agent.
+	run := envelope{Frame: strings.Repeat("f", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Tools: tools(), Contracts: contracts}
+	if out, _ := runProcedure(store, run, agentIn); emitted(t, out)[0].To != "echo" {
+		t.Fatalf("inside its refinement, compiled: %s", out)
+	}
+	run.Frame, run.Input = strings.Repeat("0", 64), json.RawMessage(`{"text":"plain"}`)
+	out, _ = runProcedure(store, run, agentIn)
+	if fell := emitted(t, out); fell[0].To != "agent" || string(fell[0].Payload) != `{"text":"plain"}` {
+		t.Fatalf("outside it, the agent from the start: %s", out)
+	}
+	// At an edge: the second call returned something else.
+	run.Frame, run.Input, run.Steps = strings.Repeat("1", 64), json.RawMessage(`{"text":"relay:new"}`), nil
+	out, _ = runProcedure(store, run, agentIn)
+	ins = emitted(t, out)
+	run.Steps = []proc.Step{
+		{To: "echo", Payload: ins[0].Payload, State: "return", Value: json.RawMessage(`"relay:new"`)},
+		{To: "echo", Payload: ins[1].Payload, State: "return", Value: json.RawMessage(`"diverted"`)},
+	}
+	out, _ = runProcedure(store, run, agentIn)
+	if fell := emitted(t, out); fell[0].To != "agent" {
+		t.Fatalf("an edge refinement that is false falls back: %s", out)
+	}
+}
+
+// An answer that never passes leaves the base types after MaxAttempts.
+func TestAModelThatCannotRefineKeepsTheBaseTypes(t *testing.T) {
+	store := proc.Store{Dir: t.TempDir()}
+	st, obs := fixture(t)
+	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Tools: tools(),
+		Contracts: map[string][]*proc.Schema{"agent": {agentIn, refineContract}}, Steps: []proc.Step{ret(st)}}
+	runRemember(store, e)
+	var out []byte
+	for i := 0; i < MaxAttempts; i++ {
+		e.Steps = append(e.Steps, ret(json.RawMessage(`{"header":"size(input.text)"}`)))
+		out, _ = runRemember(store, e)
+	}
+	if !strings.Contains(string(out), `"extend-reach"`) {
+		t.Fatalf("after %d refusals, on to extend-reach: %s", MaxAttempts, out)
+	}
+	if p, _, _ := store.Procedure(agentIn); p.Header.Refinement.Header != "" || p.Header.Refinement.Input == "" {
+		t.Fatalf("with its base types: %+v", p.Header.Refinement)
+	}
+}

@@ -51,6 +51,35 @@ type Strand struct {
 // envelope shows them.
 type Reach map[string][]*proc.Schema
 
+// Compiled is a procedure source, and the evidence it was compiled from:
+// what the model that was there is shown when it writes the refinements, and
+// what they are checked against (H9).
+type Compiled struct {
+	Source   proc.Source
+	Evidence Evidence
+}
+
+// Evidence is one continuation's strand as names and presentations, never
+// hashes: its command, every call it made by round (the node it became, what
+// it was given and returned, and the base type of that), its result, and the
+// constants the procedure will use on every run.
+type Evidence struct {
+	Input     any      `json:"input"`
+	InputType string   `json:"input_type"`
+	Rounds    [][]Call `json:"rounds"`
+	Result    any      `json:"result"`
+	Constants []any    `json:"constants"`
+}
+
+// Call is one call in the evidence.
+type Call struct {
+	Node    string `json:"node"`
+	To      string `json:"to"`
+	Payload any    `json:"payload"`
+	Value   any    `json:"value"`
+	Type    string `json:"type"`
+}
+
 // Refused is a strand remember will not compile: shown to whoever asked.
 type Refused string
 
@@ -62,7 +91,7 @@ func refuse(format string, args ...any) error { return Refused(fmt.Sprintf(forma
 // up: every procedure before the procedure that calls it, the one for the
 // requested contract last. self is the interpreter's own name in reach, the
 // target a compiled child is called through.
-func Compile(st Strand, observation, target string, schema *proc.Schema, reach Reach, self string) ([]proc.Source, error) {
+func Compile(st Strand, observation, target string, schema *proc.Schema, reach Reach, self string) ([]Compiled, error) {
 	if len(st.Chain) == 0 {
 		return nil, refuse("the strand is empty")
 	}
@@ -151,7 +180,7 @@ type known struct {
 // contract it was invoked through, and every child procedure before it. It
 // reports whether its return is control; when it is not, the frame stays a
 // call to its original actor.
-func (c *compiler) frame(frame string, schema *proc.Schema, original string, discharge Record) ([]proc.Source, bool, error) {
+func (c *compiler) frame(frame string, schema *proc.Schema, original string, discharge Record) ([]Compiled, bool, error) {
 	inv := c.st.Records[frame]
 	input, err := decode(inv.Payload)
 	if err != nil {
@@ -160,15 +189,17 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 	src := proc.Source{Contract: schema, Original: original, Nodes: map[string]proc.SourceNode{},
 		Refinement: &proc.Refinement{Input: proc.InputType(schema, input), Edges: map[string]string{},
 			InputShown: proc.InputShown(schema, input), EdgesShown: map[string]string{}}}
-	var below []proc.Source
+	var below []Compiled
 	var seen []known
 	var prev []string
+	ev := Evidence{Input: input, InputType: proc.InputShown(schema, input)}
 	for k, round := range c.rounds(frame) {
 		res, ok := c.resolves[round]
 		if !ok || c.st.Records[res].Frame != frame {
 			break // the last round: the frame returned from it
 		}
 		var this []string
+		var calls []Call
 		for i, d := range c.st.Records[res].Deps {
 			stamp, err := c.child(d, round)
 			if err != nil {
@@ -211,12 +242,59 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 			src.Refinement.EdgesShown[name] = proc.Present(call, value)
 			seen = append(seen, known{name, value})
 			this = append(this, name)
+			calls = append(calls, Call{Node: name, To: x.To, Payload: mustDecode(x.Payload), Value: value, Type: proc.Present(call, value)})
+			ev.Constants = append(ev.Constants, constants(src.Nodes[name].In)...)
 		}
 		prev = this
+		ev.Rounds = append(ev.Rounds, calls)
 	}
 	ret, control := c.template(mustDecode(discharge.Payload), input, seen, false)
 	src.Return = ret
-	return append(below, src), control, nil
+	ev.Result = mustDecode(discharge.Payload)
+	ev.Constants = unique(ev.Constants)
+	return append(below, Compiled{src, ev}), control, nil
+}
+
+// constants are the leaves of a template that are not bound: what the model
+// chose, kept as recorded (decision 14).
+func constants(t json.RawMessage) []any {
+	var out []any
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if _, b := x["$"]; b && len(x) == 1 {
+				return
+			}
+			if c, ok := x["$const"]; ok && len(x) == 1 {
+				out = append(out, c)
+				return
+			}
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		default:
+			out = append(out, v)
+		}
+	}
+	walk(mustDecode(t))
+	return out
+}
+
+func unique(vs []any) []any {
+	out := []any{}
+	seen := map[string]bool{}
+	for _, v := range vs {
+		if k := canonical(v); !seen[k] {
+			seen[k] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // template is a value as a template: wherever a part of it equals the input,

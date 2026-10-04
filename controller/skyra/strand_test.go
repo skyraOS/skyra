@@ -162,9 +162,10 @@ func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
 
 // The research metric (next/32, H8), read from the records of the thesis
 // demo: one procedure remembered for the one task, a second remember of the
-// same contract refused, and of the two calls to it, the one that returned
-// ran with zero model steps and zero approvals (the other, from a Horizon
-// without echo, faulted).
+// same contract refused, and of the three calls to it, one ran with zero
+// model steps and zero approvals (another, from a Horizon without echo,
+// faulted, and the third was outside the refinement the agent wrote, so the
+// agent ran).
 func TestTheMetricFromTheRecords(t *testing.T) {
 	run, _, _ := room(t)
 	root := run("remember:hello")
@@ -172,7 +173,7 @@ func TestTheMetricFromTheRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Tasks != 1 || m.Remembers != 2 || !reflect.DeepEqual(m.Remembered, []string{"agent"}) || m.Calls != 2 || m.Unattended != 1 {
+	if m.Tasks != 1 || m.Remembers != 2 || !reflect.DeepEqual(m.Remembered, []string{"agent"}) || m.Calls != 3 || m.Unattended != 1 {
 		t.Fatalf("%+v", m)
 	}
 	if n, err := replay.Replay(root, mustHead(t, root)); err != nil || n < 40 {

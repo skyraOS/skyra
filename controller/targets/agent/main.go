@@ -30,7 +30,9 @@
 // H8): it asks agent to relay, remembers that strand through agent's
 // contract, calls the procedure on new input (no agent runs), calls it again
 // from a Horizon narrowed to keep it but drop echo, tries to remember the
-// same contract a second time, and returns what each step gave back.
+// same contract a second time, calls the procedure on input outside the
+// refinement the agent wrote (H9: the agent runs), and returns what each step
+// gave back.
 //
 // With text "redundant:", it tries to extend itself with the contract it
 // already holds: a contract fault at intake, which discharges its frame.
@@ -42,6 +44,11 @@
 // remembers a look at <dir>/a.txt, looks at <dir>/b.txt through the
 // procedure (the same base types: no agent runs), then at <dir>/sub, whose
 // listing is not what the procedure was compiled for: the agent resumes.
+//
+// Run against refine (next/32, H9), it writes the refinements of a procedure
+// remembered from it, in CEL: which inputs and returns its decisions still
+// hold for. Its first answer reads a field that does not exist, so the
+// interpreter refuses it and shows why; its second is right.
 package main
 
 import (
@@ -60,6 +67,16 @@ type continuation struct {
 		Text   string `json:"text"`
 		Shout  string `json:"shout"`
 		Path   string `json:"path"`
+		Refine *struct {
+			Command struct {
+				Text *string `json:"text"`
+				Path *string `json:"path"`
+			} `json:"command"`
+			Rounds [][]struct {
+				Node string `json:"node"`
+			} `json:"rounds"`
+			Refused string `json:"refused"`
+		} `json:"refine"`
 		Resume *struct {
 			Ran []struct {
 				Value json.RawMessage `json:"value"`
@@ -102,6 +119,9 @@ func main() {
 				return
 			}
 			emit(c.Frame, c.Steps[0].Value) // what read observed, passed up
+			return
+		case "refine":
+			emit(c.Frame, refinements(c))
 			return
 		case "resume":
 			r := c.Input.Resume
@@ -204,9 +224,11 @@ func remember(c continuation, word string) {
 	case 5:
 		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
 		emit("interpreter", remembering)
+	case 6:
+		emit("interpreter", map[string]string{"text": "plain words"})
 	default:
 		said := map[string]any{}
-		for i, name := range []string{"task", "remembered", "procedure", "narrow", "narrowed", "again"} {
+		for i, name := range []string{"task", "remembered", "procedure", "narrow", "narrowed", "again", "outside its refinement"} {
 			s := c.Steps[i]
 			if s.Fault != nil {
 				said[name] = fmt.Sprintf("fault (%s): %s", s.Fault.Kind, s.Fault.Cause)
@@ -216,6 +238,27 @@ func remember(c continuation, word string) {
 		}
 		emit(c.Frame, said)
 	}
+}
+
+// refinements are the agent's refinements for a procedure remembered from
+// it: a relay holds for any relay: input, and each call returning text; a
+// look holds for any path, and each read returning a file.
+func refinements(c continuation) map[string]any {
+	r := c.Input.Refine
+	header, edge := `input.text.startsWith("relay:")`, `type(returns.%s) == string`
+	if r.Command.Path != nil {
+		header, edge = `size(input.path) > 0`, `returns.%s.kind == "file"`
+	}
+	if r.Refused == "" {
+		header = strings.Replace(strings.Replace(header, "input.text", "input.txt", 1), "input.path", "input.pth", 1) // a slip
+	}
+	edges := map[string]string{}
+	for _, round := range r.Rounds {
+		for _, call := range round {
+			edges[call.Node] = fmt.Sprintf(edge, call.Node)
+		}
+	}
+	return map[string]any{"header": header, "edges": edges}
 }
 
 // look is the worker that remembers a look and runs it on new paths.

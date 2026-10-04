@@ -94,7 +94,7 @@ func Compile(src Source) (Procedure, map[string]Node, error) {
 			depended[a] = true
 		}
 	}
-	p := Procedure{Header: Header{Contract: src.Contract, Original: src.Original, Refinement: src.Refinement}}
+	p := Procedure{Header: Header{Contract: src.Contract, Original: src.Original, Refinement: src.Refinement}, Names: map[string]string{}}
 	for _, name := range order {
 		if _, err := compile(name); err != nil {
 			return Procedure{}, nil, err
@@ -104,6 +104,9 @@ func Compile(src Source) (Procedure, map[string]Node, error) {
 		if !depended[name] {
 			p.Body = append(p.Body, ids[name])
 		}
+	}
+	for name, id := range ids {
+		p.Names[id] = name
 	}
 	for _, r := range Refs(src.Return) {
 		if _, ok := ids[r]; !ok {
@@ -137,7 +140,11 @@ func Compile(src Source) (Procedure, map[string]Node, error) {
 		if err != nil {
 			return Procedure{}, nil, err
 		}
-		p.Header.Refinement = &Refinement{Input: r.Input, Edges: edges, InputShown: r.InputShown, EdgesShown: shown}
+		on, err := byID(r.On)
+		if err != nil {
+			return Procedure{}, nil, err
+		}
+		p.Header.Refinement = &Refinement{Input: r.Input, Edges: edges, InputShown: r.InputShown, EdgesShown: shown, Header: r.Header, On: on}
 	}
 	return p, nodes, nil
 }

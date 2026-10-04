@@ -60,19 +60,25 @@ type Header struct {
 // Refinement is the inputs and returns a compiled body is valid for. Until
 // the model writes refinements (H9), it is the base types themselves
 // (decision 10): the input's, and every resumed edge's.
+//
+// Where the model wrote a refinement in CEL (H9), it replaces the default:
+// Header for the input, On for a node's edge.
 type Refinement struct {
 	Input      string            `json:"input,omitempty"`       // the input's base type hash
 	Edges      map[string]string `json:"edges,omitempty"`       // node → the base type hash of what it returned
 	InputShown string            `json:"input_shown,omitempty"` // the same, as a model reads them: never a hash
 	EdgesShown map[string]string `json:"edges_shown,omitempty"`
+	Header     string            `json:"header,omitempty"` // CEL over the input
+	On         map[string]string `json:"on,omitempty"`     // node → CEL over the returns so far
 }
 
 // Procedure is a header, a return and a body: the nodes the procedure runs,
 // by hash, sinks first. Every node any of them depends on runs too.
 type Procedure struct {
-	Header Header          `json:"header"`
-	Return json.RawMessage `json:"return"`
-	Body   []string        `json:"body"`
+	Header Header            `json:"header"`
+	Return json.RawMessage   `json:"return"`
+	Body   []string          `json:"body"`
+	Names  map[string]string `json:"names,omitempty"` // node → the name it was written under: how a model refers to it
 }
 
 // Node is a call and its immediate dependencies.
@@ -250,6 +256,18 @@ func (s Store) Put(p Procedure, nodes map[string]Node) error {
 	return s.write("procedures", Key(p.Header.Contract), p)
 }
 
+// SetRefinement replaces the refinement of a stored procedure: the model
+// wrote it at remember, after the compile and before the contract joined any
+// reach (H9).
+func (s Store) SetRefinement(c *Schema, r *Refinement) error {
+	var p Procedure
+	if err := s.read("procedures", Key(c), &p); err != nil {
+		return err
+	}
+	p.Header.Refinement = r
+	return s.write("procedures", Key(c), p)
+}
+
 // Position reads where a frame is; a frame not begun is at no round.
 func (s Store) Position(frame string) (Position, error) {
 	var p Position
@@ -273,9 +291,20 @@ func title(c *Schema) string {
 // Remembering is a remember frame's work after it compiled its strand: the
 // contracts it stored procedures for, in the order it extends itself with
 // them (bottom up, the requested one last).
+//
+// Before it extends itself, it asks the actor each procedure was remembered
+// from to write its refinements (H9), when that actor holds a refine
+// contract: Refining is the one being asked about, Attempts how often, and
+// Refused why the last answer was refused, shown with the next ask.
 type Remembering struct {
-	Contracts []*Schema `json:"contracts"`
-	Originals []string  `json:"originals"` // the actor each was remembered from
+	Contracts []*Schema         `json:"contracts"`
+	Originals []string          `json:"originals"` // the actor each was remembered from
+	Evidence  []json.RawMessage `json:"evidence"`  // what each was compiled from, as names and presentations
+	Refining  int               `json:"refining"`
+	Attempts  int               `json:"attempts"`
+	Refused   string            `json:"refused,omitempty"`
+	Asked     string            `json:"asked,omitempty"` // what the last emission asked for: refine or extend
+	Extended  int               `json:"extended"`
 }
 
 // Remembering reads a remember frame's work, if it has compiled.
