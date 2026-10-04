@@ -148,6 +148,64 @@ Taken with the human on 2026-10-03.
 | 27 | A payload that fits two of one target's contracts | a contract fault, "ambiguous", at invoke. The kernel never reasons about whether two schemas overlap; it refuses when an ambiguity actually occurs | H3 |
 | 28 | One representation per contract | `remember` keeps the original contract and swaps the actor: `do-work(observation)` on Codex becomes `do-work(observation)` on the interpreter. A second run remembered through the same contract, in any Horizon, or a run of a procedure that already exists, would be a second representation: refused until versioning. The refusal comes before `extend-reach`, so no Horizon is given a procedure another Horizon remembered. A value outside the refinement falls back to the original contract | H6, H7 |
 
+## Judgement calls made while building
+
+Made by the implementer on 2026-10-03, while building H1–H9, where this plan
+or 32 left a question open, or where building showed the plan could not hold
+as written. **None was taken with the human; each is for the human to confirm
+or reverse.** A change to `core` says which invariant needs it, as the ground
+rules ask. "Revisit" marks the ones most worth a second look.
+
+### In the kernel
+
+| # | Question | Call | Why | Step |
+|---|---|---|---|---|
+| J1 | Two identical instructions in one emission | **The kernel refuses them** (a supervisor fault: "the same instruction twice"). The interpreter makes each repeat distinct bytes by putting k spaces inside the k-th repeat's object, which no reading of it notices, so every call still runs (decision 13) | Found by running it, not foreseen: under one predecessor, the same bytes are the same record (same `Predecessor` and `Input`, so the same stamp), and the second slot collides on disk. Invariant: recording, one record per step. Padding is honest but obscure. **Revisit**: a position in the record would be cleaner, but that is a record encoding change, which H forbids | H2, H6 |
+| J2 | What may share an emission | A fan-out **cannot return**, **cannot carry a resident connection**, and **cannot hold an invoke that changes the waiter's Horizon** (`narrow`, `extend-reach`): the emitter faults its own frame and kills every successor. Those are emitted alone; the interpreter's planner emits them alone | A return discharges the slot the siblings' round waits on. Custody of a connection passes to exactly one successor. A Horizon change would be applied once per sibling, each on its own copy of the waiter, and whoever resolved last would decide what the waiter holds. Invariants: custody, authority | H2 |
+| J3 | An instruction out of reach inside a fan-out | **It holds a slot of its own** and its fault discharges it, so the emitter resumes with the fault among its steps. Alone, the same fault still discharges the emitter's own slot, as before | The plan says "it still holds a slot". Replay cannot see siblings from a record, so it tells which case it was by the release the parent committed to `horizons/` (`tree.Released`): no record field changes | H2 |
+| J4 | The order of a round's steps | A slot's file holds its **position in the emission**, and `Children` sorts by it | Directory listings sort by stamp, so the plan's "in instruction order" needed it. It is side state, not a record field | H2 |
+| J5 | How a worker names an observation | A step in the continuation envelope carries **`observation`: its discharge's stamp** | 32 says the worker "may carry the hash", but no worker could get one: steps showed values, never stamps. Adapters never show it to a model (P11 holds by the adapters, as before) | H6 |
+| J6 | Which actor `extend-reach` extends, and where | A Horizon gains three fields: **`name`** (the name the frame's surface was invoked through; for a reference, its actor), **`origin`** (the invoke that created the Horizon by a narrowing; empty for the room's) and **`forked`**. An extension is applied to **every frame in the stack that shares the emitter's origin**, so the caller sees it when the interpreter returns | The plan says the contract "joins the emitter's own Horizon", but a Horizon is not shared state: each frame carries a copy in its stack. Without this, the user who called `remember` would never see the procedure. These are Horizon fields, not record fields: Horizons are committed by hash, so their ids change, records do not. Invariant: authority (who may extend what). **Revisit** with B5, when the Horizon becomes durable shared state | H3 |
+| J7 | `extend-reach` inside a branch of a fan-out | **Refused** (`forked`: a horizon fault) | Its siblings hold the same Horizon without the extension; whichever discharges last would decide whether the waiter gets it. Nondeterministic, so refused | H3 |
+| J8 | `system` under a narrowing | **Every Horizon keeps `system`**, whatever the narrowing keeps | Decision 16 makes syscalls the Horizon's own. None adds authority: `narrow` only drops, `strand` reads the requester's Horizon, `extend-reach` adds a contract to the emitter | H3 |
+| J9 | A syscall that takes a schema; a tool shown by name | `contract.Schema` gains **`title`** (ignored by fit) and the type **`any`** | `extend-reach(schema)` and `strand`'s contract take a schema, which the schema language could not express (no recursion). Tools "labelled by the schema's title" needed a title | H3 |
+| J10 | Which of several failing contracts to report | The error of the contract **whose required fields the payload has**, else the first | With one contract the message is unchanged; with `system`'s three, the first error was always the wrong one | H3 |
+| J11 | How a refusal by `strand` is a horizon fault | A syscall's refusal is a **supervisor fault whose observation is `{"refused": {kind, cause}}`**; `Observed` derives that kind, and only from exactly that encoding | The walk needs the tree, so it cannot run at intake, where kinds are derived. Every other supervisor observation begins with the supervisor's own words, never JSON, so no target can forge one | H4 |
+| J12 | What "the invoke that caused it" means | **Found by climbing frames** (the frame the observation belongs to, then each waiting caller), never by walking predecessors | Walking predecessors from a return passes through the children's invokes and would stop at one of them. The chain handed back is still the predecessors from the observation up to that invoke | H4 |
+| J13 | Where `strand`'s walk lives | In **`runtime/replay`** (`ReadStrand`), reached through a `ReadStrand` effect | It re-derives the Horizon of every frame it passes, which is what replay does | H4 |
+| J14 | How an actor gets state of its own | A registry entry marked **`"state": true`** owns `.skyra/<name>/`; a contract file may declare **`contracts`**, several entry points of one program | The plan names `.skyra/interpreter/` only; this makes it general, and lets `run.sh` install a procedure by hand (`interp install`). The name may not be a kernel directory | H5 |
+
+### In the interpreter
+
+| # | Question | Call | Why | Step |
+|---|---|---|---|---|
+| J15 | Syntax of a binding | `{"$": [root, key or index, ...]}`, root `input`, `item` or a node; a constant that would read as a binding is written `{"$const": ...}` | Paths as arrays need no escaping of dots in keys | H5 |
+| J16 | Order of a remembered strand's calls | **Each round runs after every call of the round before**, not only after the calls whose values it uses | What ran in order may have depended on order (a write, then a read). It gives up parallelism the DAG would allow. **Revisit** once refinements, or the model, can say which calls are independent | H6 |
+| J17 | When a return is control, not content | When **every leaf of it was found by provenance**; one constant leaf makes it authored, and the frame stays a call to its actor. A root whose return is authored is refused | 32 says "passes up unchanged", which is too strict for a return built from several values, and allowing constants would replay an authored answer forever | H6 |
+| J18 | Provenance by equality | The **input first**, then calls in the order they ran; **null, bools and the empty string are never bound** (too common to say where they came from); a call's target is bound only for references | Whole-value equality only. **Revisit**: a value the model derived from its input (a substring) stays a constant, so a remembered strand generalizes only where the model passed values through whole. Anti-unification across strands, already later, is the real answer | H6 |
+| J19 | Which observation can be remembered | Only **the return of the contract named**; not a deeper one | Otherwise the procedure's return is not in the strand | H6 |
+| J20 | What can be in a remembered strand | **No faults**, and of the syscalls **only `narrow`** | A fault would be compiled into a procedure that faults; `extend-reach` or `strand` in a procedure would extend or read again on every run | H6 |
+| J21 | An edge's base type | **The name called and the value's shape**; the contract is left out, and a call through a reference is named "reference" | The contract a call went through is not the same at remember (the interpreter not yet extended, a reference not in the requester's reach) as when the procedure runs, so with it the default refinement refused its own procedure | H6, H7 |
+| J22 | How the fallback is shown what ran | Through a contract titled **`resume`** on the original actor, when it holds one: `{"resume": {command, contract, ran, refused}}`. Without one, and at entry, it is given **the command**, and starts over. A faulted call is an edge that refused. The original's answer is the procedure's | Decision 15 asks the actor to be shown the command, what ran and why, but the original contract is fit strictly and has no room for them. The scripted agent holds `resume`; **Codex does not**, so it starts over. **Revisit**: a convention the interpreter relies on, chosen by name | H7 |
+| J23 | Who writes the refinements, and how | The actor a procedure was remembered from, through a contract titled **`refine`**, when it holds one; **at most 3 attempts**, each refusal shown; after that, or without `refine`, the base types stay | Decision 15's problem again: the original contract cannot carry the request. **Codex holds no `refine`**, so its procedures keep their base types. **Revisit** with J22 | H9 |
+| J24 | `invoked_at` | **Not in the CEL environment** | The records carry no timestamp, and H changes no record field, so there is nothing true to give. Time stays an input, never a clock, as 32 says | H9 |
+| J25 | `map` and `filter` | **Left out of the environment altogether**, not only over maps | Every variable is `dyn`, so no check can tell a list from a map before it runs. A refinement is a predicate: `all`, `exists` and `exists_one` say what it needs, in any order | H9 |
+| J26 | "No error on its own strand" | Evaluated **with state tracked**: any error value in any evaluated subexpression refuses it | That catches `error || true`. Not exhaustive evaluation, which would also refuse a correctly guarded `has(x) && x...` | H9 |
+| J27 | Cost | CEL's estimator, **every unknown size taken as at most 1000**, a bound of 100 000; the same limit at run time | The estimator needs a size for every variable, and all of them are inputs | H9 |
+
+### Codex
+
+| # | Question | Call | Why | Step |
+|---|---|---|---|---|
+| J28 | How Codex calls a procedure remembered in the same turn | A **`procedure`** tool (its input goes to the interpreter, which selects the contract by fit), beside one titled tool per procedure that exists at `thread/start` | Codex's tools are fixed at `thread/start`; a procedure added in the turn cannot become a tool of that thread | H8 |
+| J29 | How Codex names what to remember | **`remember {call: n}`**: the index of one of its own calls in this turn; the adapter, a worker, turns it into that step's observation and the contract it went through | Hashes never reach a model. Only a call that itself called tools compiles, so a production room of leaves (`read`, `write`) gives Codex nothing to remember yet. **Revisit** with what Codex should remember: its own earlier turns, which only the user target sees | H8 |
+| J30 | Real Codex | The resident adapter offers `remember` and procedures, and the launcher registers the interpreter; **neither was run against real Codex** | Not runnable here | H8 |
+
+Known consequence, not a call: with fan-out, siblings that discharge at the
+same time each commit a resolve, and the fan-in claim keeps one. That was
+always the design; fan-out makes it common, so the tree collects orphan
+resolve records, which replay never walks.
+
 ## H0: the documents
 
 **Deliverable:** the documents agree with this plan before code moves.
