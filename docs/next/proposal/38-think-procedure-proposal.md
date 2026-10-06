@@ -301,6 +301,26 @@ Steps 1–4, on `main` (2026-10-06):
 | 3. The prompt | `codex/prompt`; both adapters send `baseInstructions`; the fake refuses a thread without it |
 | 4. The think bundle | `interp/workflows/think`; `system.narrow` gains `without` to drop kinds of authority without naming paths |
 
+Decisions (2026-10-06), which the code relies on by omission:
+
+- **The kernel grants an edge socket as trusted core.** A connection
+  surface's profile may connect to exactly its edge's socket. The kernel adds
+  that grant when it renders the profile, from the adapter and caller names it
+  derived; it needs no Horizon authority of its own to do so, so the socket is
+  not listed in `Horizon.Authority`.
+- **An actor's rules about its own connection belong in its adapter, not the
+  core.** The core keeps no fan-out rule about connections; the old "an
+  emission of several instructions cannot carry custody of a resource" went
+  with connection custody. If an actor must serialize or route its edge's
+  traffic, its adapter and holder do it.
+- **Codex makes one tool call at a time.** When Codex asks for several in a
+  turn, the adapter queues them and runs them in order
+  (`TestEachToolCallInvokesTheToolItNames`), so one invocation has one
+  operation in flight on its edge. Running calls in parallel is a procedure's
+  job, and nothing does that today. Should two invocations share an edge at
+  once (a procedure fanning out two `think` calls in one conversation), the
+  holder would route lines by `threadId`; that belongs on the Codex side.
+
 Where the code departs from the text:
 
 - **No adapter disk state.** The holder already knows the edge's live

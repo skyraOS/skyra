@@ -311,9 +311,10 @@ sandbox that prohibits applying Seatbelt profiles.
   [improvement 03](../docs/design/improvements/03-conversation-is-an-invocation.md).
 - **Parked descriptors live in the webhost's memory.** The parked work and
   its Horizon are on disk, and resume derives them from the tree, but the
-  frame fds and a resident connection cannot be written to disk: if the
-  webhost stops, a waiting conversation stays viewable but cannot continue
-  until restore exists.
+  frame fds cannot be written to disk: if the webhost stops, a waiting
+  conversation stays viewable but cannot continue until restore exists. The
+  Codex app-server is not among them: it lives behind its edge's holder,
+  which outlives the webhost and reclaims it when idle.
 - **`system.register` is not built.** Narrowing through the room is; adding a
   tool an agent wrote to its reach needs the tool's bytes in the tree for
   replay (improvements item 6).

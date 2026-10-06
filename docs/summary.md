@@ -512,9 +512,11 @@ The complete list of changes, with what each became, is in
   checks them, but they are not yet pure observations.
 - **`Args` is still on the surface.** The launcher passes the real app-server's
   `--disable` flags through it; it becomes slots the owner fills (next/28).
-- **Some emissions must remain singular.** A fan-out cannot return, carry a
-  resident connection or contain `narrow`/`extend-reach`, because those cases
-  require one owner or would make the waiting Horizon nondeterministic.
+- **Some emissions must remain singular.** A fan-out cannot return or contain
+  `narrow`/`extend-reach`, because those cases require one owner or would make
+  the waiting Horizon nondeterministic. Rules about an actor's own connection
+  are its adapter's, not the core's: Codex makes one tool call at a time, and
+  running calls in parallel is a procedure's job ([proposal 38](next/proposal/38-think-procedure-proposal.md#implemented)).
 - **The provider profile is pinned to Codex 0.160.0.**
 - **Procedure versioning is incomplete.** There is one remembered
   representation per contract; authored bundles, migrations and versioned
