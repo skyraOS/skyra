@@ -92,6 +92,29 @@ func TestNarrowingCannotWiden(t *testing.T) {
 	}
 }
 
+// "without" drops whole kinds of what is held, naming no path: a procedure
+// can make a read-only Horizon (proposal 38) without knowing the workspace.
+// It only removes; an unknown kind is a horizon fault at intake.
+func TestNarrowingWithoutDropsKindsOfAuthority(t *testing.T) {
+	root := operator
+	root.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	root.Reach[System] = Syscalls()
+	work := []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}
+	root.Authority = horizon.Authority{Read: work, Write: work, Scratch: "/private/scratch", Connect: []string{"/private/s.sock"}}
+	g, err := narrowing(root, json.RawMessage(`{"actor":"agent","reach":["echo"],"without":["write","scratch"]}`))
+	want := horizon.Authority{Read: work, Connect: []string{"/private/s.sock"}}
+	if err != nil || !reflect.DeepEqual(g.Authority, want) || !reflect.DeepEqual(g.Reach, []string{"echo"}) {
+		t.Fatalf("read-only narrowing: %+v %v", g, err)
+	}
+	if !root.Authority.Allows(g.Authority) {
+		t.Fatal("a narrowing widened")
+	}
+	r := intakeRecord(root, `{"to":"system","payload":{"narrow":{"actor":"agent","without":["root"]}}}`)
+	if r.State != record.Fault || r.Fault.Kind != record.Horizon || !strings.Contains(r.Fault.Cause, `"root"`) {
+		t.Fatalf("an unknown kind is refused: %+v", r.Fault)
+	}
+}
+
 // room is the operator's Horizon with the agent, echo and the syscalls.
 func room() horizon.Horizon {
 	root := operator

@@ -20,8 +20,10 @@ import (
 // reads Horizon state, which only the kernel holds. No registry may name
 // system, or anything under system.
 //
-//	{"to": "system", "payload": {"narrow": {"actor": "<name in reach>", "reach": [...], "authority": {...}}}}
-//	   → returns {"reference": "<ref>"}: a narrowed Horizon for that actor, now in the caller's reach
+//	{"to": "system", "payload": {"narrow": {"actor": "<name in reach>", "reach": [...], "authority": {...}, "without": [...]}}}
+//	   → returns {"reference": "<ref>"}: a narrowed Horizon for that actor, now in the caller's reach.
+//	     "without" drops whole kinds of authority (read, write, mach, connect,
+//	     scratch) from what is held, so a procedure can narrow without naming paths
 //	{"to": "<ref>", "payload": <the actor's input>}
 //	   → an ordinary invoke of the actor, under the narrowed Horizon
 //	{"to": "system", "payload": {"extend-reach": {"schema": <a contract>}}}
@@ -54,6 +56,7 @@ var (
 		"authority": {Type: "object", Fields: map[string]*contract.Schema{
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
+		"without": strs,
 	}}
 	extendIn = &contract.Schema{Type: "object", Required: []string{"schema"}, Fields: map[string]*contract.Schema{
 		"schema": {Type: "any"},
@@ -210,6 +213,7 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 		Actor     string             `json:"actor"`
 		Reach     *[]string          `json:"reach"`
 		Authority *horizon.Authority `json:"authority"`
+		Without   []string           `json:"without"`
 	}
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return horizon.Grant{}, err
@@ -238,6 +242,22 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 			return horizon.Grant{}, fmt.Errorf("narrowing asks for authority outside the Horizon")
 		}
 		g.Authority = *ask.Authority
+	}
+	for _, kind := range ask.Without {
+		switch kind {
+		case "read":
+			g.Authority.Read = nil
+		case "write":
+			g.Authority.Write = nil
+		case "mach":
+			g.Authority.Mach = nil
+		case "connect":
+			g.Authority.Connect = nil
+		case "scratch":
+			g.Authority.Scratch = ""
+		default:
+			return horizon.Grant{}, fmt.Errorf("narrowing drops %q, which is not a kind of authority", kind)
+		}
 	}
 	return g, nil
 }

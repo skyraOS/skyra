@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "procedures": [
+    {
+      "contract": {
+        "title": "think",
+        "type": "object",
+        "required": ["think"],
+        "fields": {
+          "think": {
+            "type": "object",
+            "required": ["text"],
+            "fields": {"text": {"type": "string"}}
+          }
+        }
+      },
+      "order": ["scope", "run"],
+      "nodes": {
+        "scope": {
+          "call": "system",
+          "in": {
+            "narrow": {
+              "actor": "codex",
+              "reach": ["echo", "read", "roots", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"],
+              "without": ["write", "scratch"]
+            }
+          }
+        },
+        "run": {
+          "call": {"$": ["scope", "reference"]},
+          "after": ["scope"],
+          "in": {
+            "header": "think",
+            "text": {"$": ["input", "think", "text"]}
+          }
+        }
+      },
+      "return": {"$": ["run"]}
+    }
+  ]
+}

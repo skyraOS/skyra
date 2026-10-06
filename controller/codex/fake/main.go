@@ -119,10 +119,21 @@ func main() {
 		case "initialized":
 		case "turn/interrupt":
 			reply(m.ID, map[string]any{})
-			if held != nil && held.thread == v.ThreadID && held.id == v.TurnID {
-				send(map[string]any{"method": "turn/completed", "params": map[string]any{
-					"threadId": held.thread, "turn": map[string]string{"id": held.id, "status": "interrupted"}}})
+			// An interrupt ends the named turn, as Codex does, whether it is
+			// held or waiting on a tool call the adapter will never answer.
+			interrupted := held != nil && held.thread == v.ThreadID && held.id == v.TurnID
+			if interrupted {
 				held = nil
+			}
+			for id, t := range pending {
+				if t.thread == v.ThreadID && t.id == v.TurnID {
+					delete(pending, id)
+					interrupted = true
+				}
+			}
+			if interrupted {
+				send(map[string]any{"method": "turn/completed", "params": map[string]any{
+					"threadId": v.ThreadID, "turn": map[string]string{"id": v.TurnID, "status": "interrupted"}}})
 			}
 		case "thread/loaded/list":
 			if mode == "hang-health" {
