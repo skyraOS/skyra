@@ -30,6 +30,10 @@ New implementation proposals:
   drawn as constellations of their input contracts; application actions
   select interpreter procedures and reconstructed state matches the app's
   full snapshot input. Aligned with 33. Proposed (2026-10-03).
+- [37 — Delegate](37-delegate-proposal.md): `delegate` hands a short,
+  capped header and observations to a fresh child thread and makes a tool;
+  remembering that tool's return is how a procedure is created, since a
+  leaf alone has nothing to compile. Proposed (2026-10-06).
 
 ## The design in one paragraph
 
