@@ -34,6 +34,10 @@ New implementation proposals:
   capped header and observations to a fresh child thread and makes a tool;
   remembering that tool's return is how a procedure is created, since a
   leaf alone has nothing to compile. Proposed (2026-10-06).
+- [38 — Think](38-think-procedure-proposal.md): the first continuation
+  procedure. A `think` star the user selects; a narrowing attaches read-only
+  tools to that invocation only; a fresh Codex thread whose whole prompt is
+  the header. Proposed (2026-10-06).
 
 ## The design in one paragraph
 
