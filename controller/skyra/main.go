@@ -30,6 +30,7 @@ import (
 )
 
 func main() {
+	custody.SealInherited() // nothing the launcher leaked reaches a target
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: skyra boot -root DIR -registry FILE [-to CAPABILITY] [-payload JSON] | skyra instance DIR")
 		os.Exit(2)

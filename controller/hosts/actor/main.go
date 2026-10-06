@@ -39,6 +39,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"skyra/controller/runtime/custody"
 )
 
 type event struct {
@@ -65,6 +67,7 @@ type host struct {
 }
 
 func main() {
+	custody.SealInherited() // nothing the launcher leaked reaches the actor
 	sock := flag.String("sock", "", "unix socket to serve the universal contracts on")
 	state := flag.String("state", "", "directory for the durable inbox and delivery log")
 	flag.Parse()

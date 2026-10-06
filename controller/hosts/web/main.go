@@ -40,6 +40,8 @@ import (
 	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/tree"
+
+	"skyra/controller/runtime/custody"
 )
 
 type entry struct {
@@ -77,6 +79,7 @@ type webhost struct {
 }
 
 func main() {
+	custody.SealInherited() // nothing the launcher leaked reaches a resumed instance
 	ws := flag.String("ws", "127.0.0.1:8080", "loopback address for the browser")
 	parkSock := flag.String("park", "", "unix socket instances park browser frames on")
 	skyra := flag.String("skyra", "", "the skyra binary, to resume parked frames and seed conversations")

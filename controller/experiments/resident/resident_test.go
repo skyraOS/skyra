@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"skyra/controller/runtime/handshake"
+
+	"skyra/controller/runtime/custody"
 )
 
 // TestResidentHelper is re-executed as real, separate runtime, provider, and
@@ -26,6 +28,7 @@ func TestResidentHelper(t *testing.T) {
 	if mode == "" {
 		return
 	}
+	custody.SealInherited() // a helper stands in for a runtime process
 	if err := helper(mode); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
