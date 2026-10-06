@@ -13,8 +13,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
@@ -27,6 +29,8 @@ import (
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
+
+	"skyra/controller/runtime/hold"
 )
 
 func main() {
@@ -88,6 +92,15 @@ func main() {
 		} else {
 			err = resume(os.Args[2])
 		}
+	case "hold":
+		// Started only by a resident's recorded start, holding the resident's
+		// stream at fd 3: it serves the edge's socket (proposal 38).
+		trace.Who = fmt.Sprintf("hold pid %d", os.Getpid())
+		if len(os.Args) != 4 {
+			err = fmt.Errorf("usage: skyra hold SOCKET INCARNATION")
+		} else {
+			err = holdResident(os.Args[2], os.Args[3])
+		}
 	case "instance":
 		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())
 		if len(os.Args) != 3 {
@@ -127,16 +140,13 @@ func resume(root string) error {
 	if err := json.NewDecoder(os.Stdin).Decode(&r); err != nil {
 		return err
 	}
-	stack := handshake.Inherited(3, r.Frames+len(r.Resources))
+	stack := handshake.Inherited(3, r.Frames)
 	s, err := parked(root, r)
 	if err != nil {
 		for _, f := range stack {
 			f.Close()
 		}
 		return fmt.Errorf("resume %s: %w", record.Short(r.Stamp), err)
-	}
-	if err := custody.Validate(r.Resources, stack[r.Frames:]); err != nil {
-		return err
 	}
 	trace.Who = "resume " + record.Short(r.Stamp)
 	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
@@ -172,5 +182,30 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	if handed {
 		return machine.Instance{}, errors.New("already resumed")
 	}
-	return machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, R: rec, Stamp: r.Stamp, Self: self, Resources: r.Resources}, nil
+	return machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, R: rec, Stamp: r.Stamp, Self: self, Sockets: hold.Sockets()}, nil
+}
+
+// holdResident keeps the resident's stream at fd 3 behind the edge's socket.
+// The idle backoff starts at 30 s and stops the resident once its interval
+// would pass 16 min with no request: about half an hour of idleness, the old
+// rule. SKYRA_HOLD_START and SKYRA_HOLD_MAX (Go durations) override them.
+func holdResident(socket, incarnation string) error {
+	f := os.NewFile(3, "resident-stream")
+	c, err := net.FileConn(f)
+	f.Close()
+	if err != nil {
+		return err
+	}
+	stream, ok := c.(*net.UnixConn)
+	if !ok {
+		return errors.New("the resident's stream is not a unix socket")
+	}
+	start, max := 30*time.Second, 16*time.Minute
+	if d, err := time.ParseDuration(os.Getenv("SKYRA_HOLD_START")); err == nil {
+		start = d
+	}
+	if d, err := time.ParseDuration(os.Getenv("SKYRA_HOLD_MAX")); err == nil {
+		max = d
+	}
+	return hold.Serve(stream, hold.Config{Socket: socket, Incarnation: incarnation, Start: start, Max: max, Log: os.Stderr})
 }

@@ -21,21 +21,17 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
-
-	"skyra/controller/core/horizon"
-	"skyra/controller/runtime/custody"
 )
 
 // Frame is a parked invocation. The host holds a reference to the work and
 // its descriptors, never its authority: resume derives the instance from the
 // tree (next/20, finding 1; next/24).
 type Frame struct {
-	Root      string             `json:"root"`                // the .skyra it belongs to
-	Stamp     string             `json:"stamp"`               // the parked invoke; its frame is the slot the event returns to
-	Frames    int                `json:"frames"`              // how many of Files are the frame stack; resume checks it against the derived Horizon
-	Resources []horizon.Resource `json:"resources,omitempty"` // what the descriptors after the frame stack are
-	Payload   json.RawMessage    `json:"payload"`             // what the invocation asked of the host
-	Files     []*os.File         `json:"-"`                   // the frame stack and resources: custody
+	Root    string          `json:"root"`    // the .skyra it belongs to
+	Stamp   string          `json:"stamp"`   // the parked invoke; its frame is the slot the event returns to
+	Frames  int             `json:"frames"`  // how many of Files are the frame stack; resume checks it against the derived Horizon
+	Payload json.RawMessage `json:"payload"` // what the invocation asked of the host
+	Files   []*os.File      `json:"-"`       // the frame stack and resources: custody
 }
 
 // Send parks a frame with the host at sock and waits for its answer.
@@ -138,11 +134,8 @@ func Receive(c *net.UnixConn) (result Frame, failure error) {
 	}
 	f.Files = files
 	depth := f.Frames
-	if depth < 1 || len(f.Files) != depth+len(f.Resources) {
-		return Frame{}, fmt.Errorf("parked with %d descriptors, for %d frames and %d resources", len(f.Files), depth, len(f.Resources))
-	}
-	if err := custody.Validate(f.Resources, f.Files[depth:]); err != nil {
-		return Frame{}, err
+	if depth < 1 || len(f.Files) != depth {
+		return Frame{}, fmt.Errorf("parked with %d descriptors, for %d frames", len(f.Files), depth)
 	}
 	return f, nil
 }
@@ -160,7 +153,7 @@ func Answer(c *net.UnixConn, refusal string) error {
 // target's output, handed off to a successor that checks it like any other.
 func Resume(skyra string, f Frame, event []byte, stderr io.Writer) error {
 	defer f.Close()
-	in, _ := json.Marshal(Resumed{Stamp: f.Stamp, Frames: f.Frames, Resources: f.Resources, Out: string(event)})
+	in, _ := json.Marshal(Resumed{Stamp: f.Stamp, Frames: f.Frames, Out: string(event)})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, skyra, "resume", f.Root)
@@ -181,10 +174,9 @@ func Resume(skyra string, f Frame, event []byte, stderr io.Writer) error {
 // Resumed is what `skyra resume` reads on stdin: which work, what its
 // descriptors are, and the event. Nothing in it is authority.
 type Resumed struct {
-	Stamp     string             `json:"stamp"`
-	Frames    int                `json:"frames"`
-	Resources []horizon.Resource `json:"resources,omitempty"`
-	Out       string             `json:"out"`
+	Stamp  string `json:"stamp"`
+	Frames int    `json:"frames"`
+	Out    string `json:"out"`
 }
 
 // Close releases the host's hold on the frame stack.

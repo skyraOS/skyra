@@ -11,7 +11,6 @@ import (
 	"skyra/controller/codex/proceduretools"
 	"slices"
 	"strings"
-	"time"
 
 	"skyra/controller/codex/prompt"
 )
@@ -61,6 +60,7 @@ type derived struct {
 	Incarnation, Thread, Turn, Final, Violation, Partial             string
 	Initialized, SentInitialize, SentThread, SentTurn, SentInterrupt bool
 	NeedInspect, SentInspect, Inspected, NeedStop, Stopped, Lost     bool
+	Reused                                                           bool // codex.start found the edge's live server
 	InspectAt, ActivityAt                                            int64
 	Terminal, TerminalError                                          string // how the turn ended, and Codex's reason when it failed
 	Pending                                                          []message
@@ -227,13 +227,17 @@ func decide(c continuation) (string, error) {
 		case "codex.start":
 			var started struct {
 				Incarnation string `json:"incarnation"`
+				Reused      bool   `json:"reused"`
 			}
 			if err := json.Unmarshal(s.Value, &started); err != nil || started.Incarnation == "" {
 				return "", errors.New("start did not return an incarnation")
 			}
 			d.Incarnation, d.Thread, d.Partial = started.Incarnation, "", ""
 			d.NeedInspect, d.SentInspect, d.Inspected = false, false, false
-			d.Initialized, d.SentInitialize, d.SentThread = false, false, false
+			// A reused server is the edge's live one (proposal 38): it was
+			// initialized by an earlier invocation, so only a thread is new.
+			d.Initialized, d.SentInitialize, d.SentThread = started.Reused, started.Reused, false
+			d.Reused = started.Reused
 		case "codex.stop":
 			var o observation
 			if err := json.Unmarshal(s.Value, &o); err != nil {
@@ -389,9 +393,8 @@ func decide(c continuation) (string, error) {
 			return "", fmt.Errorf("unexpected step %s", s.To)
 		}
 	}
-	if d.NeedInspect && d.Inspected && c.Input.ActivityAt > 0 && d.InspectAt-c.Input.ActivityAt >= int64(30*time.Minute/time.Millisecond) {
-		d.NeedStop = true
-	}
+	// An idle server is the holder's to reclaim, by its backoff (proposal 38);
+	// a turn finds out by its inspect, and starts another.
 	if d.NeedStop && !d.Stopped {
 		return operation("codex.stop", d.Incarnation, "stop", nil, d.Partial), nil
 	}
@@ -409,9 +412,13 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
-		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
 		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": defs, "baseInstructions": prompt.Base(c.Input.Header)})
-		return ioCall(d.Incarnation, []string{string(initialized), start}, d.Partial), nil
+		deliver := []string{start}
+		if !d.Reused { // this invocation initialized the server: finish the handshake
+			initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
+			deliver = []string{string(initialized), start}
+		}
+		return ioCall(d.Incarnation, deliver, d.Partial), nil
 	}
 	if d.Thread == "" {
 		return ioCall(d.Incarnation, nil, d.Partial), nil

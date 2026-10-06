@@ -2,9 +2,10 @@
 
 Date: 2026-10-06
 
-Status: proposed; not implemented. Revised the same day: destinations come
-from the user's selection, and connections belong to adapters, not the
-kernel.
+Status: steps 1–4 implemented (2026-10-06); steps 5–8 proposed. See
+[Implemented](#implemented) for where the code departs from the text.
+Revised the same day: destinations come from the user's selection, and
+connections belong to adapters, not the kernel.
 
 Builds on [think](../think.md) (a read-only conversation, through
 `system.narrow`), [37 — Delegate](37-delegate-proposal.md) (a header is the
@@ -288,3 +289,40 @@ deterministic because the lookup is itself recorded.
    development, or think becomes the only entry.
 3. The backoff's starting interval and maximum.
 4. The browser's star: the desktop first, or both at once.
+
+## Implemented
+
+Steps 1–4, on `main` (2026-10-06):
+
+| Step | Where |
+|---|---|
+| 1. `caller` in the envelope | `core/machine`: `caller(h)` is `Resume.Name`; a payload that names one is refused at intake |
+| 2. Adapter-owned connections | `runtime/hold` (the holder, `skyra hold`), `core/machine.edgeSocket`, `codex/io` as the holder's client; the kernel's connection custody is gone |
+| 3. The prompt | `codex/prompt`; both adapters send `baseInstructions`; the fake refuses a thread without it |
+| 4. The think bundle | `interp/workflows/think`; `system.narrow` gains `without` to drop kinds of authority without naming paths |
+
+Where the code departs from the text:
+
+- **No adapter disk state.** The holder already knows the edge's live
+  resident, so `codex.start` asks it first and is recorded as `reused` when
+  one is live; the Codex adapter stays a stateless continuation. The backoff
+  resets on requests the holder serves (the traffic variant above), so no
+  state file or lock is needed: the holder serves one request at a time, and
+  its idle stop takes the same lock.
+- **The holder performs the operations.** A socket carried from step to step
+  kept unread output in the kernel's buffer; a socket per step would lose it
+  when the step disconnects. So `codexio` sends its request to the holder,
+  which delivers, waits and returns complete lines, keeping the rest for the
+  next step. The observation is the same record as before.
+- **The stop race:** the holder unlinks the socket first (new steps see no
+  server: nothing delivered, start another), answers steps that had already
+  connected the same way for a second, then closes.
+- **Pings are liveness only.** A resident's exit is seen at once by end of file
+  on its output; the backoff is the idle schedule (30 s doubling to 16 min).
+- **The recorded `connection`, `close_connection` and
+  `resource_owner_depth` fields stay in the surface.** Replay looks every
+  re-derived Horizon up by the hash of its encoding, so removing them would
+  stop older histories replaying. The runtime no longer acts on the last two.
+- **`think` is not yet in the launcher's registry.** The Codex adapter offers
+  the interpreter's procedures to the model as tools, so registering it before
+  step 5 would let Codex call think on itself.

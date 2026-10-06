@@ -52,11 +52,19 @@ try {
  submit("stale","text","old"); assert.equal((await client.next(m=>m.type==="rejected" && m.requestId==="stale")).code,"stale");
  ws.close(); client=await connect(); ws=client.socket;
  const restored=await client.next(m=>m.type==="snapshot"); assert.equal(restored.requests.find(r=>r.requestId==="r1").status,"returned");
+ submit("r2","history"); await client.next(m=>m.type==="accepted" && m.requestId==="r2");
+ const second=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r2" && r.status==="returned"));
+ if (real) {
+  // A second turn reaches the conversation's one app-server, through its
+  // edge's holder (proposal 38): the fake answers with its thread's history.
+  const answer=second.conversations[0].entries.filter(e=>e.role==="agent").at(-1).text;
+  assert(answer.includes("tool:hello") && answer.includes("history"), `second turn did not reach the first turn's server: ${answer}`);
+ }
  client.send({type:"close-interaction",uiIncarnation:inc,conversation:id,requestId:"close"});
  await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close" && r.status==="returned"));
  client.send({type:"delete-conversation",uiIncarnation:inc,conversation:id,requestId:"delete"});
  await client.next(m=>m.type==="snapshot" && m.conversations.length===0);
- console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, close, delete`);
+ console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, close, delete`);
  if (real && process.argv.includes("--desktop")) {
   ws.terminate();
   const swift = spawn("swift", ["test", "--no-parallel"], { cwd: `${root}/desktop`, env: { ...process.env, SKYRA_TEST_WS: `ws://127.0.0.1:${port}/ws`, SKYRA_TEST_TOKEN: token }, stdio: "inherit" });

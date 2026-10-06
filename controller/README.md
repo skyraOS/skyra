@@ -261,16 +261,24 @@ boot wakes (kqueue on G0), prints the lineage, replays it: 7 records, byte-ident
 
 ## Resident Codex adapter
 
-The runtime knows only resident connections and registered operations. `codex.start`
-launches a private app-server and adds its connection to custody. `codexio`
-performs one recorded exchange or inspection on that connection. `codexresident`
-rebuilds protocol state from the continuation's steps and chooses the next
-operation. Before a later turn it inspects the existing process; after 30
-minutes without turn activity it stops the process and starts a fresh one.
-`codex.stop` shuts down the write side, observes peer EOF, and removes the
-connection from custody. Codex tool calls become ordinary invokes of registered
-tools. An unexpected provider request or native attempt interrupts the turn,
-and is returned to the parent as an observation.
+A connection is an edge between two actors, not something the kernel carries
+([proposal 38](../docs/next/proposal/38-think-procedure-proposal.md)). The edge is
+the adapter and whoever invoked it, named from the Horizon, so a program cannot
+pick another, and its socket lives in the user's private `/private/tmp/skyra-<uid>/`.
+`codex.start` launches a private app-server behind a holder (`runtime/hold`,
+`skyra hold`) that owns its stream and serves the edge's socket; if the edge
+already has a live one, the start is recorded as `reused` and nothing is
+launched. `codexio` is granted exactly that socket and performs one recorded
+exchange, inspection or stop through the holder, which keeps output that
+arrives between steps for the next one. `codexresident` rebuilds protocol state
+from the continuation's steps and chooses the next operation; each thread's
+whole prompt is `You are inside Skyra, a cognitive architecture, fulfilling:
+<header>`. The holder reclaims an idle app-server by an exponential backoff
+that every request resets (30 s doubling to 16 min, about half an hour idle;
+`SKYRA_HOLD_START` and `SKYRA_HOLD_MAX` override it), and a later turn finds out
+by its inspect and starts another. Codex tool calls become ordinary invokes of
+registered tools. An unexpected provider request or native attempt interrupts
+the turn, and is returned to the parent as an observation.
 
 ## Decisions, and where they live
 

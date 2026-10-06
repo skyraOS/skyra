@@ -53,8 +53,8 @@ kill_tree() {
   kill "$1" 2>/dev/null || true
 }
 
-# The controller holds one resident Codex connection per conversation. The
-# webhost holds it while that conversation waits on the human.
+# Each conversation's Codex app-server lives behind its edge's holder
+# (proposal 38), which reclaims it after about half an hour idle.
 STATE=${SKYRA_STATE:-$HOME/.skyra}
 # All launch modes authenticate ingress. Credentials travel in the environment.
 export SKYRA_WS_TOKEN=${SKYRA_WS_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}
@@ -100,7 +100,6 @@ sys.path.insert(0,str(root/'controller/codex/provider'))
 from launch import FEATURES, verified_version
 from sandbox import native_binary
 mode=os.environ['SKYRA_REGISTRY_MODE']
-depth=int(os.environ['SKYRA_REGISTRY_DEPTH'])
 if mode=='real':
     binary=native_binary().resolve(strict=True)
     verified_version(binary)
@@ -112,8 +111,7 @@ if mode=='real':
            'proxy_path':str(root/'controller/codex/provider/proxy.py'),'args':args}
 else:
     start={'path':str(build/'fake-codex')}
-start.update({'contract':str(root/'controller/codex/io/start-contract.json'),
-              'resident':True,'resource_owner_depth':depth})
+start.update({'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True})
 registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
  'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
@@ -122,12 +120,11 @@ registry={
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
  'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.start':start,
- 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
-                   'connection':True,'resource_owner_depth':depth},
- 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
-                  'connection':True,'resource_owner_depth':depth},
- 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),
-               'connection':True,'close_connection':True,'resource_owner_depth':depth},
+ # Codex's operations reach its app-server through their edge's holder
+ # (proposal 38): each is granted exactly that socket, nothing else.
+ 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
  # The interpreter (next/32): remember, and the procedures it builds, in its own state.
  'interpreter':{'path':str(build/'interp'),'contract':str(root/'controller/interp/contract.json'),'state':True},

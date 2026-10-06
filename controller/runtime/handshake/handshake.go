@@ -16,8 +16,6 @@ import (
 	"os"
 	"syscall"
 	"time"
-
-	"skyra/controller/runtime/custody"
 )
 
 type StampMsg struct {
@@ -35,7 +33,6 @@ type Under struct {
 type Release struct {
 	Horizon string `json:"horizon"` // the id of the committed Horizon: the child looks it up
 
-	Resources []custody.Resource `json:"resources,omitempty"`
 }
 
 // Accepted confirms that the successor installed and checked every custody

@@ -15,18 +15,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
-	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
+
+	"skyra/controller/runtime/hold"
 )
 
 // Run is one run of skyra, started by a parent that holds fd 3.
@@ -51,7 +53,7 @@ func Run(root string) error {
 	if len(in) > maxEmission {
 		return errors.New("instance input too large")
 	}
-	_, err = Drive(root, up, nil, machine.Instance{Floor: root, Phase: machine.Intake}, machine.Received{Under: under, In: in})
+	_, err = Drive(root, up, nil, machine.Instance{Floor: root, Sockets: hold.Sockets(), Phase: machine.Intake}, machine.Received{Under: under, In: in})
 	return err
 }
 
@@ -138,65 +140,23 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					_ = handshake.Send(up, handshake.Accepted{Error: "released Horizon: " + err.Error()})
 					return s, fmt.Errorf("released Horizon: %w", err)
 				}
-				if len(files) != h.Depth()+len(release.Resources) {
+				if len(files) != h.Depth() {
 					for _, f := range files {
 						f.Close()
 					}
 					_ = handshake.Send(up, handshake.Accepted{Error: "descriptor count does not match release"})
-					return s, fmt.Errorf("release has %d descriptors; expected %d frames and %d resources", len(files), h.Depth(), len(release.Resources))
-				}
-				if err := custody.Validate(release.Resources, files[h.Depth():]); err != nil {
-					for _, f := range files {
-						f.Close()
-					}
-					_ = handshake.Send(up, handshake.Accepted{Error: err.Error()})
-					return s, err
+					return s, fmt.Errorf("release has %d descriptors; expected %d frames", len(files), h.Depth())
 				}
 				stack = files
 				accepting = release.Horizon
 				acceptingRecord = s.R
-				trace.Logf("release  Horizon %s looked up (reach %v, %d frames, %d resources)", record.Short(release.Horizon), h.Names(), h.Depth(), len(release.Resources))
-				e = machine.Released{Self: h, Frames: h.Depth(), Resources: release.Resources}
+				trace.Logf("release  Horizon %s looked up (reach %v, %d frames)", record.Short(release.Horizon), h.Names(), h.Depth())
+				e = machine.Released{Self: h, Frames: h.Depth()}
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
-				var conn *os.File
-				resourceIndex, incarnation := -1, ""
-				if x.ConnectionOwner != "" {
-					var request struct {
-						Incarnation string `json:"incarnation"`
-					}
-					if err := json.Unmarshal(x.Stdin, &request); err != nil || request.Incarnation == "" {
-						e = machine.Emitted{Err: "connection operation needs an incarnation"}
-						break
-					}
-					var err error
-					conn, err = custody.Find(s.Resources, stack[s.Self.Depth():], x.ConnectionOwner, request.Incarnation)
-					if err != nil {
-						e = machine.Emitted{Err: err.Error()}
-						break
-					}
-					incarnation = request.Incarnation
-					for i, r := range s.Resources {
-						if r.Owner == x.ConnectionOwner && r.Incarnation == incarnation {
-							resourceIndex = s.Self.Depth() + i
-							break
-						}
-					}
-				}
-				e = run(x, conn)
-				if x.CloseConnection && resourceIndex >= 0 {
-					stack[resourceIndex].Close()
-					stack = append(stack[:resourceIndex:resourceIndex], stack[resourceIndex+1:]...)
-					out := e.(machine.Emitted)
-					out.ReleasedResource = incarnation
-					e = out
-				}
+				e = run(x)
 			case machine.StartResident:
-				var file *os.File
-				e, file = startResident(x, root)
-				if file != nil {
-					stack = append(stack, file)
-				}
+				e = startResident(x, root)
 			case machine.Spawn:
 				down, child, ev, err := spawn(root, x)
 				if err != nil {
@@ -231,7 +191,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					return s, err
 				}
 				down, child := downs[x.Index], children[x.Index]
-				if err := handshake.Send(down, handshake.Release{Horizon: id, Resources: s.Resources}, frames...); err != nil {
+				if err := handshake.Send(down, handshake.Release{Horizon: id}, frames...); err != nil {
 					return s, err
 				}
 				var accepted handshake.Accepted
@@ -283,7 +243,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 			case machine.Park:
 				trace.Logf("park     custody passes to the host at %s; waiting on an outside event", x.Host)
 				e = machine.Parked{}
-				if err := park.Send(x.Host, park.Frame{Root: root, Stamp: s.Stamp, Frames: s.Self.Depth(), Resources: s.Resources, Payload: x.Payload, Files: stack}); err != nil {
+				if err := park.Send(x.Host, park.Frame{Root: root, Stamp: s.Stamp, Frames: s.Self.Depth(), Payload: x.Payload, Files: stack}); err != nil {
 					e = machine.Parked{Err: err.Error()}
 				}
 			case machine.Pop:
@@ -352,7 +312,7 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 
 // run performs a Run effect: check the binary's content hash, run it under
 // the rendered profile, and read its one line of output; anything after it is discarded.
-func run(x machine.Run, connection *os.File) machine.Event {
+func run(x machine.Run) machine.Event {
 	bin, err := os.ReadFile(x.Surface.Path)
 	if err != nil {
 		return machine.Emitted{Err: err.Error()}
@@ -365,9 +325,6 @@ func run(x machine.Run, connection *os.File) machine.Event {
 	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Surface.Path)
 	cmd.Stdin = bytes.NewReader(x.Stdin)
 	cmd.Env = x.Env
-	if connection != nil {
-		cmd.ExtraFiles = []*os.File{connection}
-	}
 	var stderr boundedBuffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	var line firstLine
@@ -398,23 +355,31 @@ func run(x machine.Run, connection *os.File) machine.Event {
 	return machine.Emitted{Out: emission}
 }
 
-// startResident launches a registered stream target under its Horizon profile.
-// Only the local socket endpoint survives the handoff. The process sees the
-// peer as stdin and stdout, and exits on EOF when custody is dropped.
-func startResident(x machine.StartResident, root string) (machine.Event, *os.File) {
+// startResident launches a registered stream target under its Horizon profile,
+// behind a holder that serves its edge's socket (runtime/hold, proposal 38).
+// If the edge already has a live resident, that one is the answer: recorded as
+// reused, so every turn of a conversation shares one. The resident sees the
+// holder as stdin and stdout and exits on EOF when the holder lets it go.
+// Nothing of the stream stays with this instance.
+func startResident(x machine.StartResident, root string) machine.Event {
+	if incarnation := hold.Hello(x.Socket); incarnation != "" {
+		trace.Logf("execute  the edge already holds resident %s: reused", incarnation)
+		out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{"incarnation": incarnation, "reused": true}})
+		return machine.Started{Out: out}
+	}
 	bin, err := os.ReadFile(x.Run.Surface.Path)
 	if err != nil {
-		return machine.Started{Err: err.Error()}, nil
+		return machine.Started{Err: err.Error()}
 	}
 	if record.Sum(bin) != x.Run.Surface.SHA256 {
-		return machine.Started{Err: "surface binary does not match its registered hash"}, nil
+		return machine.Started{Err: "surface binary does not match its registered hash"}
 	}
 	profile, env, work := x.Run.Profile, x.Run.Env, ""
 	var prepared *preparedResident
 	if x.Run.Surface.ResidentProfile != "" {
 		prepared, err = prepareAppserver(x, root)
 		if err != nil {
-			return machine.Started{Err: err.Error()}, nil
+			return machine.Started{Err: err.Error()}
 		}
 		profile, env, work = prepared.profile, prepared.env, prepared.work
 	}
@@ -423,7 +388,7 @@ func startResident(x machine.StartResident, root string) (machine.Event, *os.Fil
 		if prepared != nil {
 			prepared.abort()
 		}
-		return machine.Started{Err: err.Error()}, nil
+		return machine.Started{Err: err.Error()}
 	}
 	for _, fd := range fds {
 		syscall.CloseOnExec(fd)
@@ -437,7 +402,18 @@ func startResident(x machine.StartResident, root string) (machine.Event, *os.Fil
 	}
 	argv = append(argv, x.Run.Surface.Args...)
 	cmd := exec.Command("/usr/bin/sandbox-exec", argv...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = peer, peer, os.Stderr
+	// The resident outlives this step, so it keeps none of this process's
+	// output: what it says on stderr goes to its edge's log.
+	logs, err := edgeLog(x.Socket)
+	if err != nil {
+		local.Close()
+		if prepared != nil {
+			prepared.abort()
+		}
+		return machine.Started{Err: err.Error()}
+	}
+	defer logs.Close()
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = peer, peer, logs
 	cmd.Env, cmd.Dir = env, work
 	if prepared != nil {
 		cmd.ExtraFiles = []*os.File{prepared.watch}
@@ -447,18 +423,56 @@ func startResident(x machine.StartResident, root string) (machine.Event, *os.Fil
 		if prepared != nil {
 			prepared.abort()
 		}
-		return machine.Started{Err: err.Error()}, nil
+		return machine.Started{Err: err.Error()}
 	}
 	if prepared != nil {
 		prepared.actorStarted()
 	}
 	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
-	resource := custody.Resource{Kind: "connection", Owner: x.Owner, Incarnation: incarnation}
-	out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{
-		"pid": cmd.Process.Pid, "incarnation": incarnation,
-		"profile": record.Sum([]byte(profile))}})
+	pid := cmd.Process.Pid
 	cmd.Process.Release()
-	return machine.Started{Out: out, Resource: resource}, local
+	if err := startHolder(local, logs, x.Socket, incarnation); err != nil {
+		return machine.Started{Err: "resident holder: " + err.Error()}
+	}
+	out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{
+		"pid": pid, "incarnation": incarnation,
+		"profile": record.Sum([]byte(profile))}})
+	return machine.Started{Out: out}
+}
+
+// edgeLog is where a resident and its holder write diagnostics: beside the
+// edge's socket, in the user's private directory, appended across restarts.
+func edgeLog(socket string) (*os.File, error) {
+	return os.OpenFile(strings.TrimSuffix(socket, ".sock")+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+}
+
+// skyraBinary is the skyra executable a holder runs as: this one, except
+// under a test, which is not skyra.
+var skyraBinary = os.Executable
+
+// startHolder hands the resident's end of its stream to a holder serving the
+// edge's socket, and returns once that holder answers for the incarnation.
+// Closing local here leaves the holder the stream's only keeper: when it lets
+// go, the resident reads EOF and exits.
+func startHolder(local, logs *os.File, socket, incarnation string) error {
+	defer local.Close()
+	self, err := skyraBinary()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(self, "hold", socket, incarnation)
+	cmd.ExtraFiles = []*os.File{local}
+	cmd.Stderr = logs // like the resident, it outlives this step and keeps none of its output
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	cmd.Process.Release()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if hold.Hello(socket) == incarnation {
+			return nil
+		}
+	}
+	return errors.New("did not start serving the edge")
 }
 
 // spawn performs a Spawn effect: start skyra again with the bytes on stdin,

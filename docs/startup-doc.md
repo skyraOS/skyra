@@ -8,8 +8,8 @@ Node 26.0.0, Python 3.9, Codex CLI **0.160.0**.
 
 The controller launches one Codex app-server per conversation under a registered
 Seatbelt profile, with direct dynamic tools, private state and an allowlisted
-egress proxy. The runtime keeps the connection in custody across turns and
-records each exchange. Live conversation, runtime echo execution and replay
+egress proxy. A holder keeps the app-server's stream across turns, behind the
+conversation's edge socket, and every exchange is recorded. Live conversation, runtime echo execution and replay
 passed on September 28. A captured inference request contains only the direct
 `functions.echo` tool. The `read` tool was added after that capture: it is
 verified with the fake provider, not yet against live Codex (rerun

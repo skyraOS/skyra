@@ -3,69 +3,81 @@
 package instance
 
 import (
-	"bufio"
-	"net"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
-	"skyra/controller/runtime/handshake"
+	"skyra/controller/runtime/hold"
 )
 
-func TestResidentLaunchAndExchange(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "fake")
-	build := exec.Command("go", "build", "-o", bin, "./controller/codex/fake")
-	build.Dir = filepath.Join("..", "..", "..")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v %s", err, output)
-	}
-	data, err := os.ReadFile(bin)
+// A resident starts behind a holder serving its edge's socket (proposal 38):
+// operations reach it there, a second start of the same edge finds the live
+// one, and a stop ends it and frees the edge.
+func TestResidentLaunchReuseAndStop(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, err = filepath.EvalSymlinks(bin)
+	for name, pkg := range map[string]string{"fake": "./controller/codex/fake", "skyra": "./controller/skyra"} {
+		build := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg)
+		build.Dir = filepath.Join("..", "..", "..")
+		if output, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build %s: %v %s", name, err, output)
+		}
+	}
+	skyraBinary = func() (string, error) { return filepath.Join(dir, "skyra"), nil }
+	defer func() { skyraBinary = os.Executable }()
+	bin := filepath.Join(dir, "fake")
+	data, _ := os.ReadFile(bin)
+	sockets, err := os.MkdirTemp("/private/tmp", "edge-") // short: a socket path is bounded
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := horizon.Horizon{Surface: &horizon.Surface{Path: bin, SHA256: record.Sum(data)}}
-	e, file := startResident(machine.StartResident{Run: machine.Run{Surface: *h.Surface, Profile: horizon.Render(h, t.TempDir()), Env: []string{"PATH=/usr/bin:/bin"}}, Owner: "test"}, t.TempDir())
-	if file == nil {
-		t.Fatalf("launch: %+v", e)
+	defer os.RemoveAll(sockets)
+	socket := filepath.Join(sockets, "e.sock")
+	h := horizon.Horizon{Frame: "start", Surface: &horizon.Surface{Path: bin, SHA256: record.Sum(data)}}
+	x := machine.StartResident{Run: machine.Run{Surface: *h.Surface, Profile: horizon.Render(h, t.TempDir()), Env: []string{"PATH=/usr/bin:/bin"}}, Socket: socket, Horizon: h}
+
+	started := func() (string, bool) {
+		t.Helper()
+		e, ok := startResident(x, t.TempDir()).(machine.Started)
+		if !ok || e.Err != "" {
+			t.Fatalf("start: %+v", e)
+		}
+		var out struct {
+			Payload struct {
+				Incarnation string `json:"incarnation"`
+				Reused      bool   `json:"reused"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(e.Out, &out); err != nil || out.Payload.Incarnation == "" {
+			t.Fatalf("start emitted %s", e.Out)
+		}
+		return out.Payload.Incarnation, out.Payload.Reused
 	}
-	parent, child, err := handshake.Pair()
-	if err != nil {
-		t.Fatal(err)
+	incarnation, reused := started()
+	if reused {
+		t.Fatal("a fresh edge reported a reused resident")
 	}
-	defer parent.Close()
-	defer child.Close()
-	go func() { handshake.Send(parent, map[string]string{"kind": "handoff"}, file); file.Close() }()
-	childConn, err := handshake.Conn(child)
-	if err != nil {
-		t.Fatal(err)
+	o := hold.Ask(socket, hold.Request{Incarnation: incarnation, Op: "exchange", WaitMS: 3000,
+		Deliver: []string{`{"id":"a","method":"initialize","params":{}}`}})
+	if o.Error != "" || len(o.Lines) == 0 || !strings.Contains(o.Lines[0], `"id":"a"`) {
+		t.Fatalf("exchange through the edge: %+v", o)
 	}
-	defer childConn.Close()
-	var msg map[string]string
-	files, err := handshake.Recv(childConn, &msg)
-	if err != nil {
-		t.Fatal(err)
+	if again, reused := started(); !reused || again != incarnation {
+		t.Fatalf("a second start of the edge should find the live resident: %s reused=%v", again, reused)
 	}
-	defer files[0].Close()
-	conn, err := net.FileConn(files[0])
-	if err != nil {
-		t.Fatal(err)
+	o = hold.Ask(socket, hold.Request{Incarnation: incarnation, Op: "stop", WaitMS: 3000})
+	if !o.PeerEOF || o.Delivery != "shutdown" {
+		t.Fatalf("stop: %+v", o)
 	}
-	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
-	if _, err = conn.Write([]byte("{\"id\":\"a\",\"method\":\"initialize\",\"params\":{}}\n")); err != nil {
-		t.Fatal(err)
-	}
-	line, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil || line == "" {
-		t.Fatalf("read %q: %v", line, err)
+	if hold.Hello(socket) != "" {
+		t.Fatal("the edge still answers after its resident stopped")
 	}
 }

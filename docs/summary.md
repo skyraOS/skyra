@@ -277,7 +277,7 @@ semantics live in an adapter (P6).
 
 | Piece | Role |
 |---|---|
-| `codex.start` | a resident surface: the runtime launches one app-server per conversation under its registered profile (private home and scratch, egress only through an allowlisting proxy) and puts its connection into custody |
+| `codex.start` | a resident surface: the runtime launches one app-server per conversation edge under its registered profile (private home and scratch, egress only through an allowlisting proxy), behind a holder that serves the edge's socket; a later start of the same edge reuses it |
 | `codex.exchange` / `inspect` / `stop` | `codexio`: one bounded, recorded operation on that connection. Every byte Codex said is in the lineage |
 | `codex` | `codexresident`: stateless. It rebuilds the whole protocol state from its steps each run and emits exactly one next operation |
 
@@ -422,8 +422,8 @@ checkpoint advancement and crash-gap reconciliation are proposed, not built.
    Horizon; the parent commits it and hands over its hash; the child re-derives
    it before anything runs.
 3. **The adapter** rebuilds state from its steps and emits `codex.inspect`, then
-   `codex.exchange` with `turn/start`, each an invoke of `codexio` on the
-   connection in custody, each observation recorded.
+   `codex.exchange` with `turn/start`, each an invoke of `codexio` through the
+   conversation's edge socket, each observation recorded.
 4. **Codex asks for `read`.** The adapter checks it is offered and emits
    `{"to":"read","payload":{"path":"README.md"}}`.
 5. **Intake derives `invoke read`.** It runs in a fresh process under the
@@ -464,7 +464,7 @@ back to the user side as an observation.
 | Resume derived from the tree; the host holds a stamp, never authority | **built** (2026-09-30) |
 | Dependencies, slots, resolve, fan-in claim | **built** |
 | Replay re-deriving every record and every Horizon | **built** |
-| Real Codex: one resident app-server per conversation, sandboxed, egress-proxied, connection in custody, idle restart | **built** |
+| Real Codex: one resident app-server per conversation edge, sandboxed, egress-proxied, held behind the edge's socket and reclaimed by an idle backoff | **built** (edges 2026-10-06) |
 | Codex native attempts: interrupted and returned as an observation; the conversation continues on the same thread | **built** (2026-09-30) |
 | `echo` and `read` as model-facing tools; a tool's result or fault back to Codex in the same turn | **built** |
 | Conversations as lineages in the browser, the TUI and the desktop app | **built** |

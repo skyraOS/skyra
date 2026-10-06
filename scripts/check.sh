@@ -3,6 +3,10 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+# Every conversation a check opens leaves a resident behind its edge's holder
+# (proposal 38). A short idle backoff reclaims them soon after, instead of
+# the half hour a real session gets.
+export SKYRA_HOLD_START=2s SKYRA_HOLD_MAX=8s
 go test -race -count=1 ./controller/... ./tui/... ./website/export/...
 go vet ./controller/... ./tui/... ./website/export/...
 (cd controller/interp && go test -race -count=1 ./... && go vet ./...)

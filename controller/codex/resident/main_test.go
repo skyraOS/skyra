@@ -25,7 +25,9 @@ func emitted(t *testing.T, c continuation) (string, map[string]json.RawMessage) 
 	return to, m
 }
 
-func TestExistingThreadInspectsBeforeTurnAndRestartsAfterIdle(t *testing.T) {
+// An idle server is reclaimed by its holder's backoff (proposal 38); the
+// adapter finds out when its inspect sees the server gone, and starts another.
+func TestExistingThreadInspectsBeforeTurnAndRestartsWhenGone(t *testing.T) {
 	c := continuation{Frame: "frame"}
 	c.Input.Text = "next question"
 	c.Input.Thread = "thread-1"
@@ -48,11 +50,11 @@ func TestExistingThreadInspectsBeforeTurnAndRestartsAfterIdle(t *testing.T) {
 		t.Fatalf("recent thread should start a turn, got %s", to)
 	}
 	c.Steps[0].Value = value(map[string]any{
-		"lines": []string{`{"id":"frame:inspect","result":{"data":[]}}` + "\n"}, "delivery": "written", "read": "observed", "observed_at": 1801000, "peer_eof": false, "error": "", "partial": "",
+		"lines": []string{}, "delivery": "not_sent", "read": "not_started", "observed_at": 1801000, "peer_eof": true, "error": "", "partial": "",
 	})
 	to, m = emitted(t, c)
 	if to != "codex.stop" {
-		t.Fatalf("idle thread should stop, got %s", to)
+		t.Fatalf("a reclaimed server should be stopped and replaced, got %s", to)
 	}
 	c.Steps = append(c.Steps, step{To: to, Payload: m["payload"], State: "return", Value: value(map[string]any{
 		"lines": []string{}, "delivery": "shutdown", "read": "observed", "observed_at": 1801001, "peer_eof": true, "error": "", "partial": "",
@@ -296,5 +298,22 @@ func TestQuietWaits(t *testing.T) {
 	c.Steps = []step{quietly("codex.inspect", []string{rpc("frame:inspect", "thread/loaded/list", map[string]any{})})}
 	if to, _ := emitted(t, c); to != "codex.stop" {
 		t.Fatalf("an unanswered health check should stop the server, got %s", to)
+	}
+}
+
+// A reused start is the edge's live server: it was initialized by an earlier
+// invocation, so this one only starts its own thread, with no initialize and
+// no initialized notification.
+func TestAReusedServerOnlyStartsAThread(t *testing.T) {
+	c := continuation{Frame: "frame", Tools: map[string]*schema{}}
+	c.Input.Text, c.Input.Header = "hello", "think"
+	c.Steps = []step{{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1", "reused": true})}}
+	to, m := emitted(t, c)
+	var q struct {
+		Deliver []string `json:"deliver"`
+	}
+	json.Unmarshal(m["payload"], &q)
+	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], `"thread/start"`) {
+		t.Fatalf("a reused server should get only thread/start: %s %v", to, q.Deliver)
 	}
 }

@@ -1,167 +1,42 @@
 // Command codexio performs one recorded operation on a resident stream. The
-// runtime grants only the matching connection at fd 3; the worker owns no
-// process launcher, host socket or side store.
+// runtime grants it exactly one path, its edge's socket (SKYRA_RESIDENT), and
+// the holder there performs the operation (runtime/hold, proposal 38). Its
+// observation is the operation's record; the worker owns no process
+// launcher, host socket or side store.
 package main
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"os"
-	"syscall"
-	"time"
-	"unsafe"
+
+	"skyra/controller/runtime/hold"
 )
 
-type request struct {
-	Incarnation string   `json:"incarnation"`
-	Op          string   `json:"op"`
-	Deliver     []string `json:"deliver"`
-	WaitMS      int      `json:"wait_ms"`
-	Prefix      string   `json:"prefix"`
-}
-
-type observation struct {
-	Lines      []string `json:"lines"`
-	Partial    string   `json:"partial"`
-	Delivery   string   `json:"delivery"`
-	Read       string   `json:"read"`
-	ObservedAt int64    `json:"observed_at"`
-	PeerEOF    bool     `json:"peer_eof"`
-	Error      string   `json:"error"`
-}
-
 func main() {
-	var q request
+	var q hold.Request
 	if err := json.NewDecoder(os.Stdin).Decode(&q); err != nil {
 		fail(err)
 	}
-	if q.Incarnation == "" || (q.Op != "exchange" && q.Op != "stop" && q.Op != "inspect") || q.WaitMS < 1 || q.WaitMS > 30000 {
-		fail(errors.New("invalid operation"))
+	o, err := perform(q, os.Getenv("SKYRA_RESIDENT"))
+	if err != nil {
+		fail(err)
 	}
-	file := os.NewFile(3, "resident-connection")
-	if file == nil {
-		fail(errors.New("no connection granted"))
-	}
-	defer file.Close()
-	o := operate(file, q)
 	b, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": o})
 	fmt.Println(string(b))
 }
 
+// perform checks the request, then asks the holder. A holder that cannot be
+// reached is a resident that is gone: nothing was delivered.
+func perform(q hold.Request, socket string) (hold.Observation, error) {
+	if q.Incarnation == "" || (q.Op != "exchange" && q.Op != "stop" && q.Op != "inspect") || q.WaitMS < 1 || q.WaitMS > 30000 {
+		return hold.Observation{}, errors.New("invalid operation")
+	}
+	if socket == "" {
+		return hold.Observation{}, errors.New("no resident granted")
+	}
+	return hold.Ask(socket, q), nil
+}
+
 func fail(err error) { fmt.Fprintln(os.Stderr, "codexio:", err); os.Exit(1) }
-
-func operate(file *os.File, q request) (o observation) {
-	o.Lines = []string{}
-	o.Delivery, o.Read = "not_sent", "not_started"
-	defer func() { o.ObservedAt = time.Now().UnixMilli() }()
-	conn, err := net.FileConn(file)
-	if err != nil {
-		o.Error = err.Error()
-		return
-	}
-	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond))
-	if q.Op == "stop" {
-		if len(q.Deliver) != 0 {
-			o.Error = "stop cannot deliver protocol requests"
-			return
-		}
-		if err = syscall.Shutdown(int(file.Fd()), syscall.SHUT_WR); err != nil {
-			o.Error = err.Error()
-			return
-		}
-		o.Delivery = "shutdown"
-	} else {
-		for _, line := range q.Deliver {
-			if !json.Valid([]byte(line)) || len(line) > 1<<20 {
-				o.Error = "delivery is not one JSON value"
-				return
-			}
-			if _, err = io.WriteString(conn, line+"\n"); err != nil {
-				o.Delivery = "unknown"
-				o.Error = err.Error()
-				return
-			}
-		}
-		if len(q.Deliver) > 0 {
-			o.Delivery = "written"
-		}
-	}
-	if q.Op == "inspect" && len(q.Deliver) == 0 {
-		o.Error = "inspect needs a protocol request"
-		return
-	}
-	o.Read = "observed"
-	// Each read stops exactly at a newline. A stop drains until EOF. An
-	// exchange waits for one line, then takes every further line already
-	// buffered on the socket: it never waits for new output, so it does not
-	// consume bytes written after this operation observed.
-	limit := 1024
-	if q.Op != "stop" {
-		limit = maxBatch
-	}
-	prefix := q.Prefix
-	for i := 0; i < limit; i++ {
-		if i > 0 && q.Op != "stop" {
-			if buffered(file) == 0 {
-				return
-			}
-			// The rest of a line already begun arrives with it; if it does
-			// not, it is carried to the next operation as partial.
-			conn.SetDeadline(time.Now().Add(drainWait))
-		}
-		line, readErr := exactLine(conn, prefix)
-		prefix = ""
-		if readErr != nil {
-			o.Partial = line
-			o.PeerEOF = errors.Is(readErr, io.EOF)
-			var timeout net.Error
-			if !o.PeerEOF && !(i > 0 && q.Op != "stop" && errors.As(readErr, &timeout) && timeout.Timeout()) {
-				o.Error = readErr.Error()
-			}
-			return
-		}
-		o.Lines = append(o.Lines, line)
-	}
-	if q.Op == "stop" {
-		o.Error = "stop drain exceeded 1024 lines"
-	}
-	return
-}
-
-const (
-	maxBatch  = 256                   // lines one exchange may return
-	drainWait = 50 * time.Millisecond // for the rest of a buffered, partly read line
-	fionread  = 0x4004667f            // FIONREAD, _IOR('f', 127, int) in <sys/filio.h>
-)
-
-// buffered reports how many bytes the socket holds unread (FIONREAD).
-func buffered(file *os.File) int {
-	var n int32
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), fionread, uintptr(unsafe.Pointer(&n)))
-	if errno != 0 {
-		return 0
-	}
-	return int(n)
-}
-
-func exactLine(conn net.Conn, prefix string) (string, error) {
-	line := []byte(prefix)
-	var one [1]byte
-	for len(line) < 1<<20 {
-		n, err := conn.Read(one[:])
-		if n == 1 {
-			line = append(line, one[0])
-			if one[0] == '\n' {
-				return string(line), nil
-			}
-		}
-		if err != nil {
-			return string(line), err
-		}
-	}
-	return string(line), errors.New("line exceeds 1 MiB")
-}

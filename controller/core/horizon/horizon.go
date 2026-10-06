@@ -22,14 +22,6 @@ type PathGrant struct {
 	Scope string `json:"scope"` // literal or subpath
 }
 
-// Resource describes an inherited descriptor that travels beside a Horizon's
-// frame stack. It is transport metadata, not authority to invoke a surface.
-type Resource struct {
-	Kind        string `json:"kind"`
-	Owner       string `json:"owner"`
-	Incarnation string `json:"incarnation"`
-}
-
 // Authority is the OS authority a Horizon grants to everything that runs
 // under it (next/24). Exec is not among it: a profile allows exec of the one
 // program being run and nothing else, so no grant can let a target start
