@@ -128,6 +128,12 @@ func lookup(c continuation, name string) (tool, bool) {
 	return ts[i], true
 }
 
+// quiet reports whether an operation only waited out its deadline with
+// nothing to read. codexio reports Go's net timeout ("i/o timeout").
+func quiet(o observation) bool {
+	return strings.Contains(o.Error, "i/o timeout") || strings.Contains(o.Error, "timed out") || strings.Contains(o.Error, "deadline exceeded")
+}
+
 func offered(c continuation, name string) bool {
 	_, ok := lookup(c, name)
 	return ok
@@ -274,7 +280,9 @@ func decide(c continuation) (string, error) {
 					d.Answered[id(m.ID)] = true
 				}
 			}
-			if o.PeerEOF && s.To == "codex.inspect" {
+			// A health check that ends or goes unanswered is a lost server:
+			// stop it and start another, rather than wait on it forever.
+			if s.To == "codex.inspect" && (o.PeerEOF || quiet(o) && len(o.Lines) == 0) {
 				d.NeedStop, d.Lost = true, true
 				continue
 			}
@@ -284,7 +292,10 @@ func decide(c continuation) (string, error) {
 			if o.Delivery == "unknown" {
 				return "", errors.New("delivery may have reached Codex; refusing to retry")
 			}
-			if o.Error != "" && !strings.Contains(o.Error, "timed out") && !strings.Contains(o.Error, "deadline exceeded") {
+			// Silence during a turn is normal: the model may reason without
+			// streaming. Before a turn, the server answers at once, so a
+			// quiet wait there is still a failure.
+			if o.Error != "" && !(quiet(o) && d.Turn != "") {
 				return "", fmt.Errorf("exchange: %s", o.Error)
 			}
 			d.Partial = o.Partial

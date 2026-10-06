@@ -265,3 +265,36 @@ func TestThreadPromptIsTheHeaderOnly(t *testing.T) {
 		}
 	}
 }
+
+// A wait that ends with nothing to read (codexio reports Go's "i/o timeout")
+// is silence during a turn, a failure before one, and a lost server when it
+// was a health check.
+func TestQuietWaits(t *testing.T) {
+	quietly := func(to string, deliver []string) step {
+		return step{To: to, State: "return", Payload: value(map[string]any{"deliver": deliver}),
+			Value: value(map[string]any{"lines": []string{}, "delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "read unix ->: i/o timeout", "partial": ""})}
+	}
+	// During a turn: keep waiting on Codex.
+	c := turnWithCalls()
+	c.Steps = append(c.Steps, quietly("codex.exchange", nil))
+	if to, _ := emitted(t, c); to != "codex.exchange" {
+		t.Fatalf("silence during a turn should wait again, got %s", to)
+	}
+	// Before a turn: the server should have answered initialize.
+	c = continuation{Frame: "frame", Tools: map[string]*schema{}}
+	c.Input.Text = "hello"
+	c.Steps = []step{
+		{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+		quietly("codex.exchange", []string{rpc("frame:initialize", "initialize", map[string]any{})}),
+	}
+	if _, err := decide(c); err == nil || !strings.Contains(err.Error(), "i/o timeout") {
+		t.Fatalf("a silent server before the turn must fail, got %v", err)
+	}
+	// A health check nobody answers: stop the server and start another.
+	c = continuation{Frame: "frame"}
+	c.Input.Text, c.Input.Thread, c.Input.Incarnation, c.Input.ActivityAt = "next", "thread-1", "old-process", 1000
+	c.Steps = []step{quietly("codex.inspect", []string{rpc("frame:inspect", "thread/loaded/list", map[string]any{})})}
+	if to, _ := emitted(t, c); to != "codex.stop" {
+		t.Fatalf("an unanswered health check should stop the server, got %s", to)
+	}
+}
