@@ -90,7 +90,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		return Outcome{}, err
 	}
 	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
-	g0, err := tree.Commit(root, record.Record{Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
+	g0, err := tree.Commit(root, record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
 		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
 	if err != nil {
 		return Outcome{}, err

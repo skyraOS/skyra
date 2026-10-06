@@ -127,8 +127,10 @@ Why no server: **crash semantics.** A long-running controller could enforce the
 same invariants, but then its memory is state a crash can lose or leave half
 applied, and recovery has to reconcile it with what is on disk. Here each step
 is read, authorize, one atomic write, execute. A crash before the write means
-nothing happened; after it, the intent is recorded and is faulted or resumed on
-restore. There is never live state to recover, only the tree.
+no target effect was released; after it, intent is recorded but an external
+effect may have an unknown outcome. Runtime I/O failures are recorded separately
+and shown as recovery failures. A host restart does not revive parked frames or
+automatically repeat work; inspect history before retrying.
 
 ```text
  INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
@@ -155,7 +157,7 @@ restore. There is never live state to recover, only the tree.
   invoke, and every step it has taken, and prints one output.
 - **No secrets anywhere.** A stamp is a hash, verified by reading the tree.
 
-The code is about 5,700 lines of Go, standard library only, with 63 tests. Start
+The controller is standard-library Go; the interpreter is a separate module with CEL dependencies. Start
 with [`controller/core/machine/machine.go`](controller/core/machine/machine.go); the
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
@@ -192,7 +194,7 @@ handles, and puts every decision in one replayable function.
 | Ingress: an outside event resumes a frame parked with its host (next/16) | **built**; the host holds a stamp, never authority |
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
-| Tail calls, fan-out of several children at once | **not built**: one emission is one successor, and a round's size is never committed (fan-out is H2 of [next/32](docs/next/32-procedures.md)) |
+| Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
 | Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/next/32-procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
 | Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/next/32-procedures.md)) | **built** |
 | Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |

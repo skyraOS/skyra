@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -38,7 +39,7 @@ func connect(addr string) (*socket, error) {
 		return nil, err
 	}
 	key := base64.StdEncoding.EncodeToString(nonce[:])
-	if _, err = fmt.Fprintf(c, "GET /ws HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: %s\r\n\r\n", addr, key); err != nil {
+	if _, err = fmt.Fprintf(c, "GET /ws HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: %s\r\nAuthorization: Bearer %s\r\n\r\n", addr, key, os.Getenv("SKYRA_WS_TOKEN")); err != nil {
 		c.Close()
 		return nil, err
 	}

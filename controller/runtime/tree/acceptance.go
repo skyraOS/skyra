@@ -23,7 +23,7 @@ func Accept(root string, r record.Record, id string) error {
 		return fmt.Errorf("acceptance does not name this commit")
 	}
 	dir := filepath.Join(root, "acceptances")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	// Put first makes the complete receipt durable, then link publishes its

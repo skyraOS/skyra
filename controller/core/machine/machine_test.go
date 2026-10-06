@@ -327,6 +327,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	a, _ = Step(a, Emitted{Out: call})
 	b, _ := Step(Instance{Phase: Intake}, Received{Under: a.Self, In: call})
 	_, effs = Step(a, Stamped{Stamp: b.Stamp, R: &b.R})
+	effs = publishedRound(t, effs, call, a.Self.Stamp)
 	if effs[0] != (OpenDep{Round: a.Self.Stamp, Child: b.Stamp}) || !effs[1].(SendHorizon).NewFrame {
 		t.Fatalf("an invoke's slot is opened before it is released: %#v", effs)
 	}
@@ -550,6 +551,7 @@ func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Effec
 			}
 		}
 	}
+	effs = publishedRound(t, effs, a.Out, a.Self.Stamp)
 	return a, kids, effs
 }
 
@@ -697,4 +699,12 @@ func TestInstructions(t *testing.T) {
 	if _, err := Instructions([]byte("[" + strings.Repeat("1,", MaxFanOut) + "1]")); err == nil {
 		t.Fatal("more than MaxFanOut instructions")
 	}
+}
+
+func publishedRound(t *testing.T, effs []Effect, out []byte, round string) []Effect {
+	t.Helper()
+	if len(effs) < 2 || !reflect.DeepEqual(effs[0], StoreInput{out}) || effs[1] != (PublishEmission{Round: round, Hash: record.Sum(out)}) {
+		t.Fatalf("complete round must be committed before slots and releases: %#v", effs)
+	}
+	return effs[2:]
 }

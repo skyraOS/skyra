@@ -134,6 +134,7 @@ type StrandRead struct {         // → Execute (strand): the strand, or why the
 
 // Round is one emission of a continuation and the slots it opened.
 type Round struct {
+	Emission string // hash of the complete emission that opened these slots
 	Stamp    string
 	Children []Child
 }
@@ -183,7 +184,11 @@ type Spawn struct { // start the successor, forward the bytes, then wait for Sta
 	Out   []byte
 }
 type KillSuccessor struct{} // kill every successor spawned so far
-type OpenDep struct {       // open a slot in this instance's frame, before any child is released
+type PublishEmission struct{ Round, Hash string }
+
+func (PublishEmission) effect() {}
+
+type OpenDep struct { // open a slot in this instance's frame, before any child is released
 	Round, Child string
 	Pos          int // the instruction's position in the emission: a round's steps come back in this order
 }
@@ -583,6 +588,12 @@ func handoff(s Instance, e Stamped) (Instance, []Effect) {
 	}
 	s.Child, s.Phase = s.Kids[0].Stamp, Done
 	var effs []Effect
+	for _, k := range s.Kids {
+		if opensSlot(k) {
+			effs = append(effs, StoreInput{s.Out}, PublishEmission{Round: s.Self.Stamp, Hash: record.Sum(s.Out)})
+			break
+		}
+	}
 	for i, k := range s.Kids {
 		if opensSlot(k) {
 			effs = append(effs, OpenDep{Round: s.Self.Stamp, Child: k.Stamp, Pos: i})
@@ -771,7 +782,7 @@ func resolve(s Instance, e Settled) (Instance, []Effect) {
 	for _, c := range round.Children {
 		results = append(results, c.Result)
 	}
-	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results})
+	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results, Emission: round.Emission})
 	r, _ := Resolved(s.Stamp, obs)
 	s.Held, s.Phase = r, Claim
 	s.Next = continuation(e, *waiter)
@@ -798,6 +809,7 @@ func claim(s Instance, e Claimed) (Instance, []Effect) {
 // Observation is what a resolve observed: the round whose slots are all
 // discharged, and the discharges, in slot order.
 type Observation struct {
+	Emission   string   `json:"emission,omitempty"`
 	Frame      string   `json:"frame"`
 	Round      string   `json:"round"`
 	Discharges []string `json:"discharges"`
@@ -826,7 +838,7 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 		return record.Record{}, err
 	}
 	return record.Record{Predecessor: predecessor, Input: record.Sum(obs), State: record.Resolve,
-		Frame: o.Frame, Round: o.Round, Deps: o.Discharges}, nil
+		Frame: o.Frame, Round: o.Round, Deps: o.Discharges, Emission: o.Emission}, nil
 }
 
 // runOf is the Run effect for a Horizon: its surface, under the sandbox the

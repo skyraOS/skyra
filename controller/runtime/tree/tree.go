@@ -13,6 +13,8 @@
 package tree
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +22,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"syscall"
+	"strings"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
@@ -29,27 +31,36 @@ import (
 // Init creates the tree's directories.
 func Init(root string) error {
 	for _, d := range []string{"records", "inputs", "horizons", "frames", "acceptances"} {
-		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Put stores b under its hash in root/kind: temp file, flush, rename, flush
+// Put stores b under its hash in root/kind: temp file, flush, exclusive link, flush
 // the directory. Storing the same bytes twice is a no-op.
 func Put(root, kind string, b []byte) (string, error) {
 	h := record.Sum(b)
 	dir := filepath.Join(root, kind)
 	final := filepath.Join(dir, h)
 	if _, err := os.Stat(final); err == nil {
+		if _, err := Get(root, kind, h); err != nil {
+			return "", err
+		}
 		return h, nil
 	}
-	tmp := filepath.Join(dir, fmt.Sprintf(".tmp-%s-%d", h[:12], os.Getpid()))
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
+	f, err := os.CreateTemp(dir, ".tmp-")
 	if err != nil {
 		return "", err
 	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Chmod(0400); err != nil {
+		f.Close()
+		return "", err
+	}
+
 	if _, err := f.Write(b); err != nil {
 		f.Close()
 		return "", err
@@ -61,8 +72,13 @@ func Put(root, kind string, b []byte) (string, error) {
 	if err := f.Close(); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp, final); err != nil {
-		return "", err
+	if err := os.Link(tmp, final); err != nil {
+		if !os.IsExist(err) {
+			return "", err
+		}
+		if _, err := Get(root, kind, h); err != nil {
+			return "", err
+		}
 	}
 	return h, syncDir(dir)
 }
@@ -96,7 +112,7 @@ func PutHorizon(root string, h horizon.Horizon) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(root, "horizons"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "horizons"), 0o700); err != nil {
 		return "", err
 	}
 	return Put(root, "horizons", b)
@@ -150,7 +166,7 @@ func Load(root, stamp string) (record.Record, error) {
 // OpenFrame creates a frame's directory and returns its node fd.
 func OpenFrame(root, stamp string) (*os.File, error) {
 	dir := filepath.Join(root, "frames", stamp)
-	if err := os.Mkdir(dir, 0o755); err != nil {
+	if err := os.Mkdir(dir, 0o700); err != nil {
 		return nil, err
 	}
 	return os.Open(dir)
@@ -205,14 +221,22 @@ func Settle(node *os.File, stamp string) error {
 // place: link fails if the name exists (exclusive), and a reader never sees
 // the file empty or half written.
 func writeOnce(frame *os.File, name, content string) (bool, error) {
-	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
-		return false, err
-	}
-	tmp := fmt.Sprintf(".tmp-%s-%d", name, os.Getpid())
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o444)
+	r, err := descriptorRoot(frame)
 	if err != nil {
 		return false, err
 	}
+	defer r.Close()
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return false, err
+	}
+	tmp := ".tmp-" + hex.EncodeToString(nonce)
+	f, err := r.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0400)
+	if err != nil {
+		return false, err
+	}
+	defer r.Remove(tmp)
+
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
 		return false, err
@@ -224,8 +248,7 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 	if err := f.Close(); err != nil {
 		return false, err
 	}
-	defer os.Remove(tmp)
-	if err := os.Link(tmp, name); err != nil {
+	if err := r.Link(tmp, name); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return false, nil
 		}
@@ -239,31 +262,33 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 // The slot holds the child's position in the emission that opened the round,
 // so the round's steps come back in the order they were emitted.
 func OpenDep(frame *os.File, round, child string, pos int) error {
-	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
-		return err
-	}
-	dir := filepath.Join("deps", round)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(filepath.Join(dir, child), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o444)
+	r, err := descriptorRoot(frame)
 	if err != nil {
 		return err
 	}
-	if pos > 0 {
-		if _, err := f.WriteString(strconv.Itoa(pos)); err != nil {
-			f.Close()
-			return err
-		}
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
+	defer r.Close()
+	dir := filepath.Join("deps", round)
+	if err := r.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
+	node, err := r.Open(dir)
+	if err != nil {
 		return err
 	}
-	if err := syncDir(dir); err != nil {
+	defer node.Close()
+	won, err := writeOnce(node, child, strconv.Itoa(pos))
+	if err != nil {
+		return err
+	}
+	if !won {
+		return errors.New("dependency already exists")
+	}
+	deps, err := r.Open("deps")
+	if err != nil {
+		return err
+	}
+	defer deps.Close()
+	if err := deps.Sync(); err != nil {
 		return err
 	}
 	return frame.Sync()
@@ -272,11 +297,18 @@ func OpenDep(frame *os.File, round, child string, pos int) error {
 // Children lists the slots a round opened in a frame, in the order they were
 // emitted, read through the frame's fd. A slot with no position is the first.
 func Children(frame *os.File, round string) ([]string, error) {
-	if err := syscall.Fchdir(int(frame.Fd())); err != nil {
+	r, err := descriptorRoot(frame)
+	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 	dir := filepath.Join("deps", round)
-	entries, err := os.ReadDir(dir)
+	node, err := r.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer node.Close()
+	entries, err := node.ReadDir(-1)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +318,10 @@ func Children(frame *os.File, round string) ([]string, error) {
 	}
 	var slots []slot
 	for _, e := range entries {
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		b, err := r.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -325,4 +360,29 @@ func syncDir(dir string) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// PublishEmission seals the full emission before any child is released.
+func PublishEmission(frame *os.File, round, hash string) error {
+	won, err := writeOnce(frame, "emitted-"+round, hash)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return errors.New("round emission already published")
+	}
+	return nil
+}
+func Emission(root, frame, round string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(root, "frames", frame, "emitted-"+round))
+	return string(b), err
+}
+
+// Opening through /dev/fd duplicates the granted directory capability; it
+// never resolves the original frame path or changes process-wide cwd.
+func descriptorRoot(frame *os.File) (*os.Root, error) {
+	if frame == nil {
+		return nil, errors.New("no frame descriptor")
+	}
+	return os.OpenRoot(fmt.Sprintf("/dev/fd/%d", frame.Fd()))
 }

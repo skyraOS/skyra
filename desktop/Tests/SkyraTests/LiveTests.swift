@@ -19,7 +19,8 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
 
     s.draft = "Call the echo tool with the text hi."
     s.submit()
-    #expect(s.draft.isEmpty)
+    #expect(!s.draft.isEmpty)
+    try await until { s.draft.isEmpty }
     try await until { s.current?.entries.contains { !$0.isUser } == true && s.current?.phase == .ready }
     let c = try #require(s.current)
     #expect(c.entries.first?.isUser == true)
