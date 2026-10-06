@@ -32,6 +32,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"skyra/controller/codex/prompt"
 )
 
 type schema = proceduretools.Schema
@@ -99,7 +101,7 @@ func run() (string, error) {
 	}
 	seq, err = h.deliver(threadID, request(threadID, "thread/start", map[string]any{
 		"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": dynamicTools(c),
-		"developerInstructions": "Only the registered dynamic tools may perform effects."}))
+		"baseInstructions": prompt.Base("")}))
 	if err != nil {
 		return "", err
 	}

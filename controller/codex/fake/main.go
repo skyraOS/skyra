@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"skyra/controller/codex/prompt"
 )
 
 type message struct {
@@ -55,6 +57,7 @@ func main() {
 	}
 	var held *turn
 	history := map[string][]string{}
+	prompts := map[string]string{} // each thread's base prompt, as Skyra gave it
 	mode := ""
 	if len(os.Args) > 1 {
 		mode = os.Args[1]
@@ -97,6 +100,7 @@ func main() {
 				Text string `json:"text"`
 			} `json:"input"`
 			Developer string `json:"developerInstructions"`
+			Base      string `json:"baseInstructions"`
 			Tools     []struct {
 				Name string `json:"name"`
 			} `json:"dynamicTools"`
@@ -126,10 +130,18 @@ func main() {
 			}
 			reply(m.ID, map[string]any{"data": []string{}})
 		case "thread/start", "thread/fork":
+			if m.Method == "thread/start" && (v.Developer != "" || !strings.HasPrefix(v.Base, prompt.Prefix)) {
+				// Proposal 38: the whole prompt is Skyra's; the provider's
+				// default and the old developer line must never reach a thread.
+				send(map[string]any{"id": m.ID, "error": map[string]any{"code": -1, "message": "thread/start without Skyra's base prompt"}})
+				continue
+			}
 			threads++
 			id := fmt.Sprintf("thread-%d", threads)
+			prompts[id] = v.Base
 			if m.Method == "thread/fork" {
 				history[id] = append([]string(nil), history[v.ThreadID]...)
+				prompts[id] = prompts[v.ThreadID]
 			}
 			if mode == "reject-replace" && threads > 1 {
 				send(map[string]any{"id": m.ID, "error": map[string]any{"code": -1, "message": "replacement unsupported"}})
@@ -197,6 +209,8 @@ func main() {
 				}
 				script[t.id] = calls[1:]
 				toolCall(t, 0, calls[0])
+			case t.text == "prompt":
+				complete(t, prompts[t.thread])
 			case t.text == "history":
 				complete(t, strings.Join(history[t.thread], "|"))
 			default:

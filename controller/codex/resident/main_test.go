@@ -231,3 +231,37 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 		t.Fatalf("without the interpreter: %v", names)
 	}
 }
+
+func TestThreadPromptIsTheHeaderOnly(t *testing.T) {
+	for header, want := range map[string]string{
+		"think": "You are inside Skyra, a cognitive architecture, fulfilling: think",
+		"":      "You are inside Skyra, a cognitive architecture.",
+	} {
+		c := continuation{Frame: "frame", Tools: map[string]*schema{}}
+		c.Input.Text, c.Input.Header = "hello", header
+		c.Steps = []step{
+			{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+			{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{rpc("frame:initialize", "initialize", map[string]any{})}}),
+				Value: value(map[string]any{"lines": []string{`{"id":"frame:initialize","result":{}}` + "\n"}, "delivery": "written", "read": "observed", "observed_at": 1, "peer_eof": false, "error": "", "partial": ""})},
+		}
+		_, m := emitted(t, c)
+		var q struct {
+			Deliver []string `json:"deliver"`
+		}
+		if err := json.Unmarshal(m["payload"], &q); err != nil || len(q.Deliver) != 2 {
+			t.Fatalf("thread setup: %s", m["payload"])
+		}
+		var start struct {
+			Params map[string]any `json:"params"`
+		}
+		if err := json.Unmarshal([]byte(q.Deliver[1]), &start); err != nil {
+			t.Fatal(err)
+		}
+		if start.Params["baseInstructions"] != want {
+			t.Fatalf("header %q: prompt %v", header, start.Params["baseInstructions"])
+		}
+		if _, ok := start.Params["developerInstructions"]; ok {
+			t.Fatal("the old developer line is still sent")
+		}
+	}
+}

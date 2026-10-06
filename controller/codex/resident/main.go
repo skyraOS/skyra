@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"skyra/controller/codex/prompt"
 )
 
 type schema = proceduretools.Schema
@@ -26,8 +28,8 @@ type step struct {
 type continuation struct {
 	Frame string `json:"frame"`
 	Input struct {
-		Text, Conversation, Thread, Incarnation string
-		ActivityAt                              int64 `json:"activity_at"`
+		Text, Header, Conversation, Thread, Incarnation string
+		ActivityAt                                      int64 `json:"activity_at"`
 	} `json:"input"`
 	Tools     map[string]*schema   `json:"tools"`
 	Contracts map[string][]*schema `json:"contracts"`
@@ -397,7 +399,7 @@ func decide(c continuation) (string, error) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
 		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
-		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": defs, "developerInstructions": "Only registered dynamic tools may perform effects."})
+		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": defs, "baseInstructions": prompt.Base(c.Input.Header)})
 		return ioCall(d.Incarnation, []string{string(initialized), start}, d.Partial), nil
 	}
 	if d.Thread == "" {
