@@ -469,7 +469,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	stdin := []byte(s.R.Payload)
 	if e.Self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
+		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
 			Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
 	}
 	if e.Self.Surface.Resident {
@@ -947,11 +947,12 @@ func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
 }
 
 // Continuation is what a continuation reads on stdin: the frame it runs in,
-// the payload it was invoked with, the contract it is executed against (when
-// it has more than one), the tools it may invoke, and every step it has
-// taken, with what came back. It is stateless: everything it knows is here.
+// who invoked it, the payload it was invoked with, the contract it is executed
+// against (when it has more than one), the tools it may invoke, and every step
+// it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
 	Frame     string                        `json:"frame"`
+	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
 	Input     json.RawMessage               `json:"input"`
 	Contract  *contract.Schema              `json:"contract,omitempty"`
 	Tools     map[string]*contract.Schema   `json:"tools"`
@@ -972,10 +973,21 @@ type StepView struct {
 	Observation string            `json:"observation,omitempty"`
 }
 
+// caller is who invoked the frame h runs in: the name its invoker was itself
+// invoked through, derived from the Horizon, so a program cannot claim another.
+// Two actors name the edge between them by it (proposal 38). The operator has
+// no name.
+func caller(h horizon.Horizon) string {
+	if h.Resume == nil {
+		return ""
+	}
+	return h.Resume.Name
+}
+
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Input: e.Frame.Payload, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, e.Frame.Payload)
 	}
