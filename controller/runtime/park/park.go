@@ -10,6 +10,7 @@ package park
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/runtime/custody"
@@ -37,14 +39,23 @@ type Frame struct {
 }
 
 // Send parks a frame with the host at sock and waits for its answer.
+const maxMessage = 16 << 20
+
 func Send(sock string, f Frame) error {
 	c, err := net.Dial("unix", sock)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
+	c.SetDeadline(time.Now().Add(30 * time.Second))
 	uc := c.(*net.UnixConn)
-	body, _ := json.Marshal(f)
+	body, err := json.Marshal(f)
+	if err != nil {
+		return err
+	}
+	if len(body) > maxMessage {
+		return errors.New("park message too large")
+	}
 	msg := binary.BigEndian.AppendUint32(nil, uint32(len(body)))
 	msg = append(msg, body...)
 	fds := make([]int, len(f.Files))
@@ -73,19 +84,51 @@ func Send(sock string, f Frame) error {
 }
 
 // Receive reads one parked frame from a connection, with its fds.
-func Receive(c *net.UnixConn) (Frame, error) {
+func Receive(c *net.UnixConn) (result Frame, failure error) {
+	c.SetDeadline(time.Now().Add(30 * time.Second))
 	head := make([]byte, 4)
 	oob := make([]byte, syscall.CmsgSpace(4*64))
-	n, oobn, _, _, err := c.ReadMsgUnix(head, oob)
+	n, oobn, flags, _, err := c.ReadMsgUnix(head, oob)
 	if err != nil {
 		return Frame{}, err
+	}
+	var files []*os.File
+	defer func() {
+		if failure != nil {
+			for _, f := range files {
+				f.Close()
+			}
+		}
+	}()
+	if oobn > 0 {
+		msgs, err := syscall.ParseSocketControlMessage(oob[:oobn])
+		if err != nil {
+			return Frame{}, err
+		}
+		for _, msg := range msgs {
+			fds, err := syscall.ParseUnixRights(&msg)
+			if err != nil {
+				return Frame{}, err
+			}
+			for _, fd := range fds {
+				syscall.CloseOnExec(fd)
+				files = append(files, os.NewFile(uintptr(fd), "frame"))
+			}
+		}
+	}
+	if flags&syscall.MSG_CTRUNC != 0 {
+		return Frame{}, errors.New("truncated descriptors")
 	}
 	if n < 4 {
 		if _, err := io.ReadFull(c, head[n:]); err != nil {
 			return Frame{}, err
 		}
 	}
-	body := make([]byte, binary.BigEndian.Uint32(head))
+	size := binary.BigEndian.Uint32(head)
+	if size > maxMessage {
+		return Frame{}, errors.New("park message too large")
+	}
+	body := make([]byte, size)
 	if _, err := io.ReadFull(c, body); err != nil {
 		return Frame{}, err
 	}
@@ -93,27 +136,12 @@ func Receive(c *net.UnixConn) (Frame, error) {
 	if err := json.Unmarshal(body, &f); err != nil {
 		return Frame{}, err
 	}
-	if oobn > 0 {
-		msgs, err := syscall.ParseSocketControlMessage(oob[:oobn])
-		if err != nil || len(msgs) != 1 {
-			return Frame{}, errors.New("bad control message")
-		}
-		fds, err := syscall.ParseUnixRights(&msgs[0])
-		if err != nil {
-			return Frame{}, err
-		}
-		for _, fd := range fds {
-			syscall.CloseOnExec(fd)
-			f.Files = append(f.Files, os.NewFile(uintptr(fd), "frame"))
-		}
-	}
+	f.Files = files
 	depth := f.Frames
 	if depth < 1 || len(f.Files) != depth+len(f.Resources) {
-		f.Close()
 		return Frame{}, fmt.Errorf("parked with %d descriptors, for %d frames and %d resources", len(f.Files), depth, len(f.Resources))
 	}
 	if err := custody.Validate(f.Resources, f.Files[depth:]); err != nil {
-		f.Close()
 		return Frame{}, err
 	}
 	return f, nil
@@ -131,16 +159,22 @@ func Answer(c *net.UnixConn, refusal string) error {
 // stdin. The runtime derives the instance from the tree; the event is the
 // target's output, handed off to a successor that checks it like any other.
 func Resume(skyra string, f Frame, event []byte, stderr io.Writer) error {
+	defer f.Close()
 	in, _ := json.Marshal(Resumed{Stamp: f.Stamp, Frames: f.Frames, Resources: f.Resources, Out: string(event)})
-	cmd := exec.Command(skyra, "resume", f.Root)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, skyra, "resume", f.Root)
 	cmd.Stdin = bytes.NewReader(in)
 	cmd.Stderr = stderr
 	cmd.ExtraFiles = f.Files
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	f.Close() // the resumed instance holds custody now
-	go cmd.Wait()
+	// Drive returns only after its successor has validated custody. A process
+	// that starts but rejects the resume must be reported to the caller.
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("resume custody was not confirmed: %w", err)
+	}
 	return nil
 }
 
@@ -165,7 +199,11 @@ func readFramed(c io.Reader, v any) error {
 	if _, err := io.ReadFull(c, head); err != nil {
 		return err
 	}
-	body := make([]byte, binary.BigEndian.Uint32(head))
+	size := binary.BigEndian.Uint32(head)
+	if size > maxMessage {
+		return errors.New("park message too large")
+	}
+	body := make([]byte, size)
 	if _, err := io.ReadFull(c, body); err != nil {
 		return err
 	}

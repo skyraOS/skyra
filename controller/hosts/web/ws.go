@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"crypto/subtle"
 	"encoding/base64"
@@ -9,99 +10,163 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const maxFrame = 16 << 20
+const maxHandshake = 16 << 10
 
-// Minimal RFC 6455 framing (text/close/ping only, unfragmented), from
-// DNA-19's user peer, the predecessor's browser host.
-//
-// When token is set, the client must present it as "Authorization: Bearer
-// TOKEN" (next/23): whoever holds this socket speaks as the human.
-func handshake(r *bufio.Reader, conn net.Conn, token string) error {
-	var key, auth string
+// Native clients use Bearer auth. Browsers carry the session token in a
+// subprotocol and must match the launcher's explicit UI origin. No token is
+// ever accepted from a URL query or an unrelated browser origin.
+func handshake(r *bufio.Reader, conn net.Conn, token string, origins ...string) error {
+	reject := func(status int, reason string) error {
+		fmt.Fprintf(conn, "HTTP/1.1 %d %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", status, http.StatusText(status))
+		return fmt.Errorf("%s", reason)
+	}
+	var headers bytes.Buffer
 	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return err
+		line, err := r.ReadSlice('\n')
+		if err != nil || headers.Len()+len(line) > maxHandshake {
+			return reject(431, "handshake headers exceed limit or are incomplete")
 		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
+		headers.Write(line)
+		if bytes.Equal(line, []byte("\r\n")) {
 			break
 		}
-		if i := strings.IndexByte(line, ':'); i > 0 {
-			name := strings.ToLower(strings.TrimSpace(line[:i]))
-			switch name {
-			case "sec-websocket-key":
-				key = strings.TrimSpace(line[i+1:])
-			case "authorization":
-				auth = strings.TrimSpace(line[i+1:])
+	}
+	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(headers.Bytes())))
+	if err != nil {
+		return reject(400, "invalid HTTP upgrade")
+	}
+	defer req.Body.Close()
+	host := req.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return reject(403, "Host must be loopback")
+	}
+	if req.Method != "GET" || req.URL.Path != "/ws" || req.URL.RawQuery != "" || req.Header.Get("Sec-WebSocket-Version") != "13" || !strings.EqualFold(req.Header.Get("Upgrade"), "websocket") || !headerToken(req.Header.Get("Connection"), "upgrade") {
+		return reject(400, "invalid WebSocket upgrade")
+	}
+	origin := req.Header.Get("Origin")
+	if origin != "" {
+		allowed := false
+		for _, o := range origins {
+			if o != "" && origin == o {
+				allowed = true
 			}
 		}
+		if !allowed {
+			return reject(403, "browser origin is not authorized")
+		}
 	}
-	if token != "" && subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+token)) != 1 {
-		io.WriteString(conn, "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
-		return fmt.Errorf("missing or wrong token")
+	auth := req.Header.Get("Authorization")
+	browserProtocol := false
+	for _, protocol := range strings.Split(req.Header.Get("Sec-WebSocket-Protocol"), ",") {
+		protocol = strings.TrimSpace(protocol)
+		if origin != "" && strings.HasPrefix(protocol, "skyra-token.") {
+			auth = "Bearer " + strings.TrimPrefix(protocol, "skyra-token.")
+		}
+		if protocol == "skyra" {
+			browserProtocol = true
+		}
 	}
-	if key == "" {
-		return fmt.Errorf("missing Sec-WebSocket-Key")
+	if token == "" || subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+token)) != 1 {
+		return reject(401, "missing or wrong token")
+	}
+	key := req.Header.Get("Sec-WebSocket-Key")
+	decoded, err := base64.StdEncoding.DecodeString(key)
+	if err != nil || len(decoded) != 16 {
+		return reject(400, "invalid Sec-WebSocket-Key")
 	}
 	sum := sha1.Sum([]byte(key + wsGUID))
-	accept := base64.StdEncoding.EncodeToString(sum[:])
-	_, err := io.WriteString(conn, "HTTP/1.1 101 Switching Protocols\r\n"+
-		"Upgrade: websocket\r\n"+
-		"Connection: Upgrade\r\n"+
-		"Sec-WebSocket-Accept: "+accept+"\r\n\r\n")
+	response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(sum[:]) + "\r\n"
+	if browserProtocol {
+		response += "Sec-WebSocket-Protocol: skyra\r\n"
+	}
+	_, err = io.WriteString(conn, response+"\r\n")
 	return err
 }
 
-func readFrame(r *bufio.Reader) (opcode byte, payload []byte, err error) {
-	h := make([]byte, 2)
-	if _, err = io.ReadFull(r, h); err != nil {
-		return 0, nil, err
-	}
-	opcode = h[0] & 0x0f
-	masked := h[1]&0x80 != 0
-	n := uint64(h[1] & 0x7f)
-	switch n {
-	case 126:
-		ext := make([]byte, 2)
-		if _, err = io.ReadFull(r, ext); err != nil {
-			return 0, nil, err
-		}
-		n = uint64(binary.BigEndian.Uint16(ext))
-	case 127:
-		ext := make([]byte, 8)
-		if _, err = io.ReadFull(r, ext); err != nil {
-			return 0, nil, err
-		}
-		n = binary.BigEndian.Uint64(ext)
-	}
-	var mask []byte
-	if masked {
-		mask = make([]byte, 4)
-		if _, err = io.ReadFull(r, mask); err != nil {
-			return 0, nil, err
+func headerToken(header, token string) bool {
+	for _, v := range strings.Split(header, ",") {
+		if strings.EqualFold(strings.TrimSpace(v), token) {
+			return true
 		}
 	}
-	payload = make([]byte, n)
-	if _, err = io.ReadFull(r, payload); err != nil {
-		return 0, nil, err
-	}
-	if masked {
-		for i := range payload {
-			payload[i] ^= mask[i%4]
-		}
-	}
-	return opcode, payload, nil
+	return false
 }
 
-// writeFrame writes an unmasked server frame (FIN set, no fragmentation).
+// Client frames are masked, bounded and unfragmented. Invalid framing is
+// rejected before allocation so malformed traffic cannot panic the host.
+func readFrame(r *bufio.Reader) (opcode byte, payload []byte, err error) {
+	var h [2]byte
+	if _, err = io.ReadFull(r, h[:]); err != nil {
+		return
+	}
+	opcode = h[0] & 0x0f
+	if h[0]&0x80 == 0 || h[0]&0x70 != 0 || h[1]&0x80 == 0 {
+		return 0, nil, fmt.Errorf("invalid client frame flags")
+	}
+	switch opcode {
+	case 1, 2, 8, 9, 10:
+	default:
+		return 0, nil, fmt.Errorf("unsupported opcode")
+	}
+	n := uint64(h[1] & 0x7f)
+	marker := n
+	switch marker {
+	case 126:
+		var ext [2]byte
+		if _, err = io.ReadFull(r, ext[:]); err != nil {
+			return
+		}
+		n = uint64(binary.BigEndian.Uint16(ext[:]))
+		if n < 126 {
+			return 0, nil, fmt.Errorf("noncanonical frame length")
+		}
+	case 127:
+		var ext [8]byte
+		if _, err = io.ReadFull(r, ext[:]); err != nil {
+			return
+		}
+		n = binary.BigEndian.Uint64(ext[:])
+		if n < 65536 {
+			return 0, nil, fmt.Errorf("noncanonical frame length")
+		}
+	}
+	if n > maxFrame || (opcode >= 8 && n > 125) {
+		return 0, nil, fmt.Errorf("frame exceeds limit")
+	}
+	var mask [4]byte
+	if _, err = io.ReadFull(r, mask[:]); err != nil {
+		return
+	}
+	payload = make([]byte, int(n))
+	if _, err = io.ReadFull(r, payload); err != nil {
+		return
+	}
+	for i := range payload {
+		payload[i] ^= mask[i%4]
+	}
+	if (opcode == 1 && !utf8.Valid(payload)) || (opcode == 8 && (len(payload) == 1 || len(payload) > 2 && !utf8.Valid(payload[2:]))) {
+		return 0, nil, fmt.Errorf("invalid frame text")
+	}
+	return
+}
+
 func writeFrame(w io.Writer, opcode byte, payload []byte) error {
+	if len(payload) > maxFrame {
+		return fmt.Errorf("frame exceeds limit")
+	}
 	header := []byte{0x80 | opcode}
-	n := len(payload)
-	switch {
+	switch n := len(payload); {
 	case n < 126:
 		header = append(header, byte(n))
 	case n < 65536:
@@ -112,9 +177,6 @@ func writeFrame(w io.Writer, opcode byte, payload []byte) error {
 		header = append(header, 127)
 		header = append(header, ext...)
 	}
-	if _, err := w.Write(header); err != nil {
-		return err
-	}
-	_, err := w.Write(payload)
+	_, err := io.Copy(w, io.MultiReader(bytes.NewReader(header), bytes.NewReader(payload)))
 	return err
 }

@@ -1,16 +1,5 @@
-/**
- * WebSocket client wrapper — v.05 runtime.
- *
- * Responsibilities:
- *   - Connect, reconnect with exponential backoff
- *   - Queue outbound messages while disconnected
- *   - Validate every inbound message against ServerMessageSchema
- *   - Push validated messages to a sink (the Zustand store)
- *   - Maintain a structured event log
- *
- * v.05 has no auth handshake — connect and you're in. The runtime
- * broadcasts full universe snapshots on every resolve. No deltas,
- * no ack tracking. Reconnect gets a fresh snapshot.
+/** Authenticated WebSocket with reconnect and validated snapshots.
+ * Commands are sent only while connected; callers retain uncertain drafts.
  */
 
 import { ServerMessageSchema, type ServerMessageParsed } from "./protocol/schemas";
@@ -31,6 +20,7 @@ export interface WSEvent {
 
 interface WSClientOptions {
   url: string;
+  token?: string;
   onMessage: (msg: ServerMessageParsed) => void;
   onStatus?: (status: ConnectionStatus) => void;
   onEvent?: (event: WSEvent) => void;
@@ -42,7 +32,6 @@ interface WSClientOptions {
 export class WSClient {
   private socket: WebSocket | null = null;
   private status: ConnectionStatus = "idle";
-  private outbox: ClientMessage[] = [];
   private retry = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
@@ -51,6 +40,7 @@ export class WSClient {
 
   constructor(opts: WSClientOptions) {
     this.opts = {
+      token: "",
       baseBackoffMs: 500,
       maxBackoffMs: 15_000,
       onStatus: undefined,
@@ -67,20 +57,22 @@ export class WSClient {
 
     this.setStatus("connecting");
     try {
-      this.socket = new WebSocket(this.opts.url);
+      this.socket = new WebSocket(this.opts.url, this.opts.token ? ["skyra", `skyra-token.${this.opts.token}`] : undefined);
     } catch (err) {
       this.emit({ ts: Date.now(), kind: "error", detail: err });
       this.scheduleReconnect();
       return;
     }
 
+    const socket = this.socket;
     this.socket.onopen = () => {
+      if (socket !== this.socket) return;
       this.retry = 0;
       this.setStatus("open");
-      this.flushOutbox();
     };
 
     this.socket.onmessage = (e) => {
+      if (socket !== this.socket) return;
       let raw: unknown;
       try {
         raw = JSON.parse(typeof e.data === "string" ? e.data : "");
@@ -104,31 +96,31 @@ export class WSClient {
     };
 
     this.socket.onclose = () => {
+      if (socket !== this.socket) return;
       this.setStatus("closed");
       this.scheduleReconnect();
     };
 
     this.socket.onerror = (err) => {
+      if (socket !== this.socket) return;
       this.emit({ ts: Date.now(), kind: "error", detail: err });
       this.setStatus("error");
     };
   }
 
-  /**
-   * Queue an outbound message. Sent immediately if connected, otherwise
-   * held and flushed on reconnect.
-   */
-  send(msg: ClientMessage) {
-    if (this.status === "open" && this.socket) {
+  /** Reports whether the socket took the bytes, not whether the host accepted them. */
+  send(msg: ClientMessage): boolean {
+    if (this.status !== "open" || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      this.emit({ ts: Date.now(), kind: "error", detail: "disconnected; request was not sent" });
+      return false;
+    }
+    try {
       this.socket.send(JSON.stringify(msg));
       this.emit({ ts: Date.now(), kind: "out", detail: msg });
-    } else {
-      this.outbox.push(msg);
-      this.emit({
-        ts: Date.now(),
-        kind: "out",
-        detail: { queued: true, msg, status: this.status },
-      });
+      return true;
+    } catch (error) {
+      this.emit({ ts: Date.now(), kind: "error", detail: error });
+      return false;
     }
   }
 
@@ -141,14 +133,6 @@ export class WSClient {
 
   getStatus() {
     return this.status;
-  }
-
-  private flushOutbox() {
-    while (this.outbox.length && this.socket && this.status === "open") {
-      const msg = this.outbox.shift()!;
-      this.socket.send(JSON.stringify(msg));
-      this.emit({ ts: Date.now(), kind: "out", detail: { flushed: true, msg } });
-    }
   }
 
   private scheduleReconnect() {

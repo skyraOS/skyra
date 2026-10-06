@@ -4,7 +4,7 @@
 //
 //	webhost -ws ADDR -park SOCK -skyra BIN -registry FILE -conversations DIR
 //
-// With SKYRA_WS_TOKEN set, only a client presenting that token may connect
+// SKYRA_WS_TOKEN is required; only a client presenting that token may connect
 // (next/23). It is read from the environment so it never shows in ps.
 //
 // It follows the browser surface's registered procedure and decides nothing:
@@ -22,6 +22,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -35,7 +37,9 @@ import (
 	"time"
 
 	"skyra/controller/core/record"
+	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/park"
+	"skyra/controller/runtime/tree"
 )
 
 type entry struct {
@@ -47,24 +51,27 @@ type entry struct {
 }
 
 type conversation struct {
-	id      string
-	started time.Time
-	phase   string // ready | pending | failed | closed
-	entries []entry
-	parked  *park.Frame
-	lineage *lineage // its records, read as they are committed
+	id               string
+	started          time.Time
+	phase            string // ready | pending | failed | closed
+	entries          []entry
+	parked           *park.Frame
+	pending          string
+	recoveryRequired bool
+	lineage          *lineage // its records, read as they are committed
 }
 
 type webhost struct {
 	skyra, registry, dir string
 	incarnation          string
-	token                string // empty: any loopback client may connect
+	token                string
+	origin               string
 	log                  *os.File
 
 	mu       sync.Mutex
 	convos   map[string]*conversation
 	revision int
-	seen     map[string]bool // request ids already answered
+	requests map[string]*requestRecord
 	conn     net.Conn
 	wmu      sync.Mutex
 }
@@ -80,10 +87,16 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	h := &webhost{skyra: *skyra, registry: *registry, dir: *dir, convos: map[string]*conversation{}, seen: map[string]bool{},
-		incarnation: fmt.Sprintf("webhost-%d-%d", os.Getpid(), time.Now().UnixMilli()), token: os.Getenv("SKYRA_WS_TOKEN")}
+	h := &webhost{skyra: *skyra, registry: *registry, dir: *dir, convos: map[string]*conversation{},
+		incarnation: fmt.Sprintf("webhost-%d-%d", os.Getpid(), time.Now().UnixMilli()), token: os.Getenv("SKYRA_WS_TOKEN"), origin: os.Getenv("SKYRA_WS_ORIGIN")}
+	if h.token == "" {
+		fail(fmt.Errorf("SKYRA_WS_TOKEN is required"))
+	}
 	h.log = os.Stderr
-	if err := os.MkdirAll(*dir, 0o755); err != nil {
+	if err := os.MkdirAll(*dir, 0o700); err != nil {
+		fail(err)
+	}
+	if err := h.loadRequests(); err != nil {
 		fail(err)
 	}
 	h.loadPast()
@@ -191,13 +204,14 @@ func (h *webhost) acceptParks(l net.Listener) {
 				conv = &conversation{id: p.Conversation, started: time.Now(), lineage: newLineage(filepath.Join(h.dir, p.Conversation, ".skyra"))}
 				h.convos[p.Conversation] = conv
 			}
-			if conv.parked != nil {
+			if conv.recoveryRequired || conv.parked != nil {
 				h.mu.Unlock()
 				f.Close()
 				park.Answer(uc, "the conversation is already waiting on the human")
 				return
 			}
-			conv.parked, conv.phase, conv.entries = &f, "ready", stamp(p.Transcript)
+			h.acceptTranscript(conv, p.Transcript)
+			conv.parked, conv.phase = &f, "ready"
 			l := conv.lineage
 			h.mu.Unlock()
 			l.refresh()
@@ -211,11 +225,14 @@ func (h *webhost) acceptParks(l net.Listener) {
 }
 
 func (h *webhost) serveBrowser(conn net.Conn) {
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
 	r := bufio.NewReader(conn)
-	if err := handshake(r, conn, h.token); err != nil {
+	if err := handshake(r, conn, h.token, h.origin); err != nil {
 		conn.Close()
 		return
 	}
+	conn.SetDeadline(time.Time{})
+	defer conn.Close()
 	h.wmu.Lock()
 	if h.conn != nil {
 		h.conn.Close()
@@ -231,6 +248,7 @@ func (h *webhost) serveBrowser(conn net.Conn) {
 		}
 		if op == 0x9 {
 			h.wmu.Lock()
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			writeFrame(conn, 0xA, payload)
 			h.wmu.Unlock()
 			continue
@@ -258,32 +276,59 @@ func (h *webhost) handle(raw []byte) {
 		h.send(map[string]string{"type": "rejected", "requestId": m.RequestID, "code": code, "message": msg})
 	}
 	h.mu.Lock()
-	if h.seen[m.RequestID] {
-		h.mu.Unlock()
-		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
-		return
-	}
 	if m.Type != "open-conversation" && m.UIIncarnation != h.incarnation {
 		h.mu.Unlock()
 		reject("stale", "the page is out of date; it will refresh")
 		h.broadcast()
 		return
 	}
+	if old := h.requests[m.RequestID]; old != nil {
+		if old.Fingerprint != fingerprint(m) {
+			h.mu.Unlock()
+			reject("conflict", "this request id belongs to different work")
+			return
+		}
+		h.mu.Unlock()
+		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
+		h.broadcast()
+		return
+	}
+	admit := func(conversation string) bool {
+		if err := h.admit(m, conversation); err != nil {
+			h.mu.Unlock()
+			reject("storage", err.Error())
+			return false
+		}
+		return true
+	}
+
 	switch m.Type {
 	case "delete-conversation":
+		if !admit(m.Conversation) {
+			return
+		}
 		if err := h.deleteConversation(m.Conversation); err != nil {
+			h.finishRequest(m.RequestID, "failed", "delete-failed", err.Error())
 			h.mu.Unlock()
 			reject("delete-failed", err.Error())
 			return
 		}
-		h.seen[m.RequestID] = true
+		h.finishRequest(m.RequestID, "returned", "", "")
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
 	case "open-conversation":
-		id := fmt.Sprintf("c-%s", time.Now().Format("20060102-150405.000"))
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
-		h.seen[m.RequestID] = true
+		nonce := make([]byte, 16)
+		if _, err := rand.Read(nonce); err != nil {
+			h.mu.Unlock()
+			reject("entropy", err.Error())
+			return
+		}
+		id := "c-" + hex.EncodeToString(nonce)
+		if !admit(id) {
+			return
+		}
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
@@ -295,6 +340,10 @@ func (h *webhost) handle(raw []byte) {
 			reject("busy", "this conversation is not waiting for you")
 			return
 		}
+		if !admit(m.Conversation) {
+			return
+		}
+		conv.pending = m.RequestID
 		text := m.Text
 		if m.Type == "close-interaction" {
 			text = "/close"
@@ -306,7 +355,6 @@ func (h *webhost) handle(raw []byte) {
 		}
 		f := *conv.parked
 		conv.parked = nil
-		h.seen[m.RequestID] = true
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
@@ -316,6 +364,9 @@ func (h *webhost) handle(raw []byte) {
 		if err := park.Resume(h.skyra, f, event, h.log); err != nil {
 			h.mu.Lock()
 			conv.phase = "failed"
+			conv.recoveryRequired = true
+			h.finishRequest(m.RequestID, "failed", "delivery-unknown", err.Error())
+			conv.pending = ""
 			conv.entries = append(conv.entries, entry{Role: "agent", Text: "⚠ could not resume: " + err.Error(), TS: int64(len(conv.entries))})
 			h.mu.Unlock()
 			h.broadcast()
@@ -384,6 +435,8 @@ func (h *webhost) seed(id string) {
 		h.mu.Lock()
 		if c := h.convos[id]; c != nil && c.parked == nil {
 			c.phase = "failed"
+			h.finishRequest(c.pending, "failed", "startup", err.Error())
+			c.pending = ""
 			c.entries = append(c.entries, entry{Role: "agent", Text: "⚠ could not start the conversation: " + err.Error()})
 		}
 		h.mu.Unlock()
@@ -398,7 +451,7 @@ func (h *webhost) watch() {
 		h.mu.Lock()
 		var working []*lineage
 		for _, c := range h.convos {
-			if c.phase == "pending" && c.lineage != nil {
+			if (c.phase == "pending" || c.pending != "") && c.lineage != nil {
 				working = append(working, c.lineage)
 			}
 		}
@@ -409,6 +462,7 @@ func (h *webhost) watch() {
 				changed = true
 			}
 		}
+		changed = h.reconcileRequests() || changed
 		if changed {
 			h.broadcast()
 		}
@@ -426,18 +480,111 @@ func (h *webhost) broadcast() {
 	views := []map[string]any{}
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.lineage.snapshot())
-		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": nil})
+		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending)})
 	}
-	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": []any{}}
+	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot()}
 	h.mu.Unlock()
-	h.send(snap)
+	b, omitted := fitSnapshot(snap, views, maxFrame)
+	if omitted > 0 {
+		fmt.Fprintf(h.log, "webhost: snapshot over %d bytes; omitted older history from %d views (it remains on disk)\n", maxFrame, omitted)
+	}
+	h.sendRaw(b)
+}
+
+// fitSnapshot keeps a snapshot within one frame, so a large history cannot
+// put every client into a reconnect loop. It first lists the oldest finished
+// conversations without entries, then drops the oldest half of the longest
+// remaining history, until it fits. Views run newest first.
+func fitSnapshot(snap map[string]any, views []map[string]any, limit int) ([]byte, int) {
+	b, _ := json.Marshal(snap)
+	omitted := 0
+	for i := len(views) - 1; i >= 0 && len(b) > limit; i-- {
+		if p := views[i]["phase"]; p == "ready" || p == "pending" {
+			continue
+		}
+		if es := views[i]["entries"].([]entry); len(es) > 0 {
+			views[i]["entries"] = []entry{}
+			omitted++
+			b, _ = json.Marshal(snap)
+		}
+	}
+	for len(b) > limit {
+		longest := -1
+		for i, v := range views {
+			if n := len(v["entries"].([]entry)); n > 1 && (longest < 0 || n > len(views[longest]["entries"].([]entry))) {
+				longest = i
+			}
+		}
+		if longest < 0 {
+			break // nothing left to omit; send reports the oversized frame
+		}
+		es := views[longest]["entries"].([]entry)
+		views[longest]["entries"] = es[len(es)/2:]
+		omitted++
+		b, _ = json.Marshal(snap)
+	}
+	return b, omitted
 }
 
 func (h *webhost) send(v any) {
 	b, _ := json.Marshal(v)
+	h.sendRaw(b)
+}
+
+func (h *webhost) sendRaw(b []byte) {
 	h.wmu.Lock()
 	defer h.wmu.Unlock()
 	if h.conn != nil {
-		writeFrame(h.conn, 0x1, b)
+		h.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err := writeFrame(h.conn, 0x1, b); err != nil {
+			h.conn.Close()
+			h.conn = nil
+		}
 	}
+}
+
+func pendingID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
+}
+
+func (h *webhost) reconcileRequests() bool {
+	changed := false
+	h.mu.Lock()
+	for _, c := range h.convos {
+		if c.pending == "" || c.parked != nil {
+			continue
+		}
+		root := filepath.Join(h.dir, c.id, ".skyra")
+		if failure, err := tree.ReadFailure(root); err == nil && failure != nil {
+			c.phase, c.recoveryRequired = "failed", true
+			h.finishRequest(c.pending, "failed", "delivery-unknown", failure.Message)
+			c.pending = ""
+			c.entries = append(c.entries, entry{Role: "agent", Text: "⚠ runtime interrupted; inspect history before retrying: " + failure.Message, TS: int64(len(c.entries))})
+			changed = true
+			continue
+		}
+		if head, err := boot.Head(root); err == nil {
+			r, err := tree.Load(root, head)
+			if err == nil && r.State == record.Resolve && len(r.Deps) == 1 {
+				r, err = tree.Load(root, r.Deps[0])
+			}
+			if err == nil && (r.State == record.Return || r.State == record.Fault) {
+				status := "returned"
+				c.phase = "closed"
+				if r.State == record.Fault {
+					status = "failed"
+					c.phase = "failed"
+					c.entries = append(c.entries, entry{Role: "agent", Text: "⚠ the runtime faulted: " + r.Fault.Cause, TS: int64(len(c.entries))})
+				}
+				h.finishRequest(c.pending, status, "", "")
+				c.pending = ""
+				changed = true
+			}
+		}
+	}
+	h.mu.Unlock()
+	return changed
 }

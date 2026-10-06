@@ -91,6 +91,9 @@ type walker struct {
 // re-derived) to head, and returns the Horizon head released.
 func (w *walker) at(head string) (horizon.Horizon, error) {
 	var none horizon.Horizon
+	if head == "" {
+		return none, errors.New("empty lineage head")
+	}
 	var chain []string
 	s := head
 	for s != "" {
@@ -101,9 +104,10 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		if err != nil {
 			return none, err
 		}
-		chain = append([]string{s}, chain...)
+		chain = append(chain, s)
 		s = r.Predecessor
 	}
+	slices.Reverse(chain)
 	var h horizon.Horizon
 	if s != "" {
 		h = w.seen[s]
@@ -168,18 +172,36 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 			// Every other slot of the round was discharged too: re-derive
 			// each sibling's chain, and check it discharged a slot of this
 			// round (next/32, H2: a round of N).
+			slots := make([]string, 0, len(o.Discharges))
+			used := map[string]bool{}
 			for _, d := range o.Discharges {
-				if d == rec.Predecessor {
-					continue
+				if used[d] {
+					return none, fmt.Errorf("resolve %s repeats a discharge", record.Short(stamp))
 				}
-				sib, err := w.at(d)
+				used[d] = true
+				discharge, err := load(w.s, d)
 				if err != nil {
-					return none, fmt.Errorf("resolve %s, sibling %s: %w", record.Short(stamp), record.Short(d), err)
+					return none, err
 				}
-				if sib.Resume == nil || sib.Resume.Frame != o.Frame || sib.Resume.Stamp != o.Round {
-					return none, fmt.Errorf("resolve %s names %s, which discharged no slot of its round", record.Short(stamp), record.Short(d))
+				if discharge.State != record.Return && discharge.State != record.Fault {
+					return none, fmt.Errorf("resolve %s names an unfinished dependency", record.Short(stamp))
 				}
+				sib := h
+				if d != rec.Predecessor {
+					sib, err = w.at(d)
+					if err != nil {
+						return none, fmt.Errorf("resolve sibling: %w", err)
+					}
+				}
+				if sib.Resume == nil || sib.Resume.Frame != o.Frame || sib.Resume.Stamp != o.Round || slices.Contains(slots, sib.Frame) {
+					return none, fmt.Errorf("resolve %s names an unrelated or repeated slot", record.Short(stamp))
+				}
+				slots = append(slots, sib.Frame)
 			}
+			if err := w.verifyEmission(o, slots); err != nil {
+				return none, err
+			}
+
 			resumed := *h.Resume
 			resumed.Stamp = stamp
 			h = resumed
@@ -201,4 +223,50 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		w.seen[stamp] = h
 	}
 	return h, nil
+}
+
+// verifyEmission reconstructs every expected slot from the immutable emission,
+// in order. Version 2 histories must carry this evidence; legacy histories
+// still get terminal-state, uniqueness and ownership checks.
+func (w *walker) verifyEmission(o machine.Observation, slots []string) error {
+	under, err := w.at(o.Round)
+	if err != nil {
+		return err
+	}
+	outer := under
+	for outer.Resume != nil {
+		outer = *outer.Resume
+	}
+	genesis, err := load(w.s, outer.Frame)
+	if err != nil {
+		return err
+	}
+	if o.Emission == "" {
+		if genesis.Version >= 2 {
+			return errors.New("resolve has no complete round emission")
+		}
+		return nil
+	}
+	out, err := get(w.s, "inputs", o.Emission)
+	if err != nil {
+		return err
+	}
+	parts, err := machine.Instructions(out)
+	if err != nil {
+		return err
+	}
+	if len(parts) != len(slots) {
+		return errors.New("resolve does not cover every emitted instruction")
+	}
+	for i, part := range parts {
+		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: under, In: part})
+		r := machine.Committed(effs)
+		if r.State != record.Invoke && !(len(parts) > 1 && r.State == record.Fault) {
+			return errors.New("resolve emission did not open a slot")
+		}
+		if record.Stamp(r) != slots[i] {
+			return errors.New("resolve discharges do not match the emitted slots in order")
+		}
+	}
+	return nil
 }

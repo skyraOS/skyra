@@ -21,6 +21,8 @@ final class Session {
     private var revision = -1
     private var openBefore: String?
     private var pendingText = ""
+    private(set) var unacknowledged: (id: String, text: String)?
+    private var retry: (key: String, id: String)?
     private var task: URLSessionWebSocketTask?
     private var target: (url: URL, token: String)?
     private var generation = 0
@@ -49,6 +51,8 @@ final class Session {
         var req = URLRequest(url: target.url)
         req.setValue("Bearer \(target.token)", forHTTPHeaderField: "Authorization")
         let t = URLSession.shared.webSocketTask(with: req)
+        // The host keeps every snapshot within 16 MiB; the default limit is 1 MiB.
+        t.maximumMessageSize = 16 << 20
         task = t
         t.resume()
         Task { await receive(t, gen) }
@@ -83,8 +87,22 @@ final class Session {
         switch m {
         case let .snapshot(inc, rev, convs):
             if inc == incarnation && rev < revision { return }
+            if let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+               object["type"] as? String == "snapshot", let pending = unacknowledged,
+               let ledger = object["requests"] as? [[String: Any]] {
+                if let record = ledger.first(where: { $0["requestId"] as? String == pending.id }) {
+                    if record["code"] as? String == "delivery-unknown" {
+                        unacknowledged = nil
+                        notice = "delivery is unknown; inspect history before retrying. Your draft is kept"
+                    } else { acknowledge(pending.id) }
+                } else {
+                    unacknowledged = nil
+                    notice = "the message was not acknowledged; your draft is kept"
+                }
+            }
+
             if !incarnation.isEmpty && inc != incarnation && opening {
-                draft = pendingText
+                if draft.isEmpty { draft = pendingText }
                 pendingText = ""
                 opening = false
                 notice = "the host restarted; your draft is kept"
@@ -94,7 +112,7 @@ final class Session {
                 selected = newest.conversation
                 if newest.phase == .ready {
                     if !pendingText.isEmpty {
-                        send(.submit(incarnation: incarnation, conversation: newest.conversation, requestId: requestID(), text: pendingText))
+                        sendText(pendingText, conversation: newest.conversation)
                     }
                     pendingText = ""
                     opening = false
@@ -103,14 +121,17 @@ final class Session {
                 return
             }
             if selected != nil && current == nil { selected = nil }
-        case let .rejected(_, code, message):
+        case let .rejected(id, code, message):
+            if unacknowledged?.id == id { unacknowledged = nil }
             notice = "\(code): \(message)"
             if opening {
-                draft = pendingText
+                if draft.isEmpty { draft = pendingText }
                 pendingText = ""
                 opening = false
             }
-        case .accepted, .unknown:
+        case let .accepted(id):
+            acknowledge(id)
+        case .unknown:
             break
         }
     }
@@ -124,19 +145,16 @@ final class Session {
             notice = "connecting; your draft is kept"
             return
         }
+        if unacknowledged != nil { notice = "delivery is awaiting acknowledgement; your draft is kept"; return }
         if opening {
             if pendingText.isEmpty {
                 pendingText = text
-                draft = ""
             }
             return
         }
         switch current?.phase {
         case .ready:
-            if send(.submit(incarnation: incarnation, conversation: selected!, requestId: requestID(), text: text)) {
-                draft = ""
-                notice = ""
-            }
+            sendText(text, conversation: selected!)
         case nil, .closed, .failed:
             open(with: text)
         case .pending:
@@ -150,7 +168,6 @@ final class Session {
             opening = true
             openBefore = before
             pendingText = text
-            draft = ""
             notice = "opening a conversation…"
         }
     }
@@ -187,6 +204,30 @@ final class Session {
 
     func delete(_ id: String) {
         send(.delete(incarnation: incarnation, conversation: id, requestId: requestID()))
+    }
+
+    private func sendText(_ text: String, conversation: String) {
+        let id = beginSubmission(text, conversation: conversation)
+        if !send(.submit(incarnation: incarnation, conversation: conversation, requestId: id, text: text)) {
+            unacknowledged = nil
+        }
+    }
+
+    // Keep the same request identity when a reconnect has not established delivery.
+    func beginSubmission(_ text: String, conversation: String) -> String {
+        let key = [incarnation, conversation, text].joined(separator: "\u{0}")
+        let id = retry?.key == key ? retry!.id : requestID()
+        retry = (key, id)
+        unacknowledged = (id, text)
+        return id
+    }
+
+    func acknowledge(_ id: String) {
+        guard let pending = unacknowledged, pending.id == id else { return }
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
+        unacknowledged = nil
+        retry = nil
+        notice = ""
     }
 
     @discardableResult

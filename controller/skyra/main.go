@@ -106,7 +106,7 @@ func main() {
 // realDir resolves symlinks so the sandbox denies the real path
 // (/tmp is /private/tmp on macOS).
 func realDir(p string) (string, error) {
-	if err := os.MkdirAll(p, 0o755); err != nil {
+	if err := os.MkdirAll(p, 0o700); err != nil {
 		return "", err
 	}
 	abs, err := filepath.Abs(p)

@@ -82,7 +82,9 @@ export const useAppStore = create<StoreState>((set) => ({
               ? state.selectedConversation
               : order[0] ?? null;
 
+          const uncertain = msg.requests.find((r) => r.code === "delivery-unknown" && state.requests[r.requestId]?.code !== r.code);
           return {
+            ...(uncertain ? { lastError: { code: uncertain.code!, message: uncertain.message ?? "Delivery is unknown; inspect history before retrying.", ts: uncertain.ts } } : {}),
             uiIncarnation: msg.uiIncarnation,
             revision: msg.revision,
             conversations: indexBy(msg.conversations, (c) => c.conversation),

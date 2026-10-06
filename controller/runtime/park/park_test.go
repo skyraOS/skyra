@@ -1,7 +1,10 @@
 package park
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -51,5 +54,27 @@ func TestParkRoundTrip(t *testing.T) {
 	f := <-got
 	if len(f.Files) != 3 || f.Stamp != "b" || f.Frames != 3 || string(f.Payload) != string(payload) {
 		t.Fatalf("parked frame: %d files, %+v", len(f.Files), f)
+	}
+}
+
+func TestResumeReportsChildFailureAndClosesCustody(t *testing.T) {
+	for _, binary := range []string{"/usr/bin/false", "/nonexistent-skyra"} {
+		f, err := os.Open(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Resume(binary, Frame{Files: []*os.File{f}}, nil, io.Discard); err == nil {
+			t.Fatal("resume accepted a failing child")
+		}
+		if _, err := f.Stat(); err == nil {
+			t.Fatal("custody leaked")
+		}
+	}
+}
+func TestRejectOversizedFramedMessage(t *testing.T) {
+	b := binary.BigEndian.AppendUint32(nil, ^uint32(0))
+	var v any
+	if err := readFramed(bytes.NewReader(b), &v); err == nil {
+		t.Fatal("accepted oversized frame")
 	}
 }

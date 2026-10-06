@@ -20,7 +20,12 @@ sock=/private/tmp/skyra-fake-$$.sock
 ./bin/host -sock "$sock" -state "$(mktemp -d)" -- ./bin/fake-codex 2>/dev/null &
 host=$!
 trap 'kill $host 2>/dev/null' EXIT
-while [ ! -S "$sock" ]; do sleep 0.05; done
+i=0
+while [ ! -S "$sock" ]; do
+ kill -0 "$host" 2>/dev/null || { echo "actor host exited" >&2; exit 1; }
+ i=$((i+1)); [ "$i" -lt 100 ] || { echo "actor host startup timed out" >&2; exit 1; }
+ sleep 0.05
+done
 
 # A directory read may look at: two small files and a subdirectory (next/32, H7).
 look=$(cd "$(mktemp -d)" && pwd -P)
@@ -39,45 +44,60 @@ cat > bin/registry.json <<JSON
 }
 JSON
 
+run_boot() {
+  expected=$1; shift
+  output=$(./bin/skyra boot "$@")
+  printf '%s\n' "$output"
+  printf '%s\n' "$output" | grep -Eq '^replay: [0-9]+ records .*byte-identical$'
+  if [ "$expected" = return ]; then
+    printf '%s\n' "$output" | grep -Eq '^answer:'
+    if printf '%s\n' "$output" | grep -Eq '^answer: fault'; then
+      echo "unexpected fault in successful scenario" >&2; exit 1
+    fi
+  else
+    printf '%s\n' "$output" | grep -Eq "^answer: fault \($expected\):"
+  fi
+}
+
 scenario() {
-  name=$1; shift
+  expected=$1; name=$2; shift 2
   root=$(cd "$(mktemp -d)" && pwd -P)/.skyra
   echo
   echo "══ $name ══"
-  ./bin/skyra boot -root "$root" -registry bin/registry.json "$@" || true
+  run_boot "$expected" -root "$root" -registry bin/registry.json "$@"
 }
 
-scenario "agent: a continuation calls echo, waits, resumes" -to agent -payload '{"text":"hello"}'
-scenario "agent narrows echo through its Horizon, then calls it" -to agent -payload '{"text":"narrow:hello"}'
+scenario return "agent: a continuation calls echo, waits, resumes" -to agent -payload '{"text":"hello"}'
+scenario return "agent narrows echo through its Horizon, then calls it" -to agent -payload '{"text":"narrow:hello"}'
 # Fan-out (next/32, H2): one emission, two instructions, one round of two slots.
-scenario "fan-out: the agent asks echo twice in one emission" -to agent -payload '{"text":"fan:hello,world"}'
-scenario "fan-out: one instruction out of reach faults, its sibling runs" -to agent -payload '{"text":"fan:hello,!shell"}'
+scenario return "fan-out: the agent asks echo twice in one emission" -to agent -payload '{"text":"fan:hello,world"}'
+scenario return "fan-out: one instruction out of reach faults, its sibling runs" -to agent -payload '{"text":"fan:hello,!shell"}'
 # The Horizon's syscalls (next/32, H3): the agent adds a contract to itself, then calls itself through it.
-scenario "extend-reach: the agent adds a contract to itself and is invoked through it" -to agent -payload '{"text":"extend:hello"}'
-scenario "extend-reach: a contract the actor already holds is refused" -to agent -payload '{"text":"redundant:"}'
+scenario return "extend-reach: the agent adds a contract to itself and is invoked through it" -to agent -payload '{"text":"extend:hello"}'
+scenario contract "extend-reach: a contract the actor already holds is refused" -to agent -payload '{"text":"redundant:"}'
 # The interpreter (next/32, H5): a procedure installed by hand in its own state runs through the
 # kernel, its fork and its each fanned out in one emission. The kernel sees only instructions.
 root=$(cd "$(mktemp -d)" && pwd -P)/.skyra
 echo
 echo "══ interpreter: a hand-installed procedure fans out through the kernel ══"
 ./bin/interp install "$root/interpreter" interp/examples/greet.json
-./bin/skyra boot -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}' || true
+run_boot return -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}'
 # The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's strand, then calls the
 # procedure it became: no model step, no approval. From a Horizon without echo it faults at intake;
 # the same contract is not remembered twice; an actor cannot extend itself with what it holds.
-scenario "remember (P9): the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
+scenario return "remember (P9): the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
 ./bin/skyra metric "$root"
 # Running what was remembered (next/32, H7): inside its base types the procedure runs alone;
 # a listing where a file was read is outside them, and the agent resumes at that edge.
-scenario "refinement: a procedure runs inside its base types, and falls back at the edge that refused" -to agent -payload "{\"text\":\"look:$look\"}"
+scenario return "refinement: a procedure runs inside its base types, and falls back at the edge that refused" -to agent -payload "{\"text\":\"look:$look\"}"
 ./bin/skyra metric "$root"
-scenario "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
-scenario "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
+scenario return "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
+scenario return "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
 # Codex remembers (next/32, H8): remember is in its Horizon's reach, so it is offered. Codex has the
 # agent relay, remembers that call, and calls the procedure it became: no agent runs for it.
-scenario "codex (fake) remembers a call of its own and calls the procedure" -to codex -payload '{"text":"remember:hello"}'
+scenario return "codex (fake) remembers a call of its own and calls the procedure" -to codex -payload '{"text":"remember:hello"}'
 ./bin/skyra metric "$root"
-scenario "echo hello"                      -to echo -payload '{"text":"hello"}'
-scenario "echo probes .skyra/ from inside" -to echo -payload "{\"text\":\"hello\",\"probe\":\"$(cd "$(mktemp -d)" && pwd -P)/.skyra\"}"
-scenario "echo addresses what is outside the Horizon" -to echo -payload '{"text":"hello","misbehave":"yes"}'
-scenario "payload breaks echo's contract"  -to echo -payload '{"txt":"hello"}'
+scenario return "echo hello"                      -to echo -payload '{"text":"hello"}'
+scenario return "echo probes .skyra/ from inside" -to echo -payload "{\"text\":\"hello\",\"probe\":\"$(cd "$(mktemp -d)" && pwd -P)/.skyra\"}"
+scenario horizon "echo addresses what is outside the Horizon" -to echo -payload '{"text":"hello","misbehave":"yes"}'
+scenario contract "payload breaks echo's contract"  -to echo -payload '{"txt":"hello"}'

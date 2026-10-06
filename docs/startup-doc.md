@@ -38,7 +38,7 @@ python3 controller/experiments/appserver/integration.py --live  # real model usa
 | Need | Why | Install |
 |---|---|---|
 | **macOS** | the sandbox is Seatbelt (`sandbox-exec`) | — |
-| **Go 1.25+** | builds everything; standard library only, no other Go dependencies | `brew install go` |
+| **Go 1.25+** | builds the controller and interpreter; the latter downloads its CEL dependencies | `brew install go` |
 | **Node 20+** | browser UI (Next.js) | `brew install node` |
 | **Python 3.9+** | provider configuration and sandbox launcher | `brew install python` |
 | **Codex CLI 0.160.0**, logged in | verified direct-tool configuration for real chat | `npm install -g @openai/codex@0.160.0`, then `codex login` |
@@ -80,12 +80,12 @@ Ctrl-C stops the browser host and the UI; parked connections close with it.
 | `skyra tui` | a fresh terminal session backed by the conversation protocol, without starting Next.js ([keys and layout](../tui/README.md)) |
 | `skyra tui --fake` | terminal UI with the deterministic provider |
 | `skyra app` | build and open `build/Skyra.app`, the desktop client; needs Xcode ([desktop/README.md](../desktop/README.md)) |
-| `skyra serve [--fake]` | the backend alone, as the app starts it; with `SKYRA_WS_TOKEN` set, the webhost accepts only that token |
+| `skyra serve [--fake]` | the backend alone, as the app starts it; the launcher generates `SKYRA_WS_TOKEN` unless supplied; the webhost always requires it |
 | `skyra ask "TEXT"` | one question to real Codex; prints the lineage, the replay check and the answer |
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |
 | `skyra stop` | stop actor hosts left by older Skyra versions |
 | `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
-| `skyra test` | every Go test, for the controller and the TUI |
+| `skyra test` | all deterministic checks: Go race/vet, interpreter, frontend lint/types/build and mock/real-host protocol, Swift, website replay/WASM and demos |
 | `skyra build` | build every binary into `build/` |
 | `skyra doctor` | check prerequisites and ports |
 | `skyra help` | list the commands |
@@ -196,3 +196,22 @@ Before telling anyone to run this:
 3. `skyra chat --fake`, then `skyra`: the conversation prompts above; then `skyra ask`.
 4. If Codex was upgraded: `skyra live`, then update the versions and date in
    **Last verified** above.
+
+## Ingress and recovery
+
+Every launcher mode generates a fresh token unless `SKYRA_WS_TOKEN` is set.
+The browser launch link carries it in `#skyra-token=...`; the client moves it
+into session storage and removes the fragment. Use the launch link when
+opening a new tab. Native clients send a Bearer header. Browser origins must
+exactly match `SKYRA_WS_ORIGIN`, which `skyra chat` sets to its localhost UI.
+Direct `webhost` launches require a token; unset tokens are refused.
+
+Request admission is persisted before execution. Reusing an admitted ID with
+different work is a conflict; reconnects receive status rather than replaying
+commands. A host restart or runtime I/O interruption reports `delivery-unknown`.
+Inspect the recorded history before sending that work again: partial external
+effects may have happened. This is failure reporting, not automatic crash recovery.
+
+New histories use genesis version 2 and store the entire emission for each
+resolved round. Old histories still replay with terminal-state, uniqueness and
+ownership checks, but cannot prove that every originally emitted slot is present.

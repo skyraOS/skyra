@@ -158,22 +158,77 @@ func hexName(n string) bool {
 }
 
 func (s Store) write(kind, name string, v any) error {
+	return s.publish(kind, name, v, kind == "nodes" || kind == "procedures")
+}
+
+// publish flushes bytes before publishing, then flushes the directory. Unique
+// temporary names let independent procedures safely share immutable nodes.
+func (s Store) publish(kind, name string, v any, immutable bool) error {
 	p, err := s.path(kind, name)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	f, err := os.CreateTemp(dir, ".tmp-")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, p)
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if immutable {
+		err = os.Link(tmp, p)
+		if errors.Is(err, os.ErrExist) {
+			if kind != "nodes" {
+				return fmt.Errorf("%s already has a procedure: one representation per contract", name)
+			}
+			old, readErr := os.ReadFile(p)
+			if readErr != nil {
+				return readErr
+			}
+			if !bytes.Equal(old, b) {
+				return fmt.Errorf("node %s conflicts with stored bytes", name)
+			}
+			err = nil
+		}
+	} else {
+		err = os.Rename(tmp, p)
+	}
+	if err != nil {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	if err := d.Sync(); err != nil {
+		return err
+	}
+	// Persist newly created kind directories as well as their entries.
+	parent, err := os.Open(s.Dir)
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	return parent.Sync()
 }
 
 func (s Store) read(kind, name string, v any) error {
@@ -265,7 +320,7 @@ func (s Store) SetRefinement(c *Schema, r *Refinement) error {
 		return err
 	}
 	p.Header.Refinement = r
-	return s.write("procedures", Key(c), p)
+	return s.publish("procedures", Key(c), p, false)
 }
 
 // Position reads where a frame is; a frame not begun is at no round.

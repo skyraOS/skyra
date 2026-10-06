@@ -44,6 +44,8 @@ type FaultInfo struct {
 // them; replay derives it again and must get the same bytes. Predecessor is
 // the custody chain: the record whose holder committed this one.
 type Record struct {
+	Version     int                        `json:"version,omitempty"`    // genesis: 2 commits complete round emissions
+	Emission    string                     `json:"emission,omitempty"`   // resolve: hash of the complete emission
 	Predecessor string                     `json:"predecessor"`          // the stamp of the Horizon it was emitted under; "" only for genesis
 	Input       string                     `json:"input"`                // sha256 of the exact bytes observed
 	State       State                      `json:"state"`                // derived

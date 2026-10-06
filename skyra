@@ -30,13 +30,13 @@ usage: skyra [command]
   tui --fake    the terminal UI against the deterministic fake Codex
   app           build and open Skyra.app, the desktop client (next/23)
   serve [--fake]  the backend alone, as the desktop app starts it: the webhost,
-                its log on stdout, SKYRA_WS_TOKEN required when set
+                its log on stdout, SKYRA_WS_TOKEN generated unless supplied
   ask "TEXT"    one question to real Codex through the controller; prints the lineage,
                 the replay check and the answer
   replay DIR    re-derive a finished conversation or run from its records
   stop          stop any actor hosts left by an older Skyra version
   demo          the stateless controller: every scenario, each ending in a replay check
-  test          every Go test
+  test          controller, interpreter, browser, desktop, website and demos
   doctor        check prerequisites
   build         build every binary into build/
 
@@ -56,6 +56,9 @@ kill_tree() {
 # The controller holds one resident Codex connection per conversation. The
 # webhost holds it while that conversation waits on the human.
 STATE=${SKYRA_STATE:-$HOME/.skyra}
+# All launch modes authenticate ingress. Credentials travel in the environment.
+export SKYRA_WS_TOKEN=${SKYRA_WS_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}
+umask 077
 
 controller_build() {
   mkdir -p "$BUILD/controller"
@@ -182,6 +185,7 @@ chat() {
 
   local reg park=$STATE/park-$mode.sock convs=$STATE/conversations
   local addr=127.0.0.1:$WS_PORT web_pid ui_pid
+  export SKYRA_WS_ORIGIN=http://localhost:$UI_PORT
   cleanup() {
     trap - INT TERM EXIT
     say "stopping"
@@ -195,7 +199,7 @@ chat() {
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" &
   web_pid=$!
-  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -p "$UI_PORT") &
+  (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -H localhost -p "$UI_PORT") &
   ui_pid=$!
 
   local url=http://localhost:$UI_PORT i
@@ -205,8 +209,8 @@ chat() {
     curl -s -o /dev/null "$url" && break
     sleep 1
   done
-  say "codex: $mode   UI: $url   conversations: $convs   runtime trace below   Ctrl-C to stop"
-  [ -n "${SKYRA_NO_OPEN:-}" ] || open "$url" 2>/dev/null || true
+  say "codex: $mode   UI: $url/#skyra-token=$SKYRA_WS_TOKEN   conversations: $convs   runtime trace below   Ctrl-C to stop"
+  [ -n "${SKYRA_NO_OPEN:-}" ] || open "$url/#skyra-token=$SKYRA_WS_TOKEN" 2>/dev/null || true
   while kill -0 "$web_pid" 2>/dev/null && kill -0 "$ui_pid" 2>/dev/null; do sleep 1; done
 }
 
@@ -366,7 +370,7 @@ case ${1:-} in
   ask)           shift; ask "$@" ;;
   stop)          stop_host ;;
   demo)          exec "$ROOT/controller/run.sh" ;;
-  test)          cd "$ROOT" && exec go test -count=1 ./controller/... ./tui/... ;;
+  test)          exec "$ROOT/scripts/check.sh" ;;
   doctor)        doctor ;;
   build)         controller_build && say "built into $BUILD" ;;
   help|-h|--help) usage ;;

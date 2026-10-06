@@ -78,3 +78,33 @@ import Testing
     #expect(call.refused && call.to == "native.commandExecution" && call.ms == nil)
     #expect(convs.first?.entries.first?.call == nil)
 }
+
+@MainActor @Test func draftsWaitForMatchingAcknowledgement() {
+    let s = Session()
+    s.draft = "hello"
+    let id = s.beginSubmission("hello", conversation: "c")
+    #expect(s.draft == "hello")
+    s.acknowledge("other")
+    #expect(s.draft == "hello")
+    s.receive(Data("{\"type\":\"rejected\",\"requestId\":\"\(id)\",\"code\":\"busy\",\"message\":\"wait\"}".utf8))
+    #expect(s.draft == "hello")
+    #expect(s.beginSubmission("hello", conversation: "c") == id)
+    s.draft = "next draft"
+    s.acknowledge(id)
+    #expect(s.draft == "next draft")
+    let next = s.beginSubmission("hello", conversation: "c")
+    #expect(next != id)
+    s.draft = "hello"
+    s.acknowledge(next)
+    #expect(s.draft.isEmpty)
+}
+
+@MainActor @Test func unknownDeliveryKeepsDraftAndRetryIdentity() {
+    let s = Session()
+    s.draft = "hello"
+    let id = s.beginSubmission("hello", conversation: "c")
+    s.receive(Data("{\"type\":\"snapshot\",\"uiIncarnation\":\"i\",\"revision\":1,\"conversations\":[],\"requests\":[{\"requestId\":\"\(id)\",\"status\":\"failed\",\"code\":\"delivery-unknown\"}]}".utf8))
+    #expect(s.draft == "hello")
+    #expect(s.unacknowledged == nil)
+    #expect(s.notice.contains("unknown"))
+}

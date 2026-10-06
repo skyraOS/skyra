@@ -5,7 +5,6 @@
 package instance
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -45,9 +44,12 @@ func Run(root string) error {
 	if err != nil {
 		return fmt.Errorf("the Horizon this input was emitted under: %w", err)
 	}
-	in, err := io.ReadAll(os.Stdin)
+	in, err := io.ReadAll(io.LimitReader(os.Stdin, maxEmission+1))
 	if err != nil {
 		return err
+	}
+	if len(in) > maxEmission {
+		return errors.New("instance input too large")
 	}
 	_, err = Drive(root, up, nil, machine.Instance{Floor: root, Phase: machine.Intake}, machine.Received{Under: under, In: in})
 	return err
@@ -60,7 +62,7 @@ func Run(root string) error {
 // stack is the frame stack this instance holds: stack[0] is the frame its
 // reply discharges, stack[1] the frame of the continuation waiting on it, and
 // so on down to the operator's frame.
-func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, e machine.Event) (machine.Instance, error) {
+func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, e machine.Event) (result machine.Instance, failure error) {
 	var (
 		downs           []*net.UnixConn // handshakes with the successors, in instruction order
 		children        []*exec.Cmd
@@ -68,6 +70,11 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 		acceptingRecord record.Record
 	)
 	defer func() {
+		if failure != nil && len(stack) > 0 {
+			if err := tree.PublishFailure(root, stack[0], tree.Failure{Stamp: s.Stamp, Message: failure.Error()}); err != nil {
+				trace.Logf("recovery required: %v; recording failure: %v", failure, err)
+			}
+		}
 		for _, down := range downs {
 			down.Close()
 		}
@@ -201,6 +208,10 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				for _, child := range children {
 					child.Process.Kill()
 				}
+			case machine.PublishEmission:
+				if err := tree.PublishEmission(stack[0], x.Round, x.Hash); err != nil {
+					return s, err
+				}
 			case machine.OpenDep:
 				if err := tree.OpenDep(stack[0], x.Round, x.Child, x.Pos); err != nil {
 					return s, err
@@ -304,7 +315,11 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 		if err != nil {
 			return nil, err
 		}
-		r := machine.Round{Stamp: round}
+		emission, err := tree.Emission(root, waiter.Frame, round)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		r := machine.Round{Stamp: round, Emission: emission}
 		for _, c := range children {
 			inv, err := tree.Load(root, c)
 			if err != nil {
@@ -336,7 +351,7 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 }
 
 // run performs a Run effect: check the binary's content hash, run it under
-// the rendered profile, and read its one line of output.
+// the rendered profile, and read its one line of output; anything after it is discarded.
 func run(x machine.Run, connection *os.File) machine.Event {
 	bin, err := os.ReadFile(x.Surface.Path)
 	if err != nil {
@@ -353,18 +368,26 @@ func run(x machine.Run, connection *os.File) machine.Event {
 	if connection != nil {
 		cmd.ExtraFiles = []*os.File{connection}
 	}
-	var stderr bytes.Buffer
+	var stderr boundedBuffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return machine.Emitted{Err: err.Error()}
-	}
+	var line firstLine
+	cmd.Stdout = &line
+	// A descendant left holding stdout or stderr cannot hold the step open.
+	cmd.WaitDelay = time.Second
 	if err := cmd.Start(); err != nil {
 		return machine.Emitted{Err: err.Error()}
 	}
-	line, _ := bufio.NewReader(out).ReadBytes('\n')
-	_ = cmd.Wait()
-	emission := bytes.TrimSuffix(line, []byte("\n"))
+	waitErr := cmd.Wait()
+	if line.overflow {
+		return machine.Emitted{Err: "target output exceeded limit"}
+	}
+	if ctx.Err() != nil {
+		return machine.Emitted{Err: "target timed out"}
+	}
+	if waitErr != nil && len(line.b) == 0 && stderr.Len() == 0 {
+		return machine.Emitted{Err: waitErr.Error()}
+	}
+	emission := line.b
 	if len(emission) == 0 {
 		// What the target said on the way out is the observation.
 		if lines := bytes.Split(bytes.TrimSpace(stderr.Bytes()), []byte("\n")); len(lines[len(lines)-1]) > 0 {
@@ -473,4 +496,43 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 		return down, cmd, machine.Stamped{Stamp: st.Stamp, R: &r}, nil
 	}
 	return down, cmd, machine.Stamped{Stamp: st.Stamp}, nil
+}
+
+const maxEmission = 16 << 20
+
+// firstLine keeps a target's one line of output, without its newline, and
+// discards the rest so a target writing more is never blocked on a full pipe.
+// A line longer than maxEmission stops the copy: the target's next write fails.
+type firstLine struct {
+	b              []byte
+	done, overflow bool
+}
+
+func (l *firstLine) Write(p []byte) (int, error) {
+	if l.done {
+		return len(p), nil
+	}
+	n := len(p)
+	if i := bytes.IndexByte(p, '\n'); i >= 0 {
+		p, l.done = p[:i], true
+	}
+	if len(l.b)+len(p) > maxEmission {
+		l.overflow = true
+		return 0, errors.New("target output exceeded limit")
+	}
+	l.b = append(l.b, p...)
+	return n, nil
+}
+
+type boundedBuffer struct{ bytes.Buffer }
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if remaining := (64 << 10) - b.Len(); remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		b.Buffer.Write(p)
+	}
+	return n, nil
 }

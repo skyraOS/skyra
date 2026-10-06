@@ -56,13 +56,13 @@ func TestDeleteRejectsPendingAndInvalidPaths(t *testing.T) {
 }
 
 func TestDeleteRejectsStaleUI(t *testing.T) {
-	h := &webhost{dir: t.TempDir(), incarnation: "current", seen: map[string]bool{}, convos: map[string]*conversation{"chat": {id: "chat", phase: "closed"}}}
+	h := &webhost{dir: t.TempDir(), incarnation: "current", convos: map[string]*conversation{"chat": {id: "chat", phase: "closed"}}}
 	h.handle([]byte(`{"type":"delete-conversation","conversation":"chat","uiIncarnation":"old","requestId":"r"}`))
 	if h.convos["chat"] == nil {
 		t.Fatal("stale UI deleted chat")
 	}
 	h.handle([]byte(`{"type":"delete-conversation","conversation":"chat","uiIncarnation":"current","requestId":"r"}`))
-	if h.convos["chat"] != nil || !h.seen["r"] {
+	if h.convos["chat"] != nil || h.requests["r"] == nil {
 		t.Fatal("valid delete not accepted")
 	}
 	h.handle([]byte(`{"type":"delete-conversation","conversation":"chat","uiIncarnation":"current","requestId":"r"}`))

@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, selectActiveConversation } from "@/lib/store";
+import { deliveryState, type PendingSubmission } from "@/lib/delivery";
 import type { Call, ConversationEntry } from "@/lib/protocol/types";
 
 /** The header: no panel, its text directly on the sky. The sky draws the title. */
@@ -66,12 +67,26 @@ export function Conversation() {
   const dismissError = useAppStore((s) => s.dismissError);
 
   const [text, setText] = useState("");
+  const [sending, setSending] = useState<PendingSubmission | null>(null);
+  const requests = useAppStore((s) => s.requests);
+  const revision = useAppStore((s) => s.revision);
+  const retry = useRef<{ key: string; id: string } | null>(null);
+  useEffect(() => {
+    if (!sending) return;
+    const result = deliveryState(sending, requests[sending.requestId], revision, uiIncarnation);
+    if (result === "waiting") return;
+    if (result === "accepted") {
+      setText((draft) => draft.trim() === sending.text ? "" : draft);
+      retry.current = null;
+    }
+    setSending(null);
+  }, [requests, sending, revision, uiIncarnation]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const phase = convo?.phase ?? "ready";
   const connected = status === "open";
   const ready = connected && !!uiIncarnation && !!convo && phase === "ready";
-  const canSend = ready && text.trim().length > 0;
+  const canSend = ready && !sending && text.trim().length > 0;
 
   const entries = convo?.entries ?? [];
   const lastCall = entries.findLast((e) => e.call)?.call?.state;
@@ -80,25 +95,28 @@ export function Conversation() {
   }, [entries.length, phase, lastCall]);
 
   const composerHint = useMemo(() => {
-    if (!connected) return "Disconnected, reconnecting…";
+    if (!connected) return "Disconnected, reconnecting… Your draft is kept.";
+    if (sending) return "Waiting for acknowledgement; your draft is kept.";
     if (!uiIncarnation || !convo) return "Waiting for a conversation to open…";
     if (phase === "pending") return "The agent is working…";
     if (phase === "failed") return "This conversation faulted. You can read it and close it.";
     if (phase === "closed") return "This conversation is closed.";
     return "";
-  }, [connected, uiIncarnation, convo, phase]);
+  }, [connected, uiIncarnation, convo, phase, sending]);
 
   const send = () => {
     if (!canSend || !client || !convo || !uiIncarnation) return;
-    const requestId = globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}-${Math.random()}`;
-    client.send({
+    const key = JSON.stringify([uiIncarnation, convo.conversation, text.trim()]);
+    const requestId = retry.current?.key === key ? retry.current.id : (globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}-${Math.random()}`);
+    retry.current = { key, id: requestId };
+    setSending({ requestId, text: text.trim(), revision, incarnation: uiIncarnation });
+    if (!client.send({
       type: "submit",
       uiIncarnation,
       conversation: convo.conversation,
       requestId,
       text: text.trim(),
-    });
-    setText("");
+    })) setSending(null);
   };
 
   return (

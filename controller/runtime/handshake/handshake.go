@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"syscall"
+	"time"
 
 	"skyra/controller/runtime/custody"
 )
@@ -106,6 +107,7 @@ const (
 
 // Send writes one message, with any fds.
 func Send(c *net.UnixConn, v any, fds ...*os.File) error {
+	c.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -123,21 +125,22 @@ func Send(c *net.UnixConn, v any, fds ...*os.File) error {
 }
 
 // Recv reads one message, and the fds that came with it, in order.
-func Recv(c *net.UnixConn, v any) ([]*os.File, error) {
+func Recv(c *net.UnixConn, v any) (files []*os.File, failure error) {
+	c.SetReadDeadline(time.Now().Add(30 * time.Second))
 	buf := make([]byte, maxMessage)
 	oob := make([]byte, syscall.CmsgSpace(4*maxFDs))
-	n, oobn, _, _, err := c.ReadMsgUnix(buf, oob)
+	n, oobn, flags, _, err := c.ReadMsgUnix(buf, oob)
 	if err != nil {
 		return nil, err
 	}
 	if n == 0 {
 		return nil, errors.New("peer closed the handshake")
 	}
-	if err := json.Unmarshal(buf[:n], v); err != nil {
-		return nil, err
-	}
 	if oobn == 0 {
-		return nil, nil
+		if flags&(syscall.MSG_TRUNC|syscall.MSG_CTRUNC) != 0 {
+			return nil, errors.New("truncated handshake")
+		}
+		return nil, json.Unmarshal(buf[:n], v)
 	}
 	msgs, err := syscall.ParseSocketControlMessage(oob[:oobn])
 	if err != nil || len(msgs) != 1 {
@@ -147,10 +150,21 @@ func Recv(c *net.UnixConn, v any) ([]*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	files := make([]*os.File, len(raw))
+	files = make([]*os.File, len(raw))
 	for i, fd := range raw {
 		syscall.CloseOnExec(fd)
 		files[i] = os.NewFile(uintptr(fd), "frame")
+	}
+	if flags&(syscall.MSG_TRUNC|syscall.MSG_CTRUNC) != 0 {
+		failure = errors.New("truncated handshake")
+	} else {
+		failure = json.Unmarshal(buf[:n], v)
+	}
+	if failure != nil {
+		for _, f := range files {
+			f.Close()
+		}
+		return nil, failure
 	}
 	return files, nil
 }
