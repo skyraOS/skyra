@@ -1,6 +1,6 @@
 # Skyra: where we are
 
-Date: 2026-10-03
+Date: 2026-10-06
 Status: current summary of the whole project: the properties it is after, the
 patterns that produce them, what runs today, and what does not yet. The
 [README](../README.md) is the front door and [`startup-doc.md`](startup-doc.md)
@@ -71,7 +71,7 @@ claim is never made unless a mechanism enforces it, or it is listed as a gap.
 | **P2** | **Authority is derived, only narrows, and the OS enforces it** | every step runs under a Horizon derived from the tree and the proposal; a call shares its caller's Horizon unless it asks the room to narrow; nothing widens one | `machine.Narrow`, `machine.accept`, the room's `system.narrow`, `horizon.Render` | built |
 | **P3** | **Truth is derived, not stored** | only observations are stored; everything else is re-derived by one pure function | `machine.Step` is pure; `replay` re-derives every record | built, with known gaps |
 | **P4** | **Custody** | each piece of work is held by exactly one live process or one durable commit | stamp, release, exit; a parent exits only after its successor stamps | built |
-| **P5** | **Live state is durable state** | a crash loses nothing that cannot be read back; a Horizon, the parked work, its authority are all on disk | one atomic commit per handoff; Horizons committed; resume derived from the tree | built (restore after a host dies is not) |
+| **P5** | **Live state is durable state** | a crash loses nothing that cannot be read back; a Horizon, the parked work, its authority are all on disk | one atomic commit per handoff; Horizons committed; resume derived from the tree; runtime I/O interruptions recorded as failures, never as discharges | built (restore after a host dies is not; an interrupted request is reported `delivery-unknown`, never repeated) |
 | **P6** | **The runtime knows no actor** | Codex, the browser and the human live in adapters, never in the trusted core | package boundaries; the audit in [next/20](next/20-boundry-crossing.md) | built |
 | **P7** | **No program starts another unrecorded** | exec is allowed only for the program being run; every other program starts through an emission the runtime recorded | the exec exclusion in every rendered profile, with an OS test | built |
 | **P8** | **Frame ⊆ authority** | everything a model is shown is invokable; visibility grants nothing | `tools` is derived from reach and references | built |
@@ -140,6 +140,9 @@ does not fit the contract of what it addresses                                  
 no output                                                                         → fault (custody)
 ```
 
+The emission is the target's first line of stdout, at most 16 MiB; anything
+after it is discarded.
+
 - **No name is reserved.** The slot is the frame's id, a stamp no capability
   can be named. The old `"reply"` word, which let an emitter state its own
   operator, is gone.
@@ -201,6 +204,8 @@ type Horizon struct {
   frames/<F>/result                 write-once: what discharged F's slot
   frames/<F>/deps/<round>/<child>   a slot F opened, written before the child runs
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
+  frames/<F>/emitted-<round>        write-once: the hash of the complete emission that opened the round
+  frames/<F>/failure                write-once: a runtime I/O interruption, not a discharge
   interpreter/procedures/<key>      procedure bodies owned by the interpreter actor
   interpreter/frames/<frame>        durable procedure positions
 ```
@@ -210,13 +215,23 @@ Each record names its predecessor and the hash of its input bytes (top-down
 provenance); a resolve names every discharge it waited on (bottom-up). Only
 intake, a supervisor fault and a resolve write records. **Replay** walks a
 lineage from genesis and re-derives every record and every Horizon
-(`replay.HorizonAt`) with the pure machine.
+(`replay.HorizonAt`) with the pure machine. A resolve must name distinct,
+finished discharges, each settling a distinct slot of its round. A genesis of
+version 2 also commits each round's complete emission, so replay re-derives
+every slot it opened and checks that none is missing or out of order. Older
+histories get the other checks but cannot prove round coverage.
+
+Every object is published by an exclusive link of a fully written, synced
+temporary file, and an existing object is re-verified against its hash. New
+trees are readable only by their owner.
 
 ### 6. Custody travels as file descriptors
 
 The release carries the Horizon's hash **plus the frame stack as open directory
 fds** over `SCM_RIGHTS`. Every write in a frame goes through its fd, so a step
-can only settle the frames it was handed. Descriptors are close-on-exec
+can only settle the frames it was handed. Writes are resolved relative to that
+descriptor, never through the process's working directory, so concurrent
+claims in one process are safe. Descriptors are close-on-exec
 everywhere, because a sandboxed program that inherited a frame fd could list a
 directory its profile denies. A parent exits only after the successor accepts
 custody (P4).
@@ -229,8 +244,8 @@ its round is discharged (wait for all; there is no cancellation), and the
 resolve record must name every discharge, so it cannot be written early. When
 siblings race, a write-once claim lets exactly one resume the continuation.
 Faults are discharges too: the continuation decides what to do with one.
-An emission may fan out to several children; every slot is opened before any
-child is released, and the continuation resumes once all of them discharge.
+An emission may fan out to several children; the complete emission is
+committed, then every slot is opened, before any child is released, and the continuation resumes once all of them discharge.
 The interpreter uses this to run independent ready procedure nodes together.
 
 ### 8. Continuations are stateless
@@ -289,6 +304,21 @@ parent: Codex can only return to it, and only the user side ends the
 conversation. Each conversation is its lineage: saved, listed, rebuilt from
 records, replayable. The browser UI, the TUI and the desktop app speak the same
 protocol to the same webhost.
+
+**Ingress is authenticated.** Every launcher generates a session token unless
+one is supplied, and the webhost refuses to start without one. Native clients
+send it as a Bearer header; the browser carries it in a WebSocket subprotocol,
+accepted only from the launcher's exact UI origin. Host headers must be
+loopback, and frames are bounded and validated before allocation.
+
+**Requests are admitted durably before work starts.** The webhost's request
+ledger records an identity hash of each request, so reusing an ID for
+different work is a `conflict`. A client keeps its draft until admission is
+established. If the host restarts or the runtime is interrupted, the request is
+reported `delivery-unknown`: external effects may already have happened, so
+nothing is retried automatically. The ledger keeps every request in flight and
+the newest 256 finished outcomes. Snapshots are kept within 16 MiB by leaving
+older history out of the view; the history itself stays on disk.
 
 ### 11. Faults
 
@@ -438,7 +468,11 @@ back to the user side as an observation.
 | Codex native attempts: interrupted and returned as an observation; the conversation continues on the same thread | **built** (2026-09-30) |
 | `echo` and `read` as model-facing tools; a tool's result or fault back to Codex in the same turn | **built** |
 | Conversations as lineages in the browser, the TUI and the desktop app | **built** |
-| `run.sh`: scenarios for authority, fan-out, procedures and Codex behavior, each ending in a byte-identical replay | **built** |
+| `run.sh`: scenarios for authority, fan-out, procedures and Codex behavior, each ending in a byte-identical replay and checked against its expected outcome | **built** |
+| Replay rejects unfinished, repeated, unrelated, omitted or reordered discharges; version 2 histories commit each round's complete emission | **built** (2026-10-06) |
+| Authenticated ingress in every launch mode; bounded, validated WebSocket framing | **built** (2026-10-06) |
+| Durable request admission, conflict detection, `delivery-unknown` after a restart or runtime interruption; client drafts kept until admission | **built** (2026-10-06) |
+| `skyra test`: every module, frontend, Swift, website replay and demos in one command; the same script in macOS CI | **built** (2026-10-06) |
 
 ## What does not run yet
 
@@ -455,7 +489,7 @@ back to the user side as an observation.
 | **Identity**: canonical encoding, content ids and path ids | designed ([improvements item 9](improvements.md)) |
 | **Real Codex authoring refinements** | not built; real Codex is offered procedures and `remember`, but H8 was exercised with fake Codex |
 | **Observation passing** by id with enforced provenance | proposed ([next/21](next/21-observation-passing.md)) |
-| **Restore** after a webhost dies; tail calls; a write tool | not built; fan-out is built |
+| **Restore** after a webhost dies; tail calls; a write tool | not built; fan-out is built. A restart reports unfinished requests as `delivery-unknown` instead of reviving them |
 
 The complete list of changes, with what each became, is in
 [`next/proposal/`](next/proposal/README.md).
@@ -492,6 +526,13 @@ The complete list of changes, with what each became, is in
   recovery is not yet reduced to lineage endpoints.** Proposal 33 must define
   who advances an accepted checkpoint, how stale writers are refused and how a
   crash after acceptance but before publication is reconciled.
+- **Round coverage is unprovable for version 1 histories.** Replay of a
+  history someone else supplies is checked only against the genesis it
+  declares, so a supplied history can declare the older version.
+- **Large conversation views are truncated.** A snapshot over 16 MiB leaves
+  out the oldest history, and the clients do not yet say so; the host logs it.
+- **Durability is ordered, not certified.** Tree and interpreter publications
+  are synced before they are relied on, but no power-loss test has been run.
 - **A Horizon bounds the blast radius; it does not judge intent.** A prompt
   injection that misuses a granted tool is not stopped; the evaluation must
   separate the two cases.
