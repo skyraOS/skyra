@@ -47,7 +47,29 @@ func (h *webhost) finishRequest(id, status, code, message string) {
 	}
 }
 
+// maxFinishedRequests bounds the ledger every snapshot carries. In-flight
+// admissions are always kept; only the newest finished outcomes are. An ID
+// pruned from the ledger is no longer recognised as a duplicate.
+const maxFinishedRequests = 256
+
+func (h *webhost) pruneRequests() {
+	var finished []*requestRecord
+	for _, r := range h.requests {
+		if r.Status != "accepted" {
+			finished = append(finished, r)
+		}
+	}
+	if len(finished) <= maxFinishedRequests {
+		return
+	}
+	sort.Slice(finished, func(i, j int) bool { return finished[i].TS > finished[j].TS })
+	for _, r := range finished[maxFinishedRequests:] {
+		delete(h.requests, r.RequestID)
+	}
+}
+
 func (h *webhost) persistRequests() error {
+	h.pruneRequests()
 	if h.dir == "" {
 		return nil
 	} // in-memory protocol unit tests

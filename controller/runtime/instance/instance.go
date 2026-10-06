@@ -351,7 +351,7 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 }
 
 // run performs a Run effect: check the binary's content hash, run it under
-// the rendered profile, and read its one line of output.
+// the rendered profile, and read its one line of output; anything after it is discarded.
 func run(x machine.Run, connection *os.File) machine.Event {
 	bin, err := os.ReadFile(x.Surface.Path)
 	if err != nil {
@@ -370,27 +370,24 @@ func run(x machine.Run, connection *os.File) machine.Event {
 	}
 	var stderr boundedBuffer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return machine.Emitted{Err: err.Error()}
-	}
+	var line firstLine
+	cmd.Stdout = &line
+	// A descendant left holding stdout or stderr cannot hold the step open.
+	cmd.WaitDelay = time.Second
 	if err := cmd.Start(); err != nil {
 		return machine.Emitted{Err: err.Error()}
 	}
-	line, readErr := io.ReadAll(io.LimitReader(out, maxEmission+1))
-	if len(line) > maxEmission || readErr != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
-		return machine.Emitted{Err: "target output exceeded limit or could not be read"}
-	}
 	waitErr := cmd.Wait()
+	if line.overflow {
+		return machine.Emitted{Err: "target output exceeded limit"}
+	}
 	if ctx.Err() != nil {
 		return machine.Emitted{Err: "target timed out"}
 	}
-	if waitErr != nil && len(line) == 0 && stderr.Len() == 0 {
+	if waitErr != nil && len(line.b) == 0 && stderr.Len() == 0 {
 		return machine.Emitted{Err: waitErr.Error()}
 	}
-	emission := bytes.TrimSuffix(line, []byte("\n"))
+	emission := line.b
 	if len(emission) == 0 {
 		// What the target said on the way out is the observation.
 		if lines := bytes.Split(bytes.TrimSpace(stderr.Bytes()), []byte("\n")); len(lines[len(lines)-1]) > 0 {
@@ -502,6 +499,30 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 }
 
 const maxEmission = 16 << 20
+
+// firstLine keeps a target's one line of output, without its newline, and
+// discards the rest so a target writing more is never blocked on a full pipe.
+// A line longer than maxEmission stops the copy: the target's next write fails.
+type firstLine struct {
+	b              []byte
+	done, overflow bool
+}
+
+func (l *firstLine) Write(p []byte) (int, error) {
+	if l.done {
+		return len(p), nil
+	}
+	n := len(p)
+	if i := bytes.IndexByte(p, '\n'); i >= 0 {
+		p, l.done = p[:i], true
+	}
+	if len(l.b)+len(p) > maxEmission {
+		l.overflow = true
+		return 0, errors.New("target output exceeded limit")
+	}
+	l.b = append(l.b, p...)
+	return n, nil
+}
 
 type boundedBuffer struct{ bytes.Buffer }
 

@@ -42,3 +42,19 @@ func TestTargetDiagnosticBufferIsBounded(t *testing.T) {
 		t.Fatal("diagnostics are unbounded or writer short-wrote")
 	}
 }
+
+func TestTargetEmitsItsFirstLineOnly(t *testing.T) {
+	var l firstLine
+	for _, chunk := range []string{`{"to":"echo",`, `"payload":{}}`, "\nlog line\n", "more output"} {
+		if n, err := l.Write([]byte(chunk)); err != nil || n != len(chunk) {
+			t.Fatalf("write %q: %d, %v", chunk, n, err)
+		}
+	}
+	if string(l.b) != `{"to":"echo","payload":{}}` {
+		t.Fatalf("emission %q", l.b)
+	}
+	var long firstLine
+	if _, err := long.Write(make([]byte, maxEmission+1)); err == nil || !long.overflow {
+		t.Fatal("an unbounded line was accepted")
+	}
+}

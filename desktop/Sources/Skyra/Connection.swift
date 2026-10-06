@@ -51,6 +51,8 @@ final class Session {
         var req = URLRequest(url: target.url)
         req.setValue("Bearer \(target.token)", forHTTPHeaderField: "Authorization")
         let t = URLSession.shared.webSocketTask(with: req)
+        // The host keeps every snapshot within 16 MiB; the default limit is 1 MiB.
+        t.maximumMessageSize = 16 << 20
         task = t
         t.resume()
         Task { await receive(t, gen) }

@@ -484,11 +484,54 @@ func (h *webhost) broadcast() {
 	}
 	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot()}
 	h.mu.Unlock()
-	h.send(snap)
+	b, omitted := fitSnapshot(snap, views, maxFrame)
+	if omitted > 0 {
+		fmt.Fprintf(h.log, "webhost: snapshot over %d bytes; omitted older history from %d views (it remains on disk)\n", maxFrame, omitted)
+	}
+	h.sendRaw(b)
+}
+
+// fitSnapshot keeps a snapshot within one frame, so a large history cannot
+// put every client into a reconnect loop. It first lists the oldest finished
+// conversations without entries, then drops the oldest half of the longest
+// remaining history, until it fits. Views run newest first.
+func fitSnapshot(snap map[string]any, views []map[string]any, limit int) ([]byte, int) {
+	b, _ := json.Marshal(snap)
+	omitted := 0
+	for i := len(views) - 1; i >= 0 && len(b) > limit; i-- {
+		if p := views[i]["phase"]; p == "ready" || p == "pending" {
+			continue
+		}
+		if es := views[i]["entries"].([]entry); len(es) > 0 {
+			views[i]["entries"] = []entry{}
+			omitted++
+			b, _ = json.Marshal(snap)
+		}
+	}
+	for len(b) > limit {
+		longest := -1
+		for i, v := range views {
+			if n := len(v["entries"].([]entry)); n > 1 && (longest < 0 || n > len(views[longest]["entries"].([]entry))) {
+				longest = i
+			}
+		}
+		if longest < 0 {
+			break // nothing left to omit; send reports the oversized frame
+		}
+		es := views[longest]["entries"].([]entry)
+		views[longest]["entries"] = es[len(es)/2:]
+		omitted++
+		b, _ = json.Marshal(snap)
+	}
+	return b, omitted
 }
 
 func (h *webhost) send(v any) {
 	b, _ := json.Marshal(v)
+	h.sendRaw(b)
+}
+
+func (h *webhost) sendRaw(b []byte) {
 	h.wmu.Lock()
 	defer h.wmu.Unlock()
 	if h.conn != nil {

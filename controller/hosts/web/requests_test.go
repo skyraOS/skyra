@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"skyra/controller/runtime/tree"
@@ -78,5 +79,45 @@ func TestRuntimeInterruptionEndsPendingRequestWithoutRetry(t *testing.T) {
 	}
 	if h.reconcileRequests() {
 		t.Fatal("interruption applied twice")
+	}
+}
+
+func TestLedgerKeepsInFlightAndNewestFinished(t *testing.T) {
+	h := &webhost{requests: map[string]*requestRecord{}}
+	for i := 0; i < maxFinishedRequests+50; i++ {
+		id := fmt.Sprintf("done-%d", i)
+		h.requests[id] = &requestRecord{RequestID: id, Status: "returned", TS: int64(i)}
+	}
+	h.requests["live"] = &requestRecord{RequestID: "live", Status: "accepted", TS: 0}
+	h.pruneRequests()
+	if len(h.requests) != maxFinishedRequests+1 || h.requests["live"] == nil || h.requests["done-0"] != nil || h.requests[fmt.Sprintf("done-%d", maxFinishedRequests+49)] == nil {
+		t.Fatalf("ledger kept %d records", len(h.requests))
+	}
+}
+
+func TestSnapshotFitsOneFrame(t *testing.T) {
+	big := strings.Repeat("x", 1000)
+	many := func(n int) []entry {
+		es := make([]entry, n)
+		for i := range es {
+			es[i] = entry{Role: "agent", Text: big}
+		}
+		return es
+	}
+	views := []map[string]any{
+		{"conversation": "new", "phase": "ready", "entries": many(40)},
+		{"conversation": "old", "phase": "closed", "entries": many(40)},
+	}
+	snap := map[string]any{"type": "snapshot", "conversations": views}
+	b, omitted := fitSnapshot(snap, views, 60_000)
+	if len(b) > 60_000 || omitted == 0 {
+		t.Fatalf("snapshot %d bytes, %d omitted", len(b), omitted)
+	}
+	if len(views[1]["entries"].([]entry)) != 0 || len(views[0]["entries"].([]entry)) == 0 {
+		t.Fatal("finished history should be omitted before the live conversation's")
+	}
+	b, omitted = fitSnapshot(snap, views, 1<<20)
+	if omitted != 0 || len(b) > 1<<20 {
+		t.Fatal("a snapshot that fits was changed")
 	}
 }
