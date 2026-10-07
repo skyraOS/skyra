@@ -1,0 +1,7 @@
+{
+  "action": "go.test",
+  "exit_code": 0,
+  "output": "ok  \tskyra/controller/claude/bridge\t0.332s\nok  \tskyra/controller/claude/provider\t0.173s\n",
+  "report_path": "ideas/checks/skyra-check-2753121669.json",
+  "duration_ms": 5687
+}
