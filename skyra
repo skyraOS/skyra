@@ -12,6 +12,9 @@ ROOT=$(cd "$(dirname "$self")" && pwd)
 BUILD=$ROOT/build
 PACKAGED=0
 [ ! -f "$ROOT/skyra-release.json" ] || PACKAGED=1
+if [ "$PACKAGED" = 1 ]; then
+  export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:/usr/local/opt/python@3.13/libexec/bin:$PATH"
+fi
 # The workspace the read tool is granted: where skyra was started, unless set.
 # Captured before anything below changes directory.
 WORKSPACE=${SKYRA_WORKSPACE:-$PWD}
@@ -189,7 +192,7 @@ if desktop_config:
 # In this workspace, write is an authored procedure: raw write, then commit.
 # The Git host receives only an observation; no actor gains Git authority.
 ideas_socket=os.environ.get('SKYRA_IDEAS_SOCKET','')
-if workspace==root.resolve(strict=True):
+if workspace==root.resolve(strict=True) and not (root/"skyra-release.json").exists():
     if not ideas_socket: sys.exit('skyra: ideas commit host is not running')
     registry['write.file']=registry['write']
     registry['write']={'path':str(build/'interp'),'contract':str(root/'controller/interp/workflows/write/contract.json'),
@@ -202,7 +205,7 @@ if workspace==root.resolve(strict=True):
     registry['interpreter']['bundle']=str(think_file)
 # Repository edits and Git run through recorded host actors. The execve
 # contract is just target + argv; its host binds git to this repository.
-if workspace==root.resolve(strict=True):
+if workspace==root.resolve(strict=True) and not (root/"skyra-release.json").exists():
     repo_socket=os.environ.get('SKYRA_REPO_SOCKET','')
     if not repo_socket: sys.exit('skyra: repository host is not running')
     registry['find']={'host':repo_socket,'contract':str(root/'controller/targets/find/contract.json')}
