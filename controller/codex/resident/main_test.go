@@ -436,3 +436,14 @@ func TestBlenderToolsOnlyOfferedInsideBlenderProcedure(t *testing.T) {
 		t.Fatalf("blender tools: %v", ts)
 	}
 }
+
+func TestReadResultHasPlainSource(t *testing.T) {
+	source := "\tfunc X() { println(\"&\") }\n"
+	value, _ := json.Marshal(map[string]any{"path": "a.go", "text": source})
+	reply := toolResult(json.RawMessage(`1`), step{To: "read", State: "return", Value: value})
+	result := reply["result"].(map[string]any)
+	items := result["contentItems"].([]any)
+	if len(items) != 2 || items[1].(map[string]string)["text"] != source {
+		t.Fatal(reply)
+	}
+}

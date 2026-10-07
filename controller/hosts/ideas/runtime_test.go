@@ -78,10 +78,10 @@ func TestWriteProcedureThroughSandboxAndGitHost(t *testing.T) {
 	if !strings.Contains(string(out), "byte-identical") || !strings.Contains(string(out), `"commit"`) {
 		t.Fatalf("missing commit/replay: %s", out)
 	}
-	if paths := git(t, g, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"); paths != "ideas/note.md" {
+	if paths := git(t, g, "diff-tree", "--no-commit-id", "--name-only", "-r", "skyra/ideas"); paths != "ideas/note.md" {
 		t.Fatalf("commit paths: %s", paths)
 	}
-	if data := git(t, g, "show", "HEAD:ideas/note.md"); data != "from procedure" {
+	if data := git(t, g, "show", "skyra/ideas:ideas/note.md"); data != "from procedure" {
 		t.Fatalf("committed content: %s", data)
 	}
 }

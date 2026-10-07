@@ -1,12 +1,62 @@
 {
   "input": {
-    "title": "Repository file write",
+    "title": "Repository file write or guarded exact-text edit",
     "type": "object",
-    "required": ["path", "text"],
     "fields": {
-      "path": {"type": "string"},
-      "text": {"type": "string"},
-      "append": {"type": "bool"}
+      "path": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      },
+      "append": {
+        "type": "bool"
+      },
+      "old": {
+        "type": "string"
+      },
+      "new": {
+        "type": "string"
+      },
+      "count": {
+        "type": "number"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "create_only": {
+        "type": "bool"
+      },
+      "dry_run": {
+        "type": "bool"
+      },
+      "worktree": {
+        "type": "string"
+      },
+      "revert": {
+        "type": "string"
+      },
+      "edits": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "old",
+            "new"
+          ],
+          "fields": {
+            "old": {
+              "type": "string"
+            },
+            "new": {
+              "type": "string"
+            },
+            "count": {
+              "type": "number"
+            }
+          }
+        }
+      }
     }
   }
 }

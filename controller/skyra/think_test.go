@@ -107,8 +107,8 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	}
 
 	t.Run("the prompt is the header line", func(t *testing.T) {
-		answer, _, _ := think(t, "prompt")
-		if !strings.Contains(answer, prompt.Base("think")) {
+		answer, _, scratch := think(t, "prompt")
+		if !strings.Contains(answer, prompt.Base("think")) || !strings.Contains(answer, workspace) || !strings.Contains(answer, scratch) {
 			t.Fatalf("Codex's prompt: %s", answer)
 		}
 	})

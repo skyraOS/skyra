@@ -1,6 +1,4 @@
-// repohost owns the operator's repository edit and Git capability. Calls park
-// and resume through ordinary custody; no sandboxed actor gains shell exec,
-// Git metadata write access, credentials, or a file deletion operation.
+// repohost owns the operator-selected repository capability.
 package main
 
 import (
@@ -18,9 +16,13 @@ import (
 
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/park"
+	"skyra/controller/runtime/tree"
 )
 
-type repository struct{ path, git, goRoot, moduleCache, python string }
+type repository struct {
+	path, git, goRoot, moduleCache, python, session, workspace string
+	denyPush                                                   bool
+}
 
 func main() {
 	custody.SealInherited()
@@ -30,6 +32,7 @@ func main() {
 	goRoot := flag.String("go-root", "", "operator-selected Go toolchain root")
 	moduleCache := flag.String("module-cache", "", "read-only dependency cache")
 	python := flag.String("python", "", "operator-selected Python binary")
+	denyPush := flag.Bool("deny-push", false, "disable publishing through Git push")
 	flag.Parse()
 	if *repo == "" || *sock == "" || *skyra == "" {
 		fmt.Fprintln(os.Stderr, "usage: repohost -repo DIR -sock PATH -skyra BIN")
@@ -43,7 +46,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "repohost:", err)
 		os.Exit(1)
 	}
-	g := repository{path: root, git: "/usr/bin/git", goRoot: *goRoot, moduleCache: *moduleCache, python: *python}
+	g := repository{denyPush: *denyPush, path: root, git: "/usr/bin/git", goRoot: *goRoot, moduleCache: *moduleCache, python: *python}
 	if g.python != "" {
 		g.python, err = filepath.EvalSymlinks(g.python)
 		if err != nil {
@@ -72,6 +75,10 @@ func serve(g repository, socket, skyra string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	return serveRepository(ctx, g, l, skyra)
+}
+
+func serveRepository(ctx context.Context, g repository, l net.Listener, skyra string) error {
 	go func() { <-ctx.Done(); l.Close() }()
 	for {
 		conn, err := l.Accept()
@@ -81,23 +88,35 @@ func serve(g repository, socket, skyra string) error {
 			}
 			return err
 		}
-		f, err := park.Receive(conn.(*net.UnixConn))
-		if err != nil {
-			park.Answer(conn.(*net.UnixConn), err.Error())
-			conn.Close()
-			continue
-		}
-		err = park.Answer(conn.(*net.UnixConn), "")
-		conn.Close()
-		if err != nil {
-			f.Close()
-			continue
-		}
-		out := g.handle(f.Payload)
-		event, _ := json.Marshal(map[string]any{"to": f.Stamp, "payload": out})
-		if err := park.Resume(skyra, f, event, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "repohost: recovery required:", err)
-		}
+		// Taking custody must not wait on another call's Git/build operation
+		// or runtime continuation. Senders have only 30 seconds for the ack.
+		go g.serveConnection(conn.(*net.UnixConn), skyra)
+	}
+}
+
+func (g repository) serveConnection(conn *net.UnixConn, skyra string) {
+	defer conn.Close()
+	f, err := park.Receive(conn)
+	if err != nil {
+		park.Answer(conn, err.Error())
+		return
+	}
+	err = park.Answer(conn, "")
+	conn.Close()
+	if err != nil {
+		f.Close()
+		return
+	}
+	g.session = f.Root
+	var out any
+	if record, e := tree.Load(f.Root, f.Stamp); e == nil && record.To == "find" {
+		out = g.find(f.Payload)
+	} else {
+		out = g.handle(f.Payload)
+	}
+	event, _ := json.Marshal(map[string]any{"to": f.Stamp, "payload": out})
+	if err := park.Resume(skyra, f, event, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, "repohost: recovery required:", err)
 	}
 }
 
@@ -118,41 +137,72 @@ func (g repository) handle(b json.RawMessage) any {
 	if json.Unmarshal(b, &keys) != nil {
 		return map[string]string{"error": "invalid_request"}
 	}
-	// One host serializes Git and writes across conversations. Other launcher
-	// instances share the same advisory lock, outside Git's own index lock.
-	dir, err := g.query("rev-parse", "--absolute-git-dir")
+	// Validate before acquiring custody resources: malformed requests must
+	// return the same typed refusal even when Git or its lock is unavailable.
+	var operation func() any
+	var failure func(string) any
+	if len(keys) == 0 || keys["changes"] != nil {
+		var in struct {
+			Changes bool `json:"changes"`
+		}
+		if e := decode(b, &in); e != nil {
+			return map[string]string{"error": "invalid_request: " + e.Error()}
+		}
+		lock, e := g.lock()
+		if e != nil {
+			return map[string]string{"error": e.Error()}
+		}
+		defer lock.Close()
+		defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		return g.roots(in.Changes)
+	}
+	if _, ok := keys["action"]; ok {
+		var in checkInput
+		failure = func(s string) any { return checkResult{ExitCode: -1, Error: s} }
+		if err := decode(b, &in); err != nil {
+			return failure("invalid_request: " + err.Error())
+		}
+		// Checks lock only while copying source, not while building or testing.
+		return g.check(in)
+	} else if _, ok := keys["target"]; ok {
+		var in execInput
+		failure = func(s string) any { return execResult{ExitCode: -1, Error: s} }
+		if err := decode(b, &in); err != nil {
+			return failure("invalid_request: " + err.Error())
+		}
+		operation = func() any { return g.execute(in) }
+	} else {
+		var in writeInput
+		failure = func(s string) any { return writeResult{Error: s} }
+		if keys["path"] == nil && keys["revert"] == nil || (keys["text"] == nil && keys["old"] == nil && keys["edits"] == nil && keys["revert"] == nil) {
+			return failure("invalid_request: path and text or old are required")
+		}
+		if err := decode(b, &in); err != nil {
+			return failure("invalid_request: " + err.Error())
+		}
+		operation = func() any { return g.write(in) }
+	}
+	lock, err := g.lock()
 	if err != nil {
-		return map[string]string{"error": err.Error()}
+		return failure(err.Error())
+	}
+	defer lock.Close()
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	return operation()
+}
+
+func (g repository) lock() (*os.File, error) {
+	dir, err := g.commonDir()
+	if err != nil {
+		return nil, err
 	}
 	lock, err := os.OpenFile(filepath.Join(dir, "skyra-repo.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return map[string]string{"error": err.Error()}
+		return nil, err
 	}
-	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return map[string]string{"error": err.Error()}
+		lock.Close()
+		return nil, err
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	if _, ok := keys["action"]; ok {
-		var in checkInput
-		if err := decode(b, &in); err != nil {
-			return checkResult{ExitCode: -1, Error: "invalid_request: " + err.Error()}
-		}
-		return g.check(in)
-	}
-	if _, ok := keys["target"]; ok {
-		var in execInput
-		if err := decode(b, &in); err != nil {
-			return execResult{Error: "invalid_request: " + err.Error()}
-		}
-		return g.execute(in)
-	}
-	var in writeInput
-	if keys["path"] == nil || keys["text"] == nil {
-		return writeResult{Error: "invalid_request: path and text are required"}
-	}
-	if err := decode(b, &in); err != nil {
-		return writeResult{Error: "invalid_request: " + err.Error()}
-	}
-	return g.write(in)
+	return lock, nil
 }

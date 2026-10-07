@@ -339,3 +339,36 @@ approval for push (§5) is the one *reduction* proposed here.
 3. §3, §5, §14 permission summary and hints: prompt and description changes only.
 4. §10, §11, §13: smaller parameter additions.
 5. §4, §6, §7 as convenient.
+
+
+---
+
+## Implementation status (2026-10-07)
+
+Implemented both parts in the shared tool contracts, host actors and Codex/Claude
+presentation. The [repository host reference](../controller/hosts/repo/README.md)
+is the current operational documentation.
+
+| Sections | Delivered |
+| --- | --- |
+| 1, 10 | Content search in `find`, RE2/case/identifier matching, context/hit limits, skipped counts, line cutting, modified sort, and repository changed/since filtering. |
+| 2, 11 | Exact guarded edits and multi-pair validation, count/line errors, SHA guards, preview including creation, returned bounded diffs, create-only and conversation-scoped revert. |
+| 3, 4, 9 | Workspace/scratch prompt, plain source plus metadata in both providers, batch/range/around/outline/numbered reads with budgets. |
+| 5, 7, 14 | Updated grants docs, conditional desktop explanation, echo fixture description, shared permission/tool wording, truncation hints and roots change journal. |
+| 6, 13 | Git directory/worktree queries, bounded new worktrees, registered-worktree Git/write/check selectors, history/ref/merge-base/triple-dot queries. |
+| 8 | Only the observed note file is committed to `skyra/ideas` using a private index; agent author, configured user committer, commit/branch returned, feature HEAD/index preserved. |
+| 12 | Go/Swift test filters, uncached Go count, changed Go packages, go.vet, guarded format fixes, structured Go and Swift XCTest/compiler failures. |
+
+Decisions: content search stays in `find`; optional worktree authority is enabled
+as the user requested. Push is disabled by the launcher unless the operator sets
+`SKYRA_ALLOW_PUSH=1`; this uses a default-off capability rather than per-push UI
+approval. Desktop observation requires an operator-connected bridge and was not
+missing from an unconfigured conversation.
+
+Boundaries: no shell/delete/rename or new network-fetch tool. Existing bounded
+Git fetch remains. Reverting creation refuses because deletion is unavailable.
+Go outlines use a parser; Swift/Markdown outlines are lightweight scans. Swift
+Testing failures without XCTest report entries retain raw logs. Nested sandbox
+and outer-host integration tests skip only within repo.check and are exercised by
+the external suite. Checks and Git stdout diagnostics no longer block/corrupt
+other conversations' custody handoffs. See the host reference for all limits.

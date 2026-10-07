@@ -192,6 +192,8 @@ if workspace==root.resolve(strict=True):
 if workspace==root.resolve(strict=True):
     repo_socket=os.environ.get('SKYRA_REPO_SOCKET','')
     if not repo_socket: sys.exit('skyra: repository host is not running')
+    registry['find']={'host':repo_socket,'contract':str(root/'controller/targets/find/contract.json')}
+    registry['roots']={'host':repo_socket,'contract':str(root/'controller/targets/roots/contract.json')}
     registry['repo.write']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/write-contract.json')}
     registry['execve']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/contract.json')}
     registry['repo.check']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/check-contract.json')}
@@ -284,7 +286,9 @@ start_ideas_host() {
   "$BUILD/controller/ideas-host" -repo "$ROOT" -sock "$IDEAS_SOCKET" -skyra "$BUILD/controller/skyra" >"$STATE/ideas-$$.log" 2>&1 &
   IDEAS_HOST_PID=$!
   REPO_SOCKET="$STATE/repo-$$.sock"
-  "$BUILD/controller/repo-host" -repo "$ROOT" -sock "$REPO_SOCKET" -skyra "$BUILD/controller/skyra" \
+  local publishing=()
+  [ "${SKYRA_ALLOW_PUSH:-0}" = 1 ] || publishing=(-deny-push)
+  "$BUILD/controller/repo-host" "${publishing[@]}" -repo "$ROOT" -sock "$REPO_SOCKET" -skyra "$BUILD/controller/skyra" \
     -go-root "$(go env GOROOT)" -module-cache "$(go env GOMODCACHE)" -python "$(command -v python3)" >"$STATE/repo-$$.log" 2>&1 &
   REPO_HOST_PID=$!
   local i

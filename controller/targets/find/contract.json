@@ -2,16 +2,72 @@
   "input": {
     "type": "object",
     "fields": {
-      "in": {"type": "string"},
-      "include": {"type": "array", "items": {"type": "string"}},
-      "exclude": {"type": "array", "items": {"type": "string"}},
-      "ignore": {"type": "string"},
-      "hidden": {"type": "bool"},
-      "maxdepth": {"type": "number"},
-      "kind": {"type": "string"},
-      "newer": {"type": "string"},
-      "larger": {"type": "number"},
-      "max_results": {"type": "number"}
+      "in": {
+        "type": "string"
+      },
+      "include": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "exclude": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ignore": {
+        "type": "string"
+      },
+      "hidden": {
+        "type": "bool"
+      },
+      "maxdepth": {
+        "type": "number"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "newer": {
+        "type": "string"
+      },
+      "larger": {
+        "type": "number"
+      },
+      "max_results": {
+        "type": "number"
+      },
+      "match": {
+        "type": "string"
+      },
+      "regex": {
+        "type": "bool"
+      },
+      "case": {
+        "type": "bool"
+      },
+      "context": {
+        "type": "number"
+      },
+      "max_per_file": {
+        "type": "number"
+      },
+      "files_only": {
+        "type": "bool"
+      },
+      "word": {
+        "type": "bool"
+      },
+      "sort": {
+        "type": "string"
+      },
+      "changed": {
+        "type": "bool"
+      },
+      "since": {
+        "type": "string"
+      }
     }
   }
 }

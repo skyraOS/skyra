@@ -288,3 +288,12 @@ func TestTurnConfigIncludesSession(t *testing.T) {
 		t.Fatalf("expected session in config: %s", ex.Deliver[0])
 	}
 }
+
+func TestPromptUsesCurrentContinuationPaths(t *testing.T) {
+	c := continuation{Workspace: "/project", Scratch: "/notes"}
+	cfg := turnConfig(c)
+	text := cfg["system_prompt"].(string)
+	if !strings.Contains(text, "/project") || !strings.Contains(text, "/notes") {
+		t.Fatal(text)
+	}
+}

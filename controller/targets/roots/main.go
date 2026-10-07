@@ -14,9 +14,11 @@ import (
 
 // result is the observation. A grant the Horizon does not hold is absent.
 type result struct {
-	Workspace string   `json:"workspace,omitempty"` // a relative read path resolves here
-	Read      []string `json:"read"`                // every directory or file it may read
-	Scratch   string   `json:"scratch,omitempty"`   // read and write; read it as "scratch:PATH"
+	Workspace   string          `json:"workspace,omitempty"` // a relative read path resolves here
+	Read        []string        `json:"read"`                // every directory or file it may read
+	Permissions map[string]bool `json:"permissions,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	Scratch     string          `json:"scratch,omitempty"` // read and write; read it as "scratch:PATH"
 }
 
 func main() {
@@ -25,7 +27,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "roots:", err)
 		os.Exit(1)
 	}
-	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": roots(os.Getenv("SKYRA_READ"), os.Getenv("SKYRA_SCRATCH"))})
+	r := roots(os.Getenv("SKYRA_READ"), os.Getenv("SKYRA_SCRATCH"))
+	r.Permissions = map[string]bool{"scratch_write": r.Scratch != "", "repo_write": false, "git_push_allowed": false, "shell": false, "delete": false}
+	if changes, _ := in["changes"].(bool); changes {
+		r.Error = "changes_unavailable: conversation history requires the repository host"
+	}
+	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": r})
 	fmt.Println(string(out))
 }
 

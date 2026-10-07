@@ -1,51 +1,42 @@
 # Skyra repository development tools
 
-When the Tony Stark repository is selected, a new Think conversation receives:
+Repository-selected Think conversations offer these tools to both providers:
 
-| Tool | Purpose |
+| Tool | Capability |
 | --- | --- |
-| `repo_write` / recorded `repo.write` | Create, replace, or append UTF-8 source files in the repository. |
-| `execve` with `target: git` | Inspect status/diffs/history; stage, commit, merge, fetch or push through the existing bounded Git policy. |
-| `repo_check` / recorded `repo.check` | Run named Go, Swift and Python build/test checks, plus a Go formatting check. |
-| `read`, `find`, `roots` | Read source, locate files and inspect granted paths. |
-| `desktop_observe` | Inspect app accessibility text and screenshots without controlling it. |
+| `read` | Line ranges, batch reads, around-hit reads, outlines and numbered source; plain text plus metadata. |
+| `find` | File and bounded content search, identifier/regex matching, context, modified ordering and changed-file filtering. |
+| `repo_write` | Source creation/replacement/append, exact guarded edits, previews, diffs and conversation-scoped restoration. |
+| `execve` with `target:git` | Bounded queries and local Git operations, plus independent worktrees under `worktrees/`. |
+| `repo_check` | Go/Swift/Python fixed checks, test filters, changed Go packages, vet, guarded format fixes and failure locations. |
+| `write` | Scratch notes recorded on the separate `skyra/ideas` ref with agent authorship; preserves feature HEAD/index. |
+| `roots` | Workspace, scratch, active permissions and `changes:true` for conversation-written files/hashes/commits. |
 
-Examples:
+Commit and merge remain local operations without approval. The launcher disables
+push by default; the operator can enable its existing policy with
+`SKYRA_ALLOW_PUSH=1`. Nothing pushes scratch notes automatically.
+`desktop_observe` is conditional on a configured connected private desktop bridge
+(`SKYRA_DESKTOP_CONFIG`), rather than part of every conversation.
 
 ```json
-{"action":"go.test","package":"./controller/hosts/repo"}
-{"action":"go.build"}
-{"action":"go.format"}
-{"action":"swift.build"}
-{"action":"swift.test"}
-{"action":"python.test"}
+{"in":"controller","match":"serveConnection","word":true,"context":2}
+{"path":"controller/hosts/repo/main.go","around":{"line":100,"context":10}}
+{"path":"controller/example.go","old":"before","new":"after","sha256":"<read hash>","dry_run":true}
+{"target":"git","args":["worktree","add","-b","agent/task","worktrees/task"]}
+{"action":"go.test","package":"changed","run":"^TestOne$","worktree":"worktrees/task"}
+{"changes":true}
 ```
 
-There is no arbitrary Bash, executable, argv, script, environment or working
-folder input for checks. Tests and build scripts execute inside a macOS sandbox
-in a temporary source copy. The original checkout and private home files are
-not readable/writable from the worker. Toolchains and cached dependency sources
-are readable. Writes are limited to the job and narrowly selected Swift/SDK
-temporary files. Network access is limited to loopback and job-local Unix sockets.
-Operator environment variables and credentials are not inherited. This is a
-bounded development runner; its native system-service grants have not undergone
-a complete production isolation audit.
+No general shell, arbitrary executable recipes, deletion or arbitrary repository
+switching is added. Checks execute a temporary source snapshot inside macOS
+Seatbelt without inherited credentials or external network. Build outputs are
+discarded; actual exit status, bounded logs, failure locations and report paths
+are returned. Existing configured-remote Git fetch remains available separately.
+Revert refuses externally changed files; undoing newly created files would require
+deletion and remains unavailable.
 
-Repository writes stay within the worktree, refuse symlinks/hardlinks and Git/
-runtime metadata, and do not provide deletion. The Git tool retains its command
-and option allowlists. Checks return actual exit status, output, errors, elapsed
-time, truncation, and a readable report under `ideas/checks/`. Failed checks are
-marked unsuccessful to Codex. Jobs time out after five minutes. Build outputs
-are temporary; checking compilation does not install or launch a new app build.
-
-Go/Python execution and isolation tests pass. The Swift release build and native
-test suite also pass inside the runner. One existing native test requiring a live
-agent is skipped. Recorded acceptance calls replay byte-identically; see
-`ideas/checks/acceptance.json` for results. The attachment test now creates its
-fixture in a unique directory under the runner's TMPDIR.
-
-The backend must load the updated registry. Existing conversations keep their
-pinned tools; use a new Think conversation for the new capabilities. No changes
-were committed as part of this task.
-
-Implementation details: `controller/hosts/repo/README.md`.
+The [host reference](../controller/hosts/repo/README.md) documents limits, recipes,
+Git guards, worktree selectors, caveats and installation. The proposal and final
+implementation mapping are in [agent-tool-improvements](agent-tool-improvements.md).
+Rebuild and restart the backend, then start a new conversation: existing ones keep
+pinned tools. This implementation does not commit the development changes.

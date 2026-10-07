@@ -465,7 +465,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	stdin := []byte(s.R.Payload)
 	if e.Self.Surface.Continuation {
 		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
-			Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
+			Workspace: workspaceOf(e.Self), Scratch: e.Self.Authority.Scratch, Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
 	}
 	socket := ""
 	if e.Self.Surface.Resident || e.Self.Surface.Connection {
@@ -892,6 +892,15 @@ func tools(h horizon.Horizon) map[string]*contract.Schema {
 	return t
 }
 
+// Paths are informational continuation data, derived from the current Horizon.
+// Resident environments describe their first launch, not every later invocation.
+func workspaceOf(h horizon.Horizon) string {
+	if len(h.Authority.Read) > 0 {
+		return h.Authority.Read[0].Path
+	}
+	return ""
+}
+
 // contracts is every contract of each name in reach that holds more than
 // one, so a continuation sees all of them (next/32, H3).
 func contracts(h horizon.Horizon) map[string][]*contract.Schema {
@@ -941,6 +950,8 @@ func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
 // against (when it has more than one), the tools it may invoke, and every step
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
+	Workspace string                        `json:"workspace,omitempty"`
+	Scratch   string                        `json:"scratch,omitempty"`
 	Frame     string                        `json:"frame"`
 	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
 	Input     json.RawMessage               `json:"input"`
@@ -977,7 +988,7 @@ func caller(h horizon.Horizon) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, e.Frame.Payload)
 	}

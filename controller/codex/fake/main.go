@@ -91,7 +91,11 @@ func main() {
 						}
 						continue
 					}
-					complete(t, "tool:"+result.ContentItems[0].Text)
+					texts := []string{}
+					for _, item := range result.ContentItems {
+						texts = append(texts, item.Text)
+					}
+					complete(t, "tool:"+strings.Join(texts, " | "))
 				}
 			}
 			continue
@@ -248,7 +252,7 @@ func main() {
 				// What a real model would look at: the images it was given.
 				complete(t, "saw:"+strings.Join(seen[t.id], ","))
 			case t.text == "prompt":
-				complete(t, prompts[t.thread])
+				complete(t, strings.ReplaceAll(prompts[t.thread], "\n", " | "))
 			case t.text == "history":
 				// What this turn remembers: the context it was given, its
 				// thread's own messages, and how many threads this app-server

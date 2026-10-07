@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,22 +29,24 @@ type execResult struct {
 // value options consume the following argument; flag options do not. Unknown
 // options are refused rather than letting a new Git feature bypass the policy.
 var flags = map[string]string{
-	"status":    "--short -s --branch -b --porcelain --porcelain=v1 --porcelain=v2 --untracked-files --ignored",
-	"diff":      "--cached --staged --stat --numstat --shortstat --name-only --name-status --check --quiet --exit-code --patch -p --no-renames --no-ext-diff --no-textconv --binary --color=never",
-	"log":       "--oneline --graph --all --decorate --stat --name-only --name-status --patch -p --no-merges --merges --reverse --no-ext-diff --no-textconv",
-	"show":      "--stat --name-only --name-status --patch -p --no-ext-diff --no-textconv",
-	"rev-parse": "--show-toplevel --absolute-git-dir --verify --short --symbolic-full-name --abbrev-ref --is-inside-work-tree",
-	"ls-files":  "--stage -s --cached --modified --deleted --others --exclude-standard -z",
-	"ls-tree":   "-r -t --name-only --long -l -z",
-	"branch":    "--list --show-current --all -a --remotes -r --verbose -v --no-track",
-	"tag":       "--list -l --annotate -a --no-sign",
-	"add":       "--all -A --update -u --force -f --dry-run -n --verbose -v --intent-to-add -N",
-	"commit":    "--all -a --amend --no-edit --allow-empty --allow-empty-message --only -o --include -i --signoff -s --reset-author --no-verify -n --dry-run --verbose -v --no-gpg-sign",
-	"push":      "--force -f --force-with-lease --force-if-includes --tags --all --branches --follow-tags --set-upstream -u --dry-run -n --porcelain --atomic --no-verify --verbose -v --quiet -q",
-	"fetch":     "--all --tags --no-tags --no-prune --no-prune-tags --verbose -v --quiet -q --dry-run",
-	"merge":     "--no-ff --ff --ff-only --squash --no-squash --no-commit --commit --no-edit --no-gpg-sign --no-verify --stat --no-stat --quiet -q --verbose -v",
+	"status":     "--short -s --branch -b --porcelain --porcelain=v1 --porcelain=v2 --untracked-files --ignored",
+	"diff":       "--cached --staged --stat --numstat --shortstat --name-only --name-status --check --quiet --exit-code --patch -p --no-renames --no-ext-diff --no-textconv --binary --color=never",
+	"log":        "--oneline --graph --all --decorate --stat --name-only --name-status --patch -p --no-merges --merges --reverse --no-ext-diff --no-textconv",
+	"show":       "--stat --name-only --name-status --patch -p --no-ext-diff --no-textconv",
+	"rev-parse":  "--show-toplevel --absolute-git-dir --git-dir --git-common-dir --verify --short --symbolic-full-name --abbrev-ref --is-inside-work-tree",
+	"ls-files":   "--stage -s --cached --modified --deleted --others --exclude-standard -z",
+	"ls-tree":    "-r -t --name-only --long -l -z",
+	"merge-base": "--is-ancestor --all --octopus --independent --fork-point",
+	"branch":     "--list --show-current --all -a --remotes -r --verbose -v --no-track",
+	"tag":        "--list -l --annotate -a --no-sign",
+	"add":        "--all -A --update -u --force -f --dry-run -n --verbose -v --intent-to-add -N",
+	"commit":     "--all -a --amend --no-edit --allow-empty --allow-empty-message --only -o --include -i --signoff -s --reset-author --no-verify -n --dry-run --verbose -v --no-gpg-sign",
+	"push":       "--force -f --force-with-lease --force-if-includes --tags --all --branches --follow-tags --set-upstream -u --dry-run -n --porcelain --atomic --no-verify --verbose -v --quiet -q",
+	"fetch":      "--all --tags --no-tags --no-prune --no-prune-tags --verbose -v --quiet -q --dry-run",
+	"merge":      "--no-ff --ff --ff-only --squash --no-squash --no-commit --commit --no-edit --no-gpg-sign --no-verify --stat --no-stat --quiet -q --verbose -v",
 }
 var values = map[string]string{
+	"branch": "--contains --no-contains --merged --no-merged",
 	"diff":   "--diff-filter --unified -U",
 	"log":    "--max-count -n --format --pretty --since --until --author --grep",
 	"show":   "--format --pretty",
@@ -74,6 +78,11 @@ func parse(args []string) (positions []string, err error) {
 		}
 		if !paths && strings.HasPrefix(a, "-") {
 			key, _, equal := strings.Cut(a, "=")
+			if args[0] == "log" && !equal {
+				if n, e := strconv.Atoi(strings.TrimPrefix(a, "-")); e == nil && n > 0 && n <= 1000 {
+					continue
+				}
+			}
 			if slices.Contains(strings.Fields(allowed), a) {
 				continue
 			}
@@ -86,10 +95,10 @@ func parse(args []string) (positions []string, err error) {
 				}
 				continue
 			}
-			return nil, fmt.Errorf("Git option %q is not allowed", a)
+			return nil, fmt.Errorf("Git option %q is not allowed; log accepts -N or --max-count=N, and repository selection accepts only -C worktrees/<name>", a)
 		}
 		// File pathspecs and revision expressions cannot name an outside path.
-		if strings.HasPrefix(a, "/") || strings.Contains(a, "..") || strings.Contains(a, "\\") {
+		if strings.HasPrefix(a, "/") || (strings.Contains(a, "..") && !(args[0] == "diff" && validRange(a))) || strings.Contains(a, "\\") {
 			return nil, fmt.Errorf("outside_repo or unsupported revision: %q", a)
 		}
 		positions = append(positions, a)
@@ -103,11 +112,30 @@ func (g repository) execute(in execInput) execResult {
 	if in.Target != "git" && in.Target != "/usr/bin/git" {
 		return fail(fmt.Errorf("target must be git; no arbitrary executable or shell"))
 	}
-	positions, err := parse(in.Args)
+	args := slices.Clone(in.Args)
+	if len(args) > 0 && args[0] == "-C" {
+		if len(args) < 3 {
+			return fail(fmt.Errorf("-C requires a registered worktrees/<name> path and a Git command"))
+		}
+		if args[2] == "worktree" && (len(args) < 4 || args[3] != "list") {
+			return fail(fmt.Errorf("create worktrees from the repository root, without -C"))
+		}
+		selected, err := g.selectWorktree(args[1])
+		if err != nil {
+			return fail(err)
+		}
+		g, args = selected, args[2:]
+	}
+	var positions []string
+	var err error
+	if len(args) > 0 && args[0] == "worktree" {
+		args, err = g.worktreeArgs(args)
+	} else {
+		positions, err = parse(args)
+	}
 	if err != nil {
 		return fail(err)
 	}
-	args := slices.Clone(in.Args)
 	// Configured external filters/drivers could turn add/merge into arbitrary
 	// execution. Refuse such repositories; hooks and fsmonitor are disabled.
 	if custom, err := g.query("config", "--get-regexp", `^(filter\..*\.(clean|smudge|process)|merge\..*\.driver)$`); err == nil && custom != "" {
@@ -176,6 +204,9 @@ func (g repository) execute(in execInput) execResult {
 		args = pinMerge(args, oid)
 		args = append([]string{"merge", "--strategy=ort", "--no-edit", "--no-gpg-sign"}, args[1:]...)
 	case "push":
+		if g.denyPush {
+			return fail(fmt.Errorf("publishing is disabled: the operator can enable Git push with SKYRA_ALLOW_PUSH=1 and restart the backend"))
+		}
 		args, err = g.pushArgs(args, positions)
 		if err != nil {
 			return fail(err)
@@ -194,12 +225,38 @@ func (g repository) execute(in execInput) execResult {
 		}
 		r.Error = err.Error()
 	}
-	if err == nil && in.Args[0] == "push" && !slices.Contains(in.Args, "--dry-run") && !slices.Contains(in.Args, "-n") && (slices.Contains(in.Args, "-u") || slices.Contains(in.Args, "--set-upstream")) {
-		if err := g.setUpstream(in.Args, positions); err != nil {
+	if err == nil && args[0] == "push" && !slices.Contains(in.Args, "--dry-run") && !slices.Contains(in.Args, "-n") && (slices.Contains(in.Args, "-u") || slices.Contains(in.Args, "--set-upstream")) {
+		original := in.Args
+		if original[0] == "-C" {
+			original = original[2:]
+		}
+		if err := g.setUpstream(original, positions); err != nil {
 			r.Error = "push succeeded; setting upstream failed: " + err.Error()
 		}
 	}
+	if err == nil && (args[0] == "commit" || args[0] == "merge") {
+		hash, e := g.query("rev-parse", "HEAD")
+		branch, _ := g.query("symbolic-ref", "--short", "HEAD")
+		if e == nil {
+			if e := g.recordCommit(hash, branch); e != nil {
+				r.Error = "Git succeeded; history_failed: " + e.Error()
+			}
+		}
+	}
 	return r
+}
+
+func validRange(s string) bool {
+	parts := strings.Split(s, "...")
+	if len(parts) != 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || strings.Contains(p, "..") || strings.HasPrefix(p, "-") || (filepath.IsAbs(p) || strings.ContainsAny(p, "\\:")) {
+			return false
+		}
+	}
+	return true
 }
 
 func (g repository) setUpstream(args, positions []string) error {
@@ -471,6 +528,10 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 	return n, nil
 }
 func (g repository) run(args ...string) (string, bool, error) {
+	return g.runGit(false, args...)
+}
+
+func (g repository) runGit(query bool, args ...string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	base := []string{"--no-pager", "-C", g.path, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", "-c", "push.gpgSign=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "protocol.ext.allow=never", "-c", "submodule.recurse=false", "-c", "merge.autoStash=false"}
@@ -507,16 +568,24 @@ func (g repository) run(args ...string) (string, bool, error) {
 		}
 	}
 	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false", "GIT_SEQUENCE_EDITOR=false", "GIT_ATTR_NOSYSTEM=1")
-	var out boundedOutput
+	var out, diagnostics boundedOutput
 	cmd.Stdout, cmd.Stderr = &out, &out
+	if query {
+		cmd.Stderr = &diagnostics
+	}
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
-	return string(out.data), out.truncated, err
+	if query && err != nil {
+		return string(out.data) + string(diagnostics.data), out.truncated || diagnostics.truncated, err
+	}
+	return string(out.data), out.truncated || diagnostics.truncated, err
 }
 func (g repository) query(args ...string) (string, error) {
-	out, truncated, err := g.run(args...)
+	// Diagnostics (notably Apple's Git/xcrun shim) are not part of an OID,
+	// path or ref listing. Keep stderr for failures without polluting values.
+	out, truncated, err := g.runGit(true, args...)
 	if err != nil {
 		return "", fmt.Errorf("git %s: %s: %w", args[0], strings.TrimSpace(out), err)
 	}

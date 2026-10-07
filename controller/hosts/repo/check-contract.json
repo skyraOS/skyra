@@ -1,1 +1,29 @@
-{"input":{"title":"Repository build and checks","type":"object","required":["action"],"fields":{"action":{"type":"string"},"package":{"type":"string"}}}}
+{
+  "input": {
+    "title": "Repository build and checks",
+    "type": "object",
+    "required": [
+      "action"
+    ],
+    "fields": {
+      "action": {
+        "type": "string"
+      },
+      "package": {
+        "type": "string"
+      },
+      "run": {
+        "type": "string"
+      },
+      "count": {
+        "type": "number"
+      },
+      "fix": {
+        "type": "bool"
+      },
+      "worktree": {
+        "type": "string"
+      }
+    }
+  }
+}

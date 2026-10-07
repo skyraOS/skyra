@@ -782,3 +782,14 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 		t.Fatalf("a payload naming a caller was not refused: %+v", forged.R)
 	}
 }
+
+func TestContinuationReportsCurrentWorkspaceAndScratch(t *testing.T) {
+	h := horizon.Horizon{Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: "/workspace", Scope: "subpath"}}, Scratch: "/notes"}}
+	var c Continuation
+	if e := json.Unmarshal(continuation(Settled{Frame: record.Record{Payload: json.RawMessage(`{}`)}}, h), &c); e != nil {
+		t.Fatal(e)
+	}
+	if c.Workspace != "/workspace" || c.Scratch != "/notes" {
+		t.Fatal(c)
+	}
+}

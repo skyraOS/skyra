@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,12 +31,14 @@ type input struct {
 
 // result is the observation. An error is a return like any other.
 type result struct {
-	Path    string `json:"path"`
-	ReadAs  string `json:"read_as,omitempty"` // what to give read to read it back
-	Written *int   `json:"written,omitempty"` // bytes this write added
-	Size    *int64 `json:"size,omitempty"`    // the whole file, after it
-	SHA256  string `json:"sha256,omitempty"`  // the whole file, after it
-	Error   string `json:"error,omitempty"`
+	Path         string `json:"path"`
+	ReadAs       string `json:"read_as,omitempty"` // what to give read to read it back
+	Written      *int   `json:"written,omitempty"` // bytes this write added
+	Size         *int64 `json:"size,omitempty"`    // the whole file, after it
+	SHA256       string `json:"sha256,omitempty"`  // the whole file, after it
+	BeforeSHA256 string `json:"before_sha256,omitempty"`
+	BeforeExists *bool  `json:"before_exists,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 func main() {
@@ -67,23 +70,65 @@ func write(scratch string, in input) result {
 	}
 	name = filepath.Clean(name)
 	r.Path = name
-	path := filepath.Join(scratch, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		r.Error = describe(err)
-		return r
-	}
-	// Never through a link: the file is the one named, inside the space. No
-	// mode has an exec bit, though nothing could run it if one did.
-	flags := os.O_WRONLY | os.O_CREATE | syscall.O_NOFOLLOW
-	if in.Append {
-		flags |= os.O_APPEND
-	} else {
-		flags |= os.O_TRUNC
-	}
-	f, err := os.OpenFile(path, flags, 0o644)
+
+	root, err := os.OpenRoot(scratch)
 	if err != nil {
 		r.Error = describe(err)
 		return r
+	}
+	defer root.Close()
+	if err := root.MkdirAll(filepath.Dir(name), 0700); err != nil {
+		r.Error = describe(err)
+		return r
+	}
+	if st, e := root.Lstat(name); e == nil && st.Mode()&os.ModeSymlink != 0 {
+		r.Error = "symlink: the path names a link, which write never follows"
+		return r
+	}
+	beforeExists := true
+	f, err := root.OpenFile(name, os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0644)
+	if os.IsNotExist(err) {
+		beforeExists = false
+		f, err = root.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0644)
+	}
+	if err != nil {
+		r.Error = describe(err)
+		return r
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		r.Error = describe(err)
+		return r
+	}
+	if !st.Mode().IsRegular() {
+		r.Error = "not_regular"
+		return r
+	}
+	if stat, ok := st.Sys().(*syscall.Stat_t); !ok || stat.Nlink != 1 {
+		r.Error = "hardlink"
+		return r
+	}
+	before, err := io.ReadAll(io.LimitReader(f, maxText+1))
+	if err != nil {
+		r.Error = describe(err)
+		return r
+	}
+	if len(before) > maxText {
+		r.Error = "too_large"
+		return r
+	}
+	r.BeforeExists = &beforeExists
+	if beforeExists {
+		sum := sha256.Sum256(before)
+		r.BeforeSHA256 = hex.EncodeToString(sum[:])
+	}
+	if !in.Append {
+		if err := f.Truncate(0); err != nil {
+			r.Error = describe(err)
+			return r
+		}
+		f.Seek(0, 0)
 	}
 	n, err := f.WriteString(in.Text)
 	if cerr := f.Close(); err == nil {
@@ -93,7 +138,7 @@ func write(scratch string, in input) result {
 		r.Error = describe(err)
 		return r
 	}
-	data, err := os.ReadFile(path)
+	data, err := root.ReadFile(name)
 	if err != nil {
 		r.Error = describe(err)
 		return r

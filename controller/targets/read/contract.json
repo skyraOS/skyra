@@ -1,11 +1,46 @@
 {
   "input": {
     "type": "object",
-    "required": ["path"],
     "fields": {
-      "path": {"type": "string"},
-      "start_line": {"type": "number"},
-      "max_lines": {"type": "number"}
+      "path": {
+        "type": "string"
+      },
+      "start_line": {
+        "type": "number"
+      },
+      "max_lines": {
+        "type": "number"
+      },
+      "paths": {
+        "type": "array",
+        "items": {
+          "type": "any"
+        }
+      },
+      "end_line": {
+        "type": "number"
+      },
+      "outline": {
+        "type": "bool"
+      },
+      "numbered": {
+        "type": "bool"
+      },
+      "around": {
+        "type": "object",
+        "required": [
+          "line",
+          "context"
+        ],
+        "fields": {
+          "line": {
+            "type": "number"
+          },
+          "context": {
+            "type": "number"
+          }
+        }
+      }
     }
   }
 }

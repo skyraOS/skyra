@@ -25,7 +25,7 @@ func git(t *testing.T, g committer, args ...string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out
+	return strings.TrimSpace(out)
 }
 
 func observation(t *testing.T, g committer, name, text string) json.RawMessage {
@@ -49,6 +49,7 @@ func TestCommitsOnlyIdeasAndPreservesOtherStagedChanges(t *testing.T) {
 	g := repository(t)
 	os.WriteFile(filepath.Join(g.repo, "code.go"), []byte("staged code"), 0600)
 	git(t, g, "add", "--", "code.go")
+	head := git(t, g, "rev-parse", "HEAD")
 	index := git(t, g, "ls-files", "--stage", "--", "code.go")
 	// A repository hook must not turn this narrow operation into other effects.
 	sentinel := filepath.Join(g.repo, "hook-ran")
@@ -59,15 +60,21 @@ func TestCommitsOnlyIdeasAndPreservesOtherStagedChanges(t *testing.T) {
 		if r["commit_error"] != nil || r["commit"] == nil {
 			t.Fatalf("commit: %+v", r)
 		}
-		if files := git(t, g, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"); files != "ideas/notes/plan.md" {
+		if files := git(t, g, "diff-tree", "--no-commit-id", "--name-only", "-r", "skyra/ideas"); files != "ideas/notes/plan.md" {
 			t.Fatalf("committed files: %q", files)
 		}
 		if got := git(t, g, "ls-files", "--stage", "--", "code.go"); got != index {
 			t.Fatalf("unrelated index changed: %q", got)
 		}
-		if body := git(t, g, "show", "HEAD:ideas/notes/plan.md"); body != strings.TrimSpace(text) {
+		if body := git(t, g, "show", "skyra/ideas:ideas/notes/plan.md"); body != strings.TrimSpace(text) {
 			t.Fatalf("committed body: %q", body)
 		}
+	}
+	if git(t, g, "rev-parse", "HEAD") != head {
+		t.Fatal("agent note changed the feature branch")
+	}
+	if author := git(t, g, "log", "-1", "--format=%an", "skyra/ideas"); author != "Skyra agent" {
+		t.Fatalf("author: %s", author)
 	}
 	if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
 		t.Fatal("hook executed")

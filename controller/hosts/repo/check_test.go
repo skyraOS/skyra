@@ -41,6 +41,7 @@ func TestSnapshotExcludesStateAndRefusesLinks(t *testing.T) {
 }
 
 func TestPythonCheckRunsButCannotReadOrWriteOutsideJob(t *testing.T) {
+	requireOutsideCheckSandbox(t)
 	if _, err := os.Stat("/usr/bin/sandbox-exec"); err != nil {
 		t.Skip("macOS Seatbelt required")
 	}
@@ -93,6 +94,7 @@ class Isolation(unittest.TestCase):
 }
 
 func TestGoRecipeCompilesAndRunsTests(t *testing.T) {
+	requireOutsideCheckSandbox(t)
 	if _, err := os.Stat("/usr/bin/sandbox-exec"); err != nil {
 		t.Skip("macOS Seatbelt required")
 	}

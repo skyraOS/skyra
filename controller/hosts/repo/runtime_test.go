@@ -15,6 +15,7 @@ import (
 )
 
 func TestRepositoryActorsCustodyAndOfflineReplay(t *testing.T) {
+	requireOutsideCheckSandbox(t)
 	g := testRepo(t)
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -63,6 +64,8 @@ func TestRepositoryActorsCustodyAndOfflineReplay(t *testing.T) {
 	reg := map[string]any{
 		"repo.write": map[string]any{"host": sock, "contract": abs("write-contract.json")},
 		"execve":     map[string]any{"host": sock, "contract": abs("contract.json")},
+		"find":       map[string]any{"host": sock, "contract": abs("../../targets/find/contract.json")},
+		"roots":      map[string]any{"host": sock, "contract": abs("../../targets/roots/contract.json")},
 		"repo.check": map[string]any{"host": sock, "contract": abs("check-contract.json")},
 	}
 	b, _ := json.Marshal(reg)
@@ -74,10 +77,17 @@ func TestRepositoryActorsCustodyAndOfflineReplay(t *testing.T) {
 		{"execve", `{"target":"git","args":["commit","-m","recorded commit"]}`},
 		{"execve", `{"target":"git","args":["rm","keep.txt"]}`},
 		{"repo.check", `{"action":"bash"}`},
+		{"execve", `{"target":"git","args":["worktree","add","-b","codex/task","worktrees/codex-task"]}`},
+		{"execve", `{"target":"git","args":["worktree","add","-b","claude/task","worktrees/claude-task"]}`},
+		{"repo.write", `{"path":"worktrees/codex-task/code/note.txt","text":"worktree edit\n"}`},
+		{"execve", `{"target":"git","args":["-C","worktrees/codex-task","add","code/note.txt"]}`},
+		{"execve", `{"target":"git","args":["-C","worktrees/codex-task","commit","-m","worktree commit"]}`},
+		{"find", `{"in":"worktrees/codex-task","match":"worktree edit"}`},
+		{"roots", `{"changes":true}`},
 	}
 	var roots []string
 	for i, request := range requests {
-		root := filepath.Join(dir, fmt.Sprintf("run-%d", i), ".skyra")
+		root := filepath.Join(dir, "conversation", "runs", fmt.Sprint(i), ".skyra")
 		roots = append(roots, root)
 		cmd := exec.CommandContext(ctx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", regfile, "-to", request.target, "-payload", request.payload)
 		out, err := cmd.CombinedOutput()
@@ -88,6 +98,12 @@ func TestRepositoryActorsCustodyAndOfflineReplay(t *testing.T) {
 		if i == 3 && !strings.Contains(string(out), "refused") {
 			t.Fatalf("missing refusal: %s", out)
 		}
+		if request.target == "find" && !strings.Contains(string(out), "worktrees/codex-task/code/note.txt") {
+			t.Fatalf("search routing: %s", out)
+		}
+		if request.target == "roots" && !strings.Contains(string(out), "before_sha256") {
+			t.Fatalf("history routing: %s", out)
+		}
 		if i == 4 && !strings.Contains(string(out), "invalid_request") {
 			t.Fatalf("missing check refusal: %s", out)
 		}
@@ -97,6 +113,9 @@ func TestRepositoryActorsCustodyAndOfflineReplay(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(g.path, "keep.txt")); err != nil {
 		t.Fatal("deletion occurred")
+	}
+	if rawGit(t, g, "show", "codex/task:code/note.txt") != "worktree edit" || rawGit(t, g, "show", "claude/task:code/note.txt") != "recorded edit" {
+		t.Fatal("worktree edits were not isolated")
 	}
 	host.Process.Kill()
 	host.Wait()

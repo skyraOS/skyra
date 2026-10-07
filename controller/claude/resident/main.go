@@ -27,8 +27,10 @@ import (
 type schema = proceduretools.Schema
 
 type continuation struct {
-	Frame string `json:"frame"`
-	Input struct {
+	Workspace string `json:"workspace"`
+	Scratch   string `json:"scratch"`
+	Frame     string `json:"frame"`
+	Input     struct {
 		Text, Header, Conversation, Session string
 		Context                             json.RawMessage
 	} `json:"input"`
@@ -77,14 +79,22 @@ type derived struct {
 // modelTools lists the tools Claude is offered. A tool appears only when it
 // is also present in the continuation's reach (c.Tools).
 var modelTools = map[string]string{
-	"repo.check": "Build and verify repository changes using named recipes, without a shell command. action: go.test, go.build, go.format (reports formatting needed), swift.test, swift.build, python.test (Blender tests). Go actions accept optional package such as ./controller/blender or ./controller/... . No other arguments, commands or environment overrides. Runs current source in a disposable snapshot; source and installed toolchains are read-only, writes stay in the job and bounded Swift temporary replacement folders, credentials are absent, network is limited to loopback and job-local Unix sockets. Returns exit_code, output (64 KiB limit), truncated, error, duration_ms and report_path under ideas/checks. Nonzero exit, truncation, or a sandbox denial must be reported; never claim checks passed without their results. Build artifacts are temporary. Read report_path to review the result.",
-	"repo.write": "Create, replace, or append UTF-8 text in this repository. Input: path (relative to repository root), text, optional append. Parent folders are created. Read it back using read. No delete or rename operation; .git, runtime state, symlinks and hardlinks cannot be written.",
-	"execve":     "Run Git in this repository as a recorded actor: {target:\"git\",args:[\"status\",\"--short\"]}. args is an argv array, never a shell command. Commit, push, fetch, merge, add, branch/tag creation and inspection are available. No approval is needed for commit, push or merge. File/ref deletion, destructive reset/checkout/clean, config changes, hooks, custom filters, external drivers, arbitrary programs and repository switching are refused. Commits and merges cannot remove existing file paths; pushes cannot remove paths from an existing destination tree. Use a configured remote name. Merge takes one branch/commit and previews it; conflicting merges are refused before touching the worktree. Output includes exit_code, output, truncated and error.",
-	"echo":       "Skyra echo",
-	"read":       "Read a UTF-8 text file, or list a directory, in the workspace. Paths are relative to the workspace root; \".\" lists the root. Returns at most 2000 lines or 64 KiB: when truncated is true, call again with start_line set to end_line + 1. sha256 and size describe the whole file. A failure is reported in error (not_found, denied, not_text, too_large).",
-	"find":       "Find files (or folders) in the workspace by name, path, depth, kind, age or size, without reading them. in is where to look, relative to the workspace root (default \".\"). include and exclude are globs: one without a slash matches a name (\"*.go\"), one with a slash the path (\"src/*.go\"); an excluded folder is not entered. kind is \"file\" (default), \"dir\" or \"any\". maxdepth limits depth below in; newer is an RFC 3339 time; larger is a size in bytes. .git and node_modules are skipped unless ignore is \"none\", and dot files unless hidden is true; the result counts what was skipped. Paths come back as read takes them. At most max_results (default 100, up to 500): truncated says when the list was cut and why.",
-	"roots":      "Show the absolute paths you may see: workspace (where a relative read path resolves) and every path you may read.",
-	"write":      "Write UTF-8 text inside the granted scratch directory shown by roots, for notes, drafts and intermediate results. path is relative to the scratch space and cannot leave it; folders are created as needed. append: true adds to the end instead of replacing.",
+
+	"repo.check": proceduretools.DevelopmentDescriptions["repo.check"],
+
+	"repo.write": proceduretools.DevelopmentDescriptions["repo.write"],
+
+	"execve": proceduretools.DevelopmentDescriptions["execve"],
+
+	"echo": proceduretools.DevelopmentDescriptions["echo"],
+
+	"read": proceduretools.DevelopmentDescriptions["read"],
+
+	"find": proceduretools.DevelopmentDescriptions["find"],
+
+	"roots": proceduretools.DevelopmentDescriptions["roots"],
+
+	"write": proceduretools.DevelopmentDescriptions["write"],
 }
 
 func main() {
@@ -368,7 +378,7 @@ func turnConfig(c continuation) map[string]any {
 		"prompt":        c.Input.Text,
 		"frame":         c.Frame,
 		"tools":         tools,
-		"system_prompt": prompt.Base(c.Input.Header),
+		"system_prompt": prompt.Room(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil),
 	}
 	if c.Input.Session != "" {
 		cfg["session"] = c.Input.Session

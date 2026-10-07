@@ -16,6 +16,15 @@ func testRepo(t *testing.T) repository {
 		t.Fatal(err)
 	}
 	g := repository{path: path, git: "/usr/bin/git"}
+	if os.Getenv("SKYRA_CHECK_SANDBOX") == "1" {
+		// Use the developer tool itself inside the job. Apple's /usr/bin/git
+		// shim writes a shared xcrun cache outside the sandbox's job directory.
+		out, err := exec.Command("/usr/bin/xcrun", "--find", "git").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.git = strings.TrimSpace(string(out))
+	}
 	for _, args := range [][]string{{"init", "-b", "main"}, {"config", "user.name", "Skyra test"}, {"config", "user.email", "skyra@example.invalid"}} {
 		rawGit(t, g, args...)
 	}
