@@ -60,7 +60,7 @@ final class Backend {
             return
         }
         guard let root = Self.root() else {
-            state = .failed("Cannot find the Skyra repository. Build the app with `skyra app`, or set SKYRA_ROOT.")
+            state = .failed("Cannot find the Skyra runtime. Reinstall Skyra, or build the development app with `skyra app`.")
             return
         }
         guard let port = Self.freePort() else {
@@ -169,10 +169,14 @@ final class Backend {
 
     // MARK: finding things
 
-    /// The repository: recorded in the bundle by `skyra app`, else
-    /// SKYRA_ROOT, else the directory above the build/ the app runs from.
+    /// A release uses its bundled runtime. Development builds use SkyraRoot,
+    /// SKYRA_ROOT, or the checkout surrounding build/Skyra.app.
     static func root() -> URL? {
         var candidates: [URL] = []
+        if let resources = Bundle.main.resourceURL {
+            let bundled = resources.appendingPathComponent("skyra", isDirectory: true)
+            if FileManager.default.fileExists(atPath: bundled.appendingPathComponent("skyra-release.json").path) { candidates.append(bundled) }
+        }
         if let r = Bundle.main.object(forInfoDictionaryKey: "SkyraRoot") as? String { candidates.append(URL(fileURLWithPath: r)) }
         if let r = ProcessInfo.processInfo.environment["SKYRA_ROOT"] { candidates.append(URL(fileURLWithPath: r)) }
         var dir = Bundle.main.bundleURL

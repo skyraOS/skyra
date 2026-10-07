@@ -157,7 +157,9 @@ def resolve_binary():
 
 def main():
     if sys.platform!='darwin':raise SystemExit('The bounded Blender worker currently requires macOS Seatbelt.')
-    bridge=Bridge(resolve_binary(),Path.home()/'.skyra/blender/jobs',ROOT/'ideas/design/blender/artifacts')
+    state=Path(os.environ.get('SKYRA_STATE',str(Path.home()/'.skyra')))
+    artifacts=state/'blender/artifacts' if (ROOT/'skyra-release.json').exists() else ROOT/'ideas/design/blender/artifacts'
+    bridge=Bridge(resolve_binary(),state/'blender/jobs',artifacts)
     if sys.argv[1:]==['--request']:
         try:print(json.dumps(bridge.handle(json.load(sys.stdin))))
         except Failure as e:print(json.dumps(dict(version=1,operation='blender.tools',error=e.value)))

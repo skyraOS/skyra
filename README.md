@@ -73,6 +73,7 @@ skyra test        # every test
 ```
 
 Full setup, every command and troubleshooting: [`docs/startup-doc.md`](docs/startup-doc.md).
+Release packaging, Homebrew publishing, updates and retirement: [`PUBLISHING.md`](PUBLISHING.md).
 
 Each scenario proves one thing. Trimmed real output:
 

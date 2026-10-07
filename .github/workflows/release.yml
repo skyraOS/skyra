@@ -1,0 +1,103 @@
+name: Publish desktop release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable SemVer, e.g. 0.1.0 (never reuse a published version)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: skyra-desktop-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: distribution
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: controller/interp/go.sum
+      - name: Validate release inputs and credentials
+        env:
+          CERTIFICATE: ${{ secrets.SKYRA_SIGNING_P12 }}
+          CERT_PASSWORD: ${{ secrets.SKYRA_SIGNING_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.SKYRA_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.SKYRA_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.SKYRA_NOTARY_ISSUER }}
+          GH_TOKEN: ${{ secrets.SKYRA_DISTRIBUTION_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          assert re.fullmatch(r'\d+\.\d+\.\d+', os.environ['RELEASE_VERSION']), 'Use stable SemVer'
+          assert all(os.environ.get(k) for k in ('CERTIFICATE', 'CERT_PASSWORD', 'NOTARY_KEY', 'NOTARY_KEY_ID', 'NOTARY_ISSUER', 'GH_TOKEN')), 'Configure the distribution environment signing and publication secrets first'
+          PY
+          test "$(uname -m)" = arm64
+      - name: Build and verify runtime
+        run: |
+          go test ./controller/...
+          python3 -m unittest discover -s controller/blender -p 'test_*.py'
+          SKYRA_NO_OPEN=1 ./skyra app
+          python3 scripts/release/package.py "$RELEASE_VERSION"
+          python3 scripts/release/smoke.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app"
+      - name: Import signing and notarization credentials
+        env:
+          CERTIFICATE: ${{ secrets.SKYRA_SIGNING_P12 }}
+          CERT_PASSWORD: ${{ secrets.SKYRA_SIGNING_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.SKYRA_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.SKYRA_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.SKYRA_NOTARY_ISSUER }}
+        run: |
+          python3 - <<'PY'
+          import base64, os, secrets
+          from pathlib import Path
+          tmp=Path(os.environ['RUNNER_TEMP'])
+          (tmp/'skyra-signing.p12').write_bytes(base64.b64decode(os.environ['CERTIFICATE']))
+          (tmp/'skyra-notary.p8').write_text(os.environ['NOTARY_KEY'])
+          (tmp/'skyra-keychain-password').write_text(secrets.token_urlsafe(32))
+          for n in ('skyra-signing.p12','skyra-notary.p8','skyra-keychain-password'): (tmp/n).chmod(0o600)
+          PY
+          KEYCHAIN="$RUNNER_TEMP/skyra-signing.keychain-db"
+          PASSWORD="$(cat "$RUNNER_TEMP/skyra-keychain-password")"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/skyra-signing.p12" -P "$CERT_PASSWORD" -k "$KEYCHAIN" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          xcrun notarytool store-credentials skyra-ci --key "$RUNNER_TEMP/skyra-notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --keychain "$KEYCHAIN"
+      - name: Sign, notarize and validate final archive
+        env:
+          SIGNING_IDENTITY: ${{ vars.SKYRA_SIGNING_IDENTITY }}
+        run: |
+          test -n "$SIGNING_IDENTITY"
+          python3 scripts/release/sign.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app" --identity "$SIGNING_IDENTITY" --notary-profile skyra-ci --notary-keychain "$RUNNER_TEMP/skyra-signing.keychain-db"
+          python3 scripts/release/smoke.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app"
+      - name: Publish download and Homebrew cask
+        env:
+          GH_TOKEN: ${{ secrets.SKYRA_DISTRIBUTION_TOKEN }}
+        run: |
+          gh auth setup-git
+          brew tap skyraOS/tap
+          TAP="$(brew --repository skyraOS/tap)"
+          git config --global user.name "Skyra release"
+          git config --global user.email "releases@skyra.local"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          Path(os.environ['RUNNER_TEMP'],'release-notes.md').write_text('Skyra '+os.environ['RELEASE_VERSION']+'\n\nApple Silicon; macOS 14+. Signed and notarized desktop bundle. Requires Codex 0.160.0 and your own provider login.\n')
+          PY
+          python3 scripts/release/publish.py "build/releases/$RELEASE_VERSION/arm64/Skyra-$RELEASE_VERSION-macos-arm64.zip" --tap "$TAP" --notes "$RUNNER_TEMP/release-notes.md"
+      - name: Remove ephemeral credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/skyra-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/skyra-signing.p12" "$RUNNER_TEMP/skyra-notary.p8" "$RUNNER_TEMP/skyra-keychain-password"

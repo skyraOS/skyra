@@ -10,6 +10,8 @@ while [ -L "$self" ]; do
 done
 ROOT=$(cd "$(dirname "$self")" && pwd)
 BUILD=$ROOT/build
+PACKAGED=0
+[ ! -f "$ROOT/skyra-release.json" ] || PACKAGED=1
 # The workspace the read tool is granted: where skyra was started, unless set.
 # Captured before anything below changes directory.
 WORKSPACE=${SKYRA_WORKSPACE:-$PWD}
@@ -63,8 +65,17 @@ STATE=${SKYRA_STATE:-$HOME/.skyra}
 # All launch modes authenticate ingress. Credentials travel in the environment.
 export SKYRA_WS_TOKEN=${SKYRA_WS_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}
 umask 077
+RUNTIME_CACHE=$BUILD/controller
+if [ "$PACKAGED" = 1 ]; then
+  RUNTIME_CACHE=$STATE/runtime
+  export PYTHONDONTWRITEBYTECODE=1
+fi
 
 controller_build() {
+  if [ "$PACKAGED" = 1 ]; then
+    [ -x "$BUILD/controller/skyra" ] && [ -x "$BUILD/controller/webhost" ] || die "incomplete Skyra release; reinstall it"
+    return 0
+  fi
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
@@ -88,8 +99,9 @@ controller_build() {
 registry() {
   # A launch owns its registry and response socket. Another workspace or
   # smoke-test backend must never replace the live app's grants or inbox.
-  local mode=$1 park=$2 depth=$3 file="$BUILD/controller/registry-$1-$3${4:+-$4}-$$.json"
-  SKYRA_REGISTRY_ROOT="$ROOT" SKYRA_REGISTRY_BUILD="$BUILD/controller" \
+  mkdir -p "$RUNTIME_CACHE"
+  local mode=$1 park=$2 depth=$3 file="$RUNTIME_CACHE/registry-$1-$3${4:+-$4}-$$.json"
+  SKYRA_REGISTRY_CACHE="$RUNTIME_CACHE" SKYRA_REGISTRY_ROOT="$ROOT" SKYRA_REGISTRY_BUILD="$BUILD/controller" \
     SKYRA_REGISTRY_MODE="$mode" SKYRA_REGISTRY_PARK="$park" \
     SKYRA_IDEAS_SOCKET="${IDEAS_SOCKET:-}" \
     SKYRA_REPO_SOCKET="${REPO_SOCKET:-}" \
@@ -99,6 +111,7 @@ import json, os, sys
 from pathlib import Path
 root=Path(os.environ['SKYRA_REGISTRY_ROOT'])
 build=Path(os.environ['SKYRA_REGISTRY_BUILD'])
+cache=Path(os.environ['SKYRA_REGISTRY_CACHE'])
 launch=Path(os.environ['SKYRA_REGISTRY_FILE']).stem
 # The read grant. The sandbox denies only this run's .skyra, so the workspace
 # must not contain Skyra's state (other conversations, provider logins) or
@@ -184,7 +197,7 @@ if workspace==root.resolve(strict=True):
     registry['ideas.commit']={'host':ideas_socket,'contract':str(root/'controller/hosts/ideas/contract.json')}
     think=json.loads(Path(registry['interpreter']['bundle']).read_text())
     think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['write.file','ideas.commit'])
-    think_file=build/(launch+'-think-ideas-bundle.json')
+    think_file=cache/(launch+'-think-ideas-bundle.json')
     think_file.write_text(json.dumps(think,sort_keys=True))
     registry['interpreter']['bundle']=str(think_file)
 # Repository edits and Git run through recorded host actors. The execve
@@ -199,7 +212,7 @@ if workspace==root.resolve(strict=True):
     registry['repo.check']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/check-contract.json')}
     think=json.loads(Path(registry['interpreter']['bundle']).read_text())
     think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['repo.write','execve','repo.check'])
-    think_file=build/(launch+'-think-repo-bundle.json')
+    think_file=cache/(launch+'-think-repo-bundle.json')
     think_file.write_text(json.dumps(think,sort_keys=True))
     registry['interpreter']['bundle']=str(think_file)
 # Design is callable from think and has its own root. Dependencies remain in
@@ -216,7 +229,7 @@ if penpot_socket:
     registry['design.tools']['authority']={'connect':[str(socket)]}
 think=json.loads(Path(registry['interpreter']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['design','design.tools'])
-think_file=build/(launch+'-think-design-bundle.json')
+think_file=cache/(launch+'-think-design-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
 registry['interpreter']['bundle']=str(think_file)
 # Bounded offline Blender authoring is a recorded procedure, not global MCP.
@@ -232,7 +245,7 @@ if blender_socket:
     registry['blender.tools']['authority']={'connect':[str(socket)]}
 think=json.loads(Path(registry['interpreter']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['blender','blender.tools'])
-think_file=build/(launch+'-think-blender-bundle.json')
+think_file=cache/(launch+'-think-blender-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
 registry['interpreter']['bundle']=str(think_file)
 # Each built binary is registered by a copy stored under its own hash. A
@@ -242,7 +255,7 @@ import hashlib, shutil, tempfile
 def pinned(path):
     p=Path(path)
     digest=hashlib.sha256(p.read_bytes()).hexdigest()
-    dest=build/'pinned'/digest/p.name
+    dest=cache/'pinned'/digest/p.name
     if not dest.exists():
         dest.parent.mkdir(parents=True,exist_ok=True)
         fd,tmp=tempfile.mkstemp(dir=dest.parent); os.close(fd)
@@ -252,7 +265,7 @@ for entry in registry.values():
     if 'path' in entry and Path(entry['path']).parent==build:
         entry['path']=pinned(entry['path'])
     for key in ('contract','bundle'):
-        if key in entry and Path(entry[key]).parent==build:
+        if key in entry and Path(entry[key]).parent in (build, cache):
             entry[key]=pinned(entry[key])
 Path(os.environ['SKYRA_REGISTRY_FILE']).write_text(json.dumps(registry,sort_keys=True))
 PY
@@ -267,7 +280,7 @@ import os
 from pathlib import Path
 root = Path(os.environ['SKYRA_IDEAS_ROOT']).resolve(strict=True)
 workspace = Path(os.environ['SKYRA_IDEAS_WORKSPACE']).resolve(strict=True)
-if workspace == root:
+if workspace == root and not (root / "skyra-release.json").exists():
     ideas = root / 'ideas'
     if ideas.is_symlink():
         raise SystemExit('skyra: ideas must be a real directory, not a symlink')
@@ -430,19 +443,25 @@ serve() {
     exec python3 "$ROOT/controller/design/session.py" serve ${1:+"$1"}
   fi
 
-  local stamp="$BUILD/.source-stamp"
-  local fingerprint
-  fingerprint=$(cd "$ROOT" && { cat go.mod go.sum controller/interp/go.mod controller/interp/go.sum 2>/dev/null; find controller tui -name '*.go' -o -name '*.m' | sort | xargs cat; } | shasum -a 256 | cut -d' ' -f1)
-  if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$fingerprint" ]; then
-    say "building (source changed)"
-    controller_build
-    printf '%s' "$fingerprint" > "$stamp"
+  if [ "$PACKAGED" = 0 ]; then
+    local stamp="$BUILD/.source-stamp"
+    local fingerprint
+    fingerprint=$(cd "$ROOT" && { cat go.mod go.sum controller/interp/go.mod controller/interp/go.sum 2>/dev/null; find controller tui -name '*.go' -o -name '*.m' | sort | xargs cat; } | shasum -a 256 | cut -d' ' -f1)
+    if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$fingerprint" ]; then
+      say "building (source changed)"
+      controller_build
+      printf '%s' "$fingerprint" > "$stamp"
+    fi
   fi
 
   # The normal app backend owns read-only vision automatically. The inner
   # launch has a fixed desktop config and must not start another service.
   if [ "$mode" = real ] && [ -z "${SKYRA_DESKTOP_CONFIG:-}" ]; then
-    exec python3 "$ROOT/controller/cua/session.py" --all-windows serve
+    if [ "$PACKAGED" = 1 ] && [ ! -x /Applications/CuaDriver.app/Contents/MacOS/cua-driver ]; then
+      say "desktop observation unavailable: install CuaDriver 0.34.0 to enable it"
+    else
+      exec python3 "$ROOT/controller/cua/session.py" --all-windows serve
+    fi
   fi
 
   local reg scratch park=$STATE/park-app-$mode-$$.sock convs=$STATE/conversations
@@ -490,6 +509,10 @@ PY
 # The PATH is recorded in the bundle, because an app opened from Finder gets
 # a bare one and serve needs go, python3 and codex.
 app() {
+  if [ "$PACKAGED" = 1 ]; then
+    open "$ROOT/../../.."
+    return
+  fi
   local dir=$BUILD/Skyra.app bin
   if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app ] && \
      ! xcode-select -p 2>/dev/null | grep -q '\.app/'; then
@@ -547,12 +570,14 @@ doctor() {
   check "macOS" '[ "$(uname)" = Darwin ]' "the sandbox uses sandbox-exec, which is macOS only"
   check "sandbox-exec" 'command -v sandbox-exec' "missing from this macOS"
   check "python3" 'command -v python3' "required for the provider sandbox launcher"
-  v=$(go env GOVERSION 2>/dev/null || true)
-  check "Go >= 1.25 (${v:-none})" '[ -n "$v" ] && [ "$(printf "%s\n" go1.25 "$v" | sort -V | head -1)" = go1.25 ]' "install Go 1.25+: brew install go"
-  check "node and npm" 'command -v node && command -v npm' "install Node 20+: brew install node"
-  check "frontend dependencies" '[ -d "$ROOT/frontend/node_modules" ]' "run ./install.sh"
+  if [ "$PACKAGED" = 0 ]; then
+    v=$(go env GOVERSION 2>/dev/null || true)
+    check "Go >= 1.25 (${v:-none})" '[ -n "$v" ] && [ "$(printf "%s\n" go1.25 "$v" | sort -V | head -1)" = go1.25 ]' "install Go 1.25+: brew install go"
+    check "node and npm" 'command -v node && command -v npm' "install Node 20+: brew install node"
+    check "frontend dependencies" '[ -d "$ROOT/frontend/node_modules" ]' "run ./install.sh"
+  fi
   check "skyra on PATH" '[ "$(command -v skyra)" ]' "run ./install.sh, then open a new terminal"
-  warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "only 'skyra chat' needs it; install: brew install codex"
+  warn "codex installed ($(codex --version 2>/dev/null || echo none))" 'command -v codex' "needed for Codex conversations; install the verified version: npm install -g @openai/codex@0.160.0"
   warn "codex logged in" 'codex login status' "run 'codex login' (a ChatGPT login works)"
   warn "direct-tool provider configuration" 'python3 "$ROOT/controller/codex/provider/launch.py" --check' "requires Codex 0.160.0, file login and matching model cache; see docs/startup-doc.md"
   warn "port $WS_PORT free" 'port_free "$WS_PORT"' "set SKYRA_WS_PORT"
@@ -561,6 +586,12 @@ doctor() {
   say "ready. Run 'skyra'."
 }
 
+
+if [ "$PACKAGED" = 1 ]; then
+  case ${1:-} in
+    ""|chat|build|test|demo) die "Use Skyra.app, skyra tui, skyra ask, or skyra serve. Browser/build/test commands require a source checkout." ;;
+  esac
+fi
 
 case ${1:-} in
   "")            chat ;;
