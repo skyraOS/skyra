@@ -204,7 +204,11 @@ final class Session {
         switch current?.phase {
         case .ready:
             sendText(text, conversation: selected!)
-        case nil, .closed, .failed:
+        case .closed, .failed:
+            // Its run ended (a host restart, a close, a fault): the webhost
+            // carries it on in a new run, told the conversation so far.
+            sendText(text, conversation: selected!)
+        case nil:
             open(with: text)
         case .pending:
             notice = "the agent is working; your draft is kept"

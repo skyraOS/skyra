@@ -130,6 +130,7 @@ struct Composer: View {
         switch session.current?.phase {
         case .ready: "Reply"
         case .pending: "The agent is working…"
+        case .closed, .failed: "Continue this conversation"
         default: "Message \(session.root?.title ?? "the agent") to begin"
         }
     }

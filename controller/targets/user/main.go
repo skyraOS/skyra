@@ -62,6 +62,14 @@ func main() {
 		Input struct {
 			Conversation string `json:"conversation"`
 			Procedure    string `json:"procedure"`
+			// A conversation continued in a new run, after the run it was in
+			// ended (a host restart, a close, a fault): what was said before,
+			// and the message that continues it. A conversation is the user's
+			// and the agent's, not the kernel's: the new run is told the old
+			// one as text.
+			Transcript []entry                       `json:"transcript"`
+			Text       string                        `json:"text"`
+			Images     []struct{ Path, Name string } `json:"images"`
 		} `json:"input"`
 		Steps []step `json:"steps"`
 	}
@@ -78,9 +86,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	transcript := []entry{}
+	transcript := append([]entry{}, c.Input.Transcript...)
 	said := ""
 	var images []string // the paths of the images pasted with what was said
+	continuing := c.Input.Text != "" || len(c.Input.Images) > 0
+	if continuing {
+		said = c.Input.Text
+		shown := said
+		for _, im := range c.Input.Images {
+			images = append(images, im.Path)
+			shown += "\n🖼 " + im.Name
+		}
+		transcript = append(transcript, entry{"user", shown})
+	}
 	for _, s := range c.Steps {
 		switch {
 		case s.Fault != nil:
@@ -120,6 +138,13 @@ func main() {
 
 	last := len(c.Steps) - 1
 	switch {
+	case last < 0 && continuing:
+		// The continuing message is run at once, with everything before it
+		// as its context.
+		if images == nil {
+			images = []string{}
+		}
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "context": transcript[:len(transcript)-1], "images": images}})
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault != nil:
 		f := c.Steps[last].Fault
 		emit(c.Frame, fmt.Sprintf("ended: the browser faulted (%s): %s", f.Kind, f.Cause))

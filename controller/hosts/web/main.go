@@ -171,7 +171,7 @@ func (h *webhost) loadConversation(home, under string) {
 	if h.deleted(id) {
 		return
 	}
-	root := filepath.Join(home, ".skyra")
+	root, _ := latestRun(home)
 	info, err := os.Stat(filepath.Join(root, "records"))
 	if err != nil {
 		return
@@ -425,6 +425,10 @@ func (h *webhost) handle(raw []byte) {
 		go h.seed(id, d.Title, home)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
+		if m.Type == "submit" && conv != nil && conv.parked == nil && conv.pending == "" && (conv.phase == "closed" || conv.phase == "failed") {
+			h.continueConversation(conv, m, admit, reject)
+			return
+		}
 		if conv == nil || conv.parked == nil || conv.phase != "ready" {
 			h.mu.Unlock()
 			reject("busy", "this conversation is not waiting for you")
@@ -544,10 +548,14 @@ func (h *webhost) deleteConversation(id string) error {
 
 // seed starts a new conversation as the operator: genesis, then the user side.
 func (h *webhost) seed(id, procedure, home string) {
-	root := filepath.Join(home, ".skyra")
-	// A conversation runs one procedure, fixed here at creation (proposal 38):
-	// the root the human selected, recorded in its genesis.
-	payload, _ := json.Marshal(map[string]string{"conversation": id, "procedure": procedure})
+	h.seedRun(id, filepath.Join(home, ".skyra"), home, map[string]any{"conversation": id, "procedure": procedure})
+}
+
+// seedRun starts a run of a conversation at root: genesis, then the user side
+// with payload. A conversation runs one procedure, fixed at creation
+// (proposal 38): the root the human selected, recorded in its genesis.
+func (h *webhost) seedRun(id, root, home string, seeded map[string]any) {
+	payload, _ := json.Marshal(seeded)
 	// Each conversation gets its own scratch space beside its records: the
 	// agent may write and read it, run nothing from it, and it goes when the
 	// conversation is deleted.
@@ -681,6 +689,9 @@ func (h *webhost) reconcileRequests() bool {
 			continue
 		}
 		root := filepath.Join(h.homeOf(c), ".skyra")
+		if c.lineage != nil {
+			root = c.lineage.root // the run in progress
+		}
 		if failure, err := tree.ReadFailure(root); err == nil && failure != nil {
 			c.phase, c.recoveryRequired = "failed", true
 			h.finishRequest(c.pending, "failed", "delivery-unknown", failure.Message)
@@ -710,4 +721,71 @@ func (h *webhost) reconcileRequests() bool {
 	}
 	h.mu.Unlock()
 	return changed
+}
+
+// latestRun is a conversation's newest run: the first at home/.skyra, each
+// continuation under home/runs/<n>/.skyra. Its transcript is the whole
+// conversation, since each run is seeded with what came before it.
+func latestRun(home string) (string, int) {
+	root, n := filepath.Join(home, ".skyra"), 1
+	runs, _ := os.ReadDir(filepath.Join(home, "runs"))
+	for _, r := range runs {
+		k, err := strconv.Atoi(r.Name())
+		if err != nil || k <= n {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(home, "runs", r.Name(), ".skyra", "records")); err == nil {
+			root, n = filepath.Join(home, "runs", r.Name(), ".skyra"), k
+		}
+	}
+	return root, n
+}
+
+// continueConversation carries a conversation on after the run it was in
+// ended: the host restarted, it was closed, or it failed. A conversation is
+// the user's and the agent's, not the kernel's, so it goes on in a new run of
+// the same slot, seeded with the transcript so far as text and the message
+// that continues it, which runs at once with the transcript as its context.
+// The scratch space is the conversation's, so it carries over. Nothing of the
+// old run is repeated. Caller holds mu; it is released.
+func (h *webhost) continueConversation(c *conversation, m inbound, admit func(string) bool, reject func(string, string)) {
+	d, ok := h.destinationFor(c.procedure)
+	if !ok {
+		d, ok = h.destinationFor("") // one from before procedures continues in the first root
+	}
+	if !ok {
+		h.mu.Unlock()
+		reject("unknown-procedure", "no procedure can carry this conversation on")
+		return
+	}
+	home := h.homeOf(c)
+	images, err := saveAttachments(filepath.Join(home, "scratch"), m.Images)
+	if err != nil {
+		h.mu.Unlock()
+		reject("invalid-image", err.Error())
+		return
+	}
+	if !admit(c.id) {
+		return
+	}
+	said := []map[string]string{}
+	for _, e := range c.entries {
+		if e.Role == "user" || e.Role == "agent" {
+			said = append(said, map[string]string{"role": e.Role, "text": e.Text})
+		}
+	}
+	_, n := latestRun(home)
+	root := filepath.Join(home, "runs", strconv.Itoa(n+1), ".skyra")
+	id := m.RequestID
+	c.entries = append(c.entries, entry{Role: "user", Text: withImages(m.Text, images), TS: int64(len(c.entries)), RequestID: &id})
+	c.phase, c.pending, c.recoveryRequired, c.procedure = "pending", m.RequestID, false, d.Title
+	c.lineage = newLineage(root)
+	h.mu.Unlock()
+	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
+	h.broadcast()
+	seeded := map[string]any{"conversation": c.id, "procedure": d.Title, "transcript": said, "text": m.Text}
+	if len(images) > 0 {
+		seeded["images"] = images
+	}
+	go h.seedRun(c.id, root, home, seeded)
 }

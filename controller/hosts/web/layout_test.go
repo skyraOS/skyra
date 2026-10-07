@@ -61,3 +61,21 @@ func TestAProcedureMustNameADirectory(t *testing.T) {
 		t.Fatal("a procedure whose title is a path was accepted")
 	}
 }
+
+// A conversation carried on after its run ended is read back from its newest
+// run, whose transcript is the whole conversation; a run with no records yet
+// (still starting) does not count.
+func TestTheNewestRunIsTheConversation(t *testing.T) {
+	home := t.TempDir()
+	for _, run := range []string{".skyra", "runs/2/.skyra", "runs/10/.skyra"} {
+		os.MkdirAll(filepath.Join(home, run, "records"), 0o700)
+	}
+	os.MkdirAll(filepath.Join(home, "runs", "11", ".skyra"), 0o700) // no records yet
+	os.MkdirAll(filepath.Join(home, "runs", "notes"), 0o700)
+	if root, n := latestRun(home); root != filepath.Join(home, "runs", "10", ".skyra") || n != 10 {
+		t.Fatalf("newest run: %s %d", root, n)
+	}
+	if root, n := latestRun(t.TempDir()); filepath.Base(root) != ".skyra" || n != 1 {
+		t.Fatalf("a conversation never carried on: %s %d", root, n)
+	}
+}

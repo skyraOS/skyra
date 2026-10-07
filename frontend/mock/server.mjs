@@ -27,7 +27,10 @@ function handle(ws, m) {
  const old = requests.get(m.requestId);
  if (old) { if (old.identity !== identity) return reject("conflict", "request id belongs to different work"); send(ws, { type: "accepted", requestId: m.requestId }); broadcast(); return; }
  const c = conversations.get(m.conversation);
- if (m.type !== "open-conversation" && (!c || (m.type !== "delete-conversation" && c.phase !== "ready") || c.phase === "pending")) return reject("busy", "conversation is not waiting for you");
+ // A closed or failed conversation is carried on by a submit, as the host
+ // does: a new run of the same slot, told the conversation so far.
+ const open = m.type === "submit" ? ["ready", "closed", "failed"] : ["ready"];
+ if (m.type !== "open-conversation" && (!c || (m.type !== "delete-conversation" && !open.includes(c.phase)) || c.phase === "pending")) return reject("busy", "conversation is not waiting for you");
  if (!["submit", "open-conversation", "close-interaction", "delete-conversation"].includes(m.type)) return reject("unknown", "unknown message type");
  const root = m.type === "open-conversation" ? (m.procedure ? destinations.find(d => d.title === m.procedure) : destinations[0]) : null;
  if (m.type === "open-conversation" && !root) return reject("unknown-procedure", `no procedure ${JSON.stringify(m.procedure)} can be selected`);

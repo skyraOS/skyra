@@ -423,6 +423,15 @@ Where the code departs from the text:
 - **A conversation from before procedures has `procedure: ""`.** It stays
   viewable, under History in the sidebar, under no root, as does one whose
   procedure the webhost no longer lists.
+- **A conversation outlives its run.** A conversation is the user's and the
+  agent's, not the kernel's. When its run has ended (the host restarted, it
+  was closed, or it faulted) a message into it starts a new run of the same
+  slot, `runs/<n>/.skyra` beside the first: the user actor is seeded with the
+  transcript so far as text and the message that continues it, which runs at
+  once with the transcript as its context, on a new thread. The scratch
+  space carries over. Nothing of the old run is repeated, and its calls stay
+  in its own lineage. On reload the newest run is the conversation. One from
+  before procedures continues in the first root.
 - **A conversation is kept with the surface it runs.** The webhost keeps each
   new conversation under its procedure's directory,
   `conversations/<procedure>/<id>`, so a surface's context is together on

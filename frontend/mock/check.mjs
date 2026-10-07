@@ -90,9 +90,22 @@ try {
  }
  client.send({type:"close-interaction",uiIncarnation:inc,conversation:id,requestId:"close"});
  await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close" && r.status==="returned"));
+ // A closed conversation, as every one is after a host restart, is carried
+ // on in the same slot: a new run, told the conversation so far.
+ submit("r5","history"); await client.next(m=>m.type==="accepted" && m.requestId==="r5");
+ const carried=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r5" && r.status==="returned"));
+ const slot=carried.conversations.find(c=>c.conversation===id);
+ assert(slot && slot.phase==="ready" && carried.conversations.length===1, `the conversation was not carried on in its slot: ${JSON.stringify(carried.conversations.map(c=>[c.conversation,c.phase]))}`);
+ if (real) {
+  const said=slot.entries.filter(e=>e.role==="agent").at(-1).text;
+  assert(said.includes("user: tool:hello") && said.includes("|history|"), `the new run was not told the conversation so far: ${said}`);
+  assert(slot.entries.some(e=>e.role==="user" && e.text==="tool:hello"), "the earlier turns left the transcript");
+ }
+ client.send({type:"close-interaction",uiIncarnation:inc,conversation:id,requestId:"close-again"});
+ await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close-again" && r.status==="returned"));
  client.send({type:"delete-conversation",uiIncarnation:inc,conversation:id,requestId:"delete"});
  await client.next(m=>m.type==="snapshot" && m.conversations.length===0);
- console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, roots and outlines${real ? ", a pasted image" : ""}, close, delete`);
+ console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, roots and outlines${real ? ", a pasted image" : ""}, close, carry on after close, delete`);
  if (real && process.argv.includes("--desktop")) {
   ws.terminate();
   const swift = spawn("swift", ["test", "--no-parallel"], { cwd: `${root}/desktop`, env: { ...process.env, SKYRA_TEST_WS: `ws://127.0.0.1:${port}/ws`, SKYRA_TEST_TOKEN: token }, stdio: "inherit" });

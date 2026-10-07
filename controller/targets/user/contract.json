@@ -10,6 +10,51 @@
       },
       "procedure": {
         "type": "string"
+      },
+      "transcript": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "role",
+            "text"
+          ],
+          "fields": {
+            "role": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "text": {
+        "type": "string"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "path",
+            "name"
+          ],
+          "fields": {
+            "path": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        }
       }
     }
   },
