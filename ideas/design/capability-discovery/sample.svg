@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240" role="img" aria-labelledby="title desc">
+<title id="title">Standalone task card concept</title>
+<desc id="desc">A light card with a task title, supporting text, and a decorative Start button. Static concept only.</desc>
+<rect width="400" height="240" fill="#eef2f6"/>
+<rect x="24" y="24" width="352" height="192" rx="16" fill="#ffffff"/>
+<g font-family="system-ui, sans-serif">
+<text x="48" y="65" font-size="12" fill="#536174">LOCAL DESIGN DEMO</text>
+<text x="48" y="101" font-size="24" font-weight="700" fill="#172334">Your next small step</text>
+<text x="48" y="130" font-size="14" fill="#536174">Choose one task and make a little progress.</text>
+<rect x="48" y="154" width="112" height="40" rx="8" fill="#3157d5"/>
+<text x="104" y="180" text-anchor="middle" font-size="14" font-weight="600" fill="#ffffff">Start a task</text>
+</g>
+</svg>
