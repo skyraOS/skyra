@@ -144,8 +144,9 @@ struct Composer: View {
     private var grantLine: String {
         guard let w = backend.workspace else { return "no workspace granted" }
         let path = (w.path as NSString).abbreviatingWithTildeInPath
+        let access = Backend.repositoryAccess(w) ? "read + write + git" : "read"
         return backend.fake
-            ? "read · \(path) · fake Codex, nothing leaves this Mac"
-            : "read · \(path) · contents go to the model provider"
+            ? "\(access) · \(path) · fake Codex, nothing leaves this Mac"
+            : "\(access) · \(path) · contents go to the model provider"
     }
 }

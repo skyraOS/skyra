@@ -1,0 +1,8 @@
+{
+  "action": "swift.build",
+  "exit_code": 1,
+  "output": "warning: /Users/mikepersonal/Library/org.swift.swiftpm/configuration is not accessible or not writable, disabling user-level cache features.\nwarning: /Users/mikepersonal/Library/org.swift.swiftpm/security is not accessible or not writable, disabling user-level cache features.\nwarning: /Users/mikepersonal/Library/Caches/org.swift.swiftpm is not accessible or not writable, disabling user-level cache features.\nwarning: 'desktop': failed loading cached manifest for 'desktop': Unable to open database at path(\u003cAbsolutePath:\"/Users/mikepersonal/Library/Caches/org.swift.swiftpm/manifests/manifest.db\"\u003e): authorization denied\nwarning: 'desktop': failed storing manifest for 'desktop' in cache: Unable to open database at path(\u003cAbsolutePath:\"/Users/mikepersonal/Library/Caches/org.swift.swiftpm/manifests/manifest.db\"\u003e): authorization denied\nerror: You don’t have permission to save the file “output-file-map.json” in the folder “SkyraTests.build”.\n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-1724235303.json",
+  "duration_ms": 3925
+}

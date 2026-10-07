@@ -8,6 +8,8 @@ struct ContentView: View {
     let session: Session
 
     @State private var sky = SkyModel()
+    @State private var graphicsPointer: CGPoint?
+    @AppStorage("graphicsMode") private var graphicsMode = GraphicsMode.off.rawValue
     @State private var showSidebar = true
     @State private var active = true
     @State private var visible = true
@@ -22,6 +24,8 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             SkyView(model: sky, paused: reduceMotion || !visible, inactive: !active)
+
+            graphics
 
             VStack(spacing: 0) {
                 Header(backend: backend, session: session, showSidebar: $showSidebar)
@@ -80,8 +84,8 @@ struct ContentView: View {
         .coordinateSpace(name: "sky")
         .onContinuousHover(coordinateSpace: .named("sky")) { phase in
             switch phase {
-            case let .active(p): sky.pointer = p
-            case .ended: sky.pointer = nil
+            case let .active(p): sky.pointer = p; graphicsPointer = p
+            case .ended: sky.pointer = nil; graphicsPointer = nil
             }
         }
         .frame(minWidth: 640, minHeight: 420)
@@ -121,6 +125,27 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { _ in
             // Occluded or minimized, the sky stops.
             visible = NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+        }
+    }
+
+    @ViewBuilder private var graphics: some View {
+        let mode = GraphicsMode(rawValue:graphicsMode) ?? .off
+        if mode != .off && visible && !backendFailed {
+            GeometryReader { geo in
+                let origin=geo.frame(in:.named("sky")).origin
+                let bounds=geo.size
+                let controls=[CGRect(x:0,y:0,width:showSidebar ? 232 : 0,height:bounds.height),
+                              CGRect(x:0,y:0,width:bounds.width,height:48),
+                              CGRect(x:0,y:bounds.height-80,width:bounds.width,height:80)]
+                let log=sky.logRect.map { [$0.offsetBy(dx:-origin.x,dy:-origin.y)] } ?? []
+                let roots=RootSky.place(session.destinations,in:bounds).map(\.bounds)
+                if let r=GraphicsLayout.place(in:bounds,excluding:controls+log+roots) {
+                    GraphicsCoreView(session:session,pointer:arranging ? nil : graphicsPointer,
+                                     viewport:r.offsetBy(dx:origin.x,dy:origin.y),reduceMotion:reduceMotion,
+                                     visible:visible,active:active,mode:mode)
+                        .frame(width:r.width,height:r.height).position(x:r.midX,y:r.midY)
+                }
+            }.ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
         }
     }
 
@@ -196,6 +221,7 @@ struct Header: View {
     let backend: Backend
     let session: Session
     @Binding var showSidebar: Bool
+    @State private var showPenpot = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -209,6 +235,11 @@ struct Header: View {
             .foregroundStyle(Theme.faint.color)
             .help("Show or hide conversations")
             Spacer()
+            Button("Penpot") { showPenpot = true }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.dim.color)
+                .disabled(session.current?.phase == .pending)
+                .sheet(isPresented: $showPenpot) { PenpotSheet(backend: backend) }
             WorkspaceMenu(backend: backend, working: session.current?.phase == .pending)
             if let phase = session.current?.phase {
                 Text(phase.rawValue).foregroundStyle(Theme.faint.color)

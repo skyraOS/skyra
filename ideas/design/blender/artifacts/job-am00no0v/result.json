@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "operation": "blender.tools",
+  "requested_operation": "export_asset",
+  "status": "succeeded",
+  "source_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+  "blender_version": "5.1.2",
+  "result": {
+    "objects": [
+      {
+        "id": "SkyraCoreRoot",
+        "type": "EMPTY",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 0
+      },
+      {
+        "id": "CoreMesh",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 320
+      },
+      {
+        "id": "ArcInner",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.6108652353286743,
+          0.2617993950843811,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 1024
+      },
+      {
+        "id": "ArcOuter",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          -0.5235987901687622,
+          0.2617993950843811,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 1024
+      }
+    ],
+    "materials": [
+      "SkyraAccent",
+      "SkyraTeal"
+    ],
+    "triangles": 2368,
+    "units": "METRIC"
+  },
+  "change": null,
+  "files": {
+    "asset.usdz": {
+      "sha256": "fa019a7fa2aff31c008aee241a1bd446a2a727f3525e3fe26627ebd8e610580a",
+      "size": 86978,
+      "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-am00no0v/asset.usdz"
+    },
+    "asset.glb": {
+      "sha256": "b489777ea0cbfed2565268e07b26136697ea40f2e792ed589deb239312a03354",
+      "size": 55248,
+      "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-am00no0v/asset.glb"
+    }
+  },
+  "job_id": "job-am00no0v",
+  "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+  "candidate_status": "unreviewed",
+  "validation": [
+    {
+      "format": "GLB",
+      "triangles": 2368,
+      "materials": 2,
+      "mesh_nodes": 3,
+      "nodes": [
+        "ArcInner",
+        "ArcOuter",
+        "CoreMesh",
+        "SkyraCoreRoot"
+      ],
+      "status": "inspected",
+      "approval": "unreviewed"
+    },
+    {
+      "format": "USDZ",
+      "entries": [
+        "asset.usdc"
+      ],
+      "status": "archive_inspected",
+      "approval": "unreviewed",
+      "limits": "USD scene contents still require native load and visual review."
+    }
+  ],
+  "scene_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839"
+}

@@ -1,0 +1,8 @@
+{
+  "action": "swift.test",
+  "exit_code": 1,
+  "output": "error: terminated(69): /usr/bin/xcrun --sdk macosx --show-sdk-path output:\n    xcrun: error: couldn't create cache file '/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/xcrun_db-xo27iFnj' (errno=Operation not permitted)\n    You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from within a Terminal window to review and agree to the Xcode and Apple SDKs license.\n    \n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-1619421713.json",
+  "duration_ms": 179
+}

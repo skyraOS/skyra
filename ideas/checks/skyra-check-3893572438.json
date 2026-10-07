@@ -1,0 +1,7 @@
+{
+  "action": "swift.build",
+  "exit_code": 0,
+  "output": "Building for production...\n[0/5] Write sources\n[1/5] Copying Resources\n[2/5] Write swift-version--58304C5D6DBC2206.txt\n[4/6] Compiling Skyra Backend.swift\n[4/6] Write Objects.LinkFileList\n[5/6] Linking Skyra\nBuild complete! (20.52s)\n",
+  "report_path": "ideas/checks/skyra-check-3893572438.json",
+  "duration_ms": 25614
+}

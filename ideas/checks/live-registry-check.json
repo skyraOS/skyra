@@ -1,0 +1,8 @@
+{
+  "action": "go.format",
+  "duration_ms": 166,
+  "exit_code": 0,
+  "report_path": "ideas/checks/skyra-check-3000134196.json",
+  "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-repo-check-live-pgl8auqp/format",
+  "replay_verified": true
+}

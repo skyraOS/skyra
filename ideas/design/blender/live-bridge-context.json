@@ -1,0 +1,21 @@
+{
+  "connected": true,
+  "error": null,
+  "operation": "blender.tools",
+  "operations": [
+    "context",
+    "export_asset",
+    "inspect_object",
+    "inspect_scene",
+    "render_preview",
+    "set_material_parameter",
+    "set_transform"
+  ],
+  "scene_version": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+  "source": "Skyra core working copy",
+  "status": "ready",
+  "version": 1,
+  "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+  "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-live-fn4reksz/context",
+  "replay_verified": true
+}

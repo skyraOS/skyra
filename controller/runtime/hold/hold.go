@@ -55,9 +55,12 @@ type Observation struct {
 }
 
 const (
-	maxLine  = 1 << 20 // one protocol line
-	maxBatch = 256     // lines one exchange returns
-	maxStop  = 1024    // lines a stop drains
+	// Tool results carry a 2 MiB screenshot as base64 plus text. Codex also
+	// echoes the content in its dynamic-tool completion notifications.
+	maxLine     = 4 << 20 // one incoming protocol line, including its newline
+	maxDelivery = 4 << 20
+	maxBatch    = 256  // lines one exchange returns
+	maxStop     = 1024 // lines a stop drains
 	// Quiet is how an operation that waited out its deadline is reported;
 	// the adapter treats it as silence (codex/resident: quiet).
 	Quiet = "i/o timeout: no output within the wait"
@@ -155,7 +158,7 @@ func readLine(r *bufio.Reader) (string, error) {
 		part, err := r.ReadSlice('\n')
 		line = append(line, part...)
 		if len(line) > maxLine {
-			return "", errors.New("resident line exceeds 1 MiB")
+			return "", errors.New("resident line exceeds 4 MiB")
 		}
 		if err == bufio.ErrBufferFull {
 			continue
@@ -306,7 +309,11 @@ func (h *holder) operate(q Request) Observation {
 		return o
 	}
 	for _, line := range q.Deliver {
-		if !json.Valid([]byte(line)) || len(line) > maxLine || bytes.ContainsRune([]byte(line), '\n') {
+		if len(line) > maxDelivery {
+			o.Error = "delivery exceeds 4 MiB"
+			return o
+		}
+		if !json.Valid([]byte(line)) || bytes.ContainsRune([]byte(line), '\n') {
 			o.Error = "delivery is not one JSON value"
 			return o
 		}

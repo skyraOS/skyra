@@ -9,6 +9,7 @@ import SwiftUI
 @main
 struct SkyraApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @AppStorage("graphicsMode") private var graphicsMode = GraphicsMode.off.rawValue
 
     var body: some Scene {
         Window("Skyra", id: "main") {
@@ -18,6 +19,14 @@ struct SkyraApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 720)
         .commands {
+            CommandMenu("Graphics") {
+                Picker("Core (pilot)", selection:$graphicsMode) {
+                    Text("Off").tag(GraphicsMode.off.rawValue)
+                    Text("Static").tag(GraphicsMode.static.rawValue)
+                    Text("Reactive").tag(GraphicsMode.reactive.rawValue)
+                }
+                Button("Reset Appearance") { graphicsMode = GraphicsMode.off.rawValue }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Conversation") { delegate.session.newSession() }
                     .keyboardShortcut("n")

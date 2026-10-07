@@ -73,3 +73,7 @@ became) or **not in the proposal**.
     Driver as observation-only desktop tools, with bounded app scope, a private
     adapter/bridge, recorded text and later screenshots. Click is an action;
     input is outside the initial cut. Proposed.
+18. **[`35-penpot-design-procedure.md`](35-penpot-design-procedure.md)**: Penpot
+    MCP as a selectable `design` procedure in the normal app: session-bound
+    design editing, exported previews, recorded adapter calls and offline replay.
+    Implemented with local drafts in ideas/design; live account validation pending.

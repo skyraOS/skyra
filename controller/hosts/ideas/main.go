@@ -106,7 +106,7 @@ func (g committer) commit(payload json.RawMessage) map[string]any {
 	if err != nil {
 		return fail(err)
 	}
-	lock, err := os.OpenFile(filepath.Join(gitdir, "skyra-ideas.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	lock, err := os.OpenFile(filepath.Join(gitdir, "skyra-repo.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return fail(err)
 	}

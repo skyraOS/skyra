@@ -273,7 +273,7 @@ func (l *lineage) derive() [][]call {
 			if i, ok := open[r.Predecessor]; ok {
 				c := &turns[len(turns)-1][i]
 				c.State, c.Result = "returned", summarize(r.Payload)
-				if c.To == "desktop_observe" {
+				if c.To == "desktop_observe" || c.To == "design.tools" || c.To == "blender.tools" {
 					c.Image, c.Result = desktopPreview(r.Payload)
 				}
 				if inv := l.records[r.Predecessor]; !inv.at.IsZero() && !x.at.IsZero() {
@@ -448,13 +448,21 @@ func withCalls(entries []entry, turns [][]call) []entry {
 // desktopPreview projects the recorded observation, never captures a live window.
 func desktopPreview(raw json.RawMessage) (string, string) {
 	var r desktop.Result
-	if json.Unmarshal(raw, &r) != nil || r.Version != 1 || r.Operation != "desktop_observe" {
+	if json.Unmarshal(raw, &r) != nil || r.Version != 1 || (r.Operation != "desktop_observe" && r.Operation != "design.tools" && r.Operation != "blender.tools") {
 		return "", "invalid desktop observation"
 	}
 	if r.Error != nil {
 		return "", "error: " + clip(r.Error.Message)
 	}
+	if len(r.Windows) > 0 {
+		return "", fmt.Sprintf("%d available windows", len(r.Windows))
+	}
 	summary := "observed window"
+	if r.Operation == "design.tools" {
+		summary = "design result"
+	} else if r.Operation == "blender.tools" {
+		summary = "Blender result"
+	}
 	if r.Degraded {
 		summary += " · accessibility degraded"
 	}

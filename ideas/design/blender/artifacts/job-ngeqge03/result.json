@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "operation": "blender.tools",
+  "requested_operation": "render_preview",
+  "status": "succeeded",
+  "source_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+  "blender_version": "5.1.2",
+  "result": {
+    "objects": [
+      {
+        "id": "SkyraCoreRoot",
+        "type": "EMPTY",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 0
+      },
+      {
+        "id": "CoreMesh",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 320
+      },
+      {
+        "id": "ArcInner",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.6108652353286743,
+          0.2617993950843811,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 1024
+      },
+      {
+        "id": "ArcOuter",
+        "type": "MESH",
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          -0.5235987901687622,
+          0.2617993950843811,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "triangles": 1024
+      }
+    ],
+    "materials": [
+      "SkyraAccent",
+      "SkyraTeal"
+    ],
+    "triangles": 2368,
+    "units": "METRIC"
+  },
+  "change": null,
+  "files": {
+    "preview.png": {
+      "sha256": "6253778b512c37e697d73dcb8ed60a0a765c9ee43f72fc3dd3b3cff593782669",
+      "size": 80567,
+      "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-ngeqge03/preview.png"
+    }
+  },
+  "job_id": "job-ngeqge03",
+  "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+  "candidate_status": "unreviewed",
+  "scene_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839"
+}

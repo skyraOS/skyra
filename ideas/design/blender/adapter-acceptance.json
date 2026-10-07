@@ -1,0 +1,501 @@
+[
+  {
+    "connected": true,
+    "error": null,
+    "operation": "blender.tools",
+    "operations": [
+      "context",
+      "export_asset",
+      "inspect_object",
+      "inspect_scene",
+      "render_preview",
+      "set_material_parameter",
+      "set_transform"
+    ],
+    "scene_version": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+    "source": "Skyra core working copy",
+    "status": "ready",
+    "version": 1,
+    "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+    "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-nzqlammy/record-0",
+    "replay_verified": true
+  },
+  {
+    "blender_version": "5.1.2",
+    "candidate_status": "unreviewed",
+    "change": null,
+    "files": {},
+    "job_id": "job-i7abzvvb",
+    "operation": "blender.tools",
+    "requested_operation": "inspect_scene",
+    "result": {
+      "materials": [
+        "SkyraAccent",
+        "SkyraTeal"
+      ],
+      "objects": [
+        {
+          "id": "SkyraCoreRoot",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 0,
+          "type": "EMPTY"
+        },
+        {
+          "id": "CoreMesh",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 320,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcInner",
+          "rotation": [
+            0.6108652353286743,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcOuter",
+          "rotation": [
+            -0.5235987901687622,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        }
+      ],
+      "triangles": 2368,
+      "units": "METRIC"
+    },
+    "scene_version": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+    "source_version": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+    "status": "succeeded",
+    "version": 1,
+    "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+    "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-nzqlammy/record-1",
+    "replay_verified": true
+  },
+  {
+    "blender_version": "5.1.2",
+    "candidate_status": "unreviewed",
+    "change": {
+      "after": 0.65,
+      "before": 0.550000011920929,
+      "material_id": "SkyraTeal",
+      "parameter": "roughness"
+    },
+    "files": {
+      "scene.blend": {
+        "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-2863dorc/scene.blend",
+        "sha256": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+        "size": 113813
+      }
+    },
+    "job_id": "job-2863dorc",
+    "operation": "blender.tools",
+    "requested_operation": "set_material_parameter",
+    "result": {
+      "materials": [
+        "SkyraAccent",
+        "SkyraTeal"
+      ],
+      "objects": [
+        {
+          "id": "SkyraCoreRoot",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 0,
+          "type": "EMPTY"
+        },
+        {
+          "id": "CoreMesh",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 320,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcInner",
+          "rotation": [
+            0.6108652353286743,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcOuter",
+          "rotation": [
+            -0.5235987901687622,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        }
+      ],
+      "triangles": 2368,
+      "units": "METRIC"
+    },
+    "scene_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+    "source_version": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+    "status": "succeeded",
+    "version": 1,
+    "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+    "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-nzqlammy/record-2",
+    "replay_verified": true
+  },
+  {
+    "blender_version": "5.1.2",
+    "candidate_status": "unreviewed",
+    "change": null,
+    "files": {
+      "asset.glb": {
+        "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-am00no0v/asset.glb",
+        "sha256": "b489777ea0cbfed2565268e07b26136697ea40f2e792ed589deb239312a03354",
+        "size": 55248
+      },
+      "asset.usdz": {
+        "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-am00no0v/asset.usdz",
+        "sha256": "fa019a7fa2aff31c008aee241a1bd446a2a727f3525e3fe26627ebd8e610580a",
+        "size": 86978
+      }
+    },
+    "job_id": "job-am00no0v",
+    "operation": "blender.tools",
+    "requested_operation": "export_asset",
+    "result": {
+      "materials": [
+        "SkyraAccent",
+        "SkyraTeal"
+      ],
+      "objects": [
+        {
+          "id": "SkyraCoreRoot",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 0,
+          "type": "EMPTY"
+        },
+        {
+          "id": "CoreMesh",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 320,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcInner",
+          "rotation": [
+            0.6108652353286743,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcOuter",
+          "rotation": [
+            -0.5235987901687622,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        }
+      ],
+      "triangles": 2368,
+      "units": "METRIC"
+    },
+    "scene_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+    "source_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+    "status": "succeeded",
+    "validation": [
+      {
+        "approval": "unreviewed",
+        "format": "GLB",
+        "materials": 2,
+        "mesh_nodes": 3,
+        "nodes": [
+          "ArcInner",
+          "ArcOuter",
+          "CoreMesh",
+          "SkyraCoreRoot"
+        ],
+        "status": "inspected",
+        "triangles": 2368
+      },
+      {
+        "approval": "unreviewed",
+        "entries": [
+          "asset.usdc"
+        ],
+        "format": "USDZ",
+        "limits": "USD scene contents still require native load and visual review.",
+        "status": "archive_inspected"
+      }
+    ],
+    "version": 1,
+    "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+    "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-nzqlammy/record-3",
+    "replay_verified": true
+  },
+  {
+    "blender_version": "5.1.2",
+    "candidate_status": "unreviewed",
+    "change": null,
+    "files": {
+      "preview.png": {
+        "path": "/Users/mikepersonal/tony-stark-was-able-tobuild-this-in-a-cave/ideas/design/blender/artifacts/job-ngeqge03/preview.png",
+        "sha256": "6253778b512c37e697d73dcb8ed60a0a765c9ee43f72fc3dd3b3cff593782669",
+        "size": 80567
+      }
+    },
+    "job_id": "job-ngeqge03",
+    "operation": "blender.tools",
+    "requested_operation": "render_preview",
+    "result": {
+      "materials": [
+        "SkyraAccent",
+        "SkyraTeal"
+      ],
+      "objects": [
+        {
+          "id": "SkyraCoreRoot",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 0,
+          "type": "EMPTY"
+        },
+        {
+          "id": "CoreMesh",
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 320,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcInner",
+          "rotation": [
+            0.6108652353286743,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        },
+        {
+          "id": "ArcOuter",
+          "rotation": [
+            -0.5235987901687622,
+            0.2617993950843811,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "translation": [
+            0,
+            0,
+            0
+          ],
+          "triangles": 1024,
+          "type": "MESH"
+        }
+      ],
+      "triangles": 2368,
+      "units": "METRIC"
+    },
+    "scene_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+    "source_version": "28937ed8ba00c0b5d2c2eb0fc4ae7f18714739f708d1522a59e3d2288b7ba839",
+    "status": "succeeded",
+    "version": 1,
+    "worker_sha256": "6c889c2d481ce8c35d8c4ca5fd154b2fd4aa1ccba574b25032f54747b30bedc2",
+    "preview_sha256": "6253778b512c37e697d73dcb8ed60a0a765c9ee43f72fc3dd3b3cff593782669",
+    "record_path": "/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-blender-nzqlammy/record-4",
+    "replay_verified": true
+  }
+]

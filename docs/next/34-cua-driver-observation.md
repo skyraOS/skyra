@@ -30,10 +30,12 @@ manifest and daemon identity checks. The first slice uses Cua's published
 daemon JSON socket protocol directly instead of spawning an MCP client.
 The `skyra desktop` launcher provides operator window discovery, service
 lifetime, optional chat provisioning, exact-byte screenshot recording, Codex
-image delivery and browser/native preview. Replay is offline. The default chat
-registry does not enable the tool. Images use existing immutable observations
-rather than introducing a new artifact effect. Model-side multi-window
-discovery remains outside this exact-window implementation.
+image delivery and browser/native preview. Replay is offline. The normal real
+app backend now provisions this tool in `think` automatically. It lists windows
+open at launch and allows captures of their pinned IDs. Images use existing
+immutable observations rather than introducing a new artifact effect.
+Model-side discovery lists the bootstrap’s fixed window inventory; opening new
+windows requires a new backend session.
 
 ## Click is an action
 

@@ -95,3 +95,20 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
     #expect((lights.alpha["think"] ?? 0) > 0.9)
     #expect(lights.alpha["act"] == 0 && lights.traced["act"] == 0)
 }
+
+@Test func designIsPartOfThinksConstellation() throws {
+    let json = thinkJSON.replacingOccurrences(of: #""write","codex.start""#, with: #""write","codex","design","design.tools","codex.start""#)
+    let d = try JSONDecoder().decode(Destination.self, from: Data(json.utf8))
+    let c = RootConstellation(d)
+    #expect(c.star("design")?.parent == "codex")
+    #expect(c.star("design.tools") == nil)
+    #expect(c.stars.filter { $0.name == "codex" }.count == 1)
+}
+
+@Test func blenderIsPartOfThinksConstellation() throws {
+    let json = thinkJSON.replacingOccurrences(of: #""write","codex.start""#, with: #""write","codex","blender","blender.tools","codex.start""#)
+    let d = try JSONDecoder().decode(Destination.self, from: Data(json.utf8))
+    let c = RootConstellation(d)
+    #expect(c.star("blender")?.parent == "codex")
+    #expect(c.star("blender.tools") == nil)
+}

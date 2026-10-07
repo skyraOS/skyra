@@ -28,9 +28,14 @@ private func board() -> NSPasteboard { NSPasteboard(name: .init("skyra-test-\(UU
     let converted = Attachment.images(on: tiff)
     #expect(converted.count == 1 && Attachment.kind(converted[0].data) == "png")
 
-    let file = FileManager.default.temporaryDirectory.appendingPathComponent("Screenshot 2026-10-06 at 3.14.15 PM.png")
+    // Honor the check runner's temporary directory and isolate each fixture.
+    let temporary = ProcessInfo.processInfo.environment["TMPDIR"].map { URL(fileURLWithPath:$0) }
+        ?? FileManager.default.temporaryDirectory
+    let directory = temporary.appendingPathComponent("skyra-attachment-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+    defer { try? FileManager.default.removeItem(at:directory) }
+    let file = directory.appendingPathComponent("Screenshot 2026-10-06 at 3.14.15 PM.png")
     try pngData().write(to: file)
-    defer { try? FileManager.default.removeItem(at: file) }
     let copied = board()
     copied.clearContents()
     copied.writeObjects([file as NSURL])

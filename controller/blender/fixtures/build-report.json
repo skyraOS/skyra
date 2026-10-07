@@ -1,0 +1,32 @@
+{
+  "blender": "5.1.2",
+  "script_sha256": "19b7ba8062736e7a476d97142b427814dc7812bf2e5969064c3699474ca7ec48",
+  "source_up": "Z",
+  "runtime_up": "Y",
+  "nodes": [
+    "SkyraCoreRoot",
+    "CoreMesh",
+    "ArcInner",
+    "ArcOuter"
+  ],
+  "triangles": 2368,
+  "materials": 2,
+  "files": {
+    "core.blend": {
+      "sha256": "385516d3f221e23d794627bfe9eb458886160507d4faebe7e80c263e8286fea5",
+      "bytes": 113963
+    },
+    "core.usdz": {
+      "sha256": "ced447a23cf1cc3495d98e08544fcf4a93f3731450008d163d13f61fe404cb63",
+      "bytes": 86967
+    },
+    "core.glb": {
+      "sha256": "bcaa23eb262ee151d7acc9b22f799c424aeed7934589614eb8a92f2ef7a619ff",
+      "bytes": 55248
+    },
+    "axis.usdz": {
+      "sha256": "af012c3fc5e949e914a5b7bf5912af918ddd309198553673f989d72bb9a74cc1",
+      "bytes": 3696
+    }
+  }
+}

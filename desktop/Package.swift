@@ -7,7 +7,7 @@ let package = Package(
     name: "Skyra",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "Skyra"),
+        .executableTarget(name: "Skyra", resources: [.copy("Resources")]),
         .testTarget(name: "SkyraTests", dependencies: ["Skyra"]),
     ]
 )

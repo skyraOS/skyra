@@ -1,0 +1,8 @@
+{
+  "action": "swift.build",
+  "exit_code": -1,
+  "output": "dyld[2069]: Library not loaded: @rpath/llbuild.framework/Versions/A/llbuild\n  Referenced from: \u003c86DFE85C-5209-3243-ACDA-89EA537FCAE8\u003e /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-package\n  Reason: tried: '/Applications/Xcode.app/Contents/SharedFrameworks/llbuild.framework/Versions/A/llbuild' (file system sandbox blocked open()), '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/pm/llbuild/llbuild.framework/Versions/A/llbuild' (no such file), '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/llbuild.framework/Versions/A/llbuild' (no such file), '/Applications/Xcode.app/Contents/SharedFrameworks/llbuild.framework/Versions/A/llbuild' (file system sandbox blocked open()), '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/pm/llbuild/llbuild.framework/Versions/A/llbuild' (no such file), '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/llbuild.framework/Versions/A/llbuild' (no such file)\n",
+  "error": "check_failed: signal: abort trap",
+  "report_path": "ideas/checks/skyra-check-1877948420.json",
+  "duration_ms": 91
+}

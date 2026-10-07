@@ -318,8 +318,17 @@ struct SkyScene {
                     lines.append((a, end))
                     if t < 1 { head = end }
                 }
-                for (a, b) in lines { g.line(a, b, width: 2.5, ink, (context ? 0.18 : 0.08) * lit, soft: 3) }
-                for (a, b) in lines { g.line(a, b, width: 0.7, ink, (context ? 0.45 : 0.25) * lit, round: true) }
+                // The same soft, staggered shimmer as the field's stars.
+                // Keep names steady and yield to the light of an active call.
+                let ambient = model.calls.busy(f) ? 0.0 : 1.0
+                for (i, line) in lines.enumerated() {
+                    let phase = Double(i) * 1.7
+                    let shimmer = 1 + ambient * (0.10 * sin(2 * .pi * f / 97 + phase)
+                                               + 0.05 * sin(2 * .pi * f / 163 + phase * 1.3))
+                    let (a, b) = line
+                    g.line(a, b, width: 2.5, ink, (context ? 0.18 : 0.08) * lit * shimmer, soft: 3)
+                    g.line(a, b, width: 0.7, ink, (context ? 0.45 : 0.25) * lit * shimmer, round: true)
+                }
                 if let head {
                     g.disc(head, 4, context ? Theme.glintPeak : ink, 0.25 * lit)
                     g.disc(head, 1.2, context ? Theme.glintPeak : ink, lit)
@@ -328,7 +337,12 @@ struct SkyScene {
             for (i, s) in figure.stars.enumerated() {
                 let (p, scale) = at[i]
                 let breath = (1 + sin(2 * .pi * f / 520 + Double(i) * 1.7)) / 2
+                let phase = Double(i) * 1.7
+                let glint = model.calls.busy(f) ? 0 : pow((1 + sin(2 * .pi * f / (83 + Double(i) * 7) + phase)) / 2, 4)
+                let shimmer = (0.35 + 0.65 * lit) * glint
                 let c = Theme.surfaceFloor.lerp(context ? Theme.surfacePeak : Theme.labelPeak, 0.45 + 0.25 * breath + (context ? 0.3 : 0.1) * lit)
+                    .lerp(Theme.glintPeak, 0.16 * shimmer)
+                g.glow(p, sigma: (s.kind == .root ? 7 : 4) * scale, c, 0.10 * shimmer)
                 if s.kind == .root {
                     g.disc(p, 9 * scale, c, 0.10 + 0.12 * lit)
                     g.star(p, (4 + 1.5 * lit) * scale, inner: 0.3, c)

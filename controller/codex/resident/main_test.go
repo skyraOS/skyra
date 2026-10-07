@@ -412,3 +412,27 @@ func TestReadingTheWebIsNotAViolation(t *testing.T) {
 		})
 	}
 }
+
+func TestDesignOperationsAreOfferedOnlyInsideDesign(t *testing.T) {
+	c := continuation{Tools: map[string]*schema{"design": {Type: "object"}, "design.tools": {Type: "object"}}}
+	c.Input.Header = "think"
+	if ts := tools(c); len(ts) != 1 || ts[0].name != "design" {
+		t.Fatalf("think tools: %v", ts)
+	}
+	c.Input.Header = "design: create a draft"
+	if ts := tools(c); len(ts) != 2 {
+		t.Fatalf("design tools: %v", ts)
+	}
+}
+
+func TestBlenderToolsOnlyOfferedInsideBlenderProcedure(t *testing.T) {
+	c := continuation{Tools: map[string]*schema{"blender": {Type: "object"}, "blender.tools": {Type: "object"}}}
+	if ts := tools(c); len(ts) != 1 || ts[0].name != "blender" {
+		t.Fatalf("think tools: %v", ts)
+	}
+	c.Input.Header = "blender: inspect the scene"
+	ts := tools(c)
+	if len(ts) != 2 || ts[1].name != "blender_tools" || ts[1].target != "blender.tools" {
+		t.Fatalf("blender tools: %v", ts)
+	}
+}

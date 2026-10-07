@@ -13,6 +13,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -72,6 +73,8 @@ func DecodeRequest(b []byte) (Request, error) {
 // Scope is fixed by the operator. ManifestHash is Cua's domain-separated hash,
 // not the plain hash of the manifest file. It identifies the exact bytes loaded.
 type Scope struct {
+	AppName       string `json:"app_name,omitempty"`
+	WindowTitle   string `json:"window_title,omitempty"`
 	DriverVersion string `json:"driver_version"`
 	ManifestHash  string `json:"manifest_sha256"`
 	BundleID      string `json:"bundle_id"`
@@ -87,6 +90,9 @@ func (s Scope) Validate() error {
 	if err != nil || len(b) != sha256.Size {
 		return errors.New("manifest hash must be SHA-256")
 	}
+	if len(s.AppName) > 512 || len(s.WindowTitle) > 1024 {
+		return errors.New("window labels exceed limits")
+	}
 	if s.PID <= 0 || s.WindowID <= 0 {
 		return errors.New("scope requires a positive pid and window_id")
 	}
@@ -96,13 +102,24 @@ func (s Scope) Validate() error {
 // Manifest creates the only driver manifest this first cut accepts. Return the
 // exact bytes so bootstrap can retain them; no YAML parser or freeform tool list.
 func Manifest(bundleID string) ([]byte, error) {
-	if bundleID == "" || len(bundleID) > 256 || strings.ContainsAny(bundleID, " \t\r\n\x00") {
-		return nil, errors.New("a macOS app bundle ID is required")
+	ids := strings.Split(bundleID, ",")
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	if len(ids) > 128 {
+		return nil, errors.New("too many approved apps")
 	}
+	apps := []any{}
+	for _, id := range ids {
+		if id == "" || len(id) > 256 || strings.ContainsAny(id, " \t\r\n\x00") {
+			return nil, errors.New("macOS app bundle IDs are required")
+		}
+		apps = append(apps, map[string]any{"bundle_id": id, "windows": "all", "launch": false})
+	}
+
 	return json.MarshalIndent(map[string]any{
 		"version": 3, "expires_after": "8h", "idle_timeout": "30m",
 		"allow": map[string]any{"tools": []string{"get_window_state"}}, "resources": map[string]any{
-			"apps":    []any{map[string]any{"bundle_id": bundleID, "windows": "all", "launch": false}},
+			"apps":    apps,
 			"desktop": map[string]any{"display": false},
 		},
 	}, "", "  ")
@@ -170,6 +187,7 @@ func ScreenshotFrom(data, mime string) (*Screenshot, error) {
 }
 
 type Result struct {
+	Windows    []Scope     `json:"windows,omitempty"`
 	Screenshot *Screenshot `json:"screenshot,omitempty"`
 	Version    int         `json:"version"`
 	Operation  string      `json:"operation"`
