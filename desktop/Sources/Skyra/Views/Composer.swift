@@ -69,10 +69,12 @@ struct Composer: View {
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {
-                if let root = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
-                    // Where the message goes: the root this conversation runs,
-                    // or the selected one for a new conversation.
+                if let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
+                    let root = Session.companions[proc] ?? proc
                     Text(root).foregroundStyle(Theme.dim.color)
+                    if root == "think" {
+                        Text(session.model).foregroundStyle(Theme.faint.color)
+                    }
                     Text("·")
                 }
                 Button {

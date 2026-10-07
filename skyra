@@ -70,6 +70,7 @@ controller_build() {
   local t
   local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake
+    clauderesident:claude/resident claude-start:claude/start
     desktop-observe:cua/adapter cua-bridge:cua/bridge ideas-host:hosts/ideas design-tools:design repo-host:hosts/repo blender-tools:blender"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
   # Operator discovery runs outside model authority.
@@ -141,6 +142,11 @@ registry={
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'claude':{'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json')},
+ 'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True,'resident_profile':'darwin-claude-v1'},
+ 'claude.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'claude.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'claude.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
  # The interpreter (next/32): remember, the procedures it builds, in its own state,
  # and the authored procedures a conversation runs (think, proposal 38).
@@ -225,6 +231,29 @@ if blender_socket:
 think=json.loads(Path(registry['interpreter']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['blender','blender.tools'])
 think_file=build/(launch+'-think-blender-bundle.json')
+think_file.write_text(json.dumps(think,sort_keys=True))
+registry['interpreter']['bundle']=str(think_file)
+# think-claude mirrors think but narrows to the claude adapter. The same
+# reach, with codex operations replaced by their claude counterparts.
+import copy
+think=json.loads(Path(registry['interpreter']['bundle']).read_text())
+claude_proc=copy.deepcopy(think['procedures'][0])
+claude_proc['contract']['title']='think-claude'
+claude_proc['contract']['required']=['think-claude']
+claude_proc['contract']['fields']={'think-claude':claude_proc['contract']['fields']['think']}
+claude_proc['nodes']['scope']['in']['narrow']['actor']='claude'
+claude_proc['nodes']['scope']['in']['narrow']['reach']=[
+    'claude.start' if r=='codex.start' else
+    'claude.exchange' if r=='codex.exchange' else
+    'claude.inspect' if r=='codex.inspect' else
+    'claude.stop' if r=='codex.stop' else
+    'claude' if r=='codex' else r
+    for r in claude_proc['nodes']['scope']['in']['narrow']['reach']]
+claude_proc['nodes']['run']['in']['text']={'$':['input','think-claude','text']}
+claude_proc['nodes']['run']['in']['context']={'$':['input','think-claude','context']}
+claude_proc['nodes']['run']['in']['images']={'$':['input','think-claude','images']}
+think['procedures'].append(claude_proc)
+think_file=build/(launch+'-think-claude-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
 registry['interpreter']['bundle']=str(think_file)
 # Each built binary is registered by a copy stored under its own hash. A

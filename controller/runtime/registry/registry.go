@@ -147,8 +147,11 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "") {
 			return nil, room, fmt.Errorf("%s: invalid resident or connection configuration", name)
 		}
-		if e.ResidentProfile != "" && (e.ResidentProfile != "darwin-appserver-v1" || len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
-			return nil, room, fmt.Errorf("%s: unknown resident profile or no proxy hosts", name)
+		if e.ResidentProfile == "darwin-appserver-v1" && (len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
+			return nil, room, fmt.Errorf("%s: appserver profile requires proxy hosts", name)
+		}
+		if e.ResidentProfile != "" && e.ResidentProfile != "darwin-appserver-v1" && e.ResidentProfile != "darwin-claude-v1" {
+			return nil, room, fmt.Errorf("%s: unknown resident profile %q", name, e.ResidentProfile)
 		}
 		for _, host := range e.ProxyHosts {
 			if host == "" || host != strings.ToLower(host) || strings.ContainsAny(host, "/:@ \n\r\x00") {

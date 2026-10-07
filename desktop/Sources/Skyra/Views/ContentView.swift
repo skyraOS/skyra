@@ -43,17 +43,23 @@ struct ContentView: View {
         .overlay {
             if !backendFailed {
                 GeometryReader { geo in
-                    ForEach(RootSky.place(session.destinations, in: geo.size), id: \.title) { figure in
+                    ForEach(RootSky.place(session.visibleDestinations, in: geo.size), id: \.title) { figure in
                         let chosen = session.root?.title == figure.title
                         Button {
-                            session.selectRoot(figure.title)
+                            if chosen && figure.title == "think" {
+                                session.toggleModel()
+                            } else {
+                                session.selectRoot(figure.title)
+                            }
                         } label: {
                             Circle().fill(Color.clear).frame(width: 40, height: 40).contentShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .position(figure.root.point)
-                        .help("\(figure.title): run it here. Its conversations are listed, and a new one runs it.")
-                        .accessibilityLabel("\(figure.title), procedure\(chosen ? ", selected" : "")")
+                        .help(chosen && figure.title == "think"
+                            ? "Click to switch model (\(session.model))"
+                            : "\(figure.title): run it here. Its conversations are listed, and a new one runs it.")
+                        .accessibilityLabel("\(figure.title), procedure\(chosen ? ", selected, \(session.model)" : "")")
                     }
                 }
                 .ignoresSafeArea()
@@ -70,8 +76,9 @@ struct ContentView: View {
         .onChange(of: session.current == nil, initial: true) { _, empty in sky.titleOpenTarget = empty ? 1 : 0 }
         .onChange(of: session.selected, initial: true) { _, _ in followCalls() }
         .onChange(of: session.current?.entries) { _, _ in followCalls() }
-        .onChange(of: session.destinations, initial: true) { _, d in sky.roots = d }
+        .onChange(of: session.visibleDestinations, initial: true) { _, d in sky.roots = d }
         .onChange(of: session.root?.title, initial: true) { _, t in sky.selectedRoot = t }
+        .onChange(of: session.model, initial: true) { _, m in sky.modelTarget = m == "claude" ? 1 : 0 }
         .onPreferenceChange(ReadingColumn.self) { sky.column = $0 }
         .onChange(of: storedLogFrame) { _, _ in
             sky.logRect = LogFrame.decode(storedLogFrame)

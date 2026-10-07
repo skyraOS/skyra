@@ -376,11 +376,16 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	}
 	profile, env, work := x.Run.Profile, x.Run.Env, ""
 	var prepared *preparedResident
-	if x.Run.Surface.ResidentProfile != "" {
+	switch x.Run.Surface.ResidentProfile {
+	case "darwin-appserver-v1":
 		prepared, err = prepareAppserver(x, root)
-		if err != nil {
-			return machine.Started{Err: err.Error()}
-		}
+	case "darwin-claude-v1":
+		prepared, err = prepareClaude(x, root)
+	}
+	if err != nil {
+		return machine.Started{Err: err.Error()}
+	}
+	if prepared != nil {
 		profile, env, work = prepared.profile, prepared.env, prepared.work
 	}
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
