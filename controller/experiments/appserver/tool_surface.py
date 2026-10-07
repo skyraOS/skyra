@@ -37,7 +37,8 @@ def main():
     try:
         subprocess.run([sys.executable, launcher, '--ready', str(sock)], check=True, timeout=25)
         h = Host(sock); h.deliver({'method': 'initialized', 'params': {}})
-        started = h.rpc('thread/start', {'model':'gpt-6-astra', 'cwd':str(prepared / 'work'), 'approvalPolicy':'never', 'sandbox':'read-only', 'environments':[], 'dynamicTools':[{'name':'echo','description':'Skyra echo','inputSchema':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}]})
+        base = 'You are inside Skyra, a cognitive architecture, fulfilling: think'
+        started = h.rpc('thread/start', {'model':'gpt-6-astra', 'cwd':str(prepared / 'work'), 'approvalPolicy':'never', 'sandbox':'read-only', 'environments':[], 'baseInstructions':base, 'dynamicTools':[{'name':'echo','description':'Skyra echo','inputSchema':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}]})
         thread = started['result']['thread']['id']
         h.rpc('turn/start', {'threadId':thread,'input':[{'type':'text','text':'Call echo with hello.'}]})
         assert arrived.wait(30), 'no inference request received'
@@ -59,7 +60,17 @@ def main():
         # Generic base instructions mention the heading in prose; reject an
         # actual injected skills block or heading, not that textual reference.
         assert '<skills_instructions>' not in prompt and '\\n### Available skills\\n' not in prompt, 'skill inventory still injected'
+        # Our header is the whole prompt (proposal 38): no Codex base prompt,
+        # permissions, collaboration mode, environment context or documents.
+        said = []
+        for item in request.get('input', []):
+            if item.get('type') != 'message': continue
+            texts = [c.get('text', '') for c in item.get('content', []) if isinstance(c, dict)]
+            said.append((item.get('role'), texts))
+        assert said == [('developer', [base]), ('user', ['Call echo with hello.'])] or \
+               (request.get('instructions') == base and said == [('user', ['Call echo with hello.'])]), said
         print('PASS actual inference tool list is exactly one direct function: echo', flush=True)
+        print('PASS the prompt is the header alone, then the message', flush=True)
         print('PASS no injected skill inventory', flush=True)
     finally:
         if h: h.close()

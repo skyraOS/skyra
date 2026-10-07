@@ -26,6 +26,13 @@ type preparedResident struct {
 	proxy         *exec.Cmd
 }
 
+// quiet turns off every prompt Codex adds of its own (proposal 38): its
+// permissions and approval text, its collaboration mode, its environment
+// context, its apps text, and project documents such as AGENTS.md. Skyra's
+// header is the whole prompt; the sandbox, not a sentence, keeps the agent in
+// its Horizon. These are top-level keys in Codex's own defaults file.
+const quiet = "include_permissions_instructions = false\ninclude_apps_instructions = false\ninclude_collaboration_mode_instructions = false\ninclude_environment_context = false\nproject_doc_max_bytes = 0\n"
+
 // PinnedCodex is the one Codex version the resident profile is verified for
 // (codex/provider/launch.py pins the same). Changing it means rerunning
 // experiments/appserver/tool_surface.py and the OS probes first.
@@ -250,6 +257,12 @@ func bootstrapCatalog(s horizon.Surface, p *preparedResident, run string) error 
 	if err = os.WriteFile(filepath.Join(run, "models.json"), models, 0600); err != nil {
 		return err
 	}
-	config := fmt.Sprintf("model_catalog_json = %q\n", filepath.Join(run, "models.json")) + "cli_auth_credentials_store = \"file\"\nweb_search = \"disabled\"\nsandbox_mode = \"read-only\"\napproval_policy = \"never\"\n[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n"
-	return os.WriteFile(filepath.Join(run, "home", "config.toml"), []byte(config), 0600)
+	return os.WriteFile(filepath.Join(run, "home", "config.toml"), []byte(residentConfig(run)), 0600)
+}
+
+// residentConfig is the app-server's private config.toml: its catalog, its
+// own sandbox and approvals, none of its own prompts, and no agents, user
+// input, plan or bundled skills. Top-level keys come before any [section].
+func residentConfig(run string) string {
+	return fmt.Sprintf("model_catalog_json = %q\n", filepath.Join(run, "models.json")) + "cli_auth_credentials_store = \"file\"\nweb_search = \"disabled\"\nsandbox_mode = \"read-only\"\napproval_policy = \"never\"\n" + quiet + "[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n"
 }

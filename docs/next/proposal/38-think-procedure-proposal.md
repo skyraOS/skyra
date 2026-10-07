@@ -199,7 +199,17 @@ passed as `baseInstructions` on `thread/start`. Codex's default prompt, which
 describes `shell`, `apply_patch` and approval modes this runtime never offers,
 is gone. The old `developerInstructions` line ("Only registered dynamic tools
 may perform effects") is removed from the resident adapter and the legacy
-adapter. The header arrives in the Codex adapter's payload, so the prompt is
+adapter. Codex's own prompts are turned off as well, in the app-server's private
+`config.toml`: its permissions and approval text, its collaboration mode,
+its environment context, its apps text and project documents such as
+`AGENTS.md` (`include_*_instructions`, `include_environment_context`,
+`project_doc_max_bytes = 0`). The agent need not be told it is read-only:
+the sandbox keeps it in its Horizon. A capture of Codex's actual inference
+request (`experiments/appserver/tool_surface.py`, no model call) shows only
+the tools, the header, and the message. The model provider may still add a
+system prompt of its own on its side, which no client setting reaches.
+
+The header arrives in the Codex adapter's payload, so the prompt is
 whatever invoked it, and it is recorded through `codex.exchange` like every
 other byte Codex is given. The fake Codex requires `baseInstructions`, so a
 dropped prompt fails the tests.
