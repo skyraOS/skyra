@@ -42,6 +42,7 @@ def main():
         # stay off by feature and by model metadata.
         base = 'You are inside Skyra, a cognitive architecture, fulfilling: think'
         started = h.rpc('thread/start', {'model':'gpt-6-astra', 'cwd':str(prepared / 'work'), 'approvalPolicy':'never', 'sandbox':'read-only', 'baseInstructions':base, 'dynamicTools':[{'name':'echo','description':'Skyra echo','inputSchema':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}]})
+        assert 'result' in started, started
         thread = started['result']['thread']['id']
         h.rpc('turn/start', {'threadId':thread,'input':[{'type':'text','text':'Call echo with hello.'}]})
         assert arrived.wait(30), 'no inference request received'
@@ -58,11 +59,12 @@ def main():
                 assert tool.get('name') == 'functions', tool
                 flattened.extend(tool.get('tools', []))
             else: flattened.append(tool)
-        # Our one function, echo, and Codex's view_image: the one native tool
-        # kept, so it can look at a photo (proposal 38).
-        names = sorted(t.get('name') for t in flattened)
+        # Our function plus the two native read-only tools (proposal 38).
+        names = sorted(t.get('name') or t.get('type') for t in flattened)
         print('tools offered:', names, flush=True)
-        assert names == ['echo', 'view_image'], flattened
+        assert names == ['echo', 'view_image', 'web_search'], flattened
+        search = next(t for t in flattened if t.get('type') == 'web_search')
+        assert search.get('external_web_access') is True, search
         assert next(t for t in flattened if t.get('name') == 'echo').get('type') == 'function', flattened
         prompt = json.dumps(request.get('input', []))
         # Generic base instructions mention the heading in prose; reject an
@@ -77,7 +79,7 @@ def main():
             said.append((item.get('role'), texts))
         assert said == [('developer', [base]), ('user', ['Call echo with hello.'])] or \
                (request.get('instructions') == base and said == [('user', ['Call echo with hello.'])]), said
-        print('PASS the tools are echo and view_image, nothing else', flush=True)
+        print('PASS the tools are echo, view_image and live web_search, nothing else', flush=True)
         print('PASS the prompt is the header alone, then the message', flush=True)
         print('PASS no injected skill inventory', flush=True)
     finally:

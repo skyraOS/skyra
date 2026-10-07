@@ -12,10 +12,10 @@ import tempfile
 import time
 from sandbox import native_binary, render
 
-# Disabled Codex features. view_image stays on: the one native tool Codex
-# keeps, so it can look at a photo until Skyra has its own way to show one
-# (proposal 38). Its resident profile lets it read images, and only images,
-# under the Horizon's read grants; what it sees is not recorded.
+# Disabled Codex features. view_image and live web search stay on so Codex
+# can look at photos and read the internet until Skyra has its own tools
+# (proposal 38). Native reads are not recorded in the lineage. Image access
+# stays under the Horizon's read grants; web search runs at the provider.
 FEATURES = ['apps', 'plugins', 'hooks', 'daemon_auto_start', 'browser_use',
             'browser_use_external', 'computer_use', 'image_generation',
             'multi_agent', 'multi_agent_v2', 'shell_snapshot', 'code_mode', 'code_mode_only',
@@ -53,7 +53,8 @@ def direct_catalog(binary, cache_file=None):
         model['multi_agent_version'] = 'disabled'
         model['experimental_supported_tools'] = []
         model['apply_patch_tool_type'] = None  # no native file edits (see runtime/instance/appserver.go)
-        model['supports_search_tool'] = False
+        model['supports_search_tool'] = False  # deferred tool discovery stays off
+        model['use_responses_lite'] = False  # the lite API omits hosted web search
         model['include_skills_usage_instructions'] = False
         model['include_plugin_usage_instructions'] = False
         model['include_apps_usage_instructions'] = False
@@ -66,7 +67,7 @@ def configuration(run, capture_port=None):
         return ('model_provider = "capture"\n' + configuration(run) +
                 f'[model_providers.capture]\nname = "capture"\nbase_url = "http://127.0.0.1:{capture_port}/v1"\n'
                 'wire_api = "responses"\nrequires_openai_auth = false\n[features]\nenable_request_compression = false\n')
-    return 'model_catalog_json = ' + json.dumps(str(run / 'models.json')) + '\n' + 'cli_auth_credentials_store = "file"\nweb_search = "disabled"\nsandbox_mode = "read-only"\napproval_policy = "never"\n' + QUIET + '[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n'
+    return 'model_catalog_json = ' + json.dumps(str(run / 'models.json')) + '\n' + 'cli_auth_credentials_store = "file"\nweb_search = "live"\nsandbox_mode = "read-only"\napproval_policy = "never"\n' + QUIET + '[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n'
 
 
 def prepare(state, binary=None):

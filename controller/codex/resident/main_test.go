@@ -345,9 +345,8 @@ func TestContextPrecedesTheMessage(t *testing.T) {
 	}
 }
 
-// Codex's own view_image is the one native item allowed (proposal 38): a
-// turn that looks at a photo and answers is not interrupted. Any other
-// native item still is.
+// Codex's native read-only tools are allowed (proposal 38): a turn that
+// looks at a photo or reads the web is not interrupted. Native edits still are.
 func TestViewingAnImageIsNotAViolation(t *testing.T) {
 	c := turnWithCalls()
 	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
@@ -375,5 +374,41 @@ func TestViewingAnImageIsNotAViolation(t *testing.T) {
 	json.Unmarshal(m["payload"], &q)
 	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], "turn/interrupt") {
 		t.Fatalf("a file change must still interrupt the turn: %s %s", to, m["payload"])
+	}
+}
+
+func TestReadingTheWebIsNotAViolation(t *testing.T) {
+	for _, action := range []string{
+		`{"type":"search","queries":["Skyra"],"query":"Skyra"}`,
+		`{"type":"openPage","url":"https://example.com"}`,
+		`{"type":"findInPage","url":"https://example.com","pattern":"Skyra"}`,
+	} {
+		t.Run(action, func(t *testing.T) {
+			c := turnWithCalls()
+			c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
+				"lines": []string{
+					fmt.Sprintf(`{"method":"item/started","params":{"item":{"type":"webSearch","id":"web-1","action":%s},"threadId":"thread-1","turnId":"turn-1"}}`, action),
+					fmt.Sprintf(`{"method":"item/completed","params":{"item":{"type":"webSearch","id":"web-1","action":%s},"threadId":"thread-1","turnId":"turn-1"}}`, action),
+				},
+				"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
+			})})
+			to, m := emitted(t, c)
+			var poll struct{ Deliver []string }
+			if err := json.Unmarshal(m["payload"], &poll); err != nil || to != "codex.exchange" || len(poll.Deliver) != 0 {
+				t.Fatalf("a web read must wait for the turn, without interrupting: %s %s", to, m["payload"])
+			}
+			c.Steps = append(c.Steps, step{To: to, State: "return", Payload: m["payload"], Value: value(map[string]any{
+				"lines": []string{
+					`{"method":"item/completed","params":{"item":{"type":"agentMessage","text":"Here is what I found: https://example.com"},"threadId":"thread-1","turnId":"turn-1"}}`,
+					`{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"completed"}}}`,
+				},
+				"delivery": "written", "read": "observed", "observed_at": 3, "peer_eof": false, "error": "", "partial": "",
+			})})
+			to, m = emitted(t, c)
+			var answer struct{ Text, Refused string }
+			if err := json.Unmarshal(m["payload"], &answer); err != nil || to != "frame" || answer.Text != "Here is what I found: https://example.com" || answer.Refused != "" {
+				t.Fatalf("a turn that read the web should answer: %s %s", to, m["payload"])
+			}
+		})
 	}
 }

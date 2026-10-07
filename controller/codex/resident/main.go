@@ -85,12 +85,13 @@ var modelTools = map[string]string{
 		"larger is a size in bytes. .git and node_modules are skipped unless ignore is \"none\", and dot files unless hidden is true; the result counts what was skipped. " +
 		"Paths come back as read takes them. At most max_results (default 100, up to 500): truncated says when the list was cut and why.",
 	"roots": "Show the absolute paths you may see: workspace (where a relative read path resolves; it is read-only), " +
-		"every path you may read, and scratch (your own folder for this conversation, read and write; read it as \"scratch:PATH\"). " +
+		"every path you may read, and scratch (the granted write directory; read it as \"scratch:PATH\"). " +
 		"Anything outside these is denied. To list what is in them, use read with \".\" or \"scratch:\".",
-	"write": "Write UTF-8 text to a file in your scratch space: a folder of your own for this conversation, for notes, drafts and intermediate results. " +
+	"write": "Write UTF-8 text only inside the granted scratch directory shown by roots, for notes, drafts and intermediate results. " +
+		"When this Skyra repository is the workspace, that directory is its shared ideas/ folder. Use path \"note.md\" to write ideas/note.md. " +
 		"The path is relative to the scratch space and cannot leave it; folders are created as needed. append: true adds to the end instead of replacing. " +
 		"Nothing in the scratch space can be run, by you or any tool. Read it back with read and the path in read_as (\"scratch:<path>\"). " +
-		"The workspace itself is read-only. A failure is reported in error (outside_scratch, symlink, not_text, too_large, denied).",
+		"The rest of the workspace is read-only. A failure is reported in error (outside_scratch, symlink, not_text, too_large, denied).",
 }
 
 // tool is one tool Codex is offered: its name, what it says, its schema, and
@@ -420,10 +421,10 @@ func decide(c continuation) (string, error) {
 						if m.Method == "item/completed" {
 							d.Final = m.Params.Item.Text
 						}
-					// imageView is Codex's own view_image: the one native item
-					// allowed, so it can look at a photo (proposal 38). Its
-					// profile reads images only, and it is not recorded.
-					case "userMessage", "reasoning", "plan", "dynamicToolCall", "imageView":
+					// Native read-only tools (proposal 38): view_image reads
+					// granted images and web search runs at the provider.
+					// Their reads are not recorded in the lineage.
+					case "userMessage", "reasoning", "plan", "dynamicToolCall", "imageView", "webSearch":
 					default:
 						d.Violation = m.Params.Item.Type
 					}

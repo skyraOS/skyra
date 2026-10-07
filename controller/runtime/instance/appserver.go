@@ -248,8 +248,9 @@ func bootstrapCatalog(s horizon.Surface, p *preparedResident, run string) error 
 		model["tool_mode"] = "standard"
 		model["multi_agent_version"] = "disabled"
 		model["experimental_supported_tools"] = []any{}
-		model["apply_patch_tool_type"] = nil // no native file edits: with an environment, Codex would offer apply_patch
-		model["supports_search_tool"] = false
+		model["apply_patch_tool_type"] = nil  // no native file edits: with an environment, Codex would offer apply_patch
+		model["supports_search_tool"] = false // deferred tool discovery stays off
+		model["use_responses_lite"] = false   // the lite API omits hosted web search
 		model["include_skills_usage_instructions"] = false
 		model["include_plugin_usage_instructions"] = false
 		model["include_apps_usage_instructions"] = false
@@ -265,5 +266,5 @@ func bootstrapCatalog(s horizon.Surface, p *preparedResident, run string) error 
 // own sandbox and approvals, none of its own prompts, and no agents, user
 // input, plan or bundled skills. Top-level keys come before any [section].
 func residentConfig(run string) string {
-	return fmt.Sprintf("model_catalog_json = %q\n", filepath.Join(run, "models.json")) + "cli_auth_credentials_store = \"file\"\nweb_search = \"disabled\"\nsandbox_mode = \"read-only\"\napproval_policy = \"never\"\n" + quiet + "[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n"
+	return fmt.Sprintf("model_catalog_json = %q\n", filepath.Join(run, "models.json")) + "cli_auth_credentials_store = \"file\"\nweb_search = \"live\"\nsandbox_mode = \"read-only\"\napproval_policy = \"never\"\n" + quiet + "[agents]\nenabled = false\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n[skills.bundled]\nenabled = false\n"
 }

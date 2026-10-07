@@ -2,9 +2,33 @@ package instance
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
+
+// Both launch paths must offer live web reads with the same read-only local
+// policy. Compare their actual generated configs to catch launcher drift.
+func TestResidentConfigMatchesProviderLauncher(t *testing.T) {
+	config := residentConfig("/run")
+	for _, setting := range []string{`web_search = "live"`, `sandbox_mode = "read-only"`, `approval_policy = "never"`} {
+		if !strings.Contains(config, setting+"\n") {
+			t.Fatalf("missing %s in resident config", setting)
+		}
+	}
+	cmd := exec.Command("python3", "-B", "-c", `import sys
+from pathlib import Path
+sys.path.insert(0, '../../codex/provider')
+from launch import configuration
+sys.stdout.write(configuration(Path('/run')))`)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("provider configuration: %v: %s", err, out)
+	}
+	if string(out) != config {
+		t.Fatalf("launcher configs differ:\nGo:\n%s\nPython:\n%s", config, out)
+	}
+}
 
 // Codex adds none of its own prompts (proposal 38): every switch is off, as a
 // top-level key, before the first [section] where TOML would nest it. The

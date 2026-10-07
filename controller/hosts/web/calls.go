@@ -145,6 +145,33 @@ func (l *lineage) snapshot() [][]call {
 	return l.turns
 }
 
+// calls combines completed runs with the active run. Each run's turns are
+// indexed against the full conversation, including its seeded history.
+func (c *conversation) calls() [][]call {
+	return mergeCalls(c.pastCalls, c.lineage.snapshot())
+}
+
+func mergeCalls(past, current [][]call) [][]call {
+	out := make([][]call, max(len(past), len(current)))
+	for i, calls := range past {
+		out[i] = append(out[i], calls...)
+	}
+	for i, calls := range current {
+		out[i] = append(out[i], calls...)
+	}
+	return out
+}
+
+// startLineage retains the old run's final calls before watching the new one.
+// Caller holds the webhost mutex.
+func (c *conversation) startLineage(root string) {
+	if c.lineage != nil {
+		c.lineage.refresh()
+	}
+	c.pastCalls = c.calls()
+	c.lineage = newLineage(root)
+}
+
 // live returns the records order walks, in its order.
 func (l *lineage) live() []record.Record {
 	l.mu.Lock()
@@ -202,8 +229,29 @@ func (l *lineage) order() []string {
 // does once per message (proposal 38: whatever procedure the conversation runs).
 func (l *lineage) derive() [][]call {
 	turns := [][]call{}
+	order := l.order()
+	// Continuations are seeded with earlier messages, but their records only
+	// contain new turns. Leave room for those earlier messages so new calls
+	// are attached to the message that actually invoked them.
+	for _, s := range order {
+		r := l.records[s].r
+		if r.State != record.Invoke || r.To != "user" {
+			continue
+		}
+		var seed struct {
+			Transcript []entry `json:"transcript"`
+		}
+		if json.Unmarshal(r.Payload, &seed) == nil {
+			for _, e := range seed.Transcript {
+				if e.Role == "user" {
+					turns = append(turns, []call{})
+				}
+			}
+		}
+		break
+	}
 	open := map[string]int{} // invoke stamp → index in the current turn
-	for _, s := range l.order() {
+	for _, s := range order {
 		x := l.records[s]
 		r := x.r
 		switch r.State {

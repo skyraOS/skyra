@@ -69,3 +69,7 @@ became) or **not in the proposal**.
 16. **[`33-the-public-horizon.md`](33-the-public-horizon.md)**: the website's
     live mode without a model. A stranger's request is a run under a read-only
     public root; its records come back to replay. Proposed.
+17. **[`34-cua-driver-observation.md`](34-cua-driver-observation.md)**: Cua
+    Driver as observation-only desktop tools, with bounded app scope, a private
+    adapter/bridge, recorded text and later screenshots. Click is an action;
+    input is outside the initial cut. Proposed.

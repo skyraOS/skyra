@@ -155,16 +155,34 @@ PY
   echo "$file"
 }
 
+# This project's ideas directory is its persistent, bounded write space.
+# Other selected workspaces retain their conversation-local scratch directory.
+write_space() {
+  SKYRA_IDEAS_ROOT="$ROOT" SKYRA_IDEAS_WORKSPACE="$WORKSPACE" python3 - <<'PY'
+import os
+from pathlib import Path
+root = Path(os.environ['SKYRA_IDEAS_ROOT']).resolve(strict=True)
+workspace = Path(os.environ['SKYRA_IDEAS_WORKSPACE']).resolve(strict=True)
+if workspace == root:
+    ideas = root / 'ideas'
+    if ideas.is_symlink():
+        raise SystemExit('skyra: ideas must be a real directory, not a symlink')
+    ideas.mkdir(mode=0o700, exist_ok=True)
+    print(ideas.resolve(strict=True))
+PY
+}
+
 ask() {
   [ $# -gt 0 ] || die 'usage: skyra ask "TEXT"'
   say "building"
   controller_build
-  local reg run
+  local reg run scratch
+  scratch=$(write_space)
   reg=$(registry real "$STATE/park.sock" 1)
   mkdir -p "$STATE/runs"
   run=$STATE/runs/$(date +%Y%m%d-%H%M%S)-$$/.skyra
   mkdir -p "$run"
-  "$BUILD/controller/skyra" boot -root "$run" -registry "$reg" -to codex -text "$*"
+  "$BUILD/controller/skyra" boot -root "$run" -registry "$reg" -scratch "$scratch" -to codex -text "$*"
   say "state: $run"
 }
 
@@ -184,7 +202,8 @@ chat() {
   say "building"
   controller_build
 
-  local reg park=$STATE/park-$mode.sock convs=$STATE/conversations
+  local reg scratch park=$STATE/park-$mode.sock convs=$STATE/conversations
+  scratch=$(write_space)
   local addr=127.0.0.1:$WS_PORT web_pid ui_pid
   export SKYRA_WS_ORIGIN=http://localhost:$UI_PORT
   cleanup() {
@@ -198,7 +217,7 @@ chat() {
   [ "$mode" = fake ] && convs=$STATE/conversations-fake
   reg=$(registry "$mode" "$park" 2)
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
-    -registry "$reg" -conversations "$convs" &
+    -registry "$reg" -conversations "$convs" -scratch "$scratch" &
   web_pid=$!
   (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -H localhost -p "$UI_PORT") &
   ui_pid=$!
@@ -229,7 +248,8 @@ tui_chat() {
   say "building"
   controller_build
 
-  local reg park=$STATE/park-$mode.sock convs=$STATE/conversations
+  local reg scratch park=$STATE/park-$mode.sock convs=$STATE/conversations
+  scratch=$(write_space)
   local addr=127.0.0.1:$WS_PORT web_pid i
   cleanup() {
     trap - INT TERM EXIT
@@ -240,7 +260,7 @@ tui_chat() {
   reg=$(registry "$mode" "$park" 2)
   mkdir -p "$STATE"
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
-    -registry "$reg" -conversations "$convs" >"$STATE/tui-webhost.log" 2>&1 &
+    -registry "$reg" -conversations "$convs" -scratch "$scratch" >"$STATE/tui-webhost.log" 2>&1 &
   web_pid=$!
   for i in $(seq 1 100); do
     kill -0 "$web_pid" 2>/dev/null || die "the webhost exited (see $STATE/tui-webhost.log)"
@@ -266,7 +286,8 @@ serve() {
   say "building"
   controller_build
 
-  local reg park=$STATE/park-app-$mode.sock convs=$STATE/conversations
+  local reg scratch park=$STATE/park-app-$mode.sock convs=$STATE/conversations
+  scratch=$(write_space)
   local addr=127.0.0.1:$WS_PORT web_pid i
   cleanup() {
     trap - INT TERM EXIT
@@ -277,7 +298,7 @@ serve() {
   mkdir -p "$STATE"
   reg=$(registry "$mode" "$park" 2 app)
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
-    -registry "$reg" -conversations "$convs" &
+    -registry "$reg" -conversations "$convs" -scratch "$scratch" &
   web_pid=$!
   for i in $(seq 1 100); do
     kill -0 "$web_pid" 2>/dev/null || die "the webhost exited during startup"

@@ -209,16 +209,24 @@ request (`experiments/appserver/tool_surface.py`, no model call) shows only
 the tools, the header, and the message. The model provider may still add a
 system prompt of its own on its side, which no client setting reaches.
 
-One native tool is kept on purpose, a hole drilled for the experience until
-Skyra has its own way to show an image: Codex's `view_image`, so it can look
-at a photo. It is enabled (`--enable view_image`), the thread keeps its local
+Two native read-only tools are kept on purpose, holes drilled for the
+experience until Skyra has its own tools: Codex's `view_image`, so it can look
+at a photo, and web search, so it can read the internet. Image viewing is
+enabled (`--enable view_image`), the thread keeps its local
 environment (Codex binds the tool to one; `environments: []` hid it), and
 `apply_patch`, which an environment would also bring, is removed by model
 metadata. The app-server's profile may read image files, and only image
 files, under the Horizon's read grants, never under the floor; the adapter
-accepts the `imageView` item and still interrupts any other native item.
-**What Codex sees through it is not recorded in the lineage.** The capture
-shows exactly two tools, `echo` and `view_image`.
+accepts the `imageView` item. Both launchers enable live web search
+(`web_search = "live"`, `use_responses_lite = false` in their protected
+model catalogs, since the lite API omits hosted tools); the adapter accepts
+its `webSearch` items, including search,
+opening a page and finding text in it. Search runs at the provider, so the
+app-server's OS network grants and egress allowlist stay as they were. Shell,
+native edits, browser/computer control and other native items stay disabled
+or interrupted. **What Codex sees through these native tools is not recorded
+in the lineage.** The capture shows exactly three tools: `echo`, `view_image`
+and `web_search`, with live external web access enabled.
 
 The human can paste an image too: ⌘V in the desktop's composer with a
 screenshot on the clipboard (⌃⌘⇧4, raw image data with no file) or a copied

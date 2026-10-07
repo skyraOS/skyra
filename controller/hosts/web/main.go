@@ -64,10 +64,12 @@ type conversation struct {
 	home             string // its directory: under its procedure's, or at the top for one from before procedures
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
+	pastCalls        [][]call // completed runs, indexed by conversation turn
 }
 
 type webhost struct {
 	skyra, registry, dir string
+	scratch              string // operator-selected shared write space; empty means per-conversation
 	incarnation          string
 	token                string
 	origin               string
@@ -89,12 +91,14 @@ func main() {
 	skyra := flag.String("skyra", "", "the skyra binary, to resume parked frames and seed conversations")
 	registry := flag.String("registry", "", "the operator's registry, for new conversations")
 	dir := flag.String("conversations", "", "directory holding one .skyra per conversation")
+	scratch := flag.String("scratch", "", "shared write space for new runs; default is conversation-local scratch")
 	flag.Parse()
 	if *parkSock == "" || *skyra == "" || *registry == "" || *dir == "" {
 		flag.Usage()
 		os.Exit(2)
 	}
 	h := &webhost{skyra: *skyra, registry: *registry, dir: *dir, convos: map[string]*conversation{},
+		scratch:     *scratch,
 		incarnation: fmt.Sprintf("webhost-%d-%d", os.Getpid(), time.Now().UnixMilli()), token: os.Getenv("SKYRA_WS_TOKEN"), origin: os.Getenv("SKYRA_WS_ORIGIN")}
 	if h.token == "" {
 		fail(fmt.Errorf("SKYRA_WS_TOKEN is required"))
@@ -171,12 +175,18 @@ func (h *webhost) loadConversation(home, under string) {
 	if h.deleted(id) {
 		return
 	}
-	root, _ := latestRun(home)
+	roots := conversationRuns(home)
+	root := roots[len(roots)-1]
 	info, err := os.Stat(filepath.Join(root, "records"))
 	if err != nil {
 		return
 	}
 	c := &conversation{id: id, phase: "closed", home: home, procedure: under, lineage: newLineage(root), started: info.ModTime()}
+	for _, prior := range roots[:len(roots)-1] {
+		l := newLineage(prior)
+		l.refresh()
+		c.pastCalls = mergeCalls(c.pastCalls, l.snapshot())
+	}
 	c.lineage.refresh()
 	if info, err := os.Stat(home); err == nil {
 		c.started = info.ModTime()
@@ -439,7 +449,7 @@ func (h *webhost) handle(raw []byte) {
 		var images []attachment
 		if m.Type == "submit" && len(m.Images) > 0 {
 			var err error
-			if images, err = saveAttachments(filepath.Join(h.homeOf(conv), "scratch"), m.Images); err != nil {
+			if images, err = saveAttachments(h.scratchFor(h.homeOf(conv)), m.Images); err != nil {
 				h.mu.Unlock()
 				reject("invalid-image", err.Error())
 				return
@@ -554,12 +564,18 @@ func (h *webhost) seed(id, procedure, home string) {
 // seedRun starts a run of a conversation at root: genesis, then the user side
 // with payload. A conversation runs one procedure, fixed at creation
 // (proposal 38): the root the human selected, recorded in its genesis.
+func (h *webhost) scratchFor(home string) string {
+	if h.scratch != "" {
+		return h.scratch
+	}
+	return filepath.Join(home, "scratch")
+}
+
 func (h *webhost) seedRun(id, root, home string, seeded map[string]any) {
 	payload, _ := json.Marshal(seeded)
-	// Each conversation gets its own scratch space beside its records: the
-	// agent may write and read it, run nothing from it, and it goes when the
-	// conversation is deleted.
-	scratch := filepath.Join(home, "scratch")
+	// The operator may choose a persistent shared space; otherwise scratch
+	// belongs to this conversation and is deleted with it.
+	scratch := h.scratchFor(home)
 	cmd := exec.Command(h.skyra, "boot", "-root", root, "-registry", h.registry, "-scratch", scratch, "-to", "user", "-payload", string(payload), "-detach")
 	cmd.Stdout, cmd.Stderr = h.log, h.log
 	if err := cmd.Run(); err != nil {
@@ -610,7 +626,7 @@ func (h *webhost) broadcast() {
 	sort.Slice(list, func(i, j int) bool { return list[i].started.After(list[j].started) })
 	views := []map[string]any{}
 	for _, c := range list {
-		entries := withCalls(append([]entry(nil), c.entries...), c.lineage.snapshot())
+		entries := withCalls(append([]entry(nil), c.entries...), c.calls())
 		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure})
 	}
 	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot(), "destinations": h.destinations}
@@ -727,18 +743,40 @@ func (h *webhost) reconcileRequests() bool {
 // continuation under home/runs/<n>/.skyra. Its transcript is the whole
 // conversation, since each run is seeded with what came before it.
 func latestRun(home string) (string, int) {
-	root, n := filepath.Join(home, ".skyra"), 1
+	roots := conversationRuns(home)
+	root := roots[len(roots)-1]
+	n := 1
+	if len(roots) > 1 {
+		n, _ = strconv.Atoi(filepath.Base(filepath.Dir(root)))
+	}
+	return root, n
+}
+
+// conversationRuns lists committed runs in numeric order, starting with the
+// original run. A continuation still starting has no records and is ignored.
+func conversationRuns(home string) []string {
+	type run struct {
+		n    int
+		root string
+	}
+	committed := []run{}
 	runs, _ := os.ReadDir(filepath.Join(home, "runs"))
 	for _, r := range runs {
 		k, err := strconv.Atoi(r.Name())
-		if err != nil || k <= n {
+		if err != nil || k <= 1 || !r.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(home, "runs", r.Name(), ".skyra", "records")); err == nil {
-			root, n = filepath.Join(home, "runs", r.Name(), ".skyra"), k
+		root := filepath.Join(home, "runs", r.Name(), ".skyra")
+		if _, err := os.Stat(filepath.Join(root, "records")); err == nil {
+			committed = append(committed, run{k, root})
 		}
 	}
-	return root, n
+	sort.Slice(committed, func(i, j int) bool { return committed[i].n < committed[j].n })
+	roots := []string{filepath.Join(home, ".skyra")}
+	for _, r := range committed {
+		roots = append(roots, r.root)
+	}
+	return roots
 }
 
 // continueConversation carries a conversation on after the run it was in
@@ -759,7 +797,7 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 		return
 	}
 	home := h.homeOf(c)
-	images, err := saveAttachments(filepath.Join(home, "scratch"), m.Images)
+	images, err := saveAttachments(h.scratchFor(home), m.Images)
 	if err != nil {
 		h.mu.Unlock()
 		reject("invalid-image", err.Error())
@@ -779,7 +817,7 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 	id := m.RequestID
 	c.entries = append(c.entries, entry{Role: "user", Text: withImages(m.Text, images), TS: int64(len(c.entries)), RequestID: &id})
 	c.phase, c.pending, c.recoveryRequired, c.procedure = "pending", m.RequestID, false, d.Title
-	c.lineage = newLineage(root)
+	c.startLineage(root)
 	h.mu.Unlock()
 	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 	h.broadcast()

@@ -3,7 +3,8 @@
 Current direct-tool validation: `python3 controller/experiments/appserver/tool_surface.py`
 launches the real installed binary against a local HTTP capture server. It
 asserts that the inference request contains exactly the direct `functions.echo`
-function, with no `exec`/`wait`, other built-ins, or injected skills inventory.
+function and the two native read-only tools, `view_image` and live `web_search`,
+with no `exec`/`wait`, native edits, or injected skills inventory.
 No external model is called by this check. Evidence:
 `/private/tmp/skyra-tools-8e83ggiq/request.json`. Direct-mode live runtime echo,
 interruption and recovery passed in `/private/tmp/skyra-e2e-by7wqlkl`.
