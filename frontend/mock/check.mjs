@@ -31,10 +31,22 @@ try {
  await until(()=> /mock ready|ready ws:/.test(output) || child.exitCode !== null); assert.equal(child.exitCode,null,output);
  let client = await connect(); ws=client.socket;
  const initial = await client.next(m=>m.type==="snapshot"); const inc=initial.uiIncarnation;
- client.send({type:"open-conversation",requestId:"open"});
+ // The roots a human may select, each with its outline derived from its
+ // definition (proposal 38): think narrows Codex, then calls it.
+ const think = initial.destinations.find(d=>d.title==="think");
+ assert(think && think.actor==="interpreter" && think.schema.title==="think", `think is a root: ${JSON.stringify(initial.destinations)}`);
+ const [scope, run] = think.outline.nodes;
+ assert.equal(scope.calls,"system"); assert.equal(scope.narrows.actor,"codex");
+ assert(scope.narrows.reach.includes("write") && !scope.narrows.reach.includes("interpreter"), `codex's narrowed reach: ${scope.narrows.reach}`);
+ assert.equal(run.calls,"codex"); assert.deepEqual(run.after,["scope"]);
+ assert(!initial.destinations.some(d=>d.title==="codex"), "codex is inspectable, never a root");
+ client.send({type:"open-conversation",requestId:"open-unknown",procedure:"codex"});
+ assert.equal((await client.next(m=>m.type==="rejected" && m.requestId==="open-unknown")).code,"unknown-procedure");
+ client.send({type:"open-conversation",requestId:"open",procedure:"think"});
  await client.next(m=>m.type==="accepted" && m.requestId==="open");
  const opened = await client.next(m=>m.type==="snapshot" && m.conversations.some(c=>c.phase==="ready"));
  const id=opened.conversations[0].conversation;
+ assert.equal(opened.conversations[0].procedure,"think","a conversation records the root it runs");
  const submit=(rid,text,incarnation=inc)=>client.send({type:"submit",uiIncarnation:incarnation,conversation:id,requestId:rid,text});
  submit("r1","tool:hello");
  await client.next(m=>m.type==="accepted" && m.requestId==="r1");
@@ -67,7 +79,7 @@ try {
  await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close" && r.status==="returned"));
  client.send({type:"delete-conversation",uiIncarnation:inc,conversation:id,requestId:"delete"});
  await client.next(m=>m.type==="snapshot" && m.conversations.length===0);
- console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, close, delete`);
+ console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, roots and outlines, close, delete`);
  if (real && process.argv.includes("--desktop")) {
   ws.terminate();
   const swift = spawn("swift", ["test", "--no-parallel"], { cwd: `${root}/desktop`, env: { ...process.env, SKYRA_TEST_WS: `ws://127.0.0.1:${port}/ws`, SKYRA_TEST_TOKEN: token }, stdio: "inherit" });

@@ -32,6 +32,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ type conversation struct {
 	entries          []entry
 	parked           *park.Frame
 	pending          string
+	procedure        string // the root it runs, fixed at creation; "" for a conversation from before procedures
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
 }
@@ -70,12 +72,13 @@ type webhost struct {
 	origin               string
 	log                  *os.File
 
-	mu       sync.Mutex
-	convos   map[string]*conversation
-	revision int
-	requests map[string]*requestRecord
-	conn     net.Conn
-	wmu      sync.Mutex
+	mu           sync.Mutex
+	convos       map[string]*conversation
+	revision     int
+	requests     map[string]*requestRecord
+	destinations []destination // the roots a human may select, from the registry's bundles
+	conn         net.Conn
+	wmu          sync.Mutex
 }
 
 func main() {
@@ -102,6 +105,11 @@ func main() {
 	if err := h.loadRequests(); err != nil {
 		fail(err)
 	}
+	destinations, err := loadDestinations(h.registry)
+	if err != nil {
+		fail(err)
+	}
+	h.destinations = destinations
 	h.loadPast()
 	go h.watch()
 
@@ -150,6 +158,14 @@ func (h *webhost) loadPast() {
 			c.started = info.ModTime()
 		}
 		for _, r := range c.lineage.live() {
+			if r.State == record.Invoke && r.To == "user" {
+				var seeded struct {
+					Procedure string `json:"procedure"`
+				}
+				if json.Unmarshal(r.Payload, &seeded) == nil {
+					c.procedure = seeded.Procedure // recorded at creation: the lineage says what it runs
+				}
+			}
 			if r.State != record.Invoke || r.To != "browser" {
 				continue
 			}
@@ -268,6 +284,7 @@ type inbound struct {
 	Conversation  string `json:"conversation"`
 	RequestID     string `json:"requestId"`
 	Text          string `json:"text"`
+	Procedure     string `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
 }
 
 func (h *webhost) handle(raw []byte) {
@@ -321,6 +338,12 @@ func (h *webhost) handle(raw []byte) {
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
 	case "open-conversation":
+		d, ok := h.destinationFor(m.Procedure)
+		if !ok {
+			h.mu.Unlock()
+			reject("unknown-procedure", "no procedure "+strconv.Quote(m.Procedure)+" can be selected")
+			return
+		}
 		nonce := make([]byte, 16)
 		if _, err := rand.Read(nonce); err != nil {
 			h.mu.Unlock()
@@ -331,11 +354,11 @@ func (h *webhost) handle(raw []byte) {
 		if !admit(id) {
 			return
 		}
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: d.Title, lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id)
+		go h.seed(id, d.Title)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
 		if conv == nil || conv.parked == nil || conv.phase != "ready" {
@@ -425,11 +448,11 @@ func (h *webhost) deleteConversation(id string) error {
 }
 
 // seed starts a new conversation as the operator: genesis, then the user side.
-func (h *webhost) seed(id string) {
+func (h *webhost) seed(id, procedure string) {
 	root := filepath.Join(h.dir, id, ".skyra")
-	// A conversation runs one procedure, fixed here at creation (proposal 38).
-	// There is one so far; the UI's selection chooses it once there are more.
-	payload, _ := json.Marshal(map[string]string{"conversation": id, "procedure": "think"})
+	// A conversation runs one procedure, fixed here at creation (proposal 38):
+	// the root the human selected, recorded in its genesis.
+	payload, _ := json.Marshal(map[string]string{"conversation": id, "procedure": procedure})
 	// Each conversation gets its own scratch space beside its records: the
 	// agent may write and read it, run nothing from it, and it goes when the
 	// conversation is deleted.
@@ -485,9 +508,9 @@ func (h *webhost) broadcast() {
 	views := []map[string]any{}
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.lineage.snapshot())
-		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending)})
+		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure})
 	}
-	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot()}
+	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot(), "destinations": h.destinations}
 	h.mu.Unlock()
 	b, omitted := fitSnapshot(snap, views, maxFrame)
 	if omitted > 0 {

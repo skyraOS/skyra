@@ -11,6 +11,7 @@
 import { create } from "zustand";
 import type {
   ConversationView,
+  Destination,
   RequestRecord,
 } from "./protocol/types";
 import type { ServerMessageParsed } from "./protocol/schemas";
@@ -23,6 +24,8 @@ interface StoreState {
   conversations: Record<string, ConversationView>;
   order: string[];
   requests: Record<string, RequestRecord>;
+  /** The roots the human may select (proposal 38). */
+  destinations: Destination[];
 
   // ----- View state (frontend-only) -----------------------------------------
   selectedConversation: string | null;
@@ -54,6 +57,7 @@ export const useAppStore = create<StoreState>((set) => ({
   uiIncarnation: null,
   revision: -1,
   conversations: {},
+  destinations: [],
   order: [],
   requests: {},
 
@@ -90,6 +94,7 @@ export const useAppStore = create<StoreState>((set) => ({
             conversations: indexBy(msg.conversations, (c) => c.conversation),
             order,
             requests: indexBy(msg.requests, (r) => r.requestId),
+            destinations: msg.destinations,
             selectedConversation: selected,
           };
         }

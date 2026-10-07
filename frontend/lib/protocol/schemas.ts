@@ -57,6 +57,21 @@ export const ConversationViewSchema = z.object({
   phase: ConversationPhaseSchema,
   entries: z.array(ConversationEntrySchema),
   pendingRequestId: z.string().nullable(),
+  procedure: z.string(),
+});
+
+export const OutlineNodeSchema = z.object({
+  name: z.string(),
+  calls: z.string(),
+  after: z.array(z.string()),
+  narrows: z.object({ actor: z.string(), reach: z.array(z.string()) }).optional(),
+});
+
+export const DestinationSchema = z.object({
+  actor: z.string(),
+  title: z.string(),
+  schema: z.record(z.string(), z.unknown()),
+  outline: z.object({ nodes: z.array(OutlineNodeSchema) }),
 });
 
 export const ServerMessageSchema = z.discriminatedUnion("type", [
@@ -66,6 +81,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     revision: z.number(),
     conversations: z.array(ConversationViewSchema),
     requests: z.array(RequestRecordSchema),
+    destinations: z.array(DestinationSchema),
   }),
   z.object({
     type: z.literal("accepted"),

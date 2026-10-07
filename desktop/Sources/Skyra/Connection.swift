@@ -11,6 +11,7 @@ final class Session {
     private(set) var connected = false
     private(set) var incarnation = ""
     private(set) var conversations: [Conversation] = []
+    private(set) var destinations: [Destination] = [] // the roots a human may select (proposal 38)
     /// The conversation on screen; nil for a fresh session.
     var selected: String?
     var draft = ""
@@ -85,7 +86,7 @@ final class Session {
             return
         }
         switch m {
-        case let .snapshot(inc, rev, convs):
+        case let .snapshot(inc, rev, convs, roots):
             if inc == incarnation && rev < revision { return }
             if let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
                object["type"] as? String == "snapshot", let pending = unacknowledged,
@@ -107,7 +108,7 @@ final class Session {
                 opening = false
                 notice = "the host restarted; your draft is kept"
             }
-            (incarnation, revision, conversations) = (inc, rev, convs)
+            (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
             if opening, let newest = convs.first, newest.conversation != openBefore {
                 selected = newest.conversation
                 if newest.phase == .ready {
@@ -164,7 +165,7 @@ final class Session {
 
     private func open(with text: String) {
         let before = conversations.first?.conversation
-        if send(.open(requestId: requestID())) {
+        if send(.open(requestId: requestID(), procedure: nil)) {
             opening = true
             openBefore = before
             pendingText = text

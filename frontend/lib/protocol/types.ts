@@ -75,6 +75,35 @@ export interface ConversationView {
   entries: ConversationEntry[];
   /** The request id of the one outstanding command, if any. */
   pendingRequestId: string | null;
+  /** The root it runs, fixed at creation; "" for one from before procedures. */
+  procedure: string;
+}
+
+/** A narrowing in a procedure: the actor it narrows and the reach it keeps. */
+export interface Narrowing {
+  actor: string;
+  reach: string[];
+}
+
+/** One node of a procedure's outline, derived from its definition. */
+export interface OutlineNode {
+  name: string;
+  /** The actor it invokes; through a narrowing's reference, the narrowed actor. */
+  calls: string;
+  after: string[];
+  narrows?: Narrowing;
+}
+
+/**
+ * A root the human may select: an authored procedure, the actor it runs on,
+ * its contract and its outline. Selecting one grants nothing; everything
+ * beneath it in the outline is inspectable only (proposal 38).
+ */
+export interface Destination {
+  actor: string;
+  title: string;
+  schema: Record<string, unknown>;
+  outline: { nodes: OutlineNode[] };
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +121,8 @@ export interface SnapshotMessage {
   revision: number;
   conversations: ConversationView[];
   requests: RequestRecord[];
+  /** The roots the human may select. */
+  destinations: Destination[];
 }
 
 /** The user process accepted the request into its ledger — NOT completion. */
@@ -133,6 +164,8 @@ export interface CloseInteractionMessage {
 export interface OpenConversationMessage {
   type: "open-conversation";
   requestId: string;
+  /** The root selected; the host runs its first root when omitted. */
+  procedure?: string;
 }
 
 export interface DeleteConversationMessage {

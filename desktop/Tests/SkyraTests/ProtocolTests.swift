@@ -11,7 +11,7 @@ import Testing
        "entries":[{"role":"user","text":"hi","ts":0,"requestId":"r1"},{"role":"agent","text":"hello","ts":1,"requestId":null}]}]}
     """
     let m = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8))
-    guard case let .snapshot(inc, rev, convs) = m else {
+    guard case let .snapshot(inc, rev, convs, _) = m else {
         Issue.record("not a snapshot: \(m)")
         return
     }
@@ -70,7 +70,7 @@ import Testing
         "call":{"to":"native.commandExecution","arg":"","state":"fault","fault":"horizon",
                 "cause":"\\"native.commandExecution\\" is not in reach","stamp":"2ae3f9ec"}}]}]}
     """
-    guard case let .snapshot(_, _, convs) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
+    guard case let .snapshot(_, _, convs, _) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
         Issue.record("not a snapshot")
         return
     }
@@ -107,4 +107,35 @@ import Testing
     #expect(s.draft == "hello")
     #expect(s.unacknowledged == nil)
     #expect(s.notice.contains("unknown"))
+}
+
+// The webhost lists the roots a human may select, each with the outline it
+// derived from the procedure's definition, and each conversation names the
+// root it runs (proposal 38).
+@Test func rootsAndTheirOutlinesDecode() throws {
+    let raw = #"{"type":"snapshot","uiIncarnation":"i","revision":1,"requests":[],"conversations":[{"conversation":"c1","phase":"ready","entries":[],"pendingRequestId":null,"procedure":"think"}],"destinations":[{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write"]}},{"name":"run","calls":"codex","after":["scope"]}]}}]}"#
+    guard case let .snapshot(_, _, convs, roots) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
+        Issue.record("not a snapshot"); return
+    }
+    #expect(convs.first?.procedure == "think")
+    let think = try #require(roots.first)
+    #expect(think.actor == "interpreter" && think.title == "think")
+    #expect(think.outline.nodes.first?.narrows?.actor == "codex")
+    #expect(think.outline.nodes.first?.narrows?.reach.contains("write") == true)
+    #expect(think.outline.nodes.last?.calls == "codex" && think.outline.nodes.last?.after == ["scope"])
+}
+
+@Test func aHostThatPredatesRootsStillDecodes() throws {
+    let raw = #"{"type":"snapshot","uiIncarnation":"i","revision":1,"conversations":[{"conversation":"c1","phase":"ready","entries":[]}]}"#
+    guard case let .snapshot(_, _, convs, roots) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
+        Issue.record("not a snapshot"); return
+    }
+    #expect(roots.isEmpty && convs.first?.procedure == nil)
+}
+
+@Test func openingNamesTheSelectedRoot() throws {
+    let named = String(decoding: try JSONEncoder().encode(ClientMessage.open(requestId: "r", procedure: "think")), as: UTF8.self)
+    #expect(named.contains(#""procedure":"think""#))
+    let first = String(decoding: try JSONEncoder().encode(ClientMessage.open(requestId: "r", procedure: nil)), as: UTF8.self)
+    #expect(!first.contains("procedure"))
 }
