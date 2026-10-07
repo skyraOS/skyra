@@ -60,7 +60,7 @@ struct Message: View {
                 .foregroundStyle(!entry.isUser && entry.text.hasPrefix("⚠") ? Theme.red.color : Theme.ink.color)
                 .tint(Theme.accent.color).textSelection(.enabled)
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .panel(radius: 12, tint: entry.isUser ? Theme.userBG : Theme.sky, tintOpacity: entry.isUser ? 0.85 : 0)
+                .fadedBubble(tint: entry.isUser ? Theme.userBG : Theme.sky, strength: entry.isUser ? 0.85 : 0.35)
             if !entry.isUser { Spacer(minLength: 24) }
         }
     }
@@ -120,6 +120,37 @@ struct Running: View {
 struct Working: View {
     var body: some View { Label("Working", systemImage: "ellipsis").font(.system(size: 12)).foregroundStyle(Theme.dim.color).padding(14) }
 }
+extension View {
+    func fadedBubble(tint: RGB, strength: Double, fade: Double = 14) -> some View {
+        padding(fade)
+            .background {
+                Canvas { ctx, size in
+                    let w = size.width, h = size.height
+                    let inner = CGRect(origin: .zero, size: size).insetBy(dx: fade, dy: fade)
+                    let fill = tint.color(strength)
+                    ctx.fill(Path(inner), with: .color(fill))
+                    ctx.fill(Path(CGRect(x: 0, y: inner.minY, width: fade, height: inner.height)),
+                             with: .linearGradient(Gradient(colors: [.clear, fill]),
+                                                   startPoint: CGPoint(x: 0, y: h / 2),
+                                                   endPoint: CGPoint(x: fade, y: h / 2)))
+                    ctx.fill(Path(CGRect(x: w - fade, y: inner.minY, width: fade, height: inner.height)),
+                             with: .linearGradient(Gradient(colors: [fill, .clear]),
+                                                   startPoint: CGPoint(x: w - fade, y: h / 2),
+                                                   endPoint: CGPoint(x: w, y: h / 2)))
+                    ctx.fill(Path(CGRect(x: inner.minX, y: 0, width: inner.width, height: fade)),
+                             with: .linearGradient(Gradient(colors: [.clear, fill]),
+                                                   startPoint: CGPoint(x: w / 2, y: 0),
+                                                   endPoint: CGPoint(x: w / 2, y: fade)))
+                    ctx.fill(Path(CGRect(x: inner.minX, y: h - fade, width: inner.width, height: fade)),
+                             with: .linearGradient(Gradient(colors: [fill, .clear]),
+                                                   startPoint: CGPoint(x: w / 2, y: h - fade),
+                                                   endPoint: CGPoint(x: w / 2, y: h)))
+                }.allowsHitTesting(false)
+            }
+            .padding(-fade)
+    }
+}
+
 struct EdgeFade: View {
     let vertical: Double
     let horizontal: Double

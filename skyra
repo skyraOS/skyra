@@ -188,10 +188,9 @@ if workspace==root.resolve(strict=True):
     if not repo_socket: sys.exit('skyra: repository host is not running')
     registry['repo.write']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/write-contract.json')}
     registry['execve']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/contract.json')}
-    registry['open']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/open-contract.json')}
     registry['repo.check']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/check-contract.json')}
     think=json.loads(Path(registry['interpreter']['bundle']).read_text())
-    think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['repo.write','execve','repo.check','open'])
+    think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['repo.write','execve','repo.check'])
     think_file=build/(launch+'-think-repo-bundle.json')
     think_file.write_text(json.dumps(think,sort_keys=True))
     registry['interpreter']['bundle']=str(think_file)
