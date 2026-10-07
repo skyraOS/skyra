@@ -96,6 +96,8 @@ import Testing
     #expect(next != id)
     s.draft = "hello"
     s.acknowledge(next)
+    #expect(s.draft == "hello") // accepted, but not yet visible in the log
+    s.receive(Data("{\"type\":\"snapshot\",\"uiIncarnation\":\"i\",\"revision\":1,\"conversations\":[{\"conversation\":\"c\",\"phase\":\"pending\",\"entries\":[{\"role\":\"user\",\"text\":\"hello\",\"ts\":0,\"requestId\":\"\(next)\"}]}]}".utf8))
     #expect(s.draft.isEmpty)
 }
 

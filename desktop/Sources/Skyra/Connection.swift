@@ -27,6 +27,8 @@ final class Session {
     private var openBefore: String?
     private var pendingText = ""
     private(set) var unacknowledged: (id: String, text: String)?
+    // Acceptance is not visibility: retain the composer until the transcript arrives.
+    private var awaitingTranscript: (id: String, text: String)?
     private var retry: (key: String, id: String)?
     private var task: URLSessionWebSocketTask?
     private var target: (url: URL, token: String)?
@@ -178,7 +180,9 @@ final class Session {
                 opening = false
                 notice = "the host restarted; your draft is kept"
             }
+            if !incarnation.isEmpty && inc != incarnation { awaitingTranscript = nil }
             (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
+            finishVisibleSubmission()
             if selectedRoot == nil || !roots.contains(where: { $0.title == selectedRoot }) {
                 selectedRoot = roots.first?.title
             }
@@ -230,7 +234,7 @@ final class Session {
             notice = "connecting; your draft is kept"
             return
         }
-        if unacknowledged != nil { notice = "delivery is awaiting acknowledgement; your draft is kept"; return }
+        if unacknowledged != nil || awaitingTranscript != nil { notice = "delivery is awaiting acknowledgement; your draft is kept"; return }
         if opening {
             if pendingText.isEmpty {
                 pendingText = text
@@ -318,12 +322,22 @@ final class Session {
 
     func acknowledge(_ id: String) {
         guard let pending = unacknowledged, pending.id == id else { return }
-        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
+        awaitingTranscript = pending
+        finishVisibleSubmission()
         attachments.removeAll { sentAttachments.contains($0.id) }
         sentAttachments = []
         unacknowledged = nil
         retry = nil
         notice = ""
+    }
+
+    private func finishVisibleSubmission() {
+        guard let pending = awaitingTranscript,
+              conversations.contains(where: { c in
+                  c.entries.contains { $0.isUser && $0.requestId == pending.id }
+              }) else { return }
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
+        awaitingTranscript = nil
     }
 
     @discardableResult
