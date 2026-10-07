@@ -1,0 +1,8 @@
+{
+  "action": "go.test",
+  "exit_code": 1,
+  "output": "--- FAIL: TestChecksOnlyAcceptNamedRecipes (13.31s)\npanic: interface conversion: interface {} is map[string]string, not main.checkResult [recovered, repanicked]\n\ngoroutine 36 [running]:\ntesting.tRunner.func1.2({0x1031b2640, 0x14000120cf0})\n\t/Users/mikepersonal/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/src/testing/testing.go:1872 +0x190\ntesting.tRunner.func1()\n\t/Users/mikepersonal/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/src/testing/testing.go:1875 +0x31c\npanic({0x1031b2640?, 0x14000120cf0?})\n\t/Users/mikepersonal/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/src/runtime/panic.go:783 +0x120\nskyra/controller/hosts/repo.TestChecksOnlyAcceptNamedRecipes(0x14000102700)\n\t/private/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-check-3964200465/workspace/controller/hosts/repo/check_test.go:19 +0x31c\ntesting.tRunner(0x14000102700, 0x1031e2e80)\n\t/Users/mikepersonal/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/src/testing/testing.go:1934 +0xc8\ncreated by testing.(*T).Run in goroutine 1\n\t/Users/mikepersonal/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/src/testing/testing.go:1997 +0x364\nFAIL\tskyra/controller/hosts/repo\t13.477s\nFAIL\n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-3964200465.json",
+  "duration_ms": 17343
+}

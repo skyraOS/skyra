@@ -9,6 +9,9 @@ worktrees/
 
 # Build outputs
 controller/bin/
+/resident
+/start
+/user
 
 # Frontend dependencies (frontend/)
 node_modules/
