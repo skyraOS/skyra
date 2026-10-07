@@ -4,8 +4,10 @@ Date: 2026-10-06
 
 Status: steps 1–4 implemented (2026-10-06); steps 5–8 proposed. See
 [Implemented](#implemented) for where the code departs from the text.
-Revised the same day: destinations come from the user's selection, and
-connections belong to adapters, not the kernel.
+Revised the same day: destinations come from the user's selection,
+connections belong to adapters, not the kernel, think keeps the model's
+`write` (scratch only), and the UI shows procedures as roots whose
+constellations are their outlines.
 
 Builds on [think](../think.md) (a read-only conversation, through
 `system.narrow`), [37 — Delegate](37-delegate-proposal.md) (a header is the
@@ -30,37 +32,45 @@ text.
 ```json
 { "title": "think", "type": "object", "required": ["think"],
   "fields": { "think": { "type": "object", "required": ["text"],
-    "fields": { "text": { "type": "string" },
-                "context": { "type": "array", "items": { "type": "any" } } } } } }
+    "fields": { "text": { "type": "string" }, "context": { "type": "any" } } } } }
 ```
 
-It attaches a read-only set of tools to this invocation only, and runs Codex
-on the user's text under them.
+It attaches the model's tools to this invocation only, and runs Codex on the
+user's text under them.
 
 ```text
 user ──(selected: interpreter / think)──▶ think
-          scope: system.narrow {actor: codex, reach: [read-only tools]}  → reference
+          scope: system.narrow {actor: codex, reach: [the model's tools]}  → reference
           run:   <reference> {header: "think", text, context}            → Codex, one thread
         ◀── run's return
 ```
 
 ## Nothing names a path; the selection does
 
-No actor hardcodes where a user's message goes. The user selects a contract
-(a star); the selection is `{actor, contract}`; the user adapter wraps the
-text as that contract's observation parameter and emits
-`{"to": <selected actor>, "payload": …}`. Intake checks the fit, as for any
-emission.
+The user's selection in the UI names a procedure, and the procedure names the
+actor it runs on. No actor hardcodes where a user's message goes.
 
-- Selecting `think` reaches Codex only because think's own body composes it.
-  That composition is what a procedure is for. A different selection takes a
-  different path with no change to the user adapter.
-- The user adapter becomes generic: whatever the selected target returns is
-  the agent's turn. Today it emits `codex` itself and reads Codex's `thread`
-  and `incarnation` fields (`targets/user/main.go:72–116`); that goes.
-- The calls view groups calls by the admitted user request and its
-  descendants, not by `To == "codex"` (`hosts/web/calls.go`), as 34 already
-  requires.
+- **For now, the user actor holds the procedure table.** Each selectable
+  procedure is one entry: its title, the actor it runs on, and where the
+  user's text goes in its payload. At first there is one, `think` →
+  `interpreter`, `{think: {text, context}}`. The UI sends only the title.
+- **A conversation runs one procedure, fixed at creation.** The UI opens a
+  conversation in the selected procedure's context; the web host seeds it with
+  `{conversation, procedure}` in the genesis payload, so it is recorded and
+  replayable, and the sidebar reads it back from the lineage.
+- **Text goes in as `text`.** An application procedure takes the user's
+  message as `text` under its title. Intake checks the fit, so a procedure
+  that does not follow the convention is refused, not misused.
+- **Answers are shown by their `text`.** Whatever the procedure returns is
+  the agent's turn: its `text` field when it has one, its JSON otherwise.
+- **Codex is never invoked directly.** The user actor emits no `codex`
+  instruction of its own; Codex is reached only through think's body, which is
+  what a procedure is for. It stays in the Horizon, because think invokes it,
+  and the UI shows it for inspection only. The user actor's Codex-specific
+  fields (`thread`, `incarnation`; `targets/user/main.go:72–116`) go.
+- **Calls are grouped by the user's request**, everything under the turn it
+  started, not by `To == "codex"` (`hosts/web/calls.go`), so calls made inside
+  a procedure are shown.
 
 ## Tools attach to the invocation, by composition
 
@@ -69,7 +79,7 @@ The tool set is the `reach` of the narrowing node, nothing else:
 ```json
 "scope": { "call": "system", "in": { "narrow": {
   "actor": "codex",
-  "reach": ["echo", "read", "roots",
+  "reach": ["echo", "read", "roots", "write",
             "codex.start", "codex.exchange", "codex.inspect", "codex.stop"] } } },
 "run":   { "call": { "$": ["scope", "reference"] }, "after": ["scope"],
            "in": { "header": "think",
@@ -77,13 +87,18 @@ The tool set is the `reach` of the narrowing node, nothing else:
                    "context": { "$": ["input", "think", "context"] } } }
 ```
 
-- **Read-only is the tools the model has now, minus `write`** (its scratch
-  folder). `remember` and procedures are left out of the first version; they
+- **The tools are the model's tools now:** `echo`, `read`, `roots` and
+  `write`. `remember` and procedures are left out of the first version; they
   return with 37.
-- **It holds for the whole subtree, at the OS.** Every call Codex makes shares
-  the narrowed Horizon, so a write is a `horizon` fault at intake and the
-  rendered profile grants no write. `system.narrow` refuses anything the
-  caller does not hold.
+- **The workspace is read-only, as everywhere.** Only `read` is granted the
+  workspace; `write` is a general actor in the Horizon whose only grant is the
+  conversation's scratch space, which the user and Codex may both use. Every
+  call Codex makes shares the narrowed Horizon, which holds no write grant on
+  the workspace, so the rendered profile allows none. `system.narrow` refuses
+  anything the caller does not hold.
+- **A narrower procedure narrows further.** A procedure that must not write at
+  all drops `write` from its reach and `scratch` from its authority
+  (`"without": ["write", "scratch"]`), without naming a path.
 - **Codex's own operations stay in reach.** The adapter still talks to the
   app-server only through `codex.exchange` and `codex.inspect`, now dialing
   the edge's socket, so every byte Codex says is still a recorded
@@ -193,8 +208,12 @@ One thread per invocation means Codex's thread no longer carries memory from
 one turn to the next. Each user turn invokes think once; that invocation's
 thread lasts for the turn, including every tool call Codex makes in it.
 Memory comes from the lineage: the user continuation already holds the
-transcript in its steps, and it passes the earlier turns as `context`
-observations. Parameters are observations, so this is the same rule as 37.
+transcript in its steps, and it passes the earlier turns as one `context`
+observation beside the turn's `text`. The Codex adapter gives Codex that
+context ahead of the text in the turn's input. Parameters are observations,
+so this is the same rule as 37. It travels by value until observations are
+passed by reference ([21](../21-observation-passing.md)), and it grows with
+the conversation until think.md's compaction bounds it.
 
 ## It does not interrupt (the type, later)
 
@@ -210,20 +229,32 @@ up through `system.strand`, or the observation types with checks that
 [28](../28-types-observations-checks.md) proposes. Either keeps replay
 deterministic because the lookup is itself recorded.
 
-## The user selects think by its star; the context follows the contract
+## Procedures are roots; their constellations are their outlines
 
-- **A star titled `think`.** The snapshot gains the live contracts the user
-  may select (34's step 3): at first one, `{actor: "interpreter", title:
-  "think", schema}`. The desktop sky draws it as a star; clicking it selects
-  it. Stars drawn only from history are inspect-only.
-- **The context is the contract's.** Selecting `think` switches the sidebar to
-  the conversations that invoke think, and the composer sends to think.
-  Selecting another contract shows its own conversations. Each conversation
-  records the contract it invokes when it is created, so the sidebar can
-  filter without reading every lineage.
-- **Ordinary text is the observation.** The composer still sends text; the
-  user adapter wraps it for the selected contract, with the transcript as
-  `context`. The user never types the contract's JSON.
+- **The selectable stars are procedures.** Each one is a root: `think` now,
+  remembered procedures later. Only a root can be clicked to start or
+  continue work.
+- **A root's constellation is its outline, derived from its definition.** For
+  think: `think` → Codex, through the narrowing → Codex's narrowed tools
+  (`echo`, `read`, `roots`, `write`). The web host computes the outline from
+  the bundle it finds through the registry: each node, what it calls, and the
+  reach list of each `narrow` node. Nothing is drawn by hand, and the lines
+  are the procedure's real composition.
+- **Everything below a root is inspectable, never invokable.** Clicking Codex
+  or `read` shows its contract and its recorded calls. The live calls of a
+  running procedure animate along its outline.
+- **The context is the root's.** Selecting `think` switches the sidebar to the
+  conversations that run think, "new conversation" opens one in think, and
+  the composer shows think. Another root switches all three.
+- **In the snapshot:** a top-level `destinations` list, each
+  `{actor, title, schema, outline}`, where `outline` is the node and edge
+  structure plus each narrowed actor's reach; and each conversation's
+  `procedure`. Listing a root grants nothing: intake still checks every
+  message against the conversation's Horizon.
+- **Remembered procedures need their outline from the interpreter.** Their
+  nodes are compiled into the interpreter's state, not a bundle file, so
+  reading their outline needs a small interpreter command or a read of its
+  store. That waits until remembered procedures become roots.
 
 ## Build order
 
@@ -241,54 +272,54 @@ deterministic because the lookup is itself recorded.
    from it, a new thread per invocation, `developerInstructions` removed; the
    fake requires the field.
 4. **The think bundle**, installed at boot: the narrowing and the run nodes.
-   Tests: a write under think is a `horizon` fault; the narrowed Horizon keeps
-   the adapter's state and socket grants and no write grant; replay
+   Tests: a write lands in scratch and never in the workspace; the narrowed
+   Horizon has `write` and scratch but no workspace write grant; replay
    re-derives the narrowing and the prompt.
-5. **The generic user adapter:** the destination from the selection, the
-   transcript as `context`, and no Codex-specific fields.
-6. **The snapshot protocol:** each conversation's contract and the live
-   selectable contracts, in Go, the browser schema and the Swift decoder;
-   calls grouped by request.
-7. **The desktop:** the `think` star, selection, and the sidebar and composer
-   following the selected contract. The browser follows.
+5. **The user actor:** the procedure table, the procedure seeded at creation,
+   text and answers by convention, earlier turns as one `context`
+   observation, no Codex instruction or fields of its own; the think bundle in
+   the launcher's registry; calls grouped by request.
+6. **The snapshot protocol:** `destinations` with each root's derived
+   outline, and each conversation's `procedure`, in Go, the browser schema,
+   the Swift decoder, the TUI and the mock; `open-conversation` carries the
+   selected procedure.
+7. **The desktop:** a clickable root star for think with its outline as a
+   constellation, inspect-only stars beneath it, a keyboard-accessible list of
+   the same roots, and the sidebar, "new conversation" and composer following
+   the selection. The browser follows.
 8. **A demo scenario** in `run.sh` with the fake Codex: a think turn that
-   reads, a refused write, a second turn on a new thread with the same
+   reads, a write to scratch, a second turn on a new thread with the same
    app-server, and a replay check.
 
 ## Done when
 
-- Clicking the `think` star shows think's conversations, and sending text
-  invokes the think procedure; no actor names Codex except think's body.
+- Clicking the `think` root shows think's conversations and its outline, and
+  sending text invokes the think procedure; no actor names Codex except
+  think's body, and Codex's star can be inspected but not invoked.
 - Codex's prompt in the lineage is exactly the header line; Codex's default
   prompt and the old developer line are nowhere in it.
-- A write attempted under think is a `horizon` fault, and replay re-derives
-  the turn byte for byte.
+- A write under think lands in scratch and never in the workspace, and replay
+  re-derives the turn byte for byte.
 - A second turn sees the first through `context`, on a new thread of the same
   app-server; an idle app-server is stopped by its backoff.
 - No kernel code refers to a connection.
 
 ## Blockers
 
-1. **Two unmerged branches overlap steps 5–7.** `codex/procedure-convergence`
-   (33's procedure-native user actor) and `actor-constellations` (34's
-   selectable stars, 646 lines of desktop and browser) are not on `main` and
-   now conflict with the review fixes. Steps 1–4 touch neither and can land
-   on `main` now. Steps 5–7 should be built on whichever of those is merged
-   first, or on `main` with those branches retired.
-2. **Step 2 is the largest change.** Moving connections out of the kernel
-   retires code and tests that exist for descriptor custody of connections.
-   It is a simplification, but it replaces that guarantee with a Horizon
-   grant to the edge's socket, and the sandbox profiles must allow exactly
-   that socket and nothing else.
+None open. Steps 5–7 are built on a new branch off `main`, not on
+`codex/procedure-convergence` or `actor-constellations`: both depend on the
+connection custody step 2 removed, both conflict with `main` in the kernel and
+web host, and the first hardcodes `conversation.send` as the destination.
+Pieces are taken by hand: the desktop selection model and its tests from
+`actor-constellations`, and later the shared ancestry walk from 35 §1, once
+context is rebuilt from history rather than passed.
 
 ## Open questions
 
-1. Whether `context` carries the whole transcript, or the last N turns, until
-   think.md's compaction exists.
-2. Whether direct `codex` conversations remain available beside think, for
-   development, or think becomes the only entry.
-3. The backoff's starting interval and maximum.
-4. The browser's star: the desktop first, or both at once.
+1. How large `context` may grow before think.md's compaction exists.
+2. The browser's roots: the desktop first, or both at once.
+3. How remembered procedures expose their outlines (an interpreter command or
+   a read of its store), when they become roots.
 
 ## Implemented
 

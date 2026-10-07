@@ -111,27 +111,22 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 			t.Fatalf("read under think: %s", answer)
 		}
 	})
-	t.Run("a write is refused and nothing is written", func(t *testing.T) {
+	t.Run("a write lands in scratch, and the workspace stays read-only", func(t *testing.T) {
 		answer, root, scratch := think(t, "write:note.txt=x")
-		// Refused as what it is: a tool outside think's reach, which the
-		// adapter interrupts and reports. Not a timeout or a custody fault.
-		if !strings.Contains(answer, `"refused":"native.dynamicTool.write"`) {
-			t.Fatalf("write under think was not refused as an unoffered tool: %s", answer)
+		if strings.Contains(answer, "refused") {
+			t.Fatalf("write is one of think's tools: %s", answer)
 		}
-		if entries, _ := os.ReadDir(scratch); len(entries) != 0 {
-			t.Fatalf("something was written to scratch: %v", entries)
+		if b, err := os.ReadFile(filepath.Join(scratch, "note.txt")); err != nil || string(b) != "x" {
+			t.Fatalf("the write did not land in scratch: %q %v (answer %s)", b, err, answer)
 		}
-		// Codex ran under the narrowed Horizon: no write in reach, and no
-		// write or scratch authority for anything beneath it.
+		// Codex ran under the narrowed Horizon: write in reach, scratch
+		// granted, and no write grant on the workspace.
 		records, _ := os.ReadDir(filepath.Join(root, "records"))
 		narrowed := 0
 		for _, e := range records {
 			r, err := tree.Load(root, e.Name())
 			if err != nil {
 				t.Fatal(err)
-			}
-			if r.To == "write" {
-				t.Fatal("write was invoked under think")
 			}
 			if !strings.HasPrefix(r.To, "system.ref.") {
 				continue
@@ -141,8 +136,8 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 				t.Fatal(err)
 			}
 			narrowed++
-			if _, ok := h.Reach["write"]; ok || len(h.Authority.Write) != 0 || h.Authority.Scratch != "" {
-				t.Fatalf("think's Horizon can write: reach %v, authority %+v", slices.Sorted(func(yield func(string) bool) {
+			if _, ok := h.Reach["write"]; !ok || h.Authority.Scratch == "" || len(h.Authority.Write) != 0 {
+				t.Fatalf("think's Horizon: reach %v, authority %+v", slices.Sorted(func(yield func(string) bool) {
 					for k := range h.Reach {
 						if !yield(k) {
 							return
@@ -156,6 +151,15 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		}
 		if narrowed == 0 {
 			t.Fatal("Codex was not invoked through a narrowed reference")
+		}
+		// Aimed at the workspace, a write changes nothing there.
+		think(t, "write:../work/pwned.txt=x")
+		think(t, "write:"+filepath.Join(workspace, "a.txt")+"=x")
+		if b, _ := os.ReadFile(filepath.Join(workspace, "a.txt")); string(b) != "alpha\n" {
+			t.Fatalf("the workspace was written: %q", b)
+		}
+		if _, err := os.Stat(filepath.Join(workspace, "pwned.txt")); err == nil {
+			t.Fatal("a write escaped scratch into the workspace")
 		}
 	})
 }

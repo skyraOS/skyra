@@ -4,9 +4,10 @@ The first continuation procedure ([proposal 38](../../../../docs/next/proposal/3
 The user's text is its one parameter. It attaches read-only tools to this
 invocation only, then runs Codex on the text under them:
 
-- `scope` narrows Codex to `echo`, `read`, `roots` and its own operations,
-  dropping all write and scratch authority (`without`), so the whole subtree
-  is read-only at the OS, and `write` is not in reach.
+- `scope` narrows Codex to the model's tools, `echo`, `read`, `roots` and
+  `write`, and its own operations, for this invocation only. The workspace is
+  read-only at the OS, as everywhere: only `read` is granted it, and `write`
+  reaches nothing but the conversation's scratch space.
 - `run` invokes the reference `scope` returned, with `header: "think"`. The
   Codex adapter starts a new thread whose whole prompt is
   `You are inside Skyra, a cognitive architecture, fulfilling: think`.

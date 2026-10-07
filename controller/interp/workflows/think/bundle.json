@@ -21,8 +21,7 @@
           "in": {
             "narrow": {
               "actor": "codex",
-              "reach": ["echo", "read", "roots", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"],
-              "without": ["write", "scratch"]
+              "reach": ["echo", "read", "roots", "write", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"]
             }
           }
         },
