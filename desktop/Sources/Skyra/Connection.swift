@@ -15,6 +15,10 @@ final class Session {
     /// The conversation on screen; nil for a fresh session.
     var selected: String?
     var draft = ""
+    /// Images pasted into the composer, sent with the next message and kept
+    /// until it is acknowledged.
+    private(set) var attachments: [Attachment] = []
+    private var sentAttachments: [UUID] = []
     private(set) var notice = ""
     /// A conversation is being opened for the text in pendingText.
     private(set) var opening = false
@@ -172,9 +176,20 @@ final class Session {
 
     /// Sends the draft: into the conversation on screen when it is waiting,
     /// else into a new one. The draft stays when nothing could take it.
+    /// Adds pasted images to the next message: at most four, as the webhost takes.
+    func attach(_ images: [Attachment]) {
+        let room = max(0, 4 - attachments.count)
+        // Each attached image is its own, even the same bytes twice, so one
+        // can be removed without the others.
+        attachments += images.prefix(room).map { Attachment(name: $0.name, data: $0.data) }
+        if images.count > room { notice = "a message takes at most four images" }
+    }
+
+    func removeAttachment(_ id: UUID) { attachments.removeAll { $0.id == id } }
+
     func submit() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         guard connected, !incarnation.isEmpty else {
             notice = "connecting; your draft is kept"
             return
@@ -242,14 +257,19 @@ final class Session {
 
     private func sendText(_ text: String, conversation: String) {
         let id = beginSubmission(text, conversation: conversation)
-        if !send(.submit(incarnation: incarnation, conversation: conversation, requestId: id, text: text)) {
+        let images = attachments
+        sentAttachments = images.map(\.id)
+        if !send(.submit(incarnation: incarnation, conversation: conversation, requestId: id, text: text, images: images)) {
             unacknowledged = nil
+            sentAttachments = []
         }
     }
 
     // Keep the same request identity when a reconnect has not established delivery.
     func beginSubmission(_ text: String, conversation: String) -> String {
-        let key = [incarnation, conversation, text].joined(separator: "\u{0}")
+        // The same text with other images is other work: another request id.
+        let pictures = attachments.map { "\($0.data.count):\($0.data.hashValue)" }.joined(separator: ",")
+        let key = [incarnation, conversation, text, pictures].joined(separator: "\u{0}")
         let id = retry?.key == key ? retry!.id : requestID()
         retry = (key, id)
         unacknowledged = (id, text)
@@ -259,6 +279,8 @@ final class Session {
     func acknowledge(_ id: String) {
         guard let pending = unacknowledged, pending.id == id else { return }
         if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
+        attachments.removeAll { sentAttachments.contains($0.id) }
+        sentAttachments = []
         unacknowledged = nil
         retry = nil
         notice = ""

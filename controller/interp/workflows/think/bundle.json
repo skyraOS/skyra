@@ -13,7 +13,8 @@
             "type": "object",
             "required": [
               "text",
-              "context"
+              "context",
+              "images"
             ],
             "fields": {
               "text": {
@@ -21,6 +22,12 @@
               },
               "context": {
                 "type": "any"
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -73,6 +80,13 @@
                 "input",
                 "think",
                 "context"
+              ]
+            },
+            "images": {
+              "$": [
+                "input",
+                "think",
+                "images"
               ]
             }
           }

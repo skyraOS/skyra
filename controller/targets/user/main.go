@@ -80,6 +80,7 @@ func main() {
 
 	transcript := []entry{}
 	said := ""
+	var images []string // the paths of the images pasted with what was said
 	for _, s := range c.Steps {
 		switch {
 		case s.Fault != nil:
@@ -91,10 +92,25 @@ func main() {
 			said = ""
 		case s.To == "browser":
 			var text string
-			_ = json.Unmarshal(s.Value, &text)
-			said = text
+			var pasted []struct{ Path, Name string }
+			if json.Unmarshal(s.Value, &text) != nil {
+				// A message with pasted images: its text, and each image's
+				// path in scratch and hash, as the web host kept it.
+				var m struct {
+					Text   string                        `json:"text"`
+					Images []struct{ Path, Name string } `json:"images"`
+				}
+				_ = json.Unmarshal(s.Value, &m)
+				text, pasted = m.Text, m.Images
+			}
+			said, images = text, nil
+			shown := text
+			for _, im := range pasted {
+				images = append(images, im.Path)
+				shown += "\n🖼 " + im.Name
+			}
 			if text != "/close" {
-				transcript = append(transcript, entry{"user", text})
+				transcript = append(transcript, entry{"user", shown})
 			}
 		case s.To == p.Actor:
 			transcript = append(transcript, entry{"agent", answer(s.Value)})
@@ -112,15 +128,19 @@ func main() {
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil:
 		// The turn's context is the conversation before this message.
 		context := transcript[:len(transcript)-1]
-		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "context": context}})
+		if images == nil {
+			images = []string{}
+		}
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "context": context, "images": images}})
 	default:
 		emit("browser", map[string]any{"conversation": c.Input.Conversation, "transcript": transcript})
 	}
 }
 
 // procedure is one entry of the table of what a human can run: the actor it
-// runs on. A turn's payload is {<title>: {text, context}}: the human's message
-// as text, the conversation so far as one context observation. Intake checks
+// runs on. A turn's payload is {<title>: {text, context, images}}: the human's
+// message as text, the conversation so far as one context observation, and
+// the paths of any images pasted with the message. Intake checks
 // the fit, so a procedure that takes something else is refused, not misused.
 type procedure struct{ Actor string }
 

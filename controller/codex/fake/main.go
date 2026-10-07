@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"skyra/controller/codex/prompt"
@@ -59,6 +60,7 @@ func main() {
 	history := map[string][]string{}
 	prompts := map[string]string{}  // each thread's base prompt, as Skyra gave it
 	recalled := map[string]string{} // each turn's context, as Skyra gave it
+	seen := map[string][]string{}   // each turn's local images, by file name
 	mode := ""
 	if len(os.Args) > 1 {
 		mode = os.Args[1]
@@ -98,7 +100,9 @@ func main() {
 			ThreadID string `json:"threadId"`
 			TurnID   string `json:"turnId"`
 			Input    []struct {
+				Type string `json:"type"`
 				Text string `json:"text"`
+				Path string `json:"path"`
 			} `json:"input"`
 			Developer string `json:"developerInstructions"`
 			Base      string `json:"baseInstructions"`
@@ -169,8 +173,12 @@ func main() {
 			// The message is the turn's last input; anything before it is
 			// the context its invoker passed (proposal 38).
 			t := turn{v.ThreadID, fmt.Sprintf("turn-%d", turns), v.Input[len(v.Input)-1].Text}
-			recalled[t.id] = ""
+			recalled[t.id], seen[t.id] = "", nil
 			for _, earlier := range v.Input[:len(v.Input)-1] {
+				if earlier.Type == "localImage" {
+					seen[t.id] = append(seen[t.id], filepath.Base(earlier.Path))
+					continue
+				}
 				recalled[t.id] += earlier.Text
 			}
 			history[t.thread] = append(history[t.thread], t.text)
@@ -231,6 +239,9 @@ func main() {
 				}
 				script[t.id] = calls[1:]
 				toolCall(t, 0, calls[0])
+			case t.text == "describe":
+				// What a real model would look at: the images it was given.
+				complete(t, "saw:"+strings.Join(seen[t.id], ","))
 			case t.text == "prompt":
 				complete(t, prompts[t.thread])
 			case t.text == "history":

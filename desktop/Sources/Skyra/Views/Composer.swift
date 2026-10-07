@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The composer sits one open row below the transcript: a dark field with no
@@ -8,11 +9,24 @@ struct Composer: View {
     let backend: Backend
     let session: Session
     @FocusState private var focused: Bool
+    @State private var pasteMonitor: Any?
 
     var body: some View {
         @Bindable var session = session
         let glow = ready ? Theme.accent : Theme.dim
         VStack(spacing: 8) {
+            if !session.attachments.isEmpty {
+                // Images pasted with ⌘V, sent with the message.
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(session.attachments) { a in
+                            AttachmentChip(attachment: a) { session.removeAttachment(a.id) }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             HStack(alignment: .bottom, spacing: 10) {
                 TextField(placeholder, text: $session.draft, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -80,7 +94,25 @@ struct Composer: View {
         .padding(.top, 12)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            // ⌘V is the menu's key equivalent, so the text field never sees
+            // it as a key press: watch for it first. With an image on the
+            // clipboard (a screenshot, or a copied image file) it attaches the
+            // image; anything else is left to paste as it always has.
+            pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard focused, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                      event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
+                let images = Attachment.images(on: .general)
+                guard !images.isEmpty else { return event }
+                session.attach(images)
+                return nil
+            }
+        }
+        .onDisappear {
+            if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
+            pasteMonitor = nil
+        }
     }
 
     /// Ready for a message: connected, and the conversation on screen is
@@ -91,7 +123,7 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
-        ready && !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ready && (!session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !session.attachments.isEmpty)
     }
 
     private var placeholder: String {

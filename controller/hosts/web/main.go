@@ -341,12 +341,13 @@ func (h *webhost) serveBrowser(conn net.Conn) {
 }
 
 type inbound struct {
-	Type          string `json:"type"`
-	UIIncarnation string `json:"uiIncarnation"`
-	Conversation  string `json:"conversation"`
-	RequestID     string `json:"requestId"`
-	Text          string `json:"text"`
-	Procedure     string `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
+	Type          string   `json:"type"`
+	UIIncarnation string   `json:"uiIncarnation"`
+	Conversation  string   `json:"conversation"`
+	RequestID     string   `json:"requestId"`
+	Text          string   `json:"text"`
+	Procedure     string   `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
+	Images        []pasted `json:"images,omitempty"`    // submit: images pasted with the text
 }
 
 func (h *webhost) handle(raw []byte) {
@@ -429,6 +430,17 @@ func (h *webhost) handle(raw []byte) {
 			reject("busy", "this conversation is not waiting for you")
 			return
 		}
+		// Pasted images are checked and kept before admission, so a bad
+		// one is refused whole and nothing runs.
+		var images []attachment
+		if m.Type == "submit" && len(m.Images) > 0 {
+			var err error
+			if images, err = saveAttachments(filepath.Join(h.homeOf(conv), "scratch"), m.Images); err != nil {
+				h.mu.Unlock()
+				reject("invalid-image", err.Error())
+				return
+			}
+		}
 		if !admit(m.Conversation) {
 			return
 		}
@@ -439,7 +451,7 @@ func (h *webhost) handle(raw []byte) {
 			conv.phase = "closed"
 		} else {
 			id := m.RequestID
-			conv.entries = append(conv.entries, entry{Role: "user", Text: text, TS: int64(len(conv.entries)), RequestID: &id})
+			conv.entries = append(conv.entries, entry{Role: "user", Text: withImages(text, images), TS: int64(len(conv.entries)), RequestID: &id})
 			conv.phase = "pending"
 		}
 		f := *conv.parked
@@ -448,8 +460,13 @@ func (h *webhost) handle(raw []byte) {
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
 		// The event goes back in as a return, addressed to the parked frame's
-		// slot: whatever the human typed is only text.
-		event, _ := json.Marshal(map[string]string{"to": f.Stamp, "payload": text}) // a parked invoke's frame is its own stamp
+		// slot: whatever the human typed is only text, and pasted images are
+		// only their paths and hashes beside it.
+		var payload any = text
+		if len(images) > 0 {
+			payload = map[string]any{"text": text, "images": images}
+		}
+		event, _ := json.Marshal(map[string]any{"to": f.Stamp, "payload": payload}) // a parked invoke's frame is its own stamp
 		if err := park.Resume(h.skyra, f, event, h.log); err != nil {
 			h.mu.Lock()
 			conv.phase = "failed"
@@ -464,6 +481,15 @@ func (h *webhost) handle(raw []byte) {
 		h.mu.Unlock()
 		reject("unknown", "unknown message type")
 	}
+}
+
+// withImages is a message as the transcript shows it: its text, then a line
+// naming each image pasted with it.
+func withImages(text string, images []attachment) string {
+	for _, im := range images {
+		text += "\n🖼 " + im.Name
+	}
+	return text
 }
 
 func validConversationID(id string) bool {

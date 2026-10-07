@@ -29,6 +29,7 @@ type continuation struct {
 	Input struct {
 		Text, Header, Conversation, Thread, Incarnation string
 		Context                                         json.RawMessage
+		Images                                          []string
 		ActivityAt                                      int64 `json:"activity_at"`
 	} `json:"input"`
 	Tools     map[string]*schema   `json:"tools"`
@@ -131,13 +132,17 @@ func lookup(c continuation, name string) (tool, bool) {
 
 // turnInput is what a turn gives Codex: the conversation so far, when the
 // invoker passed it as context (proposal 38: a thread lasts one invocation,
-// so memory is the lineage's), then the message itself, always last.
-func turnInput(context json.RawMessage, text string) []any {
-	message := map[string]string{"type": "text", "text": text}
+// so memory is the lineage's), each image pasted with the message as a local
+// image Codex reads from its path, then the message itself, always last.
+func turnInput(context json.RawMessage, images []string, text string) []any {
+	var input []any
 	if earlier := recall(context); earlier != "" {
-		return []any{map[string]string{"type": "text", "text": earlier}, message}
+		input = append(input, map[string]string{"type": "text", "text": earlier})
 	}
-	return []any{message}
+	for _, path := range images {
+		input = append(input, map[string]string{"type": "localImage", "path": path})
+	}
+	return append(input, map[string]string{"type": "text", "text": text})
 }
 
 // recall renders a context observation for the model: a transcript of
@@ -469,7 +474,7 @@ func decide(c continuation) (string, error) {
 		}
 	}
 	if !d.SentTurn {
-		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Text)})}, d.Partial), nil
+		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Images, c.Input.Text)})}, d.Partial), nil
 	}
 	if d.Turn == "" {
 		return ioCall(d.Incarnation, nil, d.Partial), nil

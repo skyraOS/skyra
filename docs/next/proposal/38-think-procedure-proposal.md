@@ -220,6 +220,17 @@ accepts the `imageView` item and still interrupts any other native item.
 **What Codex sees through it is not recorded in the lineage.** The capture
 shows exactly two tools, `echo` and `view_image`.
 
+The human can paste an image too: ⌘V in the desktop's composer with a
+screenshot on the clipboard (⌃⌘⇧4, raw image data with no file) or a copied
+image file (⌘C in Finder) attaches it to the message. The webhost checks the
+bytes are a PNG, JPEG, GIF or WebP, at most four and 10 MB a message, and
+keeps each in the conversation's scratch as `attachments/<sha256>.<ext>`.
+The browser event carries the text and each image's path and hash, so the
+lineage records exactly which image was sent; the user actor passes the
+paths to think as `images`, and the Codex adapter gives each to Codex as a
+`localImage` input ahead of the message. The app-server's profile reads
+images in scratch as it does under the read grants, and nothing else there.
+
 The header arrives in the Codex adapter's payload, so the prompt is
 whatever invoked it, and it is recorded through `codex.exchange` like every
 other byte Codex is given. The fake Codex requires `baseInstructions`, so a

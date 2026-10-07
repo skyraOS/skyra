@@ -1,7 +1,7 @@
 // The same admission/reconnect contract, exercised against mock and real host.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -74,12 +74,25 @@ try {
   const answer=second.conversations[0].entries.filter(e=>e.role==="agent").at(-1).text;
   assert(answer.includes("user: tool:hello"), `second turn did not get the first through its context: ${answer}`);
   assert(answer.includes("|history|threads=2"), `second turn did not run on a new thread of the same app-server: ${answer}`);
+  // A pasted screenshot (proposal 38): kept in scratch under its own hash and
+  // given to Codex as a local image, which the fake names back.
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const hash = createHash("sha256").update(Buffer.from(png, "base64")).digest("hex");
+  client.send({type:"submit",uiIncarnation:inc,conversation:id,requestId:"r3",text:"describe",images:[{name:"Screenshot.png",data:png}]});
+  await client.next(m=>m.type==="accepted" && m.requestId==="r3");
+  const pasted=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r3" && r.status==="returned"));
+  const entries=pasted.conversations[0].entries;
+  assert(entries.some(e=>e.role==="user" && e.text.includes("🖼 Screenshot.png")), "the transcript does not name the image");
+  assert.equal(entries.filter(e=>e.role==="agent").at(-1).text, `saw:${hash}.png`, "Codex was not given the pasted image");
+  // Bytes that are not an image are refused, and nothing runs.
+  client.send({type:"submit",uiIncarnation:inc,conversation:id,requestId:"r4",text:"describe",images:[{name:"x.png",data:Buffer.from("not an image").toString("base64")}]});
+  assert.equal((await client.next(m=>m.type==="rejected" && m.requestId==="r4")).code,"invalid-image");
  }
  client.send({type:"close-interaction",uiIncarnation:inc,conversation:id,requestId:"close"});
  await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close" && r.status==="returned"));
  client.send({type:"delete-conversation",uiIncarnation:inc,conversation:id,requestId:"delete"});
  await client.next(m=>m.type==="snapshot" && m.conversations.length===0);
- console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, roots and outlines, close, delete`);
+ console.log(`PASS ${real ? "real webhost with fake Codex" : "mock"}: admission, completion, busy, identity conflict, stale UI, reconnect, a second turn, roots and outlines${real ? ", a pasted image" : ""}, close, delete`);
  if (real && process.argv.includes("--desktop")) {
   ws.terminate();
   const swift = spawn("swift", ["test", "--no-parallel"], { cwd: `${root}/desktop`, env: { ...process.env, SKYRA_TEST_WS: `ws://127.0.0.1:${port}/ws`, SKYRA_TEST_TOKEN: token }, stdio: "inherit" });

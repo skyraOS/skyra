@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -54,7 +55,13 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	// show an image (proposal 38): Codex's view_image may read image files,
 	// and only image files, under the Horizon's read grants. What it reads is
 	// not recorded in the lineage.
-	for _, g := range h.Authority.Read {
+	// Images pasted with a message are kept in the conversation's scratch,
+	// so it reads images there too.
+	grants := h.Authority.Read
+	if h.Authority.Scratch != "" {
+		grants = append(slices.Clone(grants), PathGrant{Path: h.Authority.Scratch, Scope: "subpath"})
+	}
+	for _, g := range grants {
 		if rule := imageRead(g); rule != "" {
 			b.WriteString(rule)
 		}

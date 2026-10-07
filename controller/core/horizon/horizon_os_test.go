@@ -261,8 +261,12 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 		os.WriteFile(filepath.Join(work, name), []byte(body), 0o600)
 	}
 	tmp := func() string { return real(t.TempDir()) }
+	scratch := tmp()
+	os.MkdirAll(filepath.Join(scratch, "attachments"), 0o700)
+	os.WriteFile(filepath.Join(scratch, "attachments", "pasted.png"), []byte("png"), 0o600)
+	os.WriteFile(filepath.Join(scratch, "notes.md"), []byte("notes"), 0o600)
 	h := Horizon{Surface: &Surface{Path: self, ResidentProfile: "darwin-appserver-v1"},
-		Authority: Authority{Read: []PathGrant{{Path: work, Scope: "subpath"}}}}
+		Authority: Authority{Read: []PathGrant{{Path: work, Scope: "subpath"}}, Scratch: scratch}}
 	profile, err := RenderResident(h, floor, ResidentPaths{Home: tmp(), Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Cache: tmp(), ProxyPort: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -270,9 +274,15 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 	for name, want := range map[string]string{
 		"a.png": "allowed", "B.JPG": "allowed", "deep/c.webp": "allowed",
 		"notes.txt": "denied", ".env": "denied", "notes.png.txt": "denied", ".skyra/state.png": "denied",
+		// A pasted image, kept in the conversation's scratch.
+		scratch + "/attachments/pasted.png": "allowed", scratch + "/notes.md": "denied",
 	} {
+		path := name
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(work, name)
+		}
 		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSReadHelper$")
-		cmd.Env = append(os.Environ(), "SKYRA_TEST_READ_PATH="+filepath.Join(work, name))
+		cmd.Env = append(os.Environ(), "SKYRA_TEST_READ_PATH="+path)
 		out, err := cmd.Output()
 		if got := strings.TrimSpace(string(out)); !strings.HasPrefix(got, want) {
 			var stderr []byte

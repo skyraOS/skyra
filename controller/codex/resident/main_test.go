@@ -322,7 +322,7 @@ func TestAReusedServerOnlyStartsAThread(t *testing.T) {
 // context its invoker passed: given to Codex ahead of the message, which is
 // always the turn's last input.
 func TestContextPrecedesTheMessage(t *testing.T) {
-	items := turnInput(value([]map[string]string{{"role": "user", "text": "tool:hello"}, {"role": "agent", "text": "hi"}}), "next")
+	items := turnInput(value([]map[string]string{{"role": "user", "text": "tool:hello"}, {"role": "agent", "text": "hi"}}), nil, "next")
 	if len(items) != 2 {
 		t.Fatalf("items: %v", items)
 	}
@@ -331,12 +331,17 @@ func TestContextPrecedesTheMessage(t *testing.T) {
 		t.Fatalf("context then message: %v", items)
 	}
 	for _, none := range []string{``, `null`, `[]`, `{}`} {
-		if items := turnInput(json.RawMessage(none), "only"); len(items) != 1 {
+		if items := turnInput(json.RawMessage(none), nil, "only"); len(items) != 1 {
 			t.Fatalf("context %q added an item: %v", none, items)
 		}
 	}
-	if got := turnInput(value(map[string]string{"spec": "v1"}), "go")[0].(map[string]string)["text"]; !strings.Contains(got, `{"spec":"v1"}`) {
+	if got := turnInput(value(map[string]string{"spec": "v1"}), nil, "go")[0].(map[string]string)["text"]; !strings.Contains(got, `{"spec":"v1"}`) {
 		t.Fatalf("other context is passed as recorded: %s", got)
+	}
+	// Pasted images go in as local images, before the message, which stays last.
+	items = turnInput(nil, []string{"/s/attachments/a.png"}, "what is this?")
+	if len(items) != 2 || items[0].(map[string]string)["type"] != "localImage" || items[0].(map[string]string)["path"] != "/s/attachments/a.png" || items[1].(map[string]string)["text"] != "what is this?" {
+		t.Fatalf("image then message: %v", items)
 	}
 }
 

@@ -78,7 +78,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		if earlier == nil {
 			earlier = []map[string]string{}
 		}
-		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "context": earlier}})
+		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "context": earlier, "images": []string{}}})
 		runCtx, runCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer runCancel()
 		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "interpreter", "-payload", string(payload))

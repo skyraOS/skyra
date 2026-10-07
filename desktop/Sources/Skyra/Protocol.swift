@@ -110,24 +110,30 @@ enum ServerMessage: Decodable, Equatable {
 }
 
 enum ClientMessage: Encodable {
-    case submit(incarnation: String, conversation: String, requestId: String, text: String)
+    case submit(incarnation: String, conversation: String, requestId: String, text: String, images: [Attachment] = [])
     case close(incarnation: String, conversation: String, requestId: String)
     case open(requestId: String, procedure: String?) // nil: the webhost's first root
     case delete(incarnation: String, conversation: String, requestId: String)
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, conversation, requestId, text, procedure
+        case type, uiIncarnation, conversation, requestId, text, procedure, images
     }
+
+    /// A pasted image as the webhost takes it: its name and its bytes.
+    private struct Pasted: Encodable { let name, data: String }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Keys.self)
         switch self {
-        case let .submit(inc, conv, id, text):
+        case let .submit(inc, conv, id, text, images):
             try c.encode("submit", forKey: .type)
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
             try c.encode(text, forKey: .text)
+            if !images.isEmpty {
+                try c.encode(images.map { Pasted(name: $0.name, data: $0.data.base64EncodedString()) }, forKey: .images)
+            }
         case let .close(inc, conv, id):
             try c.encode("close-interaction", forKey: .type)
             try c.encode(inc, forKey: .uiIncarnation)
