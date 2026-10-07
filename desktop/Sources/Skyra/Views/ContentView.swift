@@ -37,6 +37,14 @@ struct ContentView: View {
             // The header shares the title bar's row, beside the window's buttons.
             .ignoresSafeArea(.container, edges: .top)
 
+            // The selected root's constellation, over the sky (proposal 38).
+            if !backendFailed {
+                RootPanel(session: session)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 10)
+                    .padding(.trailing, 14)
+            }
+
             if !backendFailed, session.current != nil, let placed = logFrame {
                 GeometryReader { geo in
                     let origin = geo.frame(in: .named("sky")).origin

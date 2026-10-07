@@ -1,14 +1,24 @@
 import SwiftUI
 
-/// The saved conversations, newest first, as the webhost lists them. Past
-/// conversations are shown as ended: their parked frames died with the host
-/// that held them (next/16).
+/// The roots a human may select, then the selected root's conversations,
+/// newest first, as the webhost lists them (proposal 38). The roots are the
+/// keyboard's way to the constellation over the sky. Conversations from
+/// before procedures sit under History, under no root. Past conversations are
+/// shown as ended: their parked frames died with the host that held them
+/// (next/16).
 struct Sidebar: View {
     let session: Session
     @State private var hovered: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if !session.destinations.isEmpty {
+                section("Procedures")
+                ForEach(session.destinations) { d in
+                    rootRow(d)
+                }
+                Divider().opacity(0.3).padding(.vertical, 2)
+            }
             Button {
                 session.newSession()
             } label: {
@@ -23,8 +33,14 @@ struct Sidebar: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(session.conversations) { c in
+                    ForEach(session.rootConversations) { c in
                         row(c)
+                    }
+                    if !session.history.isEmpty {
+                        section("History").padding(.top, 8)
+                        ForEach(session.history) { c in
+                            row(c)
+                        }
                     }
                 }
             }
@@ -35,6 +51,36 @@ struct Sidebar: View {
         .panel(radius: 12, tint: Theme.userBG, tintOpacity: 0.5)
         .padding(.leading, 10)
         .padding(.bottom, 10)
+    }
+
+    private func section(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(Theme.faint.color)
+            .padding(.horizontal, 10)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func rootRow(_ d: Destination) -> some View {
+        let chosen = session.root?.title == d.title
+        return Button {
+            session.selectRoot(d.title)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle").font(.system(size: 10))
+                Text(d.title).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(d.actor).foregroundStyle(Theme.faint.color)
+            }
+            .foregroundStyle(chosen ? Theme.ink.color : Theme.dim.color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(chosen ? Theme.accent.color(0.10) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Run \(d.title): its conversations are listed, and a new one runs it")
+        .accessibilityLabel("\(d.title), procedure on \(d.actor)\(chosen ? ", selected" : "")")
     }
 
     private func row(_ c: Conversation) -> some View {

@@ -2,8 +2,9 @@
 
 Date: 2026-10-06
 
-Status: steps 1–4 implemented on `main` (2026-10-06); steps 5–6 implemented
-on `think-steps-5-7`; steps 7–8 proposed. See
+Status: steps 1–4 implemented on `main` (2026-10-06); steps 5–7 implemented
+on `think-steps-5-7` (step 7 on the desktop; the browser follows); step 8
+proposed. See
 [Implemented](#implemented) for where the code departs from the text.
 Revised the same day: destinations come from the user's selection,
 connections belong to adapters, not the kernel, think keeps the model's
@@ -334,6 +335,7 @@ Steps 1–4, on `main` (2026-10-06):
 | 4. The think bundle | `interp/workflows/think`; `system.narrow` gains `without` to drop kinds of authority without naming paths |
 | 5. The user actor (branch `think-steps-5-7`) | `targets/user`: the procedure table, `{think: {text, context}}`, answers by convention, no Codex instruction or fields; the web host seeds `procedure: "think"`; the launcher registers the think bundle; `hosts/web/calls.go` starts a turn at any invoke the user side makes; the Codex adapter gives Codex the context ahead of the message |
 | 6. The snapshot protocol (branch `think-steps-5-7`) | `hosts/web/destinations.go` derives each root's outline from its bundle at startup; snapshots carry `destinations` and each conversation's `procedure`; `open-conversation` names a root, an unknown one is `unknown-procedure`; the browser schema, store and mock and the Swift decoder follow; the shared check holds mock and real host to the same roots |
+| 7. The desktop (branch `think-steps-5-7`) | the session's selected root (`Connection.swift`); the sidebar lists the roots, then the selected root's conversations, then History; `Sky/Roots.swift` lays a root's outline out as stars and `Views/RootPanel.swift` draws it over the sky as real buttons, the root selectable, everything else inspect-only, a tool lit while a call to it runs; the composer names the root it sends to |
 
 Decisions (2026-10-06), which the code relies on by omission:
 
@@ -387,7 +389,14 @@ Where the code departs from the text:
   through a narrowing's reference is shown as a call of the narrowed actor.
   A contract schema is passed as the bundle declares it.
 - **A conversation from before procedures has `procedure: ""`.** It stays
-  viewable; step 7 decides where the sidebar shows it.
+  viewable, under History in the sidebar, under no root.
+- **The constellation is SwiftUI over the sky, not drawn in Metal.** Its stars
+  are buttons, so clicks, the keyboard and VoiceOver reach them without
+  hit-testing the Metal sky; the sky behind stays decoration. An actor's own
+  operations (`codex.*`) are counted on it rather than drawn, and a narrowing
+  is a line, not a star. Tools' contracts are not in the snapshot yet, so
+  inspecting one shows what it is in the outline and its calls in the
+  conversation on screen.
 - **The room no longer lists Codex.** Codex runs under think's narrowed
   Horizon, its own region in the sky, whose reach is the model's tools and
   Codex's operations; the desktop live test checks that shape.

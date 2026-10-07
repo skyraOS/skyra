@@ -30,6 +30,34 @@ final class Session {
 
     var current: Conversation? { conversations.first { $0.conversation == selected } }
 
+    /// The root selected (proposal 38): the sidebar lists its conversations,
+    /// a new conversation runs it, and the composer sends to it. Until the
+    /// human picks one it is the webhost's first.
+    private(set) var selectedRoot: String?
+
+    /// The selected root, as the webhost lists it.
+    var root: Destination? { destinations.first { $0.title == selectedRoot } ?? destinations.first }
+
+    /// Selects a root. A conversation on screen that runs another root is put
+    /// away: the context is the root's.
+    func selectRoot(_ title: String) {
+        guard destinations.contains(where: { $0.title == title }) else { return }
+        selectedRoot = title
+        if let c = current, let p = c.procedure, !p.isEmpty, p != title { selected = nil }
+    }
+
+    /// The conversations that run the selected root, newest first. A webhost
+    /// that lists no roots predates them: every conversation is shown.
+    var rootConversations: [Conversation] {
+        guard let r = root else { return conversations }
+        return conversations.filter { $0.procedure == r.title }
+    }
+
+    /// Conversations from before procedures: viewable, under no root.
+    var history: [Conversation] {
+        destinations.isEmpty ? [] : conversations.filter { ($0.procedure ?? "").isEmpty }
+    }
+
     /// Connects to the webhost at url, reconnecting until disconnect.
     func connect(_ url: URL, token: String) {
         disconnect()
@@ -109,6 +137,9 @@ final class Session {
                 notice = "the host restarted; your draft is kept"
             }
             (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
+            if selectedRoot == nil || !roots.contains(where: { $0.title == selectedRoot }) {
+                selectedRoot = roots.first?.title
+            }
             if opening, let newest = convs.first, newest.conversation != openBefore {
                 selected = newest.conversation
                 if newest.phase == .ready {
@@ -165,7 +196,7 @@ final class Session {
 
     private func open(with text: String) {
         let before = conversations.first?.conversation
-        if send(.open(requestId: requestID(), procedure: nil)) {
+        if send(.open(requestId: requestID(), procedure: root?.title)) {
             opening = true
             openBefore = before
             pendingText = text

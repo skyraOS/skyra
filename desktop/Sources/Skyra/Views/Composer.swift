@@ -55,6 +55,12 @@ struct Composer: View {
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {
+                if let root = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
+                    // Where the message goes: the root this conversation runs,
+                    // or the selected one for a new conversation.
+                    Text(root).foregroundStyle(Theme.dim.color)
+                    Text("·")
+                }
                 Button {
                     backend.showGrant = true
                 } label: {
@@ -92,7 +98,7 @@ struct Composer: View {
         switch session.current?.phase {
         case .ready: "Reply"
         case .pending: "The agent is working…"
-        default: "Message Codex to begin"
+        default: "Message \(session.root?.title ?? "the agent") to begin"
         }
     }
 
