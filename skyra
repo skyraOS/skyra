@@ -449,10 +449,13 @@ serve() {
     exec python3 "$ROOT/controller/design/session.py" serve ${1:+"$1"}
   fi
 
-  if [ -z "${SKYRA_BUILT:-}" ]; then
-    say "building"
+  local stamp="$BUILD/.source-stamp"
+  local fingerprint
+  fingerprint=$(cd "$ROOT" && { cat go.mod go.sum controller/interp/go.mod controller/interp/go.sum 2>/dev/null; find controller tui -name '*.go' -o -name '*.m' | sort | xargs cat; } | shasum -a 256 | cut -d' ' -f1)
+  if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$fingerprint" ]; then
+    say "building (source changed)"
     controller_build
-    export SKYRA_BUILT=1
+    printf '%s' "$fingerprint" > "$stamp"
   fi
 
   # The normal app backend owns read-only vision automatically. The inner

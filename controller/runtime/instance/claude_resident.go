@@ -40,8 +40,8 @@ func prepareClaude(x machine.StartResident, root string) (*preparedResident, err
 	if err != nil {
 		return nil, err
 	}
-	home, tmp := filepath.Join(run, "home"), filepath.Join(run, "tmp")
-	for _, dir := range []string{home, tmp} {
+	home, tmp, work := filepath.Join(run, "home"), filepath.Join(run, "tmp"), filepath.Join(run, "work")
+	for _, dir := range []string{home, tmp, work} {
 		if err = os.Mkdir(dir, 0700); err != nil {
 			return nil, err
 		}
@@ -69,6 +69,7 @@ func prepareClaude(x machine.StartResident, root string) (*preparedResident, err
 		ClaudeLinkDir: claudeLinkDir,
 		Auth:          auth,
 		Cache:         cache,
+		UserHome:      userHome,
 	})
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func prepareClaude(x machine.StartResident, root string) (*preparedResident, err
 	}
 	p := &preparedResident{
 		profile: profile,
-		work:    run,
+		work:    work,
 		env:     []string{"PATH=/usr/bin:/bin:/usr/local/bin:" + claudeLinkDir, "HOME=" + userHome, "TMPDIR=" + tmp},
 	}
 	return p, nil
