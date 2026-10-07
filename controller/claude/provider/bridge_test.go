@@ -6,16 +6,16 @@ import (
 )
 
 func TestBridgeArguments(t *testing.T) {
-	args, err := BridgeArguments("s", "-prompt", "http://127.0.0.1:1234/mcp", strings.Repeat("x", 32), []string{"echo", "repo_write"})
+	args, err := BridgeArguments("s", "-prompt", "", "http://127.0.0.1:1234/mcp", strings.Repeat("x", 32), []string{"echo", "repo_write"})
 	if err != nil { t.Fatal(err) }
 	joined := strings.Join(args, "|")
 	for _, want := range []string{"--tools||", "--strict-mcp-config", "mcp__skyra__echo,mcp__skyra__repo_write", "--resume|s", "--|-prompt"} {
 		if !strings.Contains(joined, want) { t.Errorf("missing %s", want) }
 	}
 	for _, endpoint := range []string{"http://evil.invalid:1234/mcp", "https://127.0.0.1:1234/mcp", "http://127.0.0.1/mcp", "http://user@127.0.0.1:1234/mcp", "http://127.0.0.1:1234/mcp?secret=x"} {
-		if _, err := BridgeArguments("", "", endpoint, strings.Repeat("x",32), nil); err == nil { t.Errorf("accepted %s", endpoint) }
+		if _, err := BridgeArguments("", "", "", endpoint, strings.Repeat("x",32), nil); err == nil { t.Errorf("accepted %s", endpoint) }
 	}
-	if _, err := BridgeArguments("", "", "http://127.0.0.1:1234/mcp", strings.Repeat("x",32), []string{"*"}); err == nil { t.Fatal("wildcard accepted") }
+	if _, err := BridgeArguments("", "", "", "http://127.0.0.1:1234/mcp", strings.Repeat("x",32), []string{"*"}); err == nil { t.Fatal("wildcard accepted") }
 }
 
 func TestPartialToolEnforcement(t *testing.T) {

@@ -16,7 +16,7 @@ func TestSubscriptionEnvironment(t *testing.T) {
 }
 
 func TestArguments(t *testing.T) {
- args := Arguments("session-1", "-hostile prompt")
+ args := Arguments("session-1", "-hostile prompt", "")
  joined := strings.Join(args, "|")
  for _, want := range []string{"-p", "--tools||", "--strict-mcp-config", "--resume|session-1", "--|-hostile prompt"} {
   if !strings.Contains(joined, want) { t.Fatalf("missing %q: %v", want, args) }

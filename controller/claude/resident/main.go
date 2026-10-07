@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -100,6 +101,26 @@ func main() {
 
 func fail(err error) { fmt.Fprintln(os.Stderr, "clauderesident:", err); os.Exit(1) }
 
+func loadSession() string {
+	dir := os.Getenv("SKYRA_STATE")
+	if dir == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "session"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func saveSession(session string) {
+	dir := os.Getenv("SKYRA_STATE")
+	if dir == "" || session == "" {
+		return
+	}
+	os.WriteFile(filepath.Join(dir, "session"), []byte(session), 0600)
+}
+
 func emit(to string, payload any) string {
 	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	return string(b)
@@ -122,6 +143,9 @@ func quiet(o observation) bool {
 func decide(c continuation) (string, error) {
 	if c.Frame == "" {
 		return "", errors.New("no frame")
+	}
+	if c.Input.Session == "" {
+		c.Input.Session = loadSession()
 	}
 	if len(c.Steps) > 2000 {
 		return "", errors.New("turn exceeded operation limit")
@@ -205,6 +229,7 @@ func decide(c continuation) (string, error) {
 		return "", errors.New(d.Failed)
 	}
 	if d.Done {
+		saveSession(d.Session)
 		return emit(c.Frame, map[string]any{
 			"text":        d.FinalText,
 			"session":     d.Session,
@@ -293,6 +318,9 @@ func processLine(line string, d *derived) {
 	if e.Type == "result" {
 		if e.IsError || e.Subtype != "success" {
 			d.Failed = "claude turn failed"
+			if e.Subtype != "" {
+				d.Failed = e.Subtype
+			}
 			if e.Result != "" {
 				d.Failed = e.Result
 			}

@@ -142,7 +142,7 @@ registry={
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'claude':{'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json')},
+ 'claude':{'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
  'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True,'resident_profile':'darwin-claude-v1'},
  'claude.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'claude.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
