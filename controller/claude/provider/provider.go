@@ -15,8 +15,11 @@ import (
 
 // Arguments uses the user's existing Claude Code login. Native tools and
 // ambient MCP servers are disabled; Skyra tools must use a recorded bridge.
-func Arguments(session, prompt string) []string {
-	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--settings", `{"disableAllHooks":true}`}
+func Arguments(session, prompt, systemPrompt string) []string {
+	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-5-5", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--settings", `{"disableAllHooks":true}`}
+	if systemPrompt != "" {
+		args = append(args, "--system-prompt", systemPrompt)
+	}
 	if session != "" { args = append(args, "--resume", session) }
 	return append(args, "--", prompt)
 }
@@ -24,7 +27,7 @@ func Arguments(session, prompt string) []string {
 // BridgeArguments adds a capability-protected loopback MCP server. These
 // arguments contain an ephemeral capability and must not be logged/recorded.
 // The holder must externally sandbox the CLI before launching these arguments.
-func BridgeArguments(session, prompt, endpoint, token string, tools []string) ([]string, error) {
+func BridgeArguments(session, prompt, systemPrompt, endpoint, token string, tools []string) ([]string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, errors.New("Claude bridge must be a loopback HTTP endpoint")
@@ -39,7 +42,7 @@ func BridgeArguments(session, prompt, endpoint, token string, tools []string) ([
 		allowed = append(allowed, "mcp__skyra__"+name)
 	}
 	config, _ := json.Marshal(map[string]any{"mcpServers":map[string]any{"skyra":map[string]any{"type":"http","url":endpoint,"headers":map[string]string{"Authorization":"Bearer "+token}}}})
-	args := Arguments(session, prompt)
+	args := Arguments(session, prompt, systemPrompt)
 	for i := range args { if args[i] == "--mcp-config" { args[i+1] = string(config); break } }
 	if len(allowed) > 0 { args = append(args[:len(args)-2], append([]string{"--allowedTools", strings.Join(allowed, ","), "--", prompt}, []string{}...)...) }
 	return args, nil

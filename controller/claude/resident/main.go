@@ -20,6 +20,7 @@ import (
 
 	"skyra/controller/claude/bridge"
 	"skyra/controller/codex/proceduretools"
+	"skyra/controller/codex/prompt"
 )
 
 type schema = proceduretools.Schema
@@ -27,8 +28,8 @@ type schema = proceduretools.Schema
 type continuation struct {
 	Frame string `json:"frame"`
 	Input struct {
-		Text, Conversation, Session string
-		Context                     json.RawMessage
+		Text, Header, Conversation, Session string
+		Context                             json.RawMessage
 	} `json:"input"`
 	Tools map[string]*schema `json:"tools"`
 	Steps []step             `json:"steps"`
@@ -292,8 +293,8 @@ func processLine(line string, d *derived) {
 	if e.Type == "result" {
 		if e.IsError || e.Subtype != "success" {
 			d.Failed = "claude turn failed"
-			if e.Subtype != "" {
-				d.Failed = "claude turn " + e.Subtype
+			if e.Result != "" {
+				d.Failed = e.Result
 			}
 			return
 		}
@@ -336,9 +337,10 @@ func turnConfig(c continuation) map[string]any {
 		})
 	}
 	cfg := map[string]any{
-		"prompt": c.Input.Text,
-		"frame":  c.Frame,
-		"tools":  tools,
+		"prompt":        c.Input.Text,
+		"frame":         c.Frame,
+		"tools":         tools,
+		"system_prompt": prompt.Base(c.Input.Header),
 	}
 	if c.Input.Session != "" {
 		cfg["session"] = c.Input.Session

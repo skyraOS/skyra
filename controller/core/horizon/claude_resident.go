@@ -26,17 +26,11 @@ func RenderClaudeResident(h Horizon, floor string, p ClaudePaths) (string, error
 	if h.Surface == nil || h.Surface.ResidentProfile != "darwin-claude-v1" {
 		return "", fmt.Errorf("invalid claude resident profile")
 	}
-	for _, path := range []string{p.ClaudeBin, h.Surface.Path} {
-		if !filepath.IsAbs(path) {
-			return "", fmt.Errorf("resident path is not absolute: %q", path)
-		}
+	if !filepath.IsAbs(floor) {
+		return "", fmt.Errorf("resident floor is not absolute: %q", floor)
 	}
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n")
-	b.WriteString("(deny process-exec)\n")
-	fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", h.Surface.Path)
-	fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", p.ClaudeBin)
-	b.WriteString("(allow process-exec (literal \"/usr/lib/dyld\"))\n")
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
 	return b.String(), nil
 }

@@ -77,10 +77,14 @@ func prepareClaude(x machine.StartResident, root string) (*preparedResident, err
 	if err = os.WriteFile(filepath.Join(run, "actor.sb"), []byte(profile), 0600); err != nil {
 		return nil, err
 	}
+	user := os.Getenv("USER")
+	if user == "" {
+		user = filepath.Base(userHome)
+	}
 	p := &preparedResident{
 		profile: profile,
 		work:    work,
-		env:     []string{"PATH=/usr/bin:/bin:/usr/local/bin:" + claudeLinkDir, "HOME=" + userHome, "TMPDIR=" + tmp},
+		env:     []string{"PATH=/usr/bin:/bin:/usr/local/bin:" + claudeLinkDir, "HOME=" + userHome, "TMPDIR=" + tmp, "USER=" + user},
 	}
 	return p, nil
 }

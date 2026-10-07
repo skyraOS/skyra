@@ -27,10 +27,11 @@ import (
 )
 
 type turnConfig struct {
-	Prompt  string        `json:"prompt"`
-	Session string        `json:"session"`
-	Frame   string        `json:"frame"`
-	Tools   []bridge.Tool `json:"tools"`
+	Prompt       string        `json:"prompt"`
+	Session      string        `json:"session"`
+	Frame        string        `json:"frame"`
+	SystemPrompt string        `json:"system_prompt"`
+	Tools        []bridge.Tool `json:"tools"`
 }
 
 func main() {
@@ -100,7 +101,7 @@ func main() {
 	for i, t := range cfg.Tools {
 		toolNames[i] = t.Name
 	}
-	args, err := provider.BridgeArguments(cfg.Session, cfg.Prompt, endpoint, token, toolNames)
+	args, err := provider.BridgeArguments(cfg.Session, cfg.Prompt, cfg.SystemPrompt, endpoint, token, toolNames)
 	if err != nil {
 		fatal("arguments: " + err.Error())
 	}
