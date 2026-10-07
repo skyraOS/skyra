@@ -46,6 +46,7 @@
               "reach": [
                 "echo",
                 "read",
+                "find",
                 "roots",
                 "write",
                 "codex.start",

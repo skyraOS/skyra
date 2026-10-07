@@ -28,7 +28,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, source := range map[string]string{
-		"skyra": ".", "echo": "../targets/echo", "read": "../targets/read", "roots": "../targets/roots",
+		"skyra": ".", "echo": "../targets/echo", "read": "../targets/read", "find": "../targets/find", "roots": "../targets/roots",
 		"write": "../targets/write", "codex": "../codex/resident", "codexio": "../codex/io", "fake-codex": "../codex/fake",
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -55,6 +55,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	registry := map[string]any{
 		"echo":           map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
 		"read":           map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}}},
+		"find":           map[string]any{"path": filepath.Join(dir, "find"), "contract": abs("../targets/find/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}}},
 		"roots":          map[string]any{"path": filepath.Join(dir, "roots"), "contract": abs("../targets/roots/contract.json")},
 		"write":          map[string]any{"path": filepath.Join(dir, "write"), "contract": abs("../targets/write/contract.json")},
 		"codex":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../codex/resident/contract.json")},
@@ -112,6 +113,12 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		answer, _, _ := think(t, "history", map[string]string{"role": "user", "text": "tool:hello"}, map[string]string{"role": "agent", "text": "hello"})
 		if !strings.Contains(answer, "user: tool:hello") || !strings.Contains(answer, "agent: hello") || !strings.Contains(answer, "|history|") {
 			t.Fatalf("what the turn remembered: %s", answer)
+		}
+	})
+	t.Run("finding in the workspace works", func(t *testing.T) {
+		answer, _, _ := think(t, "find:*.txt")
+		if !strings.Contains(answer, `"path":"a.txt"`) || strings.Contains(answer, "refused") || strings.Contains(answer, `"error"`) {
+			t.Fatalf("find under think: %s", answer)
 		}
 	})
 	t.Run("reading the workspace works", func(t *testing.T) {

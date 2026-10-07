@@ -79,6 +79,11 @@ var modelTools = map[string]string{
 		"Returns at most 2000 lines or 64 KiB: when truncated is true, call again with start_line set to end_line + 1. " +
 		"sha256 and size describe the whole file. A failure is reported in error (not_found, denied, not_text, too_large). " +
 		"A path starting \"scratch:\" reads your scratch space instead (\"scratch:\" alone lists it).",
+	"find": "Find files (or folders) in the workspace by name, path, depth, kind, age or size, without reading them. in is where to look, relative to the workspace root " +
+		"(default \".\"), or \"scratch:\" for your scratch space. include and exclude are globs: one without a slash matches a name (\"*.go\"), one with a slash the path " +
+		"(\"src/*.go\"); an excluded folder is not entered. kind is \"file\" (default), \"dir\" or \"any\". maxdepth limits depth below in; newer is an RFC 3339 time; " +
+		"larger is a size in bytes. .git and node_modules are skipped unless ignore is \"none\", and dot files unless hidden is true; the result counts what was skipped. " +
+		"Paths come back as read takes them. At most max_results (default 100, up to 500): truncated says when the list was cut and why.",
 	"roots": "Show the absolute paths you may see: workspace (where a relative read path resolves; it is read-only), " +
 		"every path you may read, and scratch (your own folder for this conversation, read and write; read it as \"scratch:PATH\"). " +
 		"Anything outside these is denied. To list what is in them, use read with \".\" or \"scratch:\".",

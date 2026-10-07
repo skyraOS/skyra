@@ -206,6 +206,11 @@ func main() {
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t
 				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "read", "arguments": map[string]string{"path": strings.TrimPrefix(t.text, "read:")}}})
+			case strings.HasPrefix(t.text, "find:"):
+				// find:GLOB finds files in the workspace by name.
+				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
+				pending[string(id)] = t
+				send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{"threadId": t.thread, "turnId": t.id, "callId": string(id), "tool": "find", "arguments": map[string]any{"include": []string{strings.TrimPrefix(t.text, "find:")}}}})
 			case t.text == "roots":
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t

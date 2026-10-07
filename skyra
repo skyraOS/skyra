@@ -64,7 +64,7 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  local builds="skyra:skyra echo:targets/echo read:targets/read write:targets/write roots:targets/roots agent:targets/agent user:targets/user
+  local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
   # The interpreter is its own module (next/32).
@@ -115,6 +115,8 @@ start.update({'contract':str(root/'controller/codex/io/start-contract.json'),'re
 registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
  'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
+         'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
+ 'find':{'path':str(build/'find'),'contract':str(root/'controller/targets/find/contract.json'),
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
  'roots':{'path':str(build/'roots'),'contract':str(root/'controller/targets/roots/contract.json')},
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
