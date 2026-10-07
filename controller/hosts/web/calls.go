@@ -197,8 +197,9 @@ func (l *lineage) order() []string {
 	return out
 }
 
-// derive groups tool calls by agent turn: a turn starts where the user side
-// addresses codex, which it does once per human message.
+// derive groups tool calls by the turn a human message started: a turn starts
+// where the user side invokes anything but the browser it parks on, which it
+// does once per message (proposal 38: whatever procedure the conversation runs).
 func (l *lineage) derive() [][]call {
 	turns := [][]call{}
 	open := map[string]int{} // invoke stamp → index in the current turn
@@ -207,7 +208,7 @@ func (l *lineage) derive() [][]call {
 		r := x.r
 		switch r.State {
 		case record.Invoke:
-			if r.To == "codex" {
+			if r.To != "browser" && l.byUser(r.Predecessor) {
 				turns = append(turns, []call{})
 				open = map[string]int{}
 				continue
@@ -247,7 +248,7 @@ func (l *lineage) derive() [][]call {
 			if err != nil || json.Unmarshal(b, &in) != nil {
 				continue
 			}
-			if in.To == "codex" {
+			if in.To != "browser" && l.byUser(r.Predecessor) {
 				turns = append(turns, []call{})
 				open = map[string]int{}
 				continue
@@ -264,15 +265,34 @@ func (l *lineage) derive() [][]call {
 	return turns
 }
 
-// isTool reports whether an address is a tool the agent called, rather than
-// the conversation's own plumbing: the user side, the browser, and the Codex
-// adapter's steps.
-func isTool(to string) bool {
-	switch to {
-	case "", "user", "browser", "codex":
+// byUser reports whether a record emitted under predecessor was emitted by
+// the user side: predecessor is the user's own invoke, or a resolve that
+// resumed the user's frame.
+func (l *lineage) byUser(predecessor string) bool {
+	p, ok := l.records[predecessor]
+	if !ok {
 		return false
 	}
-	return !strings.HasPrefix(to, "codex.")
+	switch p.r.State {
+	case record.Invoke:
+		return p.r.To == "user"
+	case record.Resolve:
+		f, ok := l.records[p.r.Frame]
+		return ok && f.r.State == record.Invoke && f.r.To == "user"
+	}
+	return false
+}
+
+// isTool reports whether an address is a tool the agent called, rather than
+// the conversation's own plumbing: the user side, the browser, the procedure
+// actor and the Horizon's syscalls and references (through which a procedure
+// reaches its agent), and the Codex adapter's steps.
+func isTool(to string) bool {
+	switch to {
+	case "", "user", "browser", "codex", "interpreter", "system":
+		return false
+	}
+	return !strings.HasPrefix(to, "codex.") && !strings.HasPrefix(to, "system.")
 }
 
 // argument is a call's payload in a few words: its path or text when it has

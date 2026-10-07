@@ -55,10 +55,13 @@ try {
  submit("r2","history"); await client.next(m=>m.type==="accepted" && m.requestId==="r2");
  const second=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r2" && r.status==="returned"));
  if (real) {
-  // A second turn reaches the conversation's one app-server, through its
-  // edge's holder (proposal 38): the fake answers with its thread's history.
+  // A second turn runs think again (proposal 38): a new thread, on the
+  // conversation's one app-server through its edge's holder, remembering the
+  // first turn through the context the user side passed. The fake answers
+  // with that context, its thread's messages, and its thread count.
   const answer=second.conversations[0].entries.filter(e=>e.role==="agent").at(-1).text;
-  assert(answer.includes("tool:hello") && answer.includes("history"), `second turn did not reach the first turn's server: ${answer}`);
+  assert(answer.includes("user: tool:hello"), `second turn did not get the first through its context: ${answer}`);
+  assert(answer.includes("|history|threads=2"), `second turn did not run on a new thread of the same app-server: ${answer}`);
  }
  client.send({type:"close-interaction",uiIncarnation:inc,conversation:id,requestId:"close"});
  await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="close" && r.status==="returned"));

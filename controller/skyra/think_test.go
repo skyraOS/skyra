@@ -66,7 +66,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	reg := filepath.Join(dir, "registry.json")
 	os.WriteFile(reg, b, 0o600)
 
-	think := func(t *testing.T, text string) (string, string, string) {
+	think := func(t *testing.T, text string, earlier ...map[string]string) (string, string, string) {
 		t.Helper()
 		root, scratch := filepath.Join(t.TempDir(), ".skyra"), filepath.Join(dir, "scratch-"+strings.Map(func(r rune) rune {
 			if r >= 'a' && r <= 'z' {
@@ -75,7 +75,10 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 			return '-'
 		}, text))
 		os.MkdirAll(scratch, 0o700)
-		payload, _ := json.Marshal(map[string]any{"think": map[string]string{"text": text}})
+		if earlier == nil {
+			earlier = []map[string]string{}
+		}
+		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "context": earlier}})
 		runCtx, runCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer runCancel()
 		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "interpreter", "-payload", string(payload))
@@ -103,6 +106,12 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		answer, _, _ := think(t, "prompt")
 		if !strings.Contains(answer, prompt.Base("think")) {
 			t.Fatalf("Codex's prompt: %s", answer)
+		}
+	})
+	t.Run("the context reaches Codex ahead of the message", func(t *testing.T) {
+		answer, _, _ := think(t, "history", map[string]string{"role": "user", "text": "tool:hello"}, map[string]string{"role": "agent", "text": "hello"})
+		if !strings.Contains(answer, "user: tool:hello") || !strings.Contains(answer, "agent: hello") || !strings.Contains(answer, "|history|") {
+			t.Fatalf("what the turn remembered: %s", answer)
 		}
 	})
 	t.Run("reading the workspace works", func(t *testing.T) {

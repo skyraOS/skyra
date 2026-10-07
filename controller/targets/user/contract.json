@@ -7,6 +7,9 @@
     "fields": {
       "conversation": {
         "type": "string"
+      },
+      "procedure": {
+        "type": "string"
       }
     }
   },

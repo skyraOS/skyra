@@ -28,6 +28,7 @@ type continuation struct {
 	Frame string `json:"frame"`
 	Input struct {
 		Text, Header, Conversation, Thread, Incarnation string
+		Context                                         json.RawMessage
 		ActivityAt                                      int64 `json:"activity_at"`
 	} `json:"input"`
 	Tools     map[string]*schema   `json:"tools"`
@@ -126,6 +127,39 @@ func lookup(c continuation, name string) (tool, bool) {
 		return tool{}, false
 	}
 	return ts[i], true
+}
+
+// turnInput is what a turn gives Codex: the conversation so far, when the
+// invoker passed it as context (proposal 38: a thread lasts one invocation,
+// so memory is the lineage's), then the message itself, always last.
+func turnInput(context json.RawMessage, text string) []any {
+	message := map[string]string{"type": "text", "text": text}
+	if earlier := recall(context); earlier != "" {
+		return []any{map[string]string{"type": "text", "text": earlier}, message}
+	}
+	return []any{message}
+}
+
+// recall renders a context observation for the model: a transcript of
+// {role, text} entries as lines, anything else as its JSON. Nothing at all
+// (absent, null, empty) is no context.
+func recall(context json.RawMessage) string {
+	var transcript []struct{ Role, Text string }
+	if json.Unmarshal(context, &transcript) == nil {
+		if len(transcript) == 0 {
+			return ""
+		}
+		var b strings.Builder
+		b.WriteString("Earlier in this conversation:\n")
+		for _, e := range transcript {
+			fmt.Fprintf(&b, "\n%s: %s\n", e.Role, e.Text)
+		}
+		return b.String()
+	}
+	if t := strings.TrimSpace(string(context)); t == "" || t == "null" || t == "{}" {
+		return ""
+	}
+	return "Earlier in this conversation (as recorded):\n" + string(context)
 }
 
 // quiet reports whether an operation only waited out its deadline with
@@ -432,7 +466,7 @@ func decide(c continuation) (string, error) {
 		}
 	}
 	if !d.SentTurn {
-		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": []any{map[string]string{"type": "text", "text": c.Input.Text}}})}, d.Partial), nil
+		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Text)})}, d.Partial), nil
 	}
 	if d.Turn == "" {
 		return ioCall(d.Incarnation, nil, d.Partial), nil

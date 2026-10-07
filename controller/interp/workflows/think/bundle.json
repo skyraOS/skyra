@@ -5,36 +5,84 @@
       "contract": {
         "title": "think",
         "type": "object",
-        "required": ["think"],
+        "required": [
+          "think"
+        ],
         "fields": {
           "think": {
             "type": "object",
-            "required": ["text"],
-            "fields": {"text": {"type": "string"}}
+            "required": [
+              "text",
+              "context"
+            ],
+            "fields": {
+              "text": {
+                "type": "string"
+              },
+              "context": {
+                "type": "any"
+              }
+            }
           }
         }
       },
-      "order": ["scope", "run"],
+      "order": [
+        "scope",
+        "run"
+      ],
       "nodes": {
         "scope": {
           "call": "system",
           "in": {
             "narrow": {
               "actor": "codex",
-              "reach": ["echo", "read", "roots", "write", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"]
+              "reach": [
+                "echo",
+                "read",
+                "roots",
+                "write",
+                "codex.start",
+                "codex.exchange",
+                "codex.inspect",
+                "codex.stop"
+              ]
             }
           }
         },
         "run": {
-          "call": {"$": ["scope", "reference"]},
-          "after": ["scope"],
+          "call": {
+            "$": [
+              "scope",
+              "reference"
+            ]
+          },
+          "after": [
+            "scope"
+          ],
           "in": {
             "header": "think",
-            "text": {"$": ["input", "think", "text"]}
+            "text": {
+              "$": [
+                "input",
+                "think",
+                "text"
+              ]
+            },
+            "context": {
+              "$": [
+                "input",
+                "think",
+                "context"
+              ]
+            }
           }
         }
       },
-      "return": {"$": ["run"]}
+      "return": {
+        "$": [
+          "run"
+        ]
+      }
     }
   ]
 }

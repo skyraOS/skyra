@@ -317,3 +317,25 @@ func TestAReusedServerOnlyStartsAThread(t *testing.T) {
 		t.Fatalf("a reused server should get only thread/start: %s %v", to, q.Deliver)
 	}
 }
+
+// A thread lasts one invocation (proposal 38), so a turn's memory is the
+// context its invoker passed: given to Codex ahead of the message, which is
+// always the turn's last input.
+func TestContextPrecedesTheMessage(t *testing.T) {
+	items := turnInput(value([]map[string]string{{"role": "user", "text": "tool:hello"}, {"role": "agent", "text": "hi"}}), "next")
+	if len(items) != 2 {
+		t.Fatalf("items: %v", items)
+	}
+	earlier := items[0].(map[string]string)["text"]
+	if !strings.Contains(earlier, "user: tool:hello") || !strings.Contains(earlier, "agent: hi") || items[1].(map[string]string)["text"] != "next" {
+		t.Fatalf("context then message: %v", items)
+	}
+	for _, none := range []string{``, `null`, `[]`, `{}`} {
+		if items := turnInput(json.RawMessage(none), "only"); len(items) != 1 {
+			t.Fatalf("context %q added an item: %v", none, items)
+		}
+	}
+	if got := turnInput(value(map[string]string{"spec": "v1"}), "go")[0].(map[string]string)["text"]; !strings.Contains(got, `{"spec":"v1"}`) {
+		t.Fatalf("other context is passed as recorded: %s", got)
+	}
+}

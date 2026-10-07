@@ -126,8 +126,10 @@ registry={
  'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
- # The interpreter (next/32): remember, and the procedures it builds, in its own state.
- 'interpreter':{'path':str(build/'interp'),'contract':str(root/'controller/interp/contract.json'),'state':True},
+ # The interpreter (next/32): remember, the procedures it builds, in its own state,
+ # and the authored procedures a conversation runs (think, proposal 38).
+ 'interpreter':{'path':str(build/'interp'),'contract':str(root/'controller/interp/contract.json'),'state':True,
+                'bundle':str(root/'controller/interp/workflows/think/bundle.json')},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
 # Each built binary is registered by a copy stored under its own hash. A

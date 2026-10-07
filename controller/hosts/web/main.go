@@ -427,7 +427,9 @@ func (h *webhost) deleteConversation(id string) error {
 // seed starts a new conversation as the operator: genesis, then the user side.
 func (h *webhost) seed(id string) {
 	root := filepath.Join(h.dir, id, ".skyra")
-	payload, _ := json.Marshal(map[string]string{"conversation": id})
+	// A conversation runs one procedure, fixed here at creation (proposal 38).
+	// There is one so far; the UI's selection chooses it once there are more.
+	payload, _ := json.Marshal(map[string]string{"conversation": id, "procedure": "think"})
 	// Each conversation gets its own scratch space beside its records: the
 	// agent may write and read it, run nothing from it, and it goes when the
 	// conversation is deleted.

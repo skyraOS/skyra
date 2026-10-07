@@ -57,7 +57,8 @@ func main() {
 	}
 	var held *turn
 	history := map[string][]string{}
-	prompts := map[string]string{} // each thread's base prompt, as Skyra gave it
+	prompts := map[string]string{}  // each thread's base prompt, as Skyra gave it
+	recalled := map[string]string{} // each turn's context, as Skyra gave it
 	mode := ""
 	if len(os.Args) > 1 {
 		mode = os.Args[1]
@@ -161,7 +162,17 @@ func main() {
 			reply(m.ID, map[string]any{"thread": map[string]string{"id": id}, "approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly", "networkAccess": false}})
 		case "turn/start":
 			turns++
-			t := turn{v.ThreadID, fmt.Sprintf("turn-%d", turns), v.Input[0].Text}
+			if len(v.Input) == 0 {
+				send(map[string]any{"id": m.ID, "error": map[string]any{"code": -1, "message": "turn/start without input"}})
+				continue
+			}
+			// The message is the turn's last input; anything before it is
+			// the context its invoker passed (proposal 38).
+			t := turn{v.ThreadID, fmt.Sprintf("turn-%d", turns), v.Input[len(v.Input)-1].Text}
+			recalled[t.id] = ""
+			for _, earlier := range v.Input[:len(v.Input)-1] {
+				recalled[t.id] += earlier.Text
+			}
 			history[t.thread] = append(history[t.thread], t.text)
 			reply(m.ID, map[string]any{"turn": map[string]string{"id": t.id}})
 			event("turn/started", t, nil)
@@ -223,7 +234,10 @@ func main() {
 			case t.text == "prompt":
 				complete(t, prompts[t.thread])
 			case t.text == "history":
-				complete(t, strings.Join(history[t.thread], "|"))
+				// What this turn remembers: the context it was given, its
+				// thread's own messages, and how many threads this app-server
+				// has started (more than one: it was reused).
+				complete(t, fmt.Sprintf("%s|%s|threads=%d", strings.ReplaceAll(recalled[t.id], "\n", " "), strings.Join(history[t.thread], "|"), threads))
 			default:
 				complete(t, t.thread+":"+t.text)
 			}

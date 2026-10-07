@@ -31,7 +31,11 @@ func TestCallsFromTheLineage(t *testing.T) {
 	}
 	fault := &record.FaultInfo{Kind: record.Horizon, Cause: `"native.commandExecution" is not in reach`}
 	s := commit(t, root, "", "genesis", record.Record{State: record.Invoke})
-	s = commit(t, root, s, "1", record.Record{State: record.Invoke, To: "codex", Payload: json.RawMessage(`{"text":"read it"}`)})
+	// The user side starts each turn: here by running a procedure, which
+	// reaches its agent and tools beneath it (proposal 38).
+	user := commit(t, root, s, "user", record.Record{State: record.Invoke, To: "user", Payload: json.RawMessage(`{"conversation":"c"}`)})
+	s = commit(t, root, user, "1", record.Record{State: record.Invoke, To: "interpreter", Payload: json.RawMessage(`{"think":{"text":"read it","context":[]}}`)})
+	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: "system.ref.1", Payload: json.RawMessage(`{"text":"read it"}`)})
 	s = commit(t, root, s, "2", record.Record{State: record.Invoke, To: "codex.exchange", Payload: json.RawMessage(`{}`)})
 	s = commit(t, root, s, "3", record.Record{State: record.Return, Payload: json.RawMessage(`{}`)})
 	read := commit(t, root, s, "4", record.Record{State: record.Invoke, To: "read", Payload: json.RawMessage(`{"path":"README.md"}`)})
@@ -46,7 +50,8 @@ func TestCallsFromTheLineage(t *testing.T) {
 	}
 
 	s = commit(t, root, read, "5", record.Record{State: record.Return, Payload: json.RawMessage(`{"text":"# Skyra"}`)})
-	s = commit(t, root, s, "6", record.Record{State: record.Invoke, To: "codex", Payload: json.RawMessage(`{"text":"run ls"}`)})
+	s = commit(t, root, s, "5r", record.Record{State: record.Resolve, Frame: user}) // the user's frame resumes
+	s = commit(t, root, s, "6", record.Record{State: record.Invoke, To: "interpreter", Payload: json.RawMessage(`{"think":{"text":"run ls","context":[]}}`)})
 	commit(t, root, s, `{"payload":{},"to":"native.commandExecution"}`, record.Record{State: record.Fault, Fault: fault})
 	if !l.refresh() {
 		t.Fatal("new records reported no change")
@@ -99,7 +104,8 @@ func TestUnreleasedSuccessorIsLeftOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := commit(t, root, "", "genesis", record.Record{State: record.Invoke})
-	s = commit(t, root, s, "1", record.Record{State: record.Invoke, To: "codex", Payload: json.RawMessage(`{"text":"read it"}`)})
+	s = commit(t, root, s, "user", record.Record{State: record.Invoke, To: "user", Payload: json.RawMessage(`{"conversation":"c"}`)})
+	s = commit(t, root, s, "1", record.Record{State: record.Invoke, To: "interpreter", Payload: json.RawMessage(`{"think":{"text":"read it","context":[]}}`)})
 	read := commit(t, root, s, "2", record.Record{State: record.Invoke, To: "read", Payload: json.RawMessage(`{"path":"README.md"}`)})
 	orphan := commit(t, root, read, "3", record.Record{State: record.Return, Payload: json.RawMessage(`{"text":"# Skyra"}`)})
 	obs := "successor died before stamping: EOF"

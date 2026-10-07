@@ -2,7 +2,8 @@
 
 Date: 2026-10-06
 
-Status: steps 1–4 implemented (2026-10-06); steps 5–8 proposed. See
+Status: steps 1–4 implemented on `main` (2026-10-06); step 5 implemented on
+`think-steps-5-7`; steps 6–8 proposed. See
 [Implemented](#implemented) for where the code departs from the text.
 Revised the same day: destinations come from the user's selection,
 connections belong to adapters, not the kernel, think keeps the model's
@@ -331,6 +332,7 @@ Steps 1–4, on `main` (2026-10-06):
 | 2. Adapter-owned connections | `runtime/hold` (the holder, `skyra hold`), `core/machine.edgeSocket`, `codex/io` as the holder's client; the kernel's connection custody is gone |
 | 3. The prompt | `codex/prompt`; both adapters send `baseInstructions`; the fake refuses a thread without it |
 | 4. The think bundle | `interp/workflows/think`; `system.narrow` gains `without` to drop kinds of authority without naming paths |
+| 5. The user actor (branch `think-steps-5-7`) | `targets/user`: the procedure table, `{think: {text, context}}`, answers by convention, no Codex instruction or fields; the web host seeds `procedure: "think"`; the launcher registers the think bundle; `hosts/web/calls.go` starts a turn at any invoke the user side makes; the Codex adapter gives Codex the context ahead of the message |
 
 Decisions (2026-10-06), which the code relies on by omission:
 
@@ -374,6 +376,11 @@ Where the code departs from the text:
   `resource_owner_depth` fields stay in the surface.** Replay looks every
   re-derived Horizon up by the hash of its encoding, so removing them would
   stop older histories replaying. The runtime no longer acts on the last two.
-- **`think` is not yet in the launcher's registry.** The Codex adapter offers
-  the interpreter's procedures to the model as tools, so registering it before
-  step 5 would let Codex call think on itself.
+- **`think` is in the launcher's registry as of step 5.** Inside think, Codex's
+  narrowed reach does not include the interpreter, so it is never offered
+  think, or any procedure, as a tool.
+- **A conversation with no `procedure` runs think.** It is the only one, and
+  the web host always seeds it; the default spares nothing else.
+- **The room no longer lists Codex.** Codex runs under think's narrowed
+  Horizon, its own region in the sky, whose reach is the model's tools and
+  Codex's operations; the desktop live test checks that shape.
