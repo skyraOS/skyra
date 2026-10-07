@@ -217,9 +217,12 @@ struct SkyScene {
         if full, !busy, let head = meteor(&g, size, frame) { heads.append(head) }
 
         if full {
+            let warmT = model.modelTint * 0.25
             // The core: one small star, breathing on a thirty-second cycle.
             let core = (1 + sin(2 * .pi * f / 300)) / 2
-            let cc = Theme.coreFloor.lerp(Theme.corePeak, 0.25 + 0.5 * core)
+            let coreF = Theme.coreFloor.lerp(Theme.claudeFloor, warmT)
+            let coreP = Theme.corePeak.lerp(Theme.claudePeak, warmT)
+            let cc = coreF.lerp(coreP, 0.25 + 0.5 * core)
             g.radial(center, 14, cc, 0.35)
             g.star(center, 6.5, inner: 0.28, cc)
 
@@ -229,7 +232,9 @@ struct SkyScene {
             let c = Orbit.center(dots), r = Orbit.radii(dots, 1)
             let labelAngle = atan2((label.y / d - c.y) / r.y, (label.x / d + 8 - c.x) / r.x)
             let middle = model.sim?.angle(1) ?? 0
-            let lc = Theme.labelFloor.lerp(Theme.labelPeak, 0.15 + 0.85 * Sky.sweep(labelAngle, middle))
+            let labelF = Theme.labelFloor.lerp(Theme.claudeFloor, warmT)
+            let labelP = Theme.labelPeak.lerp(Theme.claudeLabel, warmT)
+            let lc = labelF.lerp(labelP, 0.15 + 0.85 * Sky.sweep(labelAngle, middle))
             g.text(.init(text: "s k y r a", style: .label), at: label, .leading, lc)
 
             drawCalls(&g, dots, f)
@@ -391,8 +396,10 @@ struct SkyScene {
         }
         let (mm, _) = model.lens.warp(m, depth: 0.3, in: size)
         let (vv, _) = model.lens.warp(v, depth: 0.3, in: size)
-        g.light(mm, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight, breath)
-        g.light(vv, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight, 0.85)
+        let warmN = model.modelTint * 0.25
+        let warmGlow = RGB(12, 8, 4)
+        g.light(mm, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight.lerp(warmGlow, warmN), breath)
+        g.light(vv, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight.lerp(warmGlow, warmN), 0.85)
     }
 
     /// Where each lobe rests, as a share of the sky; its radii; its pigment;
