@@ -101,7 +101,13 @@ struct Composer: View {
             // clipboard (a screenshot, or a copied image file) it attaches the
             // image; anything else is left to paste as it always has.
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                guard focused, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                guard focused else { return event }
+                let modifiers = event.modifierFlags.intersection([.control, .command, .option, .shift])
+                if modifiers == .control, event.charactersIgnoringModifiers?.lowercased() == "c" {
+                    session.draft = ""
+                    return nil
+                }
+                guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                       event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
                 let images = Attachment.images(on: .general)
                 guard !images.isEmpty else { return event }

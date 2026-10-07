@@ -3,7 +3,8 @@
 Proposal: **Not in the proposal.**
 
 Date: 2026-10-06  
-Status: proposed, not implemented. The initial observation-only scope is a
+Status: exact-window observation and vision implemented on `cua-observation`
+and validated against Cua 0.34.0 and real Codex (2026-10-07). The initial observation-only scope is a
 design recommendation in response to the user's request for a Cua adapter and
 questions about read-only operation; desktop input has not been authorized by
 this spec.
@@ -14,12 +15,25 @@ Builds on [20](20-boundry-crossing.md), [24](24-the-room.md),
 ## Purpose
 
 Let Skyra inspect approved desktop applications through Cua Driver. A model
-can discover approved running windows, read their accessibility content, and,
-in the second cut, inspect a window screenshot. Each request and result is an
+can read the accessibility content and screenshot of an operator-selected
+window. Operator-side discovery selects the window before launch. Each request and result is an
 ordinary Skyra invocation and observation.
 
 Start on macOS, matching Skyra's current OS enforcement. Cua's other platform
 backends do not make Skyra's controller portable by themselves.
+
+## Implementation: as built
+
+[`controller/cua`](../../controller/cua/README.md) implements one exact-window
+`desktop_observe` contract, an observation-only bridge, generated bounded
+manifest and daemon identity checks. The first slice uses Cua's published
+daemon JSON socket protocol directly instead of spawning an MCP client.
+The `skyra desktop` launcher provides operator window discovery, service
+lifetime, optional chat provisioning, exact-byte screenshot recording, Codex
+image delivery and browser/native preview. Replay is offline. The default chat
+registry does not enable the tool. Images use existing immutable observations
+rather than introducing a new artifact effect. Model-side multi-window
+discovery remains outside this exact-window implementation.
 
 ## Click is an action
 

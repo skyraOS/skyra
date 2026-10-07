@@ -20,6 +20,7 @@ struct Call: Decodable, Equatable {
     let arg: String
     let state: String // running | returned | fault
     let result: String?
+    let image: String? // recorded desktop screenshot data URL
     let fault: String? // the fault's kind: horizon, contract, custody, malformed
     let cause: String?
     let stamp: String

@@ -1,0 +1,26 @@
+{
+  "input": {
+    "type": "object",
+    "required": [],
+    "fields": {
+      "pid": {
+        "type": "number"
+      },
+      "window_id": {
+        "type": "number"
+      },
+      "query": {
+        "type": "string"
+      },
+      "max_elements": {
+        "type": "number"
+      },
+      "max_depth": {
+        "type": "number"
+      },
+      "include_screenshot": {
+        "type": "bool"
+      }
+    }
+  }
+}

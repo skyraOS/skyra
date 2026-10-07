@@ -38,6 +38,10 @@ func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
 	if len(s.Contracts) != 1 || !filepath.IsAbs(s.BundlePath) || s.BundleSHA256 != record.Sum([]byte(body)) {
 		t.Fatalf("bundle not pinned with reach: %+v", s)
 	}
+	write("bundle.json", `{"version":1,"procedures":[{"contract":{"type":"string"}}]}`)
+	if primary, err := loadEntry(); err != nil || len(primary.Contracts) != 0 {
+		t.Fatalf("primary procedure contract: %+v %v", primary, err)
+	}
 	entry.State = false
 	if _, err := loadEntry(); err == nil {
 		t.Fatal("accepted stateless installer")
@@ -46,7 +50,7 @@ func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
 	for _, invalid := range []string{
 		`{"version":2,"procedures":[{"contract":{"type":"object"}}]}`,
 		`{"version":1,"procedures":[]}`,
-		`{"version":1,"procedures":[{"contract":{"type":"string"}}]}`,
+		`{"version":1,"procedures":[{"contract":{"type":"string"}},{"contract":{"type":"string"}}]}`,
 		`{"version":1,"procedures":[{"contract":{"type":"object"}},{"contract":{"type":"object"}}]}`,
 	} {
 		write("bundle.json", invalid)

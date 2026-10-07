@@ -110,11 +110,22 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			if bundle.Version != 1 || len(bundle.Procedures) == 0 {
 				return nil, room, fmt.Errorf("%s: invalid procedure bundle", name)
 			}
+			bundleContracts := map[string]bool{}
 			for _, p := range bundle.Procedures {
 				if err := p.Contract.Check(); err != nil {
 					return nil, room, err
 				}
-				for _, held := range append([]*contract.Schema{d.Input}, d.Contracts...) {
+				key := string(contract.Canonical(p.Contract))
+				if bundleContracts[key] {
+					return nil, room, fmt.Errorf("%s: bundle repeats a contract", name)
+				}
+				bundleContracts[key] = true
+				// A bundle may implement the actor's primary contract itself.
+				// It is already in reach, so do not advertise it twice.
+				if key == string(contract.Canonical(d.Input)) {
+					continue
+				}
+				for _, held := range d.Contracts {
 					if string(contract.Canonical(held)) == string(contract.Canonical(p.Contract)) {
 						return nil, room, fmt.Errorf("%s: bundle repeats a declared contract", name)
 					}

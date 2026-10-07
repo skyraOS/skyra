@@ -1,0 +1,13 @@
+{
+  "input": {
+    "type": "object",
+    "required": [
+      "write"
+    ],
+    "fields": {
+      "write": {
+        "type": "any"
+      }
+    }
+  }
+}

@@ -91,6 +91,7 @@ struct Ledger: View {
     let call: Call
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("↳").foregroundStyle(Theme.faint.color)
             Text(call.to).foregroundStyle(tint ?? Theme.callTo.color).lineLimit(1)
@@ -107,6 +108,20 @@ struct Ledger: View {
         .font(.system(size: 11, design: .monospaced))
         .padding(.horizontal, 14)
         .help(call.cause ?? "")
+        if let image = recordedImage {
+            DisclosureGroup("View recorded window screenshot") {
+                Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 360)
+            }.font(.system(size: 11)).foregroundStyle(Theme.dim.color).padding(.horizontal, 14)
+        }
+        }
+    }
+
+    private var recordedImage: NSImage? {
+        guard let url = call.image, url.utf8.count <= 3 << 20,
+              url.hasPrefix("data:image/png;base64,") || url.hasPrefix("data:image/jpeg;base64,"),
+              let comma = url.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(url[url.index(after: comma)...])) else { return nil }
+        return NSImage(data: data)
     }
 
     private var tint: Color? {
