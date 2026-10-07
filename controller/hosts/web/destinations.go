@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // destination is a root the human can select (proposal 38): an authored
@@ -104,6 +105,10 @@ func bundleDestinations(actor, path string) ([]destination, error) {
 		}
 		if json.Unmarshal(p.Contract, &c) != nil || c.Title == "" {
 			continue // a root is selected by its title
+		}
+		// Its conversations are kept in a directory named for it.
+		if !validConversationID(c.Title) || strings.HasPrefix(c.Title, "c-") {
+			return nil, fmt.Errorf("procedure %q cannot name the directory its conversations are kept in", c.Title)
 		}
 		order := append([]string(nil), p.Order...)
 		for name := range p.Nodes {

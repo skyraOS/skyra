@@ -389,7 +389,16 @@ Where the code departs from the text:
   through a narrowing's reference is shown as a call of the narrowed actor.
   A contract schema is passed as the bundle declares it.
 - **A conversation from before procedures has `procedure: ""`.** It stays
-  viewable, under History in the sidebar, under no root.
+  viewable, under History in the sidebar, under no root, as does one whose
+  procedure the webhost no longer lists.
+- **A conversation is kept with the surface it runs.** The webhost keeps each
+  new conversation under its procedure's directory,
+  `conversations/<procedure>/<id>`, so a surface's context is together on
+  disk; a procedure's title must therefore be a plain path segment. Ones from
+  before procedures stay where they were, at the top, and are not moved.
+  Deleting removes only the conversation's own directory. Owning the list in
+  the user actor's state, each conversation a branch of one long-lived
+  invocation (33's model), is a later step.
 - **The constellation is drawn by the sky; the click is the window's.** The
   Metal view takes no clicks, so an invisible button sits over each root star,
   placed by the same layout the sky draws from (`RootSky.place`), so a target

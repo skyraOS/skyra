@@ -33,11 +33,11 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
 @MainActor
 @Test func theContextFollowsTheSelectedRoot() {
     let s = Session()
-    s.receive(snapshot(#"[{"conversation":"t1","phase":"ready","entries":[],"procedure":"think"},{"conversation":"old","phase":"closed","entries":[],"procedure":""}]"#))
+    s.receive(snapshot(#"[{"conversation":"t1","phase":"ready","entries":[],"procedure":"think"},{"conversation":"old","phase":"closed","entries":[],"procedure":""},{"conversation":"gone","phase":"closed","entries":[],"procedure":"retired"}]"#))
     // The first root is selected until the human picks one.
     #expect(s.root?.title == "think")
     #expect(s.rootConversations.map(\.conversation) == ["t1"])
-    #expect(s.history.map(\.conversation) == ["old"])
+    #expect(s.history.map(\.conversation) == ["old", "gone"])
     // Only a root the webhost lists can be selected.
     s.selectRoot("codex")
     #expect(s.root?.title == "think")

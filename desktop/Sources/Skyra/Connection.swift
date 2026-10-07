@@ -53,9 +53,11 @@ final class Session {
         return conversations.filter { $0.procedure == r.title }
     }
 
-    /// Conversations from before procedures: viewable, under no root.
+    /// Conversations under no root: from before procedures, or running one the
+    /// webhost no longer lists. Viewable, never lost from the sidebar.
     var history: [Conversation] {
-        destinations.isEmpty ? [] : conversations.filter { ($0.procedure ?? "").isEmpty }
+        let roots = Set(destinations.map(\.title))
+        return destinations.isEmpty ? [] : conversations.filter { !roots.contains($0.procedure ?? "") }
     }
 
     /// Connects to the webhost at url, reconnecting until disconnect.

@@ -61,6 +61,7 @@ type conversation struct {
 	parked           *park.Frame
 	pending          string
 	procedure        string // the root it runs, fixed at creation; "" for a conversation from before procedures
+	home             string // its directory: under its procedure's, or at the top for one from before procedures
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
 }
@@ -141,43 +142,103 @@ func fail(err error) {
 }
 
 // loadPast derives each past conversation's transcript from its records: the
-// latest browser invocation carries the whole transcript it showed.
+// latest browser invocation carries the whole transcript it showed. A
+// conversation lives under its procedure's directory, kept with the surface
+// it runs (proposal 38); one from before procedures stays at the top.
 func (h *webhost) loadPast() {
 	dirs, _ := os.ReadDir(h.dir)
 	for _, d := range dirs {
-		if !d.IsDir() || strings.HasPrefix(d.Name(), ".") || h.deleted(d.Name()) {
+		if !d.IsDir() || strings.HasPrefix(d.Name(), ".") {
 			continue
 		}
-		root := filepath.Join(h.dir, d.Name(), ".skyra")
-		if _, err := os.Stat(filepath.Join(root, "records")); err != nil {
+		if strings.HasPrefix(d.Name(), "c-") {
+			h.loadConversation(filepath.Join(h.dir, d.Name()), "")
 			continue
 		}
-		c := &conversation{id: d.Name(), phase: "closed", lineage: newLineage(root)}
-		c.lineage.refresh()
-		if info, err := d.Info(); err == nil {
-			c.started = info.ModTime()
-		}
-		for _, r := range c.lineage.live() {
-			if r.State == record.Invoke && r.To == "user" {
-				var seeded struct {
-					Procedure string `json:"procedure"`
-				}
-				if json.Unmarshal(r.Payload, &seeded) == nil {
-					c.procedure = seeded.Procedure // recorded at creation: the lineage says what it runs
-				}
-			}
-			if r.State != record.Invoke || r.To != "browser" {
-				continue
-			}
-			var p struct {
-				Transcript []entry `json:"transcript"`
-			}
-			if json.Unmarshal(r.Payload, &p) == nil && len(p.Transcript) >= len(c.entries) {
-				c.entries = stamp(p.Transcript)
+		inside, _ := os.ReadDir(filepath.Join(h.dir, d.Name()))
+		for _, c := range inside {
+			if c.IsDir() && strings.HasPrefix(c.Name(), "c-") {
+				h.loadConversation(filepath.Join(h.dir, d.Name(), c.Name()), d.Name())
 			}
 		}
-		h.convos[c.id] = c
 	}
+}
+
+// loadConversation reads one conversation at home. Its procedure is what its
+// genesis recorded; the directory it sits in is only where it is kept.
+func (h *webhost) loadConversation(home, under string) {
+	id := filepath.Base(home)
+	if h.deleted(id) {
+		return
+	}
+	root := filepath.Join(home, ".skyra")
+	info, err := os.Stat(filepath.Join(root, "records"))
+	if err != nil {
+		return
+	}
+	c := &conversation{id: id, phase: "closed", home: home, procedure: under, lineage: newLineage(root), started: info.ModTime()}
+	c.lineage.refresh()
+	if info, err := os.Stat(home); err == nil {
+		c.started = info.ModTime()
+	}
+	for _, r := range c.lineage.live() {
+		if r.State == record.Invoke && r.To == "user" {
+			var seeded struct {
+				Procedure string `json:"procedure"`
+			}
+			if json.Unmarshal(r.Payload, &seeded) == nil && seeded.Procedure != "" {
+				if under != "" && seeded.Procedure != under {
+					fmt.Fprintf(h.log, "webhost: %s is kept under %s but runs %s\n", id, under, seeded.Procedure)
+				}
+				c.procedure = seeded.Procedure // recorded at creation: the lineage says what it runs
+			}
+		}
+		if r.State != record.Invoke || r.To != "browser" {
+			continue
+		}
+		var p struct {
+			Transcript []entry `json:"transcript"`
+		}
+		if json.Unmarshal(r.Payload, &p) == nil && len(p.Transcript) >= len(c.entries) {
+			c.entries = stamp(p.Transcript)
+		}
+	}
+	h.convos[c.id] = c
+}
+
+// homeFor is where a new conversation that runs procedure is kept: with the
+// surface it runs.
+func (h *webhost) homeFor(procedure, id string) string {
+	if procedure == "" {
+		return filepath.Join(h.dir, id)
+	}
+	return filepath.Join(h.dir, procedure, id)
+}
+
+// homeOf is a conversation's directory: where it was opened or loaded, or
+// found on disk.
+func (h *webhost) homeOf(c *conversation) string {
+	if c.home != "" {
+		return c.home
+	}
+	return h.locate(c.id)
+}
+
+// locate finds a conversation's directory on disk when it is not loaded: at
+// the top, or under any procedure's directory.
+func (h *webhost) locate(id string) string {
+	if _, err := os.Stat(filepath.Join(h.dir, id)); err == nil {
+		return filepath.Join(h.dir, id)
+	}
+	dirs, _ := os.ReadDir(h.dir)
+	for _, d := range dirs {
+		if d.IsDir() && !strings.HasPrefix(d.Name(), ".") && !strings.HasPrefix(d.Name(), "c-") {
+			if _, err := os.Stat(filepath.Join(h.dir, d.Name(), id)); err == nil {
+				return filepath.Join(h.dir, d.Name(), id)
+			}
+		}
+	}
+	return filepath.Join(h.dir, id)
 }
 
 func stamp(es []entry) []entry {
@@ -220,7 +281,8 @@ func (h *webhost) acceptParks(l net.Listener) {
 			}
 			conv := h.convos[p.Conversation]
 			if conv == nil {
-				conv = &conversation{id: p.Conversation, started: time.Now(), lineage: newLineage(filepath.Join(h.dir, p.Conversation, ".skyra"))}
+				home := h.locate(p.Conversation)
+				conv = &conversation{id: p.Conversation, started: time.Now(), home: home, lineage: newLineage(filepath.Join(home, ".skyra"))}
 				h.convos[p.Conversation] = conv
 			}
 			if conv.recoveryRequired || conv.parked != nil {
@@ -354,11 +416,12 @@ func (h *webhost) handle(raw []byte) {
 		if !admit(id) {
 			return
 		}
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: d.Title, lineage: newLineage(filepath.Join(h.dir, id, ".skyra"))}
+		home := h.homeFor(d.Title, id)
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: d.Title, home: home, lineage: newLineage(filepath.Join(home, ".skyra"))}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id, d.Title)
+		go h.seed(id, d.Title, home)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
 		if conv == nil || conv.parked == nil || conv.phase != "ready" {
@@ -436,7 +499,13 @@ func (h *webhost) deleteConversation(id string) error {
 	if err := os.WriteFile(marker, nil, 0o600); err != nil {
 		return err
 	}
-	if err := os.RemoveAll(filepath.Join(h.dir, id)); err != nil {
+	home := h.homeOf(c)
+	// Only ever a conversation's own directory, inside the conversations'.
+	if rel, err := filepath.Rel(h.dir, home); err != nil || filepath.Base(home) != id || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		os.Remove(marker)
+		return fmt.Errorf("conversation %s is not where conversations are kept", id)
+	}
+	if err := os.RemoveAll(home); err != nil {
 		os.Remove(marker)
 		return fmt.Errorf("could not remove chat history: %w", err)
 	}
@@ -448,15 +517,15 @@ func (h *webhost) deleteConversation(id string) error {
 }
 
 // seed starts a new conversation as the operator: genesis, then the user side.
-func (h *webhost) seed(id, procedure string) {
-	root := filepath.Join(h.dir, id, ".skyra")
+func (h *webhost) seed(id, procedure, home string) {
+	root := filepath.Join(home, ".skyra")
 	// A conversation runs one procedure, fixed here at creation (proposal 38):
 	// the root the human selected, recorded in its genesis.
 	payload, _ := json.Marshal(map[string]string{"conversation": id, "procedure": procedure})
 	// Each conversation gets its own scratch space beside its records: the
 	// agent may write and read it, run nothing from it, and it goes when the
 	// conversation is deleted.
-	scratch := filepath.Join(h.dir, id, "scratch")
+	scratch := filepath.Join(home, "scratch")
 	cmd := exec.Command(h.skyra, "boot", "-root", root, "-registry", h.registry, "-scratch", scratch, "-to", "user", "-payload", string(payload), "-detach")
 	cmd.Stdout, cmd.Stderr = h.log, h.log
 	if err := cmd.Run(); err != nil {
@@ -585,7 +654,7 @@ func (h *webhost) reconcileRequests() bool {
 		if c.pending == "" || c.parked != nil {
 			continue
 		}
-		root := filepath.Join(h.dir, c.id, ".skyra")
+		root := filepath.Join(h.homeOf(c), ".skyra")
 		if failure, err := tree.ReadFailure(root); err == nil && failure != nil {
 			c.phase, c.recoveryRequired = "failed", true
 			h.finishRequest(c.pending, "failed", "delivery-unknown", failure.Message)

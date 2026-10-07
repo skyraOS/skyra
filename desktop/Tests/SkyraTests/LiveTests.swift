@@ -38,7 +38,15 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
     // A second message continues the same conversation.
     s.draft = "again"
     s.submit()
-    try await until { (s.current?.entries.count ?? 0) >= 4 && s.current?.phase == .ready }
+    do {
+        try await until { (s.current?.entries.count ?? 0) >= 4 && s.current?.phase == .ready }
+    } catch {
+        // Intermittent under the full suite's load: the message has never
+        // reached the webhost. Say what the session saw, to tell whether it
+        // was refused, held back, or never sent.
+        Issue.record("second message did not land: notice=\"\(s.notice)\" unacknowledged=\(String(describing: s.unacknowledged)) draft=\"\(s.draft)\" phase=\(String(describing: s.current?.phase)) entries=\(s.current?.entries.count ?? -1) connected=\(s.connected)")
+        throw error
+    }
     #expect(s.selected == c.conversation)
     s.delete(c.conversation)
     try await until { s.selected == nil }
