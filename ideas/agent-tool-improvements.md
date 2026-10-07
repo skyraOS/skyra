@@ -201,3 +201,141 @@ the agent might use.
 3. §4 plain-text read: small change to the reply format, saves tokens on every read.
 4. §6 read-only queries, then decide on the optional worktree support.
 5. §7 whenever convenient.
+
+---
+
+# Part 2: Further features
+
+## Principle
+
+No general shell. Each capability is an **optional parameter on a tool that
+already exists**, limited by that tool's existing sandbox and rules. A new
+parameter must not reach anything the tool couldn't already reach. Where one
+would, it's marked **adds authority** and needs a deliberate decision. New
+tools only where no existing tool fits.
+
+Today's tool set is enough: `read`, `find`, `write`, `repo_write`,
+`repo_check`, `execve` (Git), `roots`.
+
+## 8. Agent writes create commits without saying so
+
+**Observation.** The scratch `write` tool (writing the first part of this doc)
+committed the file as `0f9b6c3 "ideas: save agent write"` on the user's
+current feature branch, under the user's name. The commit contained only that
+file and nothing was pushed, but the tool's description doesn't mention
+committing, and the commit lands on whatever branch is checked out.
+
+**Proposal.**
+- Say so in the description, and return `commit` *and* `branch` in the
+  result (it currently returns only `commit`).
+- Better: record agent writes somewhere other than the user's branch, e.g. a
+  dedicated `skyra/ideas` ref updated with Git's low-level commands (no
+  checkout), or simply don't commit and let the user decide. Agent notes
+  shouldn't mix with feature work and end up in a PR by accident.
+- Mark the agent as the author (e.g. `Skyra (think-claude) <…>`) with the
+  user as committer, so history shows who wrote what.
+
+## 9. `read`
+
+| Parameter | Effect | Why |
+| --- | --- | --- |
+| `paths: [..]` | Read several files (or `{path,start_line,end_line}` ranges) in one call, each with its own details. | Answering most questions means reading 3–6 related files; one round trip instead of six. |
+| `around: {line, context}` | Return `context` lines either side of `line`. | Pairs with `find match` results: jump straight to a hit. |
+| `outline: true` | For Go (via `go/parser`) and Swift/Markdown (headings), return top-level declarations with line ranges instead of the contents. | See the layout of a 400-line file for a few hundred tokens, then read only the part needed. |
+| `numbered: true` | Prefix each line with its line number (from §4). | Exact line references for edits and for the user. |
+
+No added authority: all of these read the same paths `read` already can.
+
+## 10. `find`
+
+In addition to §1:
+
+| Parameter | Effect | Why |
+| --- | --- | --- |
+| `word: true` | Match `match` only as a whole identifier. | Finding the uses of `Tool` without `Tools`, `ToolName`… gets close to "find references" with no language server. |
+| `sort: "modified"` | Most recently modified first. | "What changed recently here" is a common first question. |
+| `changed: true` | Only files changed relative to `HEAD` (or a `since` branch/commit), via a read-only `git status`/`diff --name-only`. | Limits a search or a check to the work actually in progress. Also lets the agent avoid the user's uncommitted files, the problem that came up with worktrees. |
+
+`changed` reads Git metadata. It must use the same read-only Git path and
+never fetch.
+
+## 11. `repo_write`
+
+In addition to §2 (exact-text edit):
+
+| Parameter | Effect | Why |
+| --- | --- | --- |
+| `dry_run: true` | Validate and return the diff, write nothing. | Show the user a change before applying it. |
+| reply `diff` | Every write returns the diff it applied (capped). | The agent can check what landed without a separate `read`. |
+| `revert: <path>` | Restore a file to the content it had before **this conversation's** first write to it. Only files this conversation wrote, nothing else. | A safe undo. Writes can't delete, so a bad change can only be fixed by writing again; this makes that one call and stops it touching others' work. |
+| `create_only: true` | Fail if the file already exists. | Stops a "new file" from silently replacing an existing one. |
+
+`revert` needs the runtime to keep the starting hash/content of each file the
+conversation wrote. Its record of steps should already have this.
+
+## 12. `repo_check`
+
+| Parameter | Effect | Why |
+| --- | --- | --- |
+| `run: "<regex>"` | Go `-run` / Swift `--filter` for a single test. | Running the whole package to check one test wastes minutes. Still a fixed recipe; the value is passed as one argument, never through a shell. |
+| `package: "changed"` | Check only the packages containing files changed from `HEAD`. | Fast inner loop. |
+| action `go.vet` | `go vet` on the package. | Catches a class of bugs tests miss. Same sandbox. |
+| `fix: true` on `go.format` | Apply `gofmt` to the files it reports, through `repo_write`'s rules. | Today it only reports. The agent then has to rewrite whole files by hand to fix whitespace. |
+| structured `failures` | Alongside raw `output`: `[{test, package, file, line, message}]`, parsed from `go test -json` / Swift's report. | The agent goes straight to the failing line instead of digging through 64 KiB of logs, which gets truncated. |
+| `count: 1` (Go) | Turn off the test cache for the run. | Know that a pass was actually run. |
+
+`run`/`package` values are validated (regex compiles; package is `./…` inside
+the repo) and passed as single arguments. No added authority.
+
+## 13. Git (`execve`)
+
+Read-only queries, in addition to §6:
+
+- `log -n N` / `-N`. Today `-2` and `-3` are refused, but `--max-count=2` is
+  allowed. Same effect, so allow both forms, or say in the refusal which form
+  is allowed.
+- `branch --contains <commit>`, `merge-base A B`, `show <commit>:<path>`,
+  `diff --stat A...B`. All read-only, all useful to answer "where does this
+  commit live?" or "what does this branch change?"
+- Refusal messages that name the allowed alternative
+  (`"use --max-count=N"`), not just the refusal.
+
+**Adds authority, so decide deliberately:** push currently needs no approval.
+Commit and merge are local and can be undone; push publishes. Requiring
+approval for push (§5) is the one *reduction* proposed here.
+
+## 14. Across all tools
+
+- **What this conversation has changed.** An optional `changes: true` on
+  `roots` (or a field always present in its reply): the files this
+  conversation wrote, with before/after hashes, plus any commits it made.
+  Makes handing back to the user accurate, and lets the agent check
+  what it changed before saying it's done.
+- **Consistent truncation hints.** `read` already says how to continue. `find`
+  and `repo_check` should too: `truncated_by: "results"` plus
+  `"hint":"narrow with include/in, or raise max_results (≤500)"`.
+- **Refusals that say what's allowed.** Every policy refusal names the
+  permitted form or the setting that would change it, so the agent
+  adapts in one step instead of guessing.
+- **Agent-visible permission summary.** One line in the prompt or `roots`:
+  which tools are writable, whether commits/pushes need approval, and where
+  writes land. The agent shouldn't learn its permissions by trial and error.
+
+## 15. Deliberately left out
+
+- **Shell / arbitrary commands.** By design. Every case above is covered by a
+  limited parameter.
+- **Delete / rename.** Kept out. `revert` covers undoing the agent's own
+  mistakes. Deletion stays a user action.
+- **Network fetch.** Documentation lookup would help, but it adds egress
+  authority. If it's ever added, it should be a read-only fetch limited to an
+  approved list of domains (e.g. pkg.go.dev, developer.apple.com) and
+  recorded like every other observation.
+
+## Updated order
+
+1. §1 content search, §2 exact-text edit, §8 commit behaviour.
+2. §12 `run` + structured `failures`, §9 batch/outline `read`.
+3. §3, §5, §14 permission summary and hints: prompt and description changes only.
+4. §10, §11, §13: smaller parameter additions.
+5. §4, §6, §7 as convenient.
