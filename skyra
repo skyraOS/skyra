@@ -105,7 +105,7 @@ if mode=='real':
     verified_version(binary)
     args=[]
     for feature in FEATURES: args.extend(['--disable',feature])
-    args.extend(['--enable','skip_host_skill_discovery','app-server','--listen','stdio://'])
+    args.extend(['--enable','skip_host_skill_discovery','--enable','view_image','app-server','--listen','stdio://'])
     start={'path':str(binary),'resident_profile':'darwin-appserver-v1',
            'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
            'proxy_path':str(root/'controller/codex/provider/proxy.py'),'args':args}

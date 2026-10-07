@@ -339,3 +339,36 @@ func TestContextPrecedesTheMessage(t *testing.T) {
 		t.Fatalf("other context is passed as recorded: %s", got)
 	}
 }
+
+// Codex's own view_image is the one native item allowed (proposal 38): a
+// turn that looks at a photo and answers is not interrupted. Any other
+// native item still is.
+func TestViewingAnImageIsNotAViolation(t *testing.T) {
+	c := turnWithCalls()
+	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
+		"lines": []string{
+			`{"method":"item/started","params":{"item":{"type":"imageView","path":"/w/a.png"},"threadId":"thread-1","turnId":"turn-1"}}`,
+			`{"method":"item/completed","params":{"item":{"type":"imageView","path":"/w/a.png"},"threadId":"thread-1","turnId":"turn-1"}}`,
+			`{"method":"item/completed","params":{"item":{"type":"agentMessage","text":"A cat on a chair."},"threadId":"thread-1","turnId":"turn-1"}}`,
+			`{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"completed"}}}`,
+		},
+		"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
+	})})
+	to, m := emitted(t, c)
+	var r struct{ Text, Refused string }
+	if err := json.Unmarshal(m["payload"], &r); err != nil || to != "frame" || r.Text != "A cat on a chair." || r.Refused != "" {
+		t.Fatalf("a turn that viewed an image should answer: %s %s", to, m["payload"])
+	}
+	// A different native item is still interrupted.
+	c = turnWithCalls()
+	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
+		"lines":    []string{`{"method":"item/started","params":{"item":{"type":"fileChange"},"threadId":"thread-1","turnId":"turn-1"}}`},
+		"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
+	})})
+	to, m = emitted(t, c)
+	var q struct{ Deliver []string }
+	json.Unmarshal(m["payload"], &q)
+	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], "turn/interrupt") {
+		t.Fatalf("a file change must still interrupt the turn: %s %s", to, m["payload"])
+	}
+}

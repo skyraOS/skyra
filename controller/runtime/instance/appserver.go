@@ -248,6 +248,7 @@ func bootstrapCatalog(s horizon.Surface, p *preparedResident, run string) error 
 		model["tool_mode"] = "standard"
 		model["multi_agent_version"] = "disabled"
 		model["experimental_supported_tools"] = []any{}
+		model["apply_patch_tool_type"] = nil // no native file edits: with an environment, Codex would offer apply_patch
 		model["supports_search_tool"] = false
 		model["include_skills_usage_instructions"] = false
 		model["include_plugin_usage_instructions"] = false

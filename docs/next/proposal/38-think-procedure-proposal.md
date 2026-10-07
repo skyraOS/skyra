@@ -209,6 +209,17 @@ request (`experiments/appserver/tool_surface.py`, no model call) shows only
 the tools, the header, and the message. The model provider may still add a
 system prompt of its own on its side, which no client setting reaches.
 
+One native tool is kept on purpose, a hole drilled for the experience until
+Skyra has its own way to show an image: Codex's `view_image`, so it can look
+at a photo. It is enabled (`--enable view_image`), the thread keeps its local
+environment (Codex binds the tool to one; `environments: []` hid it), and
+`apply_patch`, which an environment would also bring, is removed by model
+metadata. The app-server's profile may read image files, and only image
+files, under the Horizon's read grants, never under the floor; the adapter
+accepts the `imageView` item and still interrupts any other native item.
+**What Codex sees through it is not recorded in the lineage.** The capture
+shows exactly two tools, `echo` and `view_image`.
+
 The header arrives in the Codex adapter's payload, so the prompt is
 whatever invoked it, and it is recorded through `codex.exchange` like every
 other byte Codex is given. The fake Codex requires `baseInstructions`, so a

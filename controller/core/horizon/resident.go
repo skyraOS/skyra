@@ -3,7 +3,9 @@ package horizon
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"unicode"
 )
 
 // ResidentPaths are names allocated by the runtime for one invocation. They
@@ -48,6 +50,15 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	for _, path := range []string{"/", filepath.Dir(h.Surface.Path), h.Surface.Path, filepath.Join(filepath.Dir(filepath.Dir(h.Surface.Path)), "codex-package.json"), p.Auth, filepath.Join(filepath.Dir(p.Home), "models.json"), "/dev/null", "/dev/random", "/dev/urandom"} {
 		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", path)
 	}
+	// The one hole, chosen for the experience until Skyra has its own way to
+	// show an image (proposal 38): Codex's view_image may read image files,
+	// and only image files, under the Horizon's read grants. What it reads is
+	// not recorded in the lineage.
+	for _, g := range h.Authority.Read {
+		if rule := imageRead(g); rule != "" {
+			b.WriteString(rule)
+		}
+	}
 	for _, path := range []string{p.Home, p.Scratch} {
 		fmt.Fprintf(&b, "(allow file-write* (subpath %q))\n", path)
 	}
@@ -62,4 +73,38 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	fmt.Fprintf(&b, "(allow network-outbound (remote ip %q))\n", fmt.Sprintf("localhost:%d", p.ProxyPort))
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
 	return b.String(), nil
+}
+
+// imageExtensions are the files view_image may read, in any case.
+var imageExtensions = []string{"png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tif", "tiff"}
+
+// imageRead is the rule letting the resident read images under one read
+// grant: any image below a subpath grant, or a literal grant that is an image.
+// A path that cannot be written safely into a rule grants nothing.
+func imageRead(g PathGrant) string {
+	if !filepath.IsAbs(g.Path) || strings.ContainsAny(g.Path, "\"\\\n") {
+		return ""
+	}
+	var exts []string
+	for _, e := range imageExtensions {
+		var any strings.Builder
+		for _, r := range e {
+			fmt.Fprintf(&any, "[%c%c]", unicode.ToLower(r), unicode.ToUpper(r))
+		}
+		exts = append(exts, any.String())
+	}
+	suffix := `\.(` + strings.Join(exts, "|") + `)$`
+	quoted := regexp.QuoteMeta(filepath.Clean(g.Path))
+	switch g.Scope {
+	case "subpath":
+		return fmt.Sprintf("(allow file-read* (regex #\"^%s/.*%s\"))\n", quoted, suffix)
+	case "literal":
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(g.Path)), ".")
+		for _, e := range imageExtensions {
+			if ext == e {
+				return fmt.Sprintf("(allow file-read* (literal %q))\n", filepath.Clean(g.Path))
+			}
+		}
+	}
+	return ""
 }

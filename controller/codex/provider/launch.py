@@ -12,11 +12,15 @@ import tempfile
 import time
 from sandbox import native_binary, render
 
+# Disabled Codex features. view_image stays on: the one native tool Codex
+# keeps, so it can look at a photo until Skyra has its own way to show one
+# (proposal 38). Its resident profile lets it read images, and only images,
+# under the Horizon's read grants; what it sees is not recorded.
 FEATURES = ['apps', 'plugins', 'hooks', 'daemon_auto_start', 'browser_use',
             'browser_use_external', 'computer_use', 'image_generation',
             'multi_agent', 'multi_agent_v2', 'shell_snapshot', 'code_mode', 'code_mode_only',
             'code_mode_host', 'goals', 'sleep_tool', 'current_time_reminder',
-            'shell_tool', 'skill_search', 'view_image', 'request_permissions_tool',
+            'shell_tool', 'skill_search', 'request_permissions_tool',
             'send_message_to_user_async', 'token_budget']
 # Every prompt Codex adds of its own is off (proposal 38): Skyra's header is the
 # whole prompt. Keep in step with runtime/instance/appserver.go's quiet.
@@ -48,6 +52,7 @@ def direct_catalog(binary, cache_file=None):
         model['tool_mode'] = 'standard'
         model['multi_agent_version'] = 'disabled'
         model['experimental_supported_tools'] = []
+        model['apply_patch_tool_type'] = None  # no native file edits (see runtime/instance/appserver.go)
         model['supports_search_tool'] = False
         model['include_skills_usage_instructions'] = False
         model['include_plugin_usage_instructions'] = False
@@ -96,7 +101,7 @@ def actor_argv(run, binary):
     argv = ['/usr/bin/sandbox-exec', '-f', str(run / 'actor.sb'), str(binary)]
     for feature in FEATURES:
         argv.extend(['--disable', feature])
-    argv.extend(['--enable', 'skip_host_skill_discovery', 'app-server', '--listen', 'stdio://'])
+    argv.extend(['--enable', 'skip_host_skill_discovery', '--enable', 'view_image', 'app-server', '--listen', 'stdio://'])
     return argv
 
 

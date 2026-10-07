@@ -237,3 +237,49 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 		}
 	}
 }
+
+// The resident's one hole (proposal 38): Codex's view_image may read image
+// files under the Horizon's read grants, and nothing else there; the floor
+// stays denied even to an image.
+func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Seatbelt is macOS")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
+	self = real(self) // Seatbelt matches real paths
+	work := real(t.TempDir())
+	floor := filepath.Join(work, ".skyra")
+	for name, body := range map[string]string{
+		"a.png": "png", "B.JPG": "jpg", "deep/c.webp": "webp", "notes.txt": "secret", ".env": "TOKEN=x",
+		"notes.png.txt": "not an image", ".skyra/state.png": "floor",
+	} {
+		os.MkdirAll(filepath.Dir(filepath.Join(work, name)), 0o700)
+		os.WriteFile(filepath.Join(work, name), []byte(body), 0o600)
+	}
+	tmp := func() string { return real(t.TempDir()) }
+	h := Horizon{Surface: &Surface{Path: self, ResidentProfile: "darwin-appserver-v1"},
+		Authority: Authority{Read: []PathGrant{{Path: work, Scope: "subpath"}}}}
+	profile, err := RenderResident(h, floor, ResidentPaths{Home: tmp(), Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Cache: tmp(), ProxyPort: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"a.png": "allowed", "B.JPG": "allowed", "deep/c.webp": "allowed",
+		"notes.txt": "denied", ".env": "denied", "notes.png.txt": "denied", ".skyra/state.png": "denied",
+	} {
+		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSReadHelper$")
+		cmd.Env = append(os.Environ(), "SKYRA_TEST_READ_PATH="+filepath.Join(work, name))
+		out, err := cmd.Output()
+		if got := strings.TrimSpace(string(out)); !strings.HasPrefix(got, want) {
+			var stderr []byte
+			if e, ok := err.(*exec.ExitError); ok {
+				stderr = e.Stderr
+			}
+			t.Errorf("%s: %q, want %s (%v %s)", name, got, want, err, stderr)
+		}
+	}
+}

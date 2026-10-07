@@ -410,7 +410,10 @@ func decide(c continuation) (string, error) {
 						if m.Method == "item/completed" {
 							d.Final = m.Params.Item.Text
 						}
-					case "userMessage", "reasoning", "plan", "dynamicToolCall":
+					// imageView is Codex's own view_image: the one native item
+					// allowed, so it can look at a photo (proposal 38). Its
+					// profile reads images only, and it is not recorded.
+					case "userMessage", "reasoning", "plan", "dynamicToolCall", "imageView":
 					default:
 						d.Violation = m.Params.Item.Type
 					}
@@ -446,7 +449,7 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
-		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "environments": []any{}, "dynamicTools": defs, "baseInstructions": prompt.Base(c.Input.Header)})
+		start := rpc(c.Frame+":thread", "thread/start", map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Base(c.Input.Header)})
 		deliver := []string{start}
 		if !d.Reused { // this invocation initialized the server: finish the handshake
 			initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
