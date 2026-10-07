@@ -1,0 +1,46 @@
+{
+  "input": {
+    "type": "object",
+    "required": [
+      "operation"
+    ],
+    "fields": {
+      "operation": {
+        "type": "string"
+      },
+      "expected_scene_version": {
+        "type": "string"
+      },
+      "object_id": {
+        "type": "string"
+      },
+      "material_id": {
+        "type": "string"
+      },
+      "parameter": {
+        "type": "string"
+      },
+      "value": {
+        "type": "any"
+      },
+      "translation": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      },
+      "rotation": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      },
+      "scale": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

@@ -13,6 +13,7 @@ final class SkyModel {
     var origin = CGPoint.zero // the canvas's origin in the sky's points: the canvas runs under the title bar
     var roots: [Destination] = [] // the roots a human may select (proposal 38)
     var selectedRoot: String? // the one whose context is on screen: its constellation stays lit
+    var modelTarget = 0.0 // 0 = codex (cool), 1 = claude (warm); eased by modelTint
 
     fileprivate let start = Date()
     fileprivate var stars: [Star] = []
@@ -24,6 +25,7 @@ final class SkyModel {
     fileprivate var figures: [RootSky.Figure] = []
     fileprivate var figuresFor: ([Destination], CGSize) = ([], .zero)
     fileprivate var rootLights = RootLights()
+    fileprivate var modelTint = 0.0 // eased toward modelTarget
     /// The selected root's figure: the context's constellation.
     fileprivate var contextFigure: RootSky.Figure? { figures.first { $0.title == selectedRoot } }
 
@@ -56,6 +58,8 @@ final class SkyModel {
         }
         let hovered = over ? nil : at.flatMap { p in figures.first { $0.bounds.contains(p) }?.title }
         rootLights.follow(figures.map(\.title), hovered: hovered, selected: selectedRoot, max(0, f - lastFrame))
+        let tintK = 1 - pow(1 - 0.06, max(0, f - lastFrame))
+        modelTint += (modelTarget - modelTint) * tintK
         // The title eases over two seconds toward open or receded.
         let step = max(0, f - lastFrame) * 0.05
         titleOpen = titleOpen < titleOpenTarget ? min(titleOpenTarget, titleOpen + step) : max(titleOpenTarget, titleOpen - step)
@@ -213,9 +217,12 @@ struct SkyScene {
         if full, !busy, let head = meteor(&g, size, frame) { heads.append(head) }
 
         if full {
+            let warmT = model.modelTint * 0.25
             // The core: one small star, breathing on a thirty-second cycle.
             let core = (1 + sin(2 * .pi * f / 300)) / 2
-            let cc = Theme.coreFloor.lerp(Theme.corePeak, 0.25 + 0.5 * core)
+            let coreF = Theme.coreFloor.lerp(Theme.claudeFloor, warmT)
+            let coreP = Theme.corePeak.lerp(Theme.claudePeak, warmT)
+            let cc = coreF.lerp(coreP, 0.25 + 0.5 * core)
             g.radial(center, 14, cc, 0.35)
             g.star(center, 6.5, inner: 0.28, cc)
 
@@ -225,7 +232,9 @@ struct SkyScene {
             let c = Orbit.center(dots), r = Orbit.radii(dots, 1)
             let labelAngle = atan2((label.y / d - c.y) / r.y, (label.x / d + 8 - c.x) / r.x)
             let middle = model.sim?.angle(1) ?? 0
-            let lc = Theme.labelFloor.lerp(Theme.labelPeak, 0.15 + 0.85 * Sky.sweep(labelAngle, middle))
+            let labelF = Theme.labelFloor.lerp(Theme.claudeFloor, warmT)
+            let labelP = Theme.labelPeak.lerp(Theme.claudeLabel, warmT)
+            let lc = labelF.lerp(labelP, 0.15 + 0.85 * Sky.sweep(labelAngle, middle))
             g.text(.init(text: "s k y r a", style: .label), at: label, .leading, lc)
 
             drawCalls(&g, dots, f)
@@ -299,11 +308,14 @@ struct SkyScene {
     /// takes the highlight color, and keeps it. Only the root takes a click
     /// (the window's button over it); the rest is there to be seen.
     private func roots(_ g: inout SkyPaint, _ size: CGSize, _ f: Double) {
+        let tint = model.modelTint
         for figure in model.figures {
             let context = figure.title == model.selectedRoot
-            // The highlight is the context's alone; anything else lights in
-            // the label's quiet tone.
-            let ink = context ? Theme.surfacePeak : Theme.labelPeak
+            let warm = context ? tint : 0
+            let ink = context
+                ? Theme.surfacePeak.lerp(Theme.claudePeak, warm)
+                : Theme.labelPeak
+            let glintColor = Theme.glintPeak.lerp(Theme.claudeGlint, warm)
             let lit = model.rootLights.alpha[figure.title] ?? 0
             let traced = model.rootLights.traced[figure.title] ?? 0
             let at = figure.stars.map { model.lens.warp($0.point, depth: 0.9, in: size) }
@@ -318,17 +330,34 @@ struct SkyScene {
                     lines.append((a, end))
                     if t < 1 { head = end }
                 }
-                for (a, b) in lines { g.line(a, b, width: 2.5, ink, (context ? 0.18 : 0.08) * lit, soft: 3) }
-                for (a, b) in lines { g.line(a, b, width: 0.7, ink, (context ? 0.45 : 0.25) * lit, round: true) }
+                let ambient = model.calls.busy(f) ? 0.0 : 1.0
+                for (i, line) in lines.enumerated() {
+                    let phase = Double(i) * 1.7
+                    let shimmer = 1 + ambient * (0.10 * sin(2 * .pi * f / 97 + phase)
+                                               + 0.05 * sin(2 * .pi * f / 163 + phase * 1.3))
+                    let (a, b) = line
+                    g.line(a, b, width: 2.5, ink, (context ? 0.18 : 0.08) * lit * shimmer, soft: 3)
+                    g.line(a, b, width: 0.7, ink, (context ? 0.45 : 0.25) * lit * shimmer, round: true)
+                }
                 if let head {
-                    g.disc(head, 4, context ? Theme.glintPeak : ink, 0.25 * lit)
-                    g.disc(head, 1.2, context ? Theme.glintPeak : ink, lit)
+                    g.disc(head, 4, context ? glintColor : ink, 0.25 * lit)
+                    g.disc(head, 1.2, context ? glintColor : ink, lit)
                 }
             }
+            let floor = Theme.surfaceFloor.lerp(Theme.claudeFloor, warm)
+            let peak = context
+                ? Theme.surfacePeak.lerp(Theme.claudePeak, warm)
+                : Theme.labelPeak
+            let labelBase = Theme.labelPeak.lerp(Theme.claudeLabel, warm)
             for (i, s) in figure.stars.enumerated() {
                 let (p, scale) = at[i]
                 let breath = (1 + sin(2 * .pi * f / 520 + Double(i) * 1.7)) / 2
-                let c = Theme.surfaceFloor.lerp(context ? Theme.surfacePeak : Theme.labelPeak, 0.45 + 0.25 * breath + (context ? 0.3 : 0.1) * lit)
+                let phase = Double(i) * 1.7
+                let glint = model.calls.busy(f) ? 0 : pow((1 + sin(2 * .pi * f / (83 + Double(i) * 7) + phase)) / 2, 4)
+                let shimmer = (0.35 + 0.65 * lit) * glint
+                let c = floor.lerp(peak, 0.45 + 0.25 * breath + (context ? 0.3 : 0.1) * lit)
+                    .lerp(glintColor, 0.16 * shimmer)
+                g.glow(p, sigma: (s.kind == .root ? 7 : 4) * scale, c, 0.10 * shimmer)
                 if s.kind == .root {
                     g.disc(p, 9 * scale, c, 0.10 + 0.12 * lit)
                     g.star(p, (4 + 1.5 * lit) * scale, inner: 0.3, c)
@@ -340,7 +369,7 @@ struct SkyScene {
                 let near = model.local.map { hypot($0.x - p.x, $0.y - p.y) < 18 } ?? false
                 if s.kind == .root || near || lit > 0 {
                     let named = s.kind == .root ? max(0.35, lit) : near ? 1 : lit
-                    let lc = Theme.labelFloor.lerp(Theme.labelPeak, named).lerp(Theme.surfacePeak, context ? 0.5 * lit : 0)
+                    let lc = Theme.labelFloor.lerp(labelBase, named).lerp(peak, context ? 0.5 * lit : 0)
                     g.text(.init(text: s.name, style: .name), at: CGPoint(x: p.x, y: p.y + 12), .top, lc)
                 }
             }
@@ -367,8 +396,10 @@ struct SkyScene {
         }
         let (mm, _) = model.lens.warp(m, depth: 0.3, in: size)
         let (vv, _) = model.lens.warp(v, depth: 0.3, in: size)
-        g.light(mm, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight, breath)
-        g.light(vv, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight, 0.85)
+        let warmN = model.modelTint * 0.25
+        let warmGlow = RGB(12, 8, 4)
+        g.light(mm, CGSize(width: w * 0.3, height: h * 0.42), Theme.tealLight.lerp(warmGlow, warmN), breath)
+        g.light(vv, CGSize(width: w * 0.2, height: h * 0.3), Theme.violetLight.lerp(warmGlow, warmN), 0.85)
     }
 
     /// Where each lobe rests, as a share of the sky; its radii; its pigment;

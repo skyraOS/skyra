@@ -1,0 +1,40 @@
+{
+  "asset_sha256" : "af012c3fc5e949e914a5b7bf5912af918ddd309198553673f989d72bb9a74cc1",
+  "bounds_center" : [
+    0.37999999523162842,
+    0.17999999225139618,
+    -0.27999997138977051
+  ],
+  "bounds_extents" : [
+    0.84000003337860107,
+    0.43999996781349182,
+    0.63999998569488525
+  ],
+  "click_through" : true,
+  "foreground_frames" : 312,
+  "limits" : "Capture and detachment evidence only; no GPU, memory, energy, or macOS 14 device benchmark.",
+  "load_ms" : 310.81391661427915,
+  "nodes" : [
+    "",
+    "root",
+    "AxisY",
+    "Cube_001",
+    "AxisX",
+    "Cube",
+    "AxisZ",
+    "Cube_002"
+  ],
+  "os" : "Version 15.6 (Build 24G84)",
+  "preview_neutral" : {
+    "has_alpha" : true,
+    "height" : 480,
+    "width" : 640
+  },
+  "preview_tilted" : {
+    "has_alpha" : true,
+    "height" : 480,
+    "width" : 640
+  },
+  "status" : "captured",
+  "view_released_after_detach" : true
+}

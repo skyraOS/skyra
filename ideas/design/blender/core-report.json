@@ -1,0 +1,41 @@
+{
+  "asset_sha256" : "ced447a23cf1cc3495d98e08544fcf4a93f3731450008d163d13f61fe404cb63",
+  "bounds_center" : [
+    0,
+    0,
+    0
+  ],
+  "bounds_extents" : [
+    1.4336966276168823,
+    0.98736006021499634,
+    1.1412969827651978
+  ],
+  "click_through" : true,
+  "foreground_frames" : 296,
+  "limits" : "Capture and detachment evidence only; no GPU, memory, energy, or macOS 14 device benchmark.",
+  "load_ms" : 160.97025002818555,
+  "nodes" : [
+    "",
+    "root",
+    "SkyraCoreRoot",
+    "CoreMesh",
+    "Icosphere",
+    "ArcInner",
+    "Torus",
+    "ArcOuter",
+    "Torus_001"
+  ],
+  "os" : "Version 15.6 (Build 24G84)",
+  "preview_neutral" : {
+    "has_alpha" : true,
+    "height" : 480,
+    "width" : 640
+  },
+  "preview_tilted" : {
+    "has_alpha" : true,
+    "height" : 480,
+    "width" : 640
+  },
+  "status" : "captured",
+  "view_released_after_detach" : true
+}

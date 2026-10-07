@@ -61,6 +61,9 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		"codex":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../codex/resident/contract.json")},
 		"codex.start":    map[string]any{"path": filepath.Join(dir, "fake-codex"), "contract": abs("../codex/io/start-contract.json"), "resident": true},
 		"codex.exchange": io(), "codex.inspect": io(), "codex.stop": io(),
+		"claude":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../claude/resident/contract.json"), "state": true},
+		"claude.start":    map[string]any{"path": filepath.Join(dir, "fake-codex"), "contract": abs("../codex/io/start-contract.json"), "resident": true},
+		"claude.exchange": io(), "claude.inspect": io(), "claude.stop": io(),
 		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true, "bundle": abs("../interp/workflows/think/bundle.json")},
 	}
 	b, _ := json.Marshal(registry)
@@ -79,7 +82,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		if earlier == nil {
 			earlier = []map[string]string{}
 		}
-		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "context": earlier, "images": []string{}}})
+		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "model": "codex", "context": earlier, "images": []string{}}})
 		runCtx, runCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer runCancel()
 		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "interpreter", "-payload", string(payload))

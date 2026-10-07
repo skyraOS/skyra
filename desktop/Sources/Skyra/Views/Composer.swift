@@ -69,10 +69,12 @@ struct Composer: View {
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {
-                if let root = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
-                    // Where the message goes: the root this conversation runs,
-                    // or the selected one for a new conversation.
+                if let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
+                    let root = Session.companions[proc] ?? proc
                     Text(root).foregroundStyle(Theme.dim.color)
+                    if root == "think" {
+                        Text(session.model).foregroundStyle(Theme.faint.color)
+                    }
                     Text("·")
                 }
                 Button {
@@ -101,7 +103,13 @@ struct Composer: View {
             // clipboard (a screenshot, or a copied image file) it attaches the
             // image; anything else is left to paste as it always has.
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                guard focused, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                guard focused else { return event }
+                let modifiers = event.modifierFlags.intersection([.control, .command, .option, .shift])
+                if modifiers == .control, event.charactersIgnoringModifiers?.lowercased() == "c" {
+                    session.draft = ""
+                    return nil
+                }
+                guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                       event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
                 let images = Attachment.images(on: .general)
                 guard !images.isEmpty else { return event }
@@ -138,8 +146,9 @@ struct Composer: View {
     private var grantLine: String {
         guard let w = backend.workspace else { return "no workspace granted" }
         let path = (w.path as NSString).abbreviatingWithTildeInPath
+        let access = Backend.repositoryAccess(w) ? "read + write + git" : "read"
         return backend.fake
-            ? "read · \(path) · fake Codex, nothing leaves this Mac"
-            : "read · \(path) · contents go to the model provider"
+            ? "\(access) · \(path) · fake Codex, nothing leaves this Mac"
+            : "\(access) · \(path) · contents go to the model provider"
     }
 }

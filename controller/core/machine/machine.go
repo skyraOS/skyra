@@ -832,6 +832,10 @@ func runOf(h horizon.Horizon, stdin []byte, floor, socket string) Run {
 	for _, sock := range h.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
 	}
+	if len(h.Authority.Connect) > 0 {
+		sockets, _ := json.Marshal(h.Authority.Connect)
+		env = append(env, "SKYRA_CONNECTIONS="+string(sockets))
+	}
 	// A target is told where its read grants are, as PATH lists directories.
 	// This is information, not authority: the rendered profile enforces them.
 	if reads := h.Authority.Read; len(reads) > 0 {
@@ -918,10 +922,10 @@ func shownReach(h horizon.Horizon) map[string]horizon.Surface {
 	return r
 }
 
-// against is the contract a program is executed against, named in its
-// envelope when its surface has more than one: the one its input fits.
+// against names the contract a continuation is executing, including a
+// procedure actor whose bundle implements its single primary contract.
 func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
-	if len(s.All()) < 2 {
+	if len(s.All()) < 2 && s.BundlePath == "" {
 		return nil
 	}
 	v, err := contract.Decode(input)

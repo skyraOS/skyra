@@ -1,0 +1,1 @@
+{"input":{"title":"Repository build and checks","type":"object","required":["action"],"fields":{"action":{"type":"string"},"package":{"type":"string"}}}}

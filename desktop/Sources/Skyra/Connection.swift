@@ -39,22 +39,58 @@ final class Session {
     /// human picks one it is the webhost's first.
     private(set) var selectedRoot: String?
 
+    /// The model the next think conversation runs: "codex" or "claude".
+    var model = "codex"
+
     /// The selected root, as the webhost lists it.
     var root: Destination? { destinations.first { $0.title == selectedRoot } ?? destinations.first }
+
+    /// Destinations shown in the sky; hidden alternatives (think-claude) are
+    /// filtered, and the visible root takes the alternative's outline when its
+    /// model is selected, so the constellation reflects the real composition.
+    var visibleDestinations: [Destination] {
+        let alt = model == "claude"
+            ? destinations.first { $0.title == "think-claude" }
+            : nil
+        return destinations.compactMap { d in
+            if Self.companions[d.title] != nil { return nil }
+            if d.title == "think", let a = alt {
+                return Destination(actor: d.actor, title: d.title, outline: a.outline)
+            }
+            return d
+        }
+    }
+
+    static let companions: [String: String] = ["think-claude": "think"]
+
+    func toggleModel() {
+        model = model == "codex" ? "claude" : "codex"
+    }
+
+    /// The procedure to open: think-claude when claude is selected on think.
+    var activeProcedure: String? {
+        guard let title = root?.title else { return nil }
+        if title == "think" && model == "claude" { return "think-claude" }
+        return title
+    }
 
     /// Selects a root. A conversation on screen that runs another root is put
     /// away: the context is the root's.
     func selectRoot(_ title: String) {
         guard destinations.contains(where: { $0.title == title }) else { return }
         selectedRoot = title
-        if let c = current, let p = c.procedure, !p.isEmpty, p != title { selected = nil }
+        if let c = current, let p = c.procedure, !p.isEmpty, p != title,
+           Self.companions[p] != title { selected = nil }
     }
 
     /// The conversations that run the selected root, newest first. A webhost
     /// that lists no roots predates them: every conversation is shown.
     var rootConversations: [Conversation] {
         guard let r = root else { return conversations }
-        return conversations.filter { $0.procedure == r.title }
+        return conversations.filter { c in
+            let p = c.procedure ?? ""
+            return p == r.title || Self.companions[p] == r.title
+        }
     }
 
     /// Conversations under no root: from before procedures, or running one the
@@ -217,7 +253,7 @@ final class Session {
 
     private func open(with text: String) {
         let before = conversations.first?.conversation
-        if send(.open(requestId: requestID(), procedure: root?.title)) {
+        if send(.open(requestId: requestID(), procedure: activeProcedure)) {
             opening = true
             openBefore = before
             pendingText = text

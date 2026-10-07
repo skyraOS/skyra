@@ -63,6 +63,12 @@ enum Theme {
     static let surfaceFloor = RGB(40, 58, 70)
     static let surfacePeak = RGB(150, 200, 208)
 
+    // Claude model: warm amber constellation tones, crossfaded with the cool ones above.
+    static let claudeFloor = RGB(56, 46, 36)
+    static let claudePeak = RGB(200, 162, 118)
+    static let claudeGlint = RGB(216, 192, 160)
+    static let claudeLabel = RGB(124, 100, 76)
+
     // The title, from receded (a conversation is on screen) through open to lit.
     static let titleWordReceded = RGB(28, 34, 44)
     static let titleWordOpen = RGB(74, 84, 100)

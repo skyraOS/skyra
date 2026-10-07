@@ -184,6 +184,11 @@ final class Backend {
             && FileManager.default.fileExists(atPath: $0.appendingPathComponent("controller").path) }
     }
 
+    static func repositoryAccess(_ workspace: URL?) -> Bool {
+        guard let workspace, let root = root() else { return false }
+        return workspace.resolvingSymlinksInPath().standardizedFileURL.path == root.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
     /// The PATH serve runs with. An app opened from Finder gets a bare one,
     /// so `skyra app` records the builder's.
     static func path() -> String {

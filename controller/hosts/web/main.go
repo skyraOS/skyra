@@ -65,6 +65,7 @@ type conversation struct {
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
 	pastCalls        [][]call // completed runs, indexed by conversation turn
+	loaded           bool    // true once the full lineage and entries have been read from disk
 }
 
 type webhost struct {
@@ -116,6 +117,7 @@ func main() {
 	}
 	h.destinations = destinations
 	h.loadPast()
+	go h.loadAllFull()
 	go h.watch()
 
 	os.Remove(*parkSock)
@@ -168,8 +170,9 @@ func (h *webhost) loadPast() {
 	}
 }
 
-// loadConversation reads one conversation at home. Its procedure is what its
-// genesis recorded; the directory it sits in is only where it is kept.
+// loadConversation reads one conversation's metadata at home: its id,
+// procedure from the directory structure, and a cached title for the sidebar.
+// The full records and lineage are loaded in the background after startup.
 func (h *webhost) loadConversation(home, under string) {
 	id := filepath.Base(home)
 	if h.deleted(id) {
@@ -177,30 +180,39 @@ func (h *webhost) loadConversation(home, under string) {
 	}
 	roots := conversationRuns(home)
 	root := roots[len(roots)-1]
-	info, err := os.Stat(filepath.Join(root, "records"))
-	if err != nil {
+	if _, err := os.Stat(filepath.Join(root, "records")); err != nil {
 		return
 	}
-	c := &conversation{id: id, phase: "closed", home: home, procedure: under, lineage: newLineage(root), started: info.ModTime()}
+	started := time.Time{}
+	if info, err := os.Stat(home); err == nil {
+		started = info.ModTime()
+	}
+	c := &conversation{id: id, phase: "closed", home: home, procedure: under, lineage: newLineage(root), started: started}
+	if b, err := os.ReadFile(filepath.Join(home, ".title")); err == nil && len(b) > 0 {
+		c.entries = []entry{{Role: "user", Text: string(b)}}
+	}
+	h.convos[c.id] = c
+}
+
+// loadConversationData reads the full records and lineage for a conversation.
+// It does all the I/O without holding the webhost mutex.
+func loadConversationData(home string) (entries []entry, procedure string, pastCalls [][]call, lin *lineage) {
+	roots := conversationRuns(home)
+	root := roots[len(roots)-1]
+	lin = newLineage(root)
 	for _, prior := range roots[:len(roots)-1] {
 		l := newLineage(prior)
 		l.refresh()
-		c.pastCalls = mergeCalls(c.pastCalls, l.snapshot())
+		pastCalls = mergeCalls(pastCalls, l.snapshot())
 	}
-	c.lineage.refresh()
-	if info, err := os.Stat(home); err == nil {
-		c.started = info.ModTime()
-	}
-	for _, r := range c.lineage.live() {
+	lin.refresh()
+	for _, r := range lin.live() {
 		if r.State == record.Invoke && r.To == "user" {
 			var seeded struct {
 				Procedure string `json:"procedure"`
 			}
 			if json.Unmarshal(r.Payload, &seeded) == nil && seeded.Procedure != "" {
-				if under != "" && seeded.Procedure != under {
-					fmt.Fprintf(h.log, "webhost: %s is kept under %s but runs %s\n", id, under, seeded.Procedure)
-				}
-				c.procedure = seeded.Procedure // recorded at creation: the lineage says what it runs
+				procedure = seeded.Procedure
 			}
 		}
 		if r.State != record.Invoke || r.To != "browser" {
@@ -209,11 +221,87 @@ func (h *webhost) loadConversation(home, under string) {
 		var p struct {
 			Transcript []entry `json:"transcript"`
 		}
-		if json.Unmarshal(r.Payload, &p) == nil && len(p.Transcript) >= len(c.entries) {
-			c.entries = stamp(p.Transcript)
+		if json.Unmarshal(r.Payload, &p) == nil && len(p.Transcript) >= len(entries) {
+			entries = stamp(p.Transcript)
 		}
 	}
-	h.convos[c.id] = c
+	return
+}
+
+// loadConversationFull loads a conversation's full records, entries and lineage
+// from disk. It is safe to call concurrently: it locks the webhost mutex to
+// apply results and skips the work when already loaded.
+func (h *webhost) loadConversationFull(id string) {
+	h.mu.Lock()
+	c := h.convos[id]
+	if c == nil || c.loaded {
+		h.mu.Unlock()
+		return
+	}
+	home := c.home
+	under := c.procedure
+	h.mu.Unlock()
+
+	entries, procedure, pastCalls, lin := loadConversationData(home)
+	writeTitle(home, entries)
+
+	h.mu.Lock()
+	c = h.convos[id]
+	if c != nil && !c.loaded {
+		c.lineage = lin
+		c.pastCalls = pastCalls
+		c.entries = entries
+		if procedure != "" {
+			if under != "" && procedure != under {
+				fmt.Fprintf(h.log, "webhost: %s is kept under %s but runs %s\n", id, under, procedure)
+			}
+			c.procedure = procedure
+		}
+		c.loaded = true
+	}
+	h.mu.Unlock()
+}
+
+// loadAllFull loads every unloaded conversation's records in parallel, then
+// re-broadcasts so the client sees full transcripts.
+func (h *webhost) loadAllFull() {
+	h.mu.Lock()
+	var ids []string
+	for id, c := range h.convos {
+		if !c.loaded {
+			ids = append(ids, id)
+		}
+	}
+	h.mu.Unlock()
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			h.loadConversationFull(id)
+		}(id)
+	}
+	wg.Wait()
+	h.broadcast()
+}
+
+func writeTitle(home string, entries []entry) {
+	for _, e := range entries {
+		if e.Role == "user" {
+			line := e.Text
+			if nl := strings.IndexByte(line, '\n'); nl >= 0 {
+				line = line[:nl]
+			}
+			if len(line) > 200 {
+				line = line[:200]
+			}
+			os.WriteFile(filepath.Join(home, ".title"), []byte(line), 0o600)
+			return
+		}
+	}
 }
 
 // homeFor is where a new conversation that runs procedure is kept: with the
@@ -292,7 +380,7 @@ func (h *webhost) acceptParks(l net.Listener) {
 			conv := h.convos[p.Conversation]
 			if conv == nil {
 				home := h.locate(p.Conversation)
-				conv = &conversation{id: p.Conversation, started: time.Now(), home: home, lineage: newLineage(filepath.Join(home, ".skyra"))}
+				conv = &conversation{id: p.Conversation, started: time.Now(), home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
 				h.convos[p.Conversation] = conv
 			}
 			if conv.recoveryRequired || conv.parked != nil {
@@ -428,14 +516,30 @@ func (h *webhost) handle(raw []byte) {
 			return
 		}
 		home := h.homeFor(d.Title, id)
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: d.Title, home: home, lineage: newLineage(filepath.Join(home, ".skyra"))}
+		proc := m.Procedure
+		if proc == "" {
+			proc = d.Title
+		}
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id, d.Title, home)
+		go h.seed(id, proc, home)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
 		if m.Type == "submit" && conv != nil && conv.parked == nil && conv.pending == "" && (conv.phase == "closed" || conv.phase == "failed") {
+			if !conv.loaded {
+				id := m.Conversation
+				h.mu.Unlock()
+				h.loadConversationFull(id)
+				h.mu.Lock()
+				conv = h.convos[id]
+				if conv == nil || conv.parked != nil || conv.pending != "" || (conv.phase != "closed" && conv.phase != "failed") {
+					h.mu.Unlock()
+					reject("busy", "this conversation is not waiting for you")
+					return
+				}
+			}
 			h.continueConversation(conv, m, admit, reject)
 			return
 		}
@@ -787,9 +891,9 @@ func conversationRuns(home string) []string {
 // The scratch space is the conversation's, so it carries over. Nothing of the
 // old run is repeated. Caller holds mu; it is released.
 func (h *webhost) continueConversation(c *conversation, m inbound, admit func(string) bool, reject func(string, string)) {
-	d, ok := h.destinationFor(c.procedure)
+	_, ok := h.destinationFor(c.procedure)
 	if !ok {
-		d, ok = h.destinationFor("") // one from before procedures continues in the first root
+		_, ok = h.destinationFor("")
 	}
 	if !ok {
 		h.mu.Unlock()
@@ -816,12 +920,12 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 	root := filepath.Join(home, "runs", strconv.Itoa(n+1), ".skyra")
 	id := m.RequestID
 	c.entries = append(c.entries, entry{Role: "user", Text: withImages(m.Text, images), TS: int64(len(c.entries)), RequestID: &id})
-	c.phase, c.pending, c.recoveryRequired, c.procedure = "pending", m.RequestID, false, d.Title
+	c.phase, c.pending, c.recoveryRequired = "pending", m.RequestID, false
 	c.startLineage(root)
 	h.mu.Unlock()
 	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 	h.broadcast()
-	seeded := map[string]any{"conversation": c.id, "procedure": d.Title, "transcript": said, "text": m.Text}
+	seeded := map[string]any{"conversation": c.id, "procedure": c.procedure, "transcript": said, "text": m.Text}
 	if len(images) > 0 {
 		seeded["images"] = images
 	}

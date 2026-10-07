@@ -37,6 +37,8 @@ export interface Call {
   state: "running" | "returned" | "fault";
   /** returned: what came back, in a few words */
   result?: string;
+  /** Exact screenshot returned by desktop_observe, read from its record. */
+  image?: string;
   /** fault: its kind (horizon, contract, custody, malformed) and cause */
   fault?: string;
   cause?: string;

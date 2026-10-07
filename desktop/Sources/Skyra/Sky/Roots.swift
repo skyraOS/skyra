@@ -52,7 +52,7 @@ struct RootConstellation: Equatable {
             let reach = narrowings[actor]?.reach ?? []
             let own = reach.filter { $0.hasPrefix(actor + ".") }
             if !own.isEmpty { operations[actor] = own.count }
-            let tools = reach.filter { !$0.hasPrefix(actor + ".") && $0 != "system" && !$0.hasPrefix("system.") }
+            let tools = reach.filter { $0 != actor && !$0.hasPrefix(actor + ".") && $0 != "system" && !$0.hasPrefix("system.") && !($0 == "design.tools" && reach.contains("design")) && !($0 == "blender.tools" && reach.contains("blender")) }
             // Tools fan out on an arc to the right, in the order they are kept.
             for (j, tool) in tools.enumerated() {
                 let spread = tools.count == 1 ? 0 : Double(j) / Double(tools.count - 1) - 0.5

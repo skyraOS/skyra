@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "procedures": [
+    {
+      "contract": {
+        "title": "blender",
+        "type": "object",
+        "required": [
+          "blender"
+        ],
+        "fields": {
+          "blender": {
+            "type": "object",
+            "required": [
+              "text",
+              "context",
+              "images"
+            ],
+            "fields": {
+              "text": {
+                "type": "string"
+              },
+              "context": {
+                "type": "any"
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "order": [
+        "scope",
+        "run"
+      ],
+      "nodes": {
+        "scope": {
+          "call": "system",
+          "in": {
+            "narrow": {
+              "actor": "codex",
+              "reach": [
+                "read",
+                "find",
+                "roots",
+                "blender.tools",
+                "codex.start",
+                "codex.exchange",
+                "codex.inspect",
+                "codex.stop"
+              ]
+            }
+          }
+        },
+        "run": {
+          "call": {
+            "$": [
+              "scope",
+              "reference"
+            ]
+          },
+          "after": [
+            "scope"
+          ],
+          "in": {
+            "header": "blender: Author Skyra graphics on an isolated working copy using typed blender_tools operations only. Read context first, then supply its scene_version as expected_scene_version for every operation. Inspect scene/object IDs, make bounded transforms or PBR changes, export assets and render_preview, visually inspect PNGs and report actual paths/hashes/validation. Rotation is radians. No arbitrary Python, shell, external assets or original-project overwrites. On conflict read context before another edit. Assets are candidates; exporting does not approve them for app use. Report the specific error code and stage.",
+            "text": {
+              "$": [
+                "input",
+                "blender",
+                "text"
+              ]
+            },
+            "context": {
+              "$": [
+                "input",
+                "blender",
+                "context"
+              ]
+            },
+            "images": {
+              "$": [
+                "input",
+                "blender",
+                "images"
+              ]
+            }
+          }
+        }
+      },
+      "return": {
+        "$": [
+          "run"
+        ]
+      }
+    }
+  ]
+}

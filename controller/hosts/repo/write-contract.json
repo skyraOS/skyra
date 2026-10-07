@@ -1,0 +1,12 @@
+{
+  "input": {
+    "title": "Repository file write",
+    "type": "object",
+    "required": ["path", "text"],
+    "fields": {
+      "path": {"type": "string"},
+      "text": {"type": "string"},
+      "append": {"type": "bool"}
+    }
+  }
+}

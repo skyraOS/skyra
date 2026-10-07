@@ -161,6 +161,11 @@ export function Conversation() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
+              if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "c") {
+                e.preventDefault();
+                setText("");
+                return;
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 send();
@@ -227,6 +232,7 @@ function Ledger({ call }: { call: Call }) {
     result = call.cause ?? call.fault;
   }
   return (
+    <>
     <div
       className="flex items-baseline gap-2.5 whitespace-nowrap px-3.5 font-mono text-[11px] text-ink-dim"
       title={call.cause ?? undefined}
@@ -237,5 +243,12 @@ function Ledger({ call }: { call: Call }) {
       <span className={`ml-auto shrink-0 ${refused ? "text-amber" : broken ? "text-fault" : ""}`}>{result}</span>
       <span className="shrink-0 text-ink-faint">{call.stamp.slice(0, 8)}</span>
     </div>
+    {call.image && <details className="mx-3.5 my-2 text-xs text-ink-dim">
+      <summary className="cursor-pointer">View recorded window screenshot</summary>
+      {/* A recorded data URL; opening it never captures the desktop again. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={call.image} alt="Window screenshot observed by Skyra" className="mt-2 max-h-96 max-w-full rounded-lg" />
+    </details>}
+    </>
   );
 }

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "procedures": [
+    {
+      "contract": {
+        "type": "object",
+        "required": [
+          "path",
+          "text"
+        ],
+        "fields": {
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "append": {
+            "type": "bool"
+          }
+        }
+      },
+      "order": [
+        "write",
+        "commit"
+      ],
+      "nodes": {
+        "write": {
+          "call": "write.file",
+          "in": {
+            "$": [
+              "input"
+            ]
+          }
+        },
+        "commit": {
+          "call": "ideas.commit",
+          "after": [
+            "write"
+          ],
+          "in": {
+            "write": {
+              "$": [
+                "write"
+              ]
+            }
+          }
+        }
+      },
+      "return": {
+        "$": [
+          "commit"
+        ]
+      }
+    }
+  ]
+}

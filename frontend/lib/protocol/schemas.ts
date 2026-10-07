@@ -23,6 +23,7 @@ export const CallSchema = z.object({
   arg: z.string(),
   state: z.enum(["running", "returned", "fault"]),
   result: z.string().optional(),
+  image: z.string().max(3 << 20).regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/).optional(),
   fault: z.string().optional(),
   cause: z.string().optional(),
   stamp: z.string(),

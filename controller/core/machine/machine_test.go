@@ -27,6 +27,17 @@ var (
 	leaf     = horizon.Horizon{Stamp: "r1", Surface: &echoS, Reach: map[string]horizon.Surface{}, Frame: "r1", Resume: &operator}
 )
 
+func TestPrimaryBundleContractIsPassedToContinuation(t *testing.T) {
+	surface := horizon.Surface{Input: echoIn, Continuation: true, BundlePath: "/write-bundle.json"}
+	if got := against(surface, json.RawMessage(`{"text":"hi"}`)); got != echoIn {
+		t.Fatalf("bundle's primary contract must be named in its envelope: %+v", got)
+	}
+	surface.BundlePath = ""
+	if got := against(surface, json.RawMessage(`{"text":"hi"}`)); got != nil {
+		t.Fatalf("ordinary single-contract actor envelope changed: %+v", got)
+	}
+}
+
 // intakeRecord runs the Intake phase and returns what it commits.
 func intakeRecord(h horizon.Horizon, in string) record.Record {
 	_, effs := Step(Instance{Phase: Intake}, Received{Under: h, In: []byte(in)})

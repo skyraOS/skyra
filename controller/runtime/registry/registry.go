@@ -110,11 +110,22 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			if bundle.Version != 1 || len(bundle.Procedures) == 0 {
 				return nil, room, fmt.Errorf("%s: invalid procedure bundle", name)
 			}
+			bundleContracts := map[string]bool{}
 			for _, p := range bundle.Procedures {
 				if err := p.Contract.Check(); err != nil {
 					return nil, room, err
 				}
-				for _, held := range append([]*contract.Schema{d.Input}, d.Contracts...) {
+				key := string(contract.Canonical(p.Contract))
+				if bundleContracts[key] {
+					return nil, room, fmt.Errorf("%s: bundle repeats a contract", name)
+				}
+				bundleContracts[key] = true
+				// A bundle may implement the actor's primary contract itself.
+				// It is already in reach, so do not advertise it twice.
+				if key == string(contract.Canonical(d.Input)) {
+					continue
+				}
+				for _, held := range d.Contracts {
 					if string(contract.Canonical(held)) == string(contract.Canonical(p.Contract)) {
 						return nil, room, fmt.Errorf("%s: bundle repeats a declared contract", name)
 					}
@@ -136,8 +147,11 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "") {
 			return nil, room, fmt.Errorf("%s: invalid resident or connection configuration", name)
 		}
-		if e.ResidentProfile != "" && (e.ResidentProfile != "darwin-appserver-v1" || len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
-			return nil, room, fmt.Errorf("%s: unknown resident profile or no proxy hosts", name)
+		if e.ResidentProfile == "darwin-appserver-v1" && (len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
+			return nil, room, fmt.Errorf("%s: appserver profile requires proxy hosts", name)
+		}
+		if e.ResidentProfile != "" && e.ResidentProfile != "darwin-appserver-v1" && e.ResidentProfile != "darwin-claude-v1" {
+			return nil, room, fmt.Errorf("%s: unknown resident profile %q", name, e.ResidentProfile)
 		}
 		for _, host := range e.ProxyHosts {
 			if host == "" || host != strings.ToLower(host) || strings.ContainsAny(host, "/:@ \n\r\x00") {

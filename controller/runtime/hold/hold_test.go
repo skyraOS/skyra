@@ -47,6 +47,7 @@ func start(t *testing.T, start, max time.Duration) (socket string, r *resident, 
 		defer close(r.closed)
 		defer peer.Close()
 		in := bufio.NewScanner(peer)
+		in.Buffer(make([]byte, 64<<10), maxDelivery+1)
 		for in.Scan() {
 			r.say(`{"echo":` + in.Text() + `}`)
 		}
@@ -90,6 +91,44 @@ func TestExchangeKeepsOutputBetweenSteps(t *testing.T) {
 	}
 	if o := ask(socket, "inspect", `{"id":2}`); len(o.Lines) != 1 {
 		t.Fatalf("a stale request stopped the live server: %+v", o)
+	}
+}
+
+func TestIncomingLineBound(t *testing.T) {
+	line := strings.Repeat("a", maxLine-1) + "\n"
+	if got, err := readLine(bufio.NewReader(strings.NewReader(line))); err != nil || got != line {
+		t.Fatalf("line at limit: err=%v bytes=%d", err, len(got))
+	}
+	if _, err := readLine(bufio.NewReader(strings.NewReader("a" + line))); err == nil || err.Error() != "resident line exceeds 4 MiB" {
+		t.Fatalf("oversized line: %v", err)
+	}
+}
+
+func TestImageSizedDeliveryAndInvalidBatch(t *testing.T) {
+	socket, _, served := start(t, time.Hour, time.Hour)
+	t.Cleanup(func() {
+		ask(socket, "stop")
+		<-served
+	})
+	// A maximum-size screenshot becomes roughly 2.7 MiB of base64.
+	line := `{"result":{"contentItems":[{"type":"inputImage","imageUrl":"data:image/png;base64,` + strings.Repeat("A", (2<<20+2)/3*4) + `"}]}}`
+	// Codex includes the image again in its completion notification, so the
+	// incoming side must also accept an image-sized protocol line.
+	if o := ask(socket, "exchange", line); o.Error != "" || o.Delivery != "written" || len(o.Lines) != 1 || o.Lines[0] != `{"echo":`+line+"}\n" {
+		t.Fatalf("image-sized round trip: error=%q delivery=%q lines=%d", o.Error, o.Delivery, len(o.Lines))
+	}
+	for _, tc := range []struct{ line, error string }{
+		{`{"data":"` + strings.Repeat("A", maxDelivery) + `"}`, "delivery exceeds 4 MiB"},
+		{`{} {}`, "delivery is not one JSON value"},
+		{"{}\n", "delivery is not one JSON value"},
+	} {
+		// Validate the entire batch before writing any of it.
+		if o := ask(socket, "exchange", `{"id":1}`, tc.line); o.Error != tc.error || o.Delivery != "not_sent" {
+			t.Fatalf("invalid batch: %+v", o)
+		}
+	}
+	if o := ask(socket, "exchange", `{"id":2}`); o.Error != "" || len(o.Lines) != 1 || o.Lines[0] != "{\"echo\":{\"id\":2}}\n" {
+		t.Fatalf("invalid batch affected resident: %+v", o)
 	}
 }
 

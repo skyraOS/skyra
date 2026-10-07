@@ -1,0 +1,34 @@
+{
+  "input": {
+    "title": "design",
+    "type": "object",
+    "required": [
+      "design"
+    ],
+    "fields": {
+      "design": {
+        "type": "object",
+        "required": [
+          "text",
+          "context",
+          "images"
+        ],
+        "fields": {
+          "text": {
+            "type": "string"
+          },
+          "context": {
+            "type": "any"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "continuation": true
+}

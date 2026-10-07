@@ -172,6 +172,10 @@ func (h *webhost) acceptTranscript(c *conversation, transcript []entry) {
 		c.pending = ""
 	}
 	c.entries = stamp(transcript)
+	c.loaded = true
+	if c.home != "" {
+		writeTitle(c.home, c.entries)
+	}
 }
 
 func fingerprint(m inbound) string {

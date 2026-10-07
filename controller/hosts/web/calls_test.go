@@ -87,6 +87,7 @@ func TestCallsAcrossConversationRuns(t *testing.T) {
 	if loaded == nil {
 		t.Fatal("conversation not loaded")
 	}
+	h.loadConversationFull("c-continued")
 	assertCalls(loaded, "returned", "returned", "returned")
 }
 

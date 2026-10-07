@@ -15,7 +15,9 @@ struct GrantSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Grant a workspace").font(.system(size: 17, weight: .semibold))
-            Text("Codex may read any file in this folder without asking. Nothing outside it can be read: the macOS sandbox refuses, whatever the agent says. This is the one approval; you will not be asked again for reads inside it.")
+            Text(Backend.repositoryAccess(folder)
+                 ? "Codex may read and edit this repository, and run Git commits, pushes and merges without asking again. File and branch deletion are blocked. Git runs through the repository actor; direct edits to Git metadata are blocked."
+                 : "Codex may read any file in this folder without asking. Nothing outside it can be read: the macOS sandbox refuses, whatever the agent says. This is the one approval; you will not be asked again for reads inside it.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.dim.color)
                 .fixedSize(horizontal: false, vertical: true)
@@ -42,7 +44,7 @@ struct GrantSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                grantRow("Tool", "read")
+                grantRow("Tools", Backend.repositoryAccess(folder) ? "read, repo.write, execve (Git)" : "read")
                 grantRow("Scope", folder.map { ($0.path as NSString).abbreviatingWithTildeInPath + "/…" } ?? "—")
                 grantRow("Goes to", fake ? "nowhere: the fake Codex runs on this Mac" : "the model provider, when Codex reads it")
             }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "assetID": "skyra.core.pilot",
+  "assetVersion": "0.1.0",
+  "nativeSHA256": "ced447a23cf1cc3495d98e08544fcf4a93f3731450008d163d13f61fe404cb63",
+  "fallbackSHA256": "309d2d18579c23a3d5995c9945e1482afaffa96a29310424b2d18abd5869f241",
+  "nodes": [
+    "SkyraCoreRoot",
+    "CoreMesh",
+    "ArcInner",
+    "ArcOuter"
+  ],
+  "triangles": 2368,
+  "materials": 2,
+  "runtimeUp": "Y",
+  "blender": "5.1.2"
+}

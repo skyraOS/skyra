@@ -12,6 +12,7 @@ import (
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
+	desktop "skyra/controller/cua/observation"
 	"skyra/controller/runtime/tree"
 )
 
@@ -20,6 +21,7 @@ import (
 // tool. Clients draw it (a ledger line, a light in the sky); the webhost only
 // reads records and decides nothing.
 type call struct {
+	Image  string `json:"image,omitempty"` // recorded, validated screenshot data URL
 	To     string `json:"to"`
 	Arg    string `json:"arg"`
 	State  string `json:"state"`            // running | returned | fault
@@ -271,6 +273,9 @@ func (l *lineage) derive() [][]call {
 			if i, ok := open[r.Predecessor]; ok {
 				c := &turns[len(turns)-1][i]
 				c.State, c.Result = "returned", summarize(r.Payload)
+				if c.To == "desktop_observe" || c.To == "design.tools" || c.To == "blender.tools" {
+					c.Image, c.Result = desktopPreview(r.Payload)
+				}
 				if inv := l.records[r.Predecessor]; !inv.at.IsZero() && !x.at.IsZero() {
 					c.MS = x.at.Sub(inv.at).Milliseconds()
 				}
@@ -438,4 +443,37 @@ func withCalls(entries []entry, turns [][]call) []entry {
 		}
 	}
 	return stamp(out)
+}
+
+// desktopPreview projects the recorded observation, never captures a live window.
+func desktopPreview(raw json.RawMessage) (string, string) {
+	var r desktop.Result
+	if json.Unmarshal(raw, &r) != nil || r.Version != 1 || (r.Operation != "desktop_observe" && r.Operation != "design.tools" && r.Operation != "blender.tools") {
+		return "", "invalid desktop observation"
+	}
+	if r.Error != nil {
+		return "", "error: " + clip(r.Error.Message)
+	}
+	if len(r.Windows) > 0 {
+		return "", fmt.Sprintf("%d available windows", len(r.Windows))
+	}
+	summary := "observed window"
+	if r.Operation == "design.tools" {
+		summary = "design result"
+	} else if r.Operation == "blender.tools" {
+		summary = "Blender result"
+	}
+	if r.Degraded {
+		summary += " · accessibility degraded"
+	}
+	if r.Truncated {
+		summary += " · truncated"
+	}
+	if r.Screenshot == nil {
+		return "", summary + " · text only"
+	}
+	if r.Screenshot.Validate() != nil {
+		return "", "invalid recorded screenshot"
+	}
+	return "data:" + r.Screenshot.MIMEType + ";base64," + r.Screenshot.Data, summary
 }

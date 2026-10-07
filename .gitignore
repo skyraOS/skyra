@@ -29,3 +29,7 @@ nohup.out
 # website/ build outputs (website/build.sh)
 website/assets/replay.wasm
 website/assets/wasm_exec.js
+
+# Standalone graphics compatibility pilot
+desktop/GraphicsPilot/.build/
+desktop/GraphicsPilot/.swiftpm/

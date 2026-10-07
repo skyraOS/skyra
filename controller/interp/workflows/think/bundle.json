@@ -13,11 +13,15 @@
             "type": "object",
             "required": [
               "text",
+              "model",
               "context",
               "images"
             ],
             "fields": {
               "text": {
+                "type": "string"
+              },
+              "model": {
                 "type": "string"
               },
               "context": {
@@ -42,17 +46,29 @@
           "call": "system",
           "in": {
             "narrow": {
-              "actor": "codex",
+              "actor": {
+                "$": [
+                  "input",
+                  "think",
+                  "model"
+                ]
+              },
               "reach": [
                 "echo",
                 "read",
                 "find",
                 "roots",
                 "write",
+                "codex",
                 "codex.start",
                 "codex.exchange",
                 "codex.inspect",
-                "codex.stop"
+                "codex.stop",
+                "claude",
+                "claude.start",
+                "claude.exchange",
+                "claude.inspect",
+                "claude.stop"
               ]
             }
           }
