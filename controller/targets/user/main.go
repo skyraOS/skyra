@@ -78,7 +78,12 @@ func main() {
 		os.Exit(1)
 	}
 	if c.Input.Procedure == "" {
-		c.Input.Procedure = "think" // the one procedure there is
+		c.Input.Procedure = "think"
+	}
+	model := "codex"
+	if c.Input.Procedure == "think-claude" {
+		c.Input.Procedure = "think"
+		model = "claude"
 	}
 	p, ok := procedures[c.Input.Procedure]
 	if !ok {
@@ -144,19 +149,18 @@ func main() {
 		if images == nil {
 			images = []string{}
 		}
-		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "context": transcript[:len(transcript)-1], "images": images}})
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": transcript[:len(transcript)-1], "images": images}})
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault != nil:
 		f := c.Steps[last].Fault
 		emit(c.Frame, fmt.Sprintf("ended: the browser faulted (%s): %s", f.Kind, f.Cause))
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil && said == "/close":
 		emit(c.Frame, "closed")
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault == nil:
-		// The turn's context is the conversation before this message.
 		context := transcript[:len(transcript)-1]
 		if images == nil {
 			images = []string{}
 		}
-		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "context": context, "images": images}})
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": context, "images": images}})
 	default:
 		emit("browser", map[string]any{"conversation": c.Input.Conversation, "transcript": transcript})
 	}
@@ -172,10 +176,9 @@ type procedure struct{ Actor string }
 // procedures is held here for now (proposal 38, step 5); later the UI's
 // selection carries what a procedure runs on.
 var procedures = map[string]procedure{
-	"think":        {Actor: "interpreter"},
-	"think-claude": {Actor: "interpreter"},
-	"design":       {Actor: "design"},
-	"blender":      {Actor: "blender"},
+	"think":   {Actor: "interpreter"},
+	"design":  {Actor: "design"},
+	"blender": {Actor: "blender"},
 }
 
 // answer is what a turn returned, as the agent's line: its text when it has

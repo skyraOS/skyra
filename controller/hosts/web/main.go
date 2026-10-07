@@ -516,11 +516,15 @@ func (h *webhost) handle(raw []byte) {
 			return
 		}
 		home := h.homeFor(d.Title, id)
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: d.Title, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
+		proc := m.Procedure
+		if proc == "" {
+			proc = d.Title
+		}
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id, d.Title, home)
+		go h.seed(id, proc, home)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
 		if m.Type == "submit" && conv != nil && conv.parked == nil && conv.pending == "" && (conv.phase == "closed" || conv.phase == "failed") {
@@ -887,9 +891,9 @@ func conversationRuns(home string) []string {
 // The scratch space is the conversation's, so it carries over. Nothing of the
 // old run is repeated. Caller holds mu; it is released.
 func (h *webhost) continueConversation(c *conversation, m inbound, admit func(string) bool, reject func(string, string)) {
-	d, ok := h.destinationFor(c.procedure)
+	_, ok := h.destinationFor(c.procedure)
 	if !ok {
-		d, ok = h.destinationFor("") // one from before procedures continues in the first root
+		_, ok = h.destinationFor("")
 	}
 	if !ok {
 		h.mu.Unlock()
@@ -916,12 +920,12 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 	root := filepath.Join(home, "runs", strconv.Itoa(n+1), ".skyra")
 	id := m.RequestID
 	c.entries = append(c.entries, entry{Role: "user", Text: withImages(m.Text, images), TS: int64(len(c.entries)), RequestID: &id})
-	c.phase, c.pending, c.recoveryRequired, c.procedure = "pending", m.RequestID, false, d.Title
+	c.phase, c.pending, c.recoveryRequired = "pending", m.RequestID, false
 	c.startLineage(root)
 	h.mu.Unlock()
 	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 	h.broadcast()
-	seeded := map[string]any{"conversation": c.id, "procedure": d.Title, "transcript": said, "text": m.Text}
+	seeded := map[string]any{"conversation": c.id, "procedure": c.procedure, "transcript": said, "text": m.Text}
 	if len(images) > 0 {
 		seeded["images"] = images
 	}

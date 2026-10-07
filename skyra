@@ -213,7 +213,7 @@ if penpot_socket:
         sys.exit('skyra: Penpot bridge must be private')
     registry['design.tools']['authority']={'connect':[str(socket)]}
 think=json.loads(Path(registry['interpreter']['bundle']).read_text())
-think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['codex','design','design.tools'])
+think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['design','design.tools'])
 think_file=build/(launch+'-think-design-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
 registry['interpreter']['bundle']=str(think_file)
@@ -231,29 +231,6 @@ if blender_socket:
 think=json.loads(Path(registry['interpreter']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['blender','blender.tools'])
 think_file=build/(launch+'-think-blender-bundle.json')
-think_file.write_text(json.dumps(think,sort_keys=True))
-registry['interpreter']['bundle']=str(think_file)
-# think-claude mirrors think but narrows to the claude adapter. The same
-# reach, with codex operations replaced by their claude counterparts.
-import copy
-think=json.loads(Path(registry['interpreter']['bundle']).read_text())
-claude_proc=copy.deepcopy(think['procedures'][0])
-claude_proc['contract']['title']='think-claude'
-claude_proc['contract']['required']=['think-claude']
-claude_proc['contract']['fields']={'think-claude':claude_proc['contract']['fields']['think']}
-claude_proc['nodes']['scope']['in']['narrow']['actor']='claude'
-claude_proc['nodes']['scope']['in']['narrow']['reach']=[
-    'claude.start' if r=='codex.start' else
-    'claude.exchange' if r=='codex.exchange' else
-    'claude.inspect' if r=='codex.inspect' else
-    'claude.stop' if r=='codex.stop' else
-    'claude' if r=='codex' else r
-    for r in claude_proc['nodes']['scope']['in']['narrow']['reach']]
-claude_proc['nodes']['run']['in']['text']={'$':['input','think-claude','text']}
-claude_proc['nodes']['run']['in']['context']={'$':['input','think-claude','context']}
-claude_proc['nodes']['run']['in']['images']={'$':['input','think-claude','images']}
-think['procedures'].append(claude_proc)
-think_file=build/(launch+'-think-claude-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
 registry['interpreter']['bundle']=str(think_file)
 # Each built binary is registered by a copy stored under its own hash. A

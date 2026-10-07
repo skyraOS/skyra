@@ -130,20 +130,39 @@ func bundleDestinations(actor, path string) ([]destination, error) {
 			} else if from := bindingNode(n.Call); narrows[from] != nil {
 				node.Calls = narrows[from].Actor // through the reference that narrowing returned
 			}
-			var in struct {
-				Narrow *narrowing `json:"narrow"`
-			}
-			if node.Calls == "system" && json.Unmarshal(n.In, &in) == nil && in.Narrow != nil {
-				if in.Narrow.Reach == nil {
-					in.Narrow.Reach = []string{}
+			if node.Calls == "system" {
+				nr := parseNarrow(n.In)
+				if nr != nil {
+					node.Narrows, narrows[name] = nr, nr
 				}
-				node.Narrows, narrows[name] = in.Narrow, in.Narrow
 			}
 			o.Nodes = append(o.Nodes, node)
 		}
 		out = append(out, destination{Actor: actor, Title: c.Title, Schema: p.Contract, Outline: o})
 	}
 	return out, nil
+}
+
+func parseNarrow(in json.RawMessage) *narrowing {
+	var raw struct {
+		Narrow map[string]json.RawMessage `json:"narrow"`
+	}
+	if json.Unmarshal(in, &raw) != nil || raw.Narrow == nil {
+		return nil
+	}
+	var nr narrowing
+	if actor, ok := raw.Narrow["actor"]; ok {
+		if json.Unmarshal(actor, &nr.Actor) != nil {
+			nr.Actor = bindingNode(actor)
+		}
+	}
+	if reach, ok := raw.Narrow["reach"]; ok {
+		json.Unmarshal(reach, &nr.Reach)
+	}
+	if nr.Reach == nil {
+		nr.Reach = []string{}
+	}
+	return &nr
 }
 
 // bindingNode is the node a {"$": [node, ...]} binding reads from.
@@ -171,6 +190,9 @@ func contains(xs []string, x string) bool {
 func (h *webhost) destinationFor(title string) (destination, bool) {
 	if title == "" && len(h.destinations) > 0 {
 		return h.destinations[0], true
+	}
+	if title == "think-claude" {
+		title = "think"
 	}
 	for _, d := range h.destinations {
 		if d.Title == title {

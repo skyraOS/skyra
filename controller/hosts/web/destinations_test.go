@@ -34,15 +34,15 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 	if len(nodes) != 2 || nodes[0].Name != "scope" || nodes[1].Name != "run" {
 		t.Fatalf("think's nodes, in order: %+v", nodes)
 	}
-	if nodes[0].Calls != "system" || nodes[0].Narrows == nil || nodes[0].Narrows.Actor != "codex" {
-		t.Fatalf("scope narrows codex: %+v", nodes[0])
+	if nodes[0].Calls != "system" || nodes[0].Narrows == nil {
+		t.Fatalf("scope narrows from input: %+v", nodes[0])
 	}
-	want := []string{"echo", "read", "find", "roots", "write", "codex.start", "codex.exchange", "codex.inspect", "codex.stop"}
+	want := []string{"echo", "read", "find", "roots", "write", "codex", "codex.start", "codex.exchange", "codex.inspect", "codex.stop", "claude", "claude.start", "claude.exchange", "claude.inspect", "claude.stop"}
 	if !reflect.DeepEqual(nodes[0].Narrows.Reach, want) {
-		t.Fatalf("codex's narrowed reach: %v", nodes[0].Narrows.Reach)
+		t.Fatalf("narrowed reach: %v", nodes[0].Narrows.Reach)
 	}
-	if nodes[1].Calls != "codex" || !reflect.DeepEqual(nodes[1].After, []string{"scope"}) || nodes[1].Narrows != nil {
-		t.Fatalf("run calls codex through scope's reference: %+v", nodes[1])
+	if !reflect.DeepEqual(nodes[1].After, []string{"scope"}) || nodes[1].Narrows != nil {
+		t.Fatalf("run calls through scope's reference: %+v", nodes[1])
 	}
 
 	h := &webhost{destinations: ds}
