@@ -37,14 +37,6 @@ struct ContentView: View {
             // The header shares the title bar's row, beside the window's buttons.
             .ignoresSafeArea(.container, edges: .top)
 
-            // The selected root's constellation, over the sky (proposal 38).
-            if !backendFailed {
-                RootPanel(session: session)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 10)
-                    .padding(.trailing, 14)
-            }
-
             if !backendFailed, session.current != nil, let placed = logFrame {
                 GeometryReader { geo in
                     let origin = geo.frame(in: .named("sky")).origin
@@ -63,6 +55,28 @@ struct ContentView: View {
                 }
             }
         }
+        // Each root's click target, over its star (proposal 38). The sky draws
+        // the constellation; this takes the click, the keyboard and VoiceOver.
+        // It spans the window as the sky's canvas does, so the two share points.
+        .overlay {
+            if !backendFailed {
+                GeometryReader { geo in
+                    ForEach(RootSky.place(session.destinations, in: geo.size), id: \.title) { figure in
+                        let chosen = session.root?.title == figure.title
+                        Button {
+                            session.selectRoot(figure.title)
+                        } label: {
+                            Circle().fill(Color.clear).frame(width: 40, height: 40).contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .position(figure.root.point)
+                        .help("\(figure.title): run it here. Its conversations are listed, and a new one runs it.")
+                        .accessibilityLabel("\(figure.title), procedure\(chosen ? ", selected" : "")")
+                    }
+                }
+                .ignoresSafeArea()
+            }
+        }
         .coordinateSpace(name: "sky")
         .onContinuousHover(coordinateSpace: .named("sky")) { phase in
             switch phase {
@@ -78,6 +92,8 @@ struct ContentView: View {
         .onChange(of: session.selected, initial: true) { _, _ in followCalls() }
         .onChange(of: session.current?.entries) { _, _ in followCalls() }
         .onChange(of: session.current?.horizons, initial: true) { _, h in sky.horizons = h ?? [] }
+        .onChange(of: session.destinations, initial: true) { _, d in sky.roots = d }
+        .onChange(of: session.root?.title, initial: true) { _, t in sky.selectedRoot = t }
         .onPreferenceChange(ReadingColumn.self) { sky.column = $0; placeLog() }
         .onChange(of: docked) { _, _ in placeLog() }
         .onChange(of: storedLogFrame) { _, _ in placeLog() }

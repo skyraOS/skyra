@@ -62,3 +62,36 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
     s.receive(snapshot(#"[{"conversation":"c1","phase":"ready","entries":[]}]"#, roots: "[]"))
     #expect(s.root == nil && s.rootConversations.map(\.conversation) == ["c1"] && s.history.isEmpty)
 }
+
+// The roots sit top right in the sky, inside the canvas and clear of each
+// other; the click target and the drawn star are one point.
+@Test func rootsSitInTheSkyClearOfEachOther() throws {
+    let think = try JSONDecoder().decode(Destination.self, from: Data(thinkJSON.utf8))
+    let act = try JSONDecoder().decode(Destination.self, from: Data(thinkJSON.replacingOccurrences(of: #""title":"think""#, with: #""title":"act""#).utf8))
+    for size in [CGSize(width: 900, height: 600), CGSize(width: 1400, height: 900)] {
+        let figures = RootSky.place([think, act], in: size)
+        let canvas = CGRect(origin: .zero, size: size)
+        #expect(figures.count == 2)
+        #expect(figures.allSatisfy { f in f.stars.allSatisfy { canvas.contains($0.point) } })
+        #expect(!figures[0].bounds.insetBy(dx: 12, dy: 12).intersects(figures[1].bounds.insetBy(dx: 12, dy: 12)))
+        // Right of the middle, below the header.
+        #expect(figures[0].root.point.x > size.width / 2 && figures[0].root.point.y > RootSky.top)
+        #expect(figures[0].root.name == "think" && figures[0].root.kind == .root)
+    }
+    // Lines run parent to child: think to codex, then codex to each tool.
+    let f = RootSky.place([think], in: CGSize(width: 1000, height: 700))[0]
+    let names = f.edges.map { "\(f.stars[$0.a].name)>\(f.stars[$0.b].name)" }
+    #expect(names == ["think>codex", "codex>echo", "codex>read", "codex>roots", "codex>write"])
+}
+
+// A root lights under the pointer and fades when it leaves; the selected root
+// stays lit, its lines traced.
+@Test func theSelectedRootStaysLit() {
+    var lights = RootLights()
+    for _ in 0..<60 { lights.follow(["think", "act"], hovered: "act", selected: "think", 1) }
+    #expect((lights.alpha["think"] ?? 0) > 0.9 && (lights.alpha["act"] ?? 0) > 0.9)
+    #expect((lights.traced["think"] ?? 0) > 5)
+    for _ in 0..<200 { lights.follow(["think", "act"], hovered: nil, selected: "think", 1) }
+    #expect((lights.alpha["think"] ?? 0) > 0.9)
+    #expect(lights.alpha["act"] == 0 && lights.traced["act"] == 0)
+}

@@ -69,3 +69,68 @@ struct RootConstellation: Equatable {
 
     func star(_ name: String) -> Star? { stars.first { $0.name == name } }
 }
+
+/// Where the roots sit in the sky: their constellations, top right below the
+/// header, clear of the core and the Horizons around it, one under another.
+/// The sky draws them from this and the window places each root's click
+/// target from it, so a target can never drift from its star.
+enum RootSky {
+    struct Figure: Equatable {
+        let title: String
+        let stars: [RootConstellation.Star] // in the canvas's points
+        let edges: [(a: Int, b: Int)] // indices into stars, parent to child, in the order they are traced
+        let bounds: CGRect // the figure, padded: the pointer over it lights it
+
+        static func == (l: Figure, r: Figure) -> Bool {
+            l.title == r.title && l.stars == r.stars && l.bounds == r.bounds
+                && l.edges.map(\.a) == r.edges.map(\.a) && l.edges.map(\.b) == r.edges.map(\.b)
+        }
+
+        var root: RootConstellation.Star { stars[0] }
+    }
+
+    static let scale = 1.1
+    static let margin = 36.0 // from the canvas's right edge
+    static let top = 64.0 // below the header, which shares the title bar's row
+
+    static func place(_ roots: [Destination], in size: CGSize) -> [Figure] {
+        let w = RootConstellation.size.width * scale, h = RootConstellation.size.height * scale
+        return roots.enumerated().map { i, d in
+            let c = RootConstellation(d)
+            let origin = CGPoint(x: max(0, size.width - margin - w), y: top + Double(i) * (h + 24))
+            let stars = c.stars.map {
+                RootConstellation.Star(name: $0.name, kind: $0.kind,
+                                       point: CGPoint(x: origin.x + $0.point.x * scale, y: origin.y + $0.point.y * scale),
+                                       parent: $0.parent, via: $0.via)
+            }
+            let index = Dictionary(uniqueKeysWithValues: stars.enumerated().map { ($1.name, $0) })
+            let edges = stars.enumerated().compactMap { i, s in s.parent.flatMap { index[$0] }.map { (a: $0, b: i) } }
+            return Figure(title: d.title, stars: stars, edges: edges,
+                          bounds: CGRect(x: origin.x, y: origin.y, width: w, height: h).insetBy(dx: -12, dy: -12))
+        }
+    }
+}
+
+/// How lit each root's constellation is: the one under the pointer traces
+/// itself a line at a time and lights its stars, as a Horizon does; the
+/// selected one stays traced and lit, so the context is seen around it.
+struct RootLights {
+    private(set) var alpha: [String: Double] = [:]
+    private(set) var traced: [String: Double] = [:]
+
+    mutating func follow(_ titles: [String], hovered: String?, selected: String?, _ df: Double) {
+        let k = 1 - pow(1 - 0.08, df)
+        for t in titles {
+            var a = alpha[t] ?? 0, tr = traced[t] ?? 0
+            if t == hovered || t == selected {
+                a += (1 - a) * k
+                tr += Constellation.speed * df
+            } else {
+                a -= a * k + 0.02 * df
+                if a <= 0 { (a, tr) = (0, 0) }
+            }
+            alpha[t] = max(0, min(1, a))
+            traced[t] = tr
+        }
+    }
+}

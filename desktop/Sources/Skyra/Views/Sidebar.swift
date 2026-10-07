@@ -9,6 +9,7 @@ import SwiftUI
 struct Sidebar: View {
     let session: Session
     @State private var hovered: String?
+    @State private var showHistory = false // History is collapsed until asked for
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -37,9 +38,31 @@ struct Sidebar: View {
                         row(c)
                     }
                     if !session.history.isEmpty {
-                        section("History").padding(.top, 8)
-                        ForEach(session.history) { c in
-                            row(c)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { showHistory.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .rotationEffect(.degrees(showHistory ? 90 : 0))
+                                Text("History")
+                                Text("\(session.history.count)").foregroundStyle(Theme.faint.color(0.7))
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(Theme.faint.color)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                            .padding(.bottom, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Conversations from before procedures: they ran Codex directly")
+                        .accessibilityLabel("History, \(session.history.count) conversations, \(showHistory ? "expanded" : "collapsed")")
+                        if showHistory {
+                            ForEach(session.history) { c in
+                                row(c)
+                            }
                         }
                     }
                 }
