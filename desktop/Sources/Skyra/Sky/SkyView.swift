@@ -9,7 +9,6 @@ final class SkyModel {
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
     let calls = CallLights()
     var column: ClosedRange<Double>? // the reading column, in the sky's points: how wide the docked log is
-    var horizons: [HorizonView] = [] // the conversation on screen's
     var logRect: CGRect? // the conversation log, in the sky's points: a Horizon under it is not traced
     var origin = CGPoint.zero // the canvas's origin in the sky's points: the canvas runs under the title bar
     var roots: [Destination] = [] // the roots a human may select (proposal 38)
@@ -22,12 +21,11 @@ final class SkyModel {
     fileprivate var flow: Flow?
     fileprivate var titleOpen = 1.0
     fileprivate var lens = Lens()
-    fileprivate var map = HorizonMap()
-    fileprivate var mapFor: ([HorizonView], CGSize) = ([], .zero)
-    fileprivate var constellation = Constellation()
     fileprivate var figures: [RootSky.Figure] = []
     fileprivate var figuresFor: ([Destination], CGSize) = ([], .zero)
     fileprivate var rootLights = RootLights()
+    /// The selected root's figure: the context's constellation.
+    fileprivate var contextFigure: RootSky.Figure? { figures.first { $0.title == selectedRoot } }
 
     /// The pointer in the canvas's points.
     fileprivate var local: CGPoint? { pointer.map { CGPoint(x: $0.x - origin.x, y: $0.y - origin.y) } }
@@ -43,22 +41,15 @@ final class SkyModel {
             sim = nil
             flow = Flow(size: size)
         }
-        if mapFor.0 != horizons || mapFor.1 != size {
-            mapFor = (horizons, size)
-            map = HorizonMap.layout(horizons, in: size)
-        }
         let dots = Point(size.width / Sky.dot, size.height / Sky.dot)
         if sim == nil { sim = SkySim(size: dots, frame: f, dt: 1.0 / 6) }
         let at = local
         sim?.advance(to: f, pointer: at.map { Point($0.x / Sky.dot, $0.y / Sky.dot) })
         lens.follow(at, max(0, f - lastFrame))
         flow?.advance(f, max(0, f - lastFrame), stir: lens.at, strength: lens.strength)
-        // The Horizon under the pointer draws its constellation, unless the
-        // conversation log is over it.
+        // A root's constellation traces itself under the pointer, unless the
+        // conversation log is over it; the selected root's stays traced.
         let over = pointer.map { p in logRect?.contains(p) ?? false } ?? true
-        constellation.follow(over ? nil : at.flatMap { map.region(at: $0)?.id }, max(0, f - lastFrame))
-        // A root's constellation lights under the pointer, as a Horizon's
-        // does, and the selected root's stays lit.
         if figuresFor.0 != roots || figuresFor.1 != size {
             figuresFor = (roots, size)
             figures = RootSky.place(roots, in: size)
@@ -170,11 +161,9 @@ struct SkyScene {
         let center = CGPoint(x: w * 0.72, y: h * 0.5)
 
         light(&g, size, f, cam)
-        regions(&g, size, f)
         // While a call's light is out, meteors and glints wait.
         let busy = model.calls.busy(f)
-        // Under Horizons, the field is dust: the stars that mean something are the surfaces.
-        let field = model.map.stars.isEmpty ? 1.0 : 0.5
+        let field = 1.0
         filaments(&g, cam, field)
 
         // Light adds: where stars and their halos overlap, they bloom.
@@ -200,7 +189,6 @@ struct SkyScene {
         }
         g.blend = .over
 
-        surfaces(&g, size, f)
         roots(&g, size, f)
 
         // The TUI leaves out the core and satellites on a small terminal.
@@ -283,9 +271,10 @@ struct SkyScene {
                     g.disc(at(onRing(dots, 1, a, CallMotion.edge)), 1.3, Theme.sky.lerp(Theme.amber, k * w))
                 }
             }
-            // A call to a surface the sky shows flies to its star.
-            let target = l.to.flatMap { model.map.star(named: $0) }.map { s -> Point in
-                let (p, _) = model.lens.warp(s.at, depth: 0.9, in: CGSize(width: dots.x * d, height: dots.y * d))
+            // A call flies to its star in the context's constellation: a read
+            // to read. The machine's messages flow between the core and it.
+            let target = l.to.flatMap { name in model.contextFigure?.stars.first { $0.name == name } }.map { s -> Point in
+                let (p, _) = model.lens.warp(s.point, depth: 0.9, in: CGSize(width: dots.x * d, height: dots.y * d))
                 return Point(p.x / d, p.y / d)
             }
             guard let head = l.place(dots, f, target: target) else { continue }
@@ -302,79 +291,19 @@ struct SkyScene {
         }
     }
 
-    /// Each Horizon: a faint light the size of what it holds, brighter for
-    /// each surface that ran under it, and a dotted edge. The room is teal;
-    /// a narrowing violet.
-    private func regions(_ g: inout SkyPaint, _ size: CGSize, _ f: Double) {
-        for r in model.map.regions {
-            let (c, _) = model.lens.warp(r.center, depth: 0.5, in: size)
-            let strength = min(1.4, 0.7 + 0.15 * Double(r.actors))
-            g.light(c, CGSize(width: r.radii.width * 0.9, height: r.radii.height * 0.9), r.root ? Theme.roomLight : Theme.narrowLight, strength)
-            // The edge: dashes a point and a half long, seven apart.
-            let rx = r.radii.width, ry = r.radii.height
-            var a = 0.0
-            while a < 2 * .pi {
-                let speed = max(0.01, hypot(rx * sin(a), ry * cos(a)))
-                let b = a + 1.5 / speed
-                g.line(CGPoint(x: c.x + rx * cos(a), y: c.y + ry * sin(a)), CGPoint(x: c.x + rx * cos(b), y: c.y + ry * sin(b)),
-                       width: 0.8, Theme.horizonEdge, r.root ? 0.07 : 0.11)
-                a += 8.5 / speed
-            }
-        }
-    }
-
-    /// Each surface in reach: a star that breathes, brighter where Horizons
-    /// share it, its name shown while the pointer is near. The Horizon under
-    /// the pointer is drawn as a constellation: its lines traced one at a
-    /// time, its stars lit and named.
-    private func surfaces(_ g: inout SkyPaint, _ size: CGSize, _ f: Double) {
-        let at = model.map.stars.map { model.lens.warp($0.at, depth: 0.9, in: size) }
-        let figure = model.map.regions.first { $0.id == model.constellation.shown }
-        let lit = model.constellation.alpha
-        var members = Set<Int>()
-        if let figure, lit > 0 {
-            members = Set(figure.stars)
-            var lines: [(CGPoint, CGPoint)] = []
-            var head: CGPoint?
-            for (k, e) in figure.edges.enumerated() {
-                let t = min(1, model.constellation.traced - Double(k))
-                if t <= 0 { break }
-                let a = at[e.a].0, b = at[e.b].0
-                let end = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
-                lines.append((a, end))
-                if t < 1 { head = end }
-            }
-            for (a, b) in lines { g.line(a, b, width: 2.5, Theme.surfacePeak, 0.18 * lit, soft: 3) }
-            for (a, b) in lines { g.line(a, b, width: 0.7, Theme.surfacePeak, 0.45 * lit, round: true) }
-            if let head {
-                g.disc(head, 4, Theme.glintPeak, 0.25 * lit)
-                g.disc(head, 1.2, Theme.glintPeak, lit)
-            }
-        }
-        for (i, s) in model.map.stars.enumerated() {
-            let (p, scale) = at[i]
-            let inFigure = members.contains(i) ? lit : 0
-            let breath = (1 + sin(2 * .pi * f / 520 + s.phase)) / 2
-            let c = Theme.surfaceFloor.lerp(Theme.surfacePeak, 0.5 + 0.25 * breath + 0.1 * Double(s.shared - 1) + 0.3 * inFigure)
-            let r = 1.8 * scale * (1 + 0.25 * inFigure)
-            g.disc(p, r * 4, c, 0.14 + 0.1 * inFigure)
-            g.disc(p, r, c)
-            let near = model.local.map { hypot($0.x - p.x, $0.y - p.y) < 18 } ?? false
-            if near || inFigure > 0 {
-                let lc = Theme.labelFloor.lerp(Theme.labelPeak, near ? 1 : inFigure).lerp(Theme.surfacePeak, 0.5 * inFigure)
-                g.text(.init(text: s.name, style: .name), at: CGPoint(x: p.x, y: p.y + 12), .top, lc)
-            }
-        }
-    }
-
     /// Each root (proposal 38): a constellation in the stars' own style, the
     /// procedure at its head, the agent it reaches, and that agent's tools.
     /// Faint and breathing at rest, every name hidden but the root's; under
-    /// the pointer it traces its lines a star at a time and names its stars;
-    /// selected, it stays so. Only the root takes a click (the window's
-    /// button over it); the rest is there to be seen.
+    /// the pointer it traces its lines a star at a time and names its stars,
+    /// in the sky's own quiet tones. Only the context, the selected root,
+    /// takes the highlight color, and keeps it. Only the root takes a click
+    /// (the window's button over it); the rest is there to be seen.
     private func roots(_ g: inout SkyPaint, _ size: CGSize, _ f: Double) {
         for figure in model.figures {
+            let context = figure.title == model.selectedRoot
+            // The highlight is the context's alone; anything else lights in
+            // the label's quiet tone.
+            let ink = context ? Theme.surfacePeak : Theme.labelPeak
             let lit = model.rootLights.alpha[figure.title] ?? 0
             let traced = model.rootLights.traced[figure.title] ?? 0
             let at = figure.stars.map { model.lens.warp($0.point, depth: 0.9, in: size) }
@@ -389,17 +318,17 @@ struct SkyScene {
                     lines.append((a, end))
                     if t < 1 { head = end }
                 }
-                for (a, b) in lines { g.line(a, b, width: 2.5, Theme.surfacePeak, 0.18 * lit, soft: 3) }
-                for (a, b) in lines { g.line(a, b, width: 0.7, Theme.surfacePeak, 0.45 * lit, round: true) }
+                for (a, b) in lines { g.line(a, b, width: 2.5, ink, (context ? 0.18 : 0.08) * lit, soft: 3) }
+                for (a, b) in lines { g.line(a, b, width: 0.7, ink, (context ? 0.45 : 0.25) * lit, round: true) }
                 if let head {
-                    g.disc(head, 4, Theme.glintPeak, 0.25 * lit)
-                    g.disc(head, 1.2, Theme.glintPeak, lit)
+                    g.disc(head, 4, context ? Theme.glintPeak : ink, 0.25 * lit)
+                    g.disc(head, 1.2, context ? Theme.glintPeak : ink, lit)
                 }
             }
             for (i, s) in figure.stars.enumerated() {
                 let (p, scale) = at[i]
                 let breath = (1 + sin(2 * .pi * f / 520 + Double(i) * 1.7)) / 2
-                let c = Theme.surfaceFloor.lerp(Theme.surfacePeak, 0.45 + 0.25 * breath + 0.3 * lit)
+                let c = Theme.surfaceFloor.lerp(context ? Theme.surfacePeak : Theme.labelPeak, 0.45 + 0.25 * breath + (context ? 0.3 : 0.1) * lit)
                 if s.kind == .root {
                     g.disc(p, 9 * scale, c, 0.10 + 0.12 * lit)
                     g.star(p, (4 + 1.5 * lit) * scale, inner: 0.3, c)
@@ -411,7 +340,7 @@ struct SkyScene {
                 let near = model.local.map { hypot($0.x - p.x, $0.y - p.y) < 18 } ?? false
                 if s.kind == .root || near || lit > 0 {
                     let named = s.kind == .root ? max(0.35, lit) : near ? 1 : lit
-                    let lc = Theme.labelFloor.lerp(Theme.labelPeak, named).lerp(Theme.surfacePeak, 0.5 * lit)
+                    let lc = Theme.labelFloor.lerp(Theme.labelPeak, named).lerp(Theme.surfacePeak, context ? 0.5 * lit : 0)
                     g.text(.init(text: s.name, style: .name), at: CGPoint(x: p.x, y: p.y + 12), .top, lc)
                 }
             }

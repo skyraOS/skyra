@@ -91,7 +91,6 @@ struct ContentView: View {
         // Calls launch lights as they appear in the conversation on screen.
         .onChange(of: session.selected, initial: true) { _, _ in followCalls() }
         .onChange(of: session.current?.entries) { _, _ in followCalls() }
-        .onChange(of: session.current?.horizons, initial: true) { _, h in sky.horizons = h ?? [] }
         .onChange(of: session.destinations, initial: true) { _, d in sky.roots = d }
         .onChange(of: session.root?.title, initial: true) { _, t in sky.selectedRoot = t }
         .onPreferenceChange(ReadingColumn.self) { sky.column = $0; placeLog() }

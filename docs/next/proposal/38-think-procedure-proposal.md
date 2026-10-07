@@ -399,6 +399,14 @@ Where the code departs from the text:
   Deleting removes only the conversation's own directory. Owning the list in
   the user actor's state, each conversation a branch of one long-lived
   invocation (33's model), is a later step.
+- **The Horizon constellation is gone from the sky.** The surface stars and
+  region glows in the middle, and their hover tracing, are removed: the roots
+  are the sky's constellations now. Calls still fly from the core, each to its
+  star in the context's constellation (a `read` to `read`), so the machine's
+  messages are seen flowing. The Horizons stay in the snapshot.
+- **Only the context takes the highlight color.** Another root under the
+  pointer traces its lines and names its stars in the sky's quiet label tones;
+  the selected root alone is drawn, and stays, in the highlight.
 - **The constellation is drawn by the sky; the click is the window's.** The
   Metal view takes no clicks, so an invisible button sits over each root star,
   placed by the same layout the sky draws from (`RootSky.place`), so a target

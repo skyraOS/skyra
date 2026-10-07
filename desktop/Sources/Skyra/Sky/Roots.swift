@@ -115,6 +115,8 @@ enum RootSky {
 /// itself a line at a time and lights its stars, as a Horizon does; the
 /// selected one stays traced and lit, so the context is seen around it.
 struct RootLights {
+    static let speed = 0.35 // lines traced per frame
+
     private(set) var alpha: [String: Double] = [:]
     private(set) var traced: [String: Double] = [:]
 
@@ -124,7 +126,7 @@ struct RootLights {
             var a = alpha[t] ?? 0, tr = traced[t] ?? 0
             if t == hovered || t == selected {
                 a += (1 - a) * k
-                tr += Constellation.speed * df
+                tr += Self.speed * df
             } else {
                 a -= a * k + 0.02 * df
                 if a <= 0 { (a, tr) = (0, 0) }
