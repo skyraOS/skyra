@@ -1,7 +1,7 @@
 # Skyra
 
-**Agents that extend themselves without asking. The human approves the
-boundary once, not every tool; the OS enforces it.**
+**A runtime for bounded, auditable agents that can build reusable capabilities.
+The human approves the boundary once, not every tool; the OS enforces it.**
 
 ![skyra desktop: Codex reads controller/core file by file, each read recorded with its size and hash, then answers with a design review](assets/desktop.gif)
 
@@ -15,11 +15,16 @@ every call, including calls to tools the agent writes for itself. Nothing an
 agent says can widen its own authority, and every step is recorded so the
 whole run can be replayed and checked.
 
-**What's here:** a runtime in standard-library Go that runs real Codex under
-per-call macOS sandboxes, with hash-chained records that replay
-byte-identically, and browser, terminal and native macOS clients on one
-protocol. Built solo over seven months, including a full rewrite of a working
-predecessor once its design flaw became clear ([how it got here](#how-it-got-here)).
+**What's here:** a stateless execution runtime with a pure Go state machine,
+per-call macOS sandboxes, hash-chained records checked by replay, and browser,
+terminal and native macOS clients on one protocol. Models propose actions;
+the runtime derives and checks what may execute. An interpreter turns
+remembered execution strands into reusable procedures within the same authority
+boundary. The chat apps are clients of that runtime, not the runtime itself.
+
+The controller uses standard-library Go; the interpreter has CEL dependencies.
+The implementation and its remaining gaps are listed [below](#where-we-are).
+For the predecessor and rewrite, see [how it got here](#how-it-got-here).
 
 ```sh
 ./install.sh && skyra demo   # every scenario, each ending in a replay check
@@ -209,7 +214,22 @@ reasoned out.
 The core of the capability model is now running ([`docs/next/`](docs/next/)): the model
 never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
-under its own generated sandbox. What comes next:
+under its own generated sandbox. The next capability priority is delegation;
+it is proposed, not yet an implemented feature:
+
+- **Delegate as a procedure.** Hand a child a required `goal` and, optionally,
+  `tools` to narrow its inherited authority. The child returns observations
+  discovered while pursuing the goal—not caller-declared completion criteria
+  or an upfront output schema. See the [delegate procedure spec](ideas/delegate-procedure-spec.md).
+- **Contain ordinary child failures.** A failed child should return a failure
+  outcome so its caller can continue. Integrity and persistence failures must
+  still stop affected execution safely; an unknown outcome is not a successful
+  return.
+- **Single-tool dispatch after delegation.** A model-facing batch of addressed
+  calls (`target`, `contract`, `arguments`), with each contract owned by its
+  target actor. This is interface work, not a new source of authority.
+
+Other unfinished work:
 
 - **Self-extension with real Codex.** The demo runs scripted and with a fake
   Codex ([next/32](docs/next/32-procedures.md)): a strand remembered as a
@@ -234,12 +254,10 @@ full auto). Measured on **human interruptions per task**, task success,
 overhead, the number of agent-built tools that run with zero approvals, and
 containment of those tools and of the agent against an adversarial suite.
 
-| When | Work |
-|---|---|
-| late September | semantics: contracts, `interpret`, dependencies and resolve (**done**) |
-| October | a real continuation: Codex calling leaf tools under generated sandboxes (**first version done**); fault routing, conversations |
-| November | audit and replay; the baseline harness and task set |
-| December | evaluation and writeup |
+These are capability priorities, not release dates. Delegation's first proof
+should be a child returning discovered observations, followed by an ordinary
+child failure that leaves the caller able to continue. Both paths must remain
+accountable through recorded lineage and replay.
 
 ## Layout
 

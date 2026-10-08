@@ -1,0 +1,87 @@
+{
+  "action": "go.test",
+  "exit_code": 1,
+  "output": "?   \tskyra/controller/core/record\t[no test files]\n=== RUN   TestOSReadHelper\n--- PASS: TestOSReadHelper (0.00s)\n=== RUN   TestOSExecHelper\n--- PASS: TestOSExecHelper (0.00s)\n=== RUN   TestRenderedProfileDeniesExecOfAnyOtherProgram\n    horizon_os_test.go:52: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileDeniesExecOfAnyOtherProgram (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant\n=== RUN   TestRenderedProfileEnforcesReadGrant/ungranted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/ungranted (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant/granted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/granted (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant (0.01s)\n--- FAIL: TestRenderedProfileEnforcesReadGrant (0.02s)\n=== RUN   TestOSScratchHelper\n--- PASS: TestOSScratchHelper (0.00s)\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch (0.01s)\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch (0.01s)\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec (0.04s)\n=== RUN   TestOSStateHelper\n--- PASS: TestOSStateHelper (0.00s)\n=== RUN   TestAnActorSeesOnlyItsOwnState\n    horizon_os_test.go:227: interpreter: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestAnActorSeesOnlyItsOwnState (0.01s)\n=== RUN   TestResidentReadsOnlyImagesUnderReadGrants\n    horizon_os_test.go:292: B.JPG: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: deep/c.webp: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: notes.txt: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: .skyra/state.png: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: /private/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-check-1623330881/tmp/TestResidentReadsOnlyImagesUnderReadGrants1137052939/002/notes.md: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: a.png: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: .env: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n=== RUN   TestFits\n--- PASS: TestFits (0.00s)\n=== RUN   TestDecodeIsStrict\n--- PASS: TestDecodeIsStrict (0.00s)\n=== RUN   TestCanonical\n--- PASS: TestCanonical (0.00s)\n=== RUN   TestCheck\n--- PASS: TestCheck (0.00s)\nPASS\nok  \tskyra/controller/core/contract\t0.324s\n    horizon_os_test.go:292: notes.png.txt: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: /private/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-check-1623330881/tmp/TestResidentReadsOnlyImagesUnderReadGrants1137052939/002/attachments/pasted.png: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n--- FAIL: TestResidentReadsOnlyImagesUnderReadGrants (0.08s)\n=== RUN   TestAuthorityAllowsByPathComponent\n--- PASS: TestAuthorityAllowsByPathComponent (0.00s)\n=== RUN   TestRenderOnlyDeclaredResources\n--- PASS: TestRenderOnlyDeclaredResources (0.00s)\n=== RUN   TestOneProfilePerHorizonExecOnlyTheRunningProgram\n--- PASS: TestOneProfilePerHorizonExecOnlyTheRunningProgram (0.00s)\n=== RUN   TestRepositoryReadableButOnlyIdeasWritable\n    ideas_os_test.go:51: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRepositoryReadableButOnlyIdeasWritable (0.01s)\nFAIL\nFAIL\tskyra/controller/core/horizon\t0.340s\n=== RUN   TestPrimaryBundleContractIsPassedToContinuation\n--- PASS: TestPrimaryBundleContractIsPassedToContinuation (0.00s)\n=== RUN   TestInterpret\n=== RUN   TestInterpret/addressed,_in_reach,_fits\n--- PASS: TestInterpret/addressed,_in_reach,_fits (0.00s)\n=== RUN   TestInterpret/addresses_its_own_slot\n--- PASS: TestInterpret/addresses_its_own_slot (0.00s)\n=== RUN   TestInterpret/unaddressed_text_is_a_leaf_fault,_kept\n--- PASS: TestInterpret/unaddressed_text_is_a_leaf_fault,_kept (0.00s)\n=== RUN   TestInterpret/unaddressed_JSON_is_a_leaf_fault,_kept_as_text\n--- PASS: TestInterpret/unaddressed_JSON_is_a_leaf_fault,_kept_as_text (0.00s)\n=== RUN   TestInterpret/reply_is_not_a_name\n--- PASS: TestInterpret/reply_is_not_a_name (0.00s)\n=== RUN   TestInterpret/another_frame's_slot_is_not_in_reach\n--- PASS: TestInterpret/another_frame's_slot_is_not_in_reach (0.00s)\n=== RUN   TestInterpret/a_leaf_addresses_a_capability\n--- PASS: TestInterpret/a_leaf_addresses_a_capability (0.00s)\n=== RUN   TestInterpret/out_of_reach\n--- PASS: TestInterpret/out_of_reach (0.00s)\n=== RUN   TestInterpret/the_operator_has_no_slot_to_return_to\n--- PASS: TestInterpret/the_operator_has_no_slot_to_return_to (0.00s)\n=== RUN   TestInterpret/payload_does_not_fit\n--- PASS: TestInterpret/payload_does_not_fit (0.00s)\n=== RUN   TestInterpret/payload_missing_a_field\n--- PASS: TestInterpret/payload_missing_a_field (0.00s)\n=== RUN   TestInterpret/a_return_is_any_JSON:_its_type_is_computed\n--- PASS: TestInterpret/a_return_is_any_JSON:_its_type_is_computed (0.00s)\n=== RUN   TestInterpret/address_without_payload\n--- PASS: TestInterpret/address_without_payload (0.00s)\n=== RUN   TestInterpret/address_with_extra_fields\n--- PASS: TestInterpret/address_with_extra_fields (0.00s)\n=== RUN   TestInterpret/address_is_not_a_name\n--- PASS: TestInterpret/address_is_not_a_name (0.00s)\n=== RUN   TestInterpret/no_output\n--- PASS: TestInterpret/no_output (0.00s)\n=== RUN   TestInterpret/not_text\n--- PASS: TestInterpret/not_text (0.00s)\n--- PASS: TestInterpret (0.00s)\n=== RUN   TestStateIsTheTopLevelBranch\n--- PASS: TestStateIsTheTopLevelBranch (0.00s)\n=== RUN   TestStepIsDeterministic\n--- PASS: TestStepIsDeterministic (0.00s)\n=== RUN   TestConnectionsAreEdges\n--- PASS: TestConnectionsAreEdges (0.00s)\n=== RUN   TestReleaseStartsExecution\n--- PASS: TestReleaseStartsExecution (0.00s)\n=== RUN   TestReleaseRefusals\n--- PASS: TestReleaseRefusals (0.00s)\n=== RUN   TestReleaseToSettle\n--- PASS: TestReleaseToSettle (0.00s)\n=== RUN   TestReleaseMustBeWhatTheCommitDerives\n--- PASS: TestReleaseMustBeWhatTheCommitDerives (0.00s)\n=== RUN   TestSilentTargetFaults\n--- PASS: TestSilentTargetFaults (0.00s)\n=== RUN   TestHandoff\n--- PASS: TestHandoff (0.00s)\n=== RUN   TestHandoffRefusals\n--- PASS: TestHandoffRefusals (0.00s)\n=== RUN   TestContinuationInvokesWaitsResumes\n--- PASS: TestContinuationInvokesWaitsResumes (0.00s)\n=== RUN   TestOutOfPhase\n--- PASS: TestOutOfPhase (0.00s)\n=== RUN   TestRemovedRoutePhasesAreRefused\n--- PASS: TestRemovedRoutePhasesAreRefused (0.00s)\n=== RUN   TestNarrowSharesTheCallersHorizon\n--- PASS: TestNarrowSharesTheCallersHorizon (0.00s)\n=== RUN   TestMachineIsPure\n--- PASS: TestMachineIsPure (0.00s)\n=== RUN   TestAsyncSurfaceParks\n--- PASS: TestAsyncSurfaceParks (0.00s)\n=== RUN   TestRunTellsATargetItsSlotAndReadGrants\n--- PASS: TestRunTellsATargetItsSlotAndReadGrants (0.00s)\n=== RUN   TestFanOutResumesTheWaiterOnceWithEveryStepInOrder\n--- PASS: TestFanOutResumesTheWaiterOnceWithEveryStepInOrder (0.00s)\n=== RUN   TestFanOutFaultsOnlyTheInstructionOutOfReach\n--- PASS: TestFanOutFaultsOnlyTheInstructionOutOfReach (0.00s)\n=== RUN   TestFanOutRefusesAReturnAndANarrowing\n--- PASS: TestFanOutRefusesAReturnAndANarrowing (0.00s)\n=== RUN   TestInstructions\n--- PASS: TestInstructions (0.00s)\n=== RUN   TestContinuationIsToldItsCaller\n--- PASS: TestContinuationIsToldItsCaller (0.00s)\n=== RUN   TestContinuationReportsCurrentWorkspaceAndScratch\n--- PASS: TestContinuationReportsCurrentWorkspaceAndScratch (0.00s)\n=== RUN   TestNarrowingThroughTheRoom\n--- PASS: TestNarrowingThroughTheRoom (0.00s)\n=== RUN   TestNarrowingCannotWiden\n--- PASS: TestNarrowingCannotWiden (0.00s)\n=== RUN   TestNarrowingWithoutDropsKindsOfAuthority\n--- PASS: TestNarrowingWithoutDropsKindsOfAuthority (0.00s)\n=== RUN   TestAnActorExtendsItself\n--- PASS: TestAnActorExtendsItself (0.00s)\n=== RUN   TestExtendReachRefuses\n--- PASS: TestExtendReachRefuses (0.00s)\n=== RUN   TestAnActorExtendsItselfInItsOwnHorizonOnly\n--- PASS: TestAnActorExtendsItselfInItsOwnHorizonOnly (0.00s)\n=== RUN   TestAPayloadFittingTwoContractsIsRefused\n--- PASS: TestAPayloadFittingTwoContractsIsRefused (0.00s)\n=== RUN   TestStrandIsReadThenReturned\n--- PASS: TestStrandIsReadThenReturned (0.00s)\n=== RUN   TestStrandReconstructionForms\n--- PASS: TestStrandReconstructionForms (0.00s)\nPASS\nok  \tskyra/controller/core/machine\t0.463s\n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-1623330881.json",
+  "duration_ms": 5020,
+  "failures": [
+    {
+      "test": "TestRenderedProfileDeniesExecOfAnyOtherProgram",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 52,
+      "message": "=== RUN   TestRenderedProfileDeniesExecOfAnyOtherProgram\n    horizon_os_test.go:52: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileDeniesExecOfAnyOtherProgram (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/ungranted",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/ungranted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/ungranted (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/granted",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/granted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/granted (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant",
+      "package": "skyra/controller/core/horizon",
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant\n--- FAIL: TestRenderedProfileEnforcesReadGrant (0.02s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 164,
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 164,
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec",
+      "package": "skyra/controller/core/horizon",
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec (0.04s)"
+    },
+    {
+      "test": "TestAnActorSeesOnlyItsOwnState",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 227,
+      "message": "=== RUN   TestAnActorSeesOnlyItsOwnState\n    horizon_os_test.go:227: interpreter: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestAnActorSeesOnlyItsOwnState (0.01s)"
+    },
+    {
+      "test": "TestResidentReadsOnlyImagesUnderReadGrants",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 292,
+      "message": "=== RUN   TestResidentReadsOnlyImagesUnderReadGrants\n    horizon_os_test.go:292: B.JPG: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: deep/c.webp: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: notes.txt: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: .skyra/state.png: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: /private/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-check-1623330881/tmp/TestResidentReadsOnlyImagesUnderReadGrants1137052939/002/notes.md: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: a.png: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: .env: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: notes.png.txt: \"\", want denied (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n    horizon_os_test.go:292: /private/var/folders/pt/n5j0rmln4j1bt78k159r4q_m0000gp/T/skyra-check-1623330881/tmp/TestResidentReadsOnlyImagesUnderReadGrants1137052939/002/attachments/pasted.png: \"\", want allowed (exit status 71 sandbox-exec: sandbox_apply: Operation not permitted\n        )\n--- FAIL: TestResidentReadsOnlyImagesUnderReadGrants (0.08s)"
+    },
+    {
+      "test": "TestRepositoryReadableButOnlyIdeasWritable",
+      "package": "skyra/controller/core/horizon",
+      "file": "ideas_os_test.go",
+      "line": 51,
+      "message": "=== RUN   TestRepositoryReadableButOnlyIdeasWritable\n    ideas_os_test.go:51: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRepositoryReadableButOnlyIdeasWritable (0.01s)"
+    },
+    {
+      "package": "skyra/controller/core/horizon",
+      "message": "FAIL\nFAIL\tskyra/controller/core/horizon\t0.340s"
+    }
+  ]
+}
