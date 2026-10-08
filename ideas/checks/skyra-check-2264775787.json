@@ -1,0 +1,8 @@
+{
+  "action": "go.format",
+  "exit_code": 1,
+  "output": "controller/claude/provider/bridge_test.go\ncontroller/claude/provider/provider_test.go\n",
+  "error": "formatting_required",
+  "report_path": "ideas/checks/skyra-check-2264775787.json",
+  "duration_ms": 119
+}

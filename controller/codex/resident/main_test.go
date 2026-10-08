@@ -413,10 +413,10 @@ func TestReadingTheWebIsNotAViolation(t *testing.T) {
 	}
 }
 
-func TestDesignOperationsAreOfferedOnlyInsideDesign(t *testing.T) {
+func TestDesignOperationsAreOfferedToParent(t *testing.T) {
 	c := continuation{Tools: map[string]*schema{"design": {Type: "object"}, "design.tools": {Type: "object"}}}
 	c.Input.Header = "think"
-	if ts := tools(c); len(ts) != 1 || ts[0].name != "design" {
+	if ts := tools(c); len(ts) != 2 || ts[1].name != "design_tools" || ts[1].target != "design.tools" {
 		t.Fatalf("think tools: %v", ts)
 	}
 	c.Input.Header = "design: create a draft"
@@ -425,9 +425,9 @@ func TestDesignOperationsAreOfferedOnlyInsideDesign(t *testing.T) {
 	}
 }
 
-func TestBlenderToolsOnlyOfferedInsideBlenderProcedure(t *testing.T) {
+func TestBlenderOperationsAreOfferedToParent(t *testing.T) {
 	c := continuation{Tools: map[string]*schema{"blender": {Type: "object"}, "blender.tools": {Type: "object"}}}
-	if ts := tools(c); len(ts) != 1 || ts[0].name != "blender" {
+	if ts := tools(c); len(ts) != 2 || ts[1].name != "blender_tools" || ts[1].target != "blender.tools" {
 		t.Fatalf("think tools: %v", ts)
 	}
 	c.Input.Header = "blender: inspect the scene"

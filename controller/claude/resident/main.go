@@ -383,7 +383,7 @@ func toolText(s step) json.RawMessage {
 func tools(c continuation) []proceduretools.Tool {
 	var ts []proceduretools.Tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[name] != nil && (name != "design.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "design:")) && (name != "blender.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "blender:")) {
+		if c.Tools[name] != nil {
 			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Tools[name]})
 		}
 	}

@@ -105,7 +105,7 @@ type tool struct {
 func tools(c continuation) []tool {
 	var ts []tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[name] != nil && (name != "design.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "design:")) && (name != "blender.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "blender:")) {
+		if c.Tools[name] != nil {
 			description := modelTools[name]
 			if name == "desktop_observe" && c.Tools[name].Title != "" {
 				description += " " + c.Tools[name].Title
