@@ -216,3 +216,41 @@ func TestOnlyALapsedOrMissingDaemonIsStale(t *testing.T) {
 		t.Error("a success is stale")
 	}
 }
+
+func TestDaemonWaitsForPIDAfterSocketAppears(t *testing.T) {
+	f := startFake(t, false)
+	pidfile := filepath.Join(filepath.Dir(f.socket), "driver.pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- waitDaemonFiles(ctx, f.socket, pidfile) }()
+	select {
+	case err := <-done:
+		t.Fatalf("returned before PID file was published: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := os.WriteFile(pidfile, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("returned while PID file was empty: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := os.WriteFile(pidfile, []byte("123\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDaemonWaitIsBoundedWhenPIDNeverAppears(t *testing.T) {
+	f := startFake(t, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	err := waitDaemonFiles(ctx, f.socket, filepath.Join(filepath.Dir(f.socket), "missing.pid"))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want startup deadline, got %v", err)
+	}
+}

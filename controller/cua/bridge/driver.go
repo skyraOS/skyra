@@ -221,17 +221,10 @@ func (c cua) Launch(ctx context.Context, gen int) (*daemon, error) {
 		cleanup()
 		return nil, fmt.Errorf("open Cua: %v: %s", err, strings.TrimSpace(string(out)))
 	}
-	for {
-		if _, err := os.Stat(socket); err == nil {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			// It may still start; session.py's sweep ends it if it does.
-			cleanup()
-			return nil, errors.New("Cua did not start; check its macOS permission dialog")
-		case <-time.After(100 * time.Millisecond):
-		}
+	if err := waitDaemonFiles(ctx, socket, pidfile); err != nil {
+		// It may still start; session.py's sweep ends it if it does.
+		cleanup()
+		return nil, err
 	}
 	pid, err := c.identify(ctx, socket, pidfile)
 	if err != nil {
@@ -245,6 +238,31 @@ func (c cua) Launch(ctx context.Context, gen int) (*daemon, error) {
 	}
 	fmt.Fprintf(os.Stderr, "cua-bridge: daemon %d pid=%d socket=%s\n", gen, pid, socket)
 	return d, nil
+}
+
+// Cua publishes its listening socket before its PID file. Socket existence
+// alone does not mean startup is complete. Identity verification still runs
+// afterwards and must match the process serving the socket.
+func waitDaemonFiles(ctx context.Context, socket, pidfile string) error {
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		_, socketErr := os.Stat(socket)
+		pid, pidErr := os.ReadFile(pidfile)
+		if socketErr == nil && pidErr == nil && len(strings.TrimSpace(string(pid))) > 0 {
+			return nil
+		}
+		for _, err := range []error{socketErr, pidErr} {
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("Cua startup files: %w", err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("Cua did not finish startup; check its macOS permission dialog: %w", ctx.Err())
+		case <-tick.C:
+		}
+	}
 }
 
 // identify checks that the socket's daemon is the process its pid file names,
