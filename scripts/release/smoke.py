@@ -21,7 +21,9 @@ def hashes(app):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('app', type=Path)
-    app = parser.parse_args().app.resolve(strict=True)
+    parser.add_argument('--real-startup', action='store_true', help='test real Cua/backend startup without sending a provider turn')
+    args = parser.parse_args()
+    app = args.app.resolve(strict=True)
     source_app = app
     original = hashes(source_app)
     with tempfile.TemporaryDirectory(prefix='skyra-release-', dir='/tmp') as tmp:
@@ -41,7 +43,7 @@ def main():
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
         env = dict(os.environ, PATH=str(guards)+':'+os.environ['PATH'], SKYRA_WORKSPACE=str(workspace), SKYRA_STATE=str(state), SKYRA_WS_PORT=str(port))
-        process = subprocess.Popen([str(runtime/'skyra'), 'serve', '--fake'], cwd=workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        process = subprocess.Popen([str(runtime/'skyra'), 'serve', *([] if args.real_startup else ['--fake'])], cwd=workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
         log = b''
         try:
             deadline = time.monotonic()+45
@@ -60,16 +62,20 @@ def main():
                 raise RuntimeError('registry was not stored outside the bundle')
             with socket.create_connection(('127.0.0.1', port), timeout=2):
                 pass
-            registry = next(p for p in (state/'runtime').glob('registry-*.json') if 'codex.start' in json.loads(p.read_text()))
-            scratch = home/'notes'; scratch.mkdir()
-            for number, request in enumerate(('read:a.txt', 'write:note.txt=release note')):
-                result = subprocess.run([str(runtime/'build/controller/skyra'), 'boot', '-root', str(home/f'run-{number}'/'.skyra'), '-registry', str(registry), '-scratch', str(scratch), '-to', 'codex', '-text', request], env=env, cwd=workspace, capture_output=True, text=True, timeout=45)
-                if result.returncode or 'byte-identical' not in result.stdout or 'refused' in result.stdout:
-                    raise RuntimeError(result.stdout+result.stderr)
-                if number == 0 and 'release content' not in result.stdout:
-                    raise RuntimeError('provider did not receive plain read source: '+result.stdout)
-            if (scratch/'note.txt').read_text() != 'release note':
-                raise RuntimeError('scratch write did not land')
+            if args.real_startup:
+                if b'cua-bridge: daemon 1 pid=' not in log or b'observation-only' not in log:
+                    raise RuntimeError('real desktop observation did not start: '+log.decode(errors='replace'))
+            else:
+                registry = next(p for p in (state/'runtime').glob('registry-*.json') if 'codex.start' in json.loads(p.read_text()))
+                scratch = home/'notes'; scratch.mkdir()
+                for number, request in enumerate(('read:a.txt', 'write:note.txt=release note')):
+                    result = subprocess.run([str(runtime/'build/controller/skyra'), 'boot', '-root', str(home/f'run-{number}'/'.skyra'), '-registry', str(registry), '-scratch', str(scratch), '-to', 'codex', '-text', request], env=env, cwd=workspace, capture_output=True, text=True, timeout=45)
+                    if result.returncode or 'byte-identical' not in result.stdout or 'refused' in result.stdout:
+                        raise RuntimeError(result.stdout+result.stderr)
+                    if number == 0 and 'release content' not in result.stdout:
+                        raise RuntimeError('provider did not receive plain read source: '+result.stdout)
+                if (scratch/'note.txt').read_text() != 'release note':
+                    raise RuntimeError('scratch write did not land')
         finally:
             try: os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError: pass
@@ -80,7 +86,10 @@ def main():
             raise RuntimeError('release modified its own signed bundle')
     if hashes(source_app) != original:
         raise RuntimeError('smoke test changed the input app')
-    print('PASS: relocated runtime and provider read/write/replay work without build tools; bundle unchanged')
+    if args.real_startup:
+        print('PASS: relocated real backend, verified Cua daemon and observation bridge start; bundle unchanged')
+    else:
+        print('PASS: relocated runtime and provider read/write/replay work without build tools; bundle unchanged')
 
 
 if __name__ == '__main__':

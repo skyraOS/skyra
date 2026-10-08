@@ -180,13 +180,13 @@ if desktop_config:
     contract=json.loads((root/'controller/cua/adapter/contract.json').read_text())
     evidence={k:config[k] for k in ('bundle_id','pid','window_id','driver_version','driver_binary_sha256','manifest_sha256')}
     contract['input']['title']='Desktop scope: '+json.dumps(evidence,sort_keys=True)
-    contract_path=build/'desktop-contract.json'
+    contract_path=cache/(launch+'-desktop-contract.json')
     contract_path.write_text(json.dumps(contract,sort_keys=True))
     registry['desktop_observe']={'path':str(build/'desktop-observe'),'contract':str(contract_path),
         'authority':{'connect':[str(socket)]}}
     bundle=json.loads((root/'controller/interp/workflows/think/bundle.json').read_text())
     bundle['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].append('desktop_observe')
-    bundle_path=build/'desktop-think.json'
+    bundle_path=cache/(launch+'-desktop-think.json')
     bundle_path.write_text(json.dumps(bundle,sort_keys=True))
     registry['interpreter']['bundle']=str(bundle_path)
 # In this workspace, write is an authored procedure: raw write, then commit.

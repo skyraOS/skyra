@@ -81,7 +81,15 @@ version; the first intended stable version is `0.1.0`.
      --notary-profile skyra-notary
    ```
 
-4. Unpack the final ZIP on a clean Mac, move the app away from the build folder,
+4. If CuaDriver is installed, verify real desktop/backend startup as well:
+
+   ```sh
+   python3 scripts/release/smoke.py build/releases/0.1.1/arm64/Skyra.app --real-startup
+   ```
+
+   This starts the real Cua bridge and verifies bundle immutability without
+   sending a model turn. Use your release version in the path.
+   Unpack the final ZIP on a clean Mac, move the app away from the build folder,
    and test launch from Finder, workspace grants, a real provider turn, tools,
    restart and conversation replay. Test without Go or Xcode on PATH. Run the
    smoke script against the unpacked app as well. Verify the signature and
