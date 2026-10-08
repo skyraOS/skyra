@@ -141,3 +141,33 @@ import Testing
     let first = String(decoding: try JSONEncoder().encode(ClientMessage.open(requestId: "r", procedure: nil)), as: UTF8.self)
     #expect(!first.contains("procedure"))
 }
+
+@MainActor @Test func deltasKeepUnchangedHistoryAndApplyOrderAndDeletion() {
+    let s = Session()
+    s.receive(Data(#"{"type":"snapshot","uiIncarnation":"i","revision":1,"conversations":[{"conversation":"a","phase":"ready","entries":[{"role":"agent","text":"kept history","ts":0}]},{"conversation":"b","phase":"ready","entries":[]}]}"#.utf8))
+    s.selected = "a"
+    s.receive(Data(#"{"type":"snapshot-delta","uiIncarnation":"i","revision":2,"baseRevision":1,"order":["b","a"],"conversations":[{"conversation":"b","phase":"pending","entries":[]}]}"#.utf8))
+    #expect(s.conversations.map(\.conversation) == ["b", "a"])
+    #expect(s.current?.entries.first?.text == "kept history")
+    #expect(s.conversations.first?.phase == .pending)
+    // A missed baseline, stale revision, or other host must never corrupt history.
+    for raw in [
+        #"{"type":"snapshot-delta","uiIncarnation":"i","revision":4,"baseRevision":3,"order":[],"conversations":[]}"#,
+        #"{"type":"snapshot-delta","uiIncarnation":"i","revision":1,"baseRevision":0,"order":[],"conversations":[]}"#,
+        #"{"type":"snapshot-delta","uiIncarnation":"other","revision":3,"baseRevision":2,"order":[],"conversations":[]}"#
+    ] { s.receive(Data(raw.utf8)) }
+    #expect(s.conversations.count == 2 && s.current?.entries.first?.text == "kept history")
+    s.receive(Data(#"{"type":"snapshot-delta","uiIncarnation":"i","revision":3,"baseRevision":2,"order":["b"],"conversations":[]}"#.utf8))
+    #expect(s.conversations.map(\.conversation) == ["b"] && s.selected == nil)
+}
+
+@MainActor @Test func deltaAcknowledgementWaitsForVisibleTranscript() {
+    let s = Session()
+    s.receive(Data(#"{"type":"snapshot","uiIncarnation":"i","revision":1,"conversations":[{"conversation":"a","phase":"ready","entries":[]}]}"#.utf8))
+    s.draft = "hello"
+    let id = s.beginSubmission("hello", conversation: "a")
+    s.receive(Data("{\"type\":\"snapshot-delta\",\"uiIncarnation\":\"i\",\"revision\":2,\"baseRevision\":1,\"order\":[\"a\"],\"requests\":[{\"requestId\":\"\(id)\"}],\"conversations\":[]}".utf8))
+    #expect(s.unacknowledged == nil && s.draft == "hello")
+    s.receive(Data("{\"type\":\"snapshot-delta\",\"uiIncarnation\":\"i\",\"revision\":3,\"baseRevision\":2,\"order\":[\"a\"],\"conversations\":[{\"conversation\":\"a\",\"phase\":\"pending\",\"entries\":[{\"role\":\"user\",\"text\":\"hello\",\"ts\":0,\"requestId\":\"\(id)\"}]}]}".utf8))
+    #expect(s.draft.isEmpty)
+}

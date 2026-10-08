@@ -1,0 +1,12 @@
+{
+  "action": "go.format",
+  "exit_code": 0,
+  "output": "controller/claude/provider/bridge_test.go\ncontroller/claude/provider/provider.go\ncontroller/claude/provider/provider_test.go\n",
+  "report_path": "ideas/checks/skyra-check-1730915527.json",
+  "duration_ms": 247,
+  "formatted": [
+    "controller/claude/provider/bridge_test.go",
+    "controller/claude/provider/provider.go",
+    "controller/claude/provider/provider_test.go"
+  ]
+}

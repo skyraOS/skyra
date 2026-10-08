@@ -65,7 +65,7 @@ type conversation struct {
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
 	pastCalls        [][]call // completed runs, indexed by conversation turn
-	loaded           bool    // true once the full lineage and entries have been read from disk
+	loaded           bool     // true once the full lineage and entries have been read from disk
 }
 
 type webhost struct {
@@ -83,6 +83,8 @@ type webhost struct {
 	destinations []destination // the roots a human may select, from the registry's bundles
 	conn         net.Conn
 	wmu          sync.Mutex
+	bmu          sync.Mutex      // serialize snapshot revisions and stream baselines
+	stream       *snapshotStream // wmu; nil for legacy full-snapshot clients
 }
 
 func main() {
@@ -417,6 +419,7 @@ func (h *webhost) serveBrowser(conn net.Conn) {
 		h.conn.Close()
 	}
 	h.conn = conn
+	h.stream = nil
 	h.wmu.Unlock()
 	h.broadcast()
 	for {
@@ -433,6 +436,19 @@ func (h *webhost) serveBrowser(conn net.Conn) {
 			continue
 		}
 		if op == 0x1 || op == 0x2 {
+			var subscription struct{ Type, Mode string }
+			if json.Unmarshal(payload, &subscription) == nil && subscription.Type == "subscribe-snapshots" {
+				h.wmu.Lock()
+				current := h.conn == conn
+				if current && subscription.Mode == "delta" {
+					h.stream = &snapshotStream{}
+				}
+				h.wmu.Unlock()
+				if current {
+					h.broadcast()
+				}
+				continue
+			}
 			h.handle(payload)
 		}
 	}
@@ -721,6 +737,9 @@ func (h *webhost) watch() {
 }
 
 func (h *webhost) broadcast() {
+	h.bmu.Lock()
+	defer h.bmu.Unlock()
+	started := time.Now()
 	h.mu.Lock()
 	h.revision++
 	var list []*conversation
@@ -739,7 +758,20 @@ func (h *webhost) broadcast() {
 	if omitted > 0 {
 		fmt.Fprintf(h.log, "webhost: snapshot over %d bytes; omitted older history from %d views (it remains on disk)\n", maxFrame, omitted)
 	}
-	h.sendRaw(b)
+	h.wmu.Lock()
+	defer h.wmu.Unlock()
+	if h.stream != nil {
+		b = h.stream.frame(snap, views, b)
+	}
+	if os.Getenv("SKYRA_PROFILE_UI") == "1" && h.log != nil {
+		entries := 0
+		for _, view := range views {
+			entries += len(view["entries"].([]entry))
+		}
+		fmt.Fprintf(h.log, "webhost: snapshot revision=%d bytes=%d conversations=%d entries=%d build_ms=%.3f\n",
+			snap["revision"], len(b), len(views), entries, float64(time.Since(started).Microseconds())/1000)
+	}
+	h.sendRawLocked(b)
 }
 
 // fitSnapshot keeps a snapshot within one frame, so a large history cannot
@@ -785,6 +817,10 @@ func (h *webhost) send(v any) {
 func (h *webhost) sendRaw(b []byte) {
 	h.wmu.Lock()
 	defer h.wmu.Unlock()
+	h.sendRawLocked(b)
+}
+
+func (h *webhost) sendRawLocked(b []byte) {
 	if h.conn != nil {
 		h.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if err := writeFrame(h.conn, 0x1, b); err != nil {

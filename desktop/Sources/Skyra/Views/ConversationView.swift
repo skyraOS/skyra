@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConversationView: View {
     let session: Session
+    var expanded = false
     @State private var following = true
     var body: some View {
         if let c = session.current {
@@ -10,7 +11,8 @@ struct ConversationView: View {
                     ZStack(alignment: .bottomTrailing) {
                         ScrollView {
                             LazyVStack(spacing: 12) {
-                                ForEach(Array(c.entries.enumerated()), id: \.offset) { _, e in
+                                ForEach(c.entries.indices, id: \.self) { index in
+                                    let e = c.entries[index]
                                     if let call = e.call { Ledger(call: call) } else { Message(entry: e) }
                                 }
                                 if c.phase == .pending { Working().frame(maxWidth: .infinity, alignment: .leading) }
@@ -20,7 +22,7 @@ struct ConversationView: View {
                                     }
                                 }
                             }
-                            .frame(maxWidth: ContentView.readingWidth)
+                            .frame(maxWidth: expanded ? .infinity : ContentView.readingWidth)
                             .background {
                                 GeometryReader { p in
                                     let r = p.frame(in: .named("sky"))
@@ -34,8 +36,8 @@ struct ConversationView: View {
                         .onChange(of: c.entries.count) { _, _ in if following { proxy.scrollTo("end", anchor: .bottom) } }
                         .onChange(of: session.selected, initial: true) { _, _ in following = true; proxy.scrollTo("end", anchor: .bottom) }
                         if !following {
-                            Button("Latest messages ↓") { following = true; proxy.scrollTo("end", anchor: .bottom) }
-                                .padding(16).panel(radius: 12)
+                            LatestMessagesLink { following = true; proxy.scrollTo("end", anchor: .bottom) }
+                                .padding(16)
                         }
                     }
                 }
@@ -43,6 +45,36 @@ struct ConversationView: View {
         } else { Spacer() }
     }
 }
+private struct LatestMessagesLink: View {
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Text("Latest messages")
+                    .underline(hovered, color: Theme.accent.color)
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.accent.color(hovered ? 1 : 0.8))
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Jump to the latest messages")
+        .onHover { inside in
+            guard hovered != inside else { return }
+            hovered = inside
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDisappear {
+            if hovered { NSCursor.pop(); hovered = false }
+        }
+    }
+}
+
 private struct ReadingEnd: PreferenceKey {
     static let defaultValue = 0.0
     static func reduce(value: inout Double, nextValue: () -> Double) { value = nextValue() }
@@ -64,8 +96,23 @@ struct Message: View {
             if !entry.isUser { Spacer(minLength: 24) }
         }
     }
+    private final class MarkdownValue: NSObject {
+        let value: AttributedString
+        init(_ value: AttributedString) { self.value = value }
+    }
+    private static let markdown: NSCache<NSString, MarkdownValue> = {
+        let cache = NSCache<NSString, MarkdownValue>()
+        cache.countLimit = 512
+        cache.totalCostLimit = 4 << 20
+        return cache
+    }()
+
     static func rendered(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        let key = text as NSString
+        if let cached = markdown.object(forKey: key) { return cached.value }
+        let value = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        markdown.setObject(MarkdownValue(value), forKey: key, cost: text.utf8.count)
+        return value
     }
 }
 struct Ledger: View {

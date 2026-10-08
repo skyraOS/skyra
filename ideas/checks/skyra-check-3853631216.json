@@ -1,0 +1,6 @@
+{
+  "action": "go.vet",
+  "exit_code": 0,
+  "report_path": "ideas/checks/skyra-check-3853631216.json",
+  "duration_ms": 3565
+}

@@ -16,6 +16,7 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
     s.connect(URL(string: env["SKYRA_TEST_WS"]!)!, token: env["SKYRA_TEST_TOKEN"] ?? "")
     defer { s.disconnect() }
     try await until { s.connected && !s.incarnation.isEmpty }
+    s.selectRoot("think")
 
     s.draft = "Call the echo tool with the text hi."
     s.submit()
@@ -61,6 +62,7 @@ func theAgentWritesToItsScratchSpaceAndReadsItBack() async throws {
     s.connect(URL(string: env["SKYRA_TEST_WS"]!)!, token: env["SKYRA_TEST_TOKEN"] ?? "")
     defer { s.disconnect() }
     try await until { s.connected && !s.incarnation.isEmpty }
+    s.selectRoot("think")
 
     func say(_ text: String) async throws -> Conversation {
         let before = s.current?.entries.count ?? 0

@@ -65,8 +65,82 @@ final class Session {
 
     static let companions: [String: String] = ["think-claude": "think"]
 
+    private var openConversations: [String: [String]] = [:]
+    private var lastSelected: [String: String] = [:]
+    private var composers: [String: (String, [Attachment])] = [:]
+    private var navigationKey = ""
+    private var storageKey = ""
+
+    /// Working sets are local navigation state, never execution or cancellation.
+    func configureWorkspace(_ path: String) {
+        guard storageKey != path else { return }
+        storageKey = path
+        openConversations = UserDefaults.standard.dictionary(forKey: "conversationStars:\(path)") as? [String: [String]] ?? [:]
+        lastSelected = UserDefaults.standard.dictionary(forKey: "conversationSelection:\(path)") as? [String: String] ?? [:]
+        composers = [:]
+        navigationKey = ""
+        selected = nil
+    }
+
+    private func persistNavigation() {
+        guard !storageKey.isEmpty else { return }
+        UserDefaults.standard.set(openConversations, forKey: "conversationStars:\(storageKey)")
+        UserDefaults.standard.set(lastSelected, forKey: "conversationSelection:\(storageKey)")
+    }
+
+    private var scope: String { activeProcedure ?? "Legacy" }
+
+    private func navigate(_ id: String?) {
+        composers[navigationKey] = (draft, attachments)
+        selected = id
+        navigationKey = id ?? "new:\(scope)"
+        let saved = composers[navigationKey]
+        draft = saved?.0 ?? ""
+        attachments = saved?.1 ?? []
+        if let id {
+            var ids = openConversations[scope] ?? []
+            if !ids.contains(id) { ids.append(id) }
+            // A bounded working set; history retains everything.
+            if ids.count > 5 { ids.removeFirst(ids.count - 5) }
+            openConversations[scope] = ids
+            lastSelected[scope] = id
+        } else { lastSelected.removeValue(forKey: scope) }
+        persistNavigation()
+    }
+
+    private var canNavigate: Bool {
+        if opening || unacknowledged != nil || awaitingTranscript != nil {
+            notice = "wait for message delivery before switching conversations"
+            return false
+        }
+        return true
+    }
+
     func toggleModel() {
+        guard canNavigate else { return }
         model = model == "codex" ? "claude" : "codex"
+        navigate(lastSelected[scope].flatMap { id in rootConversations.contains { $0.conversation == id } ? id : nil })
+    }
+
+    func selectConversation(_ id: String) {
+        guard canNavigate, let c = conversations.first(where: { $0.conversation == id }) else { return }
+        if let p = c.procedure {
+            selectedRoot = Self.companions[p] ?? p
+            if p == "think" || p == "think-claude" { model = p == "think-claude" ? "claude" : "codex" }
+        }
+        navigate(id)
+    }
+
+    var conversationStars: [Conversation] {
+        let ids = openConversations[scope] ?? []
+        return ids.compactMap { id in rootConversations.first { $0.conversation == id } }
+    }
+
+    func putAwayConversation(_ id: String) {
+        guard canNavigate else { return }
+        openConversations[scope]?.removeAll { $0 == id }
+        if selected == id { navigate(nil) }
+        persistNavigation()
     }
 
     /// The procedure to open: think-claude when claude is selected on think.
@@ -80,19 +154,18 @@ final class Session {
     /// away: the context is the root's.
     func selectRoot(_ title: String) {
         guard destinations.contains(where: { $0.title == title }) else { return }
-        selectedRoot = title
-        if let c = current, let p = c.procedure, !p.isEmpty, p != title,
-           Self.companions[p] != title { selected = nil }
+        guard canNavigate else { return }
+        if selectedRoot == (Self.companions[title] ?? title), current?.procedure == activeProcedure { return }
+        selectedRoot = Self.companions[title] ?? title
+        if title == "think-claude" { model = "claude" }
+        navigate(lastSelected[scope].flatMap { id in rootConversations.contains { $0.conversation == id } ? id : nil })
     }
 
     /// The conversations that run the selected root, newest first. A webhost
     /// that lists no roots predates them: every conversation is shown.
     var rootConversations: [Conversation] {
-        guard let r = root else { return conversations }
-        return conversations.filter { c in
-            let p = c.procedure ?? ""
-            return p == r.title || Self.companions[p] == r.title
-        }
+        guard let p = activeProcedure else { return conversations }
+        return conversations.filter { $0.procedure == p }
     }
 
     /// Conversations under no root: from before procedures, or running one the
@@ -121,6 +194,7 @@ final class Session {
         guard let target else { return }
         generation += 1
         let gen = generation
+        connected = false
         var req = URLRequest(url: target.url)
         req.setValue("Bearer \(target.token)", forHTTPHeaderField: "Authorization")
         let t = URLSession.shared.webSocketTask(with: req)
@@ -136,12 +210,21 @@ final class Session {
             do {
                 let message = try await t.receive()
                 guard gen == generation else { return }
-                connected = true
+                let first = !connected
+                let raw: Data
                 switch message {
-                case let .string(s): receive(Data(s.utf8))
-                case let .data(d): receive(d)
-                @unknown default: break
+                case let .string(s): raw = Data(s.utf8)
+                case let .data(d): raw = d
+                @unknown default: continue
                 }
+                // One receive loop awaits each decode, preserving acknowledgement order.
+                let decoded = await Task.detached(priority: .userInitiated) {
+                    try? DecodedServerMessage.decode(raw)
+                }.value
+                guard gen == generation else { return }
+                connected = true
+                if let decoded { apply(decoded) } else { notice = "invalid server message" }
+                if first { subscribeToDeltas() }
             } catch {
                 guard gen == generation else { return }
                 connected = false
@@ -153,52 +236,30 @@ final class Session {
     }
 
     func receive(_ raw: Data) {
-        guard let m = try? JSONDecoder().decode(ServerMessage.self, from: raw) else {
+        guard let decoded = try? DecodedServerMessage.decode(raw) else {
             notice = "invalid server message"
             return
         }
-        switch m {
-        case let .snapshot(inc, rev, convs, roots):
-            if inc == incarnation && rev < revision { return }
-            if let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-               object["type"] as? String == "snapshot", let pending = unacknowledged,
-               let ledger = object["requests"] as? [[String: Any]] {
-                if let record = ledger.first(where: { $0["requestId"] as? String == pending.id }) {
-                    if record["code"] as? String == "delivery-unknown" {
-                        unacknowledged = nil
-                        notice = "delivery is unknown; inspect history before retrying. Your draft is kept"
-                    } else { acknowledge(pending.id) }
-                } else {
-                    unacknowledged = nil
-                    notice = "the message was not acknowledged; your draft is kept"
-                }
-            }
+        apply(decoded)
+    }
 
-            if !incarnation.isEmpty && inc != incarnation && opening {
-                if draft.isEmpty { draft = pendingText }
-                pendingText = ""
-                opening = false
-                notice = "the host restarted; your draft is kept"
-            }
-            if !incarnation.isEmpty && inc != incarnation { awaitingTranscript = nil }
-            (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
-            finishVisibleSubmission()
-            if selectedRoot == nil || !roots.contains(where: { $0.title == selectedRoot }) {
-                selectedRoot = roots.first?.title
-            }
-            if opening, let newest = convs.first, newest.conversation != openBefore {
-                selected = newest.conversation
-                if newest.phase == .ready {
-                    if !pendingText.isEmpty {
-                        sendText(pendingText, conversation: newest.conversation)
-                    }
-                    pendingText = ""
-                    opening = false
-                    notice = ""
-                }
-                return
-            }
-            if selected != nil && current == nil { selected = nil }
+    private func subscribeToDeltas() {
+        task?.send(.string("{\"type\":\"subscribe-snapshots\",\"mode\":\"delta\"}")) { _ in }
+    }
+
+    private func apply(_ decoded: DecodedServerMessage) {
+        let span = PerformanceTrace.begin("Snapshot apply")
+        defer { PerformanceTrace.end("Snapshot apply", span) }
+        switch decoded.message {
+        case let .delta(inc, rev, base, changes, order, roots):
+            guard inc == incarnation, rev > revision else { return }
+            guard base == revision else { subscribeToDeltas(); return }
+            var byID = Dictionary(uniqueKeysWithValues: conversations.map { ($0.conversation, $0) })
+            for conversation in changes { byID[conversation.conversation] = conversation }
+            guard order.allSatisfy({ byID[$0] != nil }) else { subscribeToDeltas(); return }
+            applySnapshot(inc, rev, order.compactMap { byID[$0] }, roots, decoded.requests)
+        case let .snapshot(inc, rev, convs, roots):
+            applySnapshot(inc, rev, convs, roots, decoded.requests)
         case let .rejected(id, code, message):
             if unacknowledged?.id == id { unacknowledged = nil }
             notice = "\(code): \(message)"
@@ -207,10 +268,65 @@ final class Session {
                 pendingText = ""
                 opening = false
             }
-        case let .accepted(id):
-            acknowledge(id)
-        case .unknown:
-            break
+        case let .accepted(id): acknowledge(id)
+        case .unknown: break
+        }
+    }
+
+    private func applySnapshot(_ inc: String, _ rev: Int, _ convs: [Conversation], _ roots: [Destination],
+                               _ ledger: [DecodedServerMessage.Request]?) {
+        if inc == incarnation && rev < revision { return }
+        if let pending = unacknowledged, let ledger {
+            if let record = ledger.first(where: { $0.requestId == pending.id }) {
+                if record.code == "delivery-unknown" {
+                    unacknowledged = nil
+                    notice = "delivery is unknown; inspect history before retrying. Your draft is kept"
+                } else { acknowledge(pending.id) }
+            } else {
+                unacknowledged = nil
+                notice = "the message was not acknowledged; your draft is kept"
+            }
+        }
+
+        if !incarnation.isEmpty && inc != incarnation && opening {
+            if draft.isEmpty { draft = pendingText }
+            pendingText = ""
+            opening = false
+            notice = "the host restarted; your draft is kept"
+        }
+        if !incarnation.isEmpty && inc != incarnation { awaitingTranscript = nil }
+        (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
+        finishVisibleSubmission()
+        if selectedRoot == nil || !roots.contains(where: { $0.title == selectedRoot }) {
+            selectedRoot = roots.first?.title
+        }
+        if opening, let newest = convs.first, newest.conversation != openBefore {
+            if selected != newest.conversation {
+                let openingDraft = draft
+                let openingImages = attachments
+                composers.removeValue(forKey: navigationKey)
+                navigate(newest.conversation)
+                draft = openingDraft
+                attachments = openingImages
+                composers.removeValue(forKey: "new:\(scope)")
+            }
+            if newest.phase == .ready {
+                if !pendingText.isEmpty {
+                    sendText(pendingText, conversation: newest.conversation)
+                }
+                pendingText = ""
+                opening = false
+                notice = ""
+            }
+            return
+        }
+        if selected != nil && current == nil { navigate(nil) }
+        if navigationKey.isEmpty {
+            if let id = lastSelected[scope], rootConversations.contains(where: { $0.conversation == id }) {
+                navigate(id)
+            } else {
+                navigationKey = selected ?? "new:\(scope)"
+            }
         }
     }
 
@@ -267,8 +383,8 @@ final class Session {
 
     /// Clears the view so the next message starts a fresh session.
     func newSession() {
-        guard !opening else { return }
-        selected = nil
+        guard canNavigate else { return }
+        navigate(nil)
         notice = ""
     }
 

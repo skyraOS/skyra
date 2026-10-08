@@ -109,7 +109,7 @@ struct Sidebar: View {
     private func row(_ c: Conversation) -> some View {
         let selected = c.conversation == session.selected
         return Button {
-            session.selected = c.conversation
+            session.selectConversation(c.conversation)
         } label: {
             HStack(spacing: 8) {
                 Circle().fill(dot(c.phase)).frame(width: 5, height: 5)

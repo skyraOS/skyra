@@ -8,13 +8,16 @@ struct ContentView: View {
     @State private var historyPresented = false
     @State private var active = true
     @State private var visible = true
+    @State private var focused = false
+    @State private var expanded = false
+    @State private var composerTop: CGFloat?
     @AppStorage("logFrame") private var storedLogFrame = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let readingWidth = 720.0
 
     var body: some View {
         ZStack(alignment: .top) {
-            LivingSkyView(model: sky, paused: reduceMotion || !visible || !active || historyPresented)
+            LivingSkyView(model: sky, paused: reduceMotion || !visible || !active || historyPresented || focused)
                 .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
             VStack(spacing: 0) {
                 Header(backend: backend, session: session, historyPresented: $historyPresented)
@@ -23,52 +26,25 @@ struct ContentView: View {
                 } else {
                     Spacer(minLength: 0)
                     Composer(backend: backend, session: session)
+                        .background {
+                            GeometryReader { geo in
+                                Color.clear.preference(key: ComposerTop.self, value: geo.frame(in: .named("sky")).minY)
+                            }
+                        }
                 }
             }.ignoresSafeArea(.container, edges: .top)
 
             if !backendFailed, session.current != nil {
-                GeometryReader { geo in
-                    let bounds = LogFrame.bounds(geo.size)
-                    let placed = logFrame ?? Self.defaultLogFrame(in: geo.size)
-                    let r = LogFrame.clamped(placed, in: bounds)
-                    FloatingLog(session: session, frame: Binding(
-                        get: { r },
-                        set: { logFrame = $0 }
-                    ), bounds: bounds)
-                    .frame(width: r.width, height: r.height)
-                    .position(x: r.midX, y: r.midY)
-                }
+                transcript
             }
         }
         .overlay {
-            if !backendFailed {
-                GeometryReader { geo in
-                    ForEach(RootSky.place(session.visibleDestinations, in: geo.size), id: \.title) { figure in
-                        let chosen = session.root?.title == figure.title
-                        Button {
-                            if chosen && figure.title == "think" {
-                                session.toggleModel()
-                            } else {
-                                session.selectRoot(figure.title)
-                            }
-                        } label: {
-                            Circle().fill(Color.clear).frame(width: 40, height: 40).contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .position(figure.root.point)
-                        .help(chosen && figure.title == "think"
-                            ? "Click to switch model (\(session.model))"
-                            : "\(figure.title): run it here. Its conversations are listed, and a new one runs it.")
-                        .accessibilityLabel("\(figure.title), procedure\(chosen ? ", selected, \(session.model)" : "")")
-                    }
-                }
-                .ignoresSafeArea()
-            }
+            if !backendFailed && !focused && !expanded { RootNavigation(session: session) }
         }
         .coordinateSpace(name: "sky")
         .onContinuousHover(coordinateSpace: .named("sky")) { phase in
             switch phase {
-            case let .active(p): sky.pointer = reduceMotion || historyPresented ? nil : p
+            case let .active(p): sky.pointer = reduceMotion || historyPresented || focused ? nil : p
             case .ended: sky.pointer = nil
             }
         }
@@ -79,16 +55,16 @@ struct ContentView: View {
         .onChange(of: session.visibleDestinations, initial: true) { _, d in sky.roots = d }
         .onChange(of: session.root?.title, initial: true) { _, t in sky.selectedRoot = t }
         .onChange(of: session.model, initial: true) { _, m in sky.modelTarget = m == "claude" ? 1 : 0 }
+        .onPreferenceChange(ComposerTop.self) { composerTop = $0 }
         .onPreferenceChange(ReadingColumn.self) { sky.column = $0 }
-        .onChange(of: storedLogFrame) { _, _ in
-            sky.logRect = LogFrame.decode(storedLogFrame)
-        }
         .onChange(of: session.current == nil) { _, empty in
             if empty { sky.logRect = nil }
         }
         .onChange(of: backend.state, initial: true) { _, state in
             switch state {
-            case let .ready(url): session.connect(url, token: backend.token)
+            case let .ready(url):
+                session.configureWorkspace(backend.workspace?.path ?? url.absoluteString)
+                session.connect(url, token: backend.token)
             case .idle where backend.workspace == nil: backend.showGrant = true
             default: session.disconnect()
             }
@@ -109,8 +85,25 @@ struct ContentView: View {
         }
     }
 
+    private var transcript: some View {
+        GeometryReader { geo in
+            let room = LogFrame.bounds(geo.size)
+            let bounds = CGRect(x: room.minX, y: room.minY + 38,
+                                width: room.width, height: max(0, (composerTop.map { $0 - 12 } ?? (room.maxY - 110)) - room.minY - 38))
+            let original = logFrame ?? Self.defaultLogFrame(in: geo.size)
+            let placed = expanded ? CGRect(x: bounds.minX, y: original.minY, width: bounds.width, height: original.height) : original
+            let r = focused ? bounds : LogFrame.clamped(placed, in: bounds)
+            FloatingLog(session: session, frame: Binding(get: { r }, set: { logFrame = $0 }),
+                        bounds: bounds, focused: $focused, expanded: $expanded)
+                .frame(width: r.width, height: r.height)
+                .position(x: r.midX, y: r.midY)
+                .onAppear { sky.logRect = r }
+                .onChange(of: r) { _, rect in sky.logRect = rect }
+        }
+    }
+
     private static func defaultLogFrame(in size: CGSize) -> CGRect {
-        let w = min(readingWidth, size.width - 48)
+        let w = min(readingWidth + 48, size.width - 48)
         let h = max(size.height - 200, LogFrame.minSize.height)
         return CGRect(x: (size.width - w) / 2, y: LogFrame.top, width: w, height: h)
     }
@@ -130,38 +123,98 @@ struct ContentView: View {
     }
 }
 
-/// The conversation floating over the sky. Drag anywhere to move, edges to
-/// resize. No chrome — just the words on the sky.
+private struct ComposerTop: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
+}
+
+private struct RootNavigation: View {
+    let session: Session
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(RootSky.place(session.visibleDestinations, in: geo.size), id: \.title) { figure in
+                let chosen = session.root?.title == figure.title
+                Button {
+                    if chosen && figure.title == "think" {
+                        session.toggleModel()
+                    } else {
+                        session.selectRoot(figure.title)
+                    }
+                } label: {
+                    Circle().fill(Color.clear).frame(width: 40, height: 40).contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .position(figure.root.point)
+                .help(chosen && figure.title == "think"
+                    ? "Click to switch model (\(session.model))"
+                    : "\(figure.title): run it here. Its conversations are listed, and a new one runs it.")
+                .accessibilityLabel("\(figure.title), procedure\(chosen ? ", selected, \(session.model)" : "")")
+                if let destination = session.visibleDestinations.first(where: { $0.title == figure.title }) {
+                    ProcedureInspectorButton(destination: destination)
+                        .position(x: figure.bounds.maxX - 35, y: figure.bounds.minY + 24)
+                }
+                if chosen {
+                    ConversationSatellites(session: session)
+                        .position(x: figure.root.point.x + 74, y: figure.bounds.maxY - 8)
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// Only the title bar moves the transcript; its content keeps native selection and scrolling.
 private struct FloatingLog: View {
     let session: Session
     @Binding var frame: CGRect
     let bounds: CGRect
+    @Binding var focused: Bool
+    @Binding var expanded: Bool
     @State private var start: CGRect?
 
-    private static let fade = 28.0
-
     var body: some View {
-        ZStack {
-            ConversationView(session: session)
-                .padding(Self.fade)
-                .mask { FadeMask(inset: Self.fade) }
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                HStack {
+                    Image(systemName: "line.3.horizontal")
+                    Text("Conversation")
+                    Spacer(minLength: 0)
+                }
                 .contentShape(Rectangle())
                 .gesture(drag(.all))
-
-            edge(.top, width: nil, height: 6, .top, .resizeUpDown)
-            edge(.bottom, width: nil, height: 6, .bottom, .resizeUpDown)
-            edge(.left, width: 6, height: nil, .leading, .resizeLeftRight)
-            edge(.right, width: 6, height: nil, .trailing, .resizeLeftRight)
-            edge([.top, .left], width: 12, height: 12, .topLeading, .crosshair)
-            edge([.top, .right], width: 12, height: 12, .topTrailing, .crosshair)
-            edge([.bottom, .left], width: 12, height: 12, .bottomLeading, .crosshair)
-            edge([.bottom, .right], width: 12, height: 12, .bottomTrailing, .crosshair)
+                .help("Drag to move the conversation")
+                Button(expanded ? "Reading width" : "Expand") { expanded.toggle() }
+                    .help("Use the available width for tools and long content")
+                Button(focused ? "Exit focus" : "Focus") { focused.toggle() }
+                    .help("Fill the available space and pause the sky")
+            }
+            .font(.system(size: 11)).foregroundStyle(Theme.dim.color)
+            .buttonStyle(.plain).padding(.horizontal, 16).frame(height: 34)
+            Divider().opacity(0.25)
+            ConversationView(session: session, expanded: expanded)
+        }
+        .panel(radius: 14, tintOpacity: focused ? 0.98 : 0.9)
+        .overlay {
+            if !focused {
+                ZStack {
+                    edge(.top, width: nil, height: 6, .top, .resizeUpDown)
+                    edge(.bottom, width: nil, height: 6, .bottom, .resizeUpDown)
+                    edge(.left, width: 6, height: nil, .leading, .resizeLeftRight)
+                    edge(.right, width: 6, height: nil, .trailing, .resizeLeftRight)
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10)).foregroundStyle(Theme.dim.color)
+                        .frame(width: 20, height: 20).contentShape(Rectangle())
+                        .gesture(drag([.bottom, .right]))
+                        .help("Drag to resize")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
+            }
         }
     }
 
     private func edge(_ edges: LogFrame.Edges, width: CGFloat?, height: CGFloat?,
                       _ alignment: Alignment, _ cursor: NSCursor) -> some View {
-        Color.clear
+        RoundedRectangle(cornerRadius: 3).fill(Theme.ink.color(0.12))
             .frame(width: width, height: height)
             .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: height == nil ? .infinity : nil)
             .contentShape(Rectangle())
@@ -173,6 +226,7 @@ private struct FloatingLog: View {
     private func drag(_ edges: LogFrame.Edges) -> some Gesture {
         DragGesture(minimumDistance: 1, coordinateSpace: .named("sky"))
             .onChanged { v in
+                guard !focused else { return }
                 let s = start ?? frame
                 start = s
                 frame = LogFrame.dragged(s, edges, by: v.translation, in: bounds)
@@ -192,6 +246,18 @@ struct Header: View {
             Button("History") { historyPresented = true }.keyboardShortcut("h", modifiers: [.command, .shift])
             Button { session.newSession() } label: { Image(systemName: "square.and.pencil") }
                 .help("New conversation").accessibilityLabel("New conversation")
+            Menu("Context") {
+                ForEach(session.visibleDestinations) { destination in
+                    Button(destination.title) { session.selectRoot(destination.title) }
+                }
+                if session.root?.title == "think" {
+                    Button("Switch model (\(session.model))") { session.toggleModel() }
+                }
+                Divider()
+                ForEach(session.conversationStars) { conversation in
+                    Button(Sidebar.title(conversation)) { session.selectConversation(conversation.conversation) }
+                }
+            }
             Spacer(minLength: 0)
             Menu("Tools") { Button("Penpot…") { showPenpot = true } }
                 .disabled(session.current?.phase == .pending)
@@ -244,31 +310,3 @@ extension View {
         }
     }
 }
-
-private struct FadeMask: View {
-    let inset: Double
-    var body: some View {
-        Canvas { ctx, size in
-            let w = size.width, h = size.height
-            let inner = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
-            ctx.fill(Path(inner), with: .color(.white))
-            ctx.fill(Path(CGRect(x: 0, y: inner.minY, width: inset, height: inner.height)),
-                     with: .linearGradient(Gradient(colors: [.clear, .white]),
-                                           startPoint: CGPoint(x: 0, y: h / 2),
-                                           endPoint: CGPoint(x: inset, y: h / 2)))
-            ctx.fill(Path(CGRect(x: w - inset, y: inner.minY, width: inset, height: inner.height)),
-                     with: .linearGradient(Gradient(colors: [.white, .clear]),
-                                           startPoint: CGPoint(x: w - inset, y: h / 2),
-                                           endPoint: CGPoint(x: w, y: h / 2)))
-            ctx.fill(Path(CGRect(x: inner.minX, y: 0, width: inner.width, height: inset)),
-                     with: .linearGradient(Gradient(colors: [.clear, .white]),
-                                           startPoint: CGPoint(x: w / 2, y: 0),
-                                           endPoint: CGPoint(x: w / 2, y: inset)))
-            ctx.fill(Path(CGRect(x: inner.minX, y: h - inset, width: inner.width, height: inset)),
-                     with: .linearGradient(Gradient(colors: [.white, .clear]),
-                                           startPoint: CGPoint(x: w / 2, y: h - inset),
-                                           endPoint: CGPoint(x: w / 2, y: h)))
-        }
-    }
-}
-

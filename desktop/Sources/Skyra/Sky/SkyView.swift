@@ -280,9 +280,12 @@ struct SkyScene {
                     g.disc(at(onRing(dots, 1, a, CallMotion.edge)), 1.3, Theme.sky.lerp(Theme.amber, k * w))
                 }
             }
-            // A call flies to its star in the context's constellation: a read
-            // to read. The machine's messages flow between the core and it.
-            let target = l.to.flatMap { name in model.contextFigure?.stars.first { $0.name == name } }.map { s -> Point in
+            // Tool traffic lands on its actor in the compact overview.
+            let target = l.to.flatMap { name -> RootConstellation.Star? in
+                guard let figure = model.contextFigure else { return nil }
+                let actor = figure.toolParents[name] ?? name
+                return figure.stars.first { $0.name == actor }
+            }.map { s -> Point in
                 let (p, _) = model.lens.warp(s.point, depth: 0.9, in: CGSize(width: dots.x * d, height: dots.y * d))
                 return Point(p.x / d, p.y / d)
             }
@@ -370,7 +373,8 @@ struct SkyScene {
                 if s.kind == .root || near || lit > 0 {
                     let named = s.kind == .root ? max(0.35, lit) : near ? 1 : lit
                     let lc = Theme.labelFloor.lerp(labelBase, named).lerp(peak, context ? 0.5 * lit : 0)
-                    g.text(.init(text: s.name, style: .name), at: CGPoint(x: p.x, y: p.y + 12), .top, lc)
+                    let label = figure.toolCounts[s.name].map { "\(s.name) · \($0) tools" } ?? s.name
+                    g.text(.init(text: label, style: .name), at: CGPoint(x: p.x, y: p.y + 12), .top, lc)
                 }
             }
         }

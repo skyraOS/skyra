@@ -79,9 +79,16 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         // Paint before asking for a drawable: waiting for one blocks the main
         // thread, and the frame is ready by the time it comes.
         paint(size: size, frame: frame())
+        let admission = PerformanceTrace.begin("GPU admission wait")
         gate.wait()
-        guard let pass = view.currentRenderPassDescriptor, let commands = queue.makeCommandBuffer() else { gate.signal(); return }
+        PerformanceTrace.end("GPU admission wait", admission)
+        let drawable = PerformanceTrace.begin("Drawable acquisition")
+        let pass = view.currentRenderPassDescriptor
+        PerformanceTrace.end("Drawable acquisition", drawable)
+        guard let pass, let commands = queue.makeCommandBuffer() else { gate.signal(); return }
+        let encoding = PerformanceTrace.begin("Sky encode and upload")
         encode(commands, pass, size: size, scale: scale)
+        PerformanceTrace.end("Sky encode and upload", encoding)
         if let drawable = view.currentDrawable { commands.present(drawable) }
         commands.addCompletedHandler { [gate] _ in gate.signal() }
         commands.commit()
@@ -89,6 +96,8 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
 
     /// Paints one frame of the scene into the draw list.
     func paint(size: CGSize, frame f: Double) {
+        let span = PerformanceTrace.begin("Sky scene generation")
+        defer { PerformanceTrace.end("Sky scene generation", span) }
         paint.reset()
         let words = self.words
         paint.measure = { words.size($0) }

@@ -1,0 +1,64 @@
+{
+  "action": "go.test",
+  "exit_code": 1,
+  "output": "=== RUN   TestNoBridgeGrant\n--- PASS: TestNoBridgeGrant (0.00s)\n=== RUN   TestUnknownOperationCannotDispatch\n--- PASS: TestUnknownOperationCannotDispatch (0.00s)\nPASS\nok  \tskyra/controller/blender\t0.363s\n=== RUN   TestRecordedDeliveryDeduplication\n--- PASS: TestRecordedDeliveryDeduplication (0.00s)\n=== RUN   TestCapabilityReachAndRedaction\n--- PASS: TestCapabilityReachAndRedaction (0.00s)\n=== RUN   TestProtocol\n--- PASS: TestProtocol (0.00s)\n=== RUN   TestValidation\n--- PASS: TestValidation (0.00s)\n=== RUN   TestReadHasPlainSourceAndSeparateMetadata\n--- PASS: TestReadHasPlainSourceAndSeparateMetadata (0.00s)\nPASS\nok  \tskyra/controller/claude/bridge\t0.190s\n=== RUN   TestBridgeArguments\n--- PASS: TestBridgeArguments (0.00s)\n=== RUN   TestPartialToolEnforcement\n--- PASS: TestPartialToolEnforcement (0.00s)\n=== RUN   TestSubscriptionEnvironment\n--- PASS: TestSubscriptionEnvironment (0.00s)\n=== RUN   TestArguments\n--- PASS: TestArguments (0.00s)\n=== RUN   TestRead\n=== RUN   TestRead/success\n--- PASS: TestRead/success (0.00s)\n=== RUN   TestRead/EOF\n--- PASS: TestRead/EOF (0.00s)\n=== RUN   TestRead/malformed\n--- PASS: TestRead/malformed (0.00s)\n=== RUN   TestRead/native\n--- PASS: TestRead/native (0.00s)\n=== RUN   TestRead/failed\n--- PASS: TestRead/failed (0.00s)\n=== RUN   TestRead/no_session\n--- PASS: TestRead/no_session (0.00s)\n=== RUN   TestRead/extra\n--- PASS: TestRead/extra (0.00s)\n--- PASS: TestRead (0.00s)\nPASS\nok  \tskyra/controller/claude/provider\t0.324s\n?   \tskyra/controller/claude/start\t[no test files]\n?   \tskyra/controller/codex/fake\t[no test files]\n=== RUN   TestStartWhenNoIncarnation\n--- PASS: TestStartWhenNoIncarnation (0.00s)\n=== RUN   TestDeliverConfigAfterStart\n--- PASS: TestDeliverConfigAfterStart (0.00s)\n=== RUN   TestReadMoreOnStreamEvents\n--- PASS: TestReadMoreOnStreamEvents (0.00s)\n=== RUN   TestCompleteTurn\n--- PASS: TestCompleteTurn (0.00s)\n=== RUN   TestBridgeCallDispatch\n--- PASS: TestBridgeCallDispatch (0.00s)\n=== RUN   TestBridgeResultDelivery\n--- PASS: TestBridgeResultDelivery (0.00s)\n=== RUN   TestFailedTurn\n--- PASS: TestFailedTurn (0.00s)\n=== RUN   TestPeerEOFBeforeResult\n--- PASS: TestPeerEOFBeforeResult (0.00s)\n=== RUN   TestToolFaultBecomesError\n--- PASS: TestToolFaultBecomesError (0.00s)\n=== RUN   TestOperationLimit\n--- PASS: TestOperationLimit (0.00s)\n=== RUN   TestTurnConfigIncludesSession\n--- PASS: TestTurnConfigIncludesSession (0.00s)\n=== RUN   TestPromptUsesCurrentContinuationPaths\n--- PASS: TestPromptUsesCurrentContinuationPaths (0.00s)\nPASS\nok  \tskyra/controller/claude/resident\t0.168s\n=== RUN   TestInterruptWaitsForExactTerminalTurn\n--- PASS: TestInterruptWaitsForExactTerminalTurn (0.00s)\n=== RUN   TestInterruptFailsWhenHostDies\n--- PASS: TestInterruptFailsWhenHostDies (0.00s)\n=== RUN   TestThreadStartOffersOnlyModelToolsInAFixedOrder\n--- PASS: TestThreadStartOffersOnlyModelToolsInAFixedOrder (0.00s)\n=== RUN   TestRememberAndProceduresAreOffered\n--- PASS: TestRememberAndProceduresAreOffered (0.00s)\nPASS\nok  \tskyra/controller/codex/adapter\t0.266s\n?   \tskyra/controller/core/record\t[no test files]\n=== RUN   TestReadTextBlocksPreserveSource\n--- PASS: TestReadTextBlocksPreserveSource (0.00s)\nPASS\nok  \tskyra/controller/codex/proceduretools\t0.403s\n=== RUN   TestRequestsAreCheckedBeforeTheHolderIsAsked\n--- PASS: TestRequestsAreCheckedBeforeTheHolderIsAsked (0.00s)\n=== RUN   TestAnUnreachableResidentIsGone\n--- PASS: TestAnUnreachableResidentIsGone (0.00s)\nPASS\nok  \tskyra/controller/codex/io\t0.546s\n=== RUN   TestBaseIsTheHeaderLine\n--- PASS: TestBaseIsTheHeaderLine (0.00s)\nPASS\nok  \tskyra/controller/codex/prompt\t0.680s\n?   \tskyra/controller/hosts/actor\t[no test files]\n=== RUN   TestBlenderPreviewReachesProviderAsExactImage\n--- PASS: TestBlenderPreviewReachesProviderAsExactImage (0.00s)\n=== RUN   TestBlenderConflictDetailsReachProvider\n--- PASS: TestBlenderConflictDetailsReachProvider (0.00s)\n=== RUN   TestDesktopRefusalIsUnsuccessfulToolResult\n--- PASS: TestDesktopRefusalIsUnsuccessfulToolResult (0.00s)\n=== RUN   TestDesktopImageIsASeparateProviderContentItem\n--- PASS: TestDesktopImageIsASeparateProviderContentItem (0.00s)\n=== RUN   TestPenpotPreviewPreservesIdentityAndExactImage\n--- PASS: TestPenpotPreviewPreservesIdentityAndExactImage (0.00s)\n=== RUN   TestPenpotErrorDetailsReachTheModel\n--- PASS: TestPenpotErrorDetailsReachTheModel (0.00s)\n=== RUN   TestExistingThreadInspectsBeforeTurnAndRestartsWhenGone\n--- PASS: TestExistingThreadInspectsBeforeTurnAndRestartsWhenGone (0.00s)\n=== RUN   TestOnlyModelFacingToolsAreOfferedToCodex\n--- PASS: TestOnlyModelFacingToolsAreOfferedToCodex (0.00s)\n=== RUN   TestEachToolCallInvokesTheToolItNames\n--- PASS: TestEachToolCallInvokesTheToolItNames (0.00s)\n=== RUN   TestAToolOutsideReachIsAViolation\n--- PASS: TestAToolOutsideReachIsAViolation (0.00s)\n=== RUN   TestANativeAttemptIsReturnedAsAnObservation\n--- PASS: TestANativeAttemptIsReturnedAsAnObservation (0.00s)\n=== RUN   TestAFailedTurnCarriesCodexsReason\n--- PASS: TestAFailedTurnCarriesCodexsReason (0.00s)\n=== RUN   TestRememberAndProceduresAreOffered\n--- PASS: TestRememberAndProceduresAreOffered (0.00s)\n=== RUN   TestThreadPromptIsTheHeaderOnly\n--- PASS: TestThreadPromptIsTheHeaderOnly (0.00s)\n=== RUN   TestQuietWaits\n--- PASS: TestQuietWaits (0.00s)\n=== RUN   TestAReusedServerOnlyStartsAThread\n--- PASS: TestAReusedServerOnlyStartsAThread (0.00s)\n=== RUN   TestContextPrecedesTheMessage\n--- PASS: TestContextPrecedesTheMessage (0.00s)\n=== RUN   TestViewingAnImageIsNotAViolation\n--- PASS: TestViewingAnImageIsNotAViolation (0.00s)\n=== RUN   TestReadingTheWebIsNotAViolation\n=== RUN   TestReadingTheWebIsNotAViolation/{\"type\":\"search\",\"queries\":[\"Skyra\"],\"query\":\"Skyra\"}\n--- PASS: TestReadingTheWebIsNotAViolation/{\"type\":\"search\",\"queries\":[\"Skyra\"],\"query\":\"Skyra\"} (0.00s)\n=== RUN   TestReadingTheWebIsNotAViolation/{\"type\":\"openPage\",\"url\":\"https://example.com\"}\n--- PASS: TestReadingTheWebIsNotAViolation/{\"type\":\"openPage\",\"url\":\"https://example.com\"} (0.00s)\n=== RUN   TestReadingTheWebIsNotAViolation/{\"type\":\"findInPage\",\"url\":\"https://example.com\",\"pattern\":\"Skyra\"}\n--- PASS: TestReadingTheWebIsNotAViolation/{\"type\":\"findInPage\",\"url\":\"https://example.com\",\"pattern\":\"Skyra\"} (0.00s)\n--- PASS: TestReadingTheWebIsNotAViolation (0.00s)\n=== RUN   TestDesignOperationsAreOfferedOnlyInsideDesign\n--- PASS: TestDesignOperationsAreOfferedOnlyInsideDesign (0.00s)\n=== RUN   TestBlenderToolsOnlyOfferedInsideBlenderProcedure\n--- PASS: TestBlenderToolsOnlyOfferedInsideBlenderProcedure (0.00s)\n=== RUN   TestReadResultHasPlainSource\n--- PASS: TestReadResultHasPlainSource (0.00s)\n=== RUN   TestRepositoryToolsReachAndExactArguments\n--- PASS: TestRepositoryToolsReachAndExactArguments (0.00s)\n=== RUN   TestRepositoryFailuresAreUnsuccessfulProviderResults\n--- PASS: TestRepositoryFailuresAreUnsuccessfulProviderResults (0.00s)\nPASS\nok  \tskyra/controller/codex/resident\t0.830s\n?   \tskyra/controller/hosts/journal\t[no test files]\n=== RUN   TestOSReadHelper\n--- PASS: TestOSReadHelper (0.00s)\n=== RUN   TestOSExecHelper\n--- PASS: TestOSExecHelper (0.00s)\n=== RUN   TestRenderedProfileDeniesExecOfAnyOtherProgram\n    horizon_os_test.go:52: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileDeniesExecOfAnyOtherProgram (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant\n=== RUN   TestRenderedProfileEnforcesReadGrant/ungranted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/ungranted (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant/granted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/granted (0.01s)\n=== RUN   TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant (0.01s)\n--- FAIL: TestRenderedProfileEnforcesReadGrant (0.03s)\n=== RUN   TestOSScratchHelper\n--- PASS: TestOSScratchHelper (0.00s)\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch (0.01s)\n=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch (0.01s)\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec (0.02s)\n{\"Time\":\"\n",
+  "truncated": true,
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-736867519.json",
+  "duration_ms": 130238,
+  "failures": [
+    {
+      "test": "TestRenderedProfileDeniesExecOfAnyOtherProgram",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 52,
+      "message": "=== RUN   TestRenderedProfileDeniesExecOfAnyOtherProgram\n    horizon_os_test.go:52: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileDeniesExecOfAnyOtherProgram (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/ungranted",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/ungranted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/ungranted (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/granted",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/granted\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/granted (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 103,
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant\n    horizon_os_test.go:103: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileEnforcesReadGrant/floor_overrides_parent_grant (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileEnforcesReadGrant",
+      "package": "skyra/controller/core/horizon",
+      "message": "=== RUN   TestRenderedProfileEnforcesReadGrant\n--- FAIL: TestRenderedProfileEnforcesReadGrant (0.03s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 164,
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/in_scratch (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch",
+      "package": "skyra/controller/core/horizon",
+      "file": "horizon_os_test.go",
+      "line": 164,
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch\n    horizon_os_test.go:164: sandboxed helper: exit status 71: sandbox-exec: sandbox_apply: Operation not permitted\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec/outside_scratch (0.01s)"
+    },
+    {
+      "test": "TestRenderedProfileScratchIsReadWriteNeverExec",
+      "package": "skyra/controller/core/horizon",
+      "message": "=== RUN   TestRenderedProfileScratchIsReadWriteNeverExec\n--- FAIL: TestRenderedProfileScratchIsReadWriteNeverExec (0.02s)"
+    }
+  ],
+  "hint": "Output reached 64 KiB; narrow package/run and read report_path. Failure details may be incomplete."
+}

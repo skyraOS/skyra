@@ -78,10 +78,11 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
         #expect(figures[0].root.point.x > size.width / 2 && figures[0].root.point.y > RootSky.top)
         #expect(figures[0].root.name == "think" && figures[0].root.kind == .root)
     }
-    // Lines run parent to child: think to codex, then codex to each tool.
+    // The sky shows actors only; the inspector retains the tool graph.
     let f = RootSky.place([think], in: CGSize(width: 1000, height: 700))[0]
     let names = f.edges.map { "\(f.stars[$0.a].name)>\(f.stars[$0.b].name)" }
-    #expect(names == ["think>codex", "codex>echo", "codex>read", "codex>roots", "codex>write"])
+    #expect(names == ["think>codex"])
+    #expect(f.toolCounts["codex"] == 4)
 }
 
 // A root lights under the pointer and fades when it leaves; the selected root
@@ -111,4 +112,42 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
     let c = RootConstellation(d)
     #expect(c.star("blender")?.parent == "codex")
     #expect(c.star("blender.tools") == nil)
+}
+
+@MainActor
+@Test func conversationStarsAreActorScopedAndKeepDraftsSeparate() {
+    let claude = thinkJSON.replacingOccurrences(of: #""title":"think""#, with: #""title":"think-claude""#)
+    let s = Session()
+    s.receive(snapshot(#"[{"conversation":"t1","phase":"pending","entries":[],"procedure":"think"},{"conversation":"c1","phase":"ready","entries":[],"procedure":"think-claude"}]"#, roots: "[\(thinkJSON),\(claude)]"))
+    s.selectConversation("t1")
+    s.draft = "codex draft"
+    s.attach([Attachment(name: "image", data: Data([1]))])
+    s.toggleModel()
+    #expect(s.selected == nil && s.model == "claude")
+    #expect(s.rootConversations.map(\.conversation) == ["c1"])
+    #expect(s.draft.isEmpty && s.attachments.isEmpty)
+    s.selectConversation("c1")
+    s.draft = "claude draft"
+    s.toggleModel()
+    #expect(s.selected == "t1" && s.draft == "codex draft" && s.attachments.count == 1)
+    #expect(s.current?.phase == .pending)
+    #expect(s.conversationStars.map(\.conversation) == ["t1"])
+    s.putAwayConversation("t1")
+    #expect(s.selected == nil && s.conversationStars.isEmpty)
+    #expect(s.conversations.count == 2)
+    s.selectConversation("c1")
+    #expect(s.model == "claude" && s.draft == "claude draft")
+}
+
+@Test func largeToolInventoriesStayCompactInTheSky() throws {
+    let tools = (0..<100).map { "tool\($0)" }
+    let node = Destination.Node(name: "scope", calls: "system", after: [],
+        narrows: .init(actor: "codex", reach: tools))
+    let destination = Destination(actor: "interpreter", title: "think", outline: .init(nodes: [
+        node, .init(name: "run", calls: "codex", after: ["scope"], narrows: nil)
+    ]))
+    let figure = RootSky.place([destination], in: CGSize(width: 1280, height: 758))[0]
+    #expect(figure.stars.map(\.name) == ["think", "codex"])
+    #expect(figure.toolCounts["codex"] == 100)
+    #expect(RootConstellation(destination).stars.filter { $0.kind == .tool }.count == 100)
 }

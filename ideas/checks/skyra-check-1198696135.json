@@ -1,0 +1,89 @@
+{
+  "action": "go.test",
+  "exit_code": 1,
+  "output": "=== RUN   TestRecoveryReconcilesAcceptedProgressWithoutRepeatingWork\n    recover_test.go:12: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecoveryReconcilesAcceptedProgressWithoutRepeatingWork (0.05s)\n=== RUN   TestRecoveryExcludesProposedAndForeignWorkAndEnforcesContext\n    recover_test.go:81: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecoveryExcludesProposedAndForeignWorkAndEnforcesContext (0.03s)\n=== RUN   TestReplayReproducesLineage\n--- PASS: TestReplayReproducesLineage (0.09s)\n=== RUN   TestReplayCatchesForgedRecord\n--- PASS: TestReplayCatchesForgedRecord (0.10s)\n=== RUN   TestReplayCatchesTamperedInput\n--- PASS: TestReplayCatchesTamperedInput (0.08s)\n=== RUN   TestReplayDerivesSupervisorFaults\n--- PASS: TestReplayDerivesSupervisorFaults (0.11s)\n=== RUN   TestReplayThroughResolves\n--- PASS: TestReplayThroughResolves (0.21s)\n=== RUN   TestReplayCatchesForgedResolve\n--- PASS: TestReplayCatchesForgedResolve (0.20s)\n=== RUN   TestLineageReplaysAStoreInMemory\n--- PASS: TestLineageReplaysAStoreInMemory (0.06s)\n=== RUN   TestRecordedTreeInitializationAndValidation\n    tree_test.go:137: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeInitializationAndValidation (0.03s)\n=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput\n=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/{\"to\":\"forbidden\",\"payload\":{\"text\":\"attempt\"}}\n    tree_test.go:162: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/{\"to\":\"forbidden\",\"payload\":{\"text\":\"attempt\"}} (0.03s)\n=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/not_JSON\n    tree_test.go:162: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/not_JSON (0.03s)\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput (0.07s)\n=== RUN   TestRecordedTreePartialFanOutAndWinningJoin\n    tree_test.go:178: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreePartialFanOutAndWinningJoin (0.03s)\n=== RUN   TestRecordedTreeRefusesOrphanAndForeignRoot\n    tree_test.go:211: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeRefusesOrphanAndForeignRoot (0.04s)\n=== RUN   TestRecordedTreeNarrowedChildOpacity\n    tree_test.go:223: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeNarrowedChildOpacity (0.05s)\n=== RUN   TestRecordedTreeCrossRoomReadRequiresScopedContext\n    tree_test.go:273: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCrossRoomReadRequiresScopedContext (0.04s)\n=== RUN   TestAcceptedCheckpointCrashGapUsesRecordedEvidence\n    tree_test.go:287: open /dev/fd/4: operation not permitted\n--- FAIL: TestAcceptedCheckpointCrashGapUsesRecordedEvidence (0.03s)\n=== RUN   TestReplayRejectsUnfinishedInvoke\n--- PASS: TestReplayRejectsUnfinishedInvoke (0.18s)\n=== RUN   TestReplayRejectsDuplicateDischarges\n--- PASS: TestReplayRejectsDuplicateDischarges (0.17s)\n=== RUN   TestReplayChecksCompleteRoundInEmissionOrder\n--- PASS: TestReplayChecksCompleteRoundInEmissionOrder (0.30s)\nFAIL\nFAIL\tskyra/controller/runtime/replay\t2.071s\n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-1198696135.json",
+  "duration_ms": 5194,
+  "failures": [
+    {
+      "test": "TestRecoveryReconcilesAcceptedProgressWithoutRepeatingWork",
+      "package": "skyra/controller/runtime/replay",
+      "file": "recover_test.go",
+      "line": 12,
+      "message": "=== RUN   TestRecoveryReconcilesAcceptedProgressWithoutRepeatingWork\n    recover_test.go:12: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecoveryReconcilesAcceptedProgressWithoutRepeatingWork (0.05s)"
+    },
+    {
+      "test": "TestRecoveryExcludesProposedAndForeignWorkAndEnforcesContext",
+      "package": "skyra/controller/runtime/replay",
+      "file": "recover_test.go",
+      "line": 81,
+      "message": "=== RUN   TestRecoveryExcludesProposedAndForeignWorkAndEnforcesContext\n    recover_test.go:81: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecoveryExcludesProposedAndForeignWorkAndEnforcesContext (0.03s)"
+    },
+    {
+      "test": "TestRecordedTreeInitializationAndValidation",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 137,
+      "message": "=== RUN   TestRecordedTreeInitializationAndValidation\n    tree_test.go:137: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeInitializationAndValidation (0.03s)"
+    },
+    {
+      "test": "TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/{\"to\":\"forbidden\",\"payload\":{\"text\":\"attempt\"}}",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 162,
+      "message": "=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/{\"to\":\"forbidden\",\"payload\":{\"text\":\"attempt\"}}\n    tree_test.go:162: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/{\"to\":\"forbidden\",\"payload\":{\"text\":\"attempt\"}} (0.03s)"
+    },
+    {
+      "test": "TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/not_JSON",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 162,
+      "message": "=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/not_JSON\n    tree_test.go:162: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput/not_JSON (0.03s)"
+    },
+    {
+      "test": "TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput",
+      "package": "skyra/controller/runtime/replay",
+      "message": "=== RUN   TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput\n--- FAIL: TestRecordedTreeCarriesVisibleRefusalEvidenceIncludingMalformedInput (0.07s)"
+    },
+    {
+      "test": "TestRecordedTreePartialFanOutAndWinningJoin",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 178,
+      "message": "=== RUN   TestRecordedTreePartialFanOutAndWinningJoin\n    tree_test.go:178: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreePartialFanOutAndWinningJoin (0.03s)"
+    },
+    {
+      "test": "TestRecordedTreeRefusesOrphanAndForeignRoot",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 211,
+      "message": "=== RUN   TestRecordedTreeRefusesOrphanAndForeignRoot\n    tree_test.go:211: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeRefusesOrphanAndForeignRoot (0.04s)"
+    },
+    {
+      "test": "TestRecordedTreeNarrowedChildOpacity",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 223,
+      "message": "=== RUN   TestRecordedTreeNarrowedChildOpacity\n    tree_test.go:223: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeNarrowedChildOpacity (0.05s)"
+    },
+    {
+      "test": "TestRecordedTreeCrossRoomReadRequiresScopedContext",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 273,
+      "message": "=== RUN   TestRecordedTreeCrossRoomReadRequiresScopedContext\n    tree_test.go:273: open /dev/fd/4: operation not permitted\n--- FAIL: TestRecordedTreeCrossRoomReadRequiresScopedContext (0.04s)"
+    },
+    {
+      "test": "TestAcceptedCheckpointCrashGapUsesRecordedEvidence",
+      "package": "skyra/controller/runtime/replay",
+      "file": "tree_test.go",
+      "line": 287,
+      "message": "=== RUN   TestAcceptedCheckpointCrashGapUsesRecordedEvidence\n    tree_test.go:287: open /dev/fd/4: operation not permitted\n--- FAIL: TestAcceptedCheckpointCrashGapUsesRecordedEvidence (0.03s)"
+    },
+    {
+      "package": "skyra/controller/runtime/replay",
+      "message": "FAIL\nFAIL\tskyra/controller/runtime/replay\t2.071s"
+    }
+  ]
+}

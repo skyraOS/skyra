@@ -4,7 +4,7 @@ import Foundation
 // defines it. The app renders what the webhost sends and keeps no parallel
 // model: a conversation's truth is its lineage in the tree.
 
-struct Entry: Decodable, Equatable {
+struct Entry: Decodable, Equatable, Sendable {
     let role: String // "user", "agent" or "call"; anything else renders as the agent's
     let text: String
     let ts: Int
@@ -15,7 +15,7 @@ struct Entry: Decodable, Equatable {
 
 /// A tool call in the agent's turn, as the webhost reads it from the lineage:
 /// an invoke and what discharged it, or a refused emission that named a tool.
-struct Call: Decodable, Equatable {
+struct Call: Decodable, Equatable, Sendable {
     let to: String
     let arg: String
     let state: String // running | returned | fault
@@ -30,7 +30,7 @@ struct Call: Decodable, Equatable {
     var refused: Bool { state == "fault" && (fault == "horizon" || fault == "contract") }
 }
 
-struct Conversation: Decodable, Equatable, Identifiable {
+struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     enum Phase: String, Decodable { case ready, pending, failed, closed }
     let conversation: String
     let phase: Phase
@@ -44,9 +44,9 @@ struct Conversation: Decodable, Equatable, Identifiable {
 /// actor it runs on, and its outline, derived by the webhost from the
 /// procedure's definition. Selecting one grants nothing; everything beneath
 /// it in the outline is inspectable only.
-struct Destination: Decodable, Equatable, Identifiable {
-    struct Node: Decodable, Equatable {
-        struct Narrowing: Decodable, Equatable {
+struct Destination: Decodable, Equatable, Sendable, Identifiable {
+    struct Node: Decodable, Equatable, Sendable {
+        struct Narrowing: Decodable, Equatable, Sendable {
             let actor: String
             let reach: [String]
         }
@@ -55,7 +55,7 @@ struct Destination: Decodable, Equatable, Identifiable {
         let after: [String]
         let narrows: Narrowing?
     }
-    struct Outline: Decodable, Equatable { let nodes: [Node] }
+    struct Outline: Decodable, Equatable, Sendable { let nodes: [Node] }
 
     let actor: String
     let title: String
@@ -66,8 +66,8 @@ struct Destination: Decodable, Equatable, Identifiable {
 /// One Horizon of a conversation, as the webhost reads it from the lineage:
 /// what it reaches and how many OS grants it carries. Frames released under
 /// the same reach and authority are one Horizon.
-struct HorizonView: Decodable, Equatable {
-    struct Member: Decodable, Equatable {
+struct HorizonView: Decodable, Equatable, Sendable {
+    struct Member: Decodable, Equatable, Sendable {
         let name: String
         let id: String // the surface's identity: the same surface in any Horizon
     }
@@ -79,14 +79,15 @@ struct HorizonView: Decodable, Equatable {
     let grants: Int
 }
 
-enum ServerMessage: Decodable, Equatable {
+enum ServerMessage: Decodable, Equatable, Sendable {
     case snapshot(incarnation: String, revision: Int, conversations: [Conversation], destinations: [Destination])
+    case delta(incarnation: String, revision: Int, baseRevision: Int, conversations: [Conversation], order: [String], destinations: [Destination])
     case accepted(requestId: String)
     case rejected(requestId: String, code: String, message: String)
     case unknown(String)
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, revision, conversations, destinations, requestId, code, message
+        case type, uiIncarnation, revision, baseRevision, order, conversations, destinations, requestId, code, message
     }
 
     init(from decoder: Decoder) throws {
@@ -98,6 +99,13 @@ enum ServerMessage: Decodable, Equatable {
                              revision: try c.decode(Int.self, forKey: .revision),
                              conversations: try c.decode([Conversation].self, forKey: .conversations),
                              destinations: try c.decodeIfPresent([Destination].self, forKey: .destinations) ?? [])
+        case "snapshot-delta":
+            self = .delta(incarnation: try c.decode(String.self, forKey: .uiIncarnation),
+                          revision: try c.decode(Int.self, forKey: .revision),
+                          baseRevision: try c.decode(Int.self, forKey: .baseRevision),
+                          conversations: try c.decode([Conversation].self, forKey: .conversations),
+                          order: try c.decode([String].self, forKey: .order),
+                          destinations: try c.decodeIfPresent([Destination].self, forKey: .destinations) ?? [])
         case "accepted":
             self = .accepted(requestId: try c.decode(String.self, forKey: .requestId))
         case "rejected":
@@ -107,6 +115,36 @@ enum ServerMessage: Decodable, Equatable {
         default:
             self = .unknown(type)
         }
+    }
+}
+
+/// Decode the envelope and its request ledger in one decoder traversal.
+struct DecodedServerMessage: Decodable, Sendable {
+    struct Request: Decodable, Sendable {
+        let requestId: String
+        let code: String?
+    }
+    let message: ServerMessage
+    let requests: [Request]?
+    private enum Keys: String, CodingKey { case requests }
+
+    init(from decoder: Decoder) throws {
+        message = try ServerMessage(from: decoder)
+        requests = try decoder.container(keyedBy: Keys.self).decodeIfPresent([Request].self, forKey: .requests)
+    }
+
+    static func decode(_ raw: Data) throws -> Self {
+        let span = PerformanceTrace.begin("Snapshot decode")
+        defer { PerformanceTrace.end("Snapshot decode", span) }
+        let decoded = try JSONDecoder().decode(Self.self, from: raw)
+        let entries: Int
+        switch decoded.message {
+        case let .snapshot(_, _, conversations, _), let .delta(_, _, _, conversations, _, _):
+            entries = conversations.reduce(0) { $0 + $1.entries.count }
+        default: entries = 0
+        }
+        PerformanceTrace.snapshot(bytes: raw.count, entries: entries)
+        return decoded
     }
 }
 

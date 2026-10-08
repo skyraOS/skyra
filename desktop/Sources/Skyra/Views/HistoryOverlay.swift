@@ -27,7 +27,7 @@ struct HistoryOverlay: View {
                 TextField("Search local conversations", text: $query).textFieldStyle(.roundedBorder).focused($searchFocused)
                 Picker("Procedure", selection: $procedure) {
                     Text("All procedures").tag("")
-                    ForEach(Array(Set(session.conversations.map { $0.procedure ?? "Legacy" })).sorted(), id: \.self) { Text($0).tag($0) }
+                    ForEach(Array(Set(session.conversations.map { $0.procedure ?? "Legacy" } + [session.activeProcedure ?? "Legacy"])).sorted(), id: \.self) { Text($0).tag($0) }
                 }.frame(width: 180)
             }
             HStack {
@@ -42,9 +42,8 @@ struct HistoryOverlay: View {
                     ForEach(results) { c in
                         HStack(spacing: 8) {
                             Button {
-                                if let p = c.procedure { session.selectRoot(p) }
-                                session.selected = c.conversation
-                                dismiss()
+                                session.selectConversation(c.conversation)
+                                if session.selected == c.conversation { dismiss() }
                             } label: {
                                 HStack {
                                     Text(Sidebar.title(c)).lineLimit(1)
@@ -74,6 +73,10 @@ struct HistoryOverlay: View {
                 RadialGradient(colors: [Theme.accent.color(0.07), .clear], center: .topTrailing, startRadius: 0, endRadius: 600)
             }.allowsHitTesting(false)
         }
-        .onAppear { order = session.conversations.map(\.conversation); searchFocused = true }
+        .onAppear {
+            procedure = session.activeProcedure ?? ""
+            order = session.conversations.map(\.conversation)
+            searchFocused = true
+        }
     }
 }

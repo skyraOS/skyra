@@ -80,9 +80,11 @@ enum RootSky {
         let stars: [RootConstellation.Star] // in the canvas's points
         let edges: [(a: Int, b: Int)] // indices into stars, parent to child, in the order they are traced
         let bounds: CGRect // the figure, padded: the pointer over it lights it
+        let toolCounts: [String: Int]
+        let toolParents: [String: String]
 
         static func == (l: Figure, r: Figure) -> Bool {
-            l.title == r.title && l.stars == r.stars && l.bounds == r.bounds
+            l.title == r.title && l.stars == r.stars && l.bounds == r.bounds && l.toolCounts == r.toolCounts && l.toolParents == r.toolParents
                 && l.edges.map(\.a) == r.edges.map(\.a) && l.edges.map(\.b) == r.edges.map(\.b)
         }
 
@@ -94,19 +96,31 @@ enum RootSky {
     static let top = 64.0 // below the header, which shares the title bar's row
 
     static func place(_ roots: [Destination], in size: CGSize) -> [Figure] {
-        let w = RootConstellation.size.width * scale, h = RootConstellation.size.height * scale
-        return roots.enumerated().map { i, d in
+        let w = RootConstellation.size.width * scale
+        var y = top
+        return roots.map { d in
             let c = RootConstellation(d)
-            let origin = CGPoint(x: max(0, size.width - margin - w), y: top + Double(i) * (h + 24))
-            let stars = c.stars.map {
-                RootConstellation.Star(name: $0.name, kind: $0.kind,
-                                       point: CGPoint(x: origin.x + $0.point.x * scale, y: origin.y + $0.point.y * scale),
-                                       parent: $0.parent, via: $0.via)
+            let actors = c.stars.filter { $0.kind == .actor }
+            let h = max(92, Double(actors.count) * 38 + 40)
+            let origin = CGPoint(x: max(0, size.width - margin - w), y: y)
+            y += h + 44
+            // The sky is an overview. The inspector retains the complete tool inventory.
+            var stars = [RootConstellation.Star(name: d.title, kind: .root,
+                point: CGPoint(x: origin.x + 26, y: origin.y + h / 2), parent: nil, via: nil)]
+            for (i, actor) in actors.enumerated() {
+                stars.append(.init(name: actor.name, kind: .actor,
+                    point: CGPoint(x: origin.x + 118, y: origin.y + 20 + Double(i) * 38),
+                    parent: d.title, via: actor.via))
             }
-            let index = Dictionary(uniqueKeysWithValues: stars.enumerated().map { ($1.name, $0) })
-            let edges = stars.enumerated().compactMap { i, s in s.parent.flatMap { index[$0] }.map { (a: $0, b: i) } }
+            let counts = Dictionary(uniqueKeysWithValues: actors.map { actor in
+                (actor.name, c.stars.filter { $0.kind == .tool && $0.parent == actor.name }.count)
+            })
+            var parents: [String: String] = [:]
+            for tool in c.stars where tool.kind == .tool { parents[tool.name] = tool.parent }
+            let edges = actors.indices.map { (a: 0, b: $0 + 1) }
             return Figure(title: d.title, stars: stars, edges: edges,
-                          bounds: CGRect(x: origin.x, y: origin.y, width: w, height: h).insetBy(dx: -12, dy: -12))
+                bounds: CGRect(x: origin.x, y: origin.y, width: w, height: h).insetBy(dx: -12, dy: -12),
+                toolCounts: counts, toolParents: parents)
         }
     }
 }
