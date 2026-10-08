@@ -2,6 +2,7 @@ package machine
 
 import (
 	"encoding/json"
+	"slices"
 
 	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
@@ -99,15 +100,20 @@ func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
 // against (when it has more than one), the tools it may invoke, and every step
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Workspace string                        `json:"workspace,omitempty"`
-	Scratch   string                        `json:"scratch,omitempty"`
-	Frame     string                        `json:"frame"`
-	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
-	Input     json.RawMessage               `json:"input"`
-	Contract  *contract.Schema              `json:"contract,omitempty"`
-	Tools     map[string]*contract.Schema   `json:"tools"`
-	Contracts map[string][]*contract.Schema `json:"contracts,omitempty"`
-	Steps     []StepView                    `json:"steps"`
+	Actor     string                          `json:"actor,omitempty"`
+	Agent     *horizon.AgentContext           `json:"agent,omitempty"`
+	Agents    map[string]*horizon.AgentConfig `json:"agents,omitempty"`
+	WorkTools *[]string                       `json:"work_tools,omitempty"`
+	Delegated bool                            `json:"delegated,omitempty"`
+	Workspace string                          `json:"workspace,omitempty"`
+	Scratch   string                          `json:"scratch,omitempty"`
+	Frame     string                          `json:"frame"`
+	Caller    string                          `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
+	Input     json.RawMessage                 `json:"input"`
+	Contract  *contract.Schema                `json:"contract,omitempty"`
+	Tools     map[string]*contract.Schema     `json:"tools"`
+	Contracts map[string][]*contract.Schema   `json:"contracts,omitempty"`
+	Steps     []StepView                      `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -137,7 +143,7 @@ func caller(h horizon.Horizon) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: agentName(waiter), Agent: waiter.Agent, Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, e.Frame.Payload)
 	}
@@ -149,4 +155,42 @@ func continuation(e Settled, waiter horizon.Horizon) []byte {
 	}
 	b, _ := json.Marshal(c)
 	return b
+}
+
+func agentName(h horizon.Horizon) string {
+	if h.Surface != nil && h.Surface.Agent != nil {
+		return h.Name
+	}
+	return ""
+}
+
+func agents(h horizon.Horizon) map[string]*horizon.AgentConfig {
+	out := map[string]*horizon.AgentConfig{}
+	for name, s := range h.Reach {
+		if s.Agent != nil {
+			available := true
+			for _, op := range s.Agent.Operations {
+				if _, ok := h.Reach[op]; !ok {
+					available = false
+					break
+				}
+			}
+			if available {
+				out[name] = s.Agent
+			}
+		}
+	}
+	return out
+}
+
+func workToolNames(h horizon.Horizon) *[]string {
+	if h.WorkTools == nil {
+		return nil
+	}
+	names := []string{}
+	for name := range *h.WorkTools {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return &names
 }

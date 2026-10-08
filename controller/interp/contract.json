@@ -2,21 +2,69 @@
   "input": {
     "title": "remember",
     "type": "object",
-    "required": ["remember"],
+    "required": [
+      "remember"
+    ],
     "fields": {
       "remember": {
         "type": "object",
-        "required": ["observation", "contract"],
+        "required": [
+          "observation",
+          "contract"
+        ],
         "fields": {
-          "observation": {"type": "string"},
+          "observation": {
+            "type": "string"
+          },
           "contract": {
             "type": "object",
-            "required": ["target", "schema"],
-            "fields": {"target": {"type": "string"}, "schema": {"type": "any"}}
+            "required": [
+              "target",
+              "schema"
+            ],
+            "fields": {
+              "target": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "any"
+              }
+            }
           }
         }
       }
     }
   },
-  "continuation": true
+  "continuation": true,
+  "contracts": [
+    {
+      "title": "delegate",
+      "type": "object",
+      "required": [
+        "delegate"
+      ],
+      "fields": {
+        "delegate": {
+          "type": "object",
+          "required": [
+            "goal"
+          ],
+          "fields": {
+            "goal": {
+              "type": "string"
+            },
+            "actor": {
+              "type": "string"
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

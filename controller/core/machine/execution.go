@@ -43,6 +43,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor, socket string) Run {
 		// A connection surface reaches its edge's resident by one socket, and
 		// is granted exactly that path: nothing else of the holder's directory.
 		env = append(env, "SKYRA_RESIDENT="+socket)
+		if h.Resume != nil {
+			env = append(env, "SKYRA_OWNER_FRAME="+h.Resume.Frame)
+		}
 		granted := h
 		granted.Authority.Connect = append(slices.Clone(h.Authority.Connect), socket)
 		return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(granted, floor), Env: env, Resident: socket}
@@ -64,5 +67,11 @@ func edgeSocket(h horizon.Horizon, floor, dir string) (string, error) {
 		return "", errors.New("no directory for edge sockets")
 	}
 	adapter, caller := h.Resume.Name, caller(*h.Resume)
-	return dir + "/" + record.Sum([]byte(floor + "\x00" + caller + "\x00" + adapter))[:24] + ".sock", nil
+	key := floor + "\x00" + caller + "\x00" + adapter
+	// A delegation owns a fresh provider edge: reusing its parent's server
+	// would also reuse the parent's resident sandbox and ambient state.
+	if h.Delegated {
+		key += "\x00" + h.Origin
+	}
+	return dir + "/" + record.Sum([]byte(key))[:24] + ".sock", nil
 }

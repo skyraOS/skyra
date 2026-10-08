@@ -38,12 +38,14 @@ var declared []byte
 
 // envelope is what the kernel hands a continuation on stdin.
 type envelope struct {
-	Frame     string                    `json:"frame"`
-	Input     json.RawMessage           `json:"input"`
-	Contract  *proc.Schema              `json:"contract"`
-	Tools     map[string]*proc.Schema   `json:"tools"`
-	Contracts map[string][]*proc.Schema `json:"contracts"`
-	Steps     []proc.Step               `json:"steps"`
+	Agent     *struct{ Actor, Model string } `json:"agent"`
+	Agents    map[string]json.RawMessage     `json:"agents"`
+	Frame     string                         `json:"frame"`
+	Input     json.RawMessage                `json:"input"`
+	Contract  *proc.Schema                   `json:"contract"`
+	Tools     map[string]*proc.Schema        `json:"tools"`
+	Contracts map[string][]*proc.Schema      `json:"contracts"`
+	Steps     []proc.Step                    `json:"steps"`
 }
 
 func main() {
@@ -85,6 +87,9 @@ func run() ([]byte, error) {
 	c := e.Contract
 	if c == nil || proc.Same(c, rememberContract()) {
 		return runRemember(store, e)
+	}
+	if proc.Same(c, delegateContract()) {
+		return runDelegate(e)
 	}
 	return runProcedure(store, e, c)
 }

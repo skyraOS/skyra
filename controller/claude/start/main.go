@@ -27,6 +27,7 @@ import (
 )
 
 type turnConfig struct {
+	Model        string        `json:"model"`
 	Prompt       string        `json:"prompt"`
 	Session      string        `json:"session"`
 	Frame        string        `json:"frame"`
@@ -102,6 +103,14 @@ func main() {
 		toolNames[i] = t.Name
 	}
 	args, err := provider.BridgeArguments(cfg.Session, cfg.Prompt, cfg.SystemPrompt, endpoint, token, toolNames)
+	if cfg.Model != "" {
+		for i := range args {
+			if args[i] == "--model" {
+				args[i+1] = cfg.Model
+				break
+			}
+		}
+	}
 	if err != nil {
 		fatal("arguments: " + err.Error())
 	}

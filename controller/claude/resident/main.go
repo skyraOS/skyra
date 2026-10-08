@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"skyra/controller/claude/bridge"
+	"skyra/controller/claude/provider"
 	"skyra/controller/codex/proceduretools"
 	"skyra/controller/codex/prompt"
 )
@@ -27,9 +28,15 @@ import (
 type schema = proceduretools.Schema
 
 type continuation struct {
-	Workspace string `json:"workspace"`
-	Scratch   string `json:"scratch"`
-	Frame     string `json:"frame"`
+	Agents    map[string]json.RawMessage     `json:"agents"`
+	Actor     string                         `json:"actor"`
+	Agent     *struct{ Actor, Model string } `json:"agent"`
+	WorkTools *[]string                      `json:"work_tools"`
+	Delegated bool                           `json:"delegated"`
+	Contracts map[string][]*schema           `json:"contracts"`
+	Workspace string                         `json:"workspace"`
+	Scratch   string                         `json:"scratch"`
+	Frame     string                         `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Session string
 		Context                             json.RawMessage
@@ -39,11 +46,12 @@ type continuation struct {
 }
 
 type step struct {
-	To      string          `json:"to"`
-	Payload json.RawMessage `json:"payload"`
-	State   string          `json:"state"`
-	Value   json.RawMessage `json:"value"`
-	Fault   *struct {
+	Observation string          `json:"observation"`
+	To          string          `json:"to"`
+	Payload     json.RawMessage `json:"payload"`
+	State       string          `json:"state"`
+	Value       json.RawMessage `json:"value"`
+	Fault       *struct {
 		Kind, Cause string
 	} `json:"fault"`
 }
@@ -63,39 +71,23 @@ type bridgeCall struct {
 }
 
 type derived struct {
-	Incarnation string
-	ConfigSent  bool
-	Session     string
-	FinalText   string
-	Done        bool
-	Failed      string
-	Partial     string
-	Calls       []bridgeCall
-	Results     []step
-	Answered    map[string]bool
-	ActivityAt  int64
+	PublishedModel bool
+	Incarnation    string
+	ConfigSent     bool
+	Session        string
+	FinalText      string
+	Done           bool
+	Failed         string
+	Partial        string
+	Calls          []bridgeCall
+	Results        []step
+	Answered       map[string]bool
+	ActivityAt     int64
 }
 
 // modelTools lists the tools Claude is offered. A tool appears only when it
 // is also present in the continuation's reach (c.Tools).
-var modelTools = map[string]string{
-
-	"repo.check": proceduretools.DevelopmentDescriptions["repo.check"],
-
-	"repo.write": proceduretools.DevelopmentDescriptions["repo.write"],
-
-	"execve": proceduretools.DevelopmentDescriptions["execve"],
-
-	"echo": proceduretools.DevelopmentDescriptions["echo"],
-
-	"read": proceduretools.DevelopmentDescriptions["read"],
-
-	"find": proceduretools.DevelopmentDescriptions["find"],
-
-	"roots": proceduretools.DevelopmentDescriptions["roots"],
-
-	"write": proceduretools.DevelopmentDescriptions["write"],
-}
+var modelTools = proceduretools.ModelTools
 
 func main() {
 	var c continuation
@@ -154,7 +146,7 @@ func decide(c continuation) (string, error) {
 	if c.Frame == "" {
 		return "", errors.New("no frame")
 	}
-	if c.Input.Session == "" {
+	if c.Input.Session == "" && !c.Delegated {
 		c.Input.Session = loadSession()
 	}
 	if len(c.Steps) > 2000 {
@@ -164,6 +156,17 @@ func decide(c continuation) (string, error) {
 	d := derived{Answered: map[string]bool{}}
 
 	for _, s := range c.Steps {
+		if s.To == "system" {
+			var q map[string]json.RawMessage
+			_ = json.Unmarshal(s.Payload, &q)
+			if _, ok := q["agent-context"]; ok {
+				if s.State != "return" {
+					return "", errors.New("failed to record agent model")
+				}
+				d.PublishedModel = true
+				continue
+			}
+		}
 		if !strings.HasPrefix(s.To, "claude.") {
 			d.Results = append(d.Results, s)
 			continue
@@ -239,7 +242,9 @@ func decide(c continuation) (string, error) {
 		return "", errors.New(d.Failed)
 	}
 	if d.Done {
-		saveSession(d.Session)
+		if !c.Delegated {
+			saveSession(d.Session)
+		}
 		return emit(c.Frame, map[string]any{
 			"text":        d.FinalText,
 			"session":     d.Session,
@@ -247,6 +252,9 @@ func decide(c continuation) (string, error) {
 		}), nil
 	}
 
+	if c.Actor != "" && !d.PublishedModel {
+		return emit("system", map[string]any{"agent-context": map[string]string{"model": resolvedModel(c)}}), nil
+	}
 	if d.Incarnation == "" {
 		return emit("claude.start", map[string]any{}), nil
 	}
@@ -267,12 +275,23 @@ func decide(c continuation) (string, error) {
 			if len(args) == 0 {
 				args = json.RawMessage(`{}`)
 			}
-			return emit(call.Name, json.RawMessage(args)), nil
+			t, ok := lookup(c, call.Name)
+			if !ok {
+				return "", fmt.Errorf("Claude requested unavailable tool %q", call.Name)
+			}
+			calls := make([]proceduretools.Call, len(d.Results))
+			for i, s := range d.Results {
+				calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
+			}
+			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts)), nil
 		}
 		result := d.Results[i]
 		var br map[string]any
-		if result.Fault != nil || result.State != "return" {
+		if result.Fault != nil || result.State != "return" || proceduretools.Failure(result.Value) != "" {
 			cause := "tool delivery failed"
+			if failure := proceduretools.Failure(result.Value); failure != "" {
+				cause = failure
+			}
 			if result.Fault != nil {
 				cause = result.Fault.Cause
 			}
@@ -360,27 +379,53 @@ func toolText(s step) json.RawMessage {
 }
 
 // turnConfig builds the configuration the wrapper reads from stdin.
-func turnConfig(c continuation) map[string]any {
-	var tools []bridge.Tool
+// tools shares procedure discovery and contract dispatch with Codex.
+func tools(c continuation) []proceduretools.Tool {
+	var ts []proceduretools.Tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[name] == nil {
-			continue
+		if c.Tools[name] != nil && (name != "design.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "design:")) && (name != "blender.tools" || c.Delegated || strings.HasPrefix(c.Input.Header, "blender:")) {
+			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Tools[name]})
 		}
-		schema := proceduretools.JSONSchema(c.Tools[name])
-		b, _ := json.Marshal(schema)
-		tools = append(tools, bridge.Tool{
-			Name:        name,
-			Description: modelTools[name],
-			InputSchema: b,
-		})
+	}
+	reserved := make([]string, len(ts))
+	for i, t := range ts {
+		reserved[i] = t.Name
+	}
+	ts = append(ts, proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember one of your tool calls by its index, starting at 0.")...)
+	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Allows(c.WorkTools, t.Name) })
+	for i := range ts {
+		if ts[i].Name == "delegate" && len(c.Agents) > 0 {
+			ts[i].Description += " Available actors: " + strings.Join(slices.Sorted(maps.Keys(c.Agents)), ", ") + "."
+		}
+	}
+	return ts
+}
+func lookup(c continuation, name string) (proceduretools.Tool, bool) {
+	for _, t := range tools(c) {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return proceduretools.Tool{}, false
+}
+func resolvedModel(c continuation) string {
+	if c.Agent != nil && c.Agent.Actor == c.Actor && c.Agent.Model != "" {
+		return c.Agent.Model
+	}
+	return provider.DefaultModel
+}
+
+func turnConfig(c continuation) map[string]any {
+	ts := []bridge.Tool{}
+	for _, t := range tools(c) {
+		b, _ := json.Marshal(proceduretools.JSONSchema(t.Schema))
+		ts = append(ts, bridge.Tool{Name: t.Name, Description: t.Description, InputSchema: b})
 	}
 	cfg := map[string]any{
-		"prompt":        c.Input.Text,
-		"frame":         c.Frame,
-		"tools":         tools,
-		"system_prompt": prompt.Room(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil),
+		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
+		"system_prompt": prompt.Room(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write")),
 	}
-	if c.Input.Session != "" {
+	if !c.Delegated && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session
 	}
 	return cfg

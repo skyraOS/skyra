@@ -96,10 +96,10 @@ func main() {
 		// Started only by a resident's recorded start, holding the resident's
 		// stream at fd 3: it serves the edge's socket (proposal 38).
 		trace.Who = fmt.Sprintf("hold pid %d", os.Getpid())
-		if len(os.Args) != 4 {
-			err = fmt.Errorf("usage: skyra hold SOCKET INCARNATION")
+		if len(os.Args) != 4 && len(os.Args) != 6 {
+			err = fmt.Errorf("usage: skyra hold SOCKET INCARNATION [ROOT FRAME]")
 		} else {
-			err = holdResident(os.Args[2], os.Args[3])
+			err = holdResident(os.Args[2], os.Args[3], os.Args[4:]...)
 		}
 	case "instance":
 		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())
@@ -189,7 +189,7 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 // The idle backoff starts at 30 s and stops the resident once its interval
 // would pass 16 min with no request: about half an hour of idleness, the old
 // rule. SKYRA_HOLD_START and SKYRA_HOLD_MAX (Go durations) override them.
-func holdResident(socket, incarnation string) error {
+func holdResident(socket, incarnation string, owner ...string) error {
 	f := os.NewFile(3, "resident-stream")
 	c, err := net.FileConn(f)
 	f.Close()
@@ -207,5 +207,9 @@ func holdResident(socket, incarnation string) error {
 	if d, err := time.ParseDuration(os.Getenv("SKYRA_HOLD_MAX")); err == nil {
 		max = d
 	}
-	return hold.Serve(stream, hold.Config{Socket: socket, Incarnation: incarnation, Start: start, Max: max, Log: os.Stderr})
+	cfg := hold.Config{Socket: socket, Incarnation: incarnation, Start: start, Max: max, Log: os.Stderr}
+	if len(owner) == 2 {
+		cfg.Root, cfg.Frame = owner[0], owner[1]
+	}
+	return hold.Serve(stream, cfg)
 }

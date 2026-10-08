@@ -98,7 +98,7 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 				return horizon.Horizon{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
 			}
 			// A Horizon of its own: created by this invoke, so named by it.
-			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority,
+			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Agent: g.Agent, WorkTools: g.WorkTools, Delegated: g.Delegated,
 				Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 		}
 	}
@@ -118,6 +118,12 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 				refs[name] = held
 			}
 			waiter.Refs = refs
+		case AgentContext:
+			context, err := agentContext(parent, args)
+			if err != nil {
+				return horizon.Horizon{}, err
+			}
+			waiter.Agent = context
 		case Extending:
 			c, err := extension(parent, args)
 			if err != nil {
@@ -127,7 +133,7 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 		}
 	}
 	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority,
-		Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
+		Agent: parent.Agent, WorkTools: parent.WorkTools, Delegated: parent.Delegated, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several

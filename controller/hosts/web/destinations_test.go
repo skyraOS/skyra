@@ -37,7 +37,7 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 	if nodes[0].Calls != "system" || nodes[0].Narrows == nil {
 		t.Fatalf("scope narrows from input: %+v", nodes[0])
 	}
-	want := []string{"echo", "read", "find", "roots", "write", "codex", "codex.start", "codex.exchange", "codex.inspect", "codex.stop", "claude", "claude.start", "claude.exchange", "claude.inspect", "claude.stop"}
+	want := []string{"echo", "read", "find", "roots", "write", "codex", "codex.start", "codex.exchange", "codex.inspect", "codex.stop", "claude", "claude.start", "claude.exchange", "claude.inspect", "claude.stop", "interpreter"}
 	if !reflect.DeepEqual(nodes[0].Narrows.Reach, want) {
 		t.Fatalf("narrowed reach: %v", nodes[0].Narrows.Reach)
 	}

@@ -4,7 +4,7 @@
 
 Delegate is a procedure that hands a goal to a child agent and returns the observations discovered while pursuing it. The caller specifies the goal, not an ending criterion or an output schema.
 
-This is a proposed contract, not a claim that delegation is already implemented.
+Implemented for Codex and Claude. See [DELEGATION.md](../DELEGATION.md) for runtime behavior, configuration, and verification.
 
 ## Input contract
 

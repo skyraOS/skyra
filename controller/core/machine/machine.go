@@ -155,7 +155,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	stdin := []byte(s.R.Payload)
 	if e.Self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
+		stdin, _ = json.Marshal(Continuation{Actor: agentName(e.Self), Agent: e.Self.Agent, Agents: agents(e.Self), WorkTools: workToolNames(e.Self), Delegated: e.Self.Delegated, Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
 			Workspace: workspaceOf(e.Self), Scratch: e.Self.Authority.Scratch, Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
 	}
 	socket := ""

@@ -35,6 +35,7 @@ import (
 
 // Request is one recorded operation on the resident: codexio's request.
 type Request struct {
+	Frame       string   `json:"frame,omitempty"` // derived by the recorded-edge worker from its runtime environment
 	Incarnation string   `json:"incarnation"`
 	Op          string   `json:"op"` // exchange | inspect | stop | hello
 	Deliver     []string `json:"deliver"`
@@ -69,6 +70,8 @@ const (
 // Config is one holder: the edge's socket, the resident's incarnation, and
 // its idle backoff.
 type Config struct {
+	Root        string // runtime lineage, never supplied by a model
+	Frame       string // currently executing agent frame
 	Socket      string
 	Incarnation string
 	Start, Max  time.Duration
@@ -186,6 +189,10 @@ func (h *holder) idle() {
 		case !h.owned():
 			fmt.Fprintf(h.cfg.Log, "hold %s: a newer holder serves the edge\n", h.cfg.Incarnation)
 			h.stop(false)
+		case h.done():
+			h.stop(true)
+		case h.frameOpen():
+			interval = h.cfg.Start // an unfinished turn may be waiting on a long child
 		case h.last.After(since):
 			interval = h.cfg.Start // a request since the last look: reset
 		case interval*2 > h.cfg.Max:
@@ -244,6 +251,9 @@ func (h *holder) serve(c net.Conn) bool {
 	if err := json.Unmarshal(line, &q); err != nil {
 		o.Error = "malformed request"
 	} else {
+		if h.cfg.Root != "" && validFrame(q.Frame) {
+			h.cfg.Frame = q.Frame
+		}
 		o = h.operate(q)
 	}
 	o.ObservedAt = time.Now().UnixMilli()
@@ -449,4 +459,31 @@ func inode(path string) uint64 {
 func Sockets() string {
 	dir, _ := Dir()
 	return dir
+}
+
+func validFrame(frame string) bool {
+	if len(frame) != 64 {
+		return false
+	}
+	for _, c := range frame {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// A running continuation is active even while it makes no transport requests.
+// Only runtime-derived frame identities enter here. Settled/deleted lineages
+// return to the existing idle backoff; unknown I/O never kills a live turn.
+func (h *holder) frameOpen() bool {
+	if h.cfg.Root == "" || !validFrame(h.cfg.Frame) {
+		return false
+	}
+	dir := filepath.Join(h.cfg.Root, "frames", h.cfg.Frame)
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dir, "result"))
+	return err != nil
 }

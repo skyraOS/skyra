@@ -149,6 +149,8 @@ func main() {
 				continue
 			}
 			reply(m.ID, map[string]any{"data": []string{}})
+		case "thread/resume":
+			reply(m.ID, map[string]any{"thread": map[string]string{"id": v.ThreadID}, "model": "fake-codex", "approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly", "networkAccess": false}})
 		case "thread/start", "thread/fork":
 			if m.Method == "thread/start" && (v.Developer != "" || !strings.HasPrefix(v.Base, prompt.Prefix)) {
 				// Proposal 38: the whole prompt is Skyra's; the provider's
@@ -167,7 +169,7 @@ func main() {
 				send(map[string]any{"id": m.ID, "error": map[string]any{"code": -1, "message": "replacement unsupported"}})
 				continue
 			}
-			reply(m.ID, map[string]any{"thread": map[string]string{"id": id}, "approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly", "networkAccess": false}})
+			reply(m.ID, map[string]any{"thread": map[string]string{"id": id}, "model": "fake-codex", "approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly", "networkAccess": false}})
 		case "turn/start":
 			turns++
 			if len(v.Input) == 0 {
@@ -206,6 +208,14 @@ func main() {
 					complete(*held, "held:"+held.thread)
 					held = nil
 				}
+			case strings.HasPrefix(t.text, "delegate:"):
+				var args map[string]any
+				if json.Unmarshal([]byte(strings.TrimPrefix(t.text, "delegate:")), &args) != nil {
+					complete(t, "invalid fixture delegate request")
+					continue
+				}
+				script[t.id] = []call{{"echo", map[string]string{"text": "parent continued"}}}
+				toolCall(t, 0, call{"delegate", map[string]any{"delegate": args}})
 			case strings.HasPrefix(t.text, "read:"):
 				id := json.RawMessage(fmt.Sprintf("\"call-%d\"", turns))
 				pending[string(id)] = t

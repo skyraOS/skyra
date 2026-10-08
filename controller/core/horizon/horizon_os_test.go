@@ -267,7 +267,8 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 	os.WriteFile(filepath.Join(scratch, "notes.md"), []byte("notes"), 0o600)
 	h := Horizon{Surface: &Surface{Path: self, ResidentProfile: "darwin-appserver-v1"},
 		Authority: Authority{Read: []PathGrant{{Path: work, Scope: "subpath"}}, Scratch: scratch}}
-	profile, err := RenderResident(h, floor, ResidentPaths{Home: tmp(), Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Cache: tmp(), ProxyPort: 1})
+	paths := ResidentPaths{Home: tmp(), Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Cache: tmp(), ProxyPort: 1}
+	profile, err := RenderResident(h, floor, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,4 +293,19 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 			t.Errorf("%s: %q, want %s (%v %s)", name, got, want, err, stderr)
 		}
 	}
+	// A delegated provider must not use native image access to bypass its tool ceiling.
+	h.Delegated = true
+	profile, err = RenderResident(h, floor, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(work, "a.png"), filepath.Join(scratch, "attachments", "pasted.png")} {
+		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSReadHelper$")
+		cmd.Env = append(os.Environ(), "SKYRA_TEST_READ_PATH="+path)
+		out, err := cmd.Output()
+		if err != nil || !strings.HasPrefix(strings.TrimSpace(string(out)), "denied") {
+			t.Fatalf("delegated resident read %s: %s %v", path, out, err)
+		}
+	}
+
 }

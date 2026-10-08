@@ -2,7 +2,11 @@
 
 Date: 2026-10-06
 
-Status: proposed; not implemented. Extracted from §4 of 36 (*Composition by
+Status: superseded by the [goal-based delegate contract](../../../ideas/delegate-procedure-spec.md),
+implemented for Codex and Claude. The generated-tool design below is retained
+as historical context.
+
+Extracted from §4 of 36 (*Composition by
 construction*, a draft kept uncommitted in the `codex/procedure-convergence`
 worktree), with the decisions of 2026-10-06: `delegate` is how procedures are
 created, a header is short by contract, and every invocation is its own

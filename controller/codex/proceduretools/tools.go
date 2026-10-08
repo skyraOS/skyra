@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strings"
 )
 
 type Tool struct {
@@ -54,7 +55,11 @@ func Procedures(reach map[string]*Schema, contracts map[string][]*Schema, reserv
 			continue
 		}
 		reserved = append(reserved, name)
-		ts = append(ts, Tool{Name: name, Target: target, Schema: s, Description: "A remembered procedure: " + s.Title})
+		description := "A remembered procedure: " + s.Title
+		if s.Title == "delegate" {
+			description = "Delegate a goal to a fresh child agent and receive its findings. Input: {delegate:{goal,actor?,tools?}}. Omit actor to inherit your actor and model; explicit actor uses its configured default. Omit tools to inherit available work tools; tools narrows them, [] allows reasoning only. Only the goal is passed as task context. Check any returned failure before continuing."
+		}
+		ts = append(ts, Tool{Name: name, Target: target, Schema: s, Description: description})
 	}
 	return ts
 }
@@ -88,4 +93,29 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*
 	default:
 		return args
 	}
+}
+
+// Allows applies the runtime's tool ceiling to transport names. The kernel
+// separately checks the concrete target and selected contract at intake.
+func Allows(names *[]string, name string) bool {
+	if names == nil {
+		return true
+	}
+	for _, allowed := range *names {
+		if name == allowed || strings.ReplaceAll(name, ".", "_") == strings.ReplaceAll(allowed, ".", "_") {
+			return true
+		}
+	}
+	return false
+}
+
+// Failure is a procedure failure outcome, not discovered observations.
+func Failure(value json.RawMessage) string {
+	var outcome struct {
+		Failed *struct{ Kind, Cause string } `json:"failed"`
+	}
+	if json.Unmarshal(value, &outcome) == nil && outcome.Failed != nil {
+		return outcome.Failed.Kind + ": " + outcome.Failed.Cause
+	}
+	return ""
 }

@@ -59,8 +59,16 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 	if !ok {
 		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
-	if _, err := Selected(target, payload); err != nil {
+	selected, err := Selected(target, payload)
+	if err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
+	}
+	actual := to
+	if g, ref := h.Refs[to]; ref {
+		actual = g.Actor
+	}
+	if !h.PermitsTool(actual, selected) {
+		return faulted(record.Horizon, "tool contract is excluded by delegation", attempt)
 	}
 	if target.System == "horizon" {
 		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
