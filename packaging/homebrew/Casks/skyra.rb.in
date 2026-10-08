@@ -15,6 +15,7 @@ cask "skyra" do
   binary "#{appdir}/Skyra.app/Contents/Resources/skyra/skyra"
 
   caveats <<~EOS
+    @SIGNING_CAVEAT@
     Skyra requires a separately installed, authenticated provider.
     Codex isolation is currently verified for version 0.160.0.
     Install that version with npm install -g @openai/codex@0.160.0 and run codex login.

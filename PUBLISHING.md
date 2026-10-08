@@ -8,12 +8,16 @@ not `homebrew/core`. The source repository stays private.
 - Tap: https://github.com/skyraOS/homebrew-tap — cask at `Casks/skyra.rb`.
 - Downloads: https://github.com/skyraOS/skyra-releases — versioned GitHub Releases.
 - Homepage: the downloads repository's README.
-- Install after a signed release is published: `brew tap skyraOS/tap`, then
+- Install after a release is published: `brew tap skyraOS/tap`, then
   `brew install --cask skyra`.
 
-The endpoints are provisioned. The first public cask is pending Developer ID
-signing and notarization. Do not publish an unsigned app or tell users to bypass
-Gatekeeper. A local development build is not a public release.
+Releases can be published without a paid Apple Developer membership. The initial
+release uses ad-hoc code signatures, without Apple Developer ID or notarization.
+Homebrew installs it with quarantine enabled; macOS may block first launch.
+Users can review it in System Settings > Privacy & Security and use Open Anyway
+if they trust the download. Do not disable Gatekeeper or remove quarantine
+automatically. Developer ID signing and notarization remain available for future
+releases with a paid Apple Developer membership.
 
 Initial support is Apple Silicon, macOS 14 or later. Intel downloads and a cask
 architecture mapping can be added after an Intel build passes the same checks.
@@ -31,10 +35,10 @@ that installation method. Keep this pin aligned with the provider launch policy.
 
 ## One-time maintainer setup
 
-1. Use an Apple Developer Program account with a **Developer ID Application**
+1. **Optional for notarized releases:** use an Apple Developer Program account with a **Developer ID Application**
    certificate and private key installed in the build machine's keychain.
    `security find-identity -v -p codesigning` must list that identity.
-2. Store notary credentials under a named keychain profile. For example, run
+2. **Optional for notarized releases:** store notary credentials under a named keychain profile. For example, run
    `xcrun notarytool store-credentials skyra-notary` and follow its prompts.
    Use an app-specific password or an App Store Connect API key; never commit
    the certificate private key, password, API key or GitHub token.
@@ -62,8 +66,14 @@ version; the first intended stable version is `0.1.0`.
    python3 scripts/release/smoke.py build/releases/0.1.0/arm64/Skyra.app
    ```
 
-3. Sign nested executable helpers first, then the app; notarize, staple and
-   assess the complete bundle. The script produces a ZIP and SHA-256 sidecar:
+3. For the initial release, create ad-hoc signatures and archive the app without
+   Apple credentials:
+
+   ```sh
+   python3 scripts/release/sign.py build/releases/0.1.0/arm64/Skyra.app --unsigned
+   ```
+
+   For a Developer ID signed and notarized release instead, use:
 
    ```sh
    python3 scripts/release/sign.py build/releases/0.1.0/arm64/Skyra.app \
@@ -75,17 +85,21 @@ version; the first intended stable version is `0.1.0`.
    and test launch from Finder, workspace grants, a real provider turn, tools,
    restart and conversation replay. Test without Go or Xcode on PATH. Run the
    smoke script against the unpacked app as well. Verify the signature and
-   stapled ticket after relocation. A passing fake smoke test alone does not
+   stapled ticket after relocation for notarized releases; for unsigned releases,
+   confirm the macOS first-launch approval flow. A passing fake smoke test alone does not
    validate provider login, TCC permissions or the signed runtime on another Mac.
 5. Publish the verified ZIP and update the tap:
 
    ```sh
    python3 scripts/release/publish.py \
      build/releases/0.1.0/arm64/Skyra-0.1.0-macos-arm64.zip \
-     --tap "$(brew --repository skyraOS/tap)" --notes /tmp/skyra-release-notes.md
+     --tap "$(brew --repository skyraOS/tap)" --notes /tmp/skyra-release-notes.md \
+     --allow-unsigned
    ```
 
-   This verifies the ZIP's metadata/signature/notarization, creates a release
+   Omit `--allow-unsigned` for notarized releases. All releases verify metadata
+   and code signatures; notarized releases also require a stapled ticket and
+   Gatekeeper acceptance. The command creates a release
    on the public downloads endpoint, generates the checksum-pinned cask from
    `packaging/homebrew/Casks/skyra.rb.in`, checks style, and commits/pushes the tap.
    It refuses to overwrite an existing release. If publishing succeeds but tap
@@ -112,7 +126,9 @@ The private source repository has a manual `Publish desktop release` workflow
 (`.github/workflows/release.yml`). Configure a GitHub environment named
 `distribution`; optionally require an environment reviewer before it can publish.
 The workflow runs on Apple Silicon macOS, builds/tests the package, imports a
-short-lived signing keychain, notarizes, and updates both public endpoints.
+short-lived signing keychain when requested, and updates both public endpoints.
+The `signing` input defaults to `unsigned`; select `notarized` to use Apple
+credentials. Unsigned CI releases only require `SKYRA_DISTRIBUTION_TOKEN`.
 
 Environment secrets:
 
@@ -128,7 +144,7 @@ Environment secrets:
 Environment variable `SKYRA_SIGNING_IDENTITY`: the complete
 `Developer ID Application: NAME (TEAMID)` signing identity.
 Never put these values in the public repositories or source control. The workflow
-fails before building if credentials are missing. Ephemeral signing credentials
+fails before building if credentials required for the selected mode are missing. Ephemeral signing credentials
 are deleted even after a failure. It does not upload a private checkout as a
 release asset. Confirm a clean-Mac real-provider acceptance run for the exact
 source commit before triggering public publication; CI smoke uses the fake provider.
@@ -136,7 +152,7 @@ source commit before triggering public publication; CI smoke uses the fake provi
 Run it from the source checkout with:
 
 ```sh
-gh workflow run release.yml --ref main -f version=0.1.0
+gh workflow run release.yml --ref main -f version=0.1.0 -f signing=unsigned
 gh run list --workflow release.yml
 ```
 
@@ -146,7 +162,7 @@ follow the manual repair procedure above. Do not overwrite the asset.
 
 ## Continue publishing and roll back
 
-For each update, repeat the versioned build, sign, clean-Mac test and publish
+For each update, repeat the versioned build, archive, clean-Mac test and publish
 steps with a new version. Users update with `brew update` and
 `brew upgrade --cask skyra`. Homebrew owns upgrades; no self-updater is bundled.
 Never replace a ZIP at an existing versioned URL: existing casks pin its checksum.

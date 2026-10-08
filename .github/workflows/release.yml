@@ -6,6 +6,14 @@ on:
         description: Stable SemVer, e.g. 0.1.0 (never reuse a published version)
         required: true
         type: string
+      signing:
+        description: Apple notarization or unsigned distribution
+        required: true
+        type: choice
+        default: unsigned
+        options:
+          - unsigned
+          - notarized
 permissions:
   contents: read
 concurrency:
@@ -17,6 +25,7 @@ jobs:
     timeout-minutes: 60
     environment: distribution
     env:
+      RELEASE_SIGNING: ${{ inputs.signing }}
       RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +47,9 @@ jobs:
           python3 - <<'PY'
           import os, re
           assert re.fullmatch(r'\d+\.\d+\.\d+', os.environ['RELEASE_VERSION']), 'Use stable SemVer'
-          assert all(os.environ.get(k) for k in ('CERTIFICATE', 'CERT_PASSWORD', 'NOTARY_KEY', 'NOTARY_KEY_ID', 'NOTARY_ISSUER', 'GH_TOKEN')), 'Configure the distribution environment signing and publication secrets first'
+          assert os.environ.get('GH_TOKEN'), 'Configure SKYRA_DISTRIBUTION_TOKEN in the distribution environment'
+          if os.environ['RELEASE_SIGNING'] == 'notarized':
+              assert all(os.environ.get(k) for k in ('CERTIFICATE', 'CERT_PASSWORD', 'NOTARY_KEY', 'NOTARY_KEY_ID', 'NOTARY_ISSUER')), 'Configure signing and notarization secrets first'
           PY
           test "$(uname -m)" = arm64
       - name: Build and verify runtime
@@ -49,6 +60,7 @@ jobs:
           python3 scripts/release/package.py "$RELEASE_VERSION"
           python3 scripts/release/smoke.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app"
       - name: Import signing and notarization credentials
+        if: inputs.signing == 'notarized'
         env:
           CERTIFICATE: ${{ secrets.SKYRA_SIGNING_P12 }}
           CERT_PASSWORD: ${{ secrets.SKYRA_SIGNING_PASSWORD }}
@@ -75,11 +87,17 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
           xcrun notarytool store-credentials skyra-ci --key "$RUNNER_TEMP/skyra-notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --keychain "$KEYCHAIN"
       - name: Sign, notarize and validate final archive
+        if: inputs.signing == 'notarized'
         env:
           SIGNING_IDENTITY: ${{ vars.SKYRA_SIGNING_IDENTITY }}
         run: |
           test -n "$SIGNING_IDENTITY"
           python3 scripts/release/sign.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app" --identity "$SIGNING_IDENTITY" --notary-profile skyra-ci --notary-keychain "$RUNNER_TEMP/skyra-signing.keychain-db"
+          python3 scripts/release/smoke.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app"
+      - name: Prepare unsigned archive
+        if: inputs.signing == 'unsigned'
+        run: |
+          python3 scripts/release/sign.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app" --unsigned
           python3 scripts/release/smoke.py "build/releases/$RELEASE_VERSION/arm64/Skyra.app"
       - name: Publish download and Homebrew cask
         env:
@@ -93,9 +111,12 @@ jobs:
           python3 - <<'PY'
           import os
           from pathlib import Path
-          Path(os.environ['RUNNER_TEMP'],'release-notes.md').write_text('Skyra '+os.environ['RELEASE_VERSION']+'\n\nApple Silicon; macOS 14+. Signed and notarized desktop bundle. Requires Codex 0.160.0 and your own provider login.\n')
+          signing = 'Signed and notarized desktop bundle.' if os.environ['RELEASE_SIGNING'] == 'notarized' else 'Ad-hoc signed; no Apple Developer ID or notarization. macOS may block first launch; review it in System Settings > Privacy & Security.'
+          Path(os.environ['RUNNER_TEMP'],'release-notes.md').write_text('Skyra '+os.environ['RELEASE_VERSION']+'\n\nApple Silicon; macOS 14+. '+signing+' Requires Codex 0.160.0 and your own provider login.\n')
           PY
-          python3 scripts/release/publish.py "build/releases/$RELEASE_VERSION/arm64/Skyra-$RELEASE_VERSION-macos-arm64.zip" --tap "$TAP" --notes "$RUNNER_TEMP/release-notes.md"
+          UNSIGNED_FLAG=()
+          if [ "$RELEASE_SIGNING" = unsigned ]; then UNSIGNED_FLAG=(--allow-unsigned); fi
+          python3 scripts/release/publish.py "build/releases/$RELEASE_VERSION/arm64/Skyra-$RELEASE_VERSION-macos-arm64.zip" --tap "$TAP" --notes "$RUNNER_TEMP/release-notes.md" "${UNSIGNED_FLAG[@]}"
       - name: Remove ephemeral credentials
         if: always()
         run: |

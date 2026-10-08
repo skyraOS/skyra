@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a relocatable Skyra.app; public releases require sign.py afterwards."""
+"""Build a relocatable Skyra.app; prepare the distribution ZIP with sign.py afterwards."""
 import argparse
 import json
 import platform
