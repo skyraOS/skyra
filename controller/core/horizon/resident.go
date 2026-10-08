@@ -61,6 +61,9 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	if h.Authority.Scratch != "" {
 		grants = append(slices.Clone(grants), PathGrant{Path: h.Authority.Scratch, Scope: "subpath"})
 	}
+	if h.Delegated {
+		grants = nil
+	}
 	for _, g := range grants {
 		if rule := imageRead(g); rule != "" {
 			b.WriteString(rule)

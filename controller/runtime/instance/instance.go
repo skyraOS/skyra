@@ -436,7 +436,11 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
 	pid := cmd.Process.Pid
 	cmd.Process.Release()
-	if err := startHolder(local, logs, x.Socket, incarnation); err != nil {
+	owner := []string{}
+	if x.Horizon.Resume != nil {
+		owner = []string{root, x.Horizon.Resume.Frame}
+	}
+	if err := startHolder(local, logs, x.Socket, incarnation, owner...); err != nil {
 		return machine.Started{Err: "resident holder: " + err.Error()}
 	}
 	out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{
@@ -459,13 +463,15 @@ var skyraBinary = os.Executable
 // edge's socket, and returns once that holder answers for the incarnation.
 // Closing local here leaves the holder the stream's only keeper: when it lets
 // go, the resident reads EOF and exits.
-func startHolder(local, logs *os.File, socket, incarnation string) error {
+func startHolder(local, logs *os.File, socket, incarnation string, owner ...string) error {
 	defer local.Close()
 	self, err := skyraBinary()
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(self, "hold", socket, incarnation)
+	args := []string{"hold", socket, incarnation}
+	args = append(args, owner...)
+	cmd := exec.Command(self, args...)
 	cmd.ExtraFiles = []*os.File{local}
 	cmd.Stderr = logs // like the resident, it outlives this step and keeps none of its output
 	if err := cmd.Start(); err != nil {

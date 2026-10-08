@@ -359,8 +359,16 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 	if !ok {
 		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
-	if _, err := Selected(target, payload); err != nil {
+	selected, err := Selected(target, payload)
+	if err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
+	}
+	actual := to
+	if g, ref := h.Refs[to]; ref {
+		actual = g.Actor
+	}
+	if !h.PermitsTool(actual, selected) {
+		return faulted(record.Horizon, "tool contract is excluded by delegation", attempt)
 	}
 	if target.System == "horizon" {
 		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
@@ -464,7 +472,7 @@ func release(s Instance, e Released) (Instance, []Effect) {
 	}
 	stdin := []byte(s.R.Payload)
 	if e.Self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
+		stdin, _ = json.Marshal(Continuation{Actor: agentName(e.Self), Agent: e.Self.Agent, Agents: agents(e.Self), WorkTools: workToolNames(e.Self), Delegated: e.Self.Delegated, Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
 			Workspace: workspaceOf(e.Self), Scratch: e.Self.Authority.Scratch, Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
 	}
 	socket := ""
@@ -664,7 +672,7 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 				return horizon.Horizon{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
 			}
 			// A Horizon of its own: created by this invoke, so named by it.
-			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority,
+			return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Agent: g.Agent, WorkTools: g.WorkTools, Delegated: g.Delegated,
 				Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 		}
 	}
@@ -684,6 +692,12 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 				refs[name] = held
 			}
 			waiter.Refs = refs
+		case AgentContext:
+			context, err := agentContext(parent, args)
+			if err != nil {
+				return horizon.Horizon{}, err
+			}
+			waiter.Agent = context
 		case Extending:
 			c, err := extension(parent, args)
 			if err != nil {
@@ -693,7 +707,7 @@ func Narrow(parent horizon.Horizon, r record.Record, stamp string) (horizon.Hori
 		}
 	}
 	return horizon.Horizon{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority,
-		Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
+		Agent: parent.Agent, WorkTools: parent.WorkTools, Delegated: parent.Delegated, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several
@@ -855,6 +869,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor, socket string) Run {
 		// A connection surface reaches its edge's resident by one socket, and
 		// is granted exactly that path: nothing else of the holder's directory.
 		env = append(env, "SKYRA_RESIDENT="+socket)
+		if h.Resume != nil {
+			env = append(env, "SKYRA_OWNER_FRAME="+h.Resume.Frame)
+		}
 		granted := h
 		granted.Authority.Connect = append(slices.Clone(h.Authority.Connect), socket)
 		return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(granted, floor), Env: env, Resident: socket}
@@ -876,7 +893,13 @@ func edgeSocket(h horizon.Horizon, floor, dir string) (string, error) {
 		return "", errors.New("no directory for edge sockets")
 	}
 	adapter, caller := h.Resume.Name, caller(*h.Resume)
-	return dir + "/" + record.Sum([]byte(floor + "\x00" + caller + "\x00" + adapter))[:24] + ".sock", nil
+	key := floor + "\x00" + caller + "\x00" + adapter
+	// A delegation owns a fresh provider edge: reusing its parent's server
+	// would also reuse the parent's resident sandbox and ambient state.
+	if h.Delegated {
+		key += "\x00" + h.Origin
+	}
+	return dir + "/" + record.Sum([]byte(key))[:24] + ".sock", nil
 }
 
 // tools is what a continuation is shown: the first contract of everything in
@@ -950,15 +973,20 @@ func against(s horizon.Surface, input json.RawMessage) *contract.Schema {
 // against (when it has more than one), the tools it may invoke, and every step
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Workspace string                        `json:"workspace,omitempty"`
-	Scratch   string                        `json:"scratch,omitempty"`
-	Frame     string                        `json:"frame"`
-	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
-	Input     json.RawMessage               `json:"input"`
-	Contract  *contract.Schema              `json:"contract,omitempty"`
-	Tools     map[string]*contract.Schema   `json:"tools"`
-	Contracts map[string][]*contract.Schema `json:"contracts,omitempty"`
-	Steps     []StepView                    `json:"steps"`
+	Actor     string                          `json:"actor,omitempty"`
+	Agent     *horizon.AgentContext           `json:"agent,omitempty"`
+	Agents    map[string]*horizon.AgentConfig `json:"agents,omitempty"`
+	WorkTools *[]string                       `json:"work_tools,omitempty"`
+	Delegated bool                            `json:"delegated,omitempty"`
+	Workspace string                          `json:"workspace,omitempty"`
+	Scratch   string                          `json:"scratch,omitempty"`
+	Frame     string                          `json:"frame"`
+	Caller    string                          `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
+	Input     json.RawMessage                 `json:"input"`
+	Contract  *contract.Schema                `json:"contract,omitempty"`
+	Tools     map[string]*contract.Schema     `json:"tools"`
+	Contracts map[string][]*contract.Schema   `json:"contracts,omitempty"`
+	Steps     []StepView                      `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -988,7 +1016,7 @@ func caller(h horizon.Horizon) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: agentName(waiter), Agent: waiter.Agent, Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, e.Frame.Payload)
 	}
@@ -1065,4 +1093,40 @@ func Committed(effs []Effect) record.Record {
 		}
 	}
 	return record.Record{}
+}
+
+func agentName(h horizon.Horizon) string {
+	if h.Surface != nil && h.Surface.Agent != nil {
+		return h.Name
+	}
+	return ""
+}
+func agents(h horizon.Horizon) map[string]*horizon.AgentConfig {
+	out := map[string]*horizon.AgentConfig{}
+	for name, s := range h.Reach {
+		if s.Agent != nil {
+			available := true
+			for _, op := range s.Agent.Operations {
+				if _, ok := h.Reach[op]; !ok {
+					available = false
+					break
+				}
+			}
+			if available {
+				out[name] = s.Agent
+			}
+		}
+	}
+	return out
+}
+func workToolNames(h horizon.Horizon) *[]string {
+	if h.WorkTools == nil {
+		return nil
+	}
+	names := []string{}
+	for name := range *h.WorkTools {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return &names
 }

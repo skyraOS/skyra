@@ -25,21 +25,23 @@ import (
 // Entry is one surface in the registry file. Relative paths are relative to
 // the file.
 type Entry struct {
-	Path               string            `json:"path"`
-	Contract           string            `json:"contract"`
-	Connect            []string          `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
-	Host               string            `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
-	Authority          horizon.Authority `json:"authority,omitempty"` // a grant this entry brings into the room
-	Resident           bool              `json:"resident,omitempty"`
-	Connection         bool              `json:"connection,omitempty"`
-	CloseConnection    bool              `json:"close_connection,omitempty"`
-	Args               []string          `json:"args,omitempty"`
-	ResourceOwnerDepth int               `json:"resource_owner_depth,omitempty"`
-	ResidentProfile    string            `json:"resident_profile,omitempty"`
-	ProxyHosts         []string          `json:"proxy_hosts,omitempty"`
-	ProxyPath          string            `json:"proxy_path,omitempty"`
-	State              bool              `json:"state,omitempty"`  // the actor keeps state of its own, in .skyra/<name>/ (next/32)
-	Bundle             string            `json:"bundle,omitempty"` // versioned authored procedure bundle, provisioned before genesis
+	WorkTool           bool                 `json:"work_tool,omitempty"`
+	Agent              *horizon.AgentConfig `json:"agent,omitempty"`
+	Path               string               `json:"path"`
+	Contract           string               `json:"contract"`
+	Connect            []string             `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
+	Host               string               `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
+	Authority          horizon.Authority    `json:"authority,omitempty"` // a grant this entry brings into the room
+	Resident           bool                 `json:"resident,omitempty"`
+	Connection         bool                 `json:"connection,omitempty"`
+	CloseConnection    bool                 `json:"close_connection,omitempty"`
+	Args               []string             `json:"args,omitempty"`
+	ResourceOwnerDepth int                  `json:"resource_owner_depth,omitempty"`
+	ResidentProfile    string               `json:"resident_profile,omitempty"`
+	ProxyHosts         []string             `json:"proxy_hosts,omitempty"`
+	ProxyPath          string               `json:"proxy_path,omitempty"`
+	State              bool                 `json:"state,omitempty"`  // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle             string               `json:"bundle,omitempty"` // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -206,7 +208,21 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			state = name
 		}
-		reach[name] = horizon.Surface{Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+	}
+	for name, s := range reach {
+		if s.Agent == nil {
+			continue
+		}
+		if !s.Continuation || s.WorkTool || s.Resident || s.Connection || s.Host != "" || len(s.Agent.Operations) == 0 {
+			return nil, room, fmt.Errorf("%s: invalid agent configuration", name)
+		}
+		for _, op := range s.Agent.Operations {
+			target, ok := reach[op]
+			if !ok || op == name || target.Agent != nil || target.WorkTool || !(target.Resident || target.Connection) {
+				return nil, room, fmt.Errorf("%s: invalid agent operation %q", name, op)
+			}
+		}
 	}
 	return reach, room, nil
 }

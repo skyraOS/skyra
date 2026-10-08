@@ -14,6 +14,7 @@ from probe import Host, REPO
 
 
 def main():
+    delegated = '--delegate' in sys.argv
     run = Path(tempfile.mkdtemp(prefix='skyra-tools-', dir='/tmp')).resolve()
     os.chmod(run, 0o700)
     print('evidence:', run, flush=True)
@@ -41,7 +42,9 @@ def main():
         # environment, so the thread keeps its local one; shell and apply_patch
         # stay off by feature and by model metadata.
         base = 'You are inside Skyra, a cognitive architecture, fulfilling: think'
-        started = h.rpc('thread/start', {'model':'gpt-6-astra', 'cwd':str(prepared / 'work'), 'approvalPolicy':'never', 'sandbox':'read-only', 'baseInstructions':base, 'dynamicTools':[{'name':'echo','description':'Skyra echo','inputSchema':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}]})
+        params = {'model':'gpt-6-astra', 'cwd':str(prepared / 'work'), 'approvalPolicy':'never', 'sandbox':'read-only', 'baseInstructions':base, 'dynamicTools':[{'name':'echo','description':'Skyra echo','inputSchema':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}]}
+        if delegated: params['config'] = {'features.view_image':False, 'web_search':'disabled'}
+        started = h.rpc('thread/start', params)
         assert 'result' in started, started
         thread = started['result']['thread']['id']
         h.rpc('turn/start', {'threadId':thread,'input':[{'type':'text','text':'Call echo with hello.'}]})
@@ -62,9 +65,10 @@ def main():
         # Our function plus the two native read-only tools (proposal 38).
         names = sorted(t.get('name') or t.get('type') for t in flattened)
         print('tools offered:', names, flush=True)
-        assert names == ['echo', 'view_image', 'web_search'], flattened
-        search = next(t for t in flattened if t.get('type') == 'web_search')
-        assert search.get('external_web_access') is True, search
+        assert names == (['echo'] if delegated else ['echo', 'view_image', 'web_search']), flattened
+        if not delegated:
+            search = next(t for t in flattened if t.get('type') == 'web_search')
+            assert search.get('external_web_access') is True, search
         assert next(t for t in flattened if t.get('name') == 'echo').get('type') == 'function', flattened
         prompt = json.dumps(request.get('input', []))
         # Generic base instructions mention the heading in prose; reject an
@@ -79,7 +83,7 @@ def main():
             said.append((item.get('role'), texts))
         assert said == [('developer', [base]), ('user', ['Call echo with hello.'])] or \
                (request.get('instructions') == base and said == [('user', ['Call echo with hello.'])]), said
-        print('PASS the tools are echo, view_image and live web_search, nothing else', flush=True)
+        print('PASS delegated thread exposes only echo' if delegated else 'PASS the tools are echo, view_image and live web_search, nothing else', flush=True)
         print('PASS the prompt is the header alone, then the message', flush=True)
         print('PASS no injected skill inventory', flush=True)
     finally:

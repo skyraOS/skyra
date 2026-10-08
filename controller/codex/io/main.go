@@ -36,6 +36,7 @@ func perform(q hold.Request, socket string) (hold.Observation, error) {
 	if socket == "" {
 		return hold.Observation{}, errors.New("no resident granted")
 	}
+	q.Frame = os.Getenv("SKYRA_OWNER_FRAME")
 	return hold.Ask(socket, q), nil
 }
 

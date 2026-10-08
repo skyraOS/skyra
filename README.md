@@ -214,23 +214,23 @@ reasoned out.
 The core of the capability model is now running ([`docs/next/`](docs/next/)): the model
 never emits a control operator, only operands; the runtime derives the state;
 a Codex tool call is plain output, interpreted as an invoke of a leaf that runs
-under its own generated sandbox. The next capability priority is delegation;
-it is proposed, not yet an implemented feature:
+under its own generated sandbox. Delegation is implemented for Codex and Claude:
 
 - **Delegate as a procedure.** Hand a child a required `goal` and, optionally,
-  `tools` to narrow its inherited authority. The child returns observations
+  `actor` to choose an available agent and `tools` to narrow its inherited
+  authority. The child returns observations
   discovered while pursuing the goal—not caller-declared completion criteria
-  or an upfront output schema. See the [delegate procedure spec](ideas/delegate-procedure-spec.md).
-- **Contain ordinary child failures.** A failed child should return a failure
+  or an upfront output schema. See [delegation usage and runtime behavior](DELEGATION.md) and the [delegate procedure spec](ideas/delegate-procedure-spec.md).
+- **Contain ordinary child failures.** A failed child returns a failure
   outcome so its caller can continue. Integrity and persistence failures must
   still stop affected execution safely; an unknown outcome is not a successful
   return.
-- **Single-tool dispatch after delegation.** A model-facing batch of addressed
-  calls (`target`, `contract`, `arguments`), with each contract owned by its
-  target actor. This is interface work, not a new source of authority.
 
 Other unfinished work:
 
+- **Single-tool dispatch after delegation.** A model-facing batch of addressed
+  calls (`target`, `contract`, `arguments`), with each contract owned by its
+  target actor. This is interface work, not a new source of authority.
 - **Self-extension with real Codex.** The demo runs scripted and with a fake
   Codex ([next/32](docs/next/32-procedures.md)): a strand remembered as a
   procedure runs with no model step and no approval, and the same procedure
@@ -254,10 +254,9 @@ full auto). Measured on **human interruptions per task**, task success,
 overhead, the number of agent-built tools that run with zero approvals, and
 containment of those tools and of the agent against an adversarial suite.
 
-These are capability priorities, not release dates. Delegation's first proof
-should be a child returning discovered observations, followed by an ordinary
-child failure that leaves the caller able to continue. Both paths must remain
-accountable through recorded lineage and replay.
+These are capability priorities, not release dates. Delegation acceptance tests cover child findings, ordinary child failures that
+leave the caller able to continue, actor selection, and inherited tool ceilings.
+All complete test runs are checked through recorded lineage and replay.
 
 ## Layout
 

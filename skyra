@@ -151,14 +151,14 @@ registry={
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
  'roots':{'path':str(build/'roots'),'contract':str(root/'controller/targets/roots/contract.json')},
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
- 'codex':{'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
+ 'codex':{'agent':{'operations':['codex.start','codex.exchange','codex.inspect','codex.stop']},'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.start':start,
  # Codex's operations reach its app-server through their edge's holder
  # (proposal 38): each is granted exactly that socket, nothing else.
  'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'claude':{'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
+ 'claude':{'agent':{'operations':['claude.start','claude.exchange','claude.inspect','claude.stop']},'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
  'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True,'resident_profile':'darwin-claude-v1'},
  'claude.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'claude.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
@@ -264,6 +264,8 @@ def pinned(path):
         fd,tmp=tempfile.mkstemp(dir=dest.parent); os.close(fd)
         shutil.copy2(p,tmp); os.replace(tmp,dest)
     return str(dest)
+for tool_name in ('echo','read','find','roots','write','repo.check','repo.write','execve','design','design.tools','blender','blender.tools','desktop_observe'):
+    if tool_name in registry: registry[tool_name]['work_tool']=True
 for entry in registry.values():
     if 'path' in entry and Path(entry['path']).parent==build:
         entry['path']=pinned(entry['path'])

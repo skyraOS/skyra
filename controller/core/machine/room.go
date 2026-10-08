@@ -41,9 +41,10 @@ const (
 	System       = "system"
 	SystemPrefix = "system."
 
-	Narrowing = "narrow"
-	Extending = "extend-reach"
-	Stranding = "strand"
+	Narrowing    = "narrow"
+	Extending    = "extend-reach"
+	Stranding    = "strand"
+	AgentContext = "agent-context"
 )
 
 var (
@@ -51,8 +52,11 @@ var (
 	strs     = &contract.Schema{Type: "array", Items: str}
 	grants   = &contract.Schema{Type: "array", Items: &contract.Schema{Type: "object", Required: []string{"path", "scope"}, Fields: map[string]*contract.Schema{"path": str, "scope": str}}}
 	narrowIn = &contract.Schema{Type: "object", Required: []string{"actor"}, Fields: map[string]*contract.Schema{
-		"actor": str,
-		"reach": strs,
+		"actor":         str,
+		"reach":         strs,
+		"tools":         strs,
+		"inherit_model": {Type: "bool"},
+		"delegated":     {Type: "bool"},
 		"authority": {Type: "object", Fields: map[string]*contract.Schema{
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
@@ -83,6 +87,7 @@ func Syscalls() horizon.Surface {
 		call(Narrowing, narrowIn),
 		call(Extending, extendIn),
 		call(Stranding, strandIn),
+		call(AgentContext, &contract.Schema{Type: "object", Required: []string{"model"}, Fields: map[string]*contract.Schema{"model": str}}),
 	}}
 }
 
@@ -109,7 +114,7 @@ func changesWaiter(r record.Record, s horizon.Surface) bool {
 		return false
 	}
 	name, _ := syscall(r.Payload)
-	return name == Narrowing || name == Extending
+	return name == Narrowing || name == Extending || name == AgentContext
 }
 
 // checkSyscall checks a syscall's arguments against the Horizon it was
@@ -119,6 +124,10 @@ func checkSyscall(h horizon.Horizon, payload json.RawMessage) (string, error) {
 	switch name, args := syscall(payload); name {
 	case Narrowing:
 		if _, err := narrowing(h, args); err != nil {
+			return record.Horizon, err
+		}
+	case AgentContext:
+		if _, err := agentContext(h, args); err != nil {
 			return record.Horizon, err
 		}
 	case Extending:
@@ -210,10 +219,13 @@ func isStamp(s string) bool {
 // asks for anything not held is a horizon fault.
 func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error) {
 	var ask struct {
-		Actor     string             `json:"actor"`
-		Reach     *[]string          `json:"reach"`
-		Authority *horizon.Authority `json:"authority"`
-		Without   []string           `json:"without"`
+		Actor        string             `json:"actor"`
+		Reach        *[]string          `json:"reach"`
+		Authority    *horizon.Authority `json:"authority"`
+		Without      []string           `json:"without"`
+		Tools        *[]string          `json:"tools"`
+		InheritModel bool               `json:"inherit_model"`
+		Delegated    bool               `json:"delegated"`
 	}
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return horizon.Grant{}, err
@@ -221,7 +233,41 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 	if _, ok := h.Reach[ask.Actor]; !ok || IsSystem(ask.Actor) {
 		return horizon.Grant{}, fmt.Errorf("%q is not an actor in reach", ask.Actor)
 	}
-	g := horizon.Grant{Actor: ask.Actor, Authority: h.Authority}
+	g := horizon.Grant{Actor: ask.Actor, Authority: h.Authority, Agent: h.Agent, WorkTools: h.WorkTools, Delegated: h.Delegated || ask.Delegated}
+	if ask.Delegated && h.Depth() > 64 {
+		return g, fmt.Errorf("delegation exceeds the runtime frame limit")
+	}
+	if ask.Delegated && h.Reach[ask.Actor].Agent != nil {
+		for _, op := range h.Reach[ask.Actor].Agent.Operations {
+			if _, ok := h.Reach[op]; !ok {
+				return g, fmt.Errorf("agent operation %q is unavailable", op)
+			}
+		}
+	}
+	if ask.Delegated && h.Reach[ask.Actor].Agent == nil {
+		return g, fmt.Errorf("%q is not an available agent", ask.Actor)
+	}
+	if h.Reach[ask.Actor].Agent != nil {
+		g.Agent = &horizon.AgentContext{Actor: ask.Actor}
+		if ask.InheritModel {
+			if h.Agent == nil || h.Agent.Actor != ask.Actor || h.Agent.Model == "" {
+				return g, fmt.Errorf("caller model is unavailable for %q", ask.Actor)
+			}
+			g.Agent.Model = h.Agent.Model
+		}
+	}
+	if ask.Tools != nil {
+		allowed := map[string]horizon.ToolBinding{}
+		available := h.AvailableTools()
+		for _, name := range *ask.Tools {
+			binding, ok := horizon.ResolveTool(available, name)
+			if !ok {
+				return g, fmt.Errorf("tool %q is not available", name)
+			}
+			allowed[name] = binding
+		}
+		g.WorkTools = &allowed
+	}
 	if ask.Reach == nil {
 		for name := range h.Reach {
 			g.Reach = append(g.Reach, name)
@@ -389,4 +435,22 @@ func kept(reach map[string]horizon.Surface, names []string) map[string]horizon.S
 		}
 	}
 	return out
+}
+
+// Only a configured agent adapter records its resolved provider model. The
+// actor identity is derived from the emitter, not accepted as an argument.
+func agentContext(h horizon.Horizon, payload json.RawMessage) (*horizon.AgentContext, error) {
+	var ask struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(payload, &ask); err != nil {
+		return nil, err
+	}
+	if h.Surface == nil || h.Surface.Agent == nil || strings.TrimSpace(ask.Model) == "" {
+		return nil, fmt.Errorf("only an agent records a nonempty resolved model")
+	}
+	if h.Agent != nil && h.Agent.Actor == h.Name && h.Agent.Model != "" && h.Agent.Model != ask.Model {
+		return nil, fmt.Errorf("resolved model differs from inherited model")
+	}
+	return &horizon.AgentContext{Actor: h.Name, Model: ask.Model}, nil
 }

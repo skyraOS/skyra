@@ -20,7 +20,7 @@ type resident struct {
 
 func (r *resident) say(line string) { r.conn.Write([]byte(line + "\n")) }
 
-func start(t *testing.T, start, max time.Duration) (socket string, r *resident, served chan error) {
+func start(t *testing.T, start, max time.Duration, owner ...string) (socket string, r *resident, served chan error) {
 	t.Helper()
 	dir, err := os.MkdirTemp("/private/tmp", "hold-") // a socket path must be short
 	if err != nil {
@@ -53,7 +53,11 @@ func start(t *testing.T, start, max time.Duration) (socket string, r *resident, 
 		}
 	}()
 	served = make(chan error, 1)
-	go func() { served <- Serve(stream, Config{Socket: socket, Incarnation: "inc-1", Start: start, Max: max}) }()
+	cfg := Config{Socket: socket, Incarnation: "inc-1", Start: start, Max: max}
+	if len(owner) == 2 {
+		cfg.Root, cfg.Frame = owner[0], owner[1]
+	}
+	go func() { served <- Serve(stream, cfg) }()
 	for i := 0; Hello(socket) == ""; i++ {
 		if i > 200 {
 			t.Fatal("holder did not start")
@@ -227,5 +231,37 @@ func TestDirIsPrivate(t *testing.T) {
 	}
 	if len(filepath.Join(dir, strings.Repeat("a", 24)+".sock")) > 100 {
 		t.Fatal("an edge socket path would pass the 104-byte limit")
+	}
+}
+
+func TestAnUnfinishedAgentFrameKeepsItsResidentWhileWaitingForChild(t *testing.T) {
+	grace = 10 * time.Millisecond
+	root := t.TempDir()
+	frame := strings.Repeat("a", 64)
+	dir := filepath.Join(root, "frames", frame)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	socket, r, served := start(t, 10*time.Millisecond, 40*time.Millisecond, root, frame)
+	// Longer than the complete idle backoff, without any transport request.
+	time.Sleep(200 * time.Millisecond)
+	select {
+	case <-r.closed:
+		t.Fatal("waiting parent was reclaimed")
+	default:
+	}
+	if Hello(socket) != "inc-1" {
+		t.Fatal("waiting parent lost its connection")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "result"), []byte("settled"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-r.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("settled parent was never reclaimed")
+	}
+	if err := <-served; err != nil {
+		t.Fatal(err)
 	}
 }

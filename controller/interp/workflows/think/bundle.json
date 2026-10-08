@@ -68,7 +68,8 @@
                 "claude.start",
                 "claude.exchange",
                 "claude.inspect",
-                "claude.stop"
+                "claude.stop",
+                "interpreter"
               ]
             }
           }
