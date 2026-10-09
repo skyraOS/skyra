@@ -154,8 +154,12 @@ private struct RootNavigation: View {
                         .position(x: figure.bounds.maxX - 35, y: figure.bounds.minY + 24)
                 }
                 if chosen {
+                    let top = figure.bounds.maxY + 12
+                    let height = max(44, min(300, geo.size.height - top - 120))
                     ConversationSatellites(session: session)
-                        .position(x: figure.root.point.x + 74, y: figure.bounds.maxY - 8)
+                        .frame(width: 220, height: height)
+                        .position(x: min(max(122, figure.root.point.x), geo.size.width - 122),
+                                  y: top + height / 2)
                 }
             }
         }
