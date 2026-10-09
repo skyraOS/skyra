@@ -62,6 +62,9 @@ func main() {
 		Input struct {
 			Conversation string `json:"conversation"`
 			Procedure    string `json:"procedure"`
+			// The model the procedure runs on (proposal 39): a parameter of the
+			// one think procedure, not a procedure of its own.
+			Model string `json:"model"`
 			// A conversation continued in a new run, after the run it was in
 			// ended (a host restart, a close, a fault): what was said before,
 			// and the message that continues it. A conversation is the user's
@@ -77,14 +80,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "user:", err)
 		os.Exit(1)
 	}
-	if c.Input.Procedure == "" {
-		c.Input.Procedure = "think"
-	}
-	model := "codex"
-	if c.Input.Procedure == "think-claude" {
-		c.Input.Procedure = "think"
-		model = "claude"
-	}
+	var model string
+	c.Input.Procedure, model = selection(c.Input.Procedure, c.Input.Model)
 	p, ok := procedures[c.Input.Procedure]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "user: no procedure %q\n", c.Input.Procedure)
@@ -164,6 +161,23 @@ func main() {
 	default:
 		emit("browser", map[string]any{"conversation": c.Input.Conversation, "transcript": transcript})
 	}
+}
+
+// selection is the procedure a conversation runs and the model it runs on:
+// think on Codex unless named otherwise. Conversations recorded before the
+// model was a parameter (proposal 39) named Claude as a procedure,
+// "think-claude"; their genesis records still say so.
+func selection(procedure, model string) (string, string) {
+	if procedure == "" {
+		procedure = "think"
+	}
+	if procedure == "think-claude" {
+		procedure, model = "think", "claude"
+	}
+	if model == "" {
+		model = "codex"
+	}
+	return procedure, model
 }
 
 // procedure is one entry of the table of what a human can run: the actor it

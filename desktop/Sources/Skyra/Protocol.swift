@@ -37,6 +37,7 @@ struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     let entries: [Entry]
     let horizons: [HorizonView]? // absent from a webhost that predates them
     let procedure: String? // the root it runs, fixed at creation; absent or "" from before procedures
+    var model: String? = nil // the model its root runs on, fixed at creation; absent for the root's default
     var id: String { conversation }
 }
 
@@ -47,11 +48,13 @@ struct Conversation: Decodable, Equatable, Sendable, Identifiable {
 struct Destination: Decodable, Equatable, Sendable, Identifiable {
     struct Node: Decodable, Equatable, Sendable {
         struct Narrowing: Decodable, Equatable, Sendable {
-            let actor: String
+            let actor: String // "" when the actor is a parameter of the procedure
+            var param: String? = nil // that parameter: think narrows to its model
             let reach: [String]
         }
         let name: String
         let calls: String // the actor it invokes; through a narrowing's reference, the narrowed actor
+        var via: String? = nil // a call through a narrowing whose actor is a parameter: that narrowing's node
         let after: [String]
         let narrows: Narrowing?
     }
@@ -61,6 +64,30 @@ struct Destination: Decodable, Equatable, Sendable, Identifiable {
     let title: String
     let outline: Outline
     var id: String { title }
+
+    /// The models a procedure's model parameter chooses between.
+    static let models = ["codex", "claude"]
+
+    /// The outline as it runs on model (proposal 39): a narrowing to the
+    /// procedure's model parameter narrows to that model, keeping its own
+    /// reach and none of the other models', and the call through it calls it.
+    func resolved(model: String) -> Destination {
+        var chosen: [String: String] = [:] // narrowing node → the model it narrows to
+        let others = Self.models.filter { $0 != model }
+        let narrowed = outline.nodes.map { n -> Node in
+            guard let nr = n.narrows, nr.param == "model" else { return n }
+            chosen[n.name] = model
+            let reach = nr.reach.filter { r in !others.contains { r == $0 || r.hasPrefix($0 + ".") } }
+            return Node(name: n.name, calls: n.calls, via: n.via, after: n.after,
+                        narrows: Node.Narrowing(actor: model, param: nr.param, reach: reach))
+        }
+        guard !chosen.isEmpty else { return self }
+        let nodes = narrowed.map { n -> Node in
+            guard n.calls.isEmpty, let v = n.via, let m = chosen[v] else { return n }
+            return Node(name: n.name, calls: m, via: n.via, after: n.after, narrows: n.narrows)
+        }
+        return Destination(actor: actor, title: title, outline: Outline(nodes: nodes))
+    }
 }
 
 /// One Horizon of a conversation, as the webhost reads it from the lineage:
@@ -151,11 +178,11 @@ struct DecodedServerMessage: Decodable, Sendable {
 enum ClientMessage: Encodable {
     case submit(incarnation: String, conversation: String, requestId: String, text: String, images: [Attachment] = [])
     case close(incarnation: String, conversation: String, requestId: String)
-    case open(requestId: String, procedure: String?) // nil: the webhost's first root
+    case open(requestId: String, procedure: String?, model: String? = nil) // nil procedure: the webhost's first root; nil model: its default
     case delete(incarnation: String, conversation: String, requestId: String)
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, conversation, requestId, text, procedure, images
+        case type, uiIncarnation, conversation, requestId, text, procedure, model, images
     }
 
     /// A pasted image as the webhost takes it: its name and its bytes.
@@ -178,10 +205,11 @@ enum ClientMessage: Encodable {
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
-        case let .open(id, procedure):
+        case let .open(id, procedure, model):
             try c.encode("open-conversation", forKey: .type)
             try c.encode(id, forKey: .requestId)
             try c.encodeIfPresent(procedure, forKey: .procedure)
+            try c.encodeIfPresent(model, forKey: .model)
         case let .delete(inc, conv, id):
             try c.encode("delete-conversation", forKey: .type)
             try c.encode(inc, forKey: .uiIncarnation)

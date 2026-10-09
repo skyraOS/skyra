@@ -61,6 +61,7 @@ type conversation struct {
 	parked           *park.Frame
 	pending          string
 	procedure        string // the root it runs, fixed at creation; "" for a conversation from before procedures
+	model            string // the model its procedure runs on, fixed at creation; "" for the procedure's default
 	home             string // its directory: under its procedure's, or at the top for one from before procedures
 	recoveryRequired bool
 	lineage          *lineage // its records, read as they are committed
@@ -198,7 +199,7 @@ func (h *webhost) loadConversation(home, under string) {
 
 // loadConversationData reads the full records and lineage for a conversation.
 // It does all the I/O without holding the webhost mutex.
-func loadConversationData(home string) (entries []entry, procedure string, pastCalls [][]call, lin *lineage) {
+func loadConversationData(home string) (entries []entry, procedure, model string, pastCalls [][]call, lin *lineage) {
 	roots := conversationRuns(home)
 	root := roots[len(roots)-1]
 	lin = newLineage(root)
@@ -212,9 +213,10 @@ func loadConversationData(home string) (entries []entry, procedure string, pastC
 		if r.State == record.Invoke && r.To == "user" {
 			var seeded struct {
 				Procedure string `json:"procedure"`
+				Model     string `json:"model"`
 			}
 			if json.Unmarshal(r.Payload, &seeded) == nil && seeded.Procedure != "" {
-				procedure = seeded.Procedure
+				procedure, model = normalizeRoot(seeded.Procedure, seeded.Model)
 			}
 		}
 		if r.State != record.Invoke || r.To != "browser" {
@@ -244,7 +246,7 @@ func (h *webhost) loadConversationFull(id string) {
 	under := c.procedure
 	h.mu.Unlock()
 
-	entries, procedure, pastCalls, lin := loadConversationData(home)
+	entries, procedure, model, pastCalls, lin := loadConversationData(home)
 	writeTitle(home, entries)
 
 	h.mu.Lock()
@@ -257,7 +259,7 @@ func (h *webhost) loadConversationFull(id string) {
 			if under != "" && procedure != under {
 				fmt.Fprintf(h.log, "webhost: %s is kept under %s but runs %s\n", id, under, procedure)
 			}
-			c.procedure = procedure
+			c.procedure, c.model = procedure, model
 		}
 		c.loaded = true
 	}
@@ -461,6 +463,7 @@ type inbound struct {
 	RequestID     string   `json:"requestId"`
 	Text          string   `json:"text"`
 	Procedure     string   `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
+	Model         string   `json:"model,omitempty"`     // open-conversation: the model the root runs on; its default when empty
 	Images        []pasted `json:"images,omitempty"`    // submit: images pasted with the text
 }
 
@@ -515,7 +518,8 @@ func (h *webhost) handle(raw []byte) {
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
 	case "open-conversation":
-		d, ok := h.destinationFor(m.Procedure)
+		proc, model := normalizeRoot(m.Procedure, m.Model)
+		d, ok := h.destinationFor(proc)
 		if !ok {
 			h.mu.Unlock()
 			reject("unknown-procedure", "no procedure "+strconv.Quote(m.Procedure)+" can be selected")
@@ -532,15 +536,12 @@ func (h *webhost) handle(raw []byte) {
 			return
 		}
 		home := h.homeFor(d.Title, id)
-		proc := m.Procedure
-		if proc == "" {
-			proc = d.Title
-		}
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
+		proc = d.Title
+		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, model: model, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id, proc, home)
+		go h.seed(id, proc, model, home)
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
 		if m.Type == "submit" && conv != nil && conv.parked == nil && conv.pending == "" && (conv.phase == "closed" || conv.phase == "failed") {
@@ -677,8 +678,12 @@ func (h *webhost) deleteConversation(id string) error {
 }
 
 // seed starts a new conversation as the operator: genesis, then the user side.
-func (h *webhost) seed(id, procedure, home string) {
-	h.seedRun(id, filepath.Join(home, ".skyra"), home, map[string]any{"conversation": id, "procedure": procedure})
+func (h *webhost) seed(id, procedure, model, home string) {
+	seeded := map[string]any{"conversation": id, "procedure": procedure}
+	if model != "" {
+		seeded["model"] = model
+	}
+	h.seedRun(id, filepath.Join(home, ".skyra"), home, seeded)
 }
 
 // seedRun starts a run of a conversation at root: genesis, then the user side
@@ -750,7 +755,11 @@ func (h *webhost) broadcast() {
 	views := []map[string]any{}
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.calls())
-		views = append(views, map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure})
+		view := map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure}
+		if c.model != "" {
+			view["model"] = c.model
+		}
+		views = append(views, view)
 	}
 	snap := map[string]any{"type": "snapshot", "uiIncarnation": h.incarnation, "revision": h.revision, "conversations": views, "requests": h.requestSnapshot(), "destinations": h.destinations}
 	h.mu.Unlock()
@@ -962,6 +971,9 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 	h.broadcast()
 	seeded := map[string]any{"conversation": c.id, "procedure": c.procedure, "transcript": said, "text": m.Text}
+	if c.model != "" {
+		seeded["model"] = c.model
+	}
 	if len(images) > 0 {
 		seeded["images"] = images
 	}

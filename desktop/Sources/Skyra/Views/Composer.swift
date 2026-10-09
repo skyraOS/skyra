@@ -70,9 +70,8 @@ struct Composer: View {
 
             HStack(spacing: 6) {
                 if let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
-                    let root = Session.companions[proc] ?? proc
-                    Text(root).foregroundStyle(Theme.dim.color)
-                    if root == "think" {
+                    Text(proc).foregroundStyle(Theme.dim.color)
+                    if proc == "think" {
                         Text(session.model).foregroundStyle(Theme.faint.color)
                     }
                     Text("·")
