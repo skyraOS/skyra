@@ -41,29 +41,32 @@ final class Session {
     /// human picks one it is the webhost's first.
     private(set) var selectedRoot: String?
 
-    /// The model the next think conversation runs: "codex" or "claude".
+    /// The model the next think conversation runs: "codex" or "claude". It is
+    /// a parameter of the one think procedure (proposal 39), not a procedure
+    /// of its own; the sky's warm tint follows it.
     var model = "codex"
 
     /// The selected root, as the webhost lists it.
     var root: Destination? { destinations.first { $0.title == selectedRoot } ?? destinations.first }
 
-    /// Destinations shown in the sky; hidden alternatives (think-claude) are
-    /// filtered, and the visible root takes the alternative's outline when its
-    /// model is selected, so the constellation reflects the real composition.
-    var visibleDestinations: [Destination] {
-        let alt = model == "claude"
-            ? destinations.first { $0.title == "think-claude" }
-            : nil
-        return destinations.compactMap { d in
-            if Self.companions[d.title] != nil { return nil }
-            if d.title == "think", let a = alt {
-                return Destination(actor: d.actor, title: d.title, outline: a.outline)
-            }
-            return d
-        }
+    /// The roots as the sky draws them: each outline resolved to the selected
+    /// model, so the constellation shows the adapter a new conversation runs.
+    var visibleDestinations: [Destination] { destinations.map { $0.resolved(model: model) } }
+
+    /// Whether the selected root takes a model: think runs on Codex or Claude.
+    var rootTakesModel: Bool { root?.title == "think" }
+
+    /// The model a conversation runs on: what it was opened with, Codex for a
+    /// think conversation that names none, and nil for a root without models.
+    func modelOf(_ c: Conversation) -> String? {
+        c.procedure == "think" ? (c.model ?? "codex") : nil
     }
 
-    static let companions: [String: String] = ["think-claude": "think"]
+    /// Whether a conversation runs the selected root on the selected model.
+    private func belongs(_ c: Conversation) -> Bool {
+        guard let p = activeProcedure else { return true }
+        return c.procedure == p && (!rootTakesModel || modelOf(c) == model)
+    }
 
     private var openConversations: [String: [String]] = [:]
     private var lastSelected: [String: String] = [:]
@@ -75,11 +78,21 @@ final class Session {
     func configureWorkspace(_ path: String) {
         guard storageKey != path else { return }
         storageKey = path
-        openConversations = UserDefaults.standard.dictionary(forKey: "conversationStars:\(path)") as? [String: [String]] ?? [:]
-        lastSelected = UserDefaults.standard.dictionary(forKey: "conversationSelection:\(path)") as? [String: String] ?? [:]
+        openConversations = Self.migrated(UserDefaults.standard.dictionary(forKey: "conversationStars:\(path)") as? [String: [String]] ?? [:])
+        lastSelected = Self.migrated(UserDefaults.standard.dictionary(forKey: "conversationSelection:\(path)") as? [String: String] ?? [:])
         composers = [:]
         navigationKey = ""
         selected = nil
+    }
+
+    /// Navigation saved before the model was a parameter was kept under
+    /// "think" (Codex) and "think-claude" (Claude).
+    private static func migrated<V>(_ saved: [String: V]) -> [String: V] {
+        var out = saved
+        for (old, new) in [("think", "think/codex"), ("think-claude", "think/claude")] {
+            if let v = out.removeValue(forKey: old), out[new] == nil { out[new] = v }
+        }
+        return out
     }
 
     private func persistNavigation() {
@@ -88,7 +101,11 @@ final class Session {
         UserDefaults.standard.set(lastSelected, forKey: "conversationSelection:\(storageKey)")
     }
 
-    private var scope: String { activeProcedure ?? "Legacy" }
+    /// Navigation is kept per root and, for think, per model.
+    private var scope: String {
+        guard let p = activeProcedure else { return "Legacy" }
+        return rootTakesModel ? "\(p)/\(model)" : p
+    }
 
     private func navigate(_ id: String?) {
         composers[navigationKey] = (draft, attachments)
@@ -125,8 +142,8 @@ final class Session {
     func selectConversation(_ id: String) {
         guard canNavigate, let c = conversations.first(where: { $0.conversation == id }) else { return }
         if let p = c.procedure {
-            selectedRoot = Self.companions[p] ?? p
-            if p == "think" || p == "think-claude" { model = p == "think-claude" ? "claude" : "codex" }
+            selectedRoot = p
+            if let m = modelOf(c) { model = m }
         }
         navigate(id)
     }
@@ -143,29 +160,24 @@ final class Session {
         persistNavigation()
     }
 
-    /// The procedure to open: think-claude when claude is selected on think.
-    var activeProcedure: String? {
-        guard let title = root?.title else { return nil }
-        if title == "think" && model == "claude" { return "think-claude" }
-        return title
-    }
+    /// The procedure to open: the selected root. Its model travels beside it.
+    var activeProcedure: String? { root?.title }
 
     /// Selects a root. A conversation on screen that runs another root is put
     /// away: the context is the root's.
     func selectRoot(_ title: String) {
         guard destinations.contains(where: { $0.title == title }) else { return }
         guard canNavigate else { return }
-        if selectedRoot == (Self.companions[title] ?? title), current?.procedure == activeProcedure { return }
-        selectedRoot = Self.companions[title] ?? title
-        if title == "think-claude" { model = "claude" }
+        if selectedRoot == title, let c = current, belongs(c) { return }
+        selectedRoot = title
         navigate(lastSelected[scope].flatMap { id in rootConversations.contains { $0.conversation == id } ? id : nil })
     }
 
     /// The conversations that run the selected root, newest first. A webhost
     /// that lists no roots predates them: every conversation is shown.
     var rootConversations: [Conversation] {
-        guard let p = activeProcedure else { return conversations }
-        return conversations.filter { $0.procedure == p }
+        guard activeProcedure != nil else { return conversations }
+        return conversations.filter(belongs)
     }
 
     /// Conversations under no root: from before procedures, or running one the
@@ -373,7 +385,7 @@ final class Session {
 
     private func open(with text: String) {
         let before = conversations.first?.conversation
-        if send(.open(requestId: requestID(), procedure: activeProcedure)) {
+        if send(.open(requestId: requestID(), procedure: activeProcedure, model: rootTakesModel ? model : nil)) {
             opening = true
             openBefore = before
             pendingText = text

@@ -114,11 +114,51 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
     #expect(c.star("blender.tools") == nil)
 }
 
+// think is one procedure whose model is a parameter (proposal 39): its
+// narrowing names no actor, and the sky draws it on the selected model,
+// with that model's adapter and none of the other's.
+private let unifiedThinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"","param":"model","reach":["echo","read","codex","codex.start","codex.exchange","claude","claude.start","claude.exchange","claude.stop"]}},{"name":"run","calls":"","via":"scope","after":["scope"]}]}}"#
+
+@MainActor
+@Test func thinksConstellationFollowsTheModel() throws {
+    let d = try JSONDecoder().decode(Destination.self, from: Data(unifiedThinkJSON.utf8))
+    let codex = RootConstellation(d.resolved(model: "codex"))
+    #expect(codex.stars.map(\.name) == ["think", "codex", "echo", "read"])
+    #expect(codex.operations == ["codex": 2])
+    let claude = RootConstellation(d.resolved(model: "claude"))
+    #expect(claude.stars.map(\.name) == ["think", "claude", "echo", "read"])
+    #expect(claude.operations == ["claude": 3])
+    #expect(claude.star("claude")?.via == "scope")
+
+    let s = Session()
+    s.receive(snapshot("[]", roots: "[\(unifiedThinkJSON)]"))
+    #expect(s.destinations.map(\.title) == ["think"])
+    #expect(RootConstellation(s.visibleDestinations[0]).star("codex") != nil)
+    s.toggleModel()
+    #expect(s.model == "claude" && s.visibleDestinations.map(\.title) == ["think"])
+    #expect(RootConstellation(s.visibleDestinations[0]).star("claude") != nil)
+}
+
+// A conversation opened on Claude is a think conversation with the Claude
+// model: the history lists one procedure, and selecting it selects its model.
+@MainActor
+@Test func oneThinkProcedureCarriesItsModel() {
+    let s = Session()
+    s.receive(snapshot(#"[{"conversation":"t1","phase":"ready","entries":[],"procedure":"think"},{"conversation":"c1","phase":"ready","entries":[],"procedure":"think","model":"claude"}]"#))
+    #expect(Set(s.conversations.compactMap(\.procedure)) == ["think"])
+    #expect(s.modelOf(s.conversations[0]) == "codex" && s.modelOf(s.conversations[1]) == "claude")
+    #expect(s.rootConversations.map(\.conversation) == ["t1"])
+    s.selectConversation("c1")
+    #expect(s.model == "claude" && s.activeProcedure == "think")
+    #expect(s.rootConversations.map(\.conversation) == ["c1"])
+    s.selectConversation("t1")
+    #expect(s.model == "codex")
+}
+
 @MainActor
 @Test func conversationStarsAreActorScopedAndKeepDraftsSeparate() {
-    let claude = thinkJSON.replacingOccurrences(of: #""title":"think""#, with: #""title":"think-claude""#)
     let s = Session()
-    s.receive(snapshot(#"[{"conversation":"t1","phase":"pending","entries":[],"procedure":"think"},{"conversation":"c1","phase":"ready","entries":[],"procedure":"think-claude"}]"#, roots: "[\(thinkJSON),\(claude)]"))
+    s.receive(snapshot(#"[{"conversation":"t1","phase":"pending","entries":[],"procedure":"think"},{"conversation":"c1","phase":"ready","entries":[],"procedure":"think","model":"claude"}]"#))
     s.selectConversation("t1")
     s.draft = "codex draft"
     s.attach([Attachment(name: "image", data: Data([1]))])

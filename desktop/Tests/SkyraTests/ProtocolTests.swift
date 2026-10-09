@@ -140,6 +140,10 @@ import Testing
     #expect(named.contains(#""procedure":"think""#))
     let first = String(decoding: try JSONEncoder().encode(ClientMessage.open(requestId: "r", procedure: nil)), as: UTF8.self)
     #expect(!first.contains("procedure"))
+    // The model travels beside the one think procedure, never in its name.
+    let claude = String(decoding: try JSONEncoder().encode(ClientMessage.open(requestId: "r", procedure: "think", model: "claude")), as: UTF8.self)
+    #expect(claude.contains(#""procedure":"think""#) && claude.contains(#""model":"claude""#))
+    #expect(!named.contains("model"))
 }
 
 @MainActor @Test func deltasKeepUnchangedHistoryAndApplyOrderAndDeletion() {

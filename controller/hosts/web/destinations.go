@@ -31,12 +31,14 @@ type outline struct {
 type outlineNode struct {
 	Name    string     `json:"name"`
 	Calls   string     `json:"calls"`             // the actor it invokes: a call through a narrowing's reference names the narrowed actor
+	Via     string     `json:"via,omitempty"`     // a call through a narrowing whose actor is a parameter: that narrowing's node
 	After   []string   `json:"after"`             // the nodes it waits on
 	Narrows *narrowing `json:"narrows,omitempty"` // a narrowing node: the actor it narrows, and the reach it keeps
 }
 
 type narrowing struct {
-	Actor string   `json:"actor"`
+	Actor string   `json:"actor"`           // "" when the actor is a parameter of the procedure
+	Param string   `json:"param,omitempty"` // that parameter: think narrows to its model
 	Reach []string `json:"reach"`
 }
 
@@ -50,7 +52,8 @@ func loadDestinations(registryFile string) ([]destination, error) {
 		return nil, err
 	}
 	var registry map[string]struct {
-		Bundle string `json:"bundle"`
+		Bundle string           `json:"bundle"`
+		Agent  *json.RawMessage `json:"agent"`
 	}
 	if err := json.Unmarshal(b, &registry); err != nil {
 		return nil, err
@@ -63,6 +66,9 @@ func loadDestinations(registryFile string) ([]destination, error) {
 	out := []destination{}
 	for _, actor := range names {
 		e := registry[actor]
+		if e.Agent != nil && !strings.Contains(actor, ".") {
+			adapters[actor] = true // a model adapter: its steps are not tool calls
+		}
 		if e.Bundle == "" {
 			continue
 		}
@@ -129,6 +135,9 @@ func bundleDestinations(actor, path string) ([]destination, error) {
 				node.Calls = target
 			} else if from := bindingNode(n.Call); narrows[from] != nil {
 				node.Calls = narrows[from].Actor // through the reference that narrowing returned
+				if node.Calls == "" {
+					node.Via = from // the actor is chosen by a parameter, per conversation
+				}
 			}
 			if node.Calls == "system" {
 				nr := parseNarrow(n.In)
@@ -153,7 +162,13 @@ func parseNarrow(in json.RawMessage) *narrowing {
 	var nr narrowing
 	if actor, ok := raw.Narrow["actor"]; ok {
 		if json.Unmarshal(actor, &nr.Actor) != nil {
-			nr.Actor = bindingNode(actor)
+			// An actor read from the input is a parameter of the procedure,
+			// chosen per conversation: think's model (proposal 39).
+			if path := bindingPath(actor); len(path) > 1 && path[0] == "input" {
+				nr.Param = path[len(path)-1]
+			} else {
+				nr.Actor = bindingNode(actor)
+			}
 		}
 	}
 	if reach, ok := raw.Narrow["reach"]; ok {
@@ -167,13 +182,21 @@ func parseNarrow(in json.RawMessage) *narrowing {
 
 // bindingNode is the node a {"$": [node, ...]} binding reads from.
 func bindingNode(b json.RawMessage) string {
+	if path := bindingPath(b); len(path) > 0 {
+		return path[0]
+	}
+	return ""
+}
+
+// bindingPath is the whole path a {"$": [...]} binding reads.
+func bindingPath(b json.RawMessage) []string {
 	var ref struct {
 		Path []string `json:"$"`
 	}
-	if json.Unmarshal(b, &ref) != nil || len(ref.Path) == 0 {
-		return ""
+	if json.Unmarshal(b, &ref) != nil {
+		return nil
 	}
-	return ref.Path[0]
+	return ref.Path
 }
 
 func contains(xs []string, x string) bool {
@@ -191,13 +214,20 @@ func (h *webhost) destinationFor(title string) (destination, bool) {
 	if title == "" && len(h.destinations) > 0 {
 		return h.destinations[0], true
 	}
-	if title == "think-claude" {
-		title = "think"
-	}
 	for _, d := range h.destinations {
 		if d.Title == title {
 			return d, true
 		}
 	}
 	return destination{}, false
+}
+
+// normalizeRoot is the procedure and model a conversation runs. The model is a
+// parameter of one procedure (proposal 39); conversations recorded before
+// that named the Claude model as a procedure of its own, "think-claude".
+func normalizeRoot(procedure, model string) (string, string) {
+	if procedure == "think-claude" {
+		return "think", "claude"
+	}
+	return procedure, model
 }

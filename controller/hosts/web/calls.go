@@ -336,16 +336,25 @@ func (l *lineage) byUser(predecessor string) bool {
 	return false
 }
 
+// adapters are the model adapters a procedure reaches its agent through. Their
+// own steps (start, exchange, inspect, stop) are the runtime driving the
+// model, not tools the model called. The registry's agent entries extend it.
+var adapters = map[string]bool{"codex": true, "claude": true}
+
 // isTool reports whether an address is a tool the agent called, rather than
 // the conversation's own plumbing: the user side, the browser, the procedure
 // actor and the Horizon's syscalls and references (through which a procedure
-// reaches its agent), and the Codex adapter's steps.
+// reaches its agent), and every model adapter's steps.
 func isTool(to string) bool {
 	switch to {
-	case "", "user", "browser", "codex", "interpreter", "system":
+	case "", "user", "browser", "interpreter", "system":
 		return false
 	}
-	return !strings.HasPrefix(to, "codex.") && !strings.HasPrefix(to, "system.")
+	if strings.HasPrefix(to, "system.") {
+		return false
+	}
+	actor, _, _ := strings.Cut(to, ".")
+	return !adapters[actor]
 }
 
 // argument is a call's payload in a few words: its path or text when it has

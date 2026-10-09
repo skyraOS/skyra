@@ -44,6 +44,14 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 	if !reflect.DeepEqual(nodes[1].After, []string{"scope"}) || nodes[1].Narrows != nil {
 		t.Fatalf("run calls through scope's reference: %+v", nodes[1])
 	}
+	// The actor scope narrows to is think's model parameter (proposal 39),
+	// not an actor named for the binding.
+	if nodes[0].Narrows.Actor != "" || nodes[0].Narrows.Param != "model" {
+		t.Fatalf("scope narrows to the model parameter: %+v", nodes[0].Narrows)
+	}
+	if nodes[1].Calls != "" || nodes[1].Via != "scope" {
+		t.Fatalf("run calls the model scope narrowed: %+v", nodes[1])
+	}
 
 	h := &webhost{destinations: ds}
 	if d, ok := h.destinationFor(""); !ok || d.Title != "think" {
@@ -51,6 +59,24 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 	}
 	if _, ok := h.destinationFor("codex"); ok {
 		t.Fatal("an actor that is not a root was selectable")
+	}
+	if _, ok := h.destinationFor("think-claude"); ok {
+		t.Fatal("think-claude is a model of think, not a root")
+	}
+}
+
+// The model is a parameter of think (proposal 39). Conversations recorded
+// before then named Claude as a procedure; they load as think on Claude.
+func TestTheModelIsAParameterNotARoot(t *testing.T) {
+	for _, c := range []struct{ proc, model, wantProc, wantModel string }{
+		{"think", "claude", "think", "claude"},
+		{"think", "", "think", ""},
+		{"think-claude", "", "think", "claude"},
+		{"design", "", "design", ""},
+	} {
+		if p, m := normalizeRoot(c.proc, c.model); p != c.wantProc || m != c.wantModel {
+			t.Errorf("normalizeRoot(%q, %q) = %q, %q", c.proc, c.model, p, m)
+		}
 	}
 }
 

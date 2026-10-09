@@ -48,7 +48,7 @@ struct HistoryOverlay: View {
                                 HStack {
                                     Text(Sidebar.title(c)).lineLimit(1)
                                     Spacer()
-                                    Text("\(c.procedure ?? "Legacy") · \(c.phase.rawValue)").font(.system(size: 11)).foregroundStyle(Theme.dim.color)
+                                    Text("\(c.procedure ?? "Legacy")\(session.modelOf(c).map { " · \($0)" } ?? "") · \(c.phase.rawValue)").font(.system(size: 11)).foregroundStyle(Theme.dim.color)
                                 }.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                             Button {
