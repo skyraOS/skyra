@@ -112,6 +112,9 @@ these independent responsibilities.
 | Concern | Owner |
 | --- | --- |
 | Executable identity and declared input contracts | Registered Surface |
+| Execution semantics and permitted lifetime inputs for an operation | Selected contract `(target, schema)` |
+| Concrete lifetime options requested for an execution | Invocation payload, bounded by the contract and effective Horizon |
+| Acquired resource identity, owner, endpoint, authority, and termination condition | Kernel-maintained resource instance |
 | Which target/contract can actually be invoked | Horizon reach and generic kernel intake |
 | Files, sockets, services, scratch access | Horizon.Authority and generic sandbox rendering |
 | Human/model tool names, descriptions, aliases, argument translation | Adapter binding contracts |
@@ -243,10 +246,64 @@ a boolean to change every adapter return.
 
 Fresh sessions require fresh provider resources when their ambient state or
 sandbox differs. Generic resource acquisition returns an instance handle scoped
-to its owning invocation. Connection operations use that handle; close releases
-it. Resource identity comes from recorded acquisition/ownership, not
+to its owning execution scope. Connection operations use that handle; close
+releases it. Resource identity comes from recorded acquisition/ownership, not
 `Horizon.Delegated`. Repeated resumes of one acquisition reuse it; sibling
 acquisitions do not. The parent remains alive while waiting.
+
+#### Contract policy and kernel-maintained resource lifetime
+
+A target identifies a program; a contract `(target, schema)` selects an operation
+that program implements. A program can behave differently for each contract.
+Execution semantics that vary by operation belong to the selected contract,
+rather than an actor-wide resident mode. This does not make a contract a source
+of authority: Horizon still bounds which operation can be invoked and which
+resources it can acquire.
+
+For example, one target may expose the following contracts:
+
+| Contract | Behavior |
+| --- | --- |
+| `inspect` | Execute once and return |
+| `start` | Acquire a persistent process and return a scoped handle |
+| `exchange` | Use an existing process through an authorized handle |
+| `stop` | Release that process through an authorized handle |
+
+These are illustrative operations, not final wire names. Generic acquisition,
+connection, and release are kernel syscall contracts; adapters compose them to
+implement their own declared operations. A persistent resource can outlive many
+ephemeral procedure steps without keeping the procedure's own process alive.
+
+Separate declaration, request, and enforcement:
+
+- The registered target pins executable identity and its declared contracts.
+- The selected contract declares supported execution semantics and permitted
+  lifetime inputs. Its policy does not apply to sibling contracts automatically.
+- The invocation supplies concrete lifetime options within the selected contract
+  and the caller's effective Horizon.
+- The kernel records the acquired resource's identity, owning execution scope,
+  endpoint, effective authority, and termination condition, then maintains that
+  resource until the recorded condition occurs or the resource dies.
+
+The kernel allocates the endpoint and returns a scoped handle. A port number,
+process ID, or plain string alone is not authority to connect, inspect, or stop.
+The owning scope can be a procedure invocation or a longer-lived conversation
+scope when authorized. A call cannot select an arbitrary scope or gain a longer
+lifetime merely by supplying its name.
+
+Lifetime conditions must be directly observable by the kernel: owning-scope
+completion or fault, cancellation, deadline expiry, or explicit release. An
+adapter observes provider-specific events and invokes release; the kernel does
+not interpret provider messages. Later inspection or connection calls preserve
+the established lifetime. Changing it requires an explicit authorized operation.
+
+Define cancellation, process death, runtime restart, and interrupted acquisition
+or release before migration. Recorded ownership must let recovery reclaim the
+correct resource without closing the waiting parent or a sibling, and replay
+must not blindly duplicate an acquisition. A dead process's ambient state is not
+reconstructed merely by restarting its executable; resource loss and any
+authorized restart must be explicit outcomes. Record acquisition and release
+outcomes and define how pending lifetime conditions are recovered.
 
 Provider sandbox requirements are explicit grants/launch policy. A fresh task
 with no image capability receives no workspace/scratch image grant. Provider
@@ -272,8 +329,10 @@ explicitly. Remove the delegation-only depth branch from `narrowing`.
 2. Implement generic restricted reach and extension rules. Prove equivalent
    enforcement before retiring WorkTools. Update all reach consumers, registry
    loading, release verification, continuation construction, and replay encoding.
-3. Add generic resource-instance acquisition/lifetime semantics and explicit
-   provider grants. Verify parent/child/sibling isolation and cleanup.
+3. Add generic resource syscall contracts, contract-specific execution semantics,
+   kernel-maintained instance ownership and lifetime conditions, and explicit
+   provider grants. Verify parent/child/sibling isolation, cleanup, cancellation,
+   and interrupted acquisition/release recovery.
 4. Rewrite interpreter delegation and adapter delegate bindings to compose the
    new contracts, preserving public omitted/empty tools and actor semantics.
 5. Remove AgentContext, WorkTools, Delegated from Horizon and Grant; remove
@@ -297,6 +356,16 @@ cannot be handled only at adapter inputs.
   contain no agent model, tool label/catalog, or delegated mode.
 - A non-AI actor can use the same restricted target/contract capabilities and
   resource lifetime operations.
+- One target can expose both ephemeral and persistent operations through distinct
+  contracts; selecting one does not apply its execution policy to its siblings.
+- Separate acquisitions through the same contract have independent recorded
+  identities, owners, and permitted lifetimes. Inspection and connection calls
+  cannot implicitly overwrite acquisition policy.
+- Resource handles enforce scoped access, and the kernel enforces recorded
+  lifetime conditions without interpreting provider-specific messages.
+- Cancellation, process death, runtime restart, and interrupted acquisition or
+  release have recorded recovery semantics that avoid duplicate acquisition and
+  reclaim the correct resources without closing the parent or siblings.
 - Both adapters expose binding/configuration behavior through declared contracts;
   interpreter procedures compose them without provider-specific kernel checks.
 - Omitted tools inherit, empty tools permit no work calls, and aliases resolve

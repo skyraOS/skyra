@@ -1,0 +1,21 @@
+{
+  "action": "go.test",
+  "exit_code": 1,
+  "output": "=== RUN   TestRuntimeInterruptionEndsPendingRequestWithoutRetry\n    requests_test.go:68: open /dev/fd/4: operation not permitted\n--- FAIL: TestRuntimeInterruptionEndsPendingRequestWithoutRetry (0.02s)\nFAIL\nFAIL\tskyra/controller/hosts/web\t0.199s\n",
+  "error": "check_failed: exit status 1",
+  "report_path": "ideas/checks/skyra-check-2906671844.json",
+  "duration_ms": 5620,
+  "failures": [
+    {
+      "test": "TestRuntimeInterruptionEndsPendingRequestWithoutRetry",
+      "package": "skyra/controller/hosts/web",
+      "file": "requests_test.go",
+      "line": 68,
+      "message": "=== RUN   TestRuntimeInterruptionEndsPendingRequestWithoutRetry\n    requests_test.go:68: open /dev/fd/4: operation not permitted\n--- FAIL: TestRuntimeInterruptionEndsPendingRequestWithoutRetry (0.02s)"
+    },
+    {
+      "package": "skyra/controller/hosts/web",
+      "message": "FAIL\nFAIL\tskyra/controller/hosts/web\t0.199s"
+    }
+  ]
+}
