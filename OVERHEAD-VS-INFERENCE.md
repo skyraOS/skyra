@@ -227,3 +227,259 @@ model. These are still open:
   would close most of that gap.
 - Replay stays cheap: the byte-identical re-derivation at the end of each run
   is ~12 ms for 4–7 records.
+
+## Where the 250 ms goes
+
+Date: 2026-10-13 · branch `sync-measure` (from `52e478a`) · same machine.
+Every number below is at 0 ms injected latency against the fake app-server.
+
+**Short answer: most of it is `F_FULLFSYNC`.** A `tool:hello` run issues
+**70** flushes (`hello`: 36), about 10 per record. On this machine each one
+costs **~4.6 ms**, file or directory alike, and they run strictly one after
+another. That is **334 ms of a 500 ms run** (`hello`: 210 of 338). With
+flushes ordered rather than forced to stable storage (`F_BARRIERFSYNC`), one
+more model round trip costs ~80 ms instead of ~225 ms, and a one-step run
+takes ~110 ms instead of ~250. With no flushing at all it costs ~65 ms. What remains is process launches, `sandbox-exec`, and the
+adapter's round trip to the host.
+
+### How it was measured
+
+The instrumentation is on branch `sync-measure`, not on main. There, every
+flush in `runtime/tree` (and `interp/proc`) goes through one helper, `flush`
+(`controller/runtime/tree/sync.go`). Two environment variables, both off by
+default, control it:
+
+- `SKYRA_SYNC=full|barrier|plain|none` picks how to flush. Unset or unknown
+  means `full`, the old behavior: `File.Sync()`, which Go implements on darwin
+  as `fcntl(F_FULLFSYNC)` (`internal/poll/fd_fsync_darwin.go`).
+  - `barrier` is `fcntl(fd, F_BARRIERFSYNC=85)`. It falls back to
+    `F_FULLFSYNC` if the file system refuses it.
+  - `plain` is `syscall.Fsync`.
+  - `none` skips the flush and is for measurement only.
+- `SKYRA_SYNC_TRACE=1` logs a line for each flush: mode, what was flushed,
+  and how long it took.
+
+Phases were attributed by timestamping every stderr line on arrival. Each
+phase is the time from the previous phase line up to its own line. The
+release a child logs therefore includes the parent's handoff writes, which
+happen while the child waits for its Horizon.
+
+All tests (`go test ./...` in `controller/` and `controller/interp/`) pass in
+every mode.
+
+In isolation (`micro` benchmark, 40 runs, 400-byte file on APFS, 99% full
+internal SSD):
+
+| Mode | file flush (median) | directory flush (median) |
+|---|---|---|
+| `full` (F_FULLFSYNC) | 4.7 ms | 3.9 ms |
+| `barrier` (F_BARRIERFSYNC) | 0.65 ms | ~2 µs (p90 4 ms) |
+| `plain` (fsync) | 26 µs | 0.5 µs |
+| `none` | — | — |
+
+### Per phase, by sync mode
+
+`tool:hello` (2 model steps, 7 records). Each cell is wall ms, with ms
+inside flushes in parentheses. A row sums that phase over all steps, using
+per-step medians of 3 traced trials:
+
+| Phase (summed over the run) | Flushes | full | barrier | plain | none |
+|---|---|---|---|---|---|
+| process start → `genesis` | 2 | 23 (10) | 14 (2) | 15 (0) | 17 (0) |
+| `intake`: store input + commit record, ×5 | 20 | 117 (97) | 34 (13) | 24 (0) | 25 (0) |
+| `release`: parent's handoff writes + Horizon lookup, ×5 | 20 | 91 (83) | 18 (10) | 7 (0) | 15 (0) |
+| acceptance receipt before `execute`, ×2 | 6 | 31 (28) | 6 (4) | 2 (0) | 7 (0) |
+| `execute` → emitted, ×3 | 0 | 95 (0) | 83 (0) | 95 (0) | 92 (0) |
+| acceptance receipt before `settle`, ×2 | 6 | 31 (29) | 6 (3) | 2 (0) | 2 (0) |
+| `gather`: settle's result + resolve commit, ×2 | 12 | 62 (57) | 13 (7) | 4 (0) | 11 (0) |
+| `claim`, ×2 | 4 | 21 (19) | 4 (2) | 1 (0) | 1 (0) |
+| exit + replay check | 0 | 9 (0) | 9 (0) | 9 (0) | 9 (0) |
+| **total (median of run totals)** | **70** | **500 (334)** | **196 (43)** | **161 (1)** | **215 (0)** |
+
+`hello` (1 model step, 4 records):
+
+| Phase | Flushes | full | barrier | plain | none |
+|---|---|---|---|---|---|
+| process start → `genesis` | 2 | 37 (16) | 18 (2) | 14 (0) | 15 (0) |
+| `intake` ×2 | 10 | 79 (62) | 20 (7) | 15 (0) | 12 (0) |
+| `release` ×2 | 10 | 50 (46) | 9 (5) | 3 (0) | 4 (0) |
+| acceptance before `execute` | 3 | 16 (14) | 3 (2) | 1 (0) | 1 (0) |
+| `execute` → emitted | 0 | 73 (0) | 60 (0) | 66 (0) | 66 (0) |
+| acceptance before `settle` | 3 | 15 (14) | 4 (2) | 1 (0) | 1 (0) |
+| `gather` | 6 | 32 (29) | 6 (4) | 2 (0) | 2 (0) |
+| `claim` | 2 | 10 (9) | 2 (1) | 1 (0) | 1 (0) |
+| exit + replay check | 0 | 8 (0) | 8 (0) | 9 (0) | 9 (0) |
+| **total** | **36** | **338 (210)** | **125 (22)** | **107 (1)** | **111 (0)** |
+
+The flushes for one record, in order:
+
+| Write | Flushes |
+|---|---|
+| intake: `inputs/` (file, dir), `records/` (file, dir) | 4 |
+| release of an invoke that opens a slot: `emitted-` (file, frame dir), slot (file, deps/round dir), `deps/` dir, frame dir, `horizons/` (file, dir) | 8 |
+| release of a return: `horizons/` (file, dir) | 2 |
+| acceptance receipt: `acceptances/` (file, dir), lookup link (dir) | 3 |
+| settle: `result` (file, frame dir) | 2 |
+| fan-in claim: `resolved-` (file, frame dir) | 2 |
+
+The frame-dir flush right after the `deps/` flush costs ~5 µs: nothing is
+dirty by then. Every other flush pays the full ~4.6 ms.
+
+`none` is not faster than `plain` in the traced `tool:hello`. That gap is
+noise from 3 trials (one 10.8 ms `release` outlier). The untraced sweep
+below has the two equal.
+
+### End to end, by sync mode (`sweep.sh`-style, 10 trials, medians)
+
+One actor host and one discarded warm-up boot. Modes rotate within each
+trial, so drift hits all four equally. Run twice (a, b); b ran on a noisier
+machine:
+
+| Mode | `hello` a | `hello` b | `tool:hello` a | `tool:hello` b | One more round trip (`tool:hello` − `hello`, a) |
+|---|---|---|---|---|---|
+| `full` (default) | **250** | 338 | **476** | 517 | 226 ms |
+| `barrier` | **109** | 180 | **189** | 210 | 80 ms |
+| `plain` | **86** | 112 | **152** | 159 | 66 ms |
+| `none` | **83** | 118 | **150** | 152 | 67 ms |
+
+Every run answered correctly with the expected record count (4 / 7).
+
+Two earlier batches were discarded as confounded:
+
+- One ran `SKYRA_SYNC=$m sweep.sh 10 0` per mode. Its first trial per host was
+  always an outlier (298, 176, 185 ms), and `full hello` read 404 ms for 7
+  trials, then 250.
+- One interleaved modes by calling `sweep.sh 1 0` per trial. **`sweep.sh`
+  runs `go build` on every call. That rewrites the binaries even when nothing
+  changed, and the next exec of a rewritten binary is slow** (see process
+  start below). Every trial in that batch was a first exec.
+
+Use the single-host rotation above (or warm up once) when comparing.
+
+### Process start (~30 ms to `genesis`)
+
+Exec cost, 30 runs each, warm:
+
+| Binary | Size | Median exec → exit |
+|---|---|---|
+| `/usr/bin/true` | 0.1 MB | 1.4 ms |
+| Go hello world | 2.4 MB | 2.4 ms |
+| `skyra` (no args: `SealInherited`, usage, exit 2) | 5.2 MB | 2.9 ms |
+| `echo` target | 3.0 MB | 2.9 ms |
+
+**Go runtime start is not the cost:** `skyra` starts in ~3 ms, 0.5 ms more
+than a hello world. `skyra boot` takes 26 ms median from exec to its
+`genesis` line (`full`, range 19–40), or 11.5 ms with `SKYRA_SYNC=none`.
+What runs before genesis:
+
+| Step | Time |
+|---|---|
+| exec + Go runtime + `custody.SealInherited` (lists `/dev/fd`, sets CLOEXEC) | ~3 ms |
+| flags, `realDir` (MkdirAll, Abs, EvalSymlinks) | <0.5 ms |
+| `tree.Init` (5 × MkdirAll) | 0.3 ms |
+| `registry.Load`: parse the registry and contracts, then **read and SHA-256 every registered binary** (here 2 binaries, 6.9 MB) | 4.5–6.5 ms |
+| per-actor state dirs. With a `bundle`: re-read and hash the installer, run `install-bundle` as a subprocess | 0 here |
+| `tree.Commit(genesis)`: 2 F_FULLFSYNC | ~10 ms (0.7 with `none`) |
+| `tree.OpenFrame` | 0.1–0.3 ms |
+
+`run()` also re-reads and hashes the target binary on every `execute`
+(codex 3.9 MB, echo 3.0 MB: a few ms each). A registry with many large
+binaries pays the hashing at genesis in proportion to their size.
+
+**Code signature and quarantine.** The binaries are ad-hoc,
+linker-signed (`flags=0x20002(adhoc,linker-signed)`, no TeamIdentifier). They
+carry `com.apple.provenance` but **no `com.apple.quarantine`**, so the
+Gatekeeper assessment doesn't run on exec (`spctl --assess` rejects them,
+which doesn't matter for exec). The kernel still validates code-signature
+pages on every exec; that is inside the ~3 ms.
+
+**What does apply is a one-time first-exec cost per written file:**
+
+| First exec after… | Cost |
+|---|---|
+| a new file (a byte-identical copy included) | 130–340 ms |
+| a no-op `go build -o` that touched the file | 70 ms |
+| a plain `touch` | 47 ms |
+
+Every later exec takes ~3 ms. That pattern fits a syspolicyd/XProtect scan of
+newly modified executables; the cause was inferred, not traced. In steady
+state it doesn't touch Skyra, which never rewrites its binaries. It does
+touch every benchmark that rebuilds first, and a user's first run after
+install or update.
+
+### `sandbox-exec -p` (hypothesis: the profile is compiled on every call)
+
+20 runs each, interleaved, after one warm-up round:
+
+| Command | Median | Min |
+|---|---|---|
+| `/usr/bin/true` | 2.0 ms | 1.9 ms |
+| `sandbox-exec -p <real echo profile, 737 B> /usr/bin/true` | 9.5 ms | 8.8 ms |
+| `sandbox-exec -p '(version 1)(allow default)' /usr/bin/true` | 9.6 ms | 8.8 ms |
+| `sandbox-exec -f <same profile from a file> /usr/bin/true` | 9.5 ms | 8.8 ms |
+| `echo` target, bare | 3.4 ms | 3.0 ms |
+| `sandbox-exec -p <echo profile> echo` | 11.2 ms | 10.3 ms |
+
+The profile was rendered by `horizon.Render` from a real run's accepted
+Horizon, with the binary path changed to `/usr/bin/true` for the `true` rows.
+
+**Rejected as stated.** `sandbox-exec` adds ~7.5 ms per target, but a
+trivial profile costs the same as the real one, and `-f` costs the same as
+`-p`. Compiling this profile isn't measurable. The cost is fixed: a second
+exec (sandbox-exec, then the target) plus the sandbox library's own setup.
+That is ~7.5 ms of the ~12 ms `echo` execute step. A one-off profile cache
+wouldn't remove it. Applying the sandbox without the extra exec
+(`sandbox_init` in a pre-exec helper) might; that is unmeasured.
+
+### `release` (the 10–40 ms Horizon lookup)
+
+The child's `release` phase runs from its `intake` line to `Horizon …
+looked up`. Almost none of it is the lookup:
+
+- **Child:** sends its stamp, then waits. On receipt it calls `LoadHorizon`,
+  which reads `horizons/<id>`, re-hashes it, and `json.Unmarshal`s it. That
+  takes <1 ms.
+- **Parent, in that window:**
+  1. `tree.Load` of the child's record: read and re-hash.
+  2. `issueRelease`: `checkSuccessor` plus `Narrow`, which re-derives the
+     child's Horizon from its own. This is pure, under 1 ms.
+  3. Then the handoff writes:
+     - **Invoke that opens a slot:** `StoreInput` (deduplicated: stat, read,
+       re-hash, no write), `PublishEmission` (2 flushes), `OpenDep` (4),
+       `OpenFrame` (mkdir), `PutHorizon` (2). That is **8 F_FULLFSYNC,
+       ~32 ms**.
+     - **Return:** only `PutHorizon`: **2 F_FULLFSYNC, ~9 ms**.
+
+**The variance is the step kind, not the lookup.** An invoke's release costs
+~35 ms and a return's ~10 ms. Without flushes both take 1–3 ms.
+
+After `release`, the child does more before it acts:
+
+- `machine.accept` re-derives the Horizon again (`Narrow`, JSON-encode both,
+  compare).
+- `tree.Accept` re-reads and re-hashes the Horizon a second time and writes
+  the receipt (3 flushes, ~15 ms).
+
+Only then does `execute` or `settle` begin.
+
+### What this changes in the earlier table
+
+| Earlier line | What it actually is |
+|---|---|
+| `intake` 25–35 ms | 4 flushes (~20 ms), plus 6 for the first instance, which includes boot's `PutHorizon` of the root |
+| `release` 10–40 ms | the parent's 2 or 8 flushes |
+| `settle` ~15 ms | the acceptance receipt's 3 flushes |
+| `gather` ~30 ms | settle's 2 flushes plus intake's 4 |
+| `claim` ~10 ms | 2 flushes |
+
+Without flushing, the controller-only phases (intake, release, acceptance,
+gather, claim) total 2–7 ms per record. What remains per round trip:
+
+- `execute`: sandbox-exec ~7.5 ms, binary re-hash, and for the Codex adapter
+  its own process plus the host round trip (12–48 ms)
+- ~3 ms of exec per `skyra` process
+- registry hashing at genesis
+
+A durability policy that keeps crash consistency at a fraction of this cost
+is proposed in
+[`docs/next/proposal/40-durability-policy-proposal.md`](docs/next/proposal/40-durability-policy-proposal.md).
