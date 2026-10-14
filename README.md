@@ -168,6 +168,25 @@ with [`controller/core/machine/machine.go`](controller/core/machine/machine.go);
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
 
+## Performance
+
+Running a process per step has a cost, and it is fixed: about **250 ms per
+model round trip** on an M1 Pro, however long the model takes. Wall time
+tracks injected model latency with a slope of 0.99–1.0 per model step, so
+the controller is about 3% of a 10-second model turn.
+
+Replay re-derives and verifies about **20,000 records per second**, linear in
+run length: a 10,000-record run in about half a second (2-core Xeon, Linux).
+The published runs re-verify in under 40 ms in the browser.
+
+Measured 2026-10-13 at `55579a1`, go1.25.0. Method, the per-phase breakdown
+and caveats are in [`docs/performance.md`](docs/performance.md). Reproduce
+replay with:
+
+```
+go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
+```
+
 ## How it got here
 
 Seven months, solo, and a lot of deleted code. The lineage that matters:
