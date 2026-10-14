@@ -1,7 +1,8 @@
 # Controller overhead vs inference time
 
 Date: 2026-10-13  
-Commit: `55579a1` (main) · Apple M1 Pro, 16 GB · go1.25.0
+Commit: `55579a1` (main) · Apple M1 Pro, 16 GB · go1.25.0 · native comparison:
+codex-cli 0.160.0, `gpt-6.1-sol` (low)
 
 ## Question
 
@@ -103,21 +104,107 @@ looks like macOS scheduling or wake-up latency after a process sits idle for
 several seconds, not controller logic. It is small next to multi-second
 inference (<3%).
 
+## Against native Codex
+
+Everything above was measured against the fake app-server. This section
+times the same tasks on real Codex two ways: through Skyra (`skyra ask`), and
+run directly (`codex exec`), which is the conventional runtime.
+
+**Setup.** codex-cli 0.160.0, `gpt-6.1-sol` at `low` effort for both. `low`
+is the default Skyra's isolated Codex picks; native was pinned to match with
+`-m`/`-c`. Same machine. Two prompts:
+- **plain:** "Reply with exactly: ok"
+- **tools:** read three one-line files with a separate tool call each, then
+  reply with their contents
+
+The two runtimes were interleaved for 6 rounds, 24 real model runs in all.
+Every answer was correct, and both made exactly 3 tool calls in every tools
+run: native through its shell (`cat`), Skyra through its `read` target. The
+file paths in the prompt are absolute (see the note at the end of this
+section).
+
+**What is timed.** Both measure time to the answer.
+- **Native:** time from process start to the final agent message, from
+  `--json` event times. Native's ~1 s to exit after answering is left out.
+- **Skyra:** time from the run's first state write to its last, from file
+  times. The `go build` that `skyra ask` does first is left out. The ~0.2–0.5
+  s Skyra spends after `turn/completed` (resolve, claim, replay check) is
+  counted.
+- **Skyra per tool call:** from when the holder observed Codex's
+  `item/tool/call` (`observed_at`) to the record that delivers the result
+  back to the app-server.
+
+| Median of 6 (range) | Native Codex | Skyra | Skyra − native |
+|---|---|---|---|
+| **plain**: time to answer | 4.00 s (3.66–4.97) | 6.71 s (5.80–8.80) | **+2.7 s** |
+| └ start → `turn/start` | 0.54 s | 2.46 s | +1.9 s |
+| **tools**: time to answer | 15.87 s (13.99–21.18) | 17.40 s (15.79–18.56) | **+1.5 s** |
+| └ start → `turn/start` | 0.30 s | 2.38 s | +2.1 s |
+| └ per tool call (n=18) | not separately measured | **0.38 s** (0.34–0.64) | |
+
+**Reading it.**
+- **Startup is the largest fixed cost: about +2 s per `skyra ask`.**
+  - Native `codex exec` reaches `turn.started` in 0.3–0.5 s.
+  - Skyra launches a fresh resident app-server under its Seatbelt profile,
+    with an isolated Codex home and an egress proxy. This takes ~1.2–1.9 s
+    (one run took 3.3 s).
+  - Skyra then spends ~0.4–1.1 s on initialize and `thread/start`, each a
+    recorded exchange.
+- **Each tool call costs ~0.38 s of Skyra time.** This is more than the
+  ~0.25 s per round trip on the fake path. With the resident, a tool call is
+  about 13 records (73 records for the tools run against 34 for plain): the
+  `read` step plus the recorded exchanges with the app-server. Native's
+  matching cost, running `cat` in its own sandbox, didn't get a separate
+  timing because `codex exec --json` doesn't timestamp the start of a
+  command. It is likely tens of milliseconds.
+- **Model time dominates, and its spread is wider than the gap.** Native
+  tools runs ranged over 7 s. For tools, Skyra's model-plus-wind-down portion
+  was actually shorter (median 13.5 s against 15.6 s). The two runtimes don't
+  show the model the same thing:
+  - Skyra replaces Codex's base prompt and offers its own tools.
+  - Native carries its default prompt (~14k input tokens on the plain run)
+    and makes the model write shell commands.
+
+  So the total "tools" gap of +1.5 s is within noise. The fixed costs above
+  come to ~3.5 s for this task: +2.1 s startup, 3 × 0.38 s for the tool
+  calls, and ~0.3 s wind-down. Those are the reliable numbers, not the gap
+  between totals.
+
+So against a conventional runtime, Skyra costs about **2 s more to start** a
+one-shot run and about **0.4 s per tool call**. On a 4 s answer that is
++70%. On a 15–20 s tool-using task it is 10–20%, and the model's own
+variance is larger.
+
+Reproduce with:
+
+```sh
+controller/codex/latency/compare.sh 6   # interleaved rounds; real model calls
+```
+
+`compare.sh` prints one line per run. `run.py` beside it times a finished
+`skyra ask` run from its `.skyra/` state.
+
+**Note on absolute paths.** With the current uncommitted `models` target in
+the launcher's registry, the Horizon's first read grant is
+`~/.claude/cache/model-catalog` rather than the workspace. `read` resolves
+relative paths against the first grant, so `a.txt` came back `not_found`.
+Absolute paths sidestep this and are equally fair to both runtimes.
+
 ## Not yet measured
 
-These results show that Skyra's overhead is fixed per step. They **do not**
-show how that overhead compares with a conventional runtime, and nothing in
-this doc should be read as that comparison.
+The native comparison above covers one-shot runs of two small tasks on one
+model. These are still open:
 
-- **Native Codex comparison.** Nobody has timed the same task on Codex run
-  directly (`codex` CLI or app-server, no Skyra), so there is no baseline.
-  Every number here is measured against the fake app-server. Real Codex adds
-  its own costs: process and thread start, network, and tool execution under
-  its own sandbox. Without a side-by-side run there is no way to say whether
-  ~250 ms per round trip is more or less than what a conventional runtime
-  pays for the same calls. To measure it, run identical prompts with tool
-  calls through `skyra ask` and through native Codex, with the same model and
-  machine, and compare wall time per tool round trip.
+- **Startup across a conversation.** `skyra ask` launches a resident for
+  every run. In a conversation the resident is held between turns, which
+  should take most of the ~2 s startup off every turn after the first.
+  That wasn't timed.
+- **Native per-tool cost.** Native's cost per tool call wasn't isolated, so
+  the per-call comparison is Skyra's 0.38 s against an estimate, not a
+  measurement.
+- **Other models and longer tasks.** One model, at `low` effort, with 0 or 3
+  tool calls. Ten or more tool calls, higher effort, or Claude through its
+  adapter weren't run.
 - **Replay on Apple silicon.** The only replay number here is incidental:
   the ~12 ms byte-identical check at the end of each run, over 4–7 records.
   No dedicated replay benchmark was run. In particular, this sweep did not
@@ -131,8 +218,12 @@ this doc should be read as that comparison.
   - fewer process launches per round trip
   - fewer fsynced commits per step (intake + gather ≈ 60 ms)
   - faster Horizon lookup
-- A tool-heavy turn pays ~250 ms for each tool round trip. A 10-call agentic
-  turn adds ~2.5 s of controller time no matter how fast the model is. That
-  is the case to watch as models get faster.
+- A tool-heavy turn pays for each tool round trip: ~250 ms on the fake path
+  and ~380 ms with real Codex through the resident. A 10-call agentic turn
+  adds ~4 s of controller time no matter how fast the model is. That is the
+  case to watch as models get faster.
+- For one-shot runs, the ~2 s resident startup is the largest single cost
+  against native Codex. Reusing a resident, or starting one ahead of time,
+  would close most of that gap.
 - Replay stays cheap: the byte-identical re-derivation at the end of each run
   is ~12 ms for 4–7 records.
