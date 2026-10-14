@@ -170,18 +170,20 @@ design decision to the line that implements it.
 
 ## Performance
 
-Running a process per step has a cost, and it is fixed: about **250 ms per
-model round trip** on an M1 Pro, however long the model takes. Wall time
-tracks injected model latency with a slope of 0.99–1.0 per model step, so
-the controller is about 3% of a 10-second model turn.
+Against native Codex: **~2 s more startup per one-shot run and ~0.4 s per
+tool call**. Both are fixed per step and don't depend on model speed. On a
+15-second, three-tool task that comes to about 20%. Model time varies more
+than that from run to run.
 
-Replay re-derives and verifies about **20,000 records per second**, linear in
-run length: a 10,000-record run in about half a second (2-core Xeon, Linux).
-The published runs re-verify in under 40 ms in the browser.
+Replay re-derives and verifies about **47,000 records per second** from
+memory, linear in run length. A 10,000-record run takes about 0.2 s, or
+1.3 s from the tree on disk. Every published run re-verifies in under 4 ms.
 
-Measured 2026-10-13 at `55579a1`, go1.25.0. Method, the per-phase breakdown
-and caveats are in [`docs/performance.md`](docs/performance.md). Reproduce
-replay with:
+Everything was measured on an Apple M1 Pro, go1.25.0, 2026-10-13.
+[`docs/performance.md`](docs/performance.md) has the commits, method and
+caveats, and the full overhead write-up is in
+[`OVERHEAD-VS-INFERENCE.md`](OVERHEAD-VS-INFERENCE.md). Reproduce replay
+with:
 
 ```
 go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/

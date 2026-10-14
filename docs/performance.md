@@ -6,120 +6,49 @@ state in a record tree:
 1. **Running:** the controller overhead each live step adds on top of the model.
 2. **Checking:** how long replay takes to re-derive and verify a run.
 
-Short version: the controller adds about **250 ms per model round trip**, a
-fixed cost that does not grow with inference time, so it is about 3% of a
-10-second model turn. Replay re-verifies about **20,000 records per second**
-and scales linearly with the length of a run.
+Short version: against native Codex, Skyra costs **~2 s more startup per
+one-shot run and ~0.4 s per tool call**. Both are fixed per step and don't
+depend on model speed. Replay re-verifies about **47,000 records per second**
+from memory (about 7,800 from disk) and scales linearly with the length of a
+run.
 
-| | Machine | Date | Commit |
-|---|---|---|---|
-| Controller overhead | Apple M1 Pro, 16 GB, macOS, go1.25.0 | 2026-10-13 | `55579a1` |
-| Replay | 2-core 2.8 GHz Xeon, Linux, go1.25.0 | 2026-10-13 | `55579a1` |
+Everything here was measured on one machine: Apple M1 Pro, 16 GB, macOS,
+go1.25.0, 2026-10-13.
 
-The two sets were measured on different machines. Replay numbers on Apple
-silicon are likely faster; they have not been rerun there yet.
-
-## Controller overhead vs inference time
-
-### Question
-
-As model inference gets slower, does the controller's overhead stay fixed, or
-does it grow with it? Possible causes of growth would be polling, backoff, or
-keeping a process idle while the model thinks.
-
-### Answer
-
-**The overhead is a fixed cost per step and does not grow with inference
-time.** Wall time is inference time plus a constant:
-
-| Scenario | Model steps | Records | Fit: wall time vs injected latency | Median overhead |
-|---|---|---|---|---|
-| `hello` (model answers) | 1 | 4 | slope **0.99**, intercept 337 ms | **~270 ms** |
-| `tool:hello` (model calls `echo`, then answers) | 2 | 7 | slope **2.03**, intercept 552 ms | **~515 ms** |
-
-A slope of 1.0 per model step means each millisecond of inference costs one
-millisecond of wall time, with no multiplier. The intercept is the controller.
-Each model round trip costs roughly **250 ms** of overhead. Each record costs
-roughly **70 ms**, because a record is one `skyra` process run once.
-
-So the overhead's share shrinks as the model gets slower:
-
-| Inference per model step | `hello` overhead share | `tool:hello` overhead share |
-|---|---|---|
-| 0 ms (fake, instant) | ~100% | ~100% |
-| 250 ms | ~52% | ~51% |
-| 1 s | ~21% | ~20% |
-| 2 s | ~12% | ~11% |
-| 5 s | ~5% | ~5% |
-| 10 s (typical real Codex turn) | ~3% | ~3% |
-
-### Method
-
-- The fake Codex app-server (`controller/codex/fake`) was put behind a small
-  stdio proxy that holds back each **model output** for `N` ms before
-  forwarding it. A model output is an `item/tool/call` or an `item/completed`
-  line. Everything else (initialize, thread/start, turn/started, replies)
-  passes through immediately. This simulates inference without touching
-  controller code.
-- The proxy ran under the actor host exactly as `run.sh` sets it up
-  (`bin/host -sock … -- latency -ms N ./bin/fake-codex`).
-- Each trial was one `skyra boot -to codex -text <scenario>` against a fresh
-  `.skyra/` root, timed end to end, including the closing replay check.
-- Overhead = wall time − N × (model steps).
-- N swept 0, 50, 100 … 450, 500, 1000, 2000, 3000, 4000, 5000, 6000 ms: 120
-  trials, 4–10 per cell.
-
-The proxy, for reproduction:
-
-```go
-// latency: delays each model output (tool call or agent message) by -ms.
-for {
-	line, err := r.ReadString('\n')
-	if line != "" {
-		if strings.Contains(line, `"method":"item/tool/call"`) || strings.Contains(line, `"method":"item/completed"`) {
-			time.Sleep(time.Duration(*ms) * time.Millisecond)
-		}
-		io.WriteString(os.Stdout, line)
-	}
-	if err != nil {
-		break
-	}
-}
-```
-
-### Where the overhead goes
-
-Each line of the controller log was timestamped for a `tool:hello` run with
-0 ms latency (501 ms total). Every millisecond is accounted for:
-
-| Phase (per step) | Typical |
+| | Code |
 |---|---|
-| process start → `genesis` | ~30 ms |
-| `intake` (commit record) | 25–35 ms |
-| `release` (Horizon lookup) | 10–40 ms |
-| `execute` adapter → emitted (spawn Codex adapter, host round trip) | 30–70 ms |
-| `execute` echo → emitted | ~17 ms |
-| `settle` | ~15 ms |
-| `gather` (commit resolve) | ~30 ms |
-| `claim` | ~10 ms |
-| final replay check (7 records, byte-identical) | ~12 ms |
+| Controller overhead, fake app-server | `55579a1` |
+| Controller overhead, against native Codex (codex-cli 0.160.0, `gpt-6.1-sol` low) | `9049bb7`, clean worktree; controller code identical to `55579a1` |
+| Replay | `9049bb7` |
 
-At 6000 ms latency the trace is identical, except that the two `execute` lines
-each grow by exactly 6000 ms: the extra time is entirely inside the model
-wait. The controller does nothing differently while the model thinks. Reads
-from the actor host are event-driven (a condition variable), with no polling
-interval to miss.
+## Controller overhead
 
-### Caveat: jitter after long waits
+The full write-up, with method, per-phase breakdown, where the fsync time
+goes, and caveats, is
+[`OVERHEAD-VS-INFERENCE.md`](../OVERHEAD-VS-INFERENCE.md). In short:
 
-At 4–6 s of injected latency, some runs pick up an extra 100–300 ms
-(`tool:hello` cells: 4000 ms median 851 ms in one batch, 577–814 ms in a
-rerun, 490–584 ms in another). It is intermittent and does not scale with N:
-5000 and 6000 ms runs were often a flat ~520 ms. It did not reproduce in the
-timestamped runs, and keeping the CPU busy in parallel did not remove it. It
-looks like macOS scheduling or wake-up latency after a process sits idle for
-several seconds, not controller logic. It is small next to multi-second
-inference (<3%).
+- **The overhead is fixed per step, not per second of inference.** Against a
+  fake app-server with injected latency, wall time tracks model time with a
+  slope of 0.99–1.0 per model step, plus a constant of ~250 ms per model round
+  trip. About two-thirds of that constant is `F_FULLFSYNC`.
+- **Against native Codex (`codex exec`), median of 6 interleaved runs:**
+
+  | Time to answer | Native | Skyra | Gap |
+  |---|---|---|---|
+  | "Reply with exactly: ok" | 4.39 s | 6.70 s | +2.3 s |
+  | Read 3 files, one tool call each | 15.53 s | 18.60 s | +3.1 s |
+
+  Measured directly:
+  - Skyra's start to `turn/start` is +2.0 s. It launches a fresh, sandboxed
+    resident app-server per `skyra ask`.
+  - Each tool call costs Skyra 0.38 s.
+
+  On the tools task those fixed costs come to about 20% (~3.5 s of 15.5 s).
+  Model time varies more than that between runs, so with n = 6, treat the
+  difference between totals as within noise.
+
+To reproduce: `controller/codex/latency/sweep.sh` (fake path) and
+`controller/codex/latency/compare.sh` (native comparison, real model calls).
 
 ## Replay
 
@@ -127,29 +56,39 @@ Replay re-derives every record from its stored input with `machine.Step`, and
 checks that every stored object hashes to its name. Nothing is re-executed.
 
 Synthetic version-2 runs (agent → echo rounds, each resolve carrying its
-round's complete emission), median of 5:
+round's complete emission), median of 5 on the M1 Pro:
 
 | Records | From memory | From the tree on disk |
 |---|---|---|
-| 103 | 4.8 ms | 8.2 ms |
-| 1,003 | 51 ms | 84 ms |
-| 10,003 | 0.50 s | 0.90 s |
+| 103 | 2.0 ms | 10.2 ms |
+| 1,003 | 23 ms | 107 ms |
+| 10,003 | 0.21 s | 1.29 s |
 
-That is about 20,000 records/s from memory and 11,000 records/s from disk,
-linear in run length.
+That is about 47,000 records/s from memory and 7,800–10,000 records/s from
+disk, linear in run length. The first disk iteration at 10,003 records took
+4.2 s and the other four took 1.23–1.35 s, so the median leaves it out.
 
-The runs published on the website (`website/runs/`) replay in under 10 ms
-natively and under 40 ms as WebAssembly under Node, the engine the browser
-uses. The largest, `remember` (65 records), takes about 9 ms natively and
-36 ms as WebAssembly.
+The first draft measured these on a 2-core Xeon under Linux:
+- from memory: 4.8 ms, 51 ms and 0.50 s
+- from disk: 8.2 ms, 84 ms and 0.90 s
 
-Profiling shows SHA-256 takes about a third of replay time and JSON most of
-the rest, including `released()` re-marshaling a Horizon for each record.
+The M1 Pro is about 2.3× faster from memory but slower from disk. The disk
+gap wasn't investigated.
+
+The runs published on the website (`website/runs/`) replay natively in under
+4 ms each on the M1 Pro. The largest, `remember` (65 records), takes 3.7 ms,
+and the rest take 0.12–0.33 ms. As WebAssembly under Node, the engine the
+browser uses, they took under 40 ms on the Xeon (`remember`: 36 ms). The
+WebAssembly runs aren't part of the benchmark command and weren't rerun here.
+
+Profiling on the Xeon showed SHA-256 taking about a third of replay time and
+JSON most of the rest, including `released()` re-marshaling a Horizon for
+each record.
 
 To reproduce:
 
 ```
-go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
+go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/export/
 ```
 
 ## Implications
@@ -157,18 +96,26 @@ go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 - Overhead is **per step, not per second of inference**. To reduce it, cut
   steps or per-step cost, not waiting:
   - fewer process launches per round trip
-  - fewer fsynced commits per step (intake + gather ≈ 60 ms)
+  - cheaper flushes (`F_FULLFSYNC` is about two-thirds of the fake path's
+    overhead; see
+    [proposal 40](next/proposal/40-durability-policy-proposal.md))
   - faster Horizon lookup
-- A tool-heavy turn pays ~250 ms for each tool round trip. A 10-call agentic
-  turn adds ~2.5 s of controller time no matter how fast the model is. That is
-  the case to watch as models get faster.
+- A tool-heavy turn pays for each tool round trip: ~250 ms on the fake path
+  and ~380 ms with real Codex. A 10-call agentic turn adds ~4 s of controller
+  time no matter how fast the model is. That is the case to watch as models
+  get faster.
+- For one-shot runs, the ~2 s resident startup is the largest single cost
+  against native Codex.
 - Replay stays cheap: the byte-identical check at the end of each run takes
-  ~12 ms for 4–7 records, and a 10,000-record run re-verifies in about half a
-  second.
+  ~12 ms for 4–7 records, and a 10,000-record run re-verifies in ~0.2 s from
+  memory, or ~1.3 s from disk.
 
 ## Not yet measured
 
-- **Skyra against Codex running the same task natively.** The numbers above
-  isolate Skyra's own overhead with a fake model; they do not compare it with
-  a conventional runtime doing the same work.
-- **Replay on Apple silicon**, so both sets come from one machine.
+- **Startup across a conversation.** A held resident should take most of the
+  ~2 s startup off every turn after the first. That wasn't timed.
+- **Native per-tool cost**, so the per-call comparison is Skyra's 0.38 s
+  against an estimate.
+- **Other models and longer tasks**: higher effort, 10+ tool calls, and
+  Claude through its adapter.
+- **WebAssembly replay on Apple silicon.**

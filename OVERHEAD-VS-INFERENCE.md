@@ -1,8 +1,12 @@
 # Controller overhead vs inference time
 
-Date: 2026-10-13  
-Commit: `55579a1` (main) · Apple M1 Pro, 16 GB · go1.25.0 · native comparison:
-codex-cli 0.160.0, `gpt-6.1-sol` (low)
+Date: 2026-10-13 · Apple M1 Pro, 16 GB · go1.25.0
+
+| Measurement | Code | Notes |
+|---|---|---|
+| Fake-path sweep | `55579a1` | It builds only `controller/` binaries, so the uncommitted `models` target and launcher change were never part of it |
+| Native comparison | `9049bb7`, clean worktree | Controller code identical to `55579a1`. Only the latency tools and the benchmarks were added. codex-cli 0.160.0, `gpt-6.1-sol` (low) |
+| Replay | `9049bb7` | `go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/export/`; results in [`docs/performance.md`](docs/performance.md#replay) |
 
 ## Question
 
@@ -22,8 +26,12 @@ time.** Wall time is inference time plus a constant:
 
 A slope of 1.0 per model step means each millisecond of inference costs one
 millisecond of wall time, with no multiplier. The intercept is the controller.
-Each model round trip costs roughly **250 ms** of overhead. Each record costs
-roughly **70 ms**, because a record is one `skyra` process run once.
+Each model round trip costs roughly **250 ms** of overhead. On this fake path
+only, each record costs roughly **70 ms**: a record is one `skyra` process
+run once, and most of that is `F_FULLFSYNC` (see
+[Where the 250 ms goes](#where-the-250-ms-goes)). With real Codex through the
+resident, a tool call is about 13 records in ~0.38 s, roughly 30 ms per
+record. Don't carry the 70 ms figure over to that path.
 
 So the overhead fraction shrinks as the model gets slower:
 
@@ -37,7 +45,8 @@ So the overhead fraction shrinks as the model gets slower:
 | 10 s | ~3% | ~3% |
 
 Against the fake app-server, the controller adds about 0.25 s per model round trip,
-however long the model takes.
+however long the model takes. This share table describes the fake path. Against real
+Codex the costs are larger: see [Against native Codex](#against-native-codex).
 
 ## Method
 
@@ -118,10 +127,11 @@ is the default Skyra's isolated Codex picks; native was pinned to match with
   reply with their contents
 
 The two runtimes were interleaved for 6 rounds, 24 real model runs in all.
-Every answer was correct, and both made exactly 3 tool calls in every tools
-run: native through its shell (`cat`), Skyra through its `read` target. The
-file paths in the prompt are absolute (see the note at the end of this
-section).
+The rounds ran from a clean worktree at `9049bb7`, with no uncommitted
+changes. Every answer was correct, and both made exactly 3 tool calls in
+every tools run: native through its shell (`cat`), Skyra through its `read`
+target. The file paths in the prompt are absolute (see the note at the end of
+this section).
 
 **What is timed.** Both measure time to the answer.
 - **Native:** time from process start to the final agent message, from
@@ -134,22 +144,34 @@ section).
   `item/tool/call` (`observed_at`) to the record that delivers the result
   back to the app-server.
 
+The two clocks don't start and stop at quite the same points:
+- **Start.** Native starts at process launch. Skyra starts at its first state
+  write, which skips its own process start. That is ~25 ms, per
+  [Process start](#process-start-30-ms-to-genesis).
+- **End.** Native leaves out its ~1 s exit after answering. Skyra counts its
+  0.2–0.5 s wind-down.
+
+These roughly cancel, and are small next to the gaps below.
+
 | Median of 6 (range) | Native Codex | Skyra | Skyra − native |
 |---|---|---|---|
-| **plain**: time to answer | 4.00 s (3.66–4.97) | 6.71 s (5.80–8.80) | **+2.7 s** |
-| └ start → `turn/start` | 0.54 s | 2.46 s | +1.9 s |
-| **tools**: time to answer | 15.87 s (13.99–21.18) | 17.40 s (15.79–18.56) | **+1.5 s** |
-| └ start → `turn/start` | 0.30 s | 2.38 s | +2.1 s |
-| └ per tool call (n=18) | not separately measured | **0.38 s** (0.34–0.64) | |
+| **plain**: time to answer | 4.39 s (3.95–5.37) | 6.70 s (4.86–11.97) | **+2.3 s** |
+| └ start → `turn/start` | 0.45 s | 2.44 s | +2.0 s |
+| **tools**: time to answer | 15.53 s (14.71–19.32) | 18.60 s (16.89–20.94) | **+3.1 s** |
+| └ start → `turn/start` | 0.26 s | 2.30 s | +2.0 s |
+| └ per tool call (n=18) | not separately measured | **0.38 s** (0.34–0.55) | |
 
 **Reading it.**
 - **Startup is the largest fixed cost: about +2 s per `skyra ask`.**
   - Native `codex exec` reaches `turn.started` in 0.3–0.5 s.
   - Skyra launches a fresh resident app-server under its Seatbelt profile,
-    with an isolated Codex home and an egress proxy. This takes ~1.2–1.9 s
-    (one run took 3.3 s).
+    with an isolated Codex home and an egress proxy. This took ~1.2–1.9 s in
+    an earlier batch (one run took 3.3 s).
   - Skyra then spends ~0.4–1.1 s on initialize and `thread/start`, each a
     recorded exchange.
+
+  That split comes from the earlier batch's records. The clean rerun only
+  measured the total to `turn/start`.
 - **Each tool call costs ~0.38 s of Skyra time.** This is more than the
   ~0.25 s per round trip on the fake path. With the resident, a tool call is
   about 13 records (73 records for the tools run against 34 for plain): the
@@ -157,23 +179,34 @@ section).
   matching cost, running `cat` in its own sandbox, didn't get a separate
   timing because `codex exec --json` doesn't timestamp the start of a
   command. It is likely tens of milliseconds.
-- **Model time dominates, and its spread is wider than the gap.** Native
-  tools runs ranged over 7 s. For tools, Skyra's model-plus-wind-down portion
-  was actually shorter (median 13.5 s against 15.6 s). The two runtimes don't
-  show the model the same thing:
+- **Model time dominates, and n = 6 is small.** Native tools runs spread over
+  4.6 s here; an earlier batch spread over 7 s. The two runtimes don't show
+  the model the same thing:
   - Skyra replaces Codex's base prompt and offers its own tools.
   - Native carries its default prompt (~14k input tokens on the plain run)
     and makes the model write shell commands.
 
-  So the total "tools" gap of +1.5 s is within noise. The fixed costs above
-  come to ~3.5 s for this task: +2.1 s startup, 3 × 0.38 s for the tool
-  calls, and ~0.3 s wind-down. Those are the reliable numbers, not the gap
-  between totals.
+  So model time can differ between them for reasons unrelated to the
+  runtime, and these runs can't separate that from noise. Treat the
+  difference between totals as within noise. The reliable numbers are the
+  fixed costs, which are measured directly:
+  - startup: +2.0 s
+  - tool calls: 3 × 0.38 s
+  - wind-down: ~0.3 s
+
+  For this task those come to ~3.5 s. That is close to the measured gap of
+  3.1 s.
+
+  An earlier batch, run on a tree with uncommitted launcher changes, measured
+  a total gap of only +1.5 s for the same task, with the same startup and
+  per-call costs. That shows how far model time alone moves the totals.
 
 So against a conventional runtime, Skyra costs about **2 s more to start** a
-one-shot run and about **0.4 s per tool call**. On a 4 s answer that is
-+70%. On a 15–20 s tool-using task it is 10–20%, and the model's own
-variance is larger.
+one-shot run and about **0.4 s per tool call**. Both are fixed per step and
+don't depend on model speed. On a 4 s answer that is about +50% (+2.3 s
+measured). On the 15.5 s tools task it is about 20% in fixed costs (~3.5 s).
+The measured gap was smaller (3.1 s) because Skyra's model time was shorter in
+these runs, which is noise, not a result.
 
 Reproduce with:
 
@@ -184,11 +217,16 @@ controller/codex/latency/compare.sh 6   # interleaved rounds; real model calls
 `compare.sh` prints one line per run. `run.py` beside it times a finished
 `skyra ask` run from its `.skyra/` state.
 
-**Note on absolute paths.** With the current uncommitted `models` target in
-the launcher's registry, the Horizon's first read grant is
-`~/.claude/cache/model-catalog` rather than the workspace. `read` resolves
-relative paths against the first grant, so `a.txt` came back `not_found`.
-Absolute paths sidestep this and are equally fair to both runtimes.
+**Note on absolute paths.** The prompts name files by absolute path because
+of a bug the first batch hit, filed as
+[#41](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/issues/41).
+`read` and `find` resolve a relative path against the first read grant, and
+the registry sorts read grants by path. Any second read grant that sorts
+before the workspace takes over relative paths, and `a.txt` comes back
+`not_found`. In this case an uncommitted `models` target granting
+`~/.claude/cache/model-catalog` did that. On the clean tree the workspace is
+the only read grant, so the bug can't trigger. The paths stay absolute so
+both batches use the same prompt.
 
 ## Not yet measured
 
@@ -205,11 +243,17 @@ model. These are still open:
 - **Other models and longer tasks.** One model, at `low` effort, with 0 or 3
   tool calls. Ten or more tool calls, higher effort, or Claude through its
   adapter weren't run.
-- **Replay on Apple silicon.** The only replay number here is incidental:
-  the ~12 ms byte-identical check at the end of each run, over 4–7 records.
-  No dedicated replay benchmark was run. In particular, this sweep did not
-  measure how `skyra replay` scales with lineage length (hundreds or
-  thousands of records, long conversations) or where its time goes.
+
+Closed since the first draft:
+
+- **Replay on Apple silicon.** The replay benchmarks from PR #40 now run on
+  this machine at `9049bb7`:
+  - about 47,000 records/s from memory, linear to 10,003 records (0.21 s)
+  - about 7,800 records/s from the tree on disk (1.29 s for 10,003)
+  - every published website run in under 4 ms natively
+
+  Details are in [`docs/performance.md`](docs/performance.md#replay). The
+  WebAssembly figures there were not rerun here.
 
 ## Implications
 
@@ -226,7 +270,8 @@ model. These are still open:
   against native Codex. Reusing a resident, or starting one ahead of time,
   would close most of that gap.
 - Replay stays cheap: the byte-identical re-derivation at the end of each run
-  is ~12 ms for 4–7 records.
+  is ~12 ms for 4–7 records. A 10,000-record run re-verifies in ~0.2 s from
+  memory, or ~1.3 s from disk.
 
 ## Where the 250 ms goes
 
