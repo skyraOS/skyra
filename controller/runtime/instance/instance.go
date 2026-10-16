@@ -42,7 +42,7 @@ func Run(root string) error {
 	if _, err := handshake.Recv(up, &named); err != nil {
 		return err
 	}
-	under, err := tree.LoadHorizon(root, named.Horizon)
+	under, err := object(root, "horizons", named.Horizon)
 	if err != nil {
 		return fmt.Errorf("the Horizon this input was emitted under: %w", err)
 	}
@@ -132,7 +132,9 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				if err != nil {
 					return s, fmt.Errorf("no Horizon, cannot execute: %w", err)
 				}
-				h, err := tree.LoadHorizon(root, release.Horizon)
+				// The core verifies the Horizon and counts the descriptors
+				// against it (41, V1 and V3): nothing is checked here.
+				self, err := object(root, "horizons", release.Horizon)
 				if err != nil {
 					for _, f := range files {
 						f.Close()
@@ -140,18 +142,11 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 					_ = handshake.Send(up, handshake.Accepted{Error: "released Horizon: " + err.Error()})
 					return s, fmt.Errorf("released Horizon: %w", err)
 				}
-				if len(files) != h.Depth() {
-					for _, f := range files {
-						f.Close()
-					}
-					_ = handshake.Send(up, handshake.Accepted{Error: "descriptor count does not match release"})
-					return s, fmt.Errorf("release has %d descriptors; expected %d frames", len(files), h.Depth())
-				}
 				stack = files
 				accepting = release.Horizon
 				acceptingRecord = s.R
-				trace.Logf("release  Horizon %s looked up (reach %v, %d frames)", record.Short(release.Horizon), h.Names(), h.Depth())
-				e = machine.Released{Self: h, Frames: h.Depth()}
+				trace.Logf("release  Horizon %s read (%d descriptors)", record.Short(release.Horizon), len(files))
+				e = machine.Released{Self: self, Frames: len(files)}
 			case machine.Run:
 				trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
 				e = run(x)
@@ -262,10 +257,11 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 
 // gather reads what a waiting continuation waits on: its frame's record and
 // every round it opened, following resolve records back from the latest round
-// to the frame itself. Every record is loaded by stamp and refused unless it
-// hashes to it. Discharges are read from each child's frame.
+// to the frame itself. Discharges are read from each child's frame. Every
+// record goes to the core as read, and the core verifies it; the walk decodes
+// a resolve only to find the round before it.
 func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event, error) {
-	f, err := tree.Load(root, waiter.Frame)
+	f, err := object(root, "records", waiter.Frame)
 	if err != nil {
 		return nil, err
 	}
@@ -281,17 +277,17 @@ func gather(root string, frame *os.File, waiter horizon.Horizon) (machine.Event,
 		}
 		r := machine.Round{Stamp: round, Emission: emission}
 		for _, c := range children {
-			inv, err := tree.Load(root, c)
+			inv, err := object(root, "records", c)
 			if err != nil {
 				return nil, err
 			}
-			child := machine.Child{Stamp: c, Invoke: inv}
+			child := machine.Child{Invoke: inv}
 			if result, err := tree.Result(root, c); err == nil {
-				d, err := tree.Load(root, result)
+				d, err := object(root, "records", result)
 				if err != nil {
 					return nil, err
 				}
-				child.Result, child.Discharge = result, &d
+				child.Discharge = &d
 			}
 			r.Children = append(r.Children, child)
 		}
@@ -517,10 +513,18 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 		_ = cmd.Wait()
 		return down, cmd, machine.Stamped{Err: err.Error()}, nil
 	}
-	if r, err := tree.Load(root, st.Stamp); err == nil { // Load refuses a record that does not hash to its stamp
-		return down, cmd, machine.Stamped{Stamp: st.Stamp, R: &r}, nil
+	r, err := object(root, "records", st.Stamp) // the core verifies it
+	if err != nil {
+		return down, cmd, nil, err
 	}
-	return down, cmd, machine.Stamped{Stamp: st.Stamp}, nil
+	return down, cmd, machine.Stamped{Record: r}, nil
+}
+
+// object reads what the tree holds under a key, unverified: the core
+// verifies it.
+func object(root, kind, key string) (machine.Object, error) {
+	b, err := tree.Read(root, kind, key)
+	return machine.Object{Key: key, Raw: b}, err
 }
 
 const maxEmission = 16 << 20

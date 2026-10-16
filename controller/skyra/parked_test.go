@@ -18,7 +18,7 @@ func commit(t *testing.T, root string, h horizon.Horizon, in string) (record.Rec
 	if _, err := tree.Put(root, "inputs", []byte(in)); err != nil {
 		t.Fatal(err)
 	}
-	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: []byte(in)})
+	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
 	r := machine.Committed(effs)
 	stamp, err := tree.Commit(root, r)
 	if err != nil {

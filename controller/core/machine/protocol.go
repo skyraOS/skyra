@@ -53,12 +53,12 @@ const MaxFanOut = 32
 // Events are what the world reports to Step. Each phase accepts exactly one.
 type Event interface{ event() }
 
-type Received struct { // → Intake: the bytes, and the Horizon they were emitted under
-	Under horizon.Horizon
+type Received struct { // → Intake: the bytes, and the Horizon they were emitted under, as read by id
+	Under Object
 	In    []byte
 }
-type Released struct { // → Release: this instance's Horizon, and how many frame fds came with it
-	Self   horizon.Horizon
+type Released struct { // → Release: this instance's Horizon as read by id, and how many frame fds arrived with it
+	Self   Object
 	Frames int
 }
 type Emitted struct { // → Execute: the target's one emission (empty: it exited without one)
@@ -69,13 +69,12 @@ type Started struct { // → Execute: a resident was started, or its edge alread
 	Out []byte
 	Err string
 }
-type Stamped struct { // → Handoff: the successor's stamp, and the record the tree holds under it (nil: none)
-	Stamp string
-	R     *record.Record
-	Err   string
+type Stamped struct { // → Handoff: the record read under the successor's stamp (Key: the stamp; Raw nil: none)
+	Record Object
+	Err    string
 }
 type Settled struct { // → Gather: the waiting frame's record and every round it opened, oldest first
-	Frame  record.Record
+	Frame  Object
 	Rounds []Round
 }
 type Claimed struct{ Won bool }  // → Claim: whether this instance won the fan-in claim
@@ -94,10 +93,19 @@ type Round struct {
 
 // Child is one slot: the invoke that opened it, and what discharged it (nil: still open).
 type Child struct {
-	Stamp     string
-	Invoke    record.Record
-	Result    string
-	Discharge *record.Record
+	Invoke    Object
+	Discharge *Object
+}
+
+// A gathered round, verified: what continuation and resolve read.
+type round struct {
+	Emission, Stamp string
+	Children        []slot
+}
+type slot struct {
+	Stamp, Result     string
+	Invoke, Discharge record.Record
+	Discharged        bool
 }
 
 func (Received) event()   {}

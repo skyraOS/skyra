@@ -59,7 +59,7 @@ func (j *journal) intake(v any, want record.State) {
 	if err != nil {
 		j.t.Fatal(err)
 	}
-	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: j.h, In: in})
+	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(j.h), In: in})
 	r := machine.Committed(effects)
 	if r.State != want {
 		j.t.Fatalf("intake derived %+v, want %s", r, want)

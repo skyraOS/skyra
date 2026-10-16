@@ -142,12 +142,12 @@ func caller(h horizon.Horizon) string {
 
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
-func continuation(e Settled, waiter horizon.Horizon) []byte {
-	c := Continuation{Actor: agentName(waiter), Agent: waiter.Agent, Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(e.Frame), Caller: caller(waiter), Input: e.Frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+func continuation(frame record.Record, rounds []round, waiter horizon.Horizon) []byte {
+	c := Continuation{Actor: agentName(waiter), Agent: waiter.Agent, Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
-		c.Contract = against(*waiter.Surface, e.Frame.Payload)
+		c.Contract = against(*waiter.Surface, frame.Payload)
 	}
-	for _, round := range e.Rounds {
+	for _, round := range rounds {
 		for _, child := range round.Children {
 			c.Steps = append(c.Steps, StepView{To: child.Invoke.To, Payload: child.Invoke.Payload,
 				State: child.Discharge.State, Value: child.Discharge.Payload, Fault: child.Discharge.Fault, Observation: child.Result})

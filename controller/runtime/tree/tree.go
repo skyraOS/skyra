@@ -83,6 +83,19 @@ func Put(root, kind string, b []byte) (string, error) {
 	return h, syncDir(dir)
 }
 
+// Read reads an object by hash as it is stored, unverified: what the shell
+// hands the core, which verifies it (41, V1). A missing object is nil.
+func Read(root, kind, h string) ([]byte, error) {
+	if !validHash(h) {
+		return nil, nil
+	}
+	b, err := os.ReadFile(filepath.Join(root, kind, h))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	return b, err
+}
+
 // Get reads an object by hash and refuses it unless it hashes to that name.
 func Get(root, kind, h string) ([]byte, error) {
 	b, err := os.ReadFile(filepath.Join(root, kind, h))

@@ -120,10 +120,18 @@ func stop(s Instance, e Event) (Instance, []Effect) {
 // 1. Intake: interpret the bytes as operands against the Horizon they were
 // emitted under, derive the state, and commit a record. A refused output is
 // still committed, in a state of fault: a stamp means custody, not approval.
+//
+// The Horizon is read by id and verified here. If it does not verify there is
+// no predecessor to commit against, so this instance refuses custody.
 func intake(s Instance, e Received) (Instance, []Effect) {
-	r := interpret(e.Under, e.In)
-	r.Predecessor, r.Input = e.Under.Stamp, record.Sum(e.In)
-	s.Under, s.R, s.Stamp, s.State, s.Phase = e.Under, r, record.Stamp(r), r.State, Release
+	under, err := HorizonOf(e.Under)
+	if err != nil {
+		s.Phase = Done
+		return s, []Effect{Exit{"the Horizon this input was emitted under: " + err.Error()}}
+	}
+	r := interpret(under, e.In)
+	r.Predecessor, r.Input = under.Stamp, record.Sum(e.In)
+	s.Under, s.R, s.Stamp, s.State, s.Phase = under, r, record.Stamp(r), r.State, Release
 	return s, []Effect{StoreInput{e.In}, Commit{r}, SendStamp{s.Stamp}}
 }
 
@@ -131,16 +139,17 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 // surface, under a sandbox rendered from the Horizon. A leaf gets its payload;
 // a continuation gets its payload inside a continuation (no steps yet).
 func release(s Instance, e Released) (Instance, []Effect) {
-	if err := accept(s, e); err != nil {
+	self, err := accept(s, e)
+	if err != nil {
 		s.Phase = Done
 		return s, []Effect{Exit{err.Error()}}
 	}
-	s.Self, s.Phase = e.Self, Execute
-	if e.Self.Surface.System != "" {
+	s.Self, s.Phase = self, Execute
+	if self.Surface.System != "" {
 		// A syscall: nothing runs; its result is derived. A strand is read
 		// from the tree first.
 		if name, args := syscall(s.R.Payload); name == Stranding {
-			read, err := stranding(*e.Self.Resume, args)
+			read, err := stranding(*self.Resume, args)
 			if err != nil {
 				return refuse(s, record.Horizon, err.Error())
 			}
@@ -148,27 +157,27 @@ func release(s Instance, e Released) (Instance, []Effect) {
 		}
 		return execute(s, Emitted{Out: runFacet(s)})
 	}
-	if e.Self.Surface.Host != "" {
+	if self.Surface.Host != "" {
 		// An async surface: nothing runs here. The host takes custody and
 		// resumes this instance, in Execute, with the event as the output.
-		return s, []Effect{Park{Host: e.Self.Surface.Host, Payload: s.R.Payload}}
+		return s, []Effect{Park{Host: self.Surface.Host, Payload: s.R.Payload}}
 	}
 	stdin := []byte(s.R.Payload)
-	if e.Self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Actor: agentName(e.Self), Agent: e.Self.Agent, Agents: agents(e.Self), WorkTools: workToolNames(e.Self), Delegated: e.Self.Delegated, Frame: s.Stamp, Caller: caller(e.Self), Input: s.R.Payload, Contract: against(*e.Self.Surface, s.R.Payload),
-			Workspace: workspaceOf(e.Self), Scratch: e.Self.Authority.Scratch, Tools: tools(e.Self), Contracts: contracts(e.Self), Steps: []StepView{}})
+	if self.Surface.Continuation {
+		stdin, _ = json.Marshal(Continuation{Actor: agentName(self), Agent: self.Agent, Agents: agents(self), WorkTools: workToolNames(self), Delegated: self.Delegated, Frame: s.Stamp, Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
+			Workspace: workspaceOf(self), Scratch: self.Authority.Scratch, Tools: tools(self), Contracts: contracts(self), Steps: []StepView{}})
 	}
 	socket := ""
-	if e.Self.Surface.Resident || e.Self.Surface.Connection {
+	if self.Surface.Resident || self.Surface.Connection {
 		var err error
-		if socket, err = edgeSocket(e.Self, s.Floor, s.Sockets); err != nil {
+		if socket, err = edgeSocket(self, s.Floor, s.Sockets); err != nil {
 			return fault(s, err.Error())
 		}
 	}
-	if e.Self.Surface.Resident {
-		return s, []Effect{StartResident{Run: runOf(e.Self, stdin, s.Floor, ""), Socket: socket, Horizon: e.Self, Floor: s.Floor}}
+	if self.Surface.Resident {
+		return s, []Effect{StartResident{Run: runOf(self, stdin, s.Floor, ""), Socket: socket, Horizon: self, Floor: s.Floor}}
 	}
-	return s, []Effect{runOf(e.Self, stdin, s.Floor, socket)}
+	return s, []Effect{runOf(self, stdin, s.Floor, socket)}
 }
 
 // parked: the host holds custody now, so this instance exits. If it refused,
@@ -245,11 +254,11 @@ func handoff(s Instance, e Stamped) (Instance, []Effect) {
 		return killAndFault(s, "successor died before stamping: "+e.Err)
 	}
 	fanned := len(s.Outs) > 1
-	child, err := issueRelease(s.Self, s.Outs[len(s.Kids)], s.Stamp, e, fanned)
+	r, child, err := issueRelease(s.Self, s.Outs[len(s.Kids)], s.Stamp, e.Record, fanned)
 	if err != nil {
 		return killAndFault(s, err.Error())
 	}
-	s.Kids = append(s.Kids, Kid{Stamp: e.Stamp, R: *e.R, Horizon: child})
+	s.Kids = append(s.Kids, Kid{Stamp: e.Record.Key, R: r, Horizon: child})
 	if len(s.Kids) < len(s.Outs) {
 		return s, []Effect{Spawn{Under: s.Self, Out: s.Outs[len(s.Kids)]}}
 	}
@@ -301,11 +310,12 @@ func alone(kids []Kid) error {
 // discharges, and discharge it. If a continuation waits on that slot, read
 // what it still waits on.
 func settle(s Instance, e Released) (Instance, []Effect) {
-	if err := accept(s, e); err != nil {
+	self, err := accept(s, e)
+	if err != nil {
 		s.Phase = Done
 		return s, []Effect{Exit{err.Error()}}
 	}
-	s.Self = e.Self
+	s.Self = self
 	return discharged(s, Settle{s.Stamp})
 }
 
@@ -324,24 +334,56 @@ func discharged(s Instance, effs ...Effect) (Instance, []Effect) {
 // and the fan-in claim made: the winner resumes the waiter.
 func gather(s Instance, e Settled) (Instance, []Effect) {
 	waiter := s.Self.Resume
-	if record.Stamp(e.Frame) != waiter.Frame || len(e.Rounds) == 0 || e.Rounds[len(e.Rounds)-1].Stamp != waiter.Stamp {
-		s.Phase = Done
-		return s, []Effect{Exit{"gathered rounds do not belong to the waiting continuation"}}
+	frame, rounds, err := gathered(e)
+	if err == nil && (e.Frame.Key != waiter.Frame || len(rounds) == 0 || rounds[len(rounds)-1].Stamp != waiter.Stamp) {
+		err = errors.New("gathered rounds do not belong to the waiting continuation")
 	}
-	for _, c := range e.Rounds[len(e.Rounds)-1].Children {
-		if c.Discharge == nil {
+	if err != nil {
+		s.Phase = Done
+		return s, []Effect{Exit{err.Error()}}
+	}
+	for _, c := range rounds[len(rounds)-1].Children {
+		if !c.Discharged {
 			s.Phase = Done // a sibling's discharge will be the last one
 			return s, []Effect{Exit{}}
 		}
 	}
-	return resolve(s, e)
+	return resolve(s, frame, rounds)
+}
+
+// gathered verifies every record the shell read for gather.
+func gathered(e Settled) (record.Record, []round, error) {
+	frame, err := RecordOf(e.Frame)
+	if err != nil {
+		return record.Record{}, nil, err
+	}
+	rounds := make([]round, len(e.Rounds))
+	for i, r := range e.Rounds {
+		rounds[i] = round{Emission: r.Emission, Stamp: r.Stamp}
+		for _, c := range r.Children {
+			inv, err := RecordOf(c.Invoke)
+			if err != nil {
+				return record.Record{}, nil, err
+			}
+			sl := slot{Stamp: c.Invoke.Key, Invoke: inv}
+			if c.Discharge != nil {
+				d, err := RecordOf(*c.Discharge)
+				if err != nil {
+					return record.Record{}, nil, err
+				}
+				sl.Result, sl.Discharge, sl.Discharged = c.Discharge.Key, d, true
+			}
+			rounds[i].Children = append(rounds[i].Children, sl)
+		}
+	}
+	return frame, rounds, nil
 }
 
 // resolve commits the resolve record for the gathered round and makes the
 // fan-in claim. The winner resumes the waiter.
-func resolve(s Instance, e Settled) (Instance, []Effect) {
+func resolve(s Instance, frame record.Record, rounds []round) (Instance, []Effect) {
 	waiter := s.Self.Resume
-	round := e.Rounds[len(e.Rounds)-1]
+	round := rounds[len(rounds)-1]
 	var results []string
 	for _, c := range round.Children {
 		results = append(results, c.Result)
@@ -349,7 +391,7 @@ func resolve(s Instance, e Settled) (Instance, []Effect) {
 	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results, Emission: round.Emission})
 	r, _ := Resolved(s.Stamp, obs)
 	s.Held, s.Phase = r, Claim
-	s.Next = continuation(e, *waiter)
+	s.Next = continuation(frame, rounds, *waiter)
 	return s, []Effect{StoreInput{obs}, Commit{r}, TryClaim{Round: round.Stamp, Stamp: record.Stamp(r)}}
 }
 

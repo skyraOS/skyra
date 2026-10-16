@@ -43,7 +43,7 @@ func longLineage(tb testing.TB, root string, rounds int) (string, int) {
 		return s
 	}
 	emit := func(under horizon.Horizon, out string) (string, horizon.Horizon) {
-		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: under, In: []byte(out)})
+		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: []byte(out)})
 		r := machine.Committed(effs)
 		s := put([]byte(out), r)
 		next, err := machine.Narrow(under, r, s)

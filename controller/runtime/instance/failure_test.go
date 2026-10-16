@@ -22,7 +22,7 @@ func TestDrivePublishesIOFailureWithoutFalseDischarge(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "records")); err != nil {
 		t.Fatal(err)
 	}
-	_, err = Drive(root, nil, []*os.File{frame}, machine.Instance{Phase: machine.Intake}, machine.Received{Under: horizon.Horizon{Stamp: "g", Frame: "g"}, In: []byte(`{"to":"missing","payload":{}}`)})
+	_, err = Drive(root, nil, []*os.File{frame}, machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(horizon.Horizon{Stamp: "g", Frame: "g"}), In: []byte(`{"to":"missing","payload":{}}`)})
 	if err == nil {
 		t.Fatal("missing record directory accepted")
 	}

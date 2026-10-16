@@ -40,7 +40,7 @@ func TestPrimaryBundleContractIsPassedToContinuation(t *testing.T) {
 
 // intakeRecord runs the Intake phase and returns what it commits.
 func intakeRecord(h horizon.Horizon, in string) record.Record {
-	_, effs := Step(Instance{Phase: Intake}, Received{Under: h, In: []byte(in)})
+	_, effs := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(h), In: []byte(in)})
 	return Committed(effs)
 }
 
@@ -76,7 +76,7 @@ func TestInterpret(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, effs := Step(Instance{Phase: Intake}, Received{Under: c.under, In: []byte(c.in)})
+			s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
 			r := Committed(effs)
 			if s.Phase != Release || s.Stamp != record.Stamp(r) || s.State != r.State {
 				t.Fatalf("intake must derive the state, commit, stamp and wait for the release: %+v", s)
@@ -99,7 +99,7 @@ func TestInterpret(t *testing.T) {
 
 // released feeds a release carrying the whole frame stack the Horizon needs.
 func released(s Instance, self horizon.Horizon) (Instance, []Effect) {
-	return Step(s, Released{Self: self, Frames: self.Depth()})
+	return Step(s, Released{Self: HeldHorizon(self), Frames: self.Depth()})
 }
 
 // The state picks the program: the same Released event runs a target for an
@@ -115,7 +115,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 		{leaf, `{"to":"r1","payload":"x"}`, record.Return, Settle{}},
 		{operator, `{"to":"ghost","payload":{}}`, record.Fault, Settle{}},
 	} {
-		s, _ := Step(Instance{Phase: Intake}, Received{Under: c.under, In: []byte(c.in)})
+		s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
 		if s.State != c.state {
 			t.Fatalf("%s: state %s, want %s", c.in, s.State, c.state)
 		}
@@ -127,7 +127,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 	}
 
 	// A terminal state never executes, even if an event for Execute arrives.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
 	s.Phase = Execute
 	_, effs := Step(s, Emitted{Out: []byte("x")})
 	if x, ok := effs[0].(Exit); !ok || x.Err == "" {
@@ -193,7 +193,7 @@ func TestConnectionsAreEdges(t *testing.T) {
 func awaiting(t *testing.T) Instance {
 	t.Helper()
 	s, _ := Step(Instance{Floor: "/state/.skyra", Phase: Intake},
-		Received{Under: operator, In: []byte(`{"to":"echo","payload":{"text":"hi"}}`)})
+		Received{Under: HeldHorizon(operator), In: []byte(`{"to":"echo","payload":{"text":"hi"}}`)})
 	return s
 }
 
@@ -227,9 +227,9 @@ func TestReleaseRefusals(t *testing.T) {
 	other := good
 	other.Stamp = "other"
 	for name, ev := range map[string]Released{
-		"for another commit":        {Self: other, Frames: 2},
-		"without its frame stack":   {Self: good, Frames: 0},
-		"missing the waiting frame": {Self: good, Frames: 1},
+		"for another commit":        {Self: HeldHorizon(other), Frames: 2},
+		"without its frame stack":   {Self: HeldHorizon(good), Frames: 0},
+		"missing the waiting frame": {Self: HeldHorizon(good), Frames: 1},
 	} {
 		_, effs := Step(s, ev)
 		if x, ok := effs[0].(Exit); !ok || x.Err == "" {
@@ -244,12 +244,12 @@ func TestReleaseRefusals(t *testing.T) {
 func TestReleaseToSettle(t *testing.T) {
 	// The operator's own emission is refused: its fault discharges frame 0,
 	// which only the operator waits on.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"ghost","payload":{}}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"ghost","payload":{}}`)})
 	s, effs := released(s, selfOf(t, s))
 	if !reflect.DeepEqual(effs, []Effect{Settle{s.Stamp}, Exit{}}) {
 		t.Fatalf("with only the operator waiting: %#v", effs)
 	}
-	s, _ = Step(Instance{Phase: Intake}, Received{Under: leaf, In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, _ = Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
 	s, effs = released(s, selfOf(t, s))
 	if !reflect.DeepEqual(effs, []Effect{Settle{s.Stamp}, GatherWaiter{}}) || s.Phase != Gather {
 		t.Fatalf("with a continuation waiting: %#v", effs)
@@ -302,7 +302,7 @@ func TestHandoff(t *testing.T) {
 
 	// The successor commits exactly what a real successor would.
 	succ := intakeRecord(s.Self, string(out))
-	s2, effs := Step(s, Stamped{Stamp: record.Stamp(succ), R: &succ})
+	s2, effs := Step(s, Stamped{Record: HeldRecord(succ)})
 	if succ.State != record.Return {
 		t.Fatalf("the emission addressed the frame's slot: %+v", succ)
 	}
@@ -326,10 +326,14 @@ func TestHandoffRefusals(t *testing.T) {
 	wrongBytes := intakeRecord(s.Self, `other`)
 
 	for name, ev := range map[string]Stamped{
-		"no record":     {Stamp: "nothing"},
-		"wrong parent":  {Stamp: record.Stamp(wrongParent), R: &wrongParent},
-		"wrong bytes":   {Stamp: record.Stamp(wrongBytes), R: &wrongBytes},
+		"no record":     {Record: Object{Key: "nothing"}},
+		"wrong parent":  {Record: HeldRecord(wrongParent)},
+		"wrong bytes":   {Record: HeldRecord(wrongBytes)},
 		"died silently": {Err: "EOF"},
+		// A lying shell (41, V1): what it read under the stamp is not the record.
+		"flipped bytes":       {Record: flipped(HeldRecord(good))},
+		"non-canonical bytes": {Record: reencoded(HeldRecord(good))},
+		"another record":      {Record: Object{Key: record.Stamp(good), Raw: HeldRecord(wrongBytes).Raw}},
 	} {
 		_, effs := Step(s, ev)
 		var fault *record.Record
@@ -356,7 +360,7 @@ func TestHandoffRefusals(t *testing.T) {
 // back, all without processes: the whole round trip is step.
 func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	// The operator invokes the agent. It runs with a continuation: no steps yet.
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, effs := released(a, selfOf(t, a))
 	var c Continuation
 	if err := json.Unmarshal(effs[0].(Run).Stdin, &c); err != nil || c.Frame != a.Stamp || string(c.Input) != `{"text":"hi"}` || len(c.Steps) != 0 {
@@ -367,8 +371,8 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	// a slot for it in its own frame, in this round, before releasing it.
 	call := []byte(`{"to":"echo","payload":{"text":"hi"}}`)
 	a, _ = Step(a, Emitted{Out: call})
-	b, _ := Step(Instance{Phase: Intake}, Received{Under: a.Self, In: call})
-	_, effs = Step(a, Stamped{Stamp: b.Stamp, R: &b.R})
+	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: call})
+	_, effs = Step(a, Stamped{Record: HeldRecord(b.R)})
 	effs = publishedRound(t, effs, call, a.Self.Stamp)
 	if effs[0] != (OpenDep{Round: a.Self.Stamp, Child: b.Stamp}) || !effs[1].(SendHorizon).NewFrame {
 		t.Fatalf("an invoke's slot is opened before it is released: %#v", effs)
@@ -378,8 +382,8 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	b, _ = released(b, effs[1].(SendHorizon).Child)
 	echoReturn := []byte(`{"to":"` + b.Self.Frame + `","payload":"hi"}`)
 	b, _ = Step(b, Emitted{Out: echoReturn})
-	r, _ := Step(Instance{Phase: Intake}, Received{Under: b.Self, In: echoReturn})
-	_, effs = Step(b, Stamped{Stamp: r.Stamp, R: &r.R})
+	r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(b.Self), In: echoReturn})
+	_, effs = Step(b, Stamped{Record: HeldRecord(r.R)})
 	r, effs = released(r, effs[0].(SendHorizon).Child)
 	if !reflect.DeepEqual(effs, []Effect{Settle{r.Stamp}, GatherWaiter{}}) {
 		t.Fatalf("the return discharges echo's slot, then reads the agent's round: %#v", effs)
@@ -387,11 +391,12 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 
 	agentRecord := a.R
 	round := func(discharged bool) Settled {
-		child := Child{Stamp: b.Stamp, Invoke: b.R}
+		child := Child{Invoke: HeldRecord(b.R)}
 		if discharged {
-			child.Result, child.Discharge = r.Stamp, &r.R
+			d := HeldRecord(r.R)
+			child.Discharge = &d
 		}
-		return Settled{Frame: agentRecord, Rounds: []Round{{Stamp: a.Stamp, Children: []Child{child}}}}
+		return Settled{Frame: HeldRecord(agentRecord), Rounds: []Round{{Stamp: a.Stamp, Children: []Child{child}}}}
 	}
 
 	// Wait for all: an open slot means no resolve, and nothing is committed.
@@ -435,7 +440,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	}
 
 	// Its return discharges the agent's own slot, and wakes the operator.
-	final, _ := Step(Instance{Phase: Intake}, Received{Under: g.Self, In: []byte(`{"to":"` + a.Stamp + `","payload":"echo said \"hi\""}`)})
+	final, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(g.Self), In: []byte(`{"to":"` + a.Stamp + `","payload":"echo said \"hi\""}`)})
 	child, _ := Narrow(g.Self, final.R, final.Stamp)
 	if final.State != record.Return || child.Frame != a.Stamp || child.Resume.Frame != operator.Frame {
 		t.Fatalf("the agent's return discharges its own frame, waited on by the operator: %+v", child)
@@ -535,7 +540,7 @@ func TestMachineIsPure(t *testing.T) {
 func TestAsyncSurfaceParks(t *testing.T) {
 	browserS := horizon.Surface{Host: "/tmp/park.sock", Input: echoIn}
 	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"browser": browserS}}
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: root, In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(root), In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
 	s, effs := released(s, selfOf(t, s))
 	if s.Phase != Execute || !reflect.DeepEqual(effs, []Effect{Park{Host: "/tmp/park.sock", Payload: []byte(`{"text":"show me"}`)}}) {
 		t.Fatalf("an async invoke parks with its host, in Execute: %s %#v", s.Phase, effs)
@@ -572,7 +577,7 @@ func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 // handoff's effects.
 func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Effect) {
 	t.Helper()
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, _ = released(a, selfOf(t, a))
 	emission := []byte("[" + strings.Join(instructions, ",") + "]")
 	a, effs := Step(a, Emitted{Out: emission})
@@ -582,9 +587,9 @@ func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Effec
 		if !ok || string(spawn.Out) != in {
 			t.Fatalf("instruction %d is spawned with exactly its bytes: %#v", i, effs)
 		}
-		k, _ := Step(Instance{Phase: Intake}, Received{Under: a.Self, In: spawn.Out})
+		k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: spawn.Out})
 		kids = append(kids, k)
-		a, effs = Step(a, Stamped{Stamp: k.Stamp, R: &k.R})
+		a, effs = Step(a, Stamped{Record: HeldRecord(k.R)})
 		if i < len(instructions)-1 {
 			for _, e := range effs {
 				if _, released := e.(SendHorizon); released {
@@ -629,17 +634,18 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 		k, _ = released(k, self)
 		out := []byte(`{"to":"` + self.Frame + `","payload":"` + []string{"b", "a"}[i] + `"}`)
 		k, _ = Step(k, Emitted{Out: out})
-		r, _ := Step(Instance{Phase: Intake}, Received{Under: k.Self, In: out})
-		_, hand := Step(k, Stamped{Stamp: r.Stamp, R: &r.R})
+		r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(k.Self), In: out})
+		_, hand := Step(k, Stamped{Record: HeldRecord(r.R)})
 		r, _ = released(r, hand[0].(SendHorizon).Child)
 		returns = append(returns, r)
-		children = append(children, Child{Stamp: kids[i].Stamp, Invoke: kids[i].R, Result: r.Stamp, Discharge: &r.R})
+		d := HeldRecord(r.R)
+		children = append(children, Child{Invoke: HeldRecord(kids[i].R), Discharge: &d})
 	}
-	open := Settled{Frame: a.R, Rounds: []Round{{Stamp: a.Self.Stamp, Children: []Child{children[0], {Stamp: kids[1].Stamp, Invoke: kids[1].R}}}}}
+	open := Settled{Frame: HeldRecord(a.R), Rounds: []Round{{Stamp: a.Self.Stamp, Children: []Child{children[0], {Invoke: HeldRecord(kids[1].R)}}}}}
 	if _, effs := Step(returns[0], open); !reflect.DeepEqual(effs, []Effect{Exit{}}) {
 		t.Fatalf("a round with an open slot does not resolve: %#v", effs)
 	}
-	full := Settled{Frame: a.R, Rounds: []Round{{Stamp: a.Self.Stamp, Children: children}}}
+	full := Settled{Frame: HeldRecord(a.R), Rounds: []Round{{Stamp: a.Self.Stamp, Children: children}}}
 	g, effs := Step(returns[1], full)
 	res := effs[1].(Commit).R
 	if !reflect.DeepEqual(res.Deps, []string{returns[0].Stamp, returns[1].Stamp}) {
@@ -685,17 +691,17 @@ func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
 		"a return":    `{"to":"FRAME","payload":"done"}`,
 		"a narrowing": `{"to":"system","payload":{"narrow":{"actor":"echo"}}}`,
 	} {
-		ag, _ := Step(Instance{Phase: Intake}, Received{Under: room, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(room), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 		self, _ := Narrow(room, ag.R, ag.Stamp)
 		ag, _ = released(ag, self)
 		other = strings.ReplaceAll(other, "FRAME", ag.Self.Frame)
 		ag, effs := Step(ag, Emitted{Out: []byte("[" + echo + "," + other + "]")})
 		for _, in := range []string{echo, other} {
-			k, _ := Step(Instance{Phase: Intake}, Received{Under: ag.Self, In: effs[0].(Spawn).Out})
+			k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(ag.Self), In: effs[0].(Spawn).Out})
 			if string(effs[0].(Spawn).Out) != in {
 				t.Fatalf("%s: spawned %s", name, effs[0].(Spawn).Out)
 			}
-			ag, effs = Step(ag, Stamped{Stamp: k.Stamp, R: &k.R})
+			ag, effs = Step(ag, Stamped{Record: HeldRecord(k.R)})
 		}
 		if _, killed := effs[0].(KillSuccessor); !killed {
 			t.Fatalf("%s: every successor is killed: %#v", name, effs)
@@ -760,7 +766,7 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 		}
 		return c
 	}
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, effs := released(a, selfOf(t, a))
 	if c := stdinOf(effs); c.Caller != "" {
 		t.Fatalf("the operator has no name, got caller %q", c.Caller)
@@ -768,8 +774,8 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 	// The agent invokes a continuation: that child is told the agent called it.
 	call := []byte(`{"to":"agent","payload":{"text":"again"}}`)
 	a, _ = Step(a, Emitted{Out: call})
-	b, _ := Step(Instance{Phase: Intake}, Received{Under: a.Self, In: call})
-	_, effs = Step(a, Stamped{Stamp: b.Stamp, R: &b.R})
+	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: call})
+	_, effs = Step(a, Stamped{Record: HeldRecord(b.R)})
 	effs = publishedRound(t, effs, call, a.Self.Stamp)
 	_, effs = released(b, effs[1].(SendHorizon).Child)
 	if c := stdinOf(effs); c.Caller != "agent" {
@@ -777,7 +783,7 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 	}
 	// A payload cannot claim a caller: the field is the kernel's, outside
 	// input, and a strict contract refuses an unknown one at intake.
-	forged, _ := Step(Instance{Phase: Intake}, Received{Under: operator, In: []byte(`{"to":"agent","payload":{"text":"x","caller":"user"}}`)})
+	forged, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"x","caller":"user"}}`)})
 	if forged.R.State != record.Fault || forged.R.Fault.Kind != record.Contract {
 		t.Fatalf("a payload naming a caller was not refused: %+v", forged.R)
 	}
@@ -786,10 +792,61 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 func TestContinuationReportsCurrentWorkspaceAndScratch(t *testing.T) {
 	h := horizon.Horizon{Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: "/workspace", Scope: "subpath"}}, Scratch: "/notes"}}
 	var c Continuation
-	if e := json.Unmarshal(continuation(Settled{Frame: record.Record{Payload: json.RawMessage(`{}`)}}, h), &c); e != nil {
+	if e := json.Unmarshal(continuation(record.Record{Payload: json.RawMessage(`{}`)}, nil, h), &c); e != nil {
 		t.Fatal(e)
 	}
 	if c.Workspace != "/workspace" || c.Scratch != "/notes" {
 		t.Fatal(c)
+	}
+}
+
+// flipped is an object whose bytes were changed after it was read: it no
+// longer hashes to its key.
+func flipped(o Object) Object {
+	b := append([]byte(nil), o.Raw...)
+	b[len(b)/2] ^= 1
+	return Object{Key: o.Key, Raw: b}
+}
+
+// reencoded is the same value in another encoding, under the hash of those
+// bytes: it hashes to its key, but it is not the canonical form.
+func reencoded(o Object) Object {
+	var v map[string]any
+	_ = json.Unmarshal(o.Raw, &v)
+	b, _ := json.MarshalIndent(v, "", " ")
+	return Object{Key: record.Sum(b), Raw: b}
+}
+
+// A lying shell (41, V1): every content-addressed read is verified by the
+// core, so bytes that do not hash to their key, or are not the canonical
+// encoding, stop the instance before anything acts on them.
+func TestTheShellCannotPassOffContentAddressedBytes(t *testing.T) {
+	refused := func(name string, effs []Effect) {
+		t.Helper()
+		if len(effs) != 1 {
+			t.Fatalf("%s: a lying read must stop the instance: %#v", name, effs)
+		}
+		if x, ok := effs[0].(Exit); !ok || x.Err == "" {
+			t.Fatalf("%s: a lying read must stop the instance: %#v", name, effs)
+		}
+	}
+	in := []byte(`{"to":"echo","payload":{"text":"hi"}}`)
+	for name, under := range map[string]Object{
+		"flipped":       flipped(HeldHorizon(operator)),
+		"non-canonical": reencoded(HeldHorizon(operator)),
+		"missing":       {Key: HeldHorizon(operator).Key},
+	} {
+		_, effs := Step(Instance{Phase: Intake}, Received{Under: under, In: in})
+		refused("intake under a "+name+" Horizon", effs)
+	}
+
+	s := awaiting(t)
+	good := HeldHorizon(selfOf(t, s))
+	for name, self := range map[string]Object{
+		"flipped":       flipped(good),
+		"non-canonical": reencoded(good),
+	} {
+		_, effs := Step(s, Released{Self: self, Frames: 2})
+		refused("a "+name+" release", effs)
 	}
 }

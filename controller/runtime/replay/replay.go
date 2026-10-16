@@ -157,7 +157,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 				return none, err
 			}
 		default:
-			_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: in})
+			_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: in})
 			derived = machine.Committed(effs)
 		}
 		if record.Stamp(derived) != stamp {
@@ -259,7 +259,7 @@ func (w *walker) verifyEmission(o machine.Observation, slots []string) error {
 		return errors.New("resolve does not cover every emitted instruction")
 	}
 	for i, part := range parts {
-		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: under, In: part})
+		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: part})
 		r := machine.Committed(effs)
 		if r.State != record.Invoke && !(len(parts) > 1 && r.State == record.Fault) {
 			return errors.New("resolve emission did not open a slot")
