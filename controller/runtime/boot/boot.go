@@ -91,6 +91,11 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	if _, err := rand.Read(nonce); err != nil {
 		return Outcome{}, err
 	}
+	// SKYRA_GENESIS_NONCE fixes the nonce, for scripts/equivalence.sh only: two
+	// builds booting the same registry must then commit the same records.
+	if fixed, err := hex.DecodeString(os.Getenv("SKYRA_GENESIS_NONCE")); err == nil && len(fixed) == len(nonce) {
+		nonce = fixed
+	}
 	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
 	g0, err := tree.Commit(root, record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
 		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
