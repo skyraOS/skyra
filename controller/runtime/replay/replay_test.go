@@ -234,3 +234,27 @@ func TestLineageReplaysAStoreInMemory(t *testing.T) {
 		t.Fatalf("lineage accepted a changed input: %v", err)
 	}
 }
+
+// A double winner (41, V7): two resolves of one round that both resumed the
+// waiter are reported, whatever the claim said; a resolve that lost the
+// claim, with no successor, is not.
+func TestARoundIsResumedOnce(t *testing.T) {
+	a := record.Record{Predecessor: "d1", State: record.Resolve, Frame: "f", Round: "f", Deps: []string{"d1", "d2"}}
+	b := record.Record{Predecessor: "d2", State: record.Resolve, Frame: "f", Round: "f", Deps: []string{"d1", "d2"}}
+	sa, sb := record.Stamp(a), record.Stamp(b)
+	next := func(after string) record.Record {
+		return record.Record{Predecessor: after, State: record.Return, Payload: []byte(`"x"`)}
+	}
+	tree := map[string]record.Record{sa: a, sb: b, "n1": next(sa)}
+	if err := ResumedOnce(tree); err != nil {
+		t.Fatalf("one resolve resumed, the other lost the claim: %v", err)
+	}
+	tree["n2"] = next(sb)
+	if err := ResumedOnce(tree); err == nil || !strings.Contains(err.Error(), "resumed twice") {
+		t.Fatalf("a second resume must be reported: %v", err)
+	}
+	tree["n2"] = next(sa)
+	if err := ResumedOnce(tree); err != nil {
+		t.Fatalf("one resolve with two successors (a fan-out after resuming) is one resume: %v", err)
+	}
+}

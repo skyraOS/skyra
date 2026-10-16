@@ -943,3 +943,13 @@ func TestTheShellCannotPassOffContentAddressedBytes(t *testing.T) {
 		}
 	}
 }
+
+// Replay's derivation is intake's: the record Intaken derives is the one
+// intake commits.
+func TestIntakenIsWhatIntakeCommits(t *testing.T) {
+	for _, in := range []string{`{"to":"echo","payload":{"text":"hi"}}`, `{"to":"ghost","payload":{}}`, `hello`} {
+		if a, b := record.Stamp(Intaken(operator, []byte(in))), record.Stamp(intakeRecord(operator, in)); a != b {
+			t.Fatalf("%s: replay and intake derive different records", in)
+		}
+	}
+}

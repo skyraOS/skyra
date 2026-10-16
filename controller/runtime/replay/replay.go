@@ -157,8 +157,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 				return none, err
 			}
 		default:
-			_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: in})
-			derived = machine.CommittedRecord(effs)
+			derived = machine.Intaken(h, in)
 		}
 		if record.Stamp(derived) != stamp {
 			return none, fmt.Errorf("record %s is not what step derives from its input", record.Short(stamp))
@@ -259,14 +258,43 @@ func (w *walker) verifyEmission(o machine.Observation, slots []string) error {
 		return errors.New("resolve does not cover every emitted instruction")
 	}
 	for i, part := range parts {
-		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: part})
-		r := machine.CommittedRecord(effs)
+		r := machine.Intaken(under, part)
 		if r.State != record.Invoke && !(len(parts) > 1 && r.State == record.Fault) {
 			return errors.New("resolve emission did not open a slot")
 		}
 		if record.Stamp(r) != slots[i] {
 			return errors.New("resolve discharges do not match the emitted slots in order")
 		}
+	}
+	return nil
+}
+
+// ResumedOnce checks, across a whole tree, that every round of a frame was
+// resumed at most once (41, V7). Every sibling that finds a round fully
+// discharged commits a resolve, and the fan-in claim lets exactly one of
+// them resume the waiter: the claim rests on the file system's exclusive
+// create, which is trusted to prevent a second winner. This verifies it
+// after the fact: two resolves of one round that both have a successor are
+// a second resume, whatever the claim said.
+func ResumedOnce(records map[string]record.Record) error {
+	type round struct{ frame, round string }
+	resolves := map[string]round{}
+	for stamp, r := range records {
+		if r.State == record.Resolve && !r.Supervisor {
+			resolves[stamp] = round{r.Frame, r.Round}
+		}
+	}
+	resumed := map[round]string{}
+	for _, r := range records {
+		key, ok := resolves[r.Predecessor]
+		if !ok {
+			continue
+		}
+		if first, twice := resumed[key]; twice && first != r.Predecessor {
+			return fmt.Errorf("round %s of frame %s was resumed twice, by %s and %s: the fan-in claim was not exclusive",
+				record.Short(key.round), record.Short(key.frame), record.Short(first), record.Short(r.Predecessor))
+		}
+		resumed[key] = r.Predecessor
 	}
 	return nil
 }

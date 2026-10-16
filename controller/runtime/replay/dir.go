@@ -4,6 +4,7 @@ package replay
 
 import (
 	"skyra/controller/core/horizon"
+	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
 
@@ -14,8 +15,23 @@ func (d dir) Get(kind, hash string) ([]byte, error) { return tree.Get(string(d),
 
 // Replay walks from head back to genesis, then forward, and returns the
 // number of records re-derived: the chain, and every sibling a resolve names.
+// Then it checks the whole tree: no round was resumed twice (ResumedOnce).
 func Replay(root, head string) (int, error) {
-	return Lineage(dir(root), head)
+	n, err := Lineage(dir(root), head)
+	if err != nil {
+		return n, err
+	}
+	stamps, err := tree.Stamps(root)
+	if err != nil {
+		return n, err
+	}
+	records := make(map[string]record.Record, len(stamps))
+	for _, s := range stamps {
+		if records[s], err = tree.Load(root, s); err != nil {
+			return n, err
+		}
+	}
+	return n, ResumedOnce(records)
 }
 
 // HorizonAt derives, from the tree alone, the Horizon the record at stamp

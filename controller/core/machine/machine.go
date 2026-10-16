@@ -174,10 +174,19 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 	if err != nil {
 		return exit(s, "the Horizon this input was emitted under: "+err.Error())
 	}
-	r := interpret(under, e.In)
-	r.Predecessor, r.Input = under.Stamp, record.Sum(e.In)
+	r := Intaken(under, e.In)
 	s.Under, s.R, s.Phase = under, r, Stamping
 	return s, []Effect{Commit{Writes: []Write{object("inputs", e.In), recordWrite(r)}}}
+}
+
+// Intaken is the record intake derives from bytes emitted under a Horizon:
+// the one derivation behind intake and replay. Replay holds the Horizon
+// already, re-derived from genesis, so it calls this directly instead of
+// handing Step bytes to verify again.
+func Intaken(under horizon.Horizon, in []byte) record.Record {
+	r := interpret(under, in)
+	r.Predecessor, r.Input = under.Stamp, record.Sum(in)
+	return r
 }
 
 // 2. Release: the parent answered the stamp with the id of this instance's
