@@ -2,7 +2,7 @@
   "contract": {
     "title": "greet",
     "type": "object",
-    "required": ["names", "greeting"],
+    "required": ["greeting", "names"],
     "fields": {"names": {"type": "array", "items": {"type": "string"}}, "greeting": {"type": "string"}}
   },
   "order": ["each", "fork", "then"],

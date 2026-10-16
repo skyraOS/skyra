@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
@@ -23,8 +24,8 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 
 	// The facet: an ordinary invoke, checked at intake.
 	ask := `{"to":"system","payload":{"narrow":{"actor":"echo","reach":[],"authority":{}}}}`
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: agent, In: []byte(ask)})
-	if s.State != record.Invoke || s.R.To != System {
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(ask)})
+	if s.State() != record.Invoke || s.R.To != System {
 		t.Fatalf("narrow is invoked like any capability: %+v", s.R)
 	}
 	facet := selfOf(t, s)
@@ -37,14 +38,11 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 	}
 
 	// Nothing runs: the room derives the result, which returns the reference.
-	s, effs := released(s, facet)
-	spawn, ok := effs[0].(Spawn)
-	if !ok {
-		t.Fatalf("a facet's result is handed off like any output: %#v", effs)
-	}
-	ret, _ := Step(Instance{Phase: Intake}, Received{Under: spawn.Under, In: spawn.Out})
+	s, effs := committing(released(s, facet))
+	spawn := spawned(t, effs) // a facet's result is handed off like any output
+	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawn.Out})
 	var got struct{ Reference string }
-	if ret.State != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
+	if ret.State() != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
 		t.Fatalf("system.narrow returns the reference: %+v", ret.R)
 	}
 
@@ -138,8 +136,8 @@ func TestAnActorExtendsItself(t *testing.T) {
 	if agent.Name != "agent" || agent.Origin != "" {
 		t.Fatalf("a frame knows the name it was invoked through, and shares the room's Horizon: %+v", agent)
 	}
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: agent, In: []byte(extend(shout))})
-	if s.State != record.Invoke || s.R.To != System {
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(extend(shout))})
+	if s.State() != record.Invoke || s.R.To != System {
 		t.Fatalf("extend-reach is an invoke of system: %+v", s.R)
 	}
 	facet := selfOf(t, s)
@@ -154,9 +152,9 @@ func TestAnActorExtendsItself(t *testing.T) {
 	}
 
 	// Its result is derived, like any syscall's.
-	_, effs := released(s, facet)
-	ret, _ := Step(Instance{Phase: Intake}, Received{Under: effs[0].(Spawn).Under, In: effs[0].(Spawn).Out})
-	if ret.State != record.Return || string(ret.R.Payload) != `{"ok":true}` {
+	s, effs := committing(released(s, facet))
+	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawned(t, effs).Out})
+	if ret.State() != record.Return || string(ret.R.Payload) != `{"ok":true}` {
 		t.Fatalf("extend-reach returns ok: %+v", ret.R)
 	}
 
@@ -285,28 +283,31 @@ func TestStrandIsReadThenReturned(t *testing.T) {
 		}
 	}
 
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: agent, In: []byte(ask(obs, "echo", echoContract))})
-	if s.State != record.Invoke {
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(ask(obs, "echo", echoContract))})
+	if s.State() != record.Invoke {
 		t.Fatalf("a strand of a contract the requester holds is an invoke: %+v", s.R.Fault)
 	}
 	s, effs := released(s, selfOf(t, s))
-	read, ok := effs[0].(ReadStrand)
-	if !ok || read.Observation != obs || read.Target != "echo" || read.Schema != echoS.Input || read.Origin != "" {
+	var read StrandKey
+	if rd, ok := effs[0].(Read); ok && len(rd.Keys) == 1 {
+		read, _ = rd.Keys[0].(StrandKey)
+	}
+	if read.Observation != obs || read.Target != "echo" || !reflect.DeepEqual(read.Schema, echoS.Input) || read.Origin != "" {
 		t.Fatalf("release asks the shell to walk the tree: %#v", effs)
 	}
 
-	_, effs = Step(s, StrandRead{Strand: []byte(`{"chain":["c"]}`)})
-	spawn := effs[0].(Spawn)
-	if ret := intakeRecord(spawn.Under, string(spawn.Out)); ret.State != record.Return || string(ret.Payload) != `{"chain":["c"]}` {
+	k, effs := committing(Step(s, ReadResult{Found: [][]byte{[]byte(`{"strand":{"chain":["c"]}}`)}}))
+	spawn := spawned(t, effs)
+	if ret := intakeRecord(k.Self, string(spawn.Out)); ret.State != record.Return || string(ret.Payload) != `{"chain":["c"]}` {
 		t.Fatalf("the strand is the syscall's return: %+v %s", ret, spawn.Out)
 	}
 
-	_, effs = Step(s, StrandRead{Refused: "no invoke"})
-	f := effs[1].(Commit).R
+	_, effs = Step(s, ReadResult{Found: [][]byte{[]byte(`{"refused":"no invoke"}`)}})
+	f := committedRecords(t, effs)[0]
 	if f.State != record.Fault || f.Fault.Kind != record.Horizon || f.Fault.Cause != "strand: no invoke" || !f.Supervisor {
 		t.Fatalf("a refusal is a horizon fault of the syscall's frame: %+v", f.Fault)
 	}
-	if again := Observed(f.Predecessor, effs[0].(StoreInput).In); record.Stamp(again) != record.Stamp(f) {
+	if again := Observed(f.Predecessor, inputOf(t, effs)); record.Stamp(again) != record.Stamp(f) {
 		t.Fatal("replay derives the refusal's kind from its observation")
 	}
 	if forged := Observed("p", []byte(`{"refused":{"kind":"horizon","cause":"x"},"extra":1}`)); forged.Fault.Kind != record.Custody {
@@ -346,5 +347,25 @@ func TestStrandReconstructionForms(t *testing.T) {
 	read, err := stranding(h, args)
 	if err != nil || read.Invocation != anchor || !reflect.DeepEqual(read.Observations, []string{leaf}) || read.Room != h.Frame {
 		t.Fatalf("tree effect: %+v %v", read, err)
+	}
+}
+
+// A contract restated in another order is the same contract (42): an actor
+// that holds it cannot add it again, and a strand that names it either way
+// finds it.
+func TestAContractRestatedInAnotherOrderIsTheSame(t *testing.T) {
+	two := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
+	twoS := horizon.Surface{Path: "/bin/two", SHA256: "t", Input: two, Continuation: true}
+	root := operator
+	root.Reach = map[string]horizon.Surface{"two": twoS, System: Syscalls()}
+	actor, _ := Narrow(root, intakeRecord(root, `{"to":"two","payload":{"a":"x","b":"y"}}`), "a1")
+	restated := `{"type":"object","required":["b","a"],"fields":{"a":{"type":"string"},"b":{"type":"string"}}}`
+
+	if r := intakeRecord(actor, extend(restated)); r.State != record.Fault || !strings.Contains(r.Fault.Cause, "already holds") {
+		t.Fatalf("an actor already holds a contract restated in another order: %+v", r)
+	}
+	key, err := stranding(actor, json.RawMessage(`{"observation":"`+strings.Repeat("ab", 32)+`","contract":{"target":"two","schema":`+restated+`}}`))
+	if err != nil || !reflect.DeepEqual(key.Schema, two) {
+		t.Fatalf("a strand names the contract the actor holds, in either order: %+v %v", key, err)
 	}
 }

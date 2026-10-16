@@ -84,6 +84,12 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 				return nil, room, fmt.Errorf("%s contract %d: %w", name, i+1, err)
 			}
 		}
+		// Contracts enter the room in their normal form (42), so a root
+		// Horizon does not depend on the order a file lists required fields.
+		d.Input = contract.Normal(d.Input)
+		for i, c := range d.Contracts {
+			d.Contracts[i] = contract.Normal(c)
+		}
 		var bundlePath, bundleSHA string
 		if e.Bundle != "" {
 			if !e.State || !d.Continuation || e.Host != "" || e.Resident || e.Connection {
@@ -117,22 +123,22 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 				if err := p.Contract.Check(); err != nil {
 					return nil, room, err
 				}
-				key := string(contract.Canonical(p.Contract))
+				key := string(contract.Canonical(contract.Normal(p.Contract)))
 				if bundleContracts[key] {
 					return nil, room, fmt.Errorf("%s: bundle repeats a contract", name)
 				}
 				bundleContracts[key] = true
 				// A bundle may implement the actor's primary contract itself.
 				// It is already in reach, so do not advertise it twice.
-				if key == string(contract.Canonical(d.Input)) {
+				if contract.Same(p.Contract, d.Input) {
 					continue
 				}
 				for _, held := range d.Contracts {
-					if string(contract.Canonical(held)) == string(contract.Canonical(p.Contract)) {
+					if contract.Same(held, p.Contract) {
 						return nil, room, fmt.Errorf("%s: bundle repeats a declared contract", name)
 					}
 				}
-				d.Contracts = append(d.Contracts, p.Contract)
+				d.Contracts = append(d.Contracts, contract.Normal(p.Contract))
 			}
 			bundleSHA = record.Sum(b)
 		}

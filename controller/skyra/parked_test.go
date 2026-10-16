@@ -18,8 +18,8 @@ func commit(t *testing.T, root string, h horizon.Horizon, in string) (record.Rec
 	if _, err := tree.Put(root, "inputs", []byte(in)); err != nil {
 		t.Fatal(err)
 	}
-	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: []byte(in)})
-	r := machine.Committed(effs)
+	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
+	r := machine.CommittedRecord(effs)
 	stamp, err := tree.Commit(root, r)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestResumeDerivesTheParkedInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Stamp != invoke || s.Phase != machine.Execute || s.Self.Frame != invoke || s.Self.Surface.Host == "" || s.Self.Authority.Read[0].Path != "/private/work" || s.R.Payload == nil || record.Stamp(r) != invoke {
+	if s.Stamp() != invoke || s.Phase != machine.Running || s.Self.Frame != invoke || s.Self.Surface.Host == "" || s.Self.Authority.Read[0].Path != "/private/work" || s.R.Payload == nil || record.Stamp(r) != invoke {
 		t.Fatalf("the instance must be derived from the tree: %+v", s)
 	}
 	for name, c := range map[string]struct {

@@ -12,10 +12,10 @@
           "think": {
             "type": "object",
             "required": [
-              "text",
-              "model",
               "context",
-              "images"
+              "images",
+              "model",
+              "text"
             ],
             "fields": {
               "text": {

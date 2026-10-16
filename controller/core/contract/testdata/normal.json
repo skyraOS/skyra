@@ -1,0 +1,20 @@
+[
+  {"case": "required fields in another order",
+   "in":     {"type": "object", "required": ["b", "a"], "fields": {"a": {"type": "string"}, "b": {"type": "number"}}},
+   "normal": {"type": "object", "required": ["a", "b"], "fields": {"a": {"type": "string"}, "b": {"type": "number"}}}},
+  {"case": "a required field named twice",
+   "in":     {"type": "object", "required": ["a", "b", "a"], "fields": {"a": {"type": "string"}, "b": {"type": "string"}}},
+   "normal": {"type": "object", "required": ["a", "b"], "fields": {"a": {"type": "string"}, "b": {"type": "string"}}}},
+  {"case": "a nested object's required fields",
+   "in":     {"type": "object", "required": ["x"], "fields": {"x": {"type": "object", "required": ["d", "c"], "fields": {"c": {"type": "any"}, "d": {"type": "any"}}}}},
+   "normal": {"type": "object", "required": ["x"], "fields": {"x": {"type": "object", "required": ["c", "d"], "fields": {"c": {"type": "any"}, "d": {"type": "any"}}}}}},
+  {"case": "an array's items",
+   "in":     {"type": "array", "items": {"type": "object", "required": ["z", "y"], "fields": {"y": {"type": "bool"}, "z": {"type": "null"}}}},
+   "normal": {"type": "array", "items": {"type": "object", "required": ["y", "z"], "fields": {"y": {"type": "bool"}, "z": {"type": "null"}}}}},
+  {"case": "a title is kept: the interpreter routes by it",
+   "in":     {"title": "greet", "type": "object", "required": ["n", "g"], "fields": {"g": {"type": "string"}, "n": {"type": "string"}}},
+   "normal": {"title": "greet", "type": "object", "required": ["g", "n"], "fields": {"g": {"type": "string"}, "n": {"type": "string"}}}},
+  {"case": "already normal",
+   "in":     {"type": "string"},
+   "normal": {"type": "string"}}
+]

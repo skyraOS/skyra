@@ -150,7 +150,7 @@ func resume(root string) error {
 	}
 	trace.Who = "resume " + record.Short(r.Stamp)
 	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
-	_, err = instance.Drive(root, nil, stack, s, machine.Emitted{Out: []byte(r.Out)})
+	_, err = instance.Drive(root, nil, stack, s, machine.Executed{Obs: []byte(r.Out)})
 	return err
 }
 
@@ -182,7 +182,7 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	if handed {
 		return machine.Instance{}, errors.New("already resumed")
 	}
-	return machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Execute, R: rec, Stamp: r.Stamp, Self: self, Sockets: hold.Sockets()}, nil
+	return machine.Instance{Floor: root, Phase: machine.Running, R: rec, Self: self, Sockets: hold.Sockets()}, nil
 }
 
 // holdResident keeps the resident's stream at fd 3 behind the edge's socket.

@@ -14,25 +14,29 @@ import (
 // from the Horizon it was emitted under, and must come with its whole frame
 // stack, or the instance stops. Authority is derived, never taken on trust
 // (next/24): the id is only a handle.
-func accept(s Instance, e Released) error {
-	if e.Self.Stamp != s.Stamp {
-		return errors.New("release is not for this commit")
-	}
-	want, err := Narrow(s.Under, s.R, s.Stamp)
+func accept(s Instance, released Object) (horizon.Horizon, error) {
+	self, err := HorizonOf(released)
 	if err != nil {
-		return fmt.Errorf("release cannot be derived: %w", err)
+		return horizon.Horizon{}, fmt.Errorf("released Horizon: %w", err)
 	}
-	if a, b := encode(want), encode(e.Self); a != b {
+	if self.Stamp != s.Stamp() {
+		return horizon.Horizon{}, errors.New("release is not for this commit")
+	}
+	want, err := Narrow(s.Under, s.R, s.Stamp())
+	if err != nil {
+		return horizon.Horizon{}, fmt.Errorf("release cannot be derived: %w", err)
+	}
+	if a, b := encode(want), encode(self); a != b {
 		// One instruction of several: an invoke is forked, a fault holds a
 		// slot of its own.
-		if alt, _ := Fanned(s.Under, s.R, s.Stamp); encode(alt) != b {
-			return errors.New("release is not what this commit derives")
+		if alt, _ := Fanned(s.Under, s.R, s.Stamp()); encode(alt) != b {
+			return horizon.Horizon{}, errors.New("release is not what this commit derives")
 		}
 	}
-	if e.Frames != e.Self.Depth() {
-		return fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, e.Self.Depth())
+	if s.Arrived != self.Depth() {
+		return horizon.Horizon{}, fmt.Errorf("release carries %d frames, its Horizon needs %d", s.Arrived, self.Depth())
 	}
-	return nil
+	return self, nil
 }
 
 func encode(h horizon.Horizon) string {
@@ -42,29 +46,36 @@ func encode(h horizon.Horizon) string {
 
 // issueRelease is the parent's half of Release: check the successor's stamp,
 // then compute its Horizon.
-func issueRelease(parent horizon.Horizon, emitted []byte, parentStamp string, e Stamped, fanned bool) (horizon.Horizon, error) {
-	if err := checkSuccessor(e.R, emitted, parentStamp); err != nil {
-		return horizon.Horizon{}, fmt.Errorf("stamp failed verification: %w", err)
+func issueRelease(parent horizon.Horizon, emitted []byte, parentStamp string, o Object, fanned bool) (record.Record, horizon.Horizon, error) {
+	r, err := checkSuccessor(o, emitted, parentStamp)
+	if err != nil {
+		return r, horizon.Horizon{}, fmt.Errorf("stamp failed verification: %w", err)
 	}
 	if fanned {
-		return Fanned(parent, *e.R, e.Stamp)
+		h, err := Fanned(parent, r, o.Key)
+		return r, h, err
 	}
-	return Narrow(parent, *e.R, e.Stamp)
+	h, err := Narrow(parent, r, o.Key)
+	return r, h, err
 }
 
-// checkSuccessor is the parent's check of a stamp (D3). The shell already
-// refused any record that does not hash to its stamp. This checks that the
-// successor read exactly the bytes that were emitted and linked to this frame.
-func checkSuccessor(r *record.Record, emitted []byte, parentStamp string) error {
-	switch {
-	case r == nil:
-		return errors.New("stamp names no valid record")
-	case r.Input != record.Sum(emitted):
-		return errors.New("record does not cover the bytes that were emitted")
-	case r.Predecessor != parentStamp:
-		return errors.New("record does not link to this parent")
+// checkSuccessor is the parent's check of a stamp (D3): the record read under
+// it verifies, the successor read exactly the bytes that were emitted, and it
+// linked them to this frame.
+func checkSuccessor(o Object, emitted []byte, parentStamp string) (record.Record, error) {
+	if !o.Found() {
+		return record.Record{}, errors.New("stamp names no valid record")
 	}
-	return nil
+	r, err := RecordOf(o)
+	switch {
+	case err != nil:
+		return r, err
+	case r.Input != record.Sum(emitted):
+		return r, errors.New("record does not cover the bytes that were emitted")
+	case r.Predecessor != parentStamp:
+		return r, errors.New("record does not link to this parent")
+	}
+	return r, nil
 }
 
 // Narrow computes the child's Horizon from the parent's and the child's

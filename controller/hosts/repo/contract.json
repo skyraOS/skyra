@@ -2,7 +2,7 @@
   "input": {
     "title": "Repository Git execve",
     "type": "object",
-    "required": ["target", "args"],
+    "required": ["args", "target"],
     "fields": {
       "target": {"type": "string"},
       "args": {"type": "array", "items": {"type": "string"}}

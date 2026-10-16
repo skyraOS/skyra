@@ -67,13 +67,12 @@ func (h Horizon) PermitsTool(target string, schema *contract.Schema) bool {
 	if h.WorkTools == nil || h.Internal(target) {
 		return true
 	}
-	want := string(contract.Canonical(schema))
 	for _, b := range *h.WorkTools {
 		if b.Target != target {
 			continue
 		}
 		for _, c := range b.Contracts {
-			if string(contract.Canonical(c)) == want {
+			if contract.Same(c, schema) {
 				return true
 			}
 		}

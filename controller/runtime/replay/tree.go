@@ -179,7 +179,7 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 		return none, err
 	}
 	selected, err := machine.Selected(surface, value)
-	if err != nil || string(contract.Canonical(selected)) != string(contract.Canonical(schema)) {
+	if err != nil || !contract.Same(selected, schema) {
 		return none, refusal("anchor was not invoked through the named contract")
 	}
 	if _, err := accepted(anchor); err != nil {

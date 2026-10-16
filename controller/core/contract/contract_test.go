@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -75,4 +77,45 @@ func TestCheck(t *testing.T) {
 			t.Errorf("accepted malformed schema %+v", bad)
 		}
 	}
+}
+
+// The normal form (42): testdata/normal.json lists each case and its normal
+// form. proc.Schema.Canonical in the interpreter reads the same file and
+// must reproduce the same bytes, so the two cannot drift.
+func TestNormalForm(t *testing.T) {
+	for _, c := range normalCases(t) {
+		if got, want := string(Canonical(Normal(c.In))), string(Canonical(c.Normal)); got != want {
+			t.Errorf("%s: %s, want %s", c.Case, got, want)
+		}
+		if !Same(c.In, c.Normal) || !Same(c.Normal, c.In) {
+			t.Errorf("%s: a contract and its normal form are one contract", c.Case)
+		}
+	}
+	a := &Schema{Type: "object", Required: []string{"b", "a"}, Fields: map[string]*Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
+	before := string(Canonical(a))
+	Normal(a)
+	if string(Canonical(a)) != before {
+		t.Fatal("Normal changed the contract it was given")
+	}
+	if Same(a, &Schema{Type: "object", Required: []string{"a"}, Fields: a.Fields}) || Same(a, nil) || !Same(nil, nil) {
+		t.Fatal("different contracts are not one")
+	}
+}
+
+type normalCase struct {
+	Case       string
+	In, Normal *Schema
+}
+
+func normalCases(t *testing.T) []normalCase {
+	t.Helper()
+	b, err := os.ReadFile("testdata/normal.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []normalCase
+	if err := json.Unmarshal(b, &cases); err != nil {
+		t.Fatal(err)
+	}
+	return cases
 }

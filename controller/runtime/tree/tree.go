@@ -38,49 +38,76 @@ func Init(root string) error {
 	return nil
 }
 
+// ErrConflict is a write that found different bytes already under its name.
+var ErrConflict = errors.New("different bytes are already stored under this name")
+
 // Put stores b under its hash in root/kind: temp file, flush, exclusive link, flush
 // the directory. Storing the same bytes twice is a no-op.
 func Put(root, kind string, b []byte) (string, error) {
+	_, err := Store(root, kind, b)
+	if err != nil {
+		return "", err
+	}
+	return record.Sum(b), nil
+}
+
+// Store is Put that reports whether the object was already there. Bytes
+// already under the name that do not hash to it are ErrConflict.
+func Store(root, kind string, b []byte) (existed bool, err error) {
 	h := record.Sum(b)
 	dir := filepath.Join(root, kind)
 	final := filepath.Join(dir, h)
 	if _, err := os.Stat(final); err == nil {
 		if _, err := Get(root, kind, h); err != nil {
-			return "", err
+			return true, fmt.Errorf("%w: %v", ErrConflict, err)
 		}
-		return h, nil
+		return true, nil
 	}
 	f, err := os.CreateTemp(dir, ".tmp-")
 	if err != nil {
-		return "", err
+		return false, err
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if err := f.Chmod(0400); err != nil {
 		f.Close()
-		return "", err
+		return false, err
 	}
 
 	if _, err := f.Write(b); err != nil {
 		f.Close()
-		return "", err
+		return false, err
 	}
-	if err := f.Sync(); err != nil {
+	if err := flush(f, kind+" file"); err != nil {
 		f.Close()
-		return "", err
+		return false, err
 	}
 	if err := f.Close(); err != nil {
-		return "", err
+		return false, err
 	}
 	if err := os.Link(tmp, final); err != nil {
 		if !os.IsExist(err) {
-			return "", err
+			return false, err
 		}
 		if _, err := Get(root, kind, h); err != nil {
-			return "", err
+			return true, fmt.Errorf("%w: %v", ErrConflict, err)
 		}
+		existed = true
 	}
-	return h, syncDir(dir)
+	return existed, syncDir(dir, kind+" dir")
+}
+
+// Read reads an object by hash as it is stored, unverified: what the shell
+// hands the core, which verifies it (41, V1). A missing object is nil.
+func Read(root, kind, h string) ([]byte, error) {
+	if !validHash(h) {
+		return nil, nil
+	}
+	b, err := os.ReadFile(filepath.Join(root, kind, h))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	return b, err
 }
 
 // Get reads an object by hash and refuses it unless it hashes to that name.
@@ -165,11 +192,30 @@ func Load(root, stamp string) (record.Record, error) {
 
 // OpenFrame creates a frame's directory and returns its node fd.
 func OpenFrame(root, stamp string) (*os.File, error) {
-	dir := filepath.Join(root, "frames", stamp)
-	if err := os.Mkdir(dir, 0o700); err != nil {
+	if _, err := MakeFrame(root, stamp); err != nil {
 		return nil, err
 	}
-	return os.Open(dir)
+	return FrameNode(root, stamp)
+}
+
+// MakeFrame creates a frame's directory, exactly once: false if it existed.
+// Its entry in frames/ is flushed, so the frame is ordered before anything
+// written in it (40: before barriers, a later full flush covered this only
+// as a side effect).
+func MakeFrame(root, stamp string) (bool, error) {
+	err := os.Mkdir(filepath.Join(root, "frames", stamp), 0o700)
+	if os.IsExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, syncDir(filepath.Join(root, "frames"), "frames dir")
+}
+
+// FrameNode opens an existing frame's directory: its node fd.
+func FrameNode(root, stamp string) (*os.File, error) {
+	return os.Open(filepath.Join(root, "frames", stamp))
 }
 
 // HasSuccessor reports whether any record was committed under stamp: whether
@@ -203,10 +249,7 @@ func Result(root, frame string) (string, error) {
 // Settle writes a frame's result exactly once. It writes only through the
 // node fd it was handed, never through a path.
 func Settle(node *os.File, stamp string) error {
-	if node == nil {
-		return errors.New("no node to settle")
-	}
-	won, err := writeOnce(node, "result", stamp)
+	won, err := Discharge(node, stamp)
 	if err != nil {
 		return err
 	}
@@ -214,6 +257,15 @@ func Settle(node *os.File, stamp string) error {
 		return errors.New("frame already settled")
 	}
 	return nil
+}
+
+// Discharge is Settle that reports whether this write won: false if the
+// frame was already settled.
+func Discharge(node *os.File, stamp string) (bool, error) {
+	if node == nil {
+		return false, errors.New("no node to settle")
+	}
+	return writeOnce(node, "result", stamp)
 }
 
 // writeOnce creates name in a frame with its whole content, exactly once. The
@@ -241,7 +293,7 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 		f.Close()
 		return false, err
 	}
-	if err := f.Sync(); err != nil {
+	if err := flush(f, label(name)+" file"); err != nil {
 		f.Close()
 		return false, err
 	}
@@ -254,7 +306,17 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 		}
 		return false, err
 	}
-	return true, frame.Sync()
+	return true, flush(frame, label(name)+" dir")
+}
+
+// label names a write-once file by its kind, not its hash: result, resolved,
+// emitted, or a slot.
+func label(name string) string {
+	if len(name) == 64 {
+		return "slot"
+	}
+	kind, _, _ := strings.Cut(name, "-")
+	return kind
 }
 
 // OpenDep opens a slot for a child in a frame, through the frame's fd, before
@@ -262,36 +324,46 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 // The slot holds the child's position in the emission that opened the round,
 // so the round's steps come back in the order they were emitted.
 func OpenDep(frame *os.File, round, child string, pos int) error {
-	r, err := descriptorRoot(frame)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	dir := filepath.Join("deps", round)
-	if err := r.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	node, err := r.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer node.Close()
-	won, err := writeOnce(node, child, strconv.Itoa(pos))
+	won, err := Slot(frame, round, child, pos)
 	if err != nil {
 		return err
 	}
 	if !won {
 		return errors.New("dependency already exists")
 	}
+	return nil
+}
+
+// Slot is OpenDep that reports whether this write won: false if the slot
+// already existed.
+func Slot(frame *os.File, round, child string, pos int) (bool, error) {
+	r, err := descriptorRoot(frame)
+	if err != nil {
+		return false, err
+	}
+	defer r.Close()
+	dir := filepath.Join("deps", round)
+	if err := r.MkdirAll(dir, 0700); err != nil {
+		return false, err
+	}
+	node, err := r.Open(dir)
+	if err != nil {
+		return false, err
+	}
+	defer node.Close()
+	won, err := writeOnce(node, child, strconv.Itoa(pos))
+	if err != nil || !won {
+		return won, err
+	}
 	deps, err := r.Open("deps")
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer deps.Close()
-	if err := deps.Sync(); err != nil {
-		return err
+	if err := flush(deps, "deps dir"); err != nil {
+		return false, err
 	}
-	return frame.Sync()
+	return true, flush(frame, "frame dir")
 }
 
 // Children lists the slots a round opened in a frame, in the order they were
@@ -353,18 +425,18 @@ func Resolved(root, frame, round string) (string, error) {
 	return string(b), err
 }
 
-func syncDir(dir string) error {
+func syncDir(dir, what string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
 	defer d.Close()
-	return d.Sync()
+	return flush(d, what)
 }
 
 // PublishEmission seals the full emission before any child is released.
 func PublishEmission(frame *os.File, round, hash string) error {
-	won, err := writeOnce(frame, "emitted-"+round, hash)
+	won, err := Emit(frame, round, hash)
 	if err != nil {
 		return err
 	}
@@ -373,6 +445,12 @@ func PublishEmission(frame *os.File, round, hash string) error {
 	}
 	return nil
 }
+
+// Emit is PublishEmission that reports whether this write won.
+func Emit(frame *os.File, round, hash string) (bool, error) {
+	return writeOnce(frame, "emitted-"+round, hash)
+}
+
 func Emission(root, frame, round string) (string, error) {
 	b, err := os.ReadFile(filepath.Join(root, "frames", frame, "emitted-"+round))
 	return string(b), err

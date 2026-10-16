@@ -46,7 +46,7 @@ func TestResidentLaunchReuseAndStop(t *testing.T) {
 
 	started := func() (string, bool) {
 		t.Helper()
-		e, ok := startResident(x, t.TempDir()).(machine.Started)
+		e, ok := startResident(x, t.TempDir()).(machine.Executed)
 		if !ok || e.Err != "" {
 			t.Fatalf("start: %+v", e)
 		}
@@ -56,8 +56,8 @@ func TestResidentLaunchReuseAndStop(t *testing.T) {
 				Reused      bool   `json:"reused"`
 			} `json:"payload"`
 		}
-		if err := json.Unmarshal(e.Out, &out); err != nil || out.Payload.Incarnation == "" {
-			t.Fatalf("start emitted %s", e.Out)
+		if err := json.Unmarshal(e.Obs, &out); err != nil || out.Payload.Incarnation == "" {
+			t.Fatalf("start emitted %s", e.Obs)
 		}
 		return out.Payload.Incarnation, out.Payload.Reused
 	}

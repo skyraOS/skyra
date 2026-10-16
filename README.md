@@ -168,6 +168,27 @@ with [`controller/core/machine/machine.go`](controller/core/machine/machine.go);
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
 
+## Performance
+
+Against native Codex: **~2 s more startup per one-shot run and ~0.4 s per
+tool call**. Both are fixed per step and don't depend on model speed. On a
+15-second, three-tool task that comes to about 20%. Model time varies more
+than that from run to run.
+
+Replay re-derives and verifies about **47,000 records per second** from
+memory, linear in run length. A 10,000-record run takes about 0.2 s, or
+1.3 s from the tree on disk. Every published run re-verifies in under 4 ms.
+
+Everything was measured on an Apple M1 Pro, go1.25.0, 2026-10-13.
+[`docs/performance.md`](docs/performance.md) has the commits, method and
+caveats, and the full overhead write-up is in
+[`OVERHEAD-VS-INFERENCE.md`](OVERHEAD-VS-INFERENCE.md). Reproduce replay
+with:
+
+```
+go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
+```
+
 ## How it got here
 
 Seven months, solo, and a lot of deleted code. The lineage that matters:

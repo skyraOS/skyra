@@ -1,6 +1,7 @@
 package horizon
 
 import (
+	"skyra/controller/core/contract"
 	"strings"
 	"testing"
 )
@@ -58,5 +59,18 @@ func TestOneProfilePerHorizonExecOnlyTheRunningProgram(t *testing.T) {
 	}
 	if n := strings.Count(a, "(allow process-exec"); n != 1 || !strings.Contains(a, `(allow process-exec (literal "/private/bin/a"))`) {
 		t.Fatalf("exec must be allowed for the running program only:\n%s", a)
+	}
+}
+
+// A work tool's contract restated in another order is the tool it was bound
+// as (42).
+func TestPermitsAToolRestatedInAnotherOrder(t *testing.T) {
+	bound := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
+	restated := &contract.Schema{Type: "object", Required: []string{"b", "a"}, Fields: bound.Fields}
+	other := &contract.Schema{Type: "object", Required: []string{"a"}, Fields: bound.Fields}
+	tools := map[string]ToolBinding{"t": {Target: "echo", Contracts: []*contract.Schema{bound}}}
+	h := Horizon{WorkTools: &tools}
+	if !h.PermitsTool("echo", restated) || h.PermitsTool("echo", other) {
+		t.Fatal("a restated contract is the bound tool; a different one is not")
 	}
 }

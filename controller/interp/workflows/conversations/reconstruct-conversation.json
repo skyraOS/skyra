@@ -9,8 +9,8 @@
       "reconstruct-conversation": {
         "type": "object",
         "required": [
-          "conversation",
-          "availability"
+          "availability",
+          "conversation"
         ],
         "fields": {
           "conversation": {

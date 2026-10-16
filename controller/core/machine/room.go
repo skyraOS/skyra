@@ -143,7 +143,7 @@ func checkSyscall(h horizon.Horizon, payload json.RawMessage) (string, error) {
 // stranding checks a strand payload under h at intake: the observation is a
 // stamp, and the contract it names is one the requester holds. Whether the
 // observation was requested through it is the walk's to find (ReadStrand).
-func stranding(h horizon.Horizon, payload json.RawMessage) (ReadStrand, error) {
+func stranding(h horizon.Horizon, payload json.RawMessage) (StrandKey, error) {
 	var ask struct {
 		Observation  string   `json:"observation"`
 		Invocation   string   `json:"invocation"`
@@ -154,7 +154,7 @@ func stranding(h horizon.Horizon, payload json.RawMessage) (ReadStrand, error) {
 		} `json:"contract"`
 	}
 	if err := json.Unmarshal(payload, &ask); err != nil {
-		return ReadStrand{}, err
+		return StrandKey{}, err
 	}
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(payload, &fields)
@@ -162,33 +162,32 @@ func stranding(h horizon.Horizon, payload json.RawMessage) (ReadStrand, error) {
 	_, root := fields["invocation"]
 	_, leaves := fields["observations"]
 	if single == (root || leaves) || !single && (!root || !leaves || len(ask.Observations) == 0) {
-		return ReadStrand{}, fmt.Errorf("strand requires exactly observation, or invocation and nonempty observations")
+		return StrandKey{}, fmt.Errorf("strand requires exactly observation, or invocation and nonempty observations")
 	}
 	if single && !isStamp(ask.Observation) {
-		return ReadStrand{}, fmt.Errorf("observation %q is not a stamp", ask.Observation)
+		return StrandKey{}, fmt.Errorf("observation %q is not a stamp", ask.Observation)
 	}
 	if !single {
 		if !isStamp(ask.Invocation) {
-			return ReadStrand{}, fmt.Errorf("invocation %q is not a stamp", ask.Invocation)
+			return StrandKey{}, fmt.Errorf("invocation %q is not a stamp", ask.Invocation)
 		}
 		for _, leaf := range ask.Observations {
 			if !isStamp(leaf) {
-				return ReadStrand{}, fmt.Errorf("observation %q is not a stamp", leaf)
+				return StrandKey{}, fmt.Errorf("observation %q is not a stamp", leaf)
 			}
 		}
 	}
 	target, ok := h.Reach[ask.Contract.Target]
 	if !ok || IsSystem(ask.Contract.Target) {
-		return ReadStrand{}, fmt.Errorf("%q is not an actor in reach", ask.Contract.Target)
+		return StrandKey{}, fmt.Errorf("%q is not an actor in reach", ask.Contract.Target)
 	}
 	named, err := schemaOf(ask.Contract.Schema)
 	if err != nil {
-		return ReadStrand{}, err
+		return StrandKey{}, err
 	}
-	want := string(contract.Canonical(named))
 	for _, c := range target.All() {
-		if string(contract.Canonical(c)) == want {
-			read := ReadStrand{Observation: ask.Observation, Invocation: ask.Invocation, Observations: slices.Clone(ask.Observations), Target: ask.Contract.Target, Schema: c, Origin: h.Origin}
+		if contract.Same(c, named) {
+			read := StrandKey{Observation: ask.Observation, Invocation: ask.Invocation, Observations: slices.Clone(ask.Observations), Target: ask.Contract.Target, Schema: c, Origin: h.Origin}
 			if !single {
 				outer := h
 				for outer.Resume != nil {
@@ -199,7 +198,7 @@ func stranding(h horizon.Horizon, payload json.RawMessage) (ReadStrand, error) {
 			return read, nil
 		}
 	}
-	return ReadStrand{}, fmt.Errorf("%s holds no such contract", ask.Contract.Target)
+	return StrandKey{}, fmt.Errorf("%s holds no such contract", ask.Contract.Target)
 }
 
 func isStamp(s string) bool {
@@ -349,9 +348,8 @@ func extension(h horizon.Horizon, payload json.RawMessage) (*contract.Schema, er
 	if !ok {
 		return nil, fmt.Errorf("%w: %q is not in its own Horizon's reach", errNotTheEmitters, h.Name)
 	}
-	want := string(contract.Canonical(s))
 	for _, c := range actor.All() {
-		if string(contract.Canonical(c)) == want {
+		if contract.Same(c, s) {
 			return nil, fmt.Errorf("%s already holds this contract", h.Name)
 		}
 	}

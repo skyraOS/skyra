@@ -29,8 +29,8 @@
       "around": {
         "type": "object",
         "required": [
-          "line",
-          "context"
+          "context",
+          "line"
         ],
         "fields": {
           "line": {

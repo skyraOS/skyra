@@ -22,31 +22,40 @@ func Accept(root string, r record.Record, id string) error {
 	if h.Stamp != stamp {
 		return fmt.Errorf("acceptance does not name this commit")
 	}
+	_, err = Receipt(root, stamp, id)
+	return err
+}
+
+// Receipt publishes the acceptance of stamp under the Horizon id, which the
+// caller has already checked (the core does, 41 V1). It reports whether the
+// same receipt was already there; a different one is ErrConflict.
+func Receipt(root, stamp, id string) (existed bool, err error) {
 	dir := filepath.Join(root, "acceptances")
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
+		return false, err
 	}
 	// Put first makes the complete receipt durable, then link publishes its
 	// lookup by accepted record. Concurrent publishers cannot replace it.
 	b, _ := json.Marshal(struct{ Stamp, Horizon string }{stamp, id})
 	hash, err := Put(root, "acceptances", b)
 	if err != nil {
-		return err
+		return false, err
 	}
 	name := filepath.Join(dir, stamp)
 	if err := os.Link(filepath.Join(dir, hash), name); err != nil {
 		if !os.IsExist(err) {
-			return err
+			return false, err
 		}
 		old, err := os.ReadFile(name)
 		if err != nil {
-			return err
+			return true, err
 		}
 		if string(old) != string(b) {
-			return fmt.Errorf("conflicting acceptance for %s", stamp)
+			return true, fmt.Errorf("%w: acceptance for %s", ErrConflict, stamp)
 		}
+		existed = true
 	}
-	return syncDir(dir)
+	return existed, syncDir(dir, "acceptances dir")
 }
 
 // AcceptedHorizon reads a receipt and its content-addressed release. Records,

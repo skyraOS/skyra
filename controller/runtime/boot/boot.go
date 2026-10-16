@@ -91,9 +91,15 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	if _, err := rand.Read(nonce); err != nil {
 		return Outcome{}, err
 	}
+	// SKYRA_GENESIS_NONCE fixes the nonce, for scripts/equivalence.sh only: two
+	// builds booting the same registry must then commit the same records.
+	if fixed, err := hex.DecodeString(os.Getenv("SKYRA_GENESIS_NONCE")); err == nil && len(fixed) == len(nonce) {
+		nonce = fixed
+	}
 	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
-	g0, err := tree.Commit(root, record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
-		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
+	genesis := record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
+		Author: "operator", Nonce: hex.EncodeToString(nonce)} // frame 0: the operator's, in invoke
+	g0, err := tree.Commit(root, genesis)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -108,12 +114,17 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	// under the root Horizon, and its target has just emitted the seed. The
 	// seed is operands like any other output; intake derives its state.
 	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
-	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), State: record.Invoke, Phase: machine.Execute, Stamp: g0, Self: h0}
-	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Emitted{Out: seed}); err != nil {
+	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), R: genesis, Phase: machine.Running, Self: h0}
+	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Executed{Obs: seed}); err != nil {
 		return Outcome{}, err
 	}
 
+	// What the operator is told is durable first (40, B): the lineage it
+	// names is on disk before any of it is printed.
 	if detach {
+		if err := tree.Force(root); err != nil {
+			return Outcome{}, err
+		}
 		fmt.Printf("seeded %s; state: %s\n", record.Short(g0), root)
 		return Outcome{}, nil
 	}
@@ -123,6 +134,9 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	// resolved frame 0's round.
 	head, err := wait(root, g0)
 	if err != nil {
+		return Outcome{}, err
+	}
+	if err := tree.Force(root); err != nil {
 		return Outcome{}, err
 	}
 	fmt.Println()

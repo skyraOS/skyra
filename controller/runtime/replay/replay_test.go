@@ -19,8 +19,8 @@ var echoS = horizon.Surface{Path: "/bin/echo-target", SHA256: "e",
 
 // intakeRecord runs the Intake step and returns what it commits.
 func intakeRecord(h horizon.Horizon, in string) record.Record {
-	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: h, In: []byte(in)})
-	return machine.Committed(effs)
+	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
+	return machine.CommittedRecord(effs)
 }
 
 // buildLineage commits genesis → invoke echo → return without any processes,
@@ -232,5 +232,68 @@ func TestLineageReplaysAStoreInMemory(t *testing.T) {
 	m["inputs/"+r.Input] = in
 	if _, err := Lineage(m, head); err == nil || !strings.Contains(err.Error(), "does not hash to its name") {
 		t.Fatalf("lineage accepted a changed input: %v", err)
+	}
+}
+
+// A double winner (41, V7): two resolves of one round that both resumed the
+// waiter are reported, whatever the claim said; a resolve that lost the
+// claim, with no successor, is not.
+func TestARoundIsResumedOnce(t *testing.T) {
+	a := record.Record{Predecessor: "d1", State: record.Resolve, Frame: "f", Round: "f", Deps: []string{"d1", "d2"}}
+	b := record.Record{Predecessor: "d2", State: record.Resolve, Frame: "f", Round: "f", Deps: []string{"d1", "d2"}}
+	sa, sb := record.Stamp(a), record.Stamp(b)
+	next := func(after string) record.Record {
+		return record.Record{Predecessor: after, State: record.Return, Payload: []byte(`"x"`)}
+	}
+	tree := map[string]record.Record{sa: a, sb: b, "n1": next(sa)}
+	if err := ResumedOnce(tree); err != nil {
+		t.Fatalf("one resolve resumed, the other lost the claim: %v", err)
+	}
+	tree["n2"] = next(sb)
+	if err := ResumedOnce(tree); err == nil || !strings.Contains(err.Error(), "resumed twice") {
+		t.Fatalf("a second resume must be reported: %v", err)
+	}
+	tree["n2"] = next(sa)
+	if err := ResumedOnce(tree); err != nil {
+		t.Fatalf("one resolve with two successors (a fan-out after resuming) is one resume: %v", err)
+	}
+}
+
+// A tree recorded before contracts had a normal form (42), whose genesis
+// lists required fields out of order, replays as it always did: nothing a
+// recorded Horizon holds is rewritten.
+func TestATreeWithUnsortedRequiredStillReplays(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"records", "inputs"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	two := horizon.Surface{Path: "/bin/two", SHA256: "t", Input: &contract.Schema{Type: "object", Required: []string{"text", "n"},
+		Fields: map[string]*contract.Schema{"text": {Type: "string"}, "n": {Type: "number"}}}}
+	reach := map[string]horizon.Surface{"two": two}
+	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+	var head string
+	for _, in := range []string{`{"to":"two","payload":{"text":"hi","n":1}}`, ""} {
+		if in == "" {
+			in = `{"to":"` + h.Frame + `","payload":"hi"}`
+		}
+		if _, err := tree.Put(root, "inputs", []byte(in)); err != nil {
+			t.Fatal(err)
+		}
+		r := intakeRecord(h, in)
+		if head, err = tree.Commit(root, r); err != nil {
+			t.Fatal(err)
+		}
+		if h, err = machine.Narrow(h, r, head); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := Replay(root, head); err != nil || n != 3 {
+		t.Fatalf("replay: %d %v", n, err)
 	}
 }

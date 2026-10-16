@@ -12,9 +12,9 @@
           "blender": {
             "type": "object",
             "required": [
-              "text",
               "context",
-              "images"
+              "images",
+              "text"
             ],
             "fields": {
               "text": {
