@@ -25,8 +25,9 @@ import (
 	"slices"
 )
 
-// Schema is a contract, as the kernel encodes it: field for field, so the
-// canonical bytes of a contract are the same here as there.
+// Schema is a contract, as the kernel encodes it, field for field. Its
+// canonical bytes match the kernel's except that Required is sorted here; the
+// kernel still compares Required as written.
 type Schema struct {
 	Title    string             `json:"title,omitempty"`
 	Type     string             `json:"type"`
@@ -35,10 +36,33 @@ type Schema struct {
 	Items    *Schema            `json:"items,omitempty"`
 }
 
-// Canonical is a contract's canonical bytes.
+// Canonical is a contract's canonical bytes: object keys sorted, and every
+// Required, at every depth, sorted and deduplicated, so a contract restated
+// in another order is the same contract (decision 28). Title stays part of
+// it: the interpreter names and routes by it.
 func (s *Schema) Canonical() []byte {
-	b, _ := json.Marshal(s)
+	b, _ := json.Marshal(s.normal())
 	return b
+}
+
+// normal is a copy of s with every Required sorted and deduplicated.
+func (s *Schema) normal() *Schema {
+	if s == nil {
+		return nil
+	}
+	n := &Schema{Title: s.Title, Type: s.Type, Items: s.Items.normal()}
+	if len(s.Required) > 0 {
+		n.Required = slices.Clone(s.Required)
+		slices.Sort(n.Required)
+		n.Required = slices.Compact(n.Required)
+	}
+	if len(s.Fields) > 0 {
+		n.Fields = make(map[string]*Schema, len(s.Fields))
+		for k, f := range s.Fields {
+			n.Fields[k] = f.normal()
+		}
+	}
+	return n
 }
 
 // Key is a contract's stable identity: a procedure is kept under the
@@ -105,7 +129,9 @@ func canonicalNode(n Node) Node {
 	return c
 }
 
-// canon re-encodes JSON with object keys sorted and numbers as written.
+// canon re-encodes JSON with object keys sorted and numbers as written. The
+// number rule is deliberate: a node's input is the bytes its target receives,
+// and 1 and 1.0 are different bytes, so they are different nodes.
 func canon(b json.RawMessage) json.RawMessage {
 	if len(b) == 0 {
 		return nil

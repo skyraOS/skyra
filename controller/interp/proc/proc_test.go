@@ -3,6 +3,7 @@ package proc
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -218,6 +219,50 @@ func TestOneRepresentationPerContract(t *testing.T) {
 	}
 	if !store.Has(greet) || store.Has(&Schema{Type: "string"}) {
 		t.Fatal("has")
+	}
+	restated := *greet
+	restated.Required = []string{"greeting", "names"}
+	if !store.Has(&restated) {
+		t.Fatal("the same contract with its required fields in another order is already held")
+	}
+	p2, nodes2, _ := Compile(Source{Contract: &restated, Nodes: src.Nodes, Return: src.Return})
+	if err := store.Put(p2, nodes2); err == nil || !strings.Contains(err.Error(), "one representation") {
+		t.Fatalf("a restated contract is a second representation: %v", err)
+	}
+}
+
+// A contract's identity ignores the order of its required fields, at every
+// depth, and repeats in them; its title and its shape still count.
+func TestContractIdentityIgnoresRequiredOrder(t *testing.T) {
+	obj := func(title string, req ...string) *Schema {
+		return &Schema{Title: title, Type: "object", Required: req, Fields: map[string]*Schema{
+			"a": {Type: "string"}, "b": {Type: "string"}}}
+	}
+	same := [][2]*Schema{
+		{obj("", "a", "b"), obj("", "b", "a")},
+		{obj("", "a", "b"), obj("", "b", "a", "b")},
+		{&Schema{Type: "object", Fields: map[string]*Schema{"x": obj("", "a", "b")}},
+			&Schema{Type: "object", Fields: map[string]*Schema{"x": obj("", "b", "a")}}},
+		{&Schema{Type: "array", Items: obj("", "a", "b")}, &Schema{Type: "array", Items: obj("", "b", "a")}},
+	}
+	for i, c := range same {
+		if !Same(c[0], c[1]) || Key(c[0]) != Key(c[1]) {
+			t.Fatalf("%d: %s and %s are one contract", i, c[0].Canonical(), c[1].Canonical())
+		}
+	}
+	different := [][2]*Schema{
+		{obj("", "a"), obj("", "a", "b")},
+		{obj("greet", "a", "b"), obj("wave", "a", "b")},
+	}
+	for i, c := range different {
+		if Same(c[0], c[1]) || Key(c[0]) == Key(c[1]) {
+			t.Fatalf("%d: %s and %s are different contracts", i, c[0].Canonical(), c[1].Canonical())
+		}
+	}
+	in := obj("", "b", "a")
+	in.Canonical()
+	if !slices.Equal(in.Required, []string{"b", "a"}) {
+		t.Fatal("canonicalizing leaves the contract as written")
 	}
 }
 
