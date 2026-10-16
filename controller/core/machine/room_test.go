@@ -37,12 +37,9 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 	}
 
 	// Nothing runs: the room derives the result, which returns the reference.
-	s, effs := released(s, facet)
-	spawn, ok := effs[0].(Spawn)
-	if !ok {
-		t.Fatalf("a facet's result is handed off like any output: %#v", effs)
-	}
-	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(spawn.Under), In: spawn.Out})
+	s, effs := committing(released(s, facet))
+	spawn := spawned(t, effs) // a facet's result is handed off like any output
+	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawn.Out})
 	var got struct{ Reference string }
 	if ret.State != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
 		t.Fatalf("system.narrow returns the reference: %+v", ret.R)
@@ -154,8 +151,8 @@ func TestAnActorExtendsItself(t *testing.T) {
 	}
 
 	// Its result is derived, like any syscall's.
-	_, effs := released(s, facet)
-	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(effs[0].(Spawn).Under), In: effs[0].(Spawn).Out})
+	s, effs := committing(released(s, facet))
+	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawned(t, effs).Out})
 	if ret.State != record.Return || string(ret.R.Payload) != `{"ok":true}` {
 		t.Fatalf("extend-reach returns ok: %+v", ret.R)
 	}
@@ -290,23 +287,26 @@ func TestStrandIsReadThenReturned(t *testing.T) {
 		t.Fatalf("a strand of a contract the requester holds is an invoke: %+v", s.R.Fault)
 	}
 	s, effs := released(s, selfOf(t, s))
-	read, ok := effs[0].(ReadStrand)
-	if !ok || read.Observation != obs || read.Target != "echo" || !reflect.DeepEqual(read.Schema, echoS.Input) || read.Origin != "" {
+	var read StrandKey
+	if rd, ok := effs[0].(Read); ok && len(rd.Keys) == 1 {
+		read, _ = rd.Keys[0].(StrandKey)
+	}
+	if read.Observation != obs || read.Target != "echo" || !reflect.DeepEqual(read.Schema, echoS.Input) || read.Origin != "" {
 		t.Fatalf("release asks the shell to walk the tree: %#v", effs)
 	}
 
-	_, effs = Step(s, StrandRead{Strand: []byte(`{"chain":["c"]}`)})
-	spawn := effs[0].(Spawn)
-	if ret := intakeRecord(spawn.Under, string(spawn.Out)); ret.State != record.Return || string(ret.Payload) != `{"chain":["c"]}` {
+	k, effs := committing(Step(s, ReadResult{Found: [][]byte{[]byte(`{"strand":{"chain":["c"]}}`)}}))
+	spawn := spawned(t, effs)
+	if ret := intakeRecord(k.Self, string(spawn.Out)); ret.State != record.Return || string(ret.Payload) != `{"chain":["c"]}` {
 		t.Fatalf("the strand is the syscall's return: %+v %s", ret, spawn.Out)
 	}
 
-	_, effs = Step(s, StrandRead{Refused: "no invoke"})
-	f := effs[1].(Commit).R
+	_, effs = Step(s, ReadResult{Found: [][]byte{[]byte(`{"refused":"no invoke"}`)}})
+	f := committedRecords(t, effs)[0]
 	if f.State != record.Fault || f.Fault.Kind != record.Horizon || f.Fault.Cause != "strand: no invoke" || !f.Supervisor {
 		t.Fatalf("a refusal is a horizon fault of the syscall's frame: %+v", f.Fault)
 	}
-	if again := Observed(f.Predecessor, effs[0].(StoreInput).In); record.Stamp(again) != record.Stamp(f) {
+	if again := Observed(f.Predecessor, inputOf(t, effs)); record.Stamp(again) != record.Stamp(f) {
 		t.Fatal("replay derives the refusal's kind from its observation")
 	}
 	if forged := Observed("p", []byte(`{"refused":{"kind":"horizon","cause":"x"},"extra":1}`)); forged.Fault.Kind != record.Custody {

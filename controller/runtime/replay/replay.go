@@ -158,7 +158,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 			}
 		default:
 			_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: in})
-			derived = machine.Committed(effs)
+			derived = machine.CommittedRecord(effs)
 		}
 		if record.Stamp(derived) != stamp {
 			return none, fmt.Errorf("record %s is not what step derives from its input", record.Short(stamp))
@@ -260,7 +260,7 @@ func (w *walker) verifyEmission(o machine.Observation, slots []string) error {
 	}
 	for i, part := range parts {
 		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: part})
-		r := machine.Committed(effs)
+		r := machine.CommittedRecord(effs)
 		if r.State != record.Invoke && !(len(parts) > 1 && r.State == record.Fault) {
 			return errors.New("resolve emission did not open a slot")
 		}

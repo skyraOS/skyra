@@ -20,7 +20,7 @@ var echoS = horizon.Surface{Path: "/bin/echo-target", SHA256: "e",
 // intakeRecord runs the Intake step and returns what it commits.
 func intakeRecord(h horizon.Horizon, in string) record.Record {
 	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
-	return machine.Committed(effs)
+	return machine.CommittedRecord(effs)
 }
 
 // buildLineage commits genesis → invoke echo → return without any processes,

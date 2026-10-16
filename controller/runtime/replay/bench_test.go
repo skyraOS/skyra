@@ -44,7 +44,7 @@ func longLineage(tb testing.TB, root string, rounds int) (string, int) {
 	}
 	emit := func(under horizon.Horizon, out string) (string, horizon.Horizon) {
 		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: []byte(out)})
-		r := machine.Committed(effs)
+		r := machine.CommittedRecord(effs)
 		s := put([]byte(out), r)
 		next, err := machine.Narrow(under, r, s)
 		if err != nil {

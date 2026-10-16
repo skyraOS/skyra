@@ -113,8 +113,8 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	// under the root Horizon, and its target has just emitted the seed. The
 	// seed is operands like any other output; intake derives its state.
 	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
-	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), State: record.Invoke, Phase: machine.Execute, Stamp: g0, Self: h0}
-	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Emitted{Out: seed}); err != nil {
+	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), State: record.Invoke, Phase: machine.Running, Stamp: g0, Self: h0}
+	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Executed{Obs: seed}); err != nil {
 		return Outcome{}, err
 	}
 

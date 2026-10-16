@@ -14,8 +14,8 @@ import (
 // from the Horizon it was emitted under, and must come with its whole frame
 // stack, or the instance stops. Authority is derived, never taken on trust
 // (next/24): the id is only a handle.
-func accept(s Instance, e Released) (horizon.Horizon, error) {
-	self, err := HorizonOf(e.Self)
+func accept(s Instance, released Object) (horizon.Horizon, error) {
+	self, err := HorizonOf(released)
 	if err != nil {
 		return horizon.Horizon{}, fmt.Errorf("released Horizon: %w", err)
 	}
@@ -33,8 +33,8 @@ func accept(s Instance, e Released) (horizon.Horizon, error) {
 			return horizon.Horizon{}, errors.New("release is not what this commit derives")
 		}
 	}
-	if e.Frames != self.Depth() {
-		return horizon.Horizon{}, fmt.Errorf("release carries %d frames, its Horizon needs %d", e.Frames, self.Depth())
+	if s.Arrived != self.Depth() {
+		return horizon.Horizon{}, fmt.Errorf("release carries %d frames, its Horizon needs %d", s.Arrived, self.Depth())
 	}
 	return self, nil
 }

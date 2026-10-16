@@ -51,7 +51,7 @@ func newTreeFixture(t *testing.T) *treeFixture {
 func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, accept bool) horizon.Horizon {
 	f.t.Helper()
 	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: []byte(in)})
-	r := machine.Committed(effects)
+	r := machine.CommittedRecord(effects)
 	if _, err := tree.Put(f.dir, "inputs", []byte(in)); err != nil {
 		f.t.Fatal(err)
 	}
