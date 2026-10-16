@@ -178,3 +178,31 @@ func TestEveryShippedContractLoads(t *testing.T) {
 		}
 	}
 }
+
+// Contracts enter the room in their normal form (42): the root Horizon does
+// not depend on the order a file lists its required fields.
+func TestLoadNormalizesContracts(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a"), []byte("a"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"input":{"type":"object","required":["b","a"],"fields":{"a":{"type":"string"},"b":{"type":"string"}}},
+		"contracts":[{"type":"object","required":["d","c","d"],"fields":{"c":{"type":"string"},"d":{"type":"string"}}}]}`
+	if err := os.WriteFile(filepath.Join(dir, "c.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "registry.json")
+	if err := os.WriteFile(file, []byte(`{"a": {"path": "a", "contract": "c.json"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reach, _, err := Load(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reach["a"].Input.Required; !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("input contract: %v", got)
+	}
+	if got := reach["a"].Contracts[0].Required; !reflect.DeepEqual(got, []string{"c", "d"}) {
+		t.Fatalf("other contracts: %v", got)
+	}
+}

@@ -145,9 +145,8 @@ func added(genesis record.Record, in invoke) bool {
 	if err != nil {
 		return false
 	}
-	want := string(contract.Canonical(c))
 	for _, g := range genesis.Reach[in.name].All() {
-		if string(contract.Canonical(g)) == want {
+		if contract.Same(g, c) {
 			return false
 		}
 	}

@@ -9,8 +9,8 @@
       "reconstruct-conversation": {
         "type": "object",
         "required": [
-          "conversation",
-          "availability"
+          "availability",
+          "conversation"
         ],
         "fields": {
           "conversation": {
@@ -34,9 +34,9 @@
         "reconstruct-state": {
           "type": "object",
           "required": [
-            "uiIncarnation",
+            "conversations",
             "revision",
-            "conversations"
+            "uiIncarnation"
           ],
           "fields": {
             "uiIncarnation": {
@@ -50,8 +50,8 @@
               "items": {
                 "type": "object",
                 "required": [
-                  "conversation",
-                  "availability"
+                  "availability",
+                  "conversation"
                 ],
                 "fields": {
                   "conversation": {

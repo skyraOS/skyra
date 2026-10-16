@@ -40,8 +40,8 @@
         "items": {
           "type": "object",
           "required": [
-            "path",
-            "name"
+            "name",
+            "path"
           ],
           "fields": {
             "path": {
@@ -93,9 +93,9 @@
         "project-state": {
           "type": "object",
           "required": [
-            "conversation",
             "availability",
             "checkpoint",
+            "conversation",
             "strand"
           ],
           "fields": {
@@ -106,8 +106,8 @@
               "type": "object",
               "required": [
                 "input_live",
-                "turn_live",
-                "recovery_required"
+                "recovery_required",
+                "turn_live"
               ],
               "fields": {
                 "input_live": {
@@ -141,8 +141,8 @@
         "project-app-state": {
           "type": "object",
           "required": [
-            "uiIncarnation",
             "revision",
+            "uiIncarnation",
             "views"
           ],
           "fields": {

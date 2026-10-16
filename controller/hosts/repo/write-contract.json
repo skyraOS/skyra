@@ -41,8 +41,8 @@
         "items": {
           "type": "object",
           "required": [
-            "old",
-            "new"
+            "new",
+            "old"
           ],
           "fields": {
             "old": {

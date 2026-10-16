@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
@@ -346,5 +347,25 @@ func TestStrandReconstructionForms(t *testing.T) {
 	read, err := stranding(h, args)
 	if err != nil || read.Invocation != anchor || !reflect.DeepEqual(read.Observations, []string{leaf}) || read.Room != h.Frame {
 		t.Fatalf("tree effect: %+v %v", read, err)
+	}
+}
+
+// A contract restated in another order is the same contract (42): an actor
+// that holds it cannot add it again, and a strand that names it either way
+// finds it.
+func TestAContractRestatedInAnotherOrderIsTheSame(t *testing.T) {
+	two := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
+	twoS := horizon.Surface{Path: "/bin/two", SHA256: "t", Input: two, Continuation: true}
+	root := operator
+	root.Reach = map[string]horizon.Surface{"two": twoS, System: Syscalls()}
+	actor, _ := Narrow(root, intakeRecord(root, `{"to":"two","payload":{"a":"x","b":"y"}}`), "a1")
+	restated := `{"type":"object","required":["b","a"],"fields":{"a":{"type":"string"},"b":{"type":"string"}}}`
+
+	if r := intakeRecord(actor, extend(restated)); r.State != record.Fault || !strings.Contains(r.Fault.Cause, "already holds") {
+		t.Fatalf("an actor already holds a contract restated in another order: %+v", r)
+	}
+	key, err := stranding(actor, json.RawMessage(`{"observation":"`+strings.Repeat("ab", 32)+`","contract":{"target":"two","schema":`+restated+`}}`))
+	if err != nil || !reflect.DeepEqual(key.Schema, two) {
+		t.Fatalf("a strand names the contract the actor holds, in either order: %+v %v", key, err)
 	}
 }

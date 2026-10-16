@@ -185,9 +185,8 @@ func stranding(h horizon.Horizon, payload json.RawMessage) (StrandKey, error) {
 	if err != nil {
 		return StrandKey{}, err
 	}
-	want := string(contract.Canonical(named))
 	for _, c := range target.All() {
-		if string(contract.Canonical(c)) == want {
+		if contract.Same(c, named) {
 			read := StrandKey{Observation: ask.Observation, Invocation: ask.Invocation, Observations: slices.Clone(ask.Observations), Target: ask.Contract.Target, Schema: c, Origin: h.Origin}
 			if !single {
 				outer := h
@@ -349,9 +348,8 @@ func extension(h horizon.Horizon, payload json.RawMessage) (*contract.Schema, er
 	if !ok {
 		return nil, fmt.Errorf("%w: %q is not in its own Horizon's reach", errNotTheEmitters, h.Name)
 	}
-	want := string(contract.Canonical(s))
 	for _, c := range actor.All() {
-		if string(contract.Canonical(c)) == want {
+		if contract.Same(c, s) {
 			return nil, fmt.Errorf("%s already holds this contract", h.Name)
 		}
 	}

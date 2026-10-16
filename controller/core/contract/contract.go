@@ -77,6 +77,40 @@ func Canonical(v any) json.RawMessage {
 	return b
 }
 
+// Normal is a copy of s in its normal form: every Required, at every depth,
+// sorted and deduplicated (42). Two contracts that differ only in the order
+// of their required fields are one contract. The interpreter's
+// proc.Schema.Canonical computes the same form; testdata/normal.json holds
+// the cases both must reproduce.
+func Normal(s *Schema) *Schema {
+	if s == nil {
+		return nil
+	}
+	n := &Schema{Title: s.Title, Type: s.Type, Items: Normal(s.Items)}
+	if len(s.Required) > 0 {
+		n.Required = slices.Clone(s.Required)
+		slices.Sort(n.Required)
+		n.Required = slices.Compact(n.Required)
+	}
+	if len(s.Fields) > 0 {
+		n.Fields = make(map[string]*Schema, len(s.Fields))
+		for k, f := range s.Fields {
+			n.Fields[k] = Normal(f)
+		}
+	}
+	return n
+}
+
+// Same reports whether two contracts are one: the same normal form. Every
+// comparison of contracts goes through it, so a contract restated in another
+// order is recognized wherever it is compared, in old trees as in new.
+func Same(a, b *Schema) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return string(Canonical(Normal(a))) == string(Canonical(Normal(b)))
+}
+
 // Fits checks a decoded value against a schema.
 func Fits(s *Schema, v any) error {
 	if s == nil {

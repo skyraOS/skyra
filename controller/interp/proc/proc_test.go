@@ -2,6 +2,7 @@ package proc
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -321,5 +322,27 @@ func TestRepeatedCallsAreEachTheirOwn(t *testing.T) {
 	}
 	if string(next.Return) != `["a","a","a"]` {
 		t.Fatalf("and every call ran: %s", next.Return)
+	}
+}
+
+// The kernel's normal form and this one are the same (42): both reproduce
+// the cases in the kernel's testdata/normal.json.
+func TestCanonicalIsTheKernelsNormalForm(t *testing.T) {
+	b, err := os.ReadFile("../../core/contract/testdata/normal.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Case       string
+		In, Normal *Schema
+	}
+	if err := json.Unmarshal(b, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		want, _ := json.Marshal(c.Normal)
+		if string(c.In.Canonical()) != string(want) {
+			t.Errorf("%s: %s, want %s", c.Case, c.In.Canonical(), want)
+		}
 	}
 }

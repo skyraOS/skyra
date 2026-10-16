@@ -6,12 +6,12 @@
     "fields": {
       "remember": {
         "type": "object",
-        "required": ["observation", "contract"],
+        "required": ["contract", "observation"],
         "fields": {
           "observation": {"type": "string"},
           "contract": {
             "type": "object",
-            "required": ["target", "schema"],
+            "required": ["schema", "target"],
             "fields": {"target": {"type": "string"}, "schema": {"type": "any"}}
           }
         }
@@ -22,7 +22,7 @@
     {
       "title": "greet",
       "type": "object",
-      "required": ["names", "greeting"],
+      "required": ["greeting", "names"],
       "fields": {"names": {"type": "array", "items": {"type": "string"}}, "greeting": {"type": "string"}}
     }
   ],

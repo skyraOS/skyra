@@ -9,8 +9,8 @@
       "remember": {
         "type": "object",
         "required": [
-          "observation",
-          "contract"
+          "contract",
+          "observation"
         ],
         "fields": {
           "observation": {
@@ -19,8 +19,8 @@
           "contract": {
             "type": "object",
             "required": [
-              "target",
-              "schema"
+              "schema",
+              "target"
             ],
             "fields": {
               "target": {
