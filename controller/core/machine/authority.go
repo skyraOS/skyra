@@ -19,17 +19,17 @@ func accept(s Instance, released Object) (horizon.Horizon, error) {
 	if err != nil {
 		return horizon.Horizon{}, fmt.Errorf("released Horizon: %w", err)
 	}
-	if self.Stamp != s.Stamp {
+	if self.Stamp != s.Stamp() {
 		return horizon.Horizon{}, errors.New("release is not for this commit")
 	}
-	want, err := Narrow(s.Under, s.R, s.Stamp)
+	want, err := Narrow(s.Under, s.R, s.Stamp())
 	if err != nil {
 		return horizon.Horizon{}, fmt.Errorf("release cannot be derived: %w", err)
 	}
 	if a, b := encode(want), encode(self); a != b {
 		// One instruction of several: an invoke is forked, a fault holds a
 		// slot of its own.
-		if alt, _ := Fanned(s.Under, s.R, s.Stamp); encode(alt) != b {
+		if alt, _ := Fanned(s.Under, s.R, s.Stamp()); encode(alt) != b {
 			return horizon.Horizon{}, errors.New("release is not what this commit derives")
 		}
 	}

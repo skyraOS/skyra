@@ -71,7 +71,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 	)
 	defer func() {
 		if failure != nil && len(stack) > 0 {
-			if err := tree.PublishFailure(root, stack[0], tree.Failure{Stamp: s.Stamp, Message: failure.Error()}); err != nil {
+			if err := tree.PublishFailure(root, stack[0], tree.Failure{Stamp: s.Stamp(), Message: failure.Error()}); err != nil {
 				trace.Logf("recovery required: %v; recording failure: %v", failure, err)
 			}
 		}

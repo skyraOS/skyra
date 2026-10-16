@@ -68,13 +68,13 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		switch s.Phase {
 		case Stamping:
 			s.Phase = Release
-			return s, []Effect{Execute{Act: SendStamp{s.Stamp}}}
+			return s, []Effect{Execute{Act: SendStamp{s.Stamp()}}}
 		case Acknowledging:
 			s.Phase = Acknowledged
 			return s, []Effect{Execute{Act: Acknowledge{}}}
 		case Spawning:
 			s.Phase = Handoff
-			return s, []Effect{Execute{Act: Spawn{Under: HeldHorizon(s.Self).Key, Out: s.Outs[len(s.Kids)]}}}
+			return s, []Effect{Execute{Act: Spawn{Under: HeldHorizon(s.Self).Key, Out: s.Outs()[len(s.Kids)]}}}
 		case Opening:
 			return opened(s, ev)
 		case Settling:
@@ -87,12 +87,12 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Release:
 			return arrived(s, ev)
 		case Acknowledged:
-			if s.State == record.Invoke {
+			if s.State() == record.Invoke {
 				return release(s)
 			}
 			return settle(s)
 		case Running:
-			if s.State != record.Invoke && s.State != record.Resolve {
+			if s.State() != record.Invoke && s.State() != record.Resolve {
 				break // a terminal state never runs a target
 			}
 			return execute(s, ev)
@@ -111,7 +111,7 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Accepting:
 			return accepting(s, ev)
 		case Running:
-			if s.State == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "horizon" {
+			if s.State() == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "horizon" {
 				return stranded(s, ev)
 			}
 		case Verifying:
@@ -125,8 +125,8 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 
 func stop(s Instance, e Event) (Instance, []Effect) {
 	msg := fmt.Sprintf("%T is not valid in phase %s", e, s.Phase)
-	if s.State != "" {
-		msg += fmt.Sprintf(" of an instance in a state of %s", s.State)
+	if s.State() != "" {
+		msg += fmt.Sprintf(" of an instance in a state of %s", s.State())
 	}
 	return exit(s, msg)
 }
@@ -176,7 +176,7 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 	}
 	r := interpret(under, e.In)
 	r.Predecessor, r.Input = under.Stamp, record.Sum(e.In)
-	s.Under, s.R, s.Stamp, s.State, s.Phase = under, r, record.Stamp(r), r.State, Stamping
+	s.Under, s.R, s.Phase = under, r, Stamping
 	return s, []Effect{Commit{Writes: []Write{object("inputs", e.In), recordWrite(r)}}}
 }
 
@@ -199,7 +199,7 @@ func accepting(s Instance, e ReadResult) (Instance, []Effect) {
 		return s, []Effect{Execute{Act: Acknowledge{Err: err.Error()}}, Execute{Act: Exit{err.Error()}}}
 	}
 	s.Self, s.Phase = self, Acknowledging
-	return s, []Effect{Commit{Writes: []Write{AcceptanceWrite{Stamp: s.Stamp, Horizon: s.Accepting}}}}
+	return s, []Effect{Commit{Writes: []Write{AcceptanceWrite{Stamp: s.Stamp(), Horizon: s.Accepting}}}}
 }
 
 // release, invoke: run exactly the committed surface, under a sandbox
@@ -224,11 +224,11 @@ func release(s Instance) (Instance, []Effect) {
 		// An async surface: nothing runs here. The host takes custody and
 		// resumes this instance, running, with the event as the output.
 		s.Phase = Parking
-		return s, []Effect{Execute{Act: Park{Host: self.Surface.Host, Payload: s.R.Payload, Stamp: s.Stamp, Frames: self.Depth()}, Force: true}}
+		return s, []Effect{Execute{Act: Park{Host: self.Surface.Host, Payload: s.R.Payload, Stamp: s.Stamp(), Frames: self.Depth()}, Force: true}}
 	}
 	stdin := []byte(s.R.Payload)
 	if self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Actor: agentName(self), Agent: self.Agent, Agents: agents(self), WorkTools: workToolNames(self), Delegated: self.Delegated, Frame: s.Stamp, Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
+		stdin, _ = json.Marshal(Continuation{Actor: agentName(self), Agent: self.Agent, Agents: agents(self), WorkTools: workToolNames(self), Delegated: self.Delegated, Frame: s.Stamp(), Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
 			Workspace: workspaceOf(self), Scratch: self.Authority.Scratch, Tools: tools(self), Contracts: contracts(self), Steps: []StepView{}})
 	}
 	socket := ""
@@ -264,11 +264,10 @@ func execute(s Instance, e Executed) (Instance, []Effect) {
 	if len(e.Obs) == 0 {
 		return fault(s, "target exited without emitting")
 	}
-	outs, err := Instructions(e.Obs)
-	if err != nil {
+	if _, err := Instructions(e.Obs); err != nil {
 		return fault(s, err.Error())
 	}
-	s.Out, s.Outs, s.Kids = e.Obs, outs, nil
+	s.Out, s.Kids = e.Obs, nil
 	return spawnNext(s)
 }
 
@@ -329,14 +328,15 @@ func stamped(s Instance, e Executed) (Instance, []Effect) {
 }
 
 func handoff(s Instance, e ReadResult) (Instance, []Effect) {
-	fanned := len(s.Outs) > 1
+	outs := s.Outs()
+	fanned := len(outs) > 1
 	stamp := s.Reads[0].(ObjectKey).Hash
-	r, child, err := issueRelease(s.Self, s.Outs[len(s.Kids)], s.Stamp, Object{Key: stamp, Raw: e.Found[0]}, fanned)
+	r, child, err := issueRelease(s.Self, outs[len(s.Kids)], s.Stamp(), Object{Key: stamp, Raw: e.Found[0]}, fanned)
 	if err != nil {
 		return killAndFault(s, err.Error())
 	}
 	s.Kids = append(s.Kids, Kid{Stamp: stamp, R: r, Horizon: child})
-	if len(s.Kids) < len(s.Outs) {
+	if len(s.Kids) < len(outs) {
 		return spawnNext(s)
 	}
 	if fanned {
@@ -344,7 +344,7 @@ func handoff(s Instance, e ReadResult) (Instance, []Effect) {
 			return killAndFault(s, err.Error())
 		}
 	}
-	s.Child, s.Phase = s.Kids[0].Stamp, Opening
+	s.Phase = Opening
 	var writes []Write
 	for _, k := range s.Kids {
 		if opensSlot(k) {
@@ -411,7 +411,7 @@ func alone(kids []Kid) error {
 // still waits on.
 func settle(s Instance) (Instance, []Effect) {
 	s.Phase = Settling
-	return s, []Effect{Commit{Writes: []Write{ResultWrite{Stamp: s.Stamp, Frame: s.Self.Frame}}}}
+	return s, []Effect{Commit{Writes: []Write{ResultWrite{Stamp: s.Stamp(), Frame: s.Self.Frame}}}}
 }
 
 // settled: the discharge is the last of the commit; it is exclusive.
@@ -570,7 +570,7 @@ func resolve(s Instance, frame record.Record, rounds []round) (Instance, []Effec
 		results = append(results, c.Result)
 	}
 	obs, _ := json.Marshal(Observation{Frame: waiter.Frame, Round: round.Stamp, Discharges: results, Emission: round.Emission})
-	r, _ := Resolved(s.Stamp, obs)
+	r, _ := Resolved(s.Stamp(), obs)
 	s.Held, s.Phase = r, Claim
 	s.Next = continuation(frame, rounds, *waiter)
 	return s, []Effect{Commit{Writes: []Write{object("inputs", obs), recordWrite(r), ClaimWrite{Round: round.Stamp, Stamp: record.Stamp(r), Frame: waiter.Frame}}}}
@@ -588,7 +588,7 @@ func claim(s Instance, e Committed) (Instance, []Effect) {
 	if resumed.Surface == nil {
 		return exit(s, "") // the operator's continuation: boot reads the claim and prints
 	}
-	s.State, s.R, s.Stamp, s.Self, s.Phase = record.Resolve, s.Held, resumed.Stamp, resumed, Running
+	s.R, s.Self, s.Phase = s.Held, resumed, Running
 	return s, []Effect{Execute{Act: Pop{}}, Execute{Act: runOf(resumed, s.Next, s.Floor, ""), Force: true}} // a continuation, never a connection surface
 }
 
@@ -628,9 +628,9 @@ func Refusal(kind, cause string) []byte {
 // on that slot.
 func fault(s Instance, observed string) (Instance, []Effect) {
 	obs := []byte(observed)
-	r := Observed(s.Stamp, obs)
-	s.State, s.R, s.Stamp, s.Phase, s.Cause = record.Fault, r, record.Stamp(r), Settling, ""
-	return s, []Effect{Commit{Writes: []Write{object("inputs", obs), recordWrite(r), ResultWrite{Stamp: s.Stamp, Frame: s.Self.Frame}}}}
+	r := Observed(s.Stamp(), obs)
+	s.R, s.Phase, s.Cause = r, Settling, ""
+	return s, []Effect{Commit{Writes: []Write{object("inputs", obs), recordWrite(r), ResultWrite{Stamp: s.Stamp(), Frame: s.Self.Frame}}}}
 }
 
 // Observed derives a supervisor's fault record from what it observed. The

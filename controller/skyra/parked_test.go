@@ -48,7 +48,7 @@ func TestResumeDerivesTheParkedInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Stamp != invoke || s.Phase != machine.Running || s.Self.Frame != invoke || s.Self.Surface.Host == "" || s.Self.Authority.Read[0].Path != "/private/work" || s.R.Payload == nil || record.Stamp(r) != invoke {
+	if s.Stamp() != invoke || s.Phase != machine.Running || s.Self.Frame != invoke || s.Self.Surface.Host == "" || s.Self.Authority.Read[0].Path != "/private/work" || s.R.Payload == nil || record.Stamp(r) != invoke {
 		t.Fatalf("the instance must be derived from the tree: %+v", s)
 	}
 	for name, c := range map[string]struct {

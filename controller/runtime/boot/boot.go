@@ -97,8 +97,9 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		nonce = fixed
 	}
 	roomBytes, _ := json.Marshal(map[string]any{"reach": reach, "authority": authority})
-	g0, err := tree.Commit(root, record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
-		Author: "operator", Nonce: hex.EncodeToString(nonce)}) // frame 0: the operator's, in invoke
+	genesis := record.Record{Version: 2, Input: record.Sum(roomBytes), State: record.Invoke, Reach: reach, Authority: &authority,
+		Author: "operator", Nonce: hex.EncodeToString(nonce)} // frame 0: the operator's, in invoke
+	g0, err := tree.Commit(root, genesis)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -113,7 +114,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	// under the root Horizon, and its target has just emitted the seed. The
 	// seed is operands like any other output; intake derives its state.
 	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
-	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), State: record.Invoke, Phase: machine.Running, Stamp: g0, Self: h0}
+	s0 := machine.Instance{Floor: root, Sockets: hold.Sockets(), R: genesis, Phase: machine.Running, Self: h0}
 	if _, err := instance.Drive(root, nil, []*os.File{node0}, s0, machine.Executed{Obs: seed}); err != nil {
 		return Outcome{}, err
 	}

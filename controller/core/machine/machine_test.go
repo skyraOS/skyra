@@ -78,14 +78,14 @@ func TestInterpret(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
 			r := CommittedRecord(effs)
-			if s.Phase != Stamping || s.Stamp != record.Stamp(r) || s.State != r.State {
+			if s.Phase != Stamping || s.Stamp() != record.Stamp(r) || s.State() != r.State {
 				t.Fatalf("intake must derive the state and commit: %+v", s)
 			}
 			if !reflect.DeepEqual(effs, []Effect{Commit{Writes: []Write{ObjectWrite{"inputs", []byte(c.in)}, recordWrite(r)}}}) {
 				t.Fatalf("intake commits exactly its input, then its record: %#v", effs)
 			}
 			s, effs = Step(s, created(effs))
-			if s.Phase != Release || !reflect.DeepEqual(effs, []Effect{Execute{Act: SendStamp{s.Stamp}}}) {
+			if s.Phase != Release || !reflect.DeepEqual(effs, []Effect{Execute{Act: SendStamp{s.Stamp()}}}) {
 				t.Fatalf("then it sends its stamp and waits for the release: %s %#v", s.Phase, effs)
 			}
 			if r.Predecessor != c.under.Stamp || r.Input != record.Sum([]byte(c.in)) {
@@ -115,13 +115,13 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 		{operator, `{"to":"ghost","payload":{}}`, record.Fault, true},
 	} {
 		s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
-		if s.State != c.state {
-			t.Fatalf("%s: state %s, want %s", c.in, s.State, c.state)
+		if s.State() != c.state {
+			t.Fatalf("%s: state %s, want %s", c.in, s.State(), c.state)
 		}
-		self, _ := Narrow(c.under, s.R, s.Stamp)
+		self, _ := Narrow(c.under, s.R, s.Stamp())
 		_, effs := released(s, self)
 		if c.settle {
-			if w := writes(t, effs); len(w) != 1 || w[0] != (ResultWrite{Stamp: s.Stamp, Frame: self.Frame}) {
+			if w := writes(t, effs); len(w) != 1 || w[0] != (ResultWrite{Stamp: s.Stamp(), Frame: self.Frame}) {
 				t.Fatalf("%s (%s): first a discharge: %#v", c.in, c.state, effs)
 			}
 		} else if a := acts(effs); len(a) != 1 {
@@ -204,7 +204,7 @@ func awaiting(t *testing.T) Instance {
 
 func selfOf(t *testing.T, s Instance) horizon.Horizon {
 	t.Helper()
-	h, err := Narrow(s.Under, s.R, s.Stamp)
+	h, err := Narrow(s.Under, s.R, s.Stamp())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestReleaseToSettle(t *testing.T) {
 	// which only the operator waits on.
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"ghost","payload":{}}`)})
 	s, effs := released(s, selfOf(t, s))
-	if w := writes(t, effs); w[0].(ResultWrite).Stamp != s.Stamp {
+	if w := writes(t, effs); w[0].(ResultWrite).Stamp != s.Stamp() {
 		t.Fatalf("the fault discharges its slot: %#v", effs)
 	}
 	if _, effs = Step(s, created(effs)); !cleanExit(effs) {
@@ -306,10 +306,10 @@ func TestSilentTargetFaults(t *testing.T) {
 	s2, effs := Step(s, Executed{})
 	obs := inputOf(t, effs)
 	f := committedRecords(t, effs)[0]
-	if !f.Supervisor || f.State != record.Fault || f.Fault.Kind != record.Custody || f.Predecessor != s.Stamp || !strings.Contains(f.Fault.Cause, "without emitting") {
+	if !f.Supervisor || f.State != record.Fault || f.Fault.Kind != record.Custody || f.Predecessor != s.Stamp() || !strings.Contains(f.Fault.Cause, "without emitting") {
 		t.Fatalf("supervisor fault: %+v", f)
 	}
-	if f.Input != record.Sum(obs) || record.Stamp(Observed(s.Stamp, obs)) != record.Stamp(f) {
+	if f.Input != record.Sum(obs) || record.Stamp(Observed(s.Stamp(), obs)) != record.Stamp(f) {
 		t.Fatal("a supervisor fault must be derivable from its stored observation")
 	}
 	if w := writes(t, effs); len(w) != 3 || w[2] != (ResultWrite{Stamp: record.Stamp(f), Frame: s.Self.Frame}) {
@@ -346,7 +346,7 @@ func TestHandoff(t *testing.T) {
 	if !reflect.DeepEqual(effs, []Effect{Execute{Act: ReleaseChild{Horizon: HeldHorizon(want).Key, Stamp: record.Stamp(succ)}}, Execute{Act: Exit{}}}) {
 		t.Fatalf("a verified return is released to discharge this frame's slot: %#v", effs)
 	}
-	if s2.Child != record.Stamp(succ) {
+	if s2.Child() != record.Stamp(succ) {
 		t.Fatalf("child stamp not recorded: %+v", s2)
 	}
 }
@@ -406,7 +406,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, effs := released(a, selfOf(t, a))
 	var c Continuation
-	if err := json.Unmarshal(runIn(t, effs).Stdin, &c); err != nil || c.Frame != a.Stamp || string(c.Input) != `{"text":"hi"}` || len(c.Steps) != 0 {
+	if err := json.Unmarshal(runIn(t, effs).Stdin, &c); err != nil || c.Frame != a.Stamp() || string(c.Input) != `{"text":"hi"}` || len(c.Steps) != 0 {
 		t.Fatalf("a continuation starts with its frame, its input and no steps: %s", runIn(t, effs).Stdin)
 	}
 
@@ -418,10 +418,10 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	a, effs = stampedBy(a, b.R)
 	rest := publishedRound(t, effs, call, a.Self.Stamp)
 	echoSelf := a.Kids[0].Horizon
-	if rest[0] != (SlotWrite{Round: a.Self.Stamp, Child: b.Stamp}) || rest[1] != (FrameWrite{Stamp: b.Stamp}) {
+	if rest[0] != (SlotWrite{Round: a.Self.Stamp, Child: b.Stamp()}) || rest[1] != (FrameWrite{Stamp: b.Stamp()}) {
 		t.Fatalf("an invoke's slot and frame are committed before it is released: %#v", rest)
 	}
-	if _, effs := Step(a, created(effs)); acts(effs)[0].(ReleaseChild).NewFrame != b.Stamp {
+	if _, effs := Step(a, created(effs)); acts(effs)[0].(ReleaseChild).NewFrame != b.Stamp() {
 		t.Fatalf("it is released into its own frame: %#v", effs)
 	}
 
@@ -432,7 +432,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(b.Self), In: echoReturn})
 	b, _ = stampedBy(b, r.R)
 	r, effs = released(r, b.Kids[0].Horizon)
-	if w := writes(t, effs); len(w) != 1 || w[0].(ResultWrite).Stamp != r.Stamp {
+	if w := writes(t, effs); len(w) != 1 || w[0].(ResultWrite).Stamp != r.Stamp() {
 		t.Fatalf("the return discharges echo's slot: %#v", effs)
 	}
 	r, _ = Step(r, created(effs))
@@ -447,7 +447,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 			d := HeldRecord(r.R)
 			child.Discharge = &d
 		}
-		return Settled{Frame: HeldRecord(agentRecord), Rounds: []Round{{Stamp: a.Stamp, Children: []Child{child}}}}
+		return Settled{Frame: HeldRecord(agentRecord), Rounds: []Round{{Stamp: a.Stamp(), Children: []Child{child}}}}
 	}
 	gatherRead := []Effect{Read{Keys: r.Reads}}
 
@@ -457,7 +457,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	}
 	// A lying shell: another record's bytes under the waiter's frame.
 	wrong := round(true)
-	wrong.Frame = Object{Key: a.Stamp, Raw: HeldRecord(b.R).Raw}
+	wrong.Frame = Object{Key: a.Stamp(), Raw: HeldRecord(b.R).Raw}
 	if _, effs := gatheredFrom(t, r, gatherRead, wrong); !strings.Contains(exitError(effs), "does not hash") {
 		t.Fatalf("a foreign frame must stop the instance: %#v", effs)
 	}
@@ -471,13 +471,13 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("gather resolves at once: %#v", effs)
 	}
 	res := committedRecords(t, effs)[0]
-	if res.State != record.Resolve || res.Frame != a.Stamp || res.Round != a.Stamp || !reflect.DeepEqual(res.Deps, []string{r.Stamp}) || res.Predecessor != r.Stamp {
+	if res.State != record.Resolve || res.Frame != a.Stamp() || res.Round != a.Stamp() || !reflect.DeepEqual(res.Deps, []string{r.Stamp()}) || res.Predecessor != r.Stamp() {
 		t.Fatalf("resolve record: %+v", res)
 	}
-	if derived, _ := Resolved(r.Stamp, inputOf(t, effs)); record.Stamp(derived) != record.Stamp(res) {
+	if derived, _ := Resolved(r.Stamp(), inputOf(t, effs)); record.Stamp(derived) != record.Stamp(res) {
 		t.Fatal("a resolve must be derivable from its stored observation")
 	}
-	if w[2] != (ClaimWrite{Round: a.Stamp, Stamp: record.Stamp(res), Frame: a.Stamp}) {
+	if w[2] != (ClaimWrite{Round: a.Stamp(), Stamp: record.Stamp(res), Frame: a.Stamp()}) {
 		t.Fatalf("then the fan-in claim: %#v", effs)
 	}
 
@@ -486,7 +486,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 		t.Fatalf("a lost claim exits: %#v", effs)
 	}
 	g, effs = Step(g, created(effs))
-	if g.State != record.Resolve || g.Phase != Running || g.Self.Frame != a.Stamp || g.Self.Stamp != record.Stamp(res) || acts(effs)[0] != (Pop{}) {
+	if g.State() != record.Resolve || g.Phase != Running || g.Self.Frame != a.Stamp() || g.Self.Stamp != record.Stamp(res) || acts(effs)[0] != (Pop{}) {
 		t.Fatalf("the winner takes custody of the resumed agent: %+v %#v", g, effs)
 	}
 	if err := json.Unmarshal(runIn(t, effs[1:]).Stdin, &c); err != nil || len(c.Steps) != 1 || c.Steps[0].To != "echo" || c.Steps[0].State != record.Return || string(c.Steps[0].Value) != `"hi"` {
@@ -494,9 +494,9 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	}
 
 	// Its return discharges the agent's own slot, and wakes the operator.
-	final, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(g.Self), In: []byte(`{"to":"` + a.Stamp + `","payload":"echo said \"hi\""}`)})
-	child, _ := Narrow(g.Self, final.R, final.Stamp)
-	if final.State != record.Return || child.Frame != a.Stamp || child.Resume.Frame != operator.Frame {
+	final, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(g.Self), In: []byte(`{"to":"` + a.Stamp() + `","payload":"echo said \"hi\""}`)})
+	child, _ := Narrow(g.Self, final.R, final.Stamp())
+	if final.State() != record.Return || child.Frame != a.Stamp() || child.Resume.Frame != operator.Frame {
 		t.Fatalf("the agent's return discharges its own frame, waited on by the operator: %+v", child)
 	}
 }
@@ -535,11 +535,11 @@ func TestRemovedRoutePhasesAreRefused(t *testing.T) {
 		s Instance
 		e Event
 	}{
-		"a decision after gather":           {Instance{State: record.Return, Phase: Claim}, Executed{Obs: []byte("x")}},
-		"a route looked up after gather":    {Instance{State: record.Return, Phase: Claim}, ReadResult{}},
-		"rounds read by an invoke's facet":  {Instance{State: record.Invoke, Phase: Running}, ReadResult{}},
-		"a retest of a recorded run":        {Instance{State: record.Invoke, Phase: Handoff}, ReadResult{}},
-		"a return's gather in a dead phase": {Instance{State: record.Fault, Phase: Done}, Executed{Obs: []byte("x")}},
+		"a decision after gather":           {Instance{R: record.Record{State: record.Return}, Phase: Claim}, Executed{Obs: []byte("x")}},
+		"a route looked up after gather":    {Instance{R: record.Record{State: record.Return}, Phase: Claim}, ReadResult{}},
+		"rounds read by an invoke's facet":  {Instance{R: record.Record{State: record.Invoke}, Phase: Running}, ReadResult{}},
+		"a retest of a recorded run":        {Instance{R: record.Record{State: record.Invoke}, Phase: Handoff}, ReadResult{}},
+		"a return's gather in a dead phase": {Instance{R: record.Record{State: record.Fault}, Phase: Done}, Executed{Obs: []byte("x")}},
 	} {
 		if _, effs := Step(c.s, c.e); len(effs) != 1 || !strings.Contains(exitError(effs), "not valid in phase") {
 			t.Errorf("%s: %#v", name, effs)
@@ -615,7 +615,7 @@ func TestAsyncSurfaceParks(t *testing.T) {
 	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"browser": browserS}}
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(root), In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
 	s, effs := released(s, selfOf(t, s))
-	want := []Effect{Execute{Act: Park{Host: "/tmp/park.sock", Payload: []byte(`{"text":"show me"}`), Stamp: s.Stamp, Frames: 2}, Force: true}}
+	want := []Effect{Execute{Act: Park{Host: "/tmp/park.sock", Payload: []byte(`{"text":"show me"}`), Stamp: s.Stamp(), Frames: 2}, Force: true}}
 	if s.Phase != Parking || !reflect.DeepEqual(effs, want) {
 		t.Fatalf("an async invoke parks with its host: %s %#v", s.Phase, effs)
 	}
@@ -692,8 +692,8 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 	first, second := `{"to":"echo","payload":{"text":"b"}}`, `{"to":"echo","payload":{"text":"a"}}`
 	a, kids, w := fanOut(t, first, second)
 	want := []Write{
-		SlotWrite{Round: a.Self.Stamp, Child: kids[0].Stamp, Pos: 0},
-		SlotWrite{Round: a.Self.Stamp, Child: kids[1].Stamp, Pos: 1},
+		SlotWrite{Round: a.Self.Stamp, Child: kids[0].Stamp(), Pos: 0},
+		SlotWrite{Round: a.Self.Stamp, Child: kids[1].Stamp(), Pos: 1},
 	}
 	if len(w) != 6 || !reflect.DeepEqual(w[:2], want) {
 		t.Fatalf("every slot opens in the same commit, before any release: %#v", w)
@@ -701,7 +701,7 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 	rel := releases(t, a, w)
 	for i := range kids {
 		self := a.Kids[i].Horizon
-		if rel[i].Index != i || rel[i].NewFrame != kids[i].Stamp || self.Frame != kids[i].Stamp || self.Resume.Stamp != a.Self.Stamp {
+		if rel[i].Index != i || rel[i].NewFrame != kids[i].Stamp() || self.Frame != kids[i].Stamp() || self.Resume.Stamp != a.Self.Stamp {
 			t.Fatalf("successor %d is released into a frame of its own, in the agent's round: %#v", i, rel[i])
 		}
 	}
@@ -731,7 +731,7 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 	full := Settled{Frame: HeldRecord(a.R), Rounds: []Round{{Stamp: a.Self.Stamp, Children: children}}}
 	g, effs := gatheredFrom(t, returns[1], gatherRead(returns[1]), full)
 	res := committedRecords(t, effs)[0]
-	if !reflect.DeepEqual(res.Deps, []string{returns[0].Stamp, returns[1].Stamp}) {
+	if !reflect.DeepEqual(res.Deps, []string{returns[0].Stamp(), returns[1].Stamp()}) {
 		t.Fatalf("the resolve names every discharge, in instruction order: %+v", res)
 	}
 	_, effs = Step(g, created(effs))
@@ -745,22 +745,22 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 // holds a slot of its own in the round and discharges it.
 func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
 	a, kids, w := fanOut(t, `{"to":"echo","payload":{"text":"a"}}`, `{"to":"shell","payload":{"text":"a"}}`)
-	if kids[0].State != record.Invoke || kids[1].State != record.Fault || kids[1].R.Fault.Kind != record.Horizon {
+	if kids[0].State() != record.Invoke || kids[1].State() != record.Fault || kids[1].R.Fault.Kind != record.Horizon {
 		t.Fatalf("only the instruction out of reach faults: %+v %+v", kids[0].R, kids[1].R)
 	}
-	if len(w) != 6 || w[1] != (SlotWrite{Round: a.Self.Stamp, Child: kids[1].Stamp, Pos: 1}) {
+	if len(w) != 6 || w[1] != (SlotWrite{Round: a.Self.Stamp, Child: kids[1].Stamp(), Pos: 1}) {
 		t.Fatalf("the fault holds a slot of its own: %#v", w)
 	}
 	self := a.Kids[1].Horizon
 	f, effs := released(kids[1], self)
-	if w := writes(t, effs); w[0].(ResultWrite).Stamp != kids[1].Stamp || f.Self.Resume.Frame != a.Self.Frame {
+	if w := writes(t, effs); w[0].(ResultWrite).Stamp != kids[1].Stamp() || f.Self.Resume.Frame != a.Self.Frame {
 		t.Fatalf("the fault discharges its own slot: %#v", effs)
 	}
 	if f, _ = Step(f, created(effs)); f.Phase != Gather {
 		t.Fatalf("then reads the agent's round: %s", f.Phase)
 	}
 	// Alone, the same fault discharges the emitter's own slot, as always.
-	alone, _ := Narrow(a.Self, kids[1].R, kids[1].Stamp)
+	alone, _ := Narrow(a.Self, kids[1].R, kids[1].Stamp())
 	if alone.Frame != a.Self.Frame {
 		t.Fatalf("a lone fault discharges the emitter's slot: %+v", alone)
 	}
@@ -778,7 +778,7 @@ func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
 		"a narrowing": `{"to":"system","payload":{"narrow":{"actor":"echo"}}}`,
 	} {
 		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(room), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
-		self, _ := Narrow(room, ag.R, ag.Stamp)
+		self, _ := Narrow(room, ag.R, ag.Stamp())
 		ag, _ = released(ag, self)
 		other = strings.ReplaceAll(other, "FRAME", ag.Self.Frame)
 		ag, effs := emitted(ag, []byte("["+echo+","+other+"]"))

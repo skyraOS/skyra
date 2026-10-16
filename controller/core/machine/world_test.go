@@ -69,7 +69,7 @@ func (w *world) boot(reach map[string]horizon.Surface, seed string) record.Recor
 	w.objects["records/"+o.Key] = o.Raw
 	w.frame(o.Key)
 	h0 := horizon.Horizon{Stamp: o.Key, Reach: reach, Frame: o.Key}
-	root := &proc{s: Instance{Floor: "/floor/.skyra", Sockets: "/sockets", State: record.Invoke, Phase: Running, Stamp: o.Key, Self: h0}, stack: []string{o.Key}}
+	root := &proc{s: Instance{Floor: "/floor/.skyra", Sockets: "/sockets", R: g, Phase: Running, Self: h0}, stack: []string{o.Key}}
 	w.queue = append(w.queue, queued{root, Executed{Obs: []byte(seed)}})
 	for len(w.queue) > 0 {
 		q := w.queue[0]

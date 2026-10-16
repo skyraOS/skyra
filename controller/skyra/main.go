@@ -182,7 +182,7 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	if handed {
 		return machine.Instance{}, errors.New("already resumed")
 	}
-	return machine.Instance{Floor: root, State: record.Invoke, Phase: machine.Running, R: rec, Stamp: r.Stamp, Self: self, Sockets: hold.Sockets()}, nil
+	return machine.Instance{Floor: root, Phase: machine.Running, R: rec, Self: self, Sockets: hold.Sockets()}, nil
 }
 
 // holdResident keeps the resident's stream at fd 3 behind the edge's socket.

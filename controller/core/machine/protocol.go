@@ -11,16 +11,12 @@ import (
 // Instance is the state of one instance as it moves through its phases.
 type Instance struct {
 	Floor   string          // the .skyra path every rendered sandbox denies
-	State   record.State    // the state intake derived: the top-level branch
 	Phase   Phase           // the phase whose event this instance is waiting for
 	Under   horizon.Horizon // the Horizon the input was emitted under
-	R       record.Record   // what this instance committed last
-	Stamp   string          // hash of R
+	R       record.Record   // what this instance committed last: its state and stamp are R's
 	Self    horizon.Horizon // this instance's own Horizon, once released
 	Out     []byte          // the target's emission, while it is handed off
-	Outs    [][]byte        // the instructions it carries, one per successor (fan-out: several)
 	Kids    []Kid           // the successors stamped and verified so far, in instruction order
-	Child   string          // the first successor's stamp, once every one is verified and released
 	Next    []byte          // a resumed continuation's input, while the claim is decided
 	Held    record.Record   // the resolve record, while the claim is decided
 	Sockets string          // the directory edge sockets live in (runtime/hold.Dir); set by the shell, like Floor
@@ -30,6 +26,32 @@ type Instance struct {
 	Reads     []Key   // the keys of the read in flight: a ReadResult answers them in order
 	Cause     string  // a supervisor's observation, held while its successors are killed
 	Walk      *walked // gather's reads, while they are in flight
+}
+
+// State is the state intake derived, the top-level branch: R's (41, V4).
+func (s Instance) State() record.State { return s.R.State }
+
+// Stamp is the hash of R, or "" before this instance has committed anything.
+func (s Instance) Stamp() string {
+	if s.R.State == "" {
+		return ""
+	}
+	return record.Stamp(s.R)
+}
+
+// Outs is the instructions Out carries, one per successor (fan-out: several).
+// Out was split when it was emitted, so it splits the same way again.
+func (s Instance) Outs() [][]byte {
+	outs, _ := Instructions(s.Out)
+	return outs
+}
+
+// Child is the first successor's stamp, once one is verified.
+func (s Instance) Child() string {
+	if len(s.Kids) == 0 {
+		return ""
+	}
+	return s.Kids[0].Stamp
 }
 
 type Phase string

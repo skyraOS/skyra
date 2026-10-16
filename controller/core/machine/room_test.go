@@ -24,7 +24,7 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 	// The facet: an ordinary invoke, checked at intake.
 	ask := `{"to":"system","payload":{"narrow":{"actor":"echo","reach":[],"authority":{}}}}`
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(ask)})
-	if s.State != record.Invoke || s.R.To != System {
+	if s.State() != record.Invoke || s.R.To != System {
 		t.Fatalf("narrow is invoked like any capability: %+v", s.R)
 	}
 	facet := selfOf(t, s)
@@ -41,7 +41,7 @@ func TestNarrowingThroughTheRoom(t *testing.T) {
 	spawn := spawned(t, effs) // a facet's result is handed off like any output
 	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawn.Out})
 	var got struct{ Reference string }
-	if ret.State != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
+	if ret.State() != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
 		t.Fatalf("system.narrow returns the reference: %+v", ret.R)
 	}
 
@@ -136,7 +136,7 @@ func TestAnActorExtendsItself(t *testing.T) {
 		t.Fatalf("a frame knows the name it was invoked through, and shares the room's Horizon: %+v", agent)
 	}
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(extend(shout))})
-	if s.State != record.Invoke || s.R.To != System {
+	if s.State() != record.Invoke || s.R.To != System {
 		t.Fatalf("extend-reach is an invoke of system: %+v", s.R)
 	}
 	facet := selfOf(t, s)
@@ -153,7 +153,7 @@ func TestAnActorExtendsItself(t *testing.T) {
 	// Its result is derived, like any syscall's.
 	s, effs := committing(released(s, facet))
 	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(s.Self), In: spawned(t, effs).Out})
-	if ret.State != record.Return || string(ret.R.Payload) != `{"ok":true}` {
+	if ret.State() != record.Return || string(ret.R.Payload) != `{"ok":true}` {
 		t.Fatalf("extend-reach returns ok: %+v", ret.R)
 	}
 
@@ -283,7 +283,7 @@ func TestStrandIsReadThenReturned(t *testing.T) {
 	}
 
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(agent), In: []byte(ask(obs, "echo", echoContract))})
-	if s.State != record.Invoke {
+	if s.State() != record.Invoke {
 		t.Fatalf("a strand of a contract the requester holds is an invoke: %+v", s.R.Fault)
 	}
 	s, effs := released(s, selfOf(t, s))
