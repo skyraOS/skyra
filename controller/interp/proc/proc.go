@@ -25,9 +25,9 @@ import (
 	"slices"
 )
 
-// Schema is a contract, as the kernel encodes it, field for field. Its
-// canonical bytes match the kernel's except that Required is sorted here; the
-// kernel still compares Required as written.
+// Schema is a contract, as the kernel encodes it: field for field, so its
+// canonical bytes are the kernel's normal form (contract.Normal). The cases in
+// core/contract/testdata/normal.json hold both to it.
 type Schema struct {
 	Title    string             `json:"title,omitempty"`
 	Type     string             `json:"type"`

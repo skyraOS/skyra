@@ -2,7 +2,8 @@
 
 Date: 2026-10-16
 
-Status: **proposed.** This is the build plan for two proposals:
+Status: **built** (2026-10-16), with the deviations under
+[As built](#as-built). This is the build plan for two proposals:
 
 - **41 — Read, commit, execute: one loop, an untrusted shell** (changes
   `controller/core/machine` and `controller/runtime/instance`).
@@ -274,3 +275,41 @@ a regression.
 - **Where should the shared normal-form test vectors live,** given two
   modules? `controller/core/contract/testdata` is suggested, with
   `controller/interp/proc` reading it by relative path.
+
+## As built
+
+| Step | Commit | Records |
+|---|---|---|
+| Equivalence check (`scripts/equivalence.sh`) | `8ffd420` | |
+| V1: verification in the core | `cd930d9` | byte-identical |
+| V2, V3, V6: read, commit, execute; handle count in the core; fixed mutable queries | `c8c195c` | byte-identical |
+| V4: the four caches derived | `52c9542` | byte-identical |
+| V5: barriers, one forced flush per outward act | `2c54455` | byte-identical; `CHECK_SYNC=1` passes |
+| V7: one resume per round; replay calls intake's derivation directly | `372b101` | byte-identical |
+| E2: kernel normal form and `contract.Same` | `de7d321` | changed: every stamp under a registry holding a re-sorted contract |
+
+Where the build differs from the plan above:
+
+- **"At most one commit per cycle" does not hold at settle.** The discharge
+  has to be durable before gather reads the round. Otherwise two siblings
+  can each read before the other's discharge, and nobody resolves. The
+  grammar test (`world_test.go`) checks what durability needs instead:
+  each step is one read, one commit, or a batch of executes; an exit is
+  last; only a run, a resident start or a park is forced.
+- **Directories are not flushed once per cycle.** Batching them would drop
+  the ordering between an object and the name that points at it (40's G2).
+  Every flush stays where it was and becomes a barrier, as 40 says.
+- **V2 landed as one conversion, not path by path.** The byte-identical
+  check held before and after it.
+- **V1 slowed replay** (memory, about 46,000 → 19,700 records/s): replay
+  handed Step a re-encoded Horizon to verify for every record. V7's commit
+  gives replay intake's derivation directly (`machine.Intaken`), which brings
+  it back to about 47,000–52,000.
+- **E2 does not normalize a contract added through extend-reach.** That
+  would change the Horizons replay derives for trees already on disk.
+  `contract.Same` covers the comparison instead.
+- **27 required arrays in 16 files were unsorted, not 13.** The first
+  count missed contract files not named `contract*.json`.
+- **The native Codex comparison was not rerun.** It needs a Codex login.
+  The fake app-server sweep was: `hello` 258 → 114 ms, `tool:hello`
+  476 → 190 ms ([performance](../../performance.md)).
