@@ -23,6 +23,22 @@ go1.25.0, 2026-10-13.
 
 ## Controller overhead
 
+**2026-10-16: the durability policy is built** ([proposal 40](next/proposal/40-durability-policy-proposal.md),
+[41 V5](next/proposal/41-42-build-plan.md)). The figures below this
+paragraph are from before it. Same machine, fake app-server
+(`codex/latency/sweep.sh 10 0`), medians of 10 boots each, `52c9542`
+against the V5 commit:
+
+| Scenario | Before | After |
+|---|---|---|
+| `hello` (one target) | 258 ms | 114 ms |
+| `tool:hello` (three targets) | 476 ms | 190 ms |
+
+One model round trip through a tool now costs the controller about 76 ms,
+down from about 218 ms. **The comparison against native Codex has not been
+rerun** (`codex/latency/compare.sh` needs a Codex login), so the "~0.4 s per
+tool call" headline below is the old figure until it is.
+
 The full write-up, with method, per-phase breakdown, where the fsync time
 goes, and caveats, is
 [`OVERHEAD-VS-INFERENCE.md`](../OVERHEAD-VS-INFERENCE.md). In short:

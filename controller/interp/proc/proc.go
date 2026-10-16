@@ -212,7 +212,7 @@ func (s Store) publish(kind, name string, v any, immutable bool) error {
 		f.Close()
 		return err
 	}
-	if err := f.Sync(); err != nil {
+	if err := flush(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -245,7 +245,7 @@ func (s Store) publish(kind, name string, v any, immutable bool) error {
 		return err
 	}
 	defer d.Close()
-	if err := d.Sync(); err != nil {
+	if err := flush(d); err != nil {
 		return err
 	}
 	// Persist newly created kind directories as well as their entries.
@@ -254,7 +254,7 @@ func (s Store) publish(kind, name string, v any, immutable bool) error {
 		return err
 	}
 	defer parent.Close()
-	return parent.Sync()
+	return flush(parent)
 }
 
 func (s Store) read(kind, name string, v any) error {

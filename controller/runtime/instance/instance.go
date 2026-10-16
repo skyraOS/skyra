@@ -109,6 +109,13 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 				}
 				e = machine.Committed{Outcomes: outcomes}
 			case machine.Execute:
+				if x.Force {
+					// The act leaves the failure domain: everything committed
+					// before it is made durable first (40, B).
+					if err := force(root); err != nil {
+						return s, err
+					}
+				}
 				var err error
 				var done bool
 				e, done, err = act(root, up, &stack, &downs, &children, x.Act)
@@ -120,6 +127,9 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 	}
 	return s, errors.New("step stopped without exiting")
 }
+
+// force is tree.Force, replaced by a test that records the order of acts.
+var force = tree.Force
 
 // readKey answers one key of a read with what the tree holds under it, as
 // stored: nil if nothing is there.

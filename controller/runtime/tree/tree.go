@@ -78,7 +78,7 @@ func Store(root, kind string, b []byte) (existed bool, err error) {
 		f.Close()
 		return false, err
 	}
-	if err := f.Sync(); err != nil {
+	if err := flush(f, kind+" file"); err != nil {
 		f.Close()
 		return false, err
 	}
@@ -94,7 +94,7 @@ func Store(root, kind string, b []byte) (existed bool, err error) {
 		}
 		existed = true
 	}
-	return existed, syncDir(dir)
+	return existed, syncDir(dir, kind+" dir")
 }
 
 // Read reads an object by hash as it is stored, unverified: what the shell
@@ -199,12 +199,18 @@ func OpenFrame(root, stamp string) (*os.File, error) {
 }
 
 // MakeFrame creates a frame's directory, exactly once: false if it existed.
+// Its entry in frames/ is flushed, so the frame is ordered before anything
+// written in it (40: before barriers, a later full flush covered this only
+// as a side effect).
 func MakeFrame(root, stamp string) (bool, error) {
 	err := os.Mkdir(filepath.Join(root, "frames", stamp), 0o700)
 	if os.IsExist(err) {
 		return false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return false, err
+	}
+	return true, syncDir(filepath.Join(root, "frames"), "frames dir")
 }
 
 // FrameNode opens an existing frame's directory: its node fd.
@@ -287,7 +293,7 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 		f.Close()
 		return false, err
 	}
-	if err := f.Sync(); err != nil {
+	if err := flush(f, label(name)+" file"); err != nil {
 		f.Close()
 		return false, err
 	}
@@ -300,7 +306,17 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 		}
 		return false, err
 	}
-	return true, frame.Sync()
+	return true, flush(frame, label(name)+" dir")
+}
+
+// label names a write-once file by its kind, not its hash: result, resolved,
+// emitted, or a slot.
+func label(name string) string {
+	if len(name) == 64 {
+		return "slot"
+	}
+	kind, _, _ := strings.Cut(name, "-")
+	return kind
 }
 
 // OpenDep opens a slot for a child in a frame, through the frame's fd, before
@@ -344,10 +360,10 @@ func Slot(frame *os.File, round, child string, pos int) (bool, error) {
 		return false, err
 	}
 	defer deps.Close()
-	if err := deps.Sync(); err != nil {
+	if err := flush(deps, "deps dir"); err != nil {
 		return false, err
 	}
-	return true, frame.Sync()
+	return true, flush(frame, "frame dir")
 }
 
 // Children lists the slots a round opened in a frame, in the order they were
@@ -409,13 +425,13 @@ func Resolved(root, frame, round string) (string, error) {
 	return string(b), err
 }
 
-func syncDir(dir string) error {
+func syncDir(dir, what string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
 	defer d.Close()
-	return d.Sync()
+	return flush(d, what)
 }
 
 // PublishEmission seals the full emission before any child is released.

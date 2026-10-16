@@ -11,6 +11,11 @@
 # A scenario that differs from itself under the old build (two runs) is
 # reported as nondeterministic and compared by shape only: which files exist
 # under which kinds, and how many.
+#
+# CHECK_SYNC=1 also checks the new build's durability policy (40; 41 V5)
+# from its SKYRA_SYNC_TRACE: no full flush except a forced one, a forced
+# flush in each process immediately before every target run, resident start
+# and park, and one before boot prints the answer.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 old=${1:?usage: equivalence.sh <old-rev> [<new-rev>]}
@@ -74,9 +79,39 @@ run_one() {
   rm -rf "$work/root"; mkdir -p "$work/root"
   start_host
   if [ "$1" = interp ]; then shift; "$work/bin/interp" install "$root/interpreter" "$c/interp/examples/greet.json" >/dev/null; fi
-  "$work/$build/skyra" boot -root "$root" -registry "$work/bin/registry.json" "$@" >"$work/out" 2>&1 || true
+  SKYRA_SYNC_TRACE=${CHECK_SYNC:-} "$work/$build/skyra" boot -root "$root" -registry "$work/bin/registry.json" "$@" >"$work/out" 2>&1 || true
   stop_host
   grep -q '^replay: .*byte-identical$' "$work/out" || { echo "  replay did not pass under $build:"; sed 's/^/    /' "$work/out"; return 1; }
+  if [ -n "${CHECK_SYNC:-}" ] && [ "$build" = new ]; then
+    python3 -I - "$work/out" <<'PY' >&2 || return 1
+import re, sys
+last, outward, forced, bad = {}, 0, 0, []
+for line in open(sys.argv[1]):
+    m = re.match(r"\[([^\]]+)\]\s+(\S+)\s+(.*)", line)
+    if not m:
+        if line.startswith("lineage") and last.get("boot") != "force":
+            bad.append("boot answered before a forced flush")
+        continue
+    who, what, rest = m.groups()
+    if what == "fsync":
+        kind = rest.split()[0]
+        if kind == "full":
+            bad.append(f"{who}: a full flush that is not forced: {rest}")
+        forced += kind == "force"
+        last[who] = kind
+        continue
+    if (what == "execute" and "under rendered sandbox" in rest) or what == "park" or (what == "execute" and "resident" in rest):
+        outward += 1
+        if last.get(who) != "force":
+            bad.append(f"{who}: {what} {rest.strip()} without a forced flush right before it")
+    last[who] = what
+if forced != outward + 1:
+    bad.append(f"{forced} forced flushes for {outward} outward acts and one answer")
+for b in bad:
+    print("  sync:", b)
+sys.exit(1 if bad else 0)
+PY
+  fi
   dump "$root"
 }
 

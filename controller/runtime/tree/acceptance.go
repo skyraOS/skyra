@@ -55,7 +55,7 @@ func Receipt(root, stamp, id string) (existed bool, err error) {
 		}
 		existed = true
 	}
-	return existed, syncDir(dir)
+	return existed, syncDir(dir, "acceptances dir")
 }
 
 // AcceptedHorizon reads a receipt and its content-addressed release. Records,

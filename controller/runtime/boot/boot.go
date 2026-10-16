@@ -119,7 +119,12 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		return Outcome{}, err
 	}
 
+	// What the operator is told is durable first (40, B): the lineage it
+	// names is on disk before any of it is printed.
 	if detach {
+		if err := tree.Force(root); err != nil {
+			return Outcome{}, err
+		}
 		fmt.Printf("seeded %s; state: %s\n", record.Short(g0), root)
 		return Outcome{}, nil
 	}
@@ -129,6 +134,9 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	// resolved frame 0's round.
 	head, err := wait(root, g0)
 	if err != nil {
+		return Outcome{}, err
+	}
+	if err := tree.Force(root); err != nil {
 		return Outcome{}, err
 	}
 	fmt.Println()

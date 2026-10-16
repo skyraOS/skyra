@@ -2,11 +2,18 @@
 
 Date: 2026-10-13
 
-Status: **proposed, not implemented.** The default stays `F_FULLFSYNC` on
-every flush. The measurements behind this are in
+Status: **built** (2026-10-16, with [41 V5](41-42-build-plan.md)). Every
+tree flush is `F_BARRIERFSYNC`; `tree.Force` issues one `F_FULLFSYNC` before
+each execute the core marks `Force` (a target runs, a resident starts, a host
+takes custody) and before boot prints. The interpreter's store takes barriers
+too. `OpenFrame`'s `mkdir` now flushes `frames/` (the first item under
+"Unchanged by this proposal" below). `SKYRA_SYNC=full` restores a full flush
+everywhere; `SKYRA_SYNC_TRACE=1` logs every flush, and
+`CHECK_SYNC=1 scripts/equivalence.sh` checks the policy on every scenario.
+Measured, fake app-server, M1 Pro: `hello` 258 → 114 ms, `tool:hello`
+476 → 190 ms (medians of 10; [performance](../../performance.md)). The
+measurements behind it are in
 [`OVERHEAD-VS-INFERENCE.md` § Where the 250 ms goes](../../../OVERHEAD-VS-INFERENCE.md#where-the-250-ms-goes).
-The `SKYRA_SYNC` switch used there (branch `sync-measure`) is for measurement only. This proposal
-does not make it a user setting.
 
 ## The problem
 
