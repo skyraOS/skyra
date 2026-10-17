@@ -27,8 +27,6 @@ import (
 	"skyra/controller/runtime/park"
 )
 
-const ideasPath = ":(top,literal)ideas"
-
 type committer struct{ repo, git, index, session string }
 
 func main() {
@@ -253,7 +251,6 @@ func (g committer) commit(payload json.RawMessage) map[string]any {
 	return r
 }
 
-func digestIdeas(data []byte) string                   { s := sha256.Sum256(data); return hex.EncodeToString(s[:]) }
 func (g committer) run(args ...string) (string, error) { return g.runInput(nil, args...) }
 func (g committer) runInput(input io.Reader, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

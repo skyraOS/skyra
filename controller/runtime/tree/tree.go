@@ -145,16 +145,6 @@ func PutHorizon(root string, h horizon.Horizon) (string, error) {
 	return Put(root, "horizons", b)
 }
 
-// Released reports whether h was committed: whether some parent released it.
-func Released(root string, h horizon.Horizon) bool {
-	b, err := json.Marshal(h)
-	if err != nil {
-		return false
-	}
-	_, err = Get(root, "horizons", record.Sum(b))
-	return err == nil
-}
-
 // LoadHorizon reads a Horizon by id, refusing it unless it hashes to that id.
 func LoadHorizon(root, id string) (horizon.Horizon, error) {
 	b, err := Get(root, "horizons", id)
@@ -246,21 +236,9 @@ func Result(root, frame string) (string, error) {
 	return string(b), err
 }
 
-// Settle writes a frame's result exactly once. It writes only through the
-// node fd it was handed, never through a path.
-func Settle(node *os.File, stamp string) error {
-	won, err := Discharge(node, stamp)
-	if err != nil {
-		return err
-	}
-	if !won {
-		return errors.New("frame already settled")
-	}
-	return nil
-}
-
-// Discharge is Settle that reports whether this write won: false if the
-// frame was already settled.
+// Discharge writes a frame's result exactly once, through the node fd it was
+// handed, never through a path. It reports whether this write won: false if
+// the frame was already settled.
 func Discharge(node *os.File, stamp string) (bool, error) {
 	if node == nil {
 		return false, errors.New("no node to settle")
@@ -319,23 +297,11 @@ func label(name string) string {
 	return kind
 }
 
-// OpenDep opens a slot for a child in a frame, through the frame's fd, before
+// Slot opens a slot for a child in a frame, through the frame's fd, before
 // the child is released: a child never runs without a slot waiting for it.
 // The slot holds the child's position in the emission that opened the round,
-// so the round's steps come back in the order they were emitted.
-func OpenDep(frame *os.File, round, child string, pos int) error {
-	won, err := Slot(frame, round, child, pos)
-	if err != nil {
-		return err
-	}
-	if !won {
-		return errors.New("dependency already exists")
-	}
-	return nil
-}
-
-// Slot is OpenDep that reports whether this write won: false if the slot
-// already existed.
+// so the round's steps come back in the order they were emitted. It reports
+// whether this write won: false if the slot already existed.
 func Slot(frame *os.File, round, child string, pos int) (bool, error) {
 	r, err := descriptorRoot(frame)
 	if err != nil {
@@ -434,19 +400,8 @@ func syncDir(dir, what string) error {
 	return flush(d, what)
 }
 
-// PublishEmission seals the full emission before any child is released.
-func PublishEmission(frame *os.File, round, hash string) error {
-	won, err := Emit(frame, round, hash)
-	if err != nil {
-		return err
-	}
-	if !won {
-		return errors.New("round emission already published")
-	}
-	return nil
-}
-
-// Emit is PublishEmission that reports whether this write won.
+// Emit seals the full emission before any child is released. It reports
+// whether this write won.
 func Emit(frame *os.File, round, hash string) (bool, error) {
 	return writeOnce(frame, "emitted-"+round, hash)
 }

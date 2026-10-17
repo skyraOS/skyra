@@ -26,5 +26,5 @@ func TestPartialToolEnforcement(t *testing.T) {
 		if (err == nil) != tc.ok { t.Errorf("%s: %v",tc.name,err) }
 	}
 	stream := `{"type":"system","session_id":"other"}`+"\n"+final
-	if Read(strings.NewReader(stream), func(Event) error { return nil }) == nil { t.Fatal("session changed") }
+	if ReadWithTools(strings.NewReader(stream), nil, func(Event) error { return nil }) == nil { t.Fatal("session changed") }
 }

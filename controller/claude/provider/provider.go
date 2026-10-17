@@ -105,8 +105,6 @@ type Event struct {
 	Raw json.RawMessage `json:"-"`
 }
 
-func Read(r io.Reader, observe func(Event) error) error { return ReadWithTools(r, nil, observe) }
-
 // ReadWithTools admits only explicitly offered Skyra MCP tools, including
 // partial content-block starts. Permission settings never expand this allowlist.
 // Truncated records and streams without a terminal result are never successes.

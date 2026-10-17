@@ -36,11 +36,11 @@ func TestRead(t *testing.T) {
   {"extra", success + "\n" + success, false},
  }
  for _, tc := range cases { t.Run(tc.name, func(t *testing.T) {
-  err := Read(strings.NewReader(tc.stream), func(e Event) error {
+  err := ReadWithTools(strings.NewReader(tc.stream), nil, func(e Event) error {
    if !strings.HasPrefix(string(e.Raw), "{") { t.Fatal("missing raw record") }; return nil
   })
   if (err == nil) != tc.ok { t.Fatalf("error = %v", err) }
  }) }
  sentinel := errors.New("record failed")
- if err := Read(strings.NewReader(success), func(Event) error { return sentinel }); !errors.Is(err, sentinel) { t.Fatal(err) }
+ if err := ReadWithTools(strings.NewReader(success), nil, func(Event) error { return sentinel }); !errors.Is(err, sentinel) { t.Fatal(err) }
 }

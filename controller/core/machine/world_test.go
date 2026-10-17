@@ -22,7 +22,6 @@ type world struct {
 	target  func(h horizon.Horizon, stdin []byte) []byte
 	queue   []queued
 	steps   int
-	answer  []byte // the operator's frame's result, read once boot's lineage ends
 }
 
 type memFrame struct {

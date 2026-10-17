@@ -7,28 +7,14 @@ import (
 	"path/filepath"
 
 	"skyra/controller/core/horizon"
-	"skyra/controller/core/record"
 )
 
-// Accept publishes evidence after the successor has validated its release,
-// before acknowledging custody or performing any target effect. A committed
-// Horizon alone is a proposed release, not proof of acceptance.
-func Accept(root string, r record.Record, id string) error {
-	h, err := LoadHorizon(root, id)
-	if err != nil {
-		return err
-	}
-	stamp := record.Stamp(r)
-	if h.Stamp != stamp {
-		return fmt.Errorf("acceptance does not name this commit")
-	}
-	_, err = Receipt(root, stamp, id)
-	return err
-}
-
-// Receipt publishes the acceptance of stamp under the Horizon id, which the
-// caller has already checked (the core does, 41 V1). It reports whether the
-// same receipt was already there; a different one is ErrConflict.
+// Receipt publishes the acceptance of stamp under the Horizon id, after the
+// successor has validated its release and before it acknowledges custody or
+// performs any target effect: a committed Horizon alone is a proposed release,
+// not proof of acceptance. The caller has already checked the id (the core
+// does, 41 V1). It reports whether the same receipt was already there; a
+// different one is ErrConflict.
 func Receipt(root, stamp, id string) (existed bool, err error) {
 	dir := filepath.Join(root, "acceptances")
 	if err := os.MkdirAll(dir, 0700); err != nil {

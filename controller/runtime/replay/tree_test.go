@@ -71,10 +71,10 @@ func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, 
 		if err != nil {
 			f.t.Fatal(err)
 		}
-		err = tree.OpenDep(p, under.Stamp, stamp, pos)
+		won, err := tree.Slot(p, under.Stamp, stamp, pos)
 		p.Close()
-		if err != nil {
-			f.t.Fatal(err)
+		if err != nil || !won {
+			f.t.Fatal("slot", won, err)
 		}
 		child, err := tree.OpenFrame(f.dir, stamp)
 		if err != nil {
@@ -87,7 +87,7 @@ func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, 
 		f.t.Fatal(err)
 	}
 	if accept {
-		if err := tree.Accept(f.dir, r, id); err != nil {
+		if _, err := tree.Receipt(f.dir, stamp, id); err != nil {
 			f.t.Fatal(err)
 		}
 	}
@@ -99,10 +99,10 @@ func (f *treeFixture) settle(h horizon.Horizon) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	err = tree.Settle(fd, h.Stamp)
+	won, err := tree.Discharge(fd, h.Stamp)
 	fd.Close()
-	if err != nil {
-		f.t.Fatal(err)
+	if err != nil || !won {
+		f.t.Fatal("discharge", won, err)
 	}
 }
 func (f *treeFixture) read(leaves ...string) (RecordedTree, error) {
