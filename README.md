@@ -138,6 +138,25 @@ effect may have an unknown outcome. Runtime I/O failures are recorded separately
 and shown as recovery failures. A host restart does not revive parked frames or
 automatically repeat work; inspect history before retrying.
 
+The loop, at a glance. Agents and targets only ever produce bytes; every
+decision is made by a fresh process that commits a record before anything runs.
+
+```mermaid
+flowchart TD
+    A["Agent (model)<br/>emits bytes, no authority"] --> I["Intake, in a fresh process<br/>Step derives the state"]
+    I --> H{"In the Horizon?<br/>fits the contract?"}
+    H -- no --> F["Commit a fault<br/>keeps what was refused"]
+    H -- yes --> C["Commit the record<br/>hash-chained, stamped"]
+    C --> T["Target runs<br/>own Seatbelt profile"]
+    T -- raw output --> I
+    classDef untrusted fill:#FAECE7,stroke:#993C1D,color:#712B13
+    classDef kernel fill:#EEEDFE,stroke:#534AB7,color:#3C3489
+    class A,T untrusted
+    class I,H,F,C kernel
+```
+
+The phases in detail:
+
 ```text
  INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
            reply with its stamp (a hash)
