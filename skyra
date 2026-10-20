@@ -82,7 +82,7 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user
+  local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user models:targets/models
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake
     clauderesident:claude/resident claude-start:claude/start
     desktop-observe:cua/adapter cua-bridge:cua/bridge ideas-host:hosts/ideas design-tools:design repo-host:hosts/repo blender-tools:blender"
@@ -150,6 +150,8 @@ registry={
  'find':{'path':str(build/'find'),'contract':str(root/'controller/targets/find/contract.json'),
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
  'roots':{'path':str(build/'roots'),'contract':str(root/'controller/targets/roots/contract.json')},
+ 'models':{'path':str(build/'models'),'contract':str(root/'controller/targets/models/contract.json'),
+           'authority':{'read':[{'path':str(home/'.codex'),'scope':'subpath'},{'path':str(home/'.claude'/'cache'/'model-catalog'),'scope':'subpath'}]}},
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
  'codex':{'agent':{'operations':['codex.start','codex.exchange','codex.inspect','codex.stop']},'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.start':start,
