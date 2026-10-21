@@ -3,7 +3,8 @@
 Date: 2026-09-23  
 Status: working list; not implemented. Sorts every I/O operation the
 [minimal shape](../../controller/) performs into buckets, so each has one right
-home. Companion to [`improvements.md`](improvements.md) (custody vs reductions).
+home. Its companion on custody vs reductions was removed on 2026-10-20 and is
+in git history.
 Code paths are relative to `minimal-shape/`.
 
 ## Definitions

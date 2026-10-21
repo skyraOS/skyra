@@ -3,8 +3,8 @@
 Date: 2026-10-06
 Status: proposed, not implemented.
 
-Builds on [Think](think.md), [Observation passing](21-observation-passing.md),
-and [the think procedure](proposal/38-think-procedure-proposal.md).
+Builds on [Think](../docs/next/think.md), [Observation passing](../docs/next/21-observation-passing.md),
+and [the think procedure](../docs/next/proposal/38-think-procedure-proposal.md).
 
 ## Purpose
 
@@ -208,20 +208,20 @@ replacement model context, approval requirement, or automatic implementation ste
 
 Conversation navigation can move out of the left sidebar into an ephemeral
 translucent planet picker. This is a UI design proposal, described in
-[the planet-picker draft](conversation-planets-design.md), separate from the
+[the planet-picker draft](conversation-planets/README.md), separate from the
 spec-creation mechanism.
 
 ## Existing mechanisms
 
-- [`interpreter/proc/plan.go`](../../controller/interp/proc/plan.go) runs
+- [`interpreter/proc/plan.go`](../controller/interp/proc/plan.go) runs
   dependency-ordered procedure nodes and evaluates a return bound to a child result.
-- [`machine/room.go`](../../controller/core/machine/room.go) implements
+- [`machine/room.go`](../controller/core/machine/room.go) implements
   `system.strand`, including contract and bounded history checks.
-- [`machine/machine.go`](../../controller/core/machine/machine.go) exposes child
+- [`machine/machine.go`](../controller/core/machine/machine.go) exposes child
   discharge stamps as `StepView.Observation`.
-- [`web/destinations.go`](../../controller/hosts/web/destinations.go) discovers
+- [`web/destinations.go`](../controller/hosts/web/destinations.go) discovers
   authored procedure roots and derives their outlines from bundle definitions.
-- [`codex/resident/main.go`](../../controller/codex/resident/main.go) accepts
+- [`codex/resident/main.go`](../controller/codex/resident/main.go) accepts
   context supplied by its caller and starts a thread for an invocation.
 
 These mechanisms are starting points. They do not already implement the complete
@@ -233,7 +233,7 @@ observation-passing or artifact-inspection behavior proposed here.
 
 Contracts currently support ordinary JSON types, not a checked `observation`
 type. Result stamps exist, but the general observation register and directional
-ownership checks in [21](21-observation-passing.md) are still proposed.
+ownership checks in [21](../docs/next/21-observation-passing.md) are still proposed.
 
 The implementation must explicitly validate source accessibility and provenance.
 A structural string check on a hash is insufficient. A first implementation may

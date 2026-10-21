@@ -29,7 +29,8 @@ it. Everything here is agreed and, except where noted, built.
      versus interrupts (memory lacks a contract).
    - [`durable-storage.md`](durable-storage.md): the event log, the stack, and
      a memory of contracts.
-   - [`io-buckets.md`](io-buckets.md), [`improvements.md`](improvements.md):
-     proposals for separating custody from the effects it performs.
-4. [`summary.md`](summary.md): the full map as of 2026-09-25. Long; the
-   [root README](../../README.md) is the current overview.
+   - [`io-buckets.md`](io-buckets.md): a proposal for separating custody
+     from the effects it performs.
+
+The [root README](../../README.md) and [`docs/summary.md`](../summary.md) are
+the current overview.
