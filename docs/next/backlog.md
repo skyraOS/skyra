@@ -1,6 +1,6 @@
 # Backlog
 
-Date: 2026-10-19
+Date: 2026-10-20
 
 The order to build in. Five phases; each one makes the next smaller. Detail
 stays in the linked documents; this file only keeps the order and says what
@@ -18,6 +18,10 @@ each step unblocks.
 `WorkTools` and `Delegated` from `Horizon` and `Grant` in
 `core/horizon/horizon.go`; move model configuration and tool catalogs into
 adapter contracts; delegation stays the interpreter's `delegate` procedure.
+
+- Move the Claude resident profile (`RenderClaudeResident`) from
+  `(allow default)` to `(deny default)`, like the Codex one: today it opens
+  doors no human granted (46, review Q3).
 
 Unblocks: the rewrite. The new kernel never has to carry agent fields, and the
 kernel stops knowing about agents.
@@ -38,7 +42,11 @@ and 44's mailboxes as buffered pipes.
 Proposal 43 and its audit, revised: a long-lived kernel replaces D2's `execve`
 per step.
 
-### 2a. Run the verified copy (43 D5, A6)
+### 2a. Run the verified copy (43 D5, A6) — done
+
+Done 2026-10-20 (`dac0ecb`): the checked bytes are published at
+`.skyra/surfaces/<sha256>` and that copy runs; the profile allows exec of it
+alone. Codex's app-server is still checked but not copied.
 
 `run` and `startResident` in `controller/runtime/instance/instance.go` read
 the binary, check its hash, then hand the *path* to `sandbox-exec`. The bytes
@@ -74,6 +82,10 @@ outcome is shown to the user as unknown, never retried.
 
 ### 2d. Long-lived kernel (replaces 43 D2)
 
+Contested by [proposal 46](proposal/46-kernel-entered-on-traps-proposal.md):
+a kernel entered only on traps, plus a waiter per running target. Decide
+between them before building.
+
 One kernel keeps looping in `Drive` and spawns each untrusted target, reading
 its output over a pipe, instead of starting a successor `skyra instance` per
 emission. Removes `spawn`, `runtime/handshake`, `SendStamp` and `ReleaseChild`.
@@ -87,6 +99,9 @@ emission. Removes `spawn`, `runtime/handshake`, `SendStamp` and `ReleaseChild`.
 - The kernel waits on each target, so it supervises them. Residents are still
   released to a holder (see Parked).
 - Bound pipes: output cap and timeout (already in `run`).
+- Either way (2d or 46), replace `tree.HasSuccessor`'s scan of every record
+  with an index on disk, e.g. a write-once `successor` file per stamp. A step
+  that re-reads the head pays O(records) today (46, review Q1).
 
 ### 2e. Launch helper, split per OS (43 D6)
 
@@ -98,6 +113,13 @@ applies the code-identity constraint, then execs. Never parses untrusted input.
 - If the kernel runs outside the agent's sandbox (2d), each target gets a fresh
   profile and nested Seatbelt is not needed. Probe it anyway before building.
 - A launcher applies the human's outer grant before the first kernel starts.
+- `hosts/repo/check.go` hard-codes `/Applications/Xcode.app` for
+  `DEVELOPER_DIR`, the Swift toolchain and the SDK; find it with
+  `xcode-select -p`. On a machine with only the Command Line Tools, three
+  `hosts/repo` tests fail.
+- Nothing reaches a frame through `/dev/fd`: `tree` uses the `*at` calls
+  (`fd09b02`). `runtime/custody/custody.go` still lists `/dev/fd`; move it
+  off devfs too.
 
 ### 2f. Mailboxes as their own proposal (43 D8 → 44)
 
@@ -163,6 +185,11 @@ Each waits on its own review, a measurement, or time.
 - **SQLite store (43 D4).** Only if it benchmarks better. Measure the full
   claim → execute → outcome path, including checkpoints, against the current
   barrier/force policy. Ends standard-library Go.
+- **Report the devfs panic to Apple.** On macOS 15.6 (24G84),
+  concurrent opens of `/dev/fd/N` panicked the kernel: `fdesc_lookup` reads
+  the fd table unlocked (pointer authentication failure on `fd_ofiles`). It
+  did not reproduce in 24,500 runs on 15.7.7 in a VM. Confirm on 15.6 in a
+  VM first; update the host to 15.7.x either way.
 - **Trusted head (43 A5).** The hash chain detects changes only relative to a
   trusted hash. Detecting rollback or replacement needs a head or checkpoint
   outside the writer's control.
