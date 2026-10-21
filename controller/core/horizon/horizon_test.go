@@ -52,13 +52,21 @@ func TestRenderOnlyDeclaredResources(t *testing.T) {
 // "Exclusions").
 func TestOneProfilePerHorizonExecOnlyTheRunningProgram(t *testing.T) {
 	grants := Authority{Read: []PathGrant{{Path: "/private/work", Scope: "subpath"}}}
-	a := Render(Horizon{Surface: &Surface{Path: "/private/bin/a"}, Authority: grants}, "/private/work/.skyra")
-	b := Render(Horizon{Surface: &Surface{Path: "/private/bin/b"}, Authority: grants}, "/private/work/.skyra")
-	if strings.ReplaceAll(a, "/private/bin/a", "X") != strings.ReplaceAll(b, "/private/bin/b", "X") {
+	ha, hb := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	a := Render(Horizon{Surface: &Surface{Path: "/private/bin/a", SHA256: ha}, Authority: grants}, "/private/work/.skyra")
+	b := Render(Horizon{Surface: &Surface{Path: "/private/bin/b", SHA256: hb}, Authority: grants}, "/private/work/.skyra")
+	if strings.ReplaceAll(a, ha, "X") != strings.ReplaceAll(b, hb, "X") {
 		t.Fatalf("two programs under one Horizon must get the same profile:\n%s\n%s", a, b)
 	}
-	if n := strings.Count(a, "(allow process-exec"); n != 1 || !strings.Contains(a, `(allow process-exec (literal "/private/bin/a"))`) {
-		t.Fatalf("exec must be allowed for the running program only:\n%s", a)
+	// What runs is the runtime's verified copy, never the registered path (43 D5).
+	if n := strings.Count(a, "(allow process-exec"); n != 1 || !strings.Contains(a, `(allow process-exec (literal "/private/work/.skyra/surfaces/`+ha+`"))`) || strings.Contains(a, "/private/bin/a") {
+		t.Fatalf("exec must be allowed for the running program's verified copy only:\n%s", a)
+	}
+	// A surface without a well-formed hash is allowed to run nothing.
+	for _, sum := range []string{"", "../../x", strings.Repeat("A", 64)} {
+		if p := Render(Horizon{Surface: &Surface{Path: "/private/bin/a", SHA256: sum}, Authority: grants}, "/private/work/.skyra"); strings.Contains(p, "process-exec") {
+			t.Fatalf("hash %q: exec allowed:\n%s", sum, p)
+		}
 	}
 }
 

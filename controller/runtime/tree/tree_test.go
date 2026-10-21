@@ -54,3 +54,41 @@ func TestClaimIsExclusiveAndAtomic(t *testing.T) {
 		t.Fatalf("temporary files left behind: %v", left)
 	}
 }
+
+// Nothing inside a frame is reached through a symlink: a deps entry that
+// points outside the frame is refused, and nothing is written where it points.
+func TestSlotRefusesSymlinkOutOfFrame(t *testing.T) {
+	root := t.TempDir()
+	dir, outside := filepath.Join(root, "frames", "f"), filepath.Join(root, "outside")
+	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(outside, 0o755)
+	if err := os.Symlink(outside, filepath.Join(dir, "deps")); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if won, err := Slot(f, "r", "c", 0); err == nil || won {
+		t.Fatalf("slot through a symlink: won=%v err=%v", won, err)
+	}
+	if left, _ := os.ReadDir(outside); len(left) != 0 {
+		t.Fatalf("wrote outside the frame: %v", left)
+	}
+	clean := filepath.Join(root, "frames", "g")
+	os.MkdirAll(clean, 0o755)
+	g, err := os.Open(clean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer g.Close()
+	for _, name := range []string{"", ".", "..", "a/b"} {
+		if _, err := Slot(g, name, "c", 0); err == nil {
+			t.Fatalf("slot accepted round %q", name)
+		}
+		if _, err := Slot(g, "r", name, 0); err == nil {
+			t.Fatalf("slot accepted child %q", name)
+		}
+	}
+}

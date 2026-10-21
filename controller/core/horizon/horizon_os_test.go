@@ -1,6 +1,8 @@
 package horizon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,8 +46,13 @@ func TestRenderedProfileDeniesExecOfAnyOtherProgram(t *testing.T) {
 	if self, err = filepath.EvalSymlinks(self); err != nil {
 		t.Fatal(err)
 	}
-	profile := Render(Horizon{Surface: &Surface{Path: self}, Authority: Authority{Read: []PathGrant{{Path: "/bin", Scope: "subpath"}}}}, t.TempDir())
-	cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSExecHelper$")
+	floor, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface, exe := verified(t, self, floor)
+	profile := Render(Horizon{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: "/bin", Scope: "subpath"}}}}, floor)
+	cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSExecHelper$")
 	cmd.Env = []string{"SKYRA_TEST_EXEC=1"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -80,6 +87,7 @@ func TestRenderedProfileEnforcesReadGrant(t *testing.T) {
 	if err := os.Mkdir(floor, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	surface, exe := verified(t, self, floor)
 	protected := filepath.Join(floor, "record")
 	if err := os.WriteFile(protected, []byte("runtime"), 0o600); err != nil {
 		t.Fatal(err)
@@ -95,8 +103,8 @@ func TestRenderedProfileEnforcesReadGrant(t *testing.T) {
 		{"floor overrides parent grant", []PathGrant{{Path: filepath.Dir(secret), Scope: "subpath"}}, protected, "denied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			profile := Render(Horizon{Surface: &Surface{Path: self}, Authority: Authority{Read: tc.read}}, floor)
-			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSReadHelper$")
+			profile := Render(Horizon{Surface: surface, Authority: Authority{Read: tc.read}}, floor)
+			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSReadHelper$")
 			cmd.Env = []string{"SKYRA_TEST_READ_PATH=" + tc.target}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -151,13 +159,14 @@ func TestRenderedProfileScratchIsReadWriteNeverExec(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	surface, exe := verified(t, self, floor)
 	for _, tc := range []struct{ name, target, want string }{
 		{"in scratch", filepath.Join(scratch, "tool.sh"), "allowed allowed denied"},
 		{"outside scratch", filepath.Join(outside, "tool.sh"), "denied denied denied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			profile := Render(Horizon{Surface: &Surface{Path: self}, Authority: Authority{Scratch: scratch}}, floor)
-			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSScratchHelper$")
+			profile := Render(Horizon{Surface: surface, Authority: Authority{Scratch: scratch}}, floor)
+			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSScratchHelper$")
 			cmd.Env = []string{"SKYRA_TEST_WRITE=" + tc.target}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -211,7 +220,9 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 		}
 	}
 	// A read grant that covers the whole floor changes nothing.
-	h := Horizon{Surface: &Surface{Path: self, State: "interpreter"}, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
+	surface, exe := verified(t, self, floor)
+	surface.State = "interpreter"
+	h := Horizon{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
 	if got := StateDir(h, floor); got != filepath.Join(floor, "interpreter") {
 		t.Fatalf("state dir: %s", got)
 	}
@@ -220,7 +231,7 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 		"other":       "denied,denied",
 		"records":     "denied,denied",
 	} {
-		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", Render(h, floor), self, "-test.run=^TestOSStateHelper$")
+		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", Render(h, floor), exe, "-test.run=^TestOSStateHelper$")
 		cmd.Env = []string{"SKYRA_TEST_STATE_DIR=" + filepath.Join(floor, dir)}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -308,4 +319,25 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 		}
 	}
 
+}
+
+// verified stages a program where the runtime runs it from (43 D5): copied
+// under the floor and named by its hash. It returns the surface the program
+// is registered as and the copy to exec.
+func verified(t *testing.T, path, floor string) (*Surface, string) {
+	t.Helper()
+	bin, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(bin)
+	surface := &Surface{Path: path, SHA256: hex.EncodeToString(sum[:])}
+	exe := Verified(Horizon{Surface: surface}, floor)
+	if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, bin, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	return surface, exe
 }

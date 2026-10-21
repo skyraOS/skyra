@@ -225,6 +225,7 @@ type SendStamp struct{ Stamp string } // tell the parent this stamp; its release
 type Acknowledge struct{ Err string } // tell the parent whether this instance accepted custody
 type Run struct {                     // run the target; its emission is the result
 	Surface  horizon.Surface
+	Exec     string // the verified copy of the surface's program, which is what runs (43 D5)
 	Stdin    []byte
 	Profile  string
 	Env      []string // the target's whole environment: nothing is inherited

@@ -18,11 +18,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
@@ -251,21 +254,22 @@ func Discharge(node *os.File, stamp string) (bool, error) {
 // place: link fails if the name exists (exclusive), and a reader never sees
 // the file empty or half written.
 func writeOnce(frame *os.File, name, content string) (bool, error) {
-	r, err := descriptorRoot(frame)
-	if err != nil {
+	if frame == nil {
+		return false, errors.New("no frame descriptor")
+	}
+	if err := component(name); err != nil {
 		return false, err
 	}
-	defer r.Close()
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
 		return false, err
 	}
 	tmp := ".tmp-" + hex.EncodeToString(nonce)
-	f, err := r.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0400)
+	f, err := openAt(frame, tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0400)
 	if err != nil {
 		return false, err
 	}
-	defer r.Remove(tmp)
+	defer unix.Unlinkat(int(frame.Fd()), tmp, 0)
 
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
@@ -278,11 +282,11 @@ func writeOnce(frame *os.File, name, content string) (bool, error) {
 	if err := f.Close(); err != nil {
 		return false, err
 	}
-	if err := r.Link(tmp, name); err != nil {
+	if err := unix.Linkat(int(frame.Fd()), tmp, int(frame.Fd()), name, 0); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return false, nil
 		}
-		return false, err
+		return false, &os.PathError{Op: "linkat", Path: name, Err: err}
 	}
 	return true, flush(frame, label(name)+" dir")
 }
@@ -303,16 +307,12 @@ func label(name string) string {
 // so the round's steps come back in the order they were emitted. It reports
 // whether this write won: false if the slot already existed.
 func Slot(frame *os.File, round, child string, pos int) (bool, error) {
-	r, err := descriptorRoot(frame)
+	deps, err := makeDir(frame, "deps")
 	if err != nil {
 		return false, err
 	}
-	defer r.Close()
-	dir := filepath.Join("deps", round)
-	if err := r.MkdirAll(dir, 0700); err != nil {
-		return false, err
-	}
-	node, err := r.Open(dir)
+	defer deps.Close()
+	node, err := makeDir(deps, round)
 	if err != nil {
 		return false, err
 	}
@@ -321,11 +321,6 @@ func Slot(frame *os.File, round, child string, pos int) (bool, error) {
 	if err != nil || !won {
 		return won, err
 	}
-	deps, err := r.Open("deps")
-	if err != nil {
-		return false, err
-	}
-	defer deps.Close()
 	if err := flush(deps, "deps dir"); err != nil {
 		return false, err
 	}
@@ -335,13 +330,12 @@ func Slot(frame *os.File, round, child string, pos int) (bool, error) {
 // Children lists the slots a round opened in a frame, in the order they were
 // emitted, read through the frame's fd. A slot with no position is the first.
 func Children(frame *os.File, round string) ([]string, error) {
-	r, err := descriptorRoot(frame)
+	deps, err := openDir(frame, "deps")
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	dir := filepath.Join("deps", round)
-	node, err := r.Open(dir)
+	defer deps.Close()
+	node, err := openDir(deps, round)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +353,7 @@ func Children(frame *os.File, round string) ([]string, error) {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		b, err := r.ReadFile(filepath.Join(dir, e.Name()))
+		b, err := readAt(node, e.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -411,11 +405,60 @@ func Emission(root, frame, round string) (string, error) {
 	return string(b), err
 }
 
-// Opening through /dev/fd duplicates the granted directory capability; it
-// never resolves the original frame path or changes process-wide cwd.
-func descriptorRoot(frame *os.File) (*os.Root, error) {
-	if frame == nil {
+// Everything inside a frame is reached from its directory fd with the *at
+// calls, one name at a time and never through a symlink: no path outside the
+// frame is resolved and the process-wide cwd never changes. Not through
+// /dev/fd: on macOS 15.6 (24G84) devfs's fdesc_lookup reads the fd table
+// unlocked, and concurrent opens of /dev/fd/N panicked the kernel.
+
+// component refuses any name that is not one plain entry of a directory.
+func component(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '/') {
+		return fmt.Errorf("not a single path component: %q", name)
+	}
+	return nil
+}
+
+// openAt opens name in dir, without following a symlink.
+func openAt(dir *os.File, name string, flag int, perm uint32) (*os.File, error) {
+	if dir == nil {
 		return nil, errors.New("no frame descriptor")
 	}
-	return os.OpenRoot(fmt.Sprintf("/dev/fd/%d", frame.Fd()))
+	if err := component(name); err != nil {
+		return nil, err
+	}
+	fd, err := unix.Openat(int(dir.Fd()), name, flag|unix.O_NOFOLLOW|unix.O_CLOEXEC, perm)
+	if err != nil {
+		return nil, &os.PathError{Op: "openat", Path: name, Err: err}
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+
+// openDir opens the directory name in dir.
+func openDir(dir *os.File, name string) (*os.File, error) {
+	return openAt(dir, name, os.O_RDONLY|unix.O_DIRECTORY, 0)
+}
+
+// makeDir creates the directory name in dir if it is missing, and opens it.
+func makeDir(dir *os.File, name string) (*os.File, error) {
+	if dir == nil {
+		return nil, errors.New("no frame descriptor")
+	}
+	if err := component(name); err != nil {
+		return nil, err
+	}
+	if err := unix.Mkdirat(int(dir.Fd()), name, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, &os.PathError{Op: "mkdirat", Path: name, Err: err}
+	}
+	return openDir(dir, name)
+}
+
+// readAt reads the whole file name in dir.
+func readAt(dir *os.File, name string) ([]byte, error) {
+	f, err := openAt(dir, name, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }

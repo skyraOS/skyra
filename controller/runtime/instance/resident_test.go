@@ -42,7 +42,11 @@ func TestResidentLaunchReuseAndStop(t *testing.T) {
 	defer os.RemoveAll(sockets)
 	socket := filepath.Join(sockets, "e.sock")
 	h := horizon.Horizon{Frame: "start", Surface: &horizon.Surface{Path: bin, SHA256: record.Sum(data)}}
-	x := machine.StartResident{Run: machine.Run{Surface: *h.Surface, Profile: horizon.Render(h, t.TempDir()), Env: []string{"PATH=/usr/bin:/bin"}}, Socket: socket, Horizon: h}
+	floor, err := filepath.EvalSymlinks(t.TempDir()) // Seatbelt matches real paths
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := machine.StartResident{Run: machine.Run{Surface: *h.Surface, Exec: horizon.Verified(h, floor), Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin"}}, Socket: socket, Horizon: h}
 
 	started := func() (string, bool) {
 		t.Helper()

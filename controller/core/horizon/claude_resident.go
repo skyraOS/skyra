@@ -32,5 +32,8 @@ func RenderClaudeResident(h Horizon, floor string, p ClaudePaths) (string, error
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n")
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
+	if exe := Verified(h, floor); exe != "" {
+		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", exe)
+	}
 	return b.String(), nil
 }

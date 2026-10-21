@@ -62,7 +62,7 @@ func TestReadLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 			Payload json.RawMessage
 		}
 		t.Helper()
-		e := run(machine.Run{Surface: surface, Stdin: []byte(`{"path":` + string(must(json.Marshal(path))) + `}`),
+		e := run(machine.Run{Surface: surface, Exec: horizon.Verified(h, floor), Stdin: []byte(`{"path":` + string(must(json.Marshal(path))) + `}`),
 			Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work}}).(machine.Executed)
 		if e.Err != "" {
 			t.Fatalf("%s: %s", path, e.Err)
