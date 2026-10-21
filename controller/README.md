@@ -102,7 +102,7 @@ OS, the tree or the network.
 | [`io`](codex/io/) | One bounded operation on a granted resident connection |
 | [`provider`](codex/provider/) | Launches each Codex process under its Seatbelt profile, with an allowlisted egress proxy (Python) |
 | [`fake`](codex/fake/) | A deterministic fake app-server, for the demo and tests |
-| [`latency`](codex/latency/) | Holds back each model output of an app-server by a fixed delay; with `sweep.sh`, the overhead sweep, and `compare.sh`, native Codex against Skyra, in [`OVERHEAD-VS-INFERENCE.md`](../OVERHEAD-VS-INFERENCE.md) |
+| [`latency`](codex/latency/) | Holds back each model output of an app-server by a fixed delay; with `sweep.sh`, the overhead sweep, and `compare.sh`, native Codex against Skyra, in [`OVERHEAD-VS-INFERENCE.md`](../docs/OVERHEAD-VS-INFERENCE.md) |
 | [`adapter`](codex/adapter/) | Legacy Codex adapter, retained for the demo and earlier tests |
 | [`proceduretools`](codex/proceduretools/) | Pure procedure discovery, model-call argument translation and schema projection shared by both Codex transports |
 

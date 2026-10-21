@@ -114,7 +114,7 @@ stays alive while its frame is unfinished, then resumes idle reclamation.
 The implementation still uses `Horizon.Agent`, `WorkTools` and `Delegated`,
 `system.agent-context`, and delegated socket/profile branches. These are current
 mechanisms, not the intended final ownership boundaries. See
-[DELEGATION.md](../DELEGATION.md) for exact semantics and verification limits.
+[DELEGATION.md](design/DELEGATION.md) for exact semantics and verification limits.
 
 ## Boundaries and gaps
 
@@ -155,10 +155,10 @@ mechanisms, not the intended final ownership boundaries. See
 
 ## Current architectural direction
 
-The [Horizon concern spec](../HORIZON-CONCERNS-SPEC.md) proposes generic
+The [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md) proposes generic
 contract-level reach, adapter-owned configuration and tool bindings, removal of
 agent/delegation fields from core, explicit resource ownership, and a tested
-legacy replay policy. The [change plan](../HORIZON_DELEGATION_CHANGES.md) also
+legacy replay policy. The [change plan](design/HORIZON_DELEGATION_CHANGES.md) also
 calls for visible public procedure activity and consistent native-capability
 recording. Neither document changes runtime behavior by itself.
 
@@ -212,7 +212,7 @@ comparative task-success, containment and cost evaluation remains future work.
 | Current Think composition | [bundle](../controller/interp/workflows/think/bundle.json), [proposal 38](next/proposal/38-think-procedure-proposal.md) |
 | Unified model selection and remaining ideas | [proposal 39](next/proposal/39-unified-think-procedure-proposal.md) |
 | Accepted tree reconstruction | [tree reader](../controller/runtime/replay/tree.go), [reconciliation](../controller/runtime/replay/recover.go), [proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md) |
-| Bounded delegation | [DELEGATION.md](../DELEGATION.md) |
-| Authority and adapter refactor | [Horizon concern spec](../HORIZON-CONCERNS-SPEC.md), [change plan](../HORIZON_DELEGATION_CHANGES.md) |
+| Bounded delegation | [DELEGATION.md](design/DELEGATION.md) |
+| Authority and adapter refactor | [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md), [change plan](design/HORIZON_DELEGATION_CHANGES.md) |
 | Desktop behavior | [desktop guide](../desktop/README.md) |
 | Research and invariants | [research question](next/research-question.md), [grips and invariants](grips-and-invariants.md) |

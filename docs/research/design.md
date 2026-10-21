@@ -269,7 +269,7 @@ Codex and Claude.
 ## 15. Direction (proposed, not implemented)
 
 1. **Separate authority from adapter configuration**
-   ([Horizon concern spec](../../HORIZON-CONCERNS-SPEC.md)). Delegation becomes
+   ([Horizon concern spec](../design/HORIZON-CONCERNS-SPEC.md)). Delegation becomes
    purely the interpreter's procedure, not a Horizon mode. Model configuration
    and tool catalogs move into adapter contracts. The kernel restricts generic
    `(target, contract)` capabilities without knowing providers, models or tool
@@ -316,5 +316,5 @@ the comparative evaluation is future work.
 | Original controller spec (D1–D9) | [docs/design/](../design/) |
 | Capability notes and proposals | [docs/next/](../next/) |
 | Procedures and remembering | [next/32-procedures.md](../next/32-procedures.md) |
-| Delegation semantics | [DELEGATION.md](../../DELEGATION.md) |
+| Delegation semantics | [DELEGATION.md](../design/DELEGATION.md) |
 | Research question | [next/research-question.md](../next/research-question.md) |

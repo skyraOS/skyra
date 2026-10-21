@@ -1,7 +1,7 @@
 // Latency sits between the actor host and an app-server (usually codex/fake)
 // and holds back each model output, a tool call or an agent message, for -ms
 // before forwarding it: simulated inference, with no change to the controller.
-// Every other line passes through at once. See ../../../OVERHEAD-VS-INFERENCE.md.
+// Every other line passes through at once. See ../../../docs/OVERHEAD-VS-INFERENCE.md.
 //
 //	latency -ms 1000 ./bin/fake-codex
 package main

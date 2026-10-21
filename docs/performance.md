@@ -41,7 +41,7 @@ tool call" headline below is the old figure until it is.
 
 The full write-up, with method, per-phase breakdown, where the fsync time
 goes, and caveats, is
-[`OVERHEAD-VS-INFERENCE.md`](../OVERHEAD-VS-INFERENCE.md). In short:
+[`OVERHEAD-VS-INFERENCE.md`](OVERHEAD-VS-INFERENCE.md). In short:
 
 - **The overhead is fixed per step, not per second of inference.** Against a
   fake app-server with injected latency, wall time tracks model time with a

@@ -13,7 +13,7 @@ everywhere; `SKYRA_SYNC_TRACE=1` logs every flush, and
 Measured, fake app-server, M1 Pro: `hello` 258 → 114 ms, `tool:hello`
 476 → 190 ms (medians of 10; [performance](../../performance.md)). The
 measurements behind it are in
-[`OVERHEAD-VS-INFERENCE.md` § Where the 250 ms goes](../../../OVERHEAD-VS-INFERENCE.md#where-the-250-ms-goes).
+[`OVERHEAD-VS-INFERENCE.md` § Where the 250 ms goes](../../OVERHEAD-VS-INFERENCE.md#where-the-250-ms-goes).
 
 ## The problem
 

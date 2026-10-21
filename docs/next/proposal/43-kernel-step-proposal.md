@@ -10,7 +10,7 @@ Status: **proposed.** This revises the external draft `skyra-design.md`
 process becomes the next, how an effect is started, and how executables are
 launched. The room, contracts, procedures, the interpreter, delegation,
 ingress and conversations are unchanged. Fan-out, fan-in and residents are
-**deferred** until [`FAN-OUT.md`](../../../FAN-OUT.md) has been reviewed (see
+**deferred** until [`FAN-OUT.md`](../../design/FAN-OUT.md) has been reviewed (see
 D7).
 
 The problem, invariants and research question are those of the
@@ -164,7 +164,7 @@ so this is macOS-specific. Settle it with a probe before D6 is built.
 
 ### D7. Deferred: fan-out, fan-in, residents
 
-[`FAN-OUT.md`](../../../FAN-OUT.md) describes the current mechanism and nine
+[`FAN-OUT.md`](../../design/FAN-OUT.md) describes the current mechanism and nine
 weak points. The two most serious:
 - a fully discharged round can be left unresolved if the last discharger dies;
 - no one supervises a released child.

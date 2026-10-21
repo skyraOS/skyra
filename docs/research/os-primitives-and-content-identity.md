@@ -144,7 +144,7 @@ and lost on copy; at most a hint layer.
   provider-specific branches inside the runtime. Under this direction, home
   directories, auth paths and profile fragments become configuration supplied by
   an actor and recorded with the call. This aligns with the
-  [Horizon concern spec](../../HORIZON-CONCERNS-SPEC.md).
+  [Horizon concern spec](../design/HORIZON-CONCERNS-SPEC.md).
 - `controller/runtime/instance/appserver.go`: the Codex native binary is hashed
   in place under Homebrew rather than pinned, and `--version` runs outside the
   sandbox. It should be pinned like every other binary; version becomes a

@@ -30,9 +30,9 @@ def package(version, app):
     runtime.mkdir(parents=True)
     for name in ('skyra', 'LICENSE'):
         shutil.copy2(ROOT/name, runtime/name)
-    for name in ('PUBLISHING.md',):
+    for name in ('docs/PUBLISHING.md',):
         if (ROOT/name).exists():
-            shutil.copy2(ROOT/name, runtime/name)
+            shutil.copy2(ROOT/name, runtime/Path(name).name)
     # Explicit runtime inputs: do not archive the private checkout, history,
     # credentials, conversations, attachments, or development notes.
     for path in sorted((ROOT/'controller').rglob('*')):

@@ -6,7 +6,7 @@ Date: 2026-10-13 · Apple M1 Pro, 16 GB · go1.25.0
 |---|---|---|
 | Fake-path sweep | `55579a1` | It builds only `controller/` binaries, so the uncommitted `models` target and launcher change were never part of it |
 | Native comparison | `9049bb7`, clean worktree | Controller code identical to `55579a1`. Only the latency tools and the benchmarks were added. codex-cli 0.160.0, `gpt-6.1-sol` (low) |
-| Replay | `9049bb7` | `go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/export/`; results in [`docs/performance.md`](docs/performance.md#replay) |
+| Replay | `9049bb7` | `go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/export/`; results in [`docs/performance.md`](performance.md#replay) |
 
 ## Question
 
@@ -67,7 +67,7 @@ Codex the costs are larger: see [Against native Codex](#against-native-codex).
   That came to 120 trials, with 4–10 per cell.
 
 To reproduce, use the proxy in
-[`controller/codex/latency/`](controller/codex/latency/) and the sweep script
+[`controller/codex/latency/`](../controller/codex/latency/) and the sweep script
 beside it. The script builds the binaries, runs one actor host per latency,
 and prints `ms scenario wall_ms records answer` for each trial:
 
@@ -252,7 +252,7 @@ Closed since the first draft:
   - about 7,800 records/s from the tree on disk (1.29 s for 10,003)
   - every published website run in under 4 ms natively
 
-  Details are in [`docs/performance.md`](docs/performance.md#replay). The
+  Details are in [`docs/performance.md`](performance.md#replay). The
   WebAssembly figures there were not rerun here.
 
 ## Implications
@@ -527,4 +527,4 @@ gather, claim) total 2–7 ms per record. What remains per round trip:
 
 A durability policy that keeps crash consistency at a fraction of this cost
 is proposed in
-[`docs/next/proposal/40-durability-policy-proposal.md`](docs/next/proposal/40-durability-policy-proposal.md).
+[`docs/next/proposal/40-durability-policy-proposal.md`](next/proposal/40-durability-policy-proposal.md).
