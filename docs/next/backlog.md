@@ -110,6 +110,19 @@ applies the code-identity constraint, then execs. Never parses untrusted input.
 
 - One interface, one implementation per OS. macOS (Seatbelt) now; the Linux
   side is phase 3.
+- **Conformance tests first.** The seam between kernel and OS is a short list
+  of guarantees, not syscalls: an atomic write-once name; reaching a
+  directory's contents without escaping it; a process gets exactly the fds
+  granted; ordered vs forced durability; code identity by SHA-256; an
+  irrevocable filesystem restriction inherited across exec; exec of one file
+  only; spawn, wait, timeout and exit status. One test per guarantee, written
+  once against the launch and store interfaces, run in a macOS VM and a Linux
+  VM. A guarantee that does not pass on both is not part of the seam yet.
+  Write these before the Linux launcher.
+- `Authority` holds only grants both launchers can enforce. `Mach` has no
+  meaning on Linux: make it a macOS extension of the launch layer or drop it.
+  Check whether Landlock can restrict `Connect` (Unix socket paths) before
+  treating it as portable.
 - If the kernel runs outside the agent's sandbox (2d), each target gets a fresh
   profile and nested Seatbelt is not needed. Probe it anyway before building.
 - A launcher applies the human's outer grant before the first kernel starts.
