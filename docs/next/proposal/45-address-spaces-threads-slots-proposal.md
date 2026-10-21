@@ -68,6 +68,14 @@ The pipe pins its surface, so a narrowed handle runs exactly the code it was
 granted for. `Grant` is removed: what it held is a pipe and the Horizon the
 pipe leads into.
 
+A Skyra pipe is an OS pipe plus the kernel's call/reply rule. It is carried
+by the OS (D9): an invoke reaches the callee on its stdin and the reply comes
+back on its stdout. What the kernel adds is a spawn per invoke and a
+write-once reply end (D5). A Horizon maps to an address space that many
+short-lived processes share, not to one process. Where this proposal or 44
+says "pipe" it means the Skyra pipe, call and reply included, never a bare
+byte stream.
+
 ### D2. Narrowing creates a Horizon
 
 `system.narrow` checks that the request is a subset of the caller's Horizon
@@ -77,6 +85,14 @@ adds a pipe into it to the caller's table. It returns the pipe's name.
 A pipe can only lead into a Horizon no larger than the one holding it, so
 "authority only narrows" (invariant 2) holds by construction: there is no
 operation that makes a pipe into a larger Horizon.
+
+"No larger" is measured by what the Horizon can reach: its `Authority`
+(`Allows`) and the pipes it holds. The holder's own contracts do not count.
+An extend-reach adds a contract to the actor's own input, which changes what
+payloads callers may send it and grants no OS authority. It composes what the
+Horizon already holds, and the sandbox still enforces the Horizon's grants,
+so a Horizon that has extended itself is no larger than before. The open
+question on passing pipes compares Horizons by this same measure.
 
 ### D3. The narrowed Horizon is made once, at narrow time
 
@@ -92,9 +108,23 @@ time.
 Content addressing makes an object immutable, but extend-reach changes a
 Horizon. So a Horizon's id is the stamp of the record that created it (the
 genesis, or the narrow), as `Origin` is today, and each change commits a new
-version under that id. Pipes lead to the id; a step runs under the version
-current when its invoke was committed, recorded so replay derives the same
-one.
+version under that id. Pipes lead to the id.
+
+Versions are ordered, because a Horizon is shared like an address space:
+forked threads and different callers can run in it at once and extend it
+concurrently. Today the code avoids this by refusing extend-reach from a
+forked frame (`extension`, `core/machine/room.go`). Under D3 it is allowed,
+so:
+
+- Each version names the version it follows, and is committed as a
+  write-once claim on that predecessor, the same rule as a slot. Of two
+  concurrent extensions of one version, exactly one wins; the other faults
+  and is never applied silently. The version history is a line, never a
+  fork.
+- Each invoke record names the exact version its step runs under. Records
+  form a tree, not a sequence, so "the version current at commit" is not
+  defined across threads. Replay and `accept` read the version the record
+  names; neither has to work out which one was current.
 
 ### D5. Calls: the reply end is the return address
 
