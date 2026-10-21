@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"os"
@@ -66,13 +68,27 @@ func TestSandboxedAdapterCanOnlyReachGrantedBridge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The profile lets only the runtime's verified copy run (43 D5).
+	bin, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(bin)
+	floor := filepath.Join(dir, ".skyra")
+	exe := horizon.Verified(horizon.Horizon{Surface: &horizon.Surface{SHA256: hex.EncodeToString(sum[:])}}, floor)
+	if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, bin, 0o500); err != nil {
+		t.Fatal(err)
+	}
 	for _, grant := range []bool{false, true} {
-		h := horizon.Horizon{Surface: &horizon.Surface{Path: self}}
+		h := horizon.Horizon{Surface: &horizon.Surface{Path: self, SHA256: hex.EncodeToString(sum[:])}}
 		if grant {
 			h.Authority.Connect = []string{socket}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", horizon.Render(h, filepath.Join(dir, ".skyra")), self, "-test.run=^TestAdapterHelper$")
+		cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", horizon.Render(h, floor), exe, "-test.run=^TestAdapterHelper$")
 		cmd.Env = []string{"SKYRA_TEST_CUA=1", "SKYRA_FRAME=frame-1", "SKYRA_CONNECT=" + socket}
 		cmd.Stdin = bytes.NewBufferString(`{"pid":7,"window_id":9}`)
 		b, err := cmd.CombinedOutput()

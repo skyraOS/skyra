@@ -127,10 +127,29 @@ func helperCommand(mode, floor string, sandbox bool) (*exec.Cmd, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
-	profile := horizon.Render(horizon.Horizon{Surface: &horizon.Surface{Path: self}}, floor)
+	bin, err := os.ReadFile(self)
+	if err != nil {
+		return nil, "", err
+	}
+	// The profile lets only the runtime's verified copy run (43 D5).
+	h := horizon.Horizon{Surface: &horizon.Surface{Path: self, SHA256: record.Sum(bin)}}
+	exe := horizon.Verified(h, floor)
+	if have, err := os.ReadFile(exe); err != nil || record.Sum(have) != h.Surface.SHA256 {
+		if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
+			return nil, "", err
+		}
+		tmp := fmt.Sprintf("%s.%d", exe, os.Getpid())
+		if err := os.WriteFile(tmp, bin, 0o500); err != nil {
+			return nil, "", err
+		}
+		if err := os.Rename(tmp, exe); err != nil {
+			return nil, "", err
+		}
+	}
+	profile := horizon.Render(h, floor)
 	var cmd *exec.Cmd
 	if sandbox {
-		cmd = exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestResidentHelper$")
+		cmd = exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestResidentHelper$")
 	} else {
 		cmd = exec.Command(self, "-test.run=^TestResidentHelper$")
 	}

@@ -36,15 +36,17 @@ func TestRepositoryReadableButOnlyIdeasWritable(t *testing.T) {
 	if err := os.Symlink(repo, filepath.Join(ideas, "escape")); err != nil {
 		t.Fatal(err)
 	}
-	profile := Render(Horizon{Surface: &Surface{Path: self}, Authority: Authority{
+	floor := filepath.Join(repo, ".skyra")
+	surface, exe := verified(t, self, floor)
+	profile := Render(Horizon{Surface: surface, Authority: Authority{
 		Read: []PathGrant{{Path: repo, Scope: "subpath"}}, Scratch: ideas,
-	}}, filepath.Join(repo, ".skyra"))
+	}}, floor)
 	for _, tc := range []struct{ path, want string }{
 		{filepath.Join(ideas, "note.md"), "allowed allowed denied"},
 		{source, "denied allowed denied"},
 		{filepath.Join(ideas, "escape", "main.go"), "denied allowed denied"},
 	} {
-		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, self, "-test.run=^TestOSScratchHelper$")
+		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSScratchHelper$")
 		cmd.Env = []string{"SKYRA_TEST_WRITE=" + tc.path}
 		out, err := cmd.CombinedOutput()
 		if err != nil {

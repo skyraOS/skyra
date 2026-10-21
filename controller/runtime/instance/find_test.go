@@ -49,7 +49,7 @@ func TestFindLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 		Error   string
 	}) {
 		t.Helper()
-		e := run(machine.Run{Surface: surface, Stdin: []byte(payload), Profile: horizon.Render(h, floor),
+		e := run(machine.Run{Surface: surface, Exec: horizon.Verified(h, floor), Stdin: []byte(payload), Profile: horizon.Render(h, floor),
 			Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work}}).(machine.Executed)
 		var addressed struct {
 			To      string

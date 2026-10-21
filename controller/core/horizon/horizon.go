@@ -211,19 +211,23 @@ func (h Horizon) Names() []string {
 // or remove (next/24). Everything is denied unless listed. The floor (the
 // .skyra/ directory) is always denied but for the running actor's own state
 // directory (next/32), and exec is allowed for the one program being run and
-// nothing else. The floor is a parameter, not a Horizon field, so no Horizon
-// can grant it.
+// nothing else: the runtime's verified copy of it (43 D5), never the path it
+// was registered at. The floor is a parameter, not a Horizon field, so no
+// Horizon can grant it.
 func Render(h Horizon, floor string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
-	fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", h.Surface.Path)
+	exe := Verified(h, floor)
+	if exe != "" {
+		fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", exe)
+	}
 	b.WriteString("(allow sysctl-read)\n")
 	// These are loader and operating-system reads, not surface grants. In
 	// particular, no user home or workspace is included here.
 	for _, path := range []string{"/System", "/usr/lib", "/private/etc"} {
 		fmt.Fprintf(&b, "(allow file-read* (subpath %q))\n", path)
 	}
-	for _, path := range []string{"/", "/dev/null", "/dev/random", "/dev/urandom", h.Surface.Path} {
+	for _, path := range []string{"/", "/dev/null", "/dev/random", "/dev/urandom"} {
 		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", path)
 	}
 	for _, grant := range h.Authority.Read {
@@ -247,7 +251,21 @@ func Render(h Horizon, floor string) string {
 		// After the floor's deny, so it wins for this one directory.
 		fmt.Fprintf(&b, "(allow file-read* file-write* (subpath %q))\n", dir)
 	}
+	if exe != "" {
+		// After the floor's deny, so the copy the runtime checked can be read to run.
+		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", exe)
+	}
 	return b.String()
+}
+
+// Verified is where the runtime keeps the copy of h's program it checked and
+// runs (43 D5): under the floor, which only the runtime can write, named by
+// the hash of its bytes. It is "" if the surface has no well-formed hash.
+func Verified(h Horizon, floor string) string {
+	if h.Surface == nil || len(h.Surface.SHA256) != 64 || strings.Trim(h.Surface.SHA256, "0123456789abcdef") != "" {
+		return ""
+	}
+	return filepath.Join(floor, "surfaces", h.Surface.SHA256)
 }
 
 // StateDir is the running actor's own directory under the floor, or "".
@@ -261,7 +279,7 @@ func StateDir(h Horizon, floor string) string {
 // ValidState reports whether a name may be an actor's state directory: one
 // plain path segment that is none of the kernel's own directories.
 func ValidState(name string) bool {
-	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames", "acceptances"}, name) {
+	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames", "acceptances", "surfaces"}, name) {
 		return false
 	}
 	for i, c := range name {

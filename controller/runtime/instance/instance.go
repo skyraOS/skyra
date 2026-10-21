@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/handshake"
@@ -363,19 +364,19 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 	return nil, false, fmt.Errorf("unknown act %T", a)
 }
 
-// run performs a Run effect: check the binary's content hash, run it under
-// the rendered profile, and read its one line of output; anything after it is discarded.
+// run performs a Run effect: check the binary's content hash, run the copy
+// it checked under the rendered profile, and read its one line of output;
+// anything after it is discarded.
 func run(x machine.Run) machine.Event {
-	bin, err := os.ReadFile(x.Surface.Path)
-	if err != nil {
-		return machine.Executed{Err: err.Error()}
+	if x.Exec == "" {
+		return machine.Executed{Err: "surface has no verified copy to run"}
 	}
-	if record.Sum(bin) != x.Surface.SHA256 {
-		return machine.Executed{Err: "surface binary does not match its registered hash"}
+	if err := verifiedCopy(x.Surface, x.Exec); err != nil {
+		return machine.Executed{Err: err.Error()}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Surface.Path)
+	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Exec)
 	cmd.Stdin = bytes.NewReader(x.Stdin)
 	cmd.Env = x.Env
 	var stderr boundedBuffer
@@ -420,15 +421,24 @@ func startResident(x machine.StartResident, root string) machine.Event {
 		out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{"incarnation": incarnation, "reused": true}})
 		return machine.Executed{Obs: out}
 	}
-	bin, err := os.ReadFile(x.Run.Surface.Path)
-	if err != nil {
+	// Codex finds its package beside the path it was installed at, so the
+	// app-server runs from there, checked but not copied: its pinned profile
+	// allows exec of that path alone.
+	exe := x.Run.Exec
+	if x.Run.Surface.ResidentProfile == "darwin-appserver-v1" {
+		exe = ""
+	} else if exe == "" {
+		return machine.Executed{Err: "surface has no verified copy to run"}
+	}
+	if err := verifiedCopy(x.Run.Surface, exe); err != nil {
 		return machine.Executed{Err: err.Error()}
 	}
-	if record.Sum(bin) != x.Run.Surface.SHA256 {
-		return machine.Executed{Err: "surface binary does not match its registered hash"}
+	if exe == "" {
+		exe = x.Run.Surface.Path
 	}
 	profile, env, work := x.Run.Profile, x.Run.Env, ""
 	var prepared *preparedResident
+	var err error
 	switch x.Run.Surface.ResidentProfile {
 	case "darwin-appserver-v1":
 		prepared, err = prepareAppserver(x, root)
@@ -454,9 +464,9 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	local := os.NewFile(uintptr(fds[0]), "resident-connection")
 	peer := os.NewFile(uintptr(fds[1]), "resident-peer")
 	defer peer.Close()
-	argv := []string{"-p", profile, x.Run.Surface.Path}
+	argv := []string{"-p", profile, exe}
 	if prepared != nil {
-		argv = []string{"-f", filepath.Join(filepath.Dir(prepared.work), "actor.sb"), x.Run.Surface.Path}
+		argv = []string{"-f", filepath.Join(filepath.Dir(prepared.work), "actor.sb"), exe}
 	}
 	argv = append(argv, x.Run.Surface.Args...)
 	cmd := exec.Command("/usr/bin/sandbox-exec", argv...)
@@ -500,6 +510,57 @@ func startResident(x machine.StartResident, root string) machine.Event {
 		"pid": pid, "incarnation": incarnation,
 		"profile": record.Sum([]byte(profile))}})
 	return machine.Executed{Obs: out}
+}
+
+// verifiedCopy checks a surface's program against its registered hash and
+// publishes exactly the bytes it checked at exe, the path its profile lets
+// run (43 D5). The registered path can change between a check and an exec;
+// exe is under the floor, which nothing but the runtime can write. A copy
+// already there is checked again, not trusted. An empty exe only checks: the
+// caller runs the registered path.
+func verifiedCopy(s horizon.Surface, exe string) error {
+	if exe != "" {
+		if have, err := os.ReadFile(exe); err == nil && record.Sum(have) == s.SHA256 {
+			return nil
+		}
+	}
+	bin, err := os.ReadFile(s.Path)
+	if err != nil {
+		return err
+	}
+	if record.Sum(bin) != s.SHA256 {
+		return errors.New("surface binary does not match its registered hash")
+	}
+	if exe == "" {
+		return nil
+	}
+	if filepath.Base(exe) != s.SHA256 {
+		return errors.New("verified copy is not named by its hash")
+	}
+	dir := filepath.Dir(exe)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".copy-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // a no-op once renamed
+	_, err = tmp.Write(bin)
+	if err == nil {
+		err = tmp.Chmod(0o500)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	// Published whole or not at all: a reader never sees part of a copy.
+	return os.Rename(tmp.Name(), exe)
 }
 
 // edgeLog is where a resident and its holder write diagnostics: beside the

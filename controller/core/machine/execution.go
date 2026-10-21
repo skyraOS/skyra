@@ -48,9 +48,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor, socket string) Run {
 		}
 		granted := h
 		granted.Authority.Connect = append(slices.Clone(h.Authority.Connect), socket)
-		return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(granted, floor), Env: env, Resident: socket}
+		return Run{Surface: *h.Surface, Exec: horizon.Verified(h, floor), Stdin: stdin, Profile: horizon.Render(granted, floor), Env: env, Resident: socket}
 	}
-	return Run{Surface: *h.Surface, Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
+	return Run{Surface: *h.Surface, Exec: horizon.Verified(h, floor), Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
 }
 
 // edgeSocket is where the resident of h's edge is reached (proposal 38). A
