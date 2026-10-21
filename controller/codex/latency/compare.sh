@@ -1,6 +1,6 @@
 #!/bin/bash
 # Native Codex against Skyra on real Codex: the same model, effort and
-# prompts, interleaved, TRIALS rounds. See OVERHEAD-VS-INFERENCE.md.
+# prompts, interleaved, TRIALS rounds. See docs/OVERHEAD-VS-INFERENCE.md.
 #
 #   controller/codex/latency/compare.sh 6
 #

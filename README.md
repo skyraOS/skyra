@@ -78,7 +78,7 @@ skyra test        # every test
 ```
 
 Full setup, every command and troubleshooting: [`docs/startup-doc.md`](docs/startup-doc.md).
-Release packaging, Homebrew publishing, updates and retirement: [`PUBLISHING.md`](PUBLISHING.md).
+Release packaging, Homebrew publishing, updates and retirement: [`PUBLISHING.md`](docs/PUBLISHING.md).
 
 Each scenario proves one thing. Trimmed real output:
 
@@ -201,7 +201,7 @@ memory, linear in run length. A 10,000-record run takes about 0.2 s, or
 Everything was measured on an Apple M1 Pro, go1.25.0, 2026-10-13.
 [`docs/performance.md`](docs/performance.md) has the commits, method and
 caveats, and the full overhead write-up is in
-[`OVERHEAD-VS-INFERENCE.md`](OVERHEAD-VS-INFERENCE.md). Reproduce replay
+[`OVERHEAD-VS-INFERENCE.md`](docs/OVERHEAD-VS-INFERENCE.md). Reproduce replay
 with:
 
 ```
@@ -260,7 +260,7 @@ under its own generated sandbox. Delegation is implemented for Codex and Claude:
   `actor` to choose an available agent and `tools` to narrow its inherited
   authority. The child returns observations
   discovered while pursuing the goal—not caller-declared completion criteria
-  or an upfront output schema. See [delegation usage and runtime behavior](DELEGATION.md) and the [delegate procedure spec](ideas/delegate-procedure-spec.md).
+  or an upfront output schema. See [delegation usage and runtime behavior](docs/design/DELEGATION.md) and the [delegate procedure spec](ideas/delegate-procedure-spec.md).
 - **Contain ordinary child failures.** A failed child returns a failure
   outcome so its caller can continue. Integrity and persistence failures must
   still stop affected execution safely; an unknown outcome is not a successful

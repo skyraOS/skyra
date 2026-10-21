@@ -1,5 +1,5 @@
 #!/bin/sh
-# The overhead sweep in OVERHEAD-VS-INFERENCE.md: for each latency, TRIALS boots
+# The overhead sweep in docs/OVERHEAD-VS-INFERENCE.md: for each latency, TRIALS boots
 # of each scenario against the fake Codex behind latency, each with a fresh
 # .skyra/ root. Prints: ms scenario wall_ms records answer
 #

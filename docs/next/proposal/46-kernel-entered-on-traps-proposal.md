@@ -142,7 +142,7 @@ state the stateless controller was built to remove."
 Stated so it can be weighed, not dismissed:
 
 - **Cost per step.** Each trap pays process start, a read of the head and its
-  verification. Measured overhead ([`OVERHEAD-VS-INFERENCE.md`](../../../OVERHEAD-VS-INFERENCE.md))
+  verification. Measured overhead ([`OVERHEAD-VS-INFERENCE.md`](../../OVERHEAD-VS-INFERENCE.md))
   is fixed per step and mostly `F_FULLFSYNC`, not process start: about 70 ms
   per record on the fake path, about 30 ms with real Codex. A long-lived
   kernel saves the start and the re-read, not the fsync. Not measured: the

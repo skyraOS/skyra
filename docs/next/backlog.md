@@ -14,7 +14,7 @@ each step unblocks.
 
 ## 1. Strip agent elements out of Horizon
 
-[`HORIZON-CONCERNS-SPEC.md`](../../HORIZON-CONCERNS-SPEC.md). Remove `Agent`,
+[`HORIZON-CONCERNS-SPEC.md`](../design/HORIZON-CONCERNS-SPEC.md). Remove `Agent`,
 `WorkTools` and `Delegated` from `Horizon` and `Grant` in
 `core/horizon/horizon.go`; move model configuration and tool catalogs into
 adapter contracts; delegation stays the interpreter's `delegate` procedure.
@@ -168,7 +168,7 @@ compiled into a procedure without someone deciding to keep it.
 - The open problems with agent JIT compilation, and the planned fixes.
 - Procedures still run inside the same capability bounds, so a fallback to
   model inference is no less safe.
-- **One tool: `dispatch`** ([`one-tool.md`](../../one-tool.md)). The model sees a
+- **One tool: `dispatch`** ([`one-tool.md`](../design/one-tool.md)). The model sees a
   single provider-neutral tool and requests batches of calls through it; Skyra
   validates each call against its schema and the current Horizon, runs
   independent calls concurrently, and records every actual invocation. Goes
@@ -181,7 +181,7 @@ Each waits on its own review, a measurement, or time.
 - **Windows port.** AppContainer and job objects work differently enough from
   fd passing and Seatbelt that it is close to a rewrite of the security layer.
 - **Fan-out, fan-in, residents (43 D7).** Residents keep state outside the tree
-  and need their own design. [`FAN-OUT.md`](../../FAN-OUT.md) weak points.
+  and need their own design. [`FAN-OUT.md`](../design/FAN-OUT.md) weak points.
 - **SQLite store (43 D4).** Only if it benchmarks better. Measure the full
   claim → execute → outcome path, including checkpoints, against the current
   barrier/force policy. Ends standard-library Go.

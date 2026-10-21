@@ -3,7 +3,7 @@
 Date: 2026-10-20
 
 Status: **proposed.** Follows phase 1 of the [backlog](../backlog.md)
-(agent fields out of Horizon, [`HORIZON-CONCERNS-SPEC.md`](../../../HORIZON-CONCERNS-SPEC.md))
+(agent fields out of Horizon, [`HORIZON-CONCERNS-SPEC.md`](../../design/HORIZON-CONCERNS-SPEC.md))
 and comes before 2b, because it decides the record shape of a Horizon and a
 frame.
 
