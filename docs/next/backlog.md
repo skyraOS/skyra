@@ -22,6 +22,17 @@ adapter contracts; delegation stays the interpreter's `delegate` procedure.
 Unblocks: the rewrite. The new kernel never has to carry agent fields, and the
 kernel stops knowing about agents.
 
+### 1b. Horizons, pipes and frames
+
+[Proposal 45](proposal/45-address-spaces-threads-slots-proposal.md). Reach
+and Refs collapse into one table of pipes; a narrowing creates a Horizon, a
+pipe leads into it, and a pipe's reply end is the slot. The frame stack moves
+out of `Horizon` into frames; fan-out is a cactus stack. Lands before 2b, so
+the record version is bumped once.
+
+Unblocks: 2b's Horizon and frame records, 2c's claim key, 2d's handle table,
+and 44's mailboxes as buffered pipes.
+
 ## 2. Core rewrite
 
 Proposal 43 and its audit, revised: a long-lived kernel replaces D2's `execve`
