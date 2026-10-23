@@ -47,9 +47,28 @@ the record version is bumped once.
     subset. Accurate, since handles cross as real fds over Unix sockets, but
     not the internal term, because it implies Unix semantics (dup, close,
     numbering) the c-list does not have.
-  - Name the scale whenever "agent" is used (leaf, strand, session, the
+  - Name the scale whenever "agent" is used (leaf, trace, session, the
     system, the human), so statements like "the agent holds `remember()`"
     say which one.
+- **The other renames, in the same pass.** Rename where a standard term
+  exists; keep Skyra's word where the idea is new. One pass means one record
+  version bump and one round of doc churn.
+  - **strand → trace.** `remember()` is already explained as a tracing JIT;
+    the recorded path is its trace.
+  - **slot → reply cap.** 45 defines the slot as a pipe's reply end: KeyKOS's
+    resume key, seL4's reply capability. A single-use capability in the c-list.
+  - **reach → retired.** It is the contents of the c-list.
+  - **room → retired.** Its facets are already `system`'s syscalls (32).
+  - **`extend-reach` → `export`.** An actor adds an entry point to itself; it
+    widens no one's reach.
+  - **Horizon fault → capability fault.**
+  - **One word for what runs:** actor. Leaf stays only for a frame that opened
+    no calls; target and surface go.
+  - **`try` → keep `delegate`.** "try" reads as exception handling
+    (ideas/interpreter-primitives).
+  - **Keep:** procedure, refinement, `remember`, stamp, custody.
+  - **Genome and dream stay as framing** in essays and the README story; the
+    API uses plainer names: the root grant, and `consolidate()` for `dream()`.
 
 Unblocks: 2b's Horizon and frame records, 2c's claim key, 2d's handle table,
 and 44's mailboxes as buffered pipes.
