@@ -11,6 +11,7 @@ package registry
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,8 +41,9 @@ type Entry struct {
 	ResidentProfile    string               `json:"resident_profile,omitempty"`
 	ProxyHosts         []string             `json:"proxy_hosts,omitempty"`
 	ProxyPath          string               `json:"proxy_path,omitempty"`
-	State              bool                 `json:"state,omitempty"`  // the actor keeps state of its own, in .skyra/<name>/ (next/32)
-	Bundle             string               `json:"bundle,omitempty"` // versioned authored procedure bundle, provisioned before genesis
+	Provider           *horizon.Provider    `json:"provider,omitempty"` // the model CLI a darwin-provider-v1 resident runs; hashes are pinned here
+	State              bool                 `json:"state,omitempty"`    // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle             string               `json:"bundle,omitempty"`   // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -152,14 +154,14 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if e.Path == "" {
 			return nil, room, fmt.Errorf("%s: missing executable path", name)
 		}
-		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "") {
+		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "" || e.Provider != nil) {
 			return nil, room, fmt.Errorf("%s: invalid resident or connection configuration", name)
 		}
-		if e.ResidentProfile == "darwin-appserver-v1" && (len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
-			return nil, room, fmt.Errorf("%s: appserver profile requires proxy hosts", name)
-		}
-		if e.ResidentProfile != "" && e.ResidentProfile != "darwin-appserver-v1" && e.ResidentProfile != "darwin-claude-v1" {
+		if e.ResidentProfile != "" && e.ResidentProfile != "darwin-provider-v1" {
 			return nil, room, fmt.Errorf("%s: unknown resident profile %q", name, e.ResidentProfile)
+		}
+		if (e.ResidentProfile != "") != (e.Provider != nil) || e.ResidentProfile != "" && (len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
+			return nil, room, fmt.Errorf("%s: a provider profile requires its provider and proxy hosts", name)
 		}
 		for _, host := range e.ProxyHosts {
 			if host == "" || host != strings.ToLower(host) || strings.ContainsAny(host, "/:@ \n\r\x00") {
@@ -207,6 +209,12 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			proxySHA = record.Sum(proxy)
 		}
+		var provider *horizon.Provider
+		if e.Provider != nil {
+			if provider, err = pinProvider(dir, path, record.Sum(bin), *e.Provider); err != nil {
+				return nil, room, fmt.Errorf("%s provider: %w", name, err)
+			}
+		}
 		var state string
 		if e.State {
 			if !horizon.ValidState(name) {
@@ -214,7 +222,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			state = name
 		}
-		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, Provider: provider, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
 	for name, s := range reach {
 		if s.Agent == nil {
@@ -325,4 +333,60 @@ func resolve(dir, p string) string {
 		return p
 	}
 	return filepath.Join(dir, p)
+}
+
+// pinProvider resolves a provider's paths and pins its program and helper by
+// content hash (proposal 47). The resident at path, with hash sum, is the
+// program itself when they are the same file.
+func pinProvider(dir, path, sum string, p horizon.Provider) (*horizon.Provider, error) {
+	if p.Name != "codex" && p.Name != "claude" {
+		return nil, fmt.Errorf("unknown provider %q", p.Name)
+	}
+	pin := func(file string) (string, string, error) {
+		if file == "" {
+			return "", "", errors.New("missing program")
+		}
+		resolved, err := filepath.EvalSymlinks(resolve(dir, file))
+		if err != nil {
+			return "", "", err
+		}
+		if resolved, err = filepath.Abs(resolved); err != nil {
+			return "", "", err
+		}
+		if resolved == path {
+			return resolved, sum, nil
+		}
+		b, err := os.ReadFile(resolved)
+		if err != nil {
+			return "", "", err
+		}
+		return resolved, record.Sum(b), nil
+	}
+	var err error
+	if p.Program, p.ProgramSHA256, err = pin(p.Program); err != nil {
+		return nil, err
+	}
+	for i, read := range p.Reads {
+		if !filepath.IsAbs(read) {
+			return nil, fmt.Errorf("read %q is not absolute", read)
+		}
+		p.Reads[i] = filepath.Clean(read)
+	}
+	switch p.Auth {
+	case "file":
+		if !filepath.IsAbs(p.AuthPath) || p.Keychain != "" || p.Helper != "" {
+			return nil, errors.New("file auth takes an absolute auth_path and nothing else")
+		}
+		p.AuthPath, p.HelperSHA256 = filepath.Clean(p.AuthPath), ""
+	case "keychain":
+		if p.Keychain == "" || strings.ContainsAny(p.Keychain, "\"\\\n\r\x00") || p.AuthPath != "" {
+			return nil, errors.New("keychain auth takes a plain service name and a helper")
+		}
+		if p.Helper, p.HelperSHA256, err = pin(p.Helper); err != nil {
+			return nil, fmt.Errorf("helper: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unknown auth %q", p.Auth)
+	}
+	return &p, nil
 }

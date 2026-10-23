@@ -421,11 +421,11 @@ func startResident(x machine.StartResident, root string) machine.Event {
 		out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{"incarnation": incarnation, "reused": true}})
 		return machine.Executed{Obs: out}
 	}
-	// Codex finds its package beside the path it was installed at, so the
-	// app-server runs from there, checked but not copied: its pinned profile
-	// allows exec of that path alone.
+	// A provider that is its own resident runs from where it was installed,
+	// checked but not copied (Codex finds its package beside it): its pinned
+	// profile allows exec of that path alone.
 	exe := x.Run.Exec
-	if x.Run.Surface.ResidentProfile == "darwin-appserver-v1" {
+	if v := x.Run.Surface.Provider; v != nil && v.Program == x.Run.Surface.Path {
 		exe = ""
 	} else if exe == "" {
 		return machine.Executed{Err: "surface has no verified copy to run"}
@@ -439,11 +439,8 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	profile, env, work := x.Run.Profile, x.Run.Env, ""
 	var prepared *preparedResident
 	var err error
-	switch x.Run.Surface.ResidentProfile {
-	case "darwin-appserver-v1":
-		prepared, err = prepareAppserver(x, root)
-	case "darwin-claude-v1":
-		prepared, err = prepareClaude(x, root)
+	if x.Run.Surface.ResidentProfile != "" {
+		prepared, err = prepareProvider(x, root)
 	}
 	if err != nil {
 		return machine.Executed{Err: err.Error()}

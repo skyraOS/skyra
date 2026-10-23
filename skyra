@@ -84,7 +84,7 @@ controller_build() {
   local t
   local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user models:targets/models
     codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake
-    clauderesident:claude/resident claude-start:claude/start
+    clauderesident:claude/resident claude-start:claude/start claude-keychain:claude/keychain
     desktop-observe:cua/adapter cua-bridge:cua/bridge ideas-host:hosts/ideas design-tools:design repo-host:hosts/repo blender-tools:blender"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
   # Operator discovery runs outside model authority.
@@ -137,7 +137,11 @@ if mode=='real':
     args=[]
     for feature in FEATURES: args.extend(['--disable',feature])
     args.extend(['--enable','skip_host_skill_discovery','--enable','view_image','app-server','--listen','stdio://'])
-    start={'path':str(binary),'resident_profile':'darwin-appserver-v1',
+    # One provider profile for Codex and Claude (proposal 47): what differs is
+    # the provider descriptor, pinned with the surface.
+    start={'path':str(binary),'resident_profile':'darwin-provider-v1',
+           'provider':{'name':'codex','program':str(binary),'reads':[str(binary.parent.parent/'codex-package.json')],
+                       'auth':'file','auth_path':str(home/'.codex'/'auth.json')},
            'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
            'proxy_path':str(root/'controller/codex/provider/proxy.py'),'args':args}
 else:
@@ -161,7 +165,7 @@ registry={
  'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'claude':{'agent':{'operations':['claude.start','claude.exchange','claude.inspect','claude.stop']},'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
- 'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True,'resident_profile':'darwin-claude-v1'},
+ 'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True},
  'claude.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'claude.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
  'claude.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
@@ -172,6 +176,17 @@ registry={
                 'bundle':str(root/'controller/interp/workflows/think/bundle.json')},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
+# Claude runs under the same provider profile as Codex. Its login stays in the
+# keychain: a pinned helper serves that one item from outside the sandbox.
+# Without the CLI, claude.start has no profile and refuses to start.
+import shutil
+claude=shutil.which('claude')
+if claude:
+    registry['claude.start'].update({'resident_profile':'darwin-provider-v1',
+        'provider':{'name':'claude','program':str(Path(claude).resolve(strict=True)),
+                    'auth':'keychain','keychain':'Claude Code-credentials','helper':str(build/'claude-keychain')},
+        'proxy_hosts':['api.anthropic.com','platform.claude.com','claude.ai'],
+        'proxy_path':str(root/'controller/codex/provider/proxy.py')})
 desktop_config=os.environ.get('SKYRA_DESKTOP_CONFIG')
 if desktop_config:
     config=json.loads(Path(desktop_config).read_text())

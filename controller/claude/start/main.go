@@ -5,7 +5,10 @@
 // reports EOF; the adapter starts a fresh incarnation for each turn.
 //
 // Its stdio is the holder's socketpair. It has no filesystem or process
-// authority beyond launching the claude CLI.
+// authority beyond launching the claude CLI. The runtime names both the CLI
+// (SKYRA_CLAUDE_PROGRAM, the pinned binary) and the one loopback port the
+// bridge may bind (SKYRA_CLAUDE_BRIDGE_PORT); its profile allows exactly
+// those (proposal 47).
 package main
 
 import (
@@ -89,7 +92,11 @@ func main() {
 		fatal("bridge: " + err.Error())
 	}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	program, port := os.Getenv("SKYRA_CLAUDE_PROGRAM"), os.Getenv("SKYRA_CLAUDE_BRIDGE_PORT")
+	if program == "" || port == "" {
+		fatal("the runtime names no claude program or bridge port")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:"+port)
 	if err != nil {
 		fatal("listen: " + err.Error())
 	}
@@ -120,7 +127,7 @@ func main() {
 		fatal("environment: " + err.Error())
 	}
 
-	cmd := exec.Command("claude", args...)
+	cmd := exec.Command(program, args...)
 	cmd.Env = env
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()

@@ -38,6 +38,10 @@ New implementation proposals:
   procedure. A `think` star the user selects; a narrowing attaches read-only
   tools to that invocation only; a fresh Codex thread whose whole prompt is
   the header. Proposed (2026-10-06).
+- [47 — One sandbox path for Codex and Claude](47-one-provider-sandbox-proposal.md):
+  one deny-default profile, render and prepare for every model provider; the
+  Horizon reaches both through the same lines, and what differs is a pinned
+  descriptor. Includes the hand-run Claude experiment. Proposed (2026-10-23).
 
 ## The design in one paragraph
 

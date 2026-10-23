@@ -9,29 +9,87 @@ import (
 	"unicode"
 )
 
-// ResidentPaths are names allocated by the runtime for one invocation. They
-// are never supplied by the emitting target. The profile template itself is
-// pinned in the released Surface.
-type ResidentPaths struct {
-	Home, Scratch, Work, Auth, Cache string
-	ProxyPort                        int
+// Provider is the model CLI a darwin-provider-v1 resident runs (proposal 47).
+// Codex and Claude take one path: one profile, rendered by RenderResident
+// from the same Horizon rules. What differs between them is this, pinned in
+// the surface, so a change to it is a different surface.
+type Provider struct {
+	// Name selects what the runtime itself pins for the provider: the one
+	// version its profile is verified for and the config it writes.
+	Name string `json:"name"`
+	// Program is the model CLI. When it is the surface's own path, the
+	// resident is the CLI, run from where it was installed (Codex finds its
+	// package beside it). Otherwise the resident is a wrapper, run from its
+	// verified copy, that execs Program.
+	Program       string `json:"program"`
+	ProgramSHA256 string `json:"program_sha256"`
+	// Reads are files of the program's own package it reads at startup.
+	Reads []string `json:"reads,omitempty"`
+	// Auth is how the user's existing login is reached. "file": AuthPath,
+	// linked read-only into the private home. "keychain": the one
+	// generic-password item Keychain, served from outside the sandbox by
+	// Helper, whose copy inside the sandbox is the only `security` there.
+	Auth         string `json:"auth"`
+	AuthPath     string `json:"auth_path,omitempty"`
+	Keychain     string `json:"keychain,omitempty"`
+	Helper       string `json:"helper,omitempty"`
+	HelperSHA256 string `json:"helper_sha256,omitempty"`
 }
 
-// RenderResident renders the named app-server profile in the Horizon with
-// this invocation's private paths and its single proxy endpoint. The network
-// destinations beyond that endpoint are controlled by the registered proxy
-// allowlist, which is also carried by the Surface.
+// ResidentPaths are names allocated by the runtime for one invocation. They
+// are never supplied by the emitting target.
+type ResidentPaths struct {
+	Home, Scratch, Work, Cache string
+	Config                     string // the runtime-written config in Home: readable, never writable
+	Catalog                    string // a runtime-written file beside Home the provider reads, or ""
+	Auth                       string // file auth: the resolved credential file
+	Helper                     string // keychain auth: the verified copy of the helper, named security
+	Broker                     string // keychain auth: the broker's socket
+	ProxyPort                  int
+	BridgePort                 int // a loopback port the resident serves its own tools on, or 0
+}
+
+// ResidentProgram is what the runtime execs for a provider resident: the
+// model CLI from where it was installed when the resident is the CLI, and the
+// resident's verified copy (43 D5) when it is a wrapper.
+func ResidentProgram(h Horizon, floor string) string {
+	if p := h.Surface.Provider; p != nil && p.Program == h.Surface.Path {
+		return h.Surface.Path
+	}
+	return Verified(h, floor)
+}
+
+// RenderResident renders the darwin-provider-v1 profile for the Horizon's
+// provider with this invocation's private paths, its one proxy endpoint and,
+// for a provider that serves its own tools, its one bridge port. The network
+// destinations beyond the proxy are its registered allowlist, carried by the
+// Surface.
 //
-// It renders none of the Horizon's shared grants. The app-server is the one
-// program whose authority is its pinned profile template, not its Horizon:
-// its native reads would be observations with no record. That exclusion lasts
-// until the resident fields leave the surface (next/25, item 3) and the
-// app-server's Horizon is narrowed through the room (next/26).
+// The Horizon reaches every provider through the same rules: none of its
+// shared grants render but images, below. A provider's native reads would be
+// observations with no record. That exclusion lasts until the resident fields
+// leave the surface (next/25, item 3) and a provider's Horizon is narrowed
+// through the room (next/26).
 func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
-	if h.Surface == nil || h.Surface.ResidentProfile != "darwin-appserver-v1" || p.ProxyPort < 1 || p.ProxyPort > 65535 {
+	s := h.Surface
+	if s == nil || s.ResidentProfile != "darwin-provider-v1" || s.Provider == nil || p.ProxyPort < 1 || p.ProxyPort > 65535 || p.BridgePort < 0 || p.BridgePort > 65535 {
 		return "", fmt.Errorf("invalid resident profile or proxy")
 	}
-	for _, path := range []string{p.Home, p.Scratch, p.Work, p.Auth, p.Cache, h.Surface.Path} {
+	v := s.Provider
+	exe := ResidentProgram(h, floor)
+	required := []string{p.Home, p.Scratch, p.Work, p.Cache, p.Config, v.Program, exe, floor}
+	switch v.Auth {
+	case "file":
+		required = append(required, p.Auth)
+	case "keychain":
+		required = append(required, p.Helper, p.Broker)
+	default:
+		return "", fmt.Errorf("unknown provider auth %q", v.Auth)
+	}
+	if p.Catalog != "" {
+		required = append(required, p.Catalog)
+	}
+	for _, path := range append(required, v.Reads...) {
 		if !filepath.IsAbs(path) {
 			return "", fmt.Errorf("resident path is not absolute: %q", path)
 		}
@@ -39,8 +97,16 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
 	b.WriteString("(allow process-fork)\n")
-	fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", h.Surface.Path)
-	b.WriteString("(allow process-exec (literal \"/usr/lib/dyld\"))\n")
+	programs := []string{exe}
+	if v.Program != exe {
+		programs = append(programs, v.Program)
+	}
+	if v.Auth == "keychain" {
+		programs = append(programs, p.Helper)
+	}
+	for _, program := range append(programs, "/usr/lib/dyld") {
+		fmt.Fprintf(&b, "(allow process-exec (literal %q))\n", program)
+	}
 	b.WriteString("(allow file-read-metadata)\n(allow file-map-executable)\n")
 	b.WriteString("(allow system-socket (require-all (socket-domain AF_SYSTEM) (socket-protocol 2)))\n")
 	b.WriteString("(allow ipc-posix-shm* (ipc-posix-name \"com.apple.AppleDatabaseChanged\"))\n")
@@ -48,13 +114,22 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	for _, path := range []string{"/System", "/usr/lib", "/usr/share/zoneinfo", "/usr/share/icu", "/private/etc", filepath.Join(p.Cache, "mds"), "/private/var/db/mds", "/private/var/run/com.apple.security.cryptexd", "/private/var/db/dyld", "/private/var/db/timezone", p.Home, p.Scratch, p.Work} {
 		fmt.Fprintf(&b, "(allow file-read* (subpath %q))\n", path)
 	}
-	for _, path := range []string{"/", filepath.Dir(h.Surface.Path), h.Surface.Path, filepath.Join(filepath.Dir(filepath.Dir(h.Surface.Path)), "codex-package.json"), p.Auth, filepath.Join(filepath.Dir(p.Home), "models.json"), "/dev/null", "/dev/random", "/dev/urandom"} {
+	literal := append([]string{"/", filepath.Dir(v.Program)}, programs...)
+	literal = append(literal, v.Reads...)
+	if v.Auth == "file" {
+		literal = append(literal, p.Auth)
+	}
+	if p.Catalog != "" {
+		literal = append(literal, p.Catalog)
+	}
+	for _, path := range append(literal, "/dev/null", "/dev/random", "/dev/urandom") {
 		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", path)
 	}
 	// The one hole, chosen for the experience until Skyra has its own way to
 	// show an image (proposal 38): Codex's view_image may read image files,
 	// and only image files, under the Horizon's read grants. What it reads is
-	// not recorded in the lineage.
+	// not recorded in the lineage. Claude, with its native tools off, never
+	// asks; the rule is the same for both.
 	// Images pasted with a message are kept in the conversation's scratch,
 	// so it reads images there too.
 	grants := h.Authority.Read
@@ -74,14 +149,30 @@ func RenderResident(h Horizon, floor string, p ResidentPaths) (string, error) {
 	}
 	b.WriteString("(allow file-write* (literal \"/dev/null\"))\n")
 	fmt.Fprintf(&b, "(allow file-write-data (literal %q))\n", filepath.Join(p.Cache, "mds", "mds.lock"))
-	for _, path := range []string{filepath.Join(p.Home, "config.toml"), p.Auth} {
+	denied := []string{p.Config}
+	if v.Auth == "file" {
+		denied = append(denied, p.Auth)
+	}
+	for _, path := range denied {
 		fmt.Fprintf(&b, "(deny file-write* (literal %q))\n", path)
 	}
 	for _, service := range []string{"com.apple.trustd.agent", "com.apple.trustd", "com.apple.system.notification_center", "com.apple.SystemConfiguration.DNSConfiguration", "com.apple.bsd.dirhelper", "com.apple.system.opendirectoryd.membership", "com.apple.ocspd", "com.apple.system.opendirectoryd.libinfo", "com.apple.SystemConfiguration.configd", "com.apple.networkd", "com.apple.SecurityServer"} {
 		fmt.Fprintf(&b, "(allow mach-lookup (global-name %q))\n", service)
 	}
 	fmt.Fprintf(&b, "(allow network-outbound (remote ip %q))\n", fmt.Sprintf("localhost:%d", p.ProxyPort))
+	if p.BridgePort != 0 {
+		bridge := fmt.Sprintf("localhost:%d", p.BridgePort)
+		fmt.Fprintf(&b, "(allow network-bind network-inbound (local ip %q))\n", bridge)
+		fmt.Fprintf(&b, "(allow network-outbound (remote ip %q))\n", bridge)
+	}
+	if v.Auth == "keychain" {
+		fmt.Fprintf(&b, "(allow network-outbound (remote unix-socket (path-literal %q)))\n", p.Broker)
+	}
 	fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %q))\n", floor)
+	if exe != s.Path {
+		// After the floor's deny, so the copy the runtime checked can be read to run.
+		fmt.Fprintf(&b, "(allow file-read* (literal %q))\n", exe)
+	}
 	return b.String(), nil
 }
 
