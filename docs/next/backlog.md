@@ -34,6 +34,23 @@ pipe leads into it, and a pipe's reply end is the slot. The frame stack moves
 out of `Horizon` into frames; fan-out is a cactus stack. Lands before 2b, so
 the record version is bumped once.
 
+- **Rename while the table is being restructured.** "Horizon" names two
+  things today: the table of what an actor can reach, and the actor
+  (`system`) that owns it and answers its syscalls. Split them:
+  - the table is a **c-list** (KeyKOS, EROS, seL4's CNode): unforgeable
+    handles held by index that only narrow when passed on. Use this term in
+    code and design docs;
+  - its holder is a **protection domain**, created by `narrow()` and entered
+    on syscalls. Keep "Horizon" for it or rename it too; decide in 45.
+  - Explain it outside the docs as **an fd table for agents**: a process
+    touches only what it holds a descriptor for, and a child inherits a
+    subset. Accurate, since handles cross as real fds over Unix sockets, but
+    not the internal term, because it implies Unix semantics (dup, close,
+    numbering) the c-list does not have.
+  - Name the scale whenever "agent" is used (leaf, strand, session, the
+    system, the human), so statements like "the agent holds `remember()`"
+    say which one.
+
 Unblocks: 2b's Horizon and frame records, 2c's claim key, 2d's handle table,
 and 44's mailboxes as buffered pipes.
 
@@ -203,4 +220,5 @@ Not commitments.
   ideas, not the code.
 - **Fault routing within a turn:** Horizon faults go back to the agent,
   authority faults go to the human.
-- **A Horizon as the set of fds handed across the boundary.**
+- **A Horizon as the set of fds handed across the boundary.** Taken up in 1b
+  as the c-list rename.
