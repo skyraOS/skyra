@@ -34,6 +34,42 @@ pipe leads into it, and a pipe's reply end is the slot. The frame stack moves
 out of `Horizon` into frames; fan-out is a cactus stack. Lands before 2b, so
 the record version is bumped once.
 
+- **Rename while the table is being restructured.** "Horizon" names two
+  things today: the table of what an actor can reach, and the actor
+  (`system`) that owns it and answers its syscalls. Split them:
+  - the table is a **c-list** (KeyKOS, EROS, seL4's CNode): unforgeable
+    handles held by index that only narrow when passed on. Use this term in
+    code and design docs;
+  - its holder is a **protection domain**, created by `narrow()` and entered
+    on syscalls. Keep "Horizon" for it or rename it too; decide in 45.
+  - Explain it outside the docs as **an fd table for agents**: a process
+    touches only what it holds a descriptor for, and a child inherits a
+    subset. Accurate, since handles cross as real fds over Unix sockets, but
+    not the internal term, because it implies Unix semantics (dup, close,
+    numbering) the c-list does not have.
+  - Name the scale whenever "agent" is used (leaf, trace, session, the
+    system, the human), so statements like "the agent holds `remember()`"
+    say which one.
+- **The other renames, in the same pass.** Rename where a standard term
+  exists; keep Skyra's word where the idea is new. One pass means one record
+  version bump and one round of doc churn.
+  - **strand → trace.** `remember()` is already explained as a tracing JIT;
+    the recorded path is its trace.
+  - **slot → reply cap.** 45 defines the slot as a pipe's reply end: KeyKOS's
+    resume key, seL4's reply capability. A single-use capability in the c-list.
+  - **reach → retired.** It is the contents of the c-list.
+  - **room → retired.** Its facets are already `system`'s syscalls (32).
+  - **`extend-reach` → `export`.** An actor adds an entry point to itself; it
+    widens no one's reach.
+  - **Horizon fault → capability fault.**
+  - **One word for what runs:** actor. Leaf stays only for a frame that opened
+    no calls; target and surface go.
+  - **`try` → keep `delegate`.** "try" reads as exception handling
+    (ideas/interpreter-primitives).
+  - **Keep:** procedure, refinement, `remember`, stamp, custody.
+  - **Genome and dream stay as framing** in essays and the README story; the
+    API uses plainer names: the root grant, and `consolidate()` for `dream()`.
+
 Unblocks: 2b's Horizon and frame records, 2c's claim key, 2d's handle table,
 and 44's mailboxes as buffered pipes.
 
@@ -216,4 +252,5 @@ Not commitments.
   ideas, not the code.
 - **Fault routing within a turn:** Horizon faults go back to the agent,
   authority faults go to the human.
-- **A Horizon as the set of fds handed across the boundary.**
+- **A Horizon as the set of fds handed across the boundary.** Taken up in 1b
+  as the c-list rename.
