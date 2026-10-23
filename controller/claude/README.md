@@ -65,15 +65,30 @@ The broader `go test ./controller/...` check failed in the bounded check runner:
 Seatbelt application, private temporary-directory creation and descriptor access
 were denied; some runtime tests timed out. Its complete report is
 `ideas/checks/skyra-check-2797186446.json`. This is not an end-to-end pass.
-No live Claude inference or subscription-login test has been performed.
+
+`keychain` (proposal 47):
+- the only way the sandboxed CLI reaches its login. Inside the sandbox it is
+  the `security` on PATH: it answers `find-generic-password` and
+  `add-generic-password -U -X` (token refresh) for one item, and refuses every
+  other command, deletion included;
+- outside, the runtime runs it as a broker on a private socket. It serves only
+  the `Claude Code-credentials` item the surface pins, and exits with the
+  resident.
+
+2026-10-23: live turns through `skyra ask` under `darwin-provider-v1`, the
+profile shared with Codex, with subscription login through the broker. Egress
+went through the proxy (`api.anthropic.com` allowed, Datadog telemetry
+refused), the MCP bridge connected on its pinned port, and `read` calls
+completed through it.
 
 ## Still required before enabling in the app
 
-1. Externally enforced filesystem, executable and egress restrictions for the
-   claude-start resident (macOS Seatbelt profile), including verified access
-   to Claude Code's own login.
+1. ~~Externally enforced filesystem, executable and egress restrictions~~:
+   done by proposal 47. `darwin-provider-v1` is deny-default, execs only
+   claude-start's verified copy, the pinned CLI and the keychain helper, and
+   reaches the network only through the egress proxy.
 2. Cancellation confirmation, process recovery and recorded session mapping.
-3. Live isolation smoke test (provider selection is wired: the think-claude
+3. Live isolation smoke test in the app (provider selection is wired: the think-claude
    procedure routes through the claude adapter, selected by clicking an
    already-selected think constellation in the desktop UI).
 

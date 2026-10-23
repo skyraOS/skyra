@@ -206,3 +206,68 @@ func TestLoadNormalizesContracts(t *testing.T) {
 		t.Fatalf("other contracts: %v", got)
 	}
 }
+
+// A provider resident takes the one provider profile (proposal 47), with its
+// program and helper pinned by content: the old per-provider profiles and a
+// provider without its profile or proxy are refused.
+func TestProviderIsPinnedWithItsProfile(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("claude-start", "wrapper")
+	write("claude", "the cli")
+	write("claude-keychain", "helper")
+	write("proxy.py", "proxy")
+	write("contract.json", `{"input":{"type":"object"}}`)
+	keychain := func() *horizon.Provider {
+		return &horizon.Provider{Name: "claude", Program: "claude", Auth: "keychain", Keychain: "Claude Code-credentials", Helper: "claude-keychain"}
+	}
+	base := Entry{Path: "claude-start", Contract: "contract.json", Resident: true, ResidentProfile: "darwin-provider-v1", ProxyHosts: []string{"api.anthropic.com"}, ProxyPath: "proxy.py", Provider: keychain()}
+	load := func(e Entry) (horizon.Surface, error) {
+		t.Helper()
+		b, _ := json.Marshal(map[string]Entry{"claude.start": e})
+		write("registry.json", string(b))
+		reach, _, err := Load(filepath.Join(dir, "registry.json"))
+		return reach["claude.start"], err
+	}
+	s, err := load(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := s.Provider
+	if p == nil || p.Program != filepath.Join(dir, "claude") || p.ProgramSHA256 != record.Sum([]byte("the cli")) ||
+		p.Helper != filepath.Join(dir, "claude-keychain") || p.HelperSHA256 != record.Sum([]byte("helper")) {
+		t.Fatalf("provider not pinned: %+v", p)
+	}
+	// Codex is its own program: the pin is the surface's own hash.
+	codex := base
+	codex.Provider = &horizon.Provider{Name: "codex", Program: "claude-start", Auth: "file", AuthPath: "/Users/u/.codex/auth.json"}
+	if s, err = load(codex); err != nil || s.Provider.Program != s.Path || s.Provider.ProgramSHA256 != s.SHA256 {
+		t.Fatalf("codex: %+v %v", s.Provider, err)
+	}
+	for name, mutate := range map[string]func(e *Entry){
+		"old appserver profile": func(e *Entry) { e.ResidentProfile = "darwin-appserver-v1" },
+		"old claude profile":    func(e *Entry) { e.ResidentProfile = "darwin-claude-v1" },
+		"no provider":           func(e *Entry) { e.Provider = nil },
+		"no profile":            func(e *Entry) { e.ResidentProfile = "" },
+		"no proxy":              func(e *Entry) { e.ProxyHosts = nil },
+		"unknown name":          func(e *Entry) { e.Provider.Name = "gpt" },
+		"unknown auth":          func(e *Entry) { e.Provider.Auth = "env" },
+		"missing helper":        func(e *Entry) { e.Provider.Helper = "" },
+		"quoted service":        func(e *Entry) { e.Provider.Keychain = `x" -s "other` },
+		"keychain with a file":  func(e *Entry) { e.Provider.AuthPath = "/a" },
+		"relative read":         func(e *Entry) { e.Provider.Reads = []string{"pkg.json"} },
+		"not resident":          func(e *Entry) { e.Resident = false },
+	} {
+		e := base
+		e.Provider = keychain()
+		mutate(&e)
+		if _, err := load(e); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

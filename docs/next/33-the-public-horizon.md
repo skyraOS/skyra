@@ -1,7 +1,7 @@
 # The public Horizon: ingress from strangers, read-only
 
 Proposal: **Not in the proposal.** A direction for the website
-([`website.md`](../website.md)), replacing its "live mode": no model, nothing
+([`website/`](../../website/README.md)), replacing its "live mode": no model, nothing
 that writes.
 
 Date: 2026-10-02  

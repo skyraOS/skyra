@@ -121,6 +121,7 @@ type Surface struct {
 	ProxyHosts         []string           `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
 	ProxyPath          string             `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
 	ProxySHA256        string             `json:"proxy_sha256,omitempty"`
+	Provider           *Provider          `json:"provider,omitempty"` // the model CLI a darwin-provider-v1 resident runs (proposal 47)
 	// State names the actor's own directory under the floor (next/32,
 	// decision 24): the one part of .skyra/ its sandbox may read and write.
 	// An actor can only see its own state.

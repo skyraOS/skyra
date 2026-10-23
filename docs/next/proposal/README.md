@@ -38,6 +38,10 @@ New implementation proposals:
   procedure. A `think` star the user selects; a narrowing attaches read-only
   tools to that invocation only; a fresh Codex thread whose whole prompt is
   the header. Proposed (2026-10-06).
+- [47 — One sandbox path for Codex and Claude](47-one-provider-sandbox-proposal.md):
+  one deny-default profile, render and prepare for every model provider; the
+  Horizon reaches both through the same lines, and what differs is a pinned
+  descriptor. Includes the hand-run Claude experiment. Proposed (2026-10-23).
 
 ## The design in one paragraph
 
@@ -232,7 +236,6 @@ the per-document proposals say the same for their documents.
 | [32](../32-procedures.md) | [32-procedures-proposal](32-procedures-proposal.md) | new; supersedes G, F10, and 30's type and route machinery | **Built**: see H |
 | [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
 | [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
-| [README](../README.md) | [README-proposal](README-proposal.md) | the index | Applied in the working tree, uncommitted |
 
 Removed on 2026-09-30, with their per-document proposals, because they were
 retired or fully done: 14 (interpreted, not stated), 15 (adapters), 16

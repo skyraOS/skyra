@@ -181,7 +181,7 @@ compiled into a procedure without someone deciding to keep it.
 - The open problems with agent JIT compilation, and the planned fixes.
 - Procedures still run inside the same capability bounds, so a fallback to
   model inference is no less safe.
-- **One tool: `dispatch`** ([`one-tool.md`](../design/one-tool.md)). The model sees a
+- **One tool: `dispatch`** ([`one-tool.md`](../../ideas/one-tool.md)). The model sees a
   single provider-neutral tool and requests batches of calls through it; Skyra
   validates each call against its schema and the current Horizon, runs
   independent calls concurrently, and records every actual invocation. Goes

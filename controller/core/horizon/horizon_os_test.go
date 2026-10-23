@@ -276,9 +276,10 @@ func TestResidentReadsOnlyImagesUnderReadGrants(t *testing.T) {
 	os.MkdirAll(filepath.Join(scratch, "attachments"), 0o700)
 	os.WriteFile(filepath.Join(scratch, "attachments", "pasted.png"), []byte("png"), 0o600)
 	os.WriteFile(filepath.Join(scratch, "notes.md"), []byte("notes"), 0o600)
-	h := Horizon{Surface: &Surface{Path: self, ResidentProfile: "darwin-appserver-v1"},
+	h := Horizon{Surface: &Surface{Path: self, ResidentProfile: "darwin-provider-v1", Provider: &Provider{Name: "codex", Program: self, Auth: "file"}},
 		Authority: Authority{Read: []PathGrant{{Path: work, Scope: "subpath"}}, Scratch: scratch}}
-	paths := ResidentPaths{Home: tmp(), Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Cache: tmp(), ProxyPort: 1}
+	home := tmp()
+	paths := ResidentPaths{Home: home, Scratch: tmp(), Work: tmp(), Auth: filepath.Join(tmp(), "auth.json"), Config: filepath.Join(home, "config.toml"), Cache: tmp(), ProxyPort: 1}
 	profile, err := RenderResident(h, floor, paths)
 	if err != nil {
 		t.Fatal(err)

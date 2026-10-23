@@ -1,7 +1,6 @@
 # website
 
-The personal site from [`docs/website.md`](../docs/website.md), in its
-Blueprint theme. It is static: plain HTML and CSS, and the controller's replay
+The personal site, in its Blueprint theme. It is static: plain HTML and CSS, and the controller's replay
 compiled to WebAssembly so a visitor's browser checks a recorded run itself.
 
 | Page | |

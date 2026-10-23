@@ -158,9 +158,7 @@ mechanisms, not the intended final ownership boundaries. See
 The [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md) proposes generic
 contract-level reach, adapter-owned configuration and tool bindings, removal of
 agent/delegation fields from core, explicit resource ownership, and a tested
-legacy replay policy. The [change plan](design/HORIZON_DELEGATION_CHANGES.md) also
-calls for visible public procedure activity and consistent native-capability
-recording. Neither document changes runtime behavior by itself.
+legacy replay policy. It does not change runtime behavior by itself.
 
 The latest lifecycle discussion refines the resource design further and
 supersedes the earlier idea of attaching lifecycle policy metadata to contracts:
@@ -213,6 +211,6 @@ comparative task-success, containment and cost evaluation remains future work.
 | Unified model selection and remaining ideas | [proposal 39](next/proposal/39-unified-think-procedure-proposal.md) |
 | Accepted tree reconstruction | [tree reader](../controller/runtime/replay/tree.go), [reconciliation](../controller/runtime/replay/recover.go), [proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md) |
 | Bounded delegation | [DELEGATION.md](design/DELEGATION.md) |
-| Authority and adapter refactor | [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md), [change plan](design/HORIZON_DELEGATION_CHANGES.md) |
+| Authority and adapter refactor | [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md) |
 | Desktop behavior | [desktop guide](../desktop/README.md) |
 | Research and invariants | [research question](next/research-question.md), [grips and invariants](grips-and-invariants.md) |

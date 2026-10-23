@@ -13,12 +13,13 @@ import (
 	"strings"
 )
 
-// Arguments uses the user's existing Claude Code login. Native tools and
-// ambient MCP servers are disabled; Skyra tools must use a recorded bridge.
+// Arguments uses the user's existing Claude Code login and default profile
+// (~/.claude/settings.json). Native tools, hooks and ambient MCP servers stay
+// disabled; Skyra tools must use a recorded bridge.
 const DefaultModel = "claude-opus-5-5"
 
 func Arguments(session, prompt, systemPrompt string) []string {
-	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", DefaultModel, "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "", "--settings", `{"disableAllHooks":true}`}
+	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", DefaultModel, "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "user", "--settings", `{"disableAllHooks":true}`}
 	if systemPrompt != "" {
 		args = append(args, "--system-prompt", systemPrompt)
 	}

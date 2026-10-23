@@ -50,7 +50,7 @@ def package(version, app):
             shutil.copy2(path, dest)
     binaries = runtime/'build/controller'
     binaries.mkdir(parents=True)
-    names = 'skyra echo read find write roots agent user codexresident codexio webhost fake-codex clauderesident claude-start desktop-observe cua-bridge cua-windows ideas-host design-tools repo-host blender-tools interp'.split()
+    names = 'skyra echo read find write roots agent user codexresident codexio webhost fake-codex clauderesident claude-start claude-keychain desktop-observe cua-bridge cua-windows ideas-host design-tools repo-host blender-tools interp'.split()
     for name in names:
         source = ROOT/'build/controller'/name
         if not source.is_file():
