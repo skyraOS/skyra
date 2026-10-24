@@ -25,7 +25,7 @@ func TestRepositoryRecipeCanTestHostPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := snapshot(source, g.path); err != nil {
+	if err := snapshot(source, g.path, defaultLayout().Inputs); err != nil {
 		t.Fatal(err)
 	}
 	for name, dest := range map[string]*string{"GOROOT": &g.goRoot, "GOMODCACHE": &g.moduleCache} {

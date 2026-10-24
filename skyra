@@ -323,7 +323,9 @@ start_ideas_host() {
   REPO_SOCKET="$STATE/repo-$$.sock"
   local publishing=()
   [ "${SKYRA_ALLOW_PUSH:-0}" = 1 ] || publishing=(-deny-push)
-  "$BUILD/controller/repo-host" "${publishing[@]}" -repo "$ROOT" -sock "$REPO_SOCKET" -skyra "$BUILD/controller/skyra" \
+  local layout=()
+  [ -z "${SKYRA_CHECK_LAYOUT:-}" ] || layout=(-check-layout "$SKYRA_CHECK_LAYOUT")
+  "$BUILD/controller/repo-host" ${publishing[@]+"${publishing[@]}"} ${layout[@]+"${layout[@]}"} -repo "$ROOT" -sock "$REPO_SOCKET" -skyra "$BUILD/controller/skyra" \
     -go-root "$(go env GOROOT)" -module-cache "$(go env GOMODCACHE)" -python "$(command -v python3)" >"$STATE/repo-$$.log" 2>&1 &
   REPO_HOST_PID=$!
   local i

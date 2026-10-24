@@ -11,7 +11,7 @@ import (
 
 func TestChecksOnlyAcceptNamedRecipes(t *testing.T) {
 	for _, in := range []checkInput{{Action: "bash"}, {Action: "go.test", Package: "../../secret"}, {Action: "go.test", Package: "./controller/x;touch bad"}, {Action: "swift.build", Package: "./controller/x"}} {
-		if _, _, err := checkArgs(in); err == nil {
+		if _, _, err := checkArgs(in, defaultLayout()); err == nil {
 			t.Fatalf("accepted %+v", in)
 		}
 	}
@@ -28,14 +28,14 @@ func TestSnapshotExcludesStateAndRefusesLinks(t *testing.T) {
 	os.MkdirAll(filepath.Join(source, "controller/.skyra"), 0755)
 	os.WriteFile(filepath.Join(source, "controller/.skyra/secret"), []byte("private"), 0600)
 	os.WriteFile(filepath.Join(source, "controller/main.go"), []byte("package main"), 0644)
-	if err := snapshot(source, dest); err != nil {
+	if err := snapshot(source, dest, defaultLayout().Inputs); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "controller/.skyra/secret")); !os.IsNotExist(err) {
 		t.Fatal("state copied")
 	}
 	os.Symlink("/etc/passwd", filepath.Join(source, "controller/link"))
-	if err := snapshot(source, t.TempDir()); err == nil {
+	if err := snapshot(source, t.TempDir(), defaultLayout().Inputs); err == nil {
 		t.Fatal("symlink accepted")
 	}
 }

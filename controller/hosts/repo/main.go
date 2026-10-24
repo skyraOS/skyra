@@ -22,6 +22,7 @@ import (
 type repository struct {
 	path, git, goRoot, moduleCache, python, session, workspace string
 	denyPush                                                   bool
+	layout                                                     *checkLayout // what repo.check builds; nil is this repository's own
 }
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 	moduleCache := flag.String("module-cache", "", "read-only dependency cache")
 	python := flag.String("python", "", "operator-selected Python binary")
 	denyPush := flag.Bool("deny-push", false, "disable publishing through Git push")
+	layoutFile := flag.String("check-layout", "", "operator-provisioned repo.check layout (JSON); default is this repository's")
 	flag.Parse()
 	if *repo == "" || *sock == "" || *skyra == "" {
 		fmt.Fprintln(os.Stderr, "usage: repohost -repo DIR -sock PATH -skyra BIN")
@@ -46,7 +48,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "repohost:", err)
 		os.Exit(1)
 	}
-	g := repository{denyPush: *denyPush, path: root, git: "/usr/bin/git", goRoot: *goRoot, moduleCache: *moduleCache, python: *python}
+	layout, err := loadLayout(*layoutFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "repohost:", err)
+		os.Exit(1)
+	}
+	g := repository{denyPush: *denyPush, path: root, git: "/usr/bin/git", goRoot: *goRoot, moduleCache: *moduleCache, python: *python, layout: &layout}
 	if g.python != "" {
 		g.python, err = filepath.EvalSymlinks(g.python)
 		if err != nil {

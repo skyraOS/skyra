@@ -39,7 +39,7 @@ type checkResult struct {
 	Hint       string         `json:"hint,omitempty"`
 }
 
-func checkArgs(in checkInput) (string, []string, error) {
+func checkArgs(in checkInput, l checkLayout) (string, []string, error) {
 	if in.Package != "" && in.Action != "go.test" && in.Action != "go.build" && in.Action != "go.vet" {
 		return "", nil, fmt.Errorf("package is only available for Go actions")
 	}
@@ -60,12 +60,26 @@ func checkArgs(in checkInput) (string, []string, error) {
 	if in.Fix && in.Action != "go.format" {
 		return "", nil, fmt.Errorf("fix is available only on go.format")
 	}
-	p := in.Package
-	if p == "" {
-		p = "./controller/..."
+	unconfigured := func(kind string) error {
+		return fmt.Errorf("%s actions are not configured for this workspace", kind)
 	}
-	if !strings.HasPrefix(p, "./controller/") || strings.Contains(strings.TrimSuffix(p, "/..."), "..") || strings.ContainsAny(p, "\\\x00 \t\n:;") {
-		return "", nil, fmt.Errorf("package must be a repository-relative controller package or ./controller/...")
+	p := ""
+	if strings.HasPrefix(in.Action, "go.") {
+		if l.Go == nil {
+			return "", nil, unconfigured("Go")
+		}
+		if p = in.Package; p == "" {
+			p = l.Go.goDefault()
+		}
+		if !l.Go.goAllows(p) {
+			return "", nil, fmt.Errorf("package must be %s or a repository-relative package under it", l.Go.goDefault())
+		}
+	}
+	if strings.HasPrefix(in.Action, "swift.") && l.Swift == nil {
+		return "", nil, unconfigured("Swift")
+	}
+	if in.Action == "python.test" && l.Python == nil {
+		return "", nil, unconfigured("Python")
 	}
 	switch in.Action {
 	case "go.test":
@@ -87,10 +101,10 @@ func checkArgs(in checkInput) (string, []string, error) {
 		if in.Fix {
 			args = append(args, "-w")
 		}
-		return "gofmt", append(args, "controller"), nil
+		return "gofmt", append(args, l.Go.Root), nil
 	case "swift.test":
 		platform := "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer"
-		args := []string{"test", "--disable-sandbox", "--enable-swift-testing", "--package-path", "desktop",
+		args := []string{"test", "--disable-sandbox", "--enable-swift-testing", "--package-path", l.Swift.PackagePath,
 			"-Xswiftc", "-F", "-Xswiftc", platform + "/Library/Frameworks",
 			"-Xswiftc", "-I", "-Xswiftc", platform + "/usr/lib",
 			"-Xlinker", "-L", "-Xlinker", platform + "/usr/lib",
@@ -101,9 +115,9 @@ func checkArgs(in checkInput) (string, []string, error) {
 		}
 		return "swift", args, nil
 	case "swift.build":
-		return "swift", []string{"build", "--disable-sandbox", "--package-path", "desktop", "-c", "release"}, nil
+		return "swift", []string{"build", "--disable-sandbox", "--package-path", l.Swift.PackagePath, "-c", "release"}, nil
 	case "python.test":
-		return "python", []string{"-m", "unittest", "discover", "-s", "controller/blender", "-p", "test_*.py"}, nil
+		return "python", []string{"-m", "unittest", "discover", "-s", l.Python.Start, "-p", l.Python.Pattern}, nil
 	default:
 		return "", nil, fmt.Errorf("unknown action; use go.test, go.build, go.vet, go.format, swift.test, swift.build or python.test")
 	}
@@ -111,14 +125,14 @@ func checkArgs(in checkInput) (string, []string, error) {
 
 // Copy only build inputs, without following links or importing scratch code,
 // repository metadata, caches or existing executable output.
-func snapshot(source, dest string) error {
+func snapshot(source, dest string, inputs []string) error {
 	root, err := os.OpenRoot(source)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
 	var total int64
-	for _, name := range []string{"go.mod", "go.sum", "controller", "desktop", "docs", "skyra"} {
+	for _, name := range inputs {
 		start := filepath.Join(source, name)
 		if _, err := os.Lstat(start); os.IsNotExist(err) {
 			continue
@@ -127,7 +141,9 @@ func snapshot(source, dest string) error {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() && (d.Name() == ".git" || d.Name() == ".skyra" || d.Name() == ".build" || d.Name() == ".swiftpm" || d.Name() == "__pycache__" || d.Name() == "node_modules" || d.Name() == ".venv" || d.Name() == "bin" || d.Name() == "build") {
+			// An input the operator named is copied even if its own name is
+			// one skipped below (a whole tree "." whose directory is "build").
+			if d.IsDir() && path != start && (d.Name() == ".git" || d.Name() == ".skyra" || d.Name() == ".build" || d.Name() == ".swiftpm" || d.Name() == "__pycache__" || d.Name() == "node_modules" || d.Name() == ".venv" || d.Name() == "bin" || d.Name() == "build") {
 				return filepath.SkipDir
 			}
 			if d.Type()&os.ModeSymlink != 0 {
@@ -220,12 +236,18 @@ func (g repository) check(in checkInput) checkResult {
 		}
 		g = selected
 	}
+	layout := g.checkLayout()
 	changedPackages := []string{}
 	if in.Package == "changed" {
 		if in.Action != "go.test" && in.Action != "go.build" && in.Action != "go.vet" {
 			r.Error = "bad_package: changed is for Go test/build/vet"
 			return r
 		}
+		if layout.Go == nil {
+			r.Error = "invalid_request: Go actions are not configured for this workspace"
+			return r
+		}
+		all := layout.Go.goDefault()
 		files, e := g.changedFiles("")
 		if e != nil {
 			r.Error = e.Error()
@@ -234,16 +256,16 @@ func (g repository) check(in checkInput) checkResult {
 		set := map[string]bool{}
 		for _, name := range files {
 			if name == "go.mod" || name == "go.sum" {
-				set["./controller/..."] = true
+				set[all] = true
 			}
-			if strings.HasPrefix(name, "controller/") && strings.HasSuffix(name, ".go") {
+			if pkg := layout.Go.goPackageOf(name); pkg != "" {
 				if st, e := os.Stat(filepath.Join(g.path, filepath.Dir(name))); e == nil && st.IsDir() {
-					set["./"+filepath.ToSlash(filepath.Dir(name))] = true
+					set[pkg] = true
 				}
 			}
 		}
-		if set["./controller/..."] {
-			changedPackages = []string{"./controller/..."}
+		if set[all] {
+			changedPackages = []string{all}
 		} else {
 			for p := range set {
 				changedPackages = append(changedPackages, p)
@@ -252,7 +274,7 @@ func (g repository) check(in checkInput) checkResult {
 		}
 		if len(changedPackages) == 0 {
 			r.ExitCode = 0
-			r.Output = "No changed Go packages under controller/."
+			r.Output = "No changed Go packages under " + all + "."
 			return r
 		}
 		if len(changedPackages) > 64 {
@@ -261,7 +283,7 @@ func (g repository) check(in checkInput) checkResult {
 		}
 		in.Package = changedPackages[0]
 	}
-	tool, args, err := checkArgs(in)
+	tool, args, err := checkArgs(in, layout)
 	if err != nil {
 		r.Error = "invalid_request: " + err.Error()
 		return r
@@ -292,7 +314,7 @@ func (g repository) check(in checkInput) checkResult {
 	defer os.RemoveAll(job)
 	workspace := filepath.Join(job, "workspace")
 	os.MkdirAll(workspace, 0700)
-	if err = g.snapshot(workspace); err != nil {
+	if err = g.snapshot(workspace, layout.Inputs); err != nil {
 		r.Error = "snapshot_failed: " + err.Error()
 		return r
 	}
@@ -316,7 +338,7 @@ func (g repository) check(in checkInput) checkResult {
 	}
 	originals := map[string]string{}
 	if in.Fix {
-		err = filepath.WalkDir(filepath.Join(workspace, "controller"), func(p string, d fs.DirEntry, e error) error {
+		err = filepath.WalkDir(filepath.Join(workspace, layout.Go.Root), func(p string, d fs.DirEntry, e error) error {
 			if e != nil {
 				return e
 			}
@@ -434,19 +456,26 @@ func (g repository) check(in checkInput) checkResult {
 		syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 		lock.Close()
 	}
+	reports := layout.reportsDir()
 	if r.Truncated {
 		r.Hint = "Output reached 64 KiB; narrow package/run and read report_path. Failure details may be incomplete."
+		if reports == "" {
+			r.Hint = "Output reached 64 KiB; narrow package/run. Failure details may be incomplete."
+		}
+	}
+	if reports == "" {
+		return r // this workspace publishes no reports, so checks leave its tree untouched
 	}
 	// Reports alone are published; generated executables stay in the disposable job.
 	name := filepath.Base(job) + ".json"
-	rel := filepath.Join("ideas", "checks", name)
+	rel := filepath.Join(reports, name)
 	root, e := os.OpenRoot(g.path)
 	if e != nil {
 		r.Error += "; report_failed: " + e.Error()
 		return r
 	}
 	defer root.Close()
-	if e = root.MkdirAll("ideas/checks", 0755); e == nil {
+	if e = root.MkdirAll(reports, 0755); e == nil {
 		var f *os.File
 		f, e = root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0644)
 		if e == nil {
@@ -464,14 +493,23 @@ func (g repository) check(in checkInput) checkResult {
 
 // Serialize the source copy with repo.write and Git, then release the lock
 // before running tools in the independent snapshot.
-func (g repository) snapshot(dest string) error {
+func (g repository) snapshot(dest string, inputs []string) error {
 	lock, err := g.lock()
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	return snapshot(g.path, dest)
+	return snapshot(g.path, dest, inputs)
+}
+
+// checkLayout is the layout the operator provisioned, or this repository's
+// own when none was (a repository value built without one, as tests do).
+func (g repository) checkLayout() checkLayout {
+	if g.layout == nil {
+		return defaultLayout()
+	}
+	return *g.layout
 }
 
 type checkFailure struct {

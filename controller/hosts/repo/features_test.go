@@ -93,12 +93,12 @@ func TestReadonlyGitQueriesAndPublishingPolicy(t *testing.T) {
 func TestGoFailureLocationsAndRecipeOptions(t *testing.T) {
 	run := "^TestOne$"
 	count := 2
-	_, args, e := checkArgs(checkInput{Action: "go.test", Package: "./controller/x", Run: run, Count: &count})
+	_, args, e := checkArgs(checkInput{Action: "go.test", Package: "./controller/x", Run: run, Count: &count}, defaultLayout())
 	if e != nil || !strings.Contains(strings.Join(args, " "), "-count=2 -timeout=120s -run ^TestOne$") {
 		t.Fatal(args, e)
 	}
 	for _, in := range []checkInput{{Action: "go.test", Run: "["}, {Action: "go.build", Run: "x"}, {Action: "go.test", Fix: true}} {
-		if _, _, e := checkArgs(in); e == nil {
+		if _, _, e := checkArgs(in, defaultLayout()); e == nil {
 			t.Fatal(in)
 		}
 	}

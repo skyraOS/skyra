@@ -105,11 +105,39 @@ machine-readable queries. Output caps at 64 KiB; Git has a two-minute timeout.
 ## Checks
 
 Fixed recipes: `go.test`, `go.build`, `go.vet`, `go.format`, `swift.test`,
-`swift.build`, and `python.test` (Blender unit tests). Go defaults to
-`./controller/...`; explicit packages stay under `controller/`, and
-`package:"changed"` selects packages containing changed Go files. `run` compiles
-as a regex and is passed as one Go `-run` or Swift `--filter` argument. Go
-`count` is 1..20, default 1 to disable cached test results.
+`swift.build`, and `python.test`. Where each recipe looks comes from the
+workspace's layout (below): by default Go defaults to `./controller/...` and
+explicit packages stay under `controller/`, Swift builds `desktop`, and
+`python.test` discovers the Blender unit tests. `package:"changed"` selects
+packages containing changed Go files. `run` compiles as a regex and is passed as
+one Go `-run` or Swift `--filter` argument. Go `count` is 1..20, default 1 to
+disable cached test results.
+
+### The layout is provisioned, not chosen
+
+The operator injects the layout when the host starts, with
+`-check-layout FILE` (the launcher passes `SKYRA_CHECK_LAYOUT`). The model only
+picks a recipe and its fixed fields; it never names what to snapshot, where
+packages live or which command runs. Without a file the layout is this
+repository's own, so nothing changes. A whole Go module, as a benchmark
+repository needs:
+
+```json
+{"inputs": ["."], "go": {"root": "."}, "reports": ""}
+```
+
+| Field | Means | Default |
+|---|---|---|
+| `inputs` | repository-relative paths copied into the snapshot; `["."]` is the whole tree, minus Git metadata, `.skyra` and caches | `go.mod`, `go.sum`, `controller`, `desktop`, `docs`, `skyra` |
+| `go.root` | packages must lie under it; `"."` is the whole module | `controller` |
+| `swift.package_path` | the package Swift builds and tests | `desktop` |
+| `python.start`, `python.pattern` | unittest discovery directory and file pattern | `controller/blender`, `test_*.py` |
+| `reports` | where reports are published; `""` publishes none, so checks leave the tree untouched | `ideas/checks` |
+
+A recipe whose section is absent is refused. Paths must be clean, relative,
+inside the repository and free of `.git` and `.skyra`; inputs may not overlap;
+unknown fields are refused, so a misspelled layout fails at startup rather than
+silently checking the wrong tree.
 
 Checks snapshot at most 128 MiB of build inputs under the repository lock, then
 release it before running. The worker uses macOS Seatbelt, a constructed environment,
@@ -126,8 +154,8 @@ edit or I/O failure can still prevent application; returned `formatted` names th
 files actually changed. Jobs have a five-minute deadline and process-group timeout
 termination. Results include actual exit status, output capped at 64 KiB,
 structured Go test/compiler and Swift XCTest/compiler failures, elapsed time,
-truncation hints, and JSON `report_path` under `ideas/checks/` in the selected
-checkout. Swift Testing failures without XCTest report entries retain raw output.
+truncation hints, and JSON `report_path` under the layout's report directory
+(`ideas/checks/` by default) in the selected checkout. Swift Testing failures without XCTest report entries retain raw output.
 Build outputs are discarded; checks do not install or launch the application.
 Dependencies must already be cached.
 
