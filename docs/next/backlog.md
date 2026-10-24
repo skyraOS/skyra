@@ -16,12 +16,13 @@ each step unblocks.
 
 [`HORIZON-CONCERNS-SPEC.md`](../design/HORIZON-CONCERNS-SPEC.md). Remove `Agent`,
 `WorkTools` and `Delegated` from `Horizon` and `Grant` in
-`core/horizon/horizon.go`; move model configuration and tool catalogs into
+`controller/core/horizon/horizon.go`; move model configuration and tool catalogs into
 adapter contracts; delegation stays the interpreter's `delegate` procedure.
 
-- Move the Claude resident profile (`RenderClaudeResident`) from
-  `(allow default)` to `(deny default)`, like the Codex one: today it opens
-  doors no human granted (46, review Q3).
+- ~~Move the Claude resident profile (`RenderClaudeResident`) from
+  `(allow default)` to `(deny default)`, like the Codex one.~~ Done
+  2026-10-23 (`331a0cf`, [proposal 47](proposal/47-one-provider-sandbox-proposal.md)):
+  both providers run under one deny-default profile, `darwin-provider-v1`.
 
 Unblocks: the rewrite. The new kernel never has to carry agent fields, and the
 kernel stops knowing about agents.
