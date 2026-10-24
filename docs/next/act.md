@@ -1,153 +1,154 @@
-# Act: the tree that implements
+# Act: provision, then the tree
 
-Proposal: **In the proposal.** Narrowing per node and authority as a climbing fault are proposed in [proposal/act-proposal](proposal/act-proposal.md).
-
-Date: 2026-09-28  
-Status: proposed, not built. Pairs with [think](think.md). Builds on
-[21 — observation passing](21-observation-passing.md) and the interrupt
-transition drafted in the agenda.
+Date: 2026-09-28, rewritten 2026-10-24  
+Status: proposed, not built. Part of [an agent](agent.md):
+[think](think.md) proposes, provision builds, act runs. Builds on
+[delegation](../design/DELEGATION.md), [24 — the room](24-the-room.md) and
+[21 — observation passing](21-observation-passing.md).
 
 ## What it is
 
-Act implements one approved spec version. The user invokes it with spec vN,
-contract vN, and the observations the spec cites. Act is **write-only**: it
-sees what the user passed it and what its own children return, and nothing
-else from the world.
+Act takes one proposal and makes it run. It is two parts, and only the
+second involves a model:
 
 ```text
-user
- └─ act: contract vN                      the root of the implementation
-     ├─ act: module A                     groups functions, invokes ≤ k continuations
-     │   ├─ act: A.parse    → write leaf  one LLM invocation per function
-     │   └─ act: A.render   → write leaf
-     └─ act: B.handle       → write leaf
+user ──proposal──▶ provision          a procedure: check every edge, narrow, delegate
+                      │
+                      └─▶ root        the tree starts; each node is a delegation
+                           ├─ node A  its own Horizon, its own goal, its own model
+                           │   └─ …
+                           └─ node B
 ```
 
-## Write-only
+The system provisions; the model works inside what was provisioned. No model
+chooses its own Horizon.
 
-Act's Horizon reaches write leaves and the continuations the contract
-proposes, and no read leaf. Everything act needs was read in think and cited
-in the spec, so it is already in the frame. If act needs something the spec
-does not cite, it cannot go and look: it raises an interrupt.
+## Provision
 
-That split is a security property. The node that reads untrusted content
-(think) cannot write, and the node that writes (act) sees only what the user
-approved. A prompt injection in a file think read reaches act only if the
-spec cites it, and the user saw the spec.
+Provision is an interpreter procedure with no model. Its input contract is
+the shape of a proposal ([an agent](agent.md#a-proposal-is-an-observation));
+its Horizon is the human's grant. It:
 
-## One LLM invocation per function
+1. **Checks every edge.** The root must fit provision's Horizon, and every
+   child must fit its parent's. A node that names anything its parent does
+   not hold is a horizon fault, of the whole proposal, before anything runs.
+2. **Builds the tree.** For each node, a narrowing to its Horizon and a
+   delegation binding that Horizon to its actor and goal. Nothing in the tree
+   runs yet.
+3. **Starts the root.**
 
-Each function in the contract is implemented by **one** continuation
-invocation. It receives that function's contract and the observations cited
-for it, and nothing about its siblings.
+Provision is a pure function of the proposal and its own Horizon, so replay
+derives the same tree again. It decides nothing the proposal did not say.
 
-Under [21](21-observation-passing.md) a continuation cannot return code it
-wrote itself. It authors the implementation on the way down, as the operand of
-a write leaf; the write leaf performs the write and authors the observation of
-what was written. The continuation passes that observation up unchanged.
+Today `system.narrow` returns a reference into the caller's own reach, so
+references are flat. Provision needs to narrow into a reference it is
+building, with each child checked against its parent: the same check
+`machine.Narrow` makes at runtime, made at provision.
 
-## The tool limit forces composition
+## The tree
 
-Each continuation may invoke at most **k** continuations. `reply` does not
-count, and neither do leaves: only continuations do.
+Each node is a delegation, as [DELEGATION](../design/DELEGATION.md) defines
+it: a fresh child whose only task context is its goal and the observations
+the proposal cites for it. A node's Horizon is the one provision built for its
+position. Its model may do anything that Horizon allows, in any order: the
+proposal fixes the Horizons, not the control flow.
 
-The limit is the point. A contract with more functions than k cannot be
-implemented by one node calling everything. It has to be grouped into
-modules, each a node with at most k children, so the work takes the shape of
-a tree. Composition comes from grown structure, not from one agent holding a
-long list of tools. Think proposes that tree in the contract; act grows it,
-node by node, each under a narrower Horizon.
+A node may narrow further inside its own Horizon, which needs no approval
+because narrowing only drops. It may not start a child the proposal did not
+name ([open](#open-design-choices)).
 
-This is also what makes self-extension happen: a node that needs more than k
-continuations must create structure, and every node it creates runs under a
-Horizon narrowed from its own, with no approval.
+## The leaf budget
 
-## The Horizon is derived from the contract
+The old act limited each node to k continuation invocations, to force
+composition. That makes a long, flat pipeline impossible: one root over n
+continuations is a good shape, and a limit on continuations forbids it.
 
-Act's Horizon comes from the contract it was passed:
+The limit moves to **leaves**: the invocations that touch the world.
+Continuations are structure, and structure is what this should encourage;
+syscalls touch only the Horizon. A node that can touch the world only k times
+has to be about one small thing, so composition stays tight without making
+any pipeline impossible.
 
-- **writes:** only the places the contract names.
-- **reach:** only the continuations the contract's tree proposes, at most k
-  per node.
-- **narrowing:** each child's Horizon covers its own subtree, checked by
-  `machine.Narrow` like any other edge.
+- **Counted per frame, across every round.** A continuation resumes once per
+  round; a budget per round would let a node loop forever, one leaf a round.
+  Gather already walks a frame's rounds, so the count is cheap.
+- **Set in the proposal, capped by the parent.** A child's budget cannot
+  exceed what its parent may still spend.
+- **Possibly by kind.** Reversible leaves (a read, a write to scratch) are
+  cheaper than irreversible ones ([interpreter primitives](../../ideas/interpreter-primitives.md#undo-reversibility-as-a-derived-fact)).
+  Whether the budget counts them separately is open.
 
-Passing the spec is how the user approves the boundary: they approve a plan
-they can read, and the Horizon follows from it.
+## Exits
 
-## Interrupts
+A node never improvises past its goal. When the goal does not decide
+something, it exits to its parent, typed:
 
-Act never improvises past the spec. When the spec does not decide something,
-act raises an interrupt, and the interrupt's type decides what happens next.
-
-| Interrupt | Means | Resolved by |
+| Exit | Means | Resolved by |
 |---|---|---|
-| **clarification** | the spec is ambiguous | the user answers in think; spec vN+1; act runs again |
-| **missing observation** | act needs something the spec does not cite | think reads it; spec vN+1 cites it |
-| **contract misfit** | the function cannot be implemented to its interface | think revises the contract; vN+1 |
-| **authority** | act needs to write outside what the contract grants | the user decides; vN+1 grants it, or not |
+| **ask** | the goal is ambiguous | the parent; past the root, think and the user |
+| **missing observation** | it needs something its Horizon cannot read | the parent; past the root, think, which reads it and cites it in vN+1 |
+| **give up** | it cannot do this within its Horizon | the parent, with the node's strand as the record of what was tried; the node adds only its diagnosis |
+| **authority** | it needs more than its position holds | the parent, from its own Horizon; otherwise it climbs |
 
-Every interrupt ends in a new spec and contract version, never in context
-passed to act on the side. The system has one truth of state, and an
-interrupt changes it through think.
+**Authority depends on position.** Nothing widens a Horizon, so a parent
+grants more by ending the child and starting a new one under a wider
+narrowing of its own Horizon, citing the old child's strand so the work goes
+on. A parent that does not hold what is asked exits upward itself. Past the
+root, provision decides nothing, so the request becomes a new proposal
+through [think](think.md#exits-come-back-here).
 
-The interrupt transition is drafted in the agenda but not built:
-`core/machine` has no interrupt today.
+The old act raised interrupts through a new transition in `core/machine`.
+Exits need none: each is a return, a fault or a parked frame, so each is
+expressible as kernel guarantees plus commit.
 
 ## What act returns
 
-Each function's node returns the observation its write leaf authored. Module
-nodes pass their children's observations up, selected and ordered but not
-rewritten. The root returns the set to the user, and every one names the
-leaf that wrote it and the spec version it implemented.
+Each node returns the observations its leaves authored, as
+[21](21-observation-passing.md) requires; parents pass them up, selected and
+ordered but not rewritten. The root returns them to the user, each naming
+the leaf that wrote it and the proposal version it served.
 
 ## Cases the design must decide
 
-1. **Act invokes a read leaf:** a horizon fault. No read is in reach.
-2. **A node invokes more than k continuations:** refused at intake, before
-   the child runs.
-3. **A function node returns code it wrote:** refused under 21. Only the write
-   leaf's observation can go up.
-4. **Act writes outside the contract's paths:** denied by the rendered
-   sandbox; asking for it is an authority interrupt.
-5. **A node needs an uncited file:** a missing-observation interrupt, not a
-   read.
+1. **A node invokes something outside its Horizon:** a horizon fault, which
+   the node may follow with an authority exit.
+2. **A node spends more leaves than its budget:** refused at intake, before
+   the leaf runs.
+3. **A proposal edge where the child holds more than its parent:** refused at
+   provision, before the root starts.
+4. **A goal that tells a node to reach further:** the Horizon refuses it. A
+   goal is never authority.
+5. **A node returns code it wrote itself:** refused under 21. Only a leaf's
+   observation goes up.
 
 ## Open design choices
 
-- **Verification.** Can act invoke a check leaf (build, type check, tests)
-  and receive its result? The result is a child's observation, which 21
-  allows, but the check reads the world, which write-only forbids. One answer:
-  checks are leaves act may invoke, whose output is only pass or fail against
-  the contract.
-- **Resume or re-run.** The agenda's interrupt keeps the original slot open
-  and resumes. Here the answer changes the spec, which suggests re-running
-  act. Which one, and at what granularity?
-- **Re-running only what changed.** A function whose contract and cited
-  observations did not change between versions has the same inputs, so its
-  implementation could be reused, keyed by that hash (grips I, compiled
-  cognition).
-- **Where k is set:** globally, per conversation, or per node in the
-  contract.
-- **Files a function modifies.** Assumed: think cites the current contents,
-  and act never reads them itself.
+- **Re-delegation inside a declared tree.** Is a parent starting a wider
+  replacement child allowed, or must every change to the tree's shape be a
+  new proposal?
+- **Reads in the tree.** The old act was write-only, so a node saw only what
+  the user approved. A node may now hold reads if the proposal gives them,
+  which makes verification possible (a build, a test) and lets untrusted
+  content into a node with effects. Is the default no reads but check leaves?
+- **A node's return contract.** Delegation today returns observations, with
+  no completion test from the caller. Does a proposal node name what it must
+  return?
+- **Where exits live:** interpreter syscalls, typed returns, or a park.
 
 ## What this needs in the controller
 
+- Provision as an interpreter procedure, with its input contract.
+- Narrowing into a reference under construction, checked edge by edge.
+- The leaf budget, counted at intake across a frame's rounds.
+- Typed exits in the interpreter.
 - Observation IDs, the per-frame register and the return check
   ([21](21-observation-passing.md)).
-- A write leaf, and the compaction leaf ([think](think.md)).
-- A contract format with function signatures and the tree.
-- The tool limit, counted at intake.
-- The interrupt transition in `core/machine`, with typed interrupts.
-- A Horizon derived from a contract.
 
 ## Done when
 
-- Act runs under a Horizon derived from the contract, with no read in reach.
-- Each function is one continuation invocation, and no node invokes more than
-  k continuations.
-- Every returned observation was authored by a write leaf.
-- Each interrupt type reaches the user, and answering it produces a new spec
-  version that act runs against.
-- Replay re-derives the tree, every limit check and every interrupt.
+- A proposal whose edges all narrow builds a tree that matches it, and one
+  that widens anywhere is refused before any model runs.
+- No node exceeds its leaf budget, counted across its rounds.
+- Each exit reaches the right holder, and one past the root ends in a new
+  proposal.
+- Replay re-derives provision, the tree, every budget check and every exit.

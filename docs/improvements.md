@@ -590,8 +590,8 @@ before choosing; the second works with any provider.
   and probably needs a human to promote it.
 - **Tools that call tools.** A leaf reaches nothing. Letting an agent register
   a continuation (a tool with reach) is the next step; its reach is narrowed
-  from the creator's like any child, and act's limit of k continuations per
-  node ([next/act.md](next/act.md)) applies.
+  from the creator's like any child, and act's leaf budget per frame
+  ([next/act.md](next/act.md#the-leaf-budget)) applies.
 - **Naming.** Can a registered name shadow one already in reach? It should
   not; refuse it, the way the registry refuses reserved names today.
 

@@ -1,6 +1,6 @@
 # Act: proposal
 
-Status (2026-09-30): **Not applied.** `act.md` is uncommitted work in the tree. `system.narrow` is built (`8ba6f4c`); the continuation count needs C2 (built).
+Status (2026-10-24): **Superseded.** `act.md` was rewritten with [an agent](../agent.md): the k-continuation limit became a leaf budget, narrowing moved to provision, and authority became an exit that climbs, as this proposal argued. Kept for history. Earlier status (2026-09-30): not applied; `system.narrow` is built (`8ba6f4c`).
 
 Proposes changes to [act](../act.md). Ids refer to the [list](README.md).
 

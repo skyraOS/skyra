@@ -27,10 +27,13 @@ became) or **not in the proposal**.
    in custody. Built, except the per-thread narrowing and the facets.
 5. **[`23-desktop-app.md`](23-desktop-app.md)**: `Skyra.app`, the user's entry
    point. Cuts 1 and 2 built; cut 3 waits on faults that climb to the human.
-6. **[`think.md`](think.md)** and **[`act.md`](act.md)**: the think/act split.
-   Think is a read-only conversation whose compaction writes a spec and its
-   contract proposal; act is write-only, one function per LLM invocation, under
-   a limit of k continuations per node. Proposed.
+6. **[`agent.md`](agent.md)**, **[`think.md`](think.md)** and
+   **[`act.md`](act.md)**: what an agent is. Think reads and returns a
+   proposal, the arguments to provision's contract; provision, a procedure
+   with no model, checks every edge and builds a tree of delegations; act is
+   that tree running, each node under the Horizon of its position and a
+   budget of leaves. The proposer is never the provisioner. Rewritten
+   2026-10-24; proposed.
 7. **[`30-types-by-origin-routes.md`](30-types-by-origin-routes.md)**: the
    runtime computes types, `origin{shape}` by hash; models write routes. A
    novelty interrupt produces a route, Starlark run once per return. Replaces

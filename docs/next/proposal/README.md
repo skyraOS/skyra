@@ -234,8 +234,8 @@ the per-document proposals say the same for their documents.
 | [26](../26-agents-and-facets.md) | [26-agents-and-facets-proposal](26-agents-and-facets-proposal.md) | implementation plan | **In part**: `system.narrow` and its references built; see D |
 | [30](../30-types-by-origin-routes.md) | [30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md) | new; supersedes 28's checks and handlers | **Built**: see F |
 | [32](../32-procedures.md) | [32-procedures-proposal](32-procedures-proposal.md) | new; supersedes G, F10, and 30's type and route machinery | **Built**: see H |
-| [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
-| [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
+| [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | **Superseded**: think.md rewritten 2026-10-24 ([agent](../agent.md)) |
+| [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | **Superseded**: act.md rewritten 2026-10-24 ([agent](../agent.md)) |
 
 Removed on 2026-09-30, with their per-document proposals, because they were
 retired or fully done: 14 (interpreted, not stated), 15 (adapters), 16
