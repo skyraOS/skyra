@@ -43,6 +43,15 @@ New implementation proposals:
   registered, and that is its profile; a long-lived process is a service
   behind an adapter, and work that takes several steps is a procedure that
   keeps the state. Residents leave core and runtime. Proposed (2026-10-27).
+- [50 — Write policies](50-write-policies-proposal.md): the kernel is not
+  in the loop while a procedure runs; a procedure writes to a region the
+  kernel assigns, and the kernel checks and applies it at commit points; the
+  procedure picks sync, batched or at-seal to trade speed against
+  durability. Proposed (2026-10-27).
+- [51 — Conventions the kernel still knows](51-kernel-conventions-proposal.md):
+  the kernel serves capabilities, never roles. Procedure bundles, the agent
+  fields and the agent-context syscall are Skyra conventions living in core
+  and runtime; candidates to move out. To look at (2026-10-28).
 
 ## The design in one paragraph
 
