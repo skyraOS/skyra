@@ -835,7 +835,8 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 }
 
 func TestContinuationReportsCurrentWorkspaceAndScratch(t *testing.T) {
-	h := horizon.Horizon{Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: "/workspace", Scope: "subpath"}}, Scratch: "/notes"}}
+	// The workspace is the one named, not the first read grant.
+	h := horizon.Horizon{Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/workspace", Scope: "subpath"}}, Workspace: "/workspace", Scratch: "/notes"}}
 	var c Continuation
 	if e := json.Unmarshal(continuation(record.Record{Payload: json.RawMessage(`{}`)}, nil, h), &c); e != nil {
 		t.Fatal(e)
@@ -906,5 +907,27 @@ func TestIntakenIsWhatIntakeCommits(t *testing.T) {
 		if a, b := record.Stamp(Intaken(operator, []byte(in))), record.Stamp(intakeRecord(operator, in)); a != b {
 			t.Fatalf("%s: replay and intake derive different records", in)
 		}
+	}
+}
+
+// A narrowing that drops the read grant under the workspace drops the
+// workspace with it; one that keeps the grant keeps the workspace, and none
+// can name another.
+func TestNarrowingKeepsTheWorkspaceOnlyWithItsGrant(t *testing.T) {
+	h := horizon.Horizon{Reach: map[string]horizon.Surface{"echo": echoS}, Authority: horizon.Authority{
+		Read: []horizon.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/work", Scope: "subpath"}}, Workspace: "/work"}}
+	for payload, want := range map[string]string{
+		`{"actor":"echo"}`:                    "/work",
+		`{"actor":"echo","without":["read"]}`: "",
+		`{"actor":"echo","authority":{"read":[{"path":"/cache","scope":"subpath"}]}}`:                    "",
+		`{"actor":"echo","authority":{"read":[{"path":"/work","scope":"subpath"}],"workspace":"/work"}}`: "/work",
+	} {
+		g, err := narrowing(h, json.RawMessage(payload))
+		if err != nil || g.Authority.Workspace != want {
+			t.Errorf("%s: workspace %q, want %q (%v)", payload, g.Authority.Workspace, want, err)
+		}
+	}
+	if _, err := narrowing(h, json.RawMessage(`{"actor":"echo","authority":{"read":[{"path":"/work","scope":"subpath"}],"workspace":"/elsewhere"}}`)); err == nil {
+		t.Fatal("a narrowing named another workspace")
 	}
 }

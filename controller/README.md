@@ -156,10 +156,16 @@ program being run, so nothing written there can be run. It is not a registry
 grant: `skyra boot -scratch DIR` puts it in the room at genesis, and the web
 host gives each conversation its own, `conversations/<id>/scratch`, beside its
 `.skyra/` and deleted with it. It is a field of its own, not a read and a
-write grant, so the workspace stays the first read grant (where a relative
-read resolves), and a narrowing drops it by leaving it out. OS tests check
-that a script written there can be read back but not run, and that nothing
-can be written outside it.
+write grant, so a narrowing drops it by leaving it out. OS tests check that a
+script written there can be read back but not run, and that nothing can be
+written outside it.
+
+The **workspace** (`authority.workspace`) is where a relative read resolves,
+and the directory the models are told they work in. An entry names it, and a
+read grant must cover it; a second, different workspace is refused. It is
+never inferred from the order of the read grants, which the registry sorts.
+Targets are told it in `SKYRA_WORKSPACE`. A narrowing that drops the grant
+under it drops the workspace too.
 
 A profile grants the program's own binary, fixed system loader reads, and the
 Horizon's grants. An entry marked `"state": true` keeps state of its own: its

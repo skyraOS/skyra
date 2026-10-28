@@ -44,10 +44,7 @@ func tools(h horizon.Horizon) map[string]*contract.Schema {
 
 // Paths are informational continuation data, derived from the current Horizon.
 func workspaceOf(h horizon.Horizon) string {
-	if len(h.Authority.Read) > 0 {
-		return h.Authority.Read[0].Path
-	}
-	return ""
+	return h.Authority.Workspace
 }
 
 // contracts is every contract of each name in reach that holds more than

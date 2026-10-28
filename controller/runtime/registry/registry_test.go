@@ -206,3 +206,43 @@ func TestLoadNormalizesContracts(t *testing.T) {
 		t.Fatalf("other contracts: %v", got)
 	}
 }
+
+// The workspace is named by an entry, never the first read grant: the room's
+// grants are sorted, so another entry's grant can come first (here a cache
+// directory, as the models entry's does).
+func TestTheWorkspaceIsNamedNotTheFirstReadGrant(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"a-cache", "work", "elsewhere"} {
+		os.Mkdir(filepath.Join(dir, d), 0o700)
+	}
+	os.WriteFile(filepath.Join(dir, "tool"), []byte("tool"), 0o700)
+	os.WriteFile(filepath.Join(dir, "contract.json"), []byte(`{"input":{"type":"string"}}`), 0o600)
+	load := func(read, models horizon.Authority) (horizon.Authority, error) {
+		t.Helper()
+		b, _ := json.Marshal(map[string]Entry{
+			"read":   {Path: "tool", Contract: "contract.json", Authority: read},
+			"models": {Path: "tool", Contract: "contract.json", Authority: models},
+		})
+		file := filepath.Join(dir, "registry.json")
+		os.WriteFile(file, b, 0o600)
+		_, room, err := Load(file)
+		return room, err
+	}
+	grant := func(d string) []horizon.PathGrant { return []horizon.PathGrant{{Path: filepath.Join(dir, d), Scope: "subpath"}} }
+	room, err := load(horizon.Authority{Read: grant("work"), Workspace: "work"}, horizon.Authority{Read: grant("a-cache")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if room.Read[0].Path != filepath.Join(dir, "a-cache") || room.Workspace != filepath.Join(dir, "work") {
+		t.Fatalf("the workspace followed the grants' order: %+v", room)
+	}
+	if _, err := load(horizon.Authority{Read: grant("work"), Workspace: "elsewhere"}, horizon.Authority{}); err == nil {
+		t.Fatal("accepted a workspace under no read grant")
+	}
+	if _, err := load(horizon.Authority{Read: grant("work"), Workspace: "work"}, horizon.Authority{Read: grant("a-cache"), Workspace: "a-cache"}); err == nil {
+		t.Fatal("accepted two workspaces")
+	}
+}

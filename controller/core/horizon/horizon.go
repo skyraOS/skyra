@@ -31,14 +31,19 @@ type PathGrant struct {
 // place to put work, not a place to run it. Nothing written there can be
 // executed, by the same rule that holds everywhere: a profile allows exec of
 // the program being run and nothing else. It is its own field, not a read
-// and a write grant, so the workspace stays the first read grant (where a
-// relative read resolves) and a narrowing can drop it by name.
+// and a write grant, so a narrowing can drop it by name.
+//
+// Workspace is where a relative read resolves. It is information, not
+// authority: a read grant must cover it, and the profile enforces the grant.
+// It is named, never inferred from the order of the read grants, which the
+// registry sorts.
 type Authority struct {
-	Read    []PathGrant `json:"read,omitempty"`
-	Write   []PathGrant `json:"write,omitempty"`
-	Mach    []string    `json:"mach,omitempty"`
-	Connect []string    `json:"connect,omitempty"` // outbound Unix socket paths
-	Scratch string      `json:"scratch,omitempty"` // an absolute directory, read and write
+	Read      []PathGrant `json:"read,omitempty"`
+	Write     []PathGrant `json:"write,omitempty"`
+	Mach      []string    `json:"mach,omitempty"`
+	Connect   []string    `json:"connect,omitempty"`   // outbound Unix socket paths
+	Scratch   string      `json:"scratch,omitempty"`   // an absolute directory, read and write
+	Workspace string      `json:"workspace,omitempty"` // where a relative read resolves; under a read grant
 }
 
 // Allows reports whether every direct grant in requested is contained in a
@@ -47,7 +52,13 @@ func (ceiling Authority) Allows(requested Authority) bool {
 	return pathsAllow(ceiling.Read, requested.Read) &&
 		pathsAllow(ceiling.Write, requested.Write) &&
 		stringsAllow(ceiling.Mach, requested.Mach) && stringsAllow(ceiling.Connect, requested.Connect) &&
-		(requested.Scratch == "" || requested.Scratch == ceiling.Scratch)
+		(requested.Scratch == "" || requested.Scratch == ceiling.Scratch) &&
+		(requested.Workspace == "" || requested.Workspace == ceiling.Workspace)
+}
+
+// Covers reports whether the read grants cover the workspace, if there is one.
+func (a Authority) Covers() bool {
+	return a.Workspace == "" || pathsAllow(a.Read, []PathGrant{{Path: a.Workspace, Scope: "subpath"}})
 }
 
 func pathsAllow(ceiling, requested []PathGrant) bool {

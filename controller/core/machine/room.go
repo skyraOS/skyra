@@ -304,6 +304,9 @@ func narrowing(h horizon.Horizon, payload json.RawMessage) (horizon.Grant, error
 			return horizon.Grant{}, fmt.Errorf("narrowing drops %q, which is not a kind of authority", kind)
 		}
 	}
+	if !g.Authority.Covers() {
+		g.Authority.Workspace = "" // its read grant was narrowed away
+	}
 	return g, nil
 }
 

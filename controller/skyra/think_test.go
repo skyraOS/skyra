@@ -53,7 +53,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	io := func() map[string]any { return serviceIO(dir, socket, "contract.json") }
 	registry := map[string]any{
 		"echo":           map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
-		"read":           map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}}},
+		"read":           map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}, "workspace": workspace}},
 		"find":           map[string]any{"path": filepath.Join(dir, "find"), "contract": abs("../targets/find/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}}},
 		"roots":          map[string]any{"path": filepath.Join(dir, "roots"), "contract": abs("../targets/roots/contract.json")},
 		"write":          map[string]any{"path": filepath.Join(dir, "write"), "contract": abs("../targets/write/contract.json")},

@@ -30,6 +30,9 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 		}
 		env = append(env, "SKYRA_READ="+paths)
 	}
+	if w := h.Authority.Workspace; w != "" {
+		env = append(env, "SKYRA_WORKSPACE="+w) // where a relative read resolves
+	}
 	if s := h.Authority.Scratch; s != "" {
 		env = append(env, "SKYRA_SCRATCH="+s)
 	}

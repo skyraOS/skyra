@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"skyra/controller/targets/find/search"
-	"strings"
 	"time"
 )
 
@@ -22,7 +21,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "find:", err)
 		os.Exit(1)
 	}
-	root, _, _ := strings.Cut(os.Getenv("SKYRA_READ"), ":")
+	root := os.Getenv("SKYRA_WORKSPACE")
 	out, _ := json.Marshal(map[string]any{"to": os.Getenv("SKYRA_FRAME"), "payload": find(root, os.Getenv("SKYRA_SCRATCH"), in, time.Now())})
 	fmt.Println(string(out))
 }

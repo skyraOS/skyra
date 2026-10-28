@@ -497,7 +497,7 @@ func resolve(root, scratch, in string) (string, func(string) string, string) {
 		return filepath.Clean(in), join(filepath.Clean(in)), ""
 	}
 	if root == "" {
-		return "", nil, "no_root: this leaf holds no read grant to resolve a relative path against"
+		return "", nil, "no_root: this leaf holds no workspace to resolve a relative path against"
 	}
 	clean := filepath.ToSlash(filepath.Clean(in))
 	if clean == "." {

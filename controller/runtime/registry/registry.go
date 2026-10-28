@@ -135,7 +135,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			bundleSHA = record.Sum(b)
 		}
 		if e.Host != "" {
-			if e.Path != "" || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
+			if e.Path != "" || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 || e.Authority.Workspace != "" {
 				return nil, room, fmt.Errorf("%s: an async surface cannot carry executable authority", name)
 			}
 			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input}
@@ -164,6 +164,9 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			authority.Connect = append(authority.Connect, legacy.Connect...)
 		}
+		if authority.Workspace != "" && room.Workspace != "" && authority.Workspace != room.Workspace {
+			return nil, room, fmt.Errorf("%s: a second workspace %s; the room has %s", name, authority.Workspace, room.Workspace)
+		}
 		room = union(room, authority)
 		bin, err := os.ReadFile(path)
 		if err != nil {
@@ -177,6 +180,9 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			state = name
 		}
 		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+	}
+	if !room.Covers() {
+		return nil, room, fmt.Errorf("the workspace %s is under no read grant", room.Workspace)
 	}
 	for name, s := range reach {
 		if s.Agent == nil {
@@ -197,6 +203,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 
 // union adds a grant to the room's authority, keeping each grant once and
 // the result in a stable order, so genesis is the same for the same file.
+// The order means nothing: the workspace is named, not the first read grant.
 func union(a, b horizon.Authority) horizon.Authority {
 	grants := func(x, y []horizon.PathGrant) []horizon.PathGrant {
 		for _, g := range y {
@@ -216,7 +223,11 @@ func union(a, b horizon.Authority) horizon.Authority {
 		slices.Sort(x)
 		return x
 	}
-	return horizon.Authority{Read: grants(a.Read, b.Read), Write: grants(a.Write, b.Write), Mach: names(a.Mach, b.Mach), Connect: names(a.Connect, b.Connect)}
+	workspace := a.Workspace
+	if workspace == "" {
+		workspace = b.Workspace
+	}
+	return horizon.Authority{Read: grants(a.Read, b.Read), Write: grants(a.Write, b.Write), Mach: names(a.Mach, b.Mach), Connect: names(a.Connect, b.Connect), Workspace: workspace}
 }
 
 func normalizeAuthority(dir string, a horizon.Authority) (horizon.Authority, error) {
@@ -226,6 +237,13 @@ func normalizeAuthority(dir string, a horizon.Authority) (horizon.Authority, err
 	}
 	if a.Write, err = normalizePaths(dir, a.Write); err != nil {
 		return a, err
+	}
+	if a.Workspace != "" {
+		paths, err := normalizePaths(dir, []horizon.PathGrant{{Path: a.Workspace, Scope: "subpath"}})
+		if err != nil {
+			return a, err
+		}
+		a.Workspace = paths[0].Path
 	}
 	for i, sock := range a.Connect {
 		paths, err := normalizePaths(dir, []horizon.PathGrant{{Path: sock, Scope: "literal"}})

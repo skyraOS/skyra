@@ -80,7 +80,7 @@ func TestFindRefusesWhatItCannotDo(t *testing.T) {
 		want          string
 	}{
 		"missing":         {root, "", input{In: "nope"}, "not_found"},
-		"no root":         {"", "", input{}, "no_root: this leaf holds no read grant to resolve a relative path against"},
+		"no root":         {"", "", input{}, "no_root: this leaf holds no workspace to resolve a relative path against"},
 		"bad kind":        {root, "", input{Kind: "socket"}, `bad_kind: kind is "file" (the default), "dir" or "any"`},
 		"bad glob":        {root, "", input{Include: []string{"["}}, `bad_glob: "["`},
 		"bad time":        {root, "", input{Newer: "yesterday"}, "bad_newer: newer is a time such as 2026-10-01T00:00:00Z"},

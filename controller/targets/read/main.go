@@ -74,7 +74,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "read:", err)
 		os.Exit(1)
 	}
-	root, _, _ := strings.Cut(os.Getenv("SKYRA_READ"), ":")
+	root := os.Getenv("SKYRA_WORKSPACE")
 	// A return addresses the slot this frame discharges, which the runtime
 	// names in SKYRA_FRAME. File contents only ever travel inside the
 	// observation, as a string.
@@ -83,7 +83,7 @@ func main() {
 }
 
 // observe reads what in names. A relative path is resolved against root, the
-// first read grant the runtime told this leaf about; a "scratch:" path against
+// workspace the runtime told this leaf about; a "scratch:" path against
 // the scratch space, which it may not leave.
 func observe(root, scratch string, in input) result {
 	r := result{Path: in.Path, Kind: "file"}
@@ -117,7 +117,7 @@ func observe(root, scratch string, in input) result {
 		path = filepath.Join(scratch, name)
 	} else if !filepath.IsAbs(path) {
 		if root == "" {
-			r.Error = "no_root: this leaf holds no read grant to resolve a relative path against"
+			r.Error = "no_root: this leaf holds no workspace to resolve a relative path against"
 			return r
 		}
 		path = filepath.Join(root, path)

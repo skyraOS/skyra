@@ -153,7 +153,7 @@ def io(contract):
 registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
  'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
-         'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
+         'authority':{'read':[{'path':str(workspace),'scope':'subpath'}],'workspace':str(workspace)}},
  'find':{'path':str(build/'find'),'contract':str(root/'controller/targets/find/contract.json'),
          'authority':{'read':[{'path':str(workspace),'scope':'subpath'}]}},
  'roots':{'path':str(build/'roots'),'contract':str(root/'controller/targets/roots/contract.json')},

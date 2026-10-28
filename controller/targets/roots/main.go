@@ -27,7 +27,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "roots:", err)
 		os.Exit(1)
 	}
-	r := roots(os.Getenv("SKYRA_READ"), os.Getenv("SKYRA_SCRATCH"))
+	r := roots(os.Getenv("SKYRA_WORKSPACE"), os.Getenv("SKYRA_READ"), os.Getenv("SKYRA_SCRATCH"))
 	r.Permissions = map[string]bool{"scratch_write": r.Scratch != "", "repo_write": false, "git_push_allowed": false, "shell": false, "delete": false}
 	if changes, _ := in["changes"].(bool); changes {
 		r.Error = "changes_unavailable: conversation history requires the repository host"
@@ -36,15 +36,12 @@ func main() {
 	fmt.Println(string(out))
 }
 
-func roots(read, scratch string) result {
-	r := result{Read: []string{}, Scratch: scratch}
+func roots(workspace, read, scratch string) result {
+	r := result{Workspace: workspace, Read: []string{}, Scratch: scratch}
 	for _, p := range strings.Split(read, ":") {
 		if p != "" {
 			r.Read = append(r.Read, p)
 		}
-	}
-	if len(r.Read) > 0 {
-		r.Workspace = r.Read[0]
 	}
 	return r
 }

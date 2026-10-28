@@ -42,7 +42,7 @@ func TestFindLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 	os.Symlink(outside, filepath.Join(work, "escape"))
 
 	surface := horizon.Surface{Path: bin, SHA256: record.Sum(data)}
-	h := horizon.Horizon{Surface: &surface, Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}}}
+	h := horizon.Horizon{Surface: &surface, Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}, Workspace: work}}
 	find := func(payload string) (out struct {
 		Matches []struct{ Path, Kind string }
 		Skipped struct{ Denied, Hidden int }
@@ -50,7 +50,7 @@ func TestFindLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 	}) {
 		t.Helper()
 		e := run(machine.Run{Surface: surface, Exec: horizon.Verified(h, floor), Stdin: []byte(payload), Profile: horizon.Render(h, floor),
-			Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work}}).(machine.Executed)
+			Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work, "SKYRA_WORKSPACE=" + work}}).(machine.Executed)
 		var addressed struct {
 			To      string
 			Payload json.RawMessage

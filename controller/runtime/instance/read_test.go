@@ -53,7 +53,7 @@ func TestReadLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 	}
 
 	surface := horizon.Surface{Path: bin, SHA256: record.Sum(data)}
-	h := horizon.Horizon{Surface: &surface, Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}}}
+	h := horizon.Horizon{Surface: &surface, Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: work, Scope: "subpath"}}, Workspace: work}}
 	read := func(path string) (out struct {
 		Kind, Error, Text string
 	}) {
@@ -63,7 +63,7 @@ func TestReadLeafIsBoundedByItsRenderedProfile(t *testing.T) {
 		}
 		t.Helper()
 		e := run(machine.Run{Surface: surface, Exec: horizon.Verified(h, floor), Stdin: []byte(`{"path":` + string(must(json.Marshal(path))) + `}`),
-			Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work}}).(machine.Executed)
+			Profile: horizon.Render(h, floor), Env: []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1", "SKYRA_READ=" + work, "SKYRA_WORKSPACE=" + work}}).(machine.Executed)
 		if e.Err != "" {
 			t.Fatalf("%s: %s", path, e.Err)
 		}
