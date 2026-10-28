@@ -52,6 +52,11 @@ New implementation proposals:
   the kernel serves capabilities, never roles. Procedure bundles, the agent
   fields and the agent-context syscall are Skyra conventions living in core
   and runtime; candidates to move out. To look at (2026-10-28).
+- [52 — The store behind an adapter](52-store-behind-an-adapter-proposal.md):
+  Skyra speaks a store protocol of objects (named by hash, a Merkle DAG) and
+  claims (write-once names), never SQL; the database lives in the adapter,
+  SQLite first, swappable, shown by a conformance suite and cross-adapter
+  replay. Proposed (2026-10-28).
 
 ## The design in one paragraph
 
