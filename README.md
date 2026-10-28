@@ -18,13 +18,13 @@ whole run can be replayed and checked.
 **What's here:** a stateless execution runtime with a pure Go state machine,
 per-call macOS sandboxes, hash-chained records checked by replay, and browser,
 terminal and native macOS clients on one protocol. Models propose actions;
-the runtime derives and checks what may execute. An interpreter turns
+the runtime derives and checks what may execute. Codex and Claude both run
+under it, each in its own deny-default sandbox. An interpreter turns
 remembered execution strands into reusable procedures within the same authority
 boundary. The chat apps are clients of that runtime, not the runtime itself.
 
 The controller uses standard-library Go; the interpreter has CEL dependencies.
 The implementation and its remaining gaps are listed [below](#where-we-are).
-For the predecessor and rewrite, see [how it got here](#how-it-got-here).
 
 ```sh
 ./install.sh && skyra demo   # every scenario, each ending in a replay check
@@ -52,6 +52,12 @@ the one case that needs them: reaching past the Horizon.
 
 Skyra's principal is the **bounded, auditable agent**, not the process. The
 full argument, from the pains that drove it: [`docs/grips-and-invariants.md`](docs/grips-and-invariants.md).
+
+Skyra's own predecessor had the same flaw in miniature: authority lived in Go
+pointers and exported functions, so anything that could call a function could
+act as the root, and containment rested on Codex *reporting* that it was
+sandboxed. Skyra moves authority into hash-checked records and OS handles, and
+puts every decision in one replayable function.
 
 ## Three invariants
 
@@ -125,9 +131,13 @@ user side as an observation.
 
 ## How a step works
 
-There is no long-running server. One `skyra` binary runs **once per step**,
-then exits. All durable state is a content-addressed, hash-chained record tree
-in `.skyra/`.
+There is no long-running controller. One `skyra` binary runs **once per
+step**, then exits, and every target it runs is run to its exit. All durable
+state is a content-addressed, hash-chained record tree in `.skyra/`. Anything
+that must outlive a step, such as a model CLI's session, sits behind an
+adapter in a host outside the step (the service host,
+[proposal 49](docs/next/proposal/49-services-behind-adapters-proposal.md)),
+and every operation on it is a recorded step.
 
 Why no server: **crash semantics.** A long-running controller could enforce the
 same invariants, but then its memory is state a crash can lose or leave half
@@ -194,6 +204,10 @@ tool call**. Both are fixed per step and don't depend on model speed. On a
 15-second, three-tool task that comes to about 20%. Model time varies more
 than that from run to run.
 
+These figures predate the service host (2026-10-27). Each chat turn now opens
+its own Codex session, so the startup cost applies per turn, not once per
+conversation. It has not been re-measured yet.
+
 Replay re-derives and verifies about **47,000 records per second** from
 memory, linear in run length. A 10,000-record run takes about 0.2 s, or
 1.3 s from the tree on disk. Every published run re-verifies in under 4 ms.
@@ -208,24 +222,6 @@ with:
 go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 ```
 
-## How it got here
-
-Seven months, solo, and a lot of deleted code. The lineage that matters:
-
-**DNA-19** is the long-running
-predecessor: a Go host mediating separate processes, about 7k lines. It proved
-the semantics against the **real Codex app-server** (CLI 0.155.1): persistent
-conversations, a real tool call resumed on the same turn, native fork, tool
-migration across replacement threads, and two concurrent conversations kept
-isolated, recorded in a live suite against the installed CLI. It has since
-been removed from the tree; the last commit that holds it is `b243b03`.
-
-Its own critique found the flaw: authority lived in Go pointers and exported
-functions, so anything that could call a function could enter the root without
-crossing a port, and containment rested on Codex *reporting* `sandbox=read-only`.
-The stateless controller moves authority into hash-checked records and OS
-handles, and puts every decision in one replayable function.
-
 ## Where we are
 
 | | Status |
@@ -236,14 +232,15 @@ handles, and puts every decision in one replayable function.
 | Operators derived from operands; input contracts; typed faults (thought 14) | **built** |
 | Dependencies and resolve: a continuation invokes, waits, resumes (thought 13) | **built**; boot waits on a real resolve, not a poll |
 | Replay derives every record, supervisor faults and resolves included | **built** |
-| Adapters: a dumb actor host and a stateless Codex adapter step (next/15) | **built**; real Codex works through it |
-| Ingress: an outside event resumes a frame parked with its host (next/16) | **built**; the host holds a stamp, never authority |
-| Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
+| Models behind one adapter: Codex and Claude run as sessions of the service host, reached by a session handle the stateless adapter's recorded steps carry ([proposal 49](docs/next/proposal/49-services-behind-adapters-proposal.md)) | **built**; real Codex and Claude work through it |
+| Ingress: an outside event resumes a frame parked with its host | **built**; the host holds a stamp, never authority |
+| Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; each turn is a fresh model session, remembering earlier turns through the context it is passed |
+| Pasted images | shown in the transcript, but not given to the model until a recorded tool brings them back |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
 | Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
 | Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
-| Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |
+| Codex's and Claude's native execution | each runs under the deny-default profile its program registration declares, with egress only through an allowlisting proxy; a native attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
 The design behind what's built is in [`docs/design/`](docs/design/), in the order it was
@@ -282,6 +279,13 @@ Other unfinished work:
 - **Restore:** a conversation whose host stopped continues from its lineage.
 - **Prevention, not detection,** of Codex's native execution.
 - **The evaluation** against Codex's native sandbox.
+
+Design directions in review: the kernel staying out of the loop while a
+procedure runs, with the procedure picking read, write and join policies from
+fixed menus ([proposal 50](docs/next/proposal/50-write-policies-proposal.md));
+and moving the Skyra conventions the kernel still knows (procedure bundles,
+agent fields) out of it, so it serves capabilities, never roles
+([proposal 51](docs/next/proposal/51-kernel-conventions-proposal.md)).
 
 **The research question** ([`docs/next/research-question.md`](docs/next/research-question.md)):
 

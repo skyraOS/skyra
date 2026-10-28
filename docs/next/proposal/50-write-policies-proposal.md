@@ -345,6 +345,20 @@ is recorded, not just where code lives. Open: whether first and none cancel
 their remaining children or let them run, and whether a contract can set a
 floor (question 1 asks the same for writes).
 
+**The join as kernel calls.** The kernel exposes three things: `spawn`,
+`wait`, and the join menu (all, first, none). Every calling pattern is
+composed from them, with no special case for any:
+
+- **Sync** is spawning one child and waiting on it at once.
+- **Fan-out** is spawning several children, then waiting with **all** or
+  **first**.
+- **None** means the parent is never woken for that child. Its result is
+  still recorded, but nothing waits on it.
+
+So today's two mechanisms, a single invoke that waits and a fan-out round
+whose resolve names every discharge, become one: `spawn` and `wait`, with
+the join policy saying when the waiting parent wakes.
+
 **Why this layer at all.** Most of this is AI policy over ordinary kernel
 mechanisms: the same stateless design, a kernel that runs only during a
 trap, capabilities as in seL4, Capsicum or Fuchsia. That is the point, not a
