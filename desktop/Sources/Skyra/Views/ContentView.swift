@@ -19,6 +19,11 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             LivingSkyView(model: sky, paused: reduceMotion || !visible || !active || historyPresented || focused)
                 .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+            // Sky navigation belongs behind the composer and floating transcript,
+            // both visually and for hit testing when their frames overlap.
+            if !backendFailed && !focused && !expanded {
+                RootNavigation(session: session)
+            }
             VStack(spacing: 0) {
                 Header(backend: backend, session: session, historyPresented: $historyPresented)
                 if case let .failed(why) = backend.state {
@@ -37,9 +42,6 @@ struct ContentView: View {
             if !backendFailed, session.current != nil {
                 transcript
             }
-        }
-        .overlay {
-            if !backendFailed && !focused && !expanded { RootNavigation(session: session) }
         }
         .coordinateSpace(name: "sky")
         .onContinuousHover(coordinateSpace: .named("sky")) { phase in
