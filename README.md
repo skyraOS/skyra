@@ -71,6 +71,11 @@ All three are built and shown below. For invariant 3, replay re-derives every
 record from its stored input (intake, supervisor faults and resolves alike);
 [the remaining gaps](#where-we-are) are listed.
 
+Invariant 2 covers what passes through Skyra. What an actor does with OS
+access its provisioner granted is the provisioner's to structure:
+[`docs/threat-model.md`](docs/threat-model.md) says what Skyra guarantees and
+what it leaves to them.
+
 ## Run it (macOS, Go 1.25+, Node 20+)
 
 ```sh
@@ -314,6 +319,7 @@ assets/       the README demo GIF and the VHS tape that records it
 docs/
   startup-doc.md           setup, commands, troubleshooting: kept current
   grips-and-invariants.md  why: the six pains, and the invariants they force
+  threat-model.md          what Skyra guarantees, and what it leaves to the provisioner
   improvements.md          design changes found reading the code, item by item
   summary.md               where the project is: properties, patterns, what runs
   design/                  the controller's spec (D1–D9) and the notes that led to it
