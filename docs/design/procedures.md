@@ -1,17 +1,17 @@
 # Procedures
 
-Proposal: **In the proposal**, section H of [next/proposal](proposal/README.md);
-the implementation plan is [32-procedures-proposal](proposal/32-procedures-proposal.md).
+Proposal: **In the proposal**, section H of [next/proposal](../next/proposal/README.md);
+the implementation plan is 32-procedures-proposal.
 Defines what self-extension is; `system.register` (28, improvements item 6)
 becomes `remember`, which ends in the Horizon's `extend-reach`. Supersedes
 section G and review finding F10.
 
 Date: 2026-10-03  
 Status: agreed in discussion, and **built** (2026-10-03, section H, `02bd1b9`…`9ee7e68`;
-where the build differs, the list's Status column says so). Builds on [24](24-the-room.md),
-[26](26-agents-and-facets.md), [27](27-a-horizon-is-a-process.md),
-[29](29-actors-own-their-state.md), [30](30-types-by-origin-routes.md) and
-[act](act.md). Changes what 28 calls an agent-written tool, and what 30's
+where the build differs, the list's Status column says so). Builds on [24](../next/24-the-room.md),
+[26](../next/26-agents-and-facets.md), [27](../next/27-a-horizon-is-a-process.md),
+[29](../next/29-actors-own-their-state.md), 30 and
+[act](../next/act.md). Changes what 28 calls an agent-written tool, and what 30's
 routes are part of. Revises 30's rule: types belong to the interpreter, not
 the runtime ([Types](#types)).
 
@@ -805,4 +805,4 @@ in the kernel: it is authority over a live resource.
 ## Order
 
 The steps, their deliverables and the decisions taken are in the
-[proposal](proposal/32-procedures-proposal.md), section H.
+proposal, section H.

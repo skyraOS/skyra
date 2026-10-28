@@ -1,6 +1,6 @@
 # Think: the conversation that proposes
 
-Proposal: **In the proposal.** Its mechanism, a read-only Horizon made through `system.narrow`, is proposed in [proposal/think-proposal](proposal/think-proposal.md).
+Proposal: **In the proposal.** Its mechanism, a read-only Horizon made through `system.narrow`, was built by [38](proposal/38-think-procedure-proposal.md); think's own per-document proposal was removed on 2026-10-28 (in git history).
 
 Date: 2026-09-28  
 Status: proposed, not built. Pairs with [act](act.md). Builds on

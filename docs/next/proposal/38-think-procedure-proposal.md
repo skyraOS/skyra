@@ -12,7 +12,7 @@ connections belong to adapters, not the kernel, think keeps the model's
 constellations are their outlines.
 
 Builds on [think](../think.md) (a read-only conversation, through
-`system.narrow`), [37 — Delegate](37-delegate-proposal.md) (a header is the
+`system.narrow`), 37 — Delegate (a header is the
 prompt; one thread per invocation), [34 — Actor
 constellations](34-actor-constellations-proposal.md) (contracts drawn as
 stars, selected by the user) and [33](33-procedure-adapter-extraction-proposal.md)

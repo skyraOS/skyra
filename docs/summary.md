@@ -207,7 +207,7 @@ comparative task-success, containment and cost evaluation remains future work.
 | Topic | Source |
 | --- | --- |
 | Runtime implementation | [controller guide](../controller/README.md), [machine](../controller/core/machine/machine.go) |
-| Procedure language and remembering | [procedures](next/32-procedures.md), [interpreter](../controller/interp/proc/proc.go) |
+| Procedure language and remembering | [procedures](design/procedures.md), [interpreter](../controller/interp/proc/proc.go) |
 | Current Think composition | [bundle](../controller/interp/workflows/think/bundle.json), [proposal 38](next/proposal/38-think-procedure-proposal.md) |
 | Unified model selection and remaining ideas | [proposal 39](next/proposal/39-unified-think-procedure-proposal.md) |
 | Accepted tree reconstruction | [tree reader](../controller/runtime/replay/tree.go), [reconciliation](../controller/runtime/replay/recover.go), [proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md) |

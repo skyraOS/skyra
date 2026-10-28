@@ -5,7 +5,7 @@ Proposal: **Not in the proposal.** A standing rule every new crossing must answe
 Date: 2026-09-27  
 Status: audit of the working tree on this date, and the rule for every future
 crossing. Follows 15, 16,
-[17](17-app-server-custody.md) and [18](18-app-server-spec-improvements.md).
+17 and 18.
 
 ## The invariants this protects
 

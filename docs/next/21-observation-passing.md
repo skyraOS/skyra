@@ -6,7 +6,7 @@ Date: 2026-09-28
 Status: proposed rule, not implemented. Follows [13 — Dependencies](../design/thoughts/13-dependencies.md) and 14 — Interpreted, not stated.
 
 > **Revised 2026-09-30.** Three open choices are answered by
-> [24](24-the-room.md), [25](25-surface-refactor.md) and improvements item 9:
+> [24](24-the-room.md), 25 and improvements item 9:
 >
 > - **Faults:** both. A fault is its own derived state, and it **carries the
 >   observation of why it faulted** as its payload (built). The parent passes

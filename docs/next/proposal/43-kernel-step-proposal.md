@@ -326,7 +326,7 @@ damage but does not establish that correspondence.
 D5 closes substitution of bytes at a path, subject to A6 below. It does not
 by itself close every shell bug that launches the wrong thing, as D1 claims.
 Either retain faithful execution as an explicit trust assumption, as
-[41–42](41-42-build-plan.md) does, or specify an independent binding between
+41–42 does, or specify an independent binding between
 the committed claim, derived effect, executable identity and profile that
 the launch boundary verifies.
 

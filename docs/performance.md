@@ -23,8 +23,8 @@ go1.25.0, 2026-10-13.
 
 ## Controller overhead
 
-**2026-10-16: the durability policy is built** ([proposal 40](next/proposal/40-durability-policy-proposal.md),
-[41 V5](next/proposal/41-42-build-plan.md)). The figures below this
+**2026-10-16: the durability policy is built** (proposal 40,
+41 V5). The figures below this
 paragraph are from before it. Same machine, fake app-server
 (`codex/latency/sweep.sh 10 0`), medians of 10 boots each, `52c9542`
 against the V5 commit:
@@ -114,7 +114,7 @@ go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/expor
   - fewer process launches per round trip
   - cheaper flushes (`F_FULLFSYNC` is about two-thirds of the fake path's
     overhead; see
-    [proposal 40](next/proposal/40-durability-policy-proposal.md))
+    proposal 40)
   - faster Horizon lookup
 - A tool-heavy turn pays for each tool round trip: ~250 ms on the fake path
   and ~380 ms with real Codex. A 10-call agentic turn adds ~4 s of controller

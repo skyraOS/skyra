@@ -241,8 +241,8 @@ handles, and puts every decision in one replayable function.
 | Conversations in the browser: multi-turn, each one its lineage, saved, listed with its history, replayable; the user outranks the agent | **built**; Codex keeps its memory across turns |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
-| Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/next/32-procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
-| Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/next/32-procedures.md)) | **built** |
+| Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
+| Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
 | Codex's native execution | the app-server runs under its registered Seatbelt profile; an attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
@@ -272,7 +272,7 @@ Other unfinished work:
   calls (`target`, `contract`, `arguments`), with each contract owned by its
   target actor. This is interface work, not a new source of authority.
 - **Self-extension with real Codex.** The demo runs scripted and with a fake
-  Codex ([next/32](docs/next/32-procedures.md)): a strand remembered as a
+  Codex ([next/32](docs/design/procedures.md)): a strand remembered as a
   procedure runs with no model step and no approval, and the same procedure
   reaching further is a fault. Next: real Codex, and Codex writing its own
   refinements.

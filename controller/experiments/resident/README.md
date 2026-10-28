@@ -1,7 +1,7 @@
 # Resident connection custody experiment
 
 Implements the first transport experiment from
-[spec 18](../../../docs/next/18-app-server-spec-improvements.md). This is a test
+spec 18. This is a test
 harness, not the production resident-target mode or a migrated Codex adapter.
 The existing Codex host is still in use.
 

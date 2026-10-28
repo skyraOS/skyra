@@ -1,6 +1,6 @@
 # Types, observations, and checks
 
-Proposal: **Not in the proposal.** Written after the proposal. **Checks and handlers are superseded by [30](30-types-by-origin-routes.md):** the runtime computes types, and a novelty interrupt produces a route (proposal section F). Checks, novelty interrupts, handlers and `system.register` as Starlark are not yet in [next/proposal](proposal/README.md).
+Proposal: **Not in the proposal.** Written after the proposal. **Checks and handlers are superseded by 30:** the runtime computes types, and a novelty interrupt produces a route (proposal section F). Checks, novelty interrupts, handlers and `system.register` as Starlark are not yet in [next/proposal](proposal/README.md).
 
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [24](24-the-room.md),

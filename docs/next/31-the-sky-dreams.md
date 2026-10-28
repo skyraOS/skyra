@@ -7,7 +7,7 @@ Date: 2026-10-02
 Status: proposed; cut 1 built (2026-10-02): the sky is drawn with Metal at the
 display's rate, with the nebula and the flow's filaments as styling ahead of
 the mapping. Builds on [23](23-desktop-app.md) (the app and its sky),
-[24](24-the-room.md) (Horizons, the room), [30](30-types-by-origin-routes.md)
+[24](24-the-room.md) (Horizons, the room), 30
 (types, routes, the novelty interrupt) and [20](20-boundry-crossing.md) (the
 rule for a new crossing). The look it reaches for is Refik Anadol's *Machine
 Hallucinations*: an archive pushed through a machine and shown as what the

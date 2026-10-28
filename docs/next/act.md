@@ -1,6 +1,6 @@
 # Act: the tree that implements
 
-Proposal: **In the proposal.** Narrowing per node and authority as a climbing fault are proposed in [proposal/act-proposal](proposal/act-proposal.md).
+Proposal: **In the proposal.** Narrowing per node and authority as a climbing fault were proposed in act's per-document proposal, never applied and removed on 2026-10-28 (in git history).
 
 Date: 2026-09-28  
 Status: proposed, not built. Pairs with [think](think.md). Builds on

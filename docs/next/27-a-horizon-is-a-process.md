@@ -5,7 +5,7 @@ Proposal: **Not in the proposal.** Written after the proposal. Its order (one en
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [24](24-the-room.md) and
 [26](26-agents-and-facets.md). Settles the `continuation` flag left by
-[25](25-surface-refactor.md).
+25.
 
 ## The rule
 

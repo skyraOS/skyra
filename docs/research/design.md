@@ -315,6 +315,6 @@ the comparative evaluation is future work.
 | Controller internals, package by package | [controller/README.md](../../controller/README.md) |
 | Original controller spec (D1–D9) | [docs/design/](../design/) |
 | Capability notes and proposals | [docs/next/](../next/) |
-| Procedures and remembering | [next/32-procedures.md](../next/32-procedures.md) |
+| Procedures and remembering | [next/32-procedures.md](../design/procedures.md) |
 | Delegation semantics | [DELEGATION.md](../design/DELEGATION.md) |
 | Research question | [next/research-question.md](../next/research-question.md) |

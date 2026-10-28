@@ -3,8 +3,8 @@
 Date: 2026-09-30  
 Status: **partly implemented** on branch `design-room-implimentation`
 (2026-09-30). Collects what [24](../24-the-room.md),
-[25](../25-surface-refactor.md), [26](../26-agents-and-facets.md),
-[30](../30-types-by-origin-routes.md) (section F, added 2026-10-01) and
+25, [26](../26-agents-and-facets.md),
+30 (section F, added 2026-10-01) and
 [improvements](../../improvements.md) items 1, 2, 8 and 9 change, in the code
 and in every other document under `next/`.
 
@@ -30,10 +30,6 @@ New implementation proposals:
   drawn as constellations of their input contracts; application actions
   select interpreter procedures and reconstructed state matches the app's
   full snapshot input. Aligned with 33. Proposed (2026-10-03).
-- [37 — Delegate](37-delegate-proposal.md): `delegate` hands a short,
-  capped header and observations to a fresh child thread and makes a tool;
-  remembering that tool's return is how a procedure is created, since a
-  leaf alone has nothing to compile. Proposed (2026-10-06).
 - [38 — Think](38-think-procedure-proposal.md): the first continuation
   procedure. A `think` star the user selects; a narrowing attaches read-only
   tools to that invocation only; a fresh Codex thread whose whole prompt is
@@ -128,7 +124,7 @@ contracts; reach holds facets.
 ### F. Types by origin, and routes (30)
 
 The implementation plan, with the decisions to confirm first, is
-[30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md).
+30-types-by-origin-routes-proposal.
 
 | Id | Change | Where | Status |
 |---|---|---|---|
@@ -152,7 +148,7 @@ The implementation plan, with the decisions to confirm first, is
 **Superseded by H** (2026-10-03): routes dissolve into procedures, and the
 route machinery leaves the kernel. Nothing in G is built.
 
-The rule, agreed 2026-10-02 ([30, "Every return is routed"](../30-types-by-origin-routes.md#every-return-is-routed)):
+The rule, agreed 2026-10-02 (30, "Every return is routed"):
 when the runtime derives a return, it computes the return's type and runs the
 receiver's route for that type; the route's decision is the next transition;
 with no route, the default route interrupts, of kind novelty. **F10 comes
@@ -167,8 +163,8 @@ first:** without it, the rule routes every return through F10's hole.
 
 ### H. Procedures (32)
 
-Agreed 2026-10-03 ([32](../32-procedures.md)); the plan is
-[32-procedures-proposal](32-procedures-proposal.md). Supersedes G and F10.
+Agreed 2026-10-03 ([32](../../design/procedures.md)); the plan is
+32-procedures-proposal. Supersedes G and F10.
 The kernel keeps instructions and authority, and never sees a procedure;
 routes and types leave it. The interpreter is an actor holding procedures in
 its own state; `remember` builds one from a strand and names it with the
@@ -231,19 +227,20 @@ the per-document proposals say the same for their documents.
 
 | Document | Proposal | Kind | Implemented |
 |---|---|---|---|
-| [17](../17-app-server-custody.md) | [17-app-server-custody-proposal](17-app-server-custody-proposal.md) | its blocking open item is answered | **Done**: revision note; code: B7, C1 built. The per-thread narrowing at `start` is not wired |
-| [18](../18-app-server-spec-improvements.md) | [18-app-server-spec-improvements-proposal](18-app-server-spec-improvements-proposal.md) | section 7 conflicts; facets replace the tool split | **Done**: section 7 reconciled; code: D6 not built |
 | [23](../23-desktop-app.md) | [23-desktop-app-proposal](23-desktop-app-proposal.md) | cut 3 gets its mechanism | **Done**: cut 3's mechanism named; code: the admin facet is not built |
 | [24](../24-the-room.md) | [24-the-room-proposal](24-the-room-proposal.md) | implementation plan | **In part**: status line added; see B |
-| [25](../25-surface-refactor.md) | [25-surface-refactor-proposal](25-surface-refactor-proposal.md) | implementation plan | **In part**: item 1 built; item 2 corrected and deferred; item 3 not built |
 | [26](../26-agents-and-facets.md) | [26-agents-and-facets-proposal](26-agents-and-facets-proposal.md) | implementation plan | **In part**: `system.narrow` and its references built; see D |
-| [30](../30-types-by-origin-routes.md) | [30-types-by-origin-routes-proposal](30-types-by-origin-routes-proposal.md) | new; supersedes 28's checks and handlers | **Built**: see F |
-| [32](../32-procedures.md) | [32-procedures-proposal](32-procedures-proposal.md) | new; supersedes G, F10, and 30's type and route machinery | **Built**: see H |
-| [think](../think.md) | [think-proposal](think-proposal.md) | a Horizon from a narrowing | Not applied: `think.md` is uncommitted work in the tree |
-| [act](../act.md) | [act-proposal](act-proposal.md) | narrowing per node; interrupts vs faults | Not applied: `act.md` is uncommitted work in the tree |
 
 Removed on 2026-09-30, with their per-document proposals, because they were
 retired or fully done: 14 (interpreted, not stated), 15 (adapters), 16
 (ingress), 19 (the app-server gap inventory), 22 (the read tool) and the
 agenda. The proposals for 20, 21 and the research question were removed too:
 their edits are applied, and those documents stay. All are in git history.
+
+Removed on 2026-10-28, with their per-document proposals: 17 and 18 (the
+app-server in custody, replaced by [49](49-services-behind-adapters-proposal.md)),
+25 (the surface refactor, done by 49's cleanse), 30 (types by origin, built),
+and the proposals for 32 (built), 37 (superseded by the
+[delegate spec](../../../ideas/delegate-procedure-spec.md)), 40 and 41–42
+(built), think and act (never applied). 32 itself moved to
+[`docs/design/procedures.md`](../../design/procedures.md).

@@ -9,7 +9,7 @@ Status: proposed. The static site it sits beside is built and deployed to the
 Mac mini (`website/deploy.sh`: Caddy on loopback, kept up by launchd; the
 tunnel is Tailscale Funnel). Builds on [20](20-boundry-crossing.md) (the rule for a
 new crossing), [24](24-the-room.md) (roots, Horizons) and 16 (ingress by
-parking), and [32](32-procedures.md) (procedures and system syscalls).
+parking), and [32](../design/procedures.md) (procedures and system syscalls).
 
 ## The idea
 

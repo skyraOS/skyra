@@ -527,4 +527,4 @@ gather, claim) total 2–7 ms per record. What remains per round trip:
 
 A durability policy that keeps crash consistency at a fraction of this cost
 is proposed in
-[`docs/next/proposal/40-durability-policy-proposal.md`](next/proposal/40-durability-policy-proposal.md).
+`docs/next/proposal/40-durability-policy-proposal.md`.

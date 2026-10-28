@@ -12,8 +12,8 @@ work. Ordinary application actions address procedures on the interpreter.
 Codex's exported thread/turn operations remain underlying capabilities,
 visible for inspection rather than the default chat destination.
 
-Builds on [23](../23-desktop-app.md), [25](../25-surface-refactor.md),
-[31](../31-the-sky-dreams.md), and [32](../32-procedures.md).
+Builds on [23](../23-desktop-app.md), 25,
+[31](../31-the-sky-dreams.md), and [32](../../design/procedures.md).
 
 ## The ownership boundary
 

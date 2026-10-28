@@ -10,8 +10,8 @@ set of accepted leaf observations. This supersedes the earlier
 observation-free forward-read design. A separate conversation-state database
 and caching are removed from the initial implementation.
 
-Builds on [32](../32-procedures.md) and
-[32's implementation proposal](32-procedures-proposal.md).
+Builds on [32](../../design/procedures.md) and
+32's implementation proposal.
 The earlier extraction of duplicated procedure-tool helpers remains useful,
 but is a supporting refactor within this larger change.
 
