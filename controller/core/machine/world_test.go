@@ -68,7 +68,7 @@ func (w *world) boot(reach map[string]horizon.Surface, seed string) record.Recor
 	w.objects["records/"+o.Key] = o.Raw
 	w.frame(o.Key)
 	h0 := horizon.Horizon{Stamp: o.Key, Reach: reach, Frame: o.Key}
-	root := &proc{s: Instance{Floor: "/floor/.skyra", Sockets: "/sockets", R: g, Phase: Running, Self: h0}, stack: []string{o.Key}}
+	root := &proc{s: Instance{Floor: "/floor/.skyra", R: g, Phase: Running, Self: h0}, stack: []string{o.Key}}
 	w.queue = append(w.queue, queued{root, Executed{Obs: []byte(seed)}})
 	for len(w.queue) > 0 {
 		q := w.queue[0]
@@ -145,7 +145,7 @@ func (w *world) acts(p *proc, as []Action) Event {
 		case Run:
 			return Executed{Obs: w.target(p.s.Self, x.Stdin)}
 		case Spawn:
-			child := &proc{s: Instance{Floor: p.s.Floor, Sockets: p.s.Sockets, Phase: Intake}, parent: p}
+			child := &proc{s: Instance{Floor: p.s.Floor, Phase: Intake}, parent: p}
 			p.kids = append(p.kids, child)
 			under := Object{Key: x.Under, Raw: w.objects["horizons/"+x.Under]}
 			w.queue = append(w.queue, queued{child, Received{Under: under, In: x.Out}})
@@ -286,7 +286,7 @@ func grammar(t *testing.T, effs []Effect) {
 			t.Fatalf("an exit is the last act: %#v", effs)
 		}
 		switch x.Act.(type) {
-		case Run, StartResident, Park:
+		case Run, Park:
 			if !x.Force {
 				t.Fatalf("an act that leaves the failure domain is forced (40): %#v", x)
 			}

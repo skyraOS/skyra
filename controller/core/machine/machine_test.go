@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -146,50 +145,6 @@ func TestStepIsDeterministic(t *testing.T) {
 	b, _ := record.Encode(intakeRecord(operator, in))
 	if string(a) != string(b) {
 		t.Fatalf("step is not byte-identical across runs:\n%s\n%s", a, b)
-	}
-}
-
-// A connection is an edge between two actors (proposal 38): the adapter that
-// invoked a connection surface, and whoever invoked the adapter. Its socket is
-// derived from those names and the floor, never from a frame, so every turn
-// reaches the same resident; and a connection surface is granted exactly it.
-func TestConnectionsAreEdges(t *testing.T) {
-	io := horizon.Surface{Path: "/bin/codexio", SHA256: "h", Connection: true}
-	under := func(frame, caller string) horizon.Horizon {
-		return horizon.Horizon{Surface: &io, Name: "codex.exchange", Frame: frame,
-			Resume: &horizon.Horizon{Name: "codex", Frame: "adapter-" + frame, Resume: &horizon.Horizon{Name: caller}}}
-	}
-	edge := func(h horizon.Horizon, floor string) string {
-		t.Helper()
-		socket, err := edgeSocket(h, floor, "/private/tmp/skyra-501")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return socket
-	}
-	first := edge(under("turn-1", "interpreter"), "/c1/.skyra")
-	if second := edge(under("turn-2", "interpreter"), "/c1/.skyra"); second != first {
-		t.Fatalf("two turns of one edge reach different residents: %s %s", first, second)
-	}
-	if edge(under("turn-1", "user"), "/c1/.skyra") == first || edge(under("turn-1", "interpreter"), "/c2/.skyra") == first {
-		t.Fatal("another caller, or another lineage, shares the edge")
-	}
-	if !strings.HasPrefix(first, "/private/tmp/skyra-501/") || len(first) > 100 {
-		t.Fatalf("socket path: %s", first)
-	}
-	run := runOf(under("turn-1", "interpreter"), nil, "/c1/.skyra", first)
-	if run.Resident != first || !slices.Contains(run.Env, "SKYRA_RESIDENT="+first) || !strings.Contains(run.Profile, first) {
-		t.Fatalf("a connection surface is granted its edge's socket: %+v", run)
-	}
-	if strings.Contains(runOf(under("turn-1", "interpreter"), nil, "/c1/.skyra", "").Profile, "/private/tmp/skyra-501") {
-		t.Fatal("a surface with no edge was granted the socket directory")
-	}
-	orphan := horizon.Horizon{Surface: &io, Name: "codex.exchange", Resume: &horizon.Horizon{}}
-	if _, err := edgeSocket(orphan, "/c1/.skyra", "/private/tmp/skyra-501"); err == nil {
-		t.Fatal("a connection surface not invoked by an adapter has no edge")
-	}
-	if _, err := edgeSocket(under("turn-1", "interpreter"), "/c1/.skyra", ""); err == nil {
-		t.Fatal("no socket directory was accepted")
 	}
 }
 
@@ -635,11 +590,11 @@ func TestAsyncSurfaceParks(t *testing.T) {
 
 func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 	s := horizon.Surface{Path: "/bin/tool"}
-	if env := runOf(horizon.Horizon{Surface: &s, Frame: "f1"}, nil, "/floor", "").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
+	if env := runOf(horizon.Horizon{Surface: &s, Frame: "f1"}, nil, "/floor").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
 		t.Fatalf("a target is told its slot; no read grant, no SKYRA_READ: %v", env)
 	}
 	grants := horizon.Authority{Read: []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}}
-	env := runOf(horizon.Horizon{Surface: &s, Authority: grants}, nil, "/floor", "").Env
+	env := runOf(horizon.Horizon{Surface: &s, Authority: grants}, nil, "/floor").Env
 	if env[len(env)-1] != "SKYRA_READ=/work:/etc/x" {
 		t.Fatalf("%v", env)
 	}

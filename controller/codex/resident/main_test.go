@@ -60,8 +60,8 @@ func TestExistingThreadInspectsBeforeTurnAndRestartsWhenGone(t *testing.T) {
 		"lines": []string{}, "delivery": "shutdown", "read": "observed", "observed_at": 1801001, "peer_eof": true, "error": "", "partial": "",
 	})})
 	to, _ = emitted(t, c)
-	if to != "codex.start" {
-		t.Fatalf("after stop should start a fresh process, got %s", to)
+	if to != "codex.open" {
+		t.Fatalf("after stop should open a fresh session, got %s", to)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestOnlyModelFacingToolsAreOfferedToCodex(t *testing.T) {
 	}}
 	c.Input.Text = "hello"
 	c.Steps = []step{
-		{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1", "pid": 1, "profile": "hash"})},
+		{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1", "pid": 1, "profile": "hash"})},
 		{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{rpc("frame:initialize", "initialize", map[string]any{})}}),
 			Value: value(map[string]any{"lines": []string{`{"id":"frame:initialize","result":{"userAgent":"fake"}}` + "\n"}, "delivery": "written", "read": "observed", "observed_at": 1, "peer_eof": false, "error": "", "partial": ""})},
 	}
@@ -109,7 +109,7 @@ func turnWithCalls(calls ...string) continuation {
 		turn = append(turn, fmt.Sprintf(`{"id":"call-%d","method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","tool":%q,"arguments":%s}}`, i, tool, args))
 	}
 	c.Steps = []step{
-		{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+		{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
 		observed([]string{rpc("frame:initialize", "initialize", map[string]any{})}, `{"id":"frame:initialize","result":{}}`),
 		observed([]string{`{"method":"initialized"}`, rpc("frame:thread", "thread/start", map[string]any{})},
 			`{"id":"frame:thread","result":{"thread":{"id":"thread-1"},"approvalPolicy":"never","sandbox":{"type":"readOnly","networkAccess":false}}}`),
@@ -242,7 +242,7 @@ func TestThreadPromptIsTheHeaderOnly(t *testing.T) {
 		c := continuation{Frame: "frame", Tools: map[string]*schema{}}
 		c.Input.Text, c.Input.Header = "hello", header
 		c.Steps = []step{
-			{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+			{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
 			{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{rpc("frame:initialize", "initialize", map[string]any{})}}),
 				Value: value(map[string]any{"lines": []string{`{"id":"frame:initialize","result":{}}` + "\n"}, "delivery": "written", "read": "observed", "observed_at": 1, "peer_eof": false, "error": "", "partial": ""})},
 		}
@@ -268,7 +268,7 @@ func TestThreadPromptIsTheHeaderOnly(t *testing.T) {
 	}
 }
 
-// A wait that ends with nothing to read (codexio reports Go's "i/o timeout")
+// A wait that ends with nothing to read (service-io reports Go's "i/o timeout")
 // is silence during a turn, a failure before one, and a lost server when it
 // was a health check.
 func TestQuietWaits(t *testing.T) {
@@ -286,7 +286,7 @@ func TestQuietWaits(t *testing.T) {
 	c = continuation{Frame: "frame", Tools: map[string]*schema{}}
 	c.Input.Text = "hello"
 	c.Steps = []step{
-		{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
+		{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
 		quietly("codex.exchange", []string{rpc("frame:initialize", "initialize", map[string]any{})}),
 	}
 	if _, err := decide(c); err == nil || !strings.Contains(err.Error(), "i/o timeout") {
@@ -301,20 +301,14 @@ func TestQuietWaits(t *testing.T) {
 	}
 }
 
-// A reused start is the edge's live server: it was initialized by an earlier
-// invocation, so this one only starts its own thread, with no initialize and
-// no initialized notification.
-func TestAReusedServerOnlyStartsAThread(t *testing.T) {
+// An open that returns no session is the turn's failure, with the service
+// host's reason.
+func TestAnOpenWithoutASessionFails(t *testing.T) {
 	c := continuation{Frame: "frame", Tools: map[string]*schema{}}
 	c.Input.Text, c.Input.Header = "hello", "think"
-	c.Steps = []step{{To: "codex.start", State: "return", Value: value(map[string]any{"incarnation": "actor-1", "reused": true})}}
-	to, m := emitted(t, c)
-	var q struct {
-		Deliver []string `json:"deliver"`
-	}
-	json.Unmarshal(m["payload"], &q)
-	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], `"thread/start"`) {
-		t.Fatalf("a reused server should get only thread/start: %s %v", to, q.Deliver)
+	c.Steps = []step{{To: "codex.open", State: "return", Value: value(map[string]any{"lines": []string{}, "error": "no program \"codex\""})}}
+	if _, err := decide(c); err == nil || !strings.Contains(err.Error(), `no program "codex"`) {
+		t.Fatalf("an open without a session: %v", err)
 	}
 }
 
@@ -322,7 +316,7 @@ func TestAReusedServerOnlyStartsAThread(t *testing.T) {
 // context its invoker passed: given to Codex ahead of the message, which is
 // always the turn's last input.
 func TestContextPrecedesTheMessage(t *testing.T) {
-	items := turnInput(value([]map[string]string{{"role": "user", "text": "tool:hello"}, {"role": "agent", "text": "hi"}}), nil, "next")
+	items := turnInput(value([]map[string]string{{"role": "user", "text": "tool:hello"}, {"role": "agent", "text": "hi"}}), "next")
 	if len(items) != 2 {
 		t.Fatalf("items: %v", items)
 	}
@@ -331,49 +325,28 @@ func TestContextPrecedesTheMessage(t *testing.T) {
 		t.Fatalf("context then message: %v", items)
 	}
 	for _, none := range []string{``, `null`, `[]`, `{}`} {
-		if items := turnInput(json.RawMessage(none), nil, "only"); len(items) != 1 {
+		if items := turnInput(json.RawMessage(none), "only"); len(items) != 1 {
 			t.Fatalf("context %q added an item: %v", none, items)
 		}
 	}
-	if got := turnInput(value(map[string]string{"spec": "v1"}), nil, "go")[0].(map[string]string)["text"]; !strings.Contains(got, `{"spec":"v1"}`) {
+	if got := turnInput(value(map[string]string{"spec": "v1"}), "go")[0].(map[string]string)["text"]; !strings.Contains(got, `{"spec":"v1"}`) {
 		t.Fatalf("other context is passed as recorded: %s", got)
-	}
-	// Pasted images go in as local images, before the message, which stays last.
-	items = turnInput(nil, []string{"/s/attachments/a.png"}, "what is this?")
-	if len(items) != 2 || items[0].(map[string]string)["type"] != "localImage" || items[0].(map[string]string)["path"] != "/s/attachments/a.png" || items[1].(map[string]string)["text"] != "what is this?" {
-		t.Fatalf("image then message: %v", items)
 	}
 }
 
-// Codex's native read-only tools are allowed (proposal 38): a turn that
-// looks at a photo or reads the web is not interrupted. Native edits still are.
-func TestViewingAnImageIsNotAViolation(t *testing.T) {
+// Codex has no read of images (proposal 49, decision 2): an image view
+// interrupts the turn, like any other native item but web search.
+func TestViewingAnImageIsAViolation(t *testing.T) {
 	c := turnWithCalls()
 	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
-		"lines": []string{
-			`{"method":"item/started","params":{"item":{"type":"imageView","path":"/w/a.png"},"threadId":"thread-1","turnId":"turn-1"}}`,
-			`{"method":"item/completed","params":{"item":{"type":"imageView","path":"/w/a.png"},"threadId":"thread-1","turnId":"turn-1"}}`,
-			`{"method":"item/completed","params":{"item":{"type":"agentMessage","text":"A cat on a chair."},"threadId":"thread-1","turnId":"turn-1"}}`,
-			`{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"completed"}}}`,
-		},
+		"lines":    []string{`{"method":"item/started","params":{"item":{"type":"imageView","path":"/w/a.png"},"threadId":"thread-1","turnId":"turn-1"}}`},
 		"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
 	})})
 	to, m := emitted(t, c)
-	var r struct{ Text, Refused string }
-	if err := json.Unmarshal(m["payload"], &r); err != nil || to != "frame" || r.Text != "A cat on a chair." || r.Refused != "" {
-		t.Fatalf("a turn that viewed an image should answer: %s %s", to, m["payload"])
-	}
-	// A different native item is still interrupted.
-	c = turnWithCalls()
-	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{
-		"lines":    []string{`{"method":"item/started","params":{"item":{"type":"fileChange"},"threadId":"thread-1","turnId":"turn-1"}}`},
-		"delivery": "written", "read": "observed", "observed_at": 2, "peer_eof": false, "error": "", "partial": "",
-	})})
-	to, m = emitted(t, c)
 	var q struct{ Deliver []string }
 	json.Unmarshal(m["payload"], &q)
 	if to != "codex.exchange" || len(q.Deliver) != 1 || !strings.Contains(q.Deliver[0], "turn/interrupt") {
-		t.Fatalf("a file change must still interrupt the turn: %s %s", to, m["payload"])
+		t.Fatalf("an image view must interrupt the turn: %s %s", to, m["payload"])
 	}
 }
 

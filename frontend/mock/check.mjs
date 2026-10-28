@@ -1,7 +1,7 @@
 // The same admission/reconnect contract, exercised against mock and real host.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -67,23 +67,22 @@ try {
  submit("r2","history"); await client.next(m=>m.type==="accepted" && m.requestId==="r2");
  const second=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r2" && r.status==="returned"));
  if (real) {
-  // A second turn runs think again (proposal 38): a new thread, on the
-  // conversation's one app-server through its edge's holder, remembering the
-  // first turn through the context the user side passed. The fake answers
-  // with that context, its thread's messages, and its thread count.
+  // A second turn runs think again (proposal 38): a fresh session of the
+  // service host (proposal 49), remembering the first turn through the
+  // context the user side passed. The fake answers with that context, its
+  // thread's messages, and how many threads its app-server has started.
   const answer=second.conversations[0].entries.filter(e=>e.role==="agent").at(-1).text;
   assert(answer.includes("user: tool:hello"), `second turn did not get the first through its context: ${answer}`);
-  assert(answer.includes("|history|threads=2"), `second turn did not run on a new thread of the same app-server: ${answer}`);
-  // A pasted screenshot (proposal 38): kept in scratch under its own hash and
-  // given to Codex as a local image, which the fake names back.
+  assert(answer.includes("|history|threads=1"), `second turn did not run on a fresh session: ${answer}`);
+  // A pasted screenshot is kept in scratch and named in the transcript, but
+  // Codex is not given it (proposal 49, decision 2): the fake sees nothing.
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-  const hash = createHash("sha256").update(Buffer.from(png, "base64")).digest("hex");
   client.send({type:"submit",uiIncarnation:inc,conversation:id,requestId:"r3",text:"describe",images:[{name:"Screenshot.png",data:png}]});
   await client.next(m=>m.type==="accepted" && m.requestId==="r3");
   const pasted=await client.next(m=>m.type==="snapshot" && m.requests.some(r=>r.requestId==="r3" && r.status==="returned"));
   const entries=pasted.conversations[0].entries;
   assert(entries.some(e=>e.role==="user" && e.text.includes("🖼 Screenshot.png")), "the transcript does not name the image");
-  assert.equal(entries.filter(e=>e.role==="agent").at(-1).text, `saw:${hash}.png`, "Codex was not given the pasted image");
+  assert.equal(entries.filter(e=>e.role==="agent").at(-1).text, "saw:", "Codex was given the pasted image");
   // Bytes that are not an image are refused, and nothing runs.
   client.send({type:"submit",uiIncarnation:inc,conversation:id,requestId:"r4",text:"describe",images:[{name:"x.png",data:Buffer.from("not an image").toString("base64")}]});
   assert.equal((await client.next(m=>m.type==="rejected" && m.requestId==="r4")).code,"invalid-image");

@@ -18,7 +18,7 @@ func parse(t *testing.T, out string) (string, json.RawMessage) {
 	return emission.To, emission.Payload
 }
 
-func TestStartWhenNoIncarnation(t *testing.T) {
+func TestOpenWhenNoIncarnation(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	out, err := decide(c)
@@ -26,19 +26,19 @@ func TestStartWhenNoIncarnation(t *testing.T) {
 		t.Fatal(err)
 	}
 	to, _ := parse(t, out)
-	if to != "claude.start" {
-		t.Fatalf("expected claude.start, got %s", to)
+	if to != "claude.open" {
+		t.Fatalf("expected claude.open, got %s", to)
 	}
 }
 
-func TestDeliverConfigAfterStart(t *testing.T) {
+func TestDeliverConfigAfterOpen(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	c.Tools = map[string]*schema{
 		"echo": {Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}},
 	}
 	c.Steps = []step{{
-		To: "claude.start", State: "return",
+		To: "claude.open", State: "return",
 		Value: json.RawMessage(`{"incarnation":"inc-1"}`),
 	}}
 	out, err := decide(c)
@@ -72,7 +72,7 @@ func TestReadMoreOnStreamEvents(t *testing.T) {
 	c.Input.Text = "hello"
 	c.Tools = map[string]*schema{"echo": {Type: "object"}}
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   json.RawMessage(`{"lines":["` + strings.ReplaceAll(streamLine, `"`, `\"`) + `"],"partial":"","delivery":"written","peer_eof":false,"error":""}`)},
@@ -93,7 +93,7 @@ func TestCompleteTurn(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   obs},
@@ -126,7 +126,7 @@ func TestBridgeCallDispatch(t *testing.T) {
 	c.Input.Text = "hello"
 	c.Tools = map[string]*schema{"echo": {Type: "object"}}
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   json.RawMessage(`{"lines":[],"partial":"","delivery":"written","peer_eof":false,"error":""}`)},
@@ -154,7 +154,7 @@ func TestBridgeResultDelivery(t *testing.T) {
 	c.Input.Text = "hello"
 	c.Tools = map[string]*schema{"echo": {Type: "object"}}
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   json.RawMessage(`{"lines":[],"partial":"","delivery":"written","peer_eof":false,"error":""}`)},
@@ -195,7 +195,7 @@ func TestFailedTurn(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   obs},
@@ -213,7 +213,7 @@ func TestPeerEOFBeforeResult(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   json.RawMessage(`{"lines":[],"partial":"","delivery":"written","peer_eof":true,"error":""}`)},
@@ -231,7 +231,7 @@ func TestToolFaultBecomesError(t *testing.T) {
 	c.Input.Text = "hello"
 	c.Tools = map[string]*schema{"echo": {Type: "object"}}
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
 			Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"hello\"}"]}`),
 			Value:   json.RawMessage(`{"lines":[],"partial":"","delivery":"written","peer_eof":false,"error":""}`)},
@@ -273,7 +273,7 @@ func TestTurnConfigIncludesSession(t *testing.T) {
 	c.Input.Session = "prev-session"
 	c.Tools = map[string]*schema{"echo": {Type: "object"}}
 	c.Steps = []step{
-		{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 	}
 	out, err := decide(c)
 	if err != nil {

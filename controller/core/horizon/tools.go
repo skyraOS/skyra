@@ -34,7 +34,7 @@ func (h Horizon) AvailableTools() map[string]ToolBinding {
 	names := slices.Sorted(maps.Keys(h.Reach))
 	for _, name := range names {
 		s := h.Reach[name]
-		if h.Internal(name) || s.Resident || s.Connection || s.Host != "" || len(s.All()) == 0 || s.All()[0].Title == "remember" || !s.WorkTool {
+		if h.Internal(name) || s.Host != "" || len(s.All()) == 0 || s.All()[0].Title == "remember" || !s.WorkTool {
 			continue
 		}
 		out[name] = ToolBinding{Target: name, Contracts: s.All()}

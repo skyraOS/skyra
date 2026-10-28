@@ -39,8 +39,8 @@ record tree in `.skyra/`.
 | **Dependencies and resolve** | A continuation invokes, waits on a slot, and resumes with what came back. Slots are opened before the child runs; the resolve record names every discharge (the join rule, by hashing); a fan-in claim picks the one resumer | `machine.gather`, `machine.claim`, `tree` |
 | **The call stack as capabilities** | The frame stack travels as directory fds: the frame a return discharges, then each frame waiting below it | `handshake`, `instance.Drive` |
 | **Replay derives everything** | Intake records, supervisor faults and resolves are each re-derived from their stored input; nothing is skipped | `replay` |
-| **Adapters** | A stateless Codex adapter invokes recorded start, exchange, inspect and stop operations on a resident process; the browser host holds parked conversations | `codex/resident/`, `codex/io/`, `hosts/web/` |
-| **Provider sandbox** | The runtime launches each Codex process under a registered Seatbelt profile with private state and a per-actor allowlisted egress proxy | `runtime/instance/`, `codex/provider/` |
+| **Adapters** | A stateless Codex or Claude adapter invokes recorded open, exchange, inspect and stop operations on a session of the service host; the browser host holds parked conversations | `codex/resident/`, `claude/resident/`, `service/io/`, `hosts/web/` |
+| **Provider sandbox** | The service host launches each Codex or Claude process under the profile its registration declares, with private state and an allowlisted egress proxy; the runtime only ever runs a process to its exit | `service/`, `codex/launch/`, `claude/launch/`, `codex/provider/` |
 | **Native attempt interruption** | The adapter interrupts the exact turn and confirms a terminal event, then returns the attempt to its parent as an observation (`refused`); runtime transitions remain provider-agnostic | `codex/resident/` |
 | **Real Codex** | Codex's tool calls become derived invokes of tools that run under the conversation's Horizon; a native command is interrupted and reported | `skyra ask`, `skyra` |
 | **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds a reference to the work (its stamp) and its descriptors, never its authority. `skyra resume` derives the instance from the tree, refuses work that is not parked or was already resumed, and the successor checks the event like any output | `machine.parked`, `runtime/park/`, `skyra resume` |
@@ -99,7 +99,6 @@ OS, the tree or the network.
 | Package | What it is |
 |---|---|
 | [`resident`](codex/resident/) | Stateless Codex protocol and lifecycle decisions |
-| [`io`](codex/io/) | One bounded operation on a granted resident connection |
 | [`provider`](codex/provider/) | Launches each Codex process under its Seatbelt profile, with an allowlisted egress proxy (Python) |
 | [`fake`](codex/fake/) | A deterministic fake app-server, for the demo and tests |
 | [`latency`](codex/latency/) | Holds back each model output of an app-server by a fixed delay; with `sweep.sh`, the overhead sweep, and `compare.sh`, native Codex against Skyra, in [`OVERHEAD-VS-INFERENCE.md`](../docs/OVERHEAD-VS-INFERENCE.md) |
@@ -128,6 +127,7 @@ on the existing path; the bundle README records the remaining migration.
 | Package | What it is |
 |---|---|
 | [`web`](hosts/web/) | The actor host in front of the human: WebSocket, parked conversation frames, past conversations derived from records |
+| [`service`](service/) | The service host (proposal 49): runs registered long-lived programs as sessions, each opened by a handle; [`host`](service/host/) is its binary, [`io`](service/io/) the adapter that performs one bounded operation on it |
 | [`actor`](hosts/actor/) | Legacy universal actor host, retained for the demo and earlier tests; current chat does not launch it |
 
 ### Binaries are registered by hash
@@ -169,8 +169,9 @@ its own state. A target is told its slot in `SKYRA_FRAME` and its read
 grants in `SKYRA_READ` (colon-separated, like `PATH`); that is information,
 and the profile is what enforces it. OS tests check that a file outside
 `read` is denied, that the same file is readable when granted, and that exec
-of any other program is denied. The real Codex app-server uses its registered
-resident profile and per-actor proxy, and none of the Horizon's shared grants.
+of any other program is denied. A model's process is the service host's: it
+runs under the profile its program registration declares, with its own egress
+proxy, and none of the Horizon's shared grants.
 
 ## The step
 
@@ -260,26 +261,28 @@ boot wakes (kqueue on G0), prints the lineage, replays it: 7 records, byte-ident
   frames/<F>/resolved-<round>       write-once fan-in claim: the resolve that won
 ```
 
-## Resident Codex adapter
+## Models behind the service host
 
-A connection is an edge between two actors, not something the kernel carries
-([proposal 38](../docs/next/proposal/38-think-procedure-proposal.md)). The edge is
-the adapter and whoever invoked it, named from the Horizon, so a program cannot
-pick another, and its socket lives in the user's private `/private/tmp/skyra-<uid>/`.
-`codex.start` launches a private app-server behind a holder (`runtime/hold`,
-`skyra hold`) that owns its stream and serves the edge's socket; if the edge
-already has a live one, the start is recorded as `reused` and nothing is
-launched. `codexio` is granted exactly that socket and performs one recorded
-exchange, inspection or stop through the holder, which keeps output that
-arrives between steps for the next one. `codexresident` rebuilds protocol state
-from the continuation's steps and chooses the next operation; each thread's
-whole prompt is `You are inside Skyra, a cognitive architecture, fulfilling:
-<header>`. The holder reclaims an idle app-server by an exponential backoff
-that every request resets (30 s doubling to 16 min, about half an hour idle;
-`SKYRA_HOLD_START` and `SKYRA_HOLD_MAX` override it), and a later turn finds out
-by its inspect and starts another. Codex tool calls become ordinary invokes of
-registered tools. An unexpected provider request or native attempt interrupts
-the turn, and is returned to the parent as an observation.
+The kernel runs every target to its exit
+([proposal 49](../docs/next/proposal/49-services-behind-adapters-proposal.md)).
+Anything long-lived sits behind an adapter: `service-io`, in front of the
+service host. The launcher starts one host per launch, and registers the
+programs it may run in a file beside the registry: Codex's app-server, and
+`claude-start` when the Claude CLI is installed, each with the profile, login
+and egress hosts it needs. `codex.open` (or `claude.open`) asks the host to
+start a session and returns its handle, an unguessable id that only the
+adapter's recorded steps carry. Exchange, inspect and stop name that handle,
+and the host keeps output that arrives between steps for the next one.
+`codexresident` rebuilds protocol state from the continuation's steps and
+chooses the next operation; each thread's whole prompt is `You are inside
+Skyra, a cognitive architecture, fulfilling: <header>`. Each turn opens its
+own session and stops it when done. The host reclaims a session left idle by
+an exponential backoff that every request resets (30 s doubling to 16 min,
+about half an hour idle), and a later operation on it sees the peer gone.
+Codex tool calls become ordinary invokes of registered tools. An unexpected
+provider request or native attempt interrupts the turn, and is returned to the
+parent as an observation. Pasted images are not given to either model for now
+(decision 2).
 
 ## Decisions, and where they live
 
@@ -298,9 +301,9 @@ the turn, and is returned to the parent as an observation.
 ## Known gaps
 
 The [resident custody experiment](experiments/resident/README.md) preceded the
-production path. Connection handoff now runs through `instance.Drive` and
-chat. Its tests launch `sandbox-exec`, so they must run outside an enclosing
-sandbox that prohibits applying Seatbelt profiles.
+service host (proposal 49), which replaced in-kernel resident connections.
+Tests launch `sandbox-exec`, so they must run outside an enclosing sandbox
+that prohibits applying Seatbelt profiles.
 
 - **Records store derived fields** (`state`, `to`, `payload`, `fault`). They
   are kept as a commitment that replay checks, not as a source of truth.
@@ -313,17 +316,17 @@ sandbox that prohibits applying Seatbelt profiles.
 - **Parked descriptors live in the webhost's memory.** The parked work and
   its Horizon are on disk, and resume derives them from the tree, but the
   frame fds cannot be written to disk: if the webhost stops, a waiting
-  conversation stays viewable but cannot continue until restore exists. The
-  Codex app-server is not among them: it lives behind its edge's holder,
-  which outlives the webhost and reclaims it when idle.
+  conversation stays viewable but cannot continue until restore exists. A
+  model's session is not among them: it lives in the service host, which
+  reclaims it when idle.
 - **`system.register` is not built.** Narrowing through the room is; adding a
   tool an agent wrote to its reach needs the tool's bytes in the tree for
   replay (improvements item 6).
 - **Fan-out is not for everyone yet** (next/32, H2). An emission that is a
   JSON array is that many instructions, one successor each, every slot opened
-  before any is released. A fan-out cannot return, cannot carry a resident
-  connection, and cannot hold an invoke that changes the waiter's Horizon
-  (`narrow`, `extend-reach`): those are emitted alone, and a branch of a
+  before any is released. A fan-out cannot return, and cannot hold an invoke
+  that changes the waiter's Horizon (`narrow`, `extend-reach`): those are
+  emitted alone, and a branch of a
   fan-out cannot extend the Horizon its siblings share. The scripted agent fans out;
   Codex and the human still emit one instruction at a time.
 - **Restore after a crash**, streaming, and the host's own restart are not built.

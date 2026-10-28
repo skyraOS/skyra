@@ -104,24 +104,14 @@ type ToolBinding struct {
 }
 
 type Surface struct {
-	WorkTool           bool               `json:"work_tool,omitempty"`
-	Agent              *AgentConfig       `json:"agent,omitempty"`
-	Path               string             `json:"path"`
-	SHA256             string             `json:"sha256"`
-	Input              *contract.Schema   `json:"input"`                          // what invoking it must fit: its registered contract
-	Contracts          []*contract.Schema `json:"contracts,omitempty"`            // its other contracts: a syscall's, or one the actor added to itself (next/32)
-	Continuation       bool               `json:"continuation,omitempty"`         // reads a Continuation on stdin; otherwise its bare payload
-	System             string             `json:"system,omitempty"`               // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
-	Resident           bool               `json:"resident,omitempty"`             // launch and retain a stream connection in custody
-	Connection         bool               `json:"connection,omitempty"`           // receive the caller's resident connection as fd 3
-	CloseConnection    bool               `json:"close_connection,omitempty"`     // release that connection after this operation
-	Args               []string           `json:"args,omitempty"`                 // fixed arguments for a resident target
-	ResourceOwnerDepth int                `json:"resource_owner_depth,omitempty"` // ancestor frame identifying the resident connection
-	ResidentProfile    string             `json:"resident_profile,omitempty"`     // named runtime-rendered profile template
-	ProxyHosts         []string           `json:"proxy_hosts,omitempty"`          // exact HTTPS CONNECT names for this resident
-	ProxyPath          string             `json:"proxy_path,omitempty"`           // pinned local proxy executable for this profile
-	ProxySHA256        string             `json:"proxy_sha256,omitempty"`
-	Provider           *Provider          `json:"provider,omitempty"` // the model CLI a darwin-provider-v1 resident runs (proposal 47)
+	WorkTool     bool               `json:"work_tool,omitempty"`
+	Agent        *AgentConfig       `json:"agent,omitempty"`
+	Path         string             `json:"path"`
+	SHA256       string             `json:"sha256"`
+	Input        *contract.Schema   `json:"input"`                  // what invoking it must fit: its registered contract
+	Contracts    []*contract.Schema `json:"contracts,omitempty"`    // its other contracts: a syscall's, or one the actor added to itself (next/32)
+	Continuation bool               `json:"continuation,omitempty"` // reads a Continuation on stdin; otherwise its bare payload
+	System       string             `json:"system,omitempty"`       // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
 	// State names the actor's own directory under the floor (next/32,
 	// decision 24): the one part of .skyra/ its sandbox may read and write.
 	// An actor can only see its own state.

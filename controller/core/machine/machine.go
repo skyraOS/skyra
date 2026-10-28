@@ -240,17 +240,7 @@ func release(s Instance) (Instance, []Effect) {
 		stdin, _ = json.Marshal(Continuation{Actor: agentName(self), Agent: self.Agent, Agents: agents(self), WorkTools: workToolNames(self), Delegated: self.Delegated, Frame: s.Stamp(), Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
 			Workspace: workspaceOf(self), Scratch: self.Authority.Scratch, Tools: tools(self), Contracts: contracts(self), Steps: []StepView{}})
 	}
-	socket := ""
-	if self.Surface.Resident || self.Surface.Connection {
-		var err error
-		if socket, err = edgeSocket(self, s.Floor, s.Sockets); err != nil {
-			return fault(s, err.Error())
-		}
-	}
-	if self.Surface.Resident {
-		return s, []Effect{Execute{Act: StartResident{Run: runOf(self, stdin, s.Floor, ""), Socket: socket, Horizon: self, Floor: s.Floor}, Force: true}}
-	}
-	return s, []Effect{Execute{Act: runOf(self, stdin, s.Floor, socket), Force: true}}
+	return s, []Effect{Execute{Act: runOf(self, stdin, s.Floor), Force: true}}
 }
 
 // parked: the host holds custody now, so this instance exits. If it refused,
@@ -598,7 +588,7 @@ func claim(s Instance, e Committed) (Instance, []Effect) {
 		return exit(s, "") // the operator's continuation: boot reads the claim and prints
 	}
 	s.R, s.Self, s.Phase = s.Held, resumed, Running
-	return s, []Effect{Execute{Act: Pop{}}, Execute{Act: runOf(resumed, s.Next, s.Floor, ""), Force: true}} // a continuation, never a connection surface
+	return s, []Effect{Execute{Act: Pop{}}, Execute{Act: runOf(resumed, s.Next, s.Floor), Force: true}}
 }
 
 // stranded: the walk found the strand, which is the syscall's result, or

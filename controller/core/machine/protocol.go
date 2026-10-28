@@ -10,16 +10,15 @@ import (
 
 // Instance is the state of one instance as it moves through its phases.
 type Instance struct {
-	Floor   string          // the .skyra path every rendered sandbox denies
-	Phase   Phase           // the phase whose event this instance is waiting for
-	Under   horizon.Horizon // the Horizon the input was emitted under
-	R       record.Record   // what this instance committed last: its state and stamp are R's
-	Self    horizon.Horizon // this instance's own Horizon, once released
-	Out     []byte          // the target's emission, while it is handed off
-	Kids    []Kid           // the successors stamped and verified so far, in instruction order
-	Next    []byte          // a resumed continuation's input, while the claim is decided
-	Held    record.Record   // the resolve record, while the claim is decided
-	Sockets string          // the directory edge sockets live in (runtime/hold.Dir); set by the shell, like Floor
+	Floor string          // the .skyra path every rendered sandbox denies
+	Phase Phase           // the phase whose event this instance is waiting for
+	Under horizon.Horizon // the Horizon the input was emitted under
+	R     record.Record   // what this instance committed last: its state and stamp are R's
+	Self  horizon.Horizon // this instance's own Horizon, once released
+	Out   []byte          // the target's emission, while it is handed off
+	Kids  []Kid           // the successors stamped and verified so far, in instruction order
+	Next  []byte          // a resumed continuation's input, while the claim is decided
+	Held  record.Record   // the resolve record, while the claim is decided
 
 	Accepting string  // the id of the Horizon a release named, while it is read and accepted
 	Arrived   int     // how many descriptors arrived with that release (41, V3)
@@ -224,21 +223,11 @@ type Action interface{ action() }
 type SendStamp struct{ Stamp string } // tell the parent this stamp; its release is the result
 type Acknowledge struct{ Err string } // tell the parent whether this instance accepted custody
 type Run struct {                     // run the target; its emission is the result
-	Surface  horizon.Surface
-	Exec     string // the verified copy of the surface's program, which is what runs (43 D5)
-	Stdin    []byte
-	Profile  string
-	Env      []string // the target's whole environment: nothing is inherited
-	Resident string   // a connection surface's edge socket: the one path it may reach the resident by
-}
-
-// StartResident launches a resident behind its edge's holder (runtime/hold),
-// or finds the live one the edge already has.
-type StartResident struct {
-	Run     Run
-	Socket  string // the edge's socket: derived from the floor and the two actors
-	Horizon horizon.Horizon
-	Floor   string
+	Surface horizon.Surface
+	Exec    string // the verified copy of the surface's program, which is what runs (43 D5)
+	Stdin   []byte
+	Profile string
+	Env     []string // the target's whole environment: nothing is inherited
 }
 type Spawn struct { // start the successor, hand it the bytes and the id of the Horizon they were emitted under; its stamp is the result
 	Under string
@@ -263,7 +252,6 @@ type Exit struct{ Err string }
 func (SendStamp) action()      {}
 func (Acknowledge) action()    {}
 func (Run) action()            {}
-func (StartResident) action()  {}
 func (Spawn) action()          {}
 func (ReleaseChild) action()   {}
 func (KillSuccessors) action() {}

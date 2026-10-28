@@ -6,10 +6,10 @@ when anything about setup changes, update this file in the same commit.
 **Current setup: 2026-09-28.** macOS 15.6 (Apple Silicon), Go 1.25.0,
 Node 26.0.0, Python 3.9, Codex CLI **0.160.0**.
 
-The controller launches one Codex app-server per conversation under a registered
-Seatbelt profile, with direct dynamic tools, private state and an allowlisted
-egress proxy. A holder keeps the app-server's stream across turns, behind the
-conversation's edge socket, and every exchange is recorded. Live conversation, runtime echo execution and replay
+The service host launches one Codex app-server per turn under the Seatbelt
+profile its program registration declares, with direct dynamic tools, private
+state and an allowlisted egress proxy (proposal 49). The adapter reaches it
+through `service-io` by the session's handle, and every exchange is recorded. Live conversation, runtime echo execution and replay
 passed on September 28. A captured inference request contains only the direct
 `functions.echo` tool. The `read` tool was added after that capture: it is
 verified with the fake provider, not yet against live Codex (rerun

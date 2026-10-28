@@ -62,8 +62,8 @@ kill_tree() {
   kill "$1" 2>/dev/null || true
 }
 
-# Each conversation's Codex app-server lives behind its edge's holder
-# (proposal 38), which reclaims it after about half an hour idle.
+# Codex and Claude run as sessions of the service host (proposal 49), which
+# reclaims a session after about half an hour idle.
 STATE=${SKYRA_STATE:-$HOME/.skyra}
 # All launch modes authenticate ingress. Credentials travel in the environment.
 export SKYRA_WS_TOKEN=${SKYRA_WS_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}
@@ -83,7 +83,7 @@ controller_build() {
   cd "$ROOT"
   local t
   local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user models:targets/models
-    codexresident:codex/resident codexio:codex/io webhost:hosts/web fake-codex:codex/fake
+    codexresident:codex/resident service-io:service/io service-host:service/host webhost:hosts/web fake-codex:codex/fake
     clauderesident:claude/resident claude-start:claude/start claude-keychain:claude/keychain
     desktop-observe:cua/adapter cua-bridge:cua/bridge ideas-host:hosts/ideas design-tools:design repo-host:hosts/repo blender-tools:blender"
   for t in $builds; do go build -o "$BUILD/controller/${t%%:*}" "./controller/${t#*:}"; done
@@ -108,6 +108,7 @@ registry() {
     SKYRA_REGISTRY_MODE="$mode" SKYRA_REGISTRY_PARK="$park" \
     SKYRA_IDEAS_SOCKET="${IDEAS_SOCKET:-}" \
     SKYRA_REPO_SOCKET="${REPO_SOCKET:-}" \
+    SKYRA_SERVICE_SOCKET="$SERVICE_SOCKET" \
     SKYRA_REGISTRY_DEPTH="$depth" SKYRA_REGISTRY_FILE="$file" \
     SKYRA_REGISTRY_WORKSPACE="$WORKSPACE" SKYRA_REGISTRY_STATE="$STATE" python3 - <<'PY' || return 1
 import json, os, sys
@@ -136,17 +137,19 @@ if mode=='real':
     verified_version(binary)
     args=[]
     for feature in FEATURES: args.extend(['--disable',feature])
-    args.extend(['--enable','skip_host_skill_discovery','--enable','view_image','app-server','--listen','stdio://'])
-    # One provider profile for Codex and Claude (proposal 47): what differs is
-    # the provider descriptor, pinned with the surface.
-    start={'path':str(binary),'resident_profile':'darwin-provider-v1',
-           'provider':{'name':'codex','program':str(binary),'reads':[str(binary.parent.parent/'codex-package.json')],
-                       'auth':'file','auth_path':str(home/'.codex'/'auth.json')},
-           'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
-           'proxy_path':str(root/'controller/codex/provider/proxy.py'),'args':args}
+    args.extend(['--enable','skip_host_skill_discovery','app-server','--listen','stdio://'])
+    # The programs the service host may run (proposal 49): one provider
+    # profile for Codex and Claude (proposal 47), and what differs is here.
+    programs={'codex':{'path':str(binary),'provider':'codex','cli':str(binary),'reads':[str(binary.parent.parent/'codex-package.json')],
+                       'auth':'file','auth_path':str(home/'.codex'/'auth.json'),
+                       'proxy_hosts':['chatgpt.com','api.openai.com','auth.openai.com'],
+                       'proxy':str(root/'controller/codex/provider/proxy.py'),'args':args}}
 else:
-    start={'path':str(build/'fake-codex')}
-start.update({'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True})
+    programs={'codex':{'path':str(build/'fake-codex')}}
+# Every model operation is the service host's adapter, granted its socket.
+service=os.environ['SKYRA_SERVICE_SOCKET']
+def io(contract):
+    return {'path':str(build/'service-io'),'contract':str(root/'controller/service/io'/contract),'authority':{'connect':[service]}}
 registry={
  'echo':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/contract.json')},
  'read':{'path':str(build/'read'),'contract':str(root/'controller/targets/read/contract.json'),
@@ -157,18 +160,16 @@ registry={
  'models':{'path':str(build/'models'),'contract':str(root/'controller/targets/models/contract.json'),
            'authority':{'read':[{'path':str(home/'.codex'),'scope':'subpath'},{'path':str(home/'.claude'/'cache'/'model-catalog'),'scope':'subpath'}]}},
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
- 'codex':{'agent':{'operations':['codex.start','codex.exchange','codex.inspect','codex.stop']},'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
- 'codex.start':start,
- # Codex's operations reach its app-server through their edge's holder
- # (proposal 38): each is granted exactly that socket, nothing else.
- 'codex.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'codex.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'codex.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'claude':{'agent':{'operations':['claude.start','claude.exchange','claude.inspect','claude.stop']},'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
- 'claude.start':{'path':str(build/'claude-start'),'contract':str(root/'controller/codex/io/start-contract.json'),'resident':True},
- 'claude.exchange':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'claude.inspect':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
- 'claude.stop':{'path':str(build/'codexio'),'contract':str(root/'controller/codex/io/contract.json'),'connection':True},
+ 'codex':{'agent':{'operations':['codex.open','codex.exchange','codex.inspect','codex.stop']},'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
+ 'codex.open':io('open-contract.json'),
+ 'codex.exchange':io('contract.json'),
+ 'codex.inspect':io('contract.json'),
+ 'codex.stop':io('contract.json'),
+ 'claude':{'agent':{'operations':['claude.open','claude.exchange','claude.inspect','claude.stop']},'path':str(build/'clauderesident'),'contract':str(root/'controller/claude/resident/contract.json'),'state':True},
+ 'claude.open':io('open-contract.json'),
+ 'claude.exchange':io('contract.json'),
+ 'claude.inspect':io('contract.json'),
+ 'claude.stop':io('contract.json'),
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
  # The interpreter (next/32): remember, the procedures it builds, in its own state,
  # and the authored procedures a conversation runs (think, proposal 38).
@@ -178,15 +179,15 @@ registry={
 }
 # Claude runs under the same provider profile as Codex. Its login stays in the
 # keychain: a pinned helper serves that one item from outside the sandbox.
-# Without the CLI, claude.start has no profile and refuses to start.
+# Without the CLI there is no claude program, and claude.open is refused.
 import shutil
 claude=shutil.which('claude')
 if claude:
-    registry['claude.start'].update({'resident_profile':'darwin-provider-v1',
-        'provider':{'name':'claude','program':str(Path(claude).resolve(strict=True)),
-                    'auth':'keychain','keychain':'Claude Code-credentials','helper':str(build/'claude-keychain')},
+    programs['claude']={'path':str(build/'claude-start'),'provider':'claude','cli':str(Path(claude).resolve(strict=True)),
+        'auth':'keychain','keychain':'Claude Code-credentials','helper':str(build/'claude-keychain'),
         'proxy_hosts':['api.anthropic.com','platform.claude.com','claude.ai'],
-        'proxy_path':str(root/'controller/codex/provider/proxy.py')})
+        'proxy':str(root/'controller/codex/provider/proxy.py')}
+(cache/(launch+'-programs.json')).write_text(json.dumps({'programs':programs},sort_keys=True))
 desktop_config=os.environ.get('SKYRA_DESKTOP_CONFIG')
 if desktop_config:
     config=json.loads(Path(desktop_config).read_text())
@@ -341,15 +342,44 @@ stop_ideas_host() {
   [ -z "${REPO_HOST_PID:-}" ] || kill_tree "$REPO_HOST_PID"
 }
 
+# The service host runs the launch's long-lived programs (proposal 49). Its
+# socket is chosen before the registry, which grants it, and the host starts
+# after, on the programs the registry wrote beside itself.
+service_socket() {
+  SERVICE_DIR=$(mktemp -d /private/tmp/skyra-service-XXXXXX) || die 'cannot make the service directory'
+  SERVICE_SOCKET=$SERVICE_DIR/service.sock SERVICE_HOST_PID=
+}
+
+start_service_host() {
+  mkdir -p "$STATE/services"
+  "$BUILD/controller/service-host" -programs "${1%.json}-programs.json" -sock "$SERVICE_SOCKET" -state "$STATE/services" \
+    >"$STATE/service-$$.log" 2>&1 &
+  SERVICE_HOST_PID=$!
+  local i
+  for i in $(seq 1 100); do
+    kill -0 "$SERVICE_HOST_PID" 2>/dev/null || die "service host exited (see $STATE/service-$$.log)"
+    [ -S "$SERVICE_SOCKET" ] && return 0
+    sleep 0.1
+  done
+  die 'service host did not start'
+}
+
+stop_service_host() {
+  [ -z "${SERVICE_HOST_PID:-}" ] || kill_tree "$SERVICE_HOST_PID"
+  [ -z "${SERVICE_DIR:-}" ] || rm -rf "$SERVICE_DIR"
+}
+
 ask() {
   [ $# -gt 0 ] || die 'usage: skyra ask "TEXT"'
   say "building"
   controller_build
   local reg run scratch
   scratch=$(write_space)
-  trap stop_ideas_host INT TERM EXIT
+  trap 'stop_ideas_host; stop_service_host' INT TERM EXIT
   start_ideas_host
+  service_socket
   reg=$(registry real "$STATE/park.sock" 1)
+  start_service_host "$reg"
   mkdir -p "$STATE/runs"
   run=$STATE/runs/$(date +%Y%m%d-%H%M%S)-$$/.skyra
   mkdir -p "$run"
@@ -380,6 +410,7 @@ chat() {
   cleanup() {
     trap - INT TERM EXIT
     stop_ideas_host
+    stop_service_host
     say "stopping"
     [ -n "${ui_pid:-}" ] && kill_tree "$ui_pid"
     [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
@@ -388,7 +419,9 @@ chat() {
   trap cleanup INT TERM EXIT
   start_ideas_host
   [ "$mode" = fake ] && convs=$STATE/conversations-fake
+  service_socket
   reg=$(registry "$mode" "$park" 2)
+  start_service_host "$reg"
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" -scratch "$scratch" &
   web_pid=$!
@@ -427,12 +460,15 @@ tui_chat() {
   cleanup() {
     trap - INT TERM EXIT
     stop_ideas_host
+    stop_service_host
     [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
   }
   trap cleanup INT TERM EXIT
   start_ideas_host
   [ "$mode" = fake ] && convs=$STATE/conversations-fake
+  service_socket
   reg=$(registry "$mode" "$park" 2)
+  start_service_host "$reg"
   mkdir -p "$STATE"
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" -scratch "$scratch" >"$STATE/tui-webhost.log" 2>&1 &
@@ -492,13 +528,16 @@ serve() {
   cleanup() {
     trap - INT TERM EXIT
     stop_ideas_host
+    stop_service_host
     [ -n "${web_pid:-}" ] && kill_tree "$web_pid"
   }
   trap cleanup INT TERM EXIT
   start_ideas_host
   [ "$mode" = fake ] && convs=$STATE/conversations-fake
   mkdir -p "$STATE"
+  service_socket
   reg=$(registry "$mode" "$park" 2 app)
+  start_service_host "$reg"
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
     -registry "$reg" -conversations "$convs" -scratch "$scratch" &
   web_pid=$!

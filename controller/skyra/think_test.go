@@ -29,7 +29,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	}
 	for name, source := range map[string]string{
 		"skyra": ".", "echo": "../targets/echo", "read": "../targets/read", "find": "../targets/find", "roots": "../targets/roots",
-		"write": "../targets/write", "codex": "../codex/resident", "codexio": "../codex/io", "fake-codex": "../codex/fake",
+		"write": "../targets/write", "codex": "../codex/resident", "service-io": "../service/io", "fake-codex": "../codex/fake",
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		out, err := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, name), source).CombinedOutput()
@@ -49,9 +49,8 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	workspace := filepath.Join(dir, "work")
 	os.MkdirAll(workspace, 0o700)
 	os.WriteFile(filepath.Join(workspace, "a.txt"), []byte("alpha\n"), 0o600)
-	io := func() map[string]any {
-		return map[string]any{"path": filepath.Join(dir, "codexio"), "contract": abs("../codex/io/contract.json"), "connection": true}
-	}
+	socket := startService(t, dir, map[string]string{"codex": filepath.Join(dir, "fake-codex"), "claude": filepath.Join(dir, "fake-codex")})
+	io := func() map[string]any { return serviceIO(dir, socket, "contract.json") }
 	registry := map[string]any{
 		"echo":           map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
 		"read":           map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "authority": map[string]any{"read": []map[string]string{{"path": workspace, "scope": "subpath"}}}},
@@ -59,10 +58,10 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		"roots":          map[string]any{"path": filepath.Join(dir, "roots"), "contract": abs("../targets/roots/contract.json")},
 		"write":          map[string]any{"path": filepath.Join(dir, "write"), "contract": abs("../targets/write/contract.json")},
 		"codex":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../codex/resident/contract.json")},
-		"codex.start":    map[string]any{"path": filepath.Join(dir, "fake-codex"), "contract": abs("../codex/io/start-contract.json"), "resident": true},
+		"codex.open":     serviceIO(dir, socket, "open-contract.json"),
 		"codex.exchange": io(), "codex.inspect": io(), "codex.stop": io(),
 		"claude":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../claude/resident/contract.json"), "state": true},
-		"claude.start":    map[string]any{"path": filepath.Join(dir, "fake-codex"), "contract": abs("../codex/io/start-contract.json"), "resident": true},
+		"claude.open":     serviceIO(dir, socket, "open-contract.json"),
 		"claude.exchange": io(), "claude.inspect": io(), "claude.stop": io(),
 		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true, "bundle": abs("../interp/workflows/think/bundle.json")},
 	}
@@ -86,9 +85,6 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		runCtx, runCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer runCancel()
 		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "interpreter", "-payload", string(payload))
-		// Each boot is its own lineage, so its own edge: a short backoff
-		// lets each holder reclaim its resident soon after the test.
-		cmd.Env = append(os.Environ(), "SKYRA_HOLD_START=100ms", "SKYRA_HOLD_MAX=400ms")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("think %q: %v\n%s", text, err, out)

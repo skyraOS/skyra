@@ -16,7 +16,7 @@ func delegationRoom() horizon.Horizon {
 	worker.Agent = &horizon.AgentConfig{Operations: []string{"agent.start"}}
 	work := echoS
 	work.WorkTool = true
-	h.Reach = map[string]horizon.Surface{"agent": worker, "other": worker, "agent.start": {Resident: true, Input: echoIn}, "echo": work, "write": work, System: Syscalls()}
+	h.Reach = map[string]horizon.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": work, "write": work, System: Syscalls()}
 	h.Agent = &horizon.AgentContext{Actor: "agent", Model: "chosen-model"}
 	h.Authority = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	return h
@@ -162,25 +162,5 @@ func TestAgentModelPublicationIsOwnedAndCannotChangeInheritedModel(t *testing.T)
 	h.Surface = &echoS
 	if _, err := agentContext(h, json.RawMessage(`{"model":"chosen-model"}`)); err == nil {
 		t.Fatal("work tool impersonated agent")
-	}
-}
-
-func TestDelegatedProviderEdgeIsSeparateFromParentAndSiblings(t *testing.T) {
-	parent := horizon.Horizon{Resume: &horizon.Horizon{Name: "codex", Frame: "agent", Resume: &horizon.Horizon{Name: "interpreter"}}}
-	parentSocket, err := edgeSocket(parent, "/private/session/.skyra", "/private/tmp/skyra-501")
-	if err != nil {
-		t.Fatal(err)
-	}
-	child := parent
-	child.Delegated = true
-	child.Origin = "child-one"
-	childSocket, err := edgeSocket(child, "/private/session/.skyra", "/private/tmp/skyra-501")
-	if err != nil || childSocket == parentSocket {
-		t.Fatalf("child shared parent sandbox: %s %v", childSocket, err)
-	}
-	child.Origin = "child-two"
-	siblingSocket, err := edgeSocket(child, "/private/session/.skyra", "/private/tmp/skyra-501")
-	if err != nil || siblingSocket == childSocket {
-		t.Fatalf("siblings shared a provider: %s %v", siblingSocket, err)
 	}
 }

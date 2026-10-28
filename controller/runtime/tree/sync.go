@@ -18,7 +18,7 @@ import (
 //
 // Force empties the cache: one F_FULLFSYNC, which makes everything every
 // earlier barrier sent persistent. The shell forces before an act that
-// leaves the failure domain (a target runs, a resident starts, a host takes
+// leaves the failure domain (a target runs, a host takes
 // custody) and boot forces before it tells the operator anything. So an
 // effect is never released before its intent is durable; what can be lost
 // in a power loss is only the tail of controller-only steps since the last

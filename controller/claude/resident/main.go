@@ -3,10 +3,10 @@
 // stdin and emits the next recorded action on stdout. It never owns a process,
 // socket or descriptor; the runtime performs every action it emits.
 //
-// Turn lifecycle: start a one-shot resident, deliver the turn configuration,
-// read stream events, dispatch bridge tool calls to recorded-edge targets,
-// deliver bridge results back, and return the final text when the stream
-// completes.
+// Turn lifecycle: open a one-shot session of claude-start on the service
+// host, deliver the turn configuration, read stream events, dispatch bridge
+// tool calls to recorded-edge targets, deliver bridge results back, and
+// return the final text when the stream completes.
 package main
 
 import (
@@ -178,14 +178,14 @@ func decide(c continuation) (string, error) {
 			return "", fmt.Errorf("%s ended in %s", s.To, s.State)
 		}
 		switch s.To {
-		case "claude.start":
-			var started struct {
-				Incarnation string `json:"incarnation"`
+		case "claude.open":
+			var opened struct {
+				Incarnation, Error string
 			}
-			if json.Unmarshal(s.Value, &started) != nil || started.Incarnation == "" {
-				return "", errors.New("start did not return an incarnation")
+			if json.Unmarshal(s.Value, &opened) != nil || opened.Incarnation == "" {
+				return "", fmt.Errorf("open did not return a session: %s", opened.Error)
 			}
-			d.Incarnation = started.Incarnation
+			d.Incarnation = opened.Incarnation
 			d.ConfigSent = false
 			d.Done = false
 			d.Failed = ""
@@ -256,7 +256,7 @@ func decide(c continuation) (string, error) {
 		return emit("system", map[string]any{"agent-context": map[string]string{"model": resolvedModel(c)}}), nil
 	}
 	if d.Incarnation == "" {
-		return emit("claude.start", map[string]any{}), nil
+		return emit("claude.open", map[string]any{"program": "claude"}), nil
 	}
 
 	if !d.ConfigSent {

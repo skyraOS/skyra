@@ -26,7 +26,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 	}
 	for name, source := range map[string]string{
 		"skyra": ".", "echo": "../targets/echo", "read": "../targets/read", "codex": "../codex/resident", "claude": "../claude/resident",
-		"codexio": "../codex/io", "fake-codex": "../codex/fake", "fake-claude": "../claude/fake",
+		"service-io": "../service/io", "fake-codex": "../codex/fake", "fake-claude": "../claude/fake",
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		out, err := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, name), source).CombinedOutput()
@@ -43,17 +43,18 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 		t.Fatalf("build interpreter: %v %s", err, out)
 	}
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
+	socket := startService(t, dir, map[string]string{"codex": filepath.Join(dir, "fake-codex"), "claude": filepath.Join(dir, "fake-claude")})
 	registry := map[string]any{
 		"echo":        map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json"), "work_tool": true},
 		"read":        map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "work_tool": true},
 		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true},
 	}
 	for _, actor := range []string{"codex", "claude"} {
-		ops := []string{actor + ".start", actor + ".exchange", actor + ".inspect", actor + ".stop"}
+		ops := []string{actor + ".open", actor + ".exchange", actor + ".inspect", actor + ".stop"}
 		registry[actor] = map[string]any{"path": filepath.Join(dir, actor), "contract": abs("../" + actor + "/resident/contract.json"), "agent": map[string]any{"operations": ops}}
-		registry[actor+".start"] = map[string]any{"path": filepath.Join(dir, "fake-"+actor), "contract": abs("../codex/io/start-contract.json"), "resident": true}
+		registry[actor+".open"] = serviceIO(dir, socket, "open-contract.json")
 		for _, op := range ops[1:] {
-			registry[op] = map[string]any{"path": filepath.Join(dir, "codexio"), "contract": abs("../codex/io/contract.json"), "connection": true}
+			registry[op] = serviceIO(dir, socket, "contract.json")
 		}
 	}
 	b, _ := json.Marshal(registry)
@@ -93,7 +94,6 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 			runCtx, runCancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer runCancel()
 			cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-to", tc.rootActor, "-payload", string(payload))
-			cmd.Env = append(os.Environ(), "SKYRA_HOLD_START=100ms", "SKYRA_HOLD_MAX=400ms")
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("runtime: %v\n%s", err, out)

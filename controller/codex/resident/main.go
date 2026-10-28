@@ -37,7 +37,6 @@ type continuation struct {
 	Input     struct {
 		Text, Header, Conversation, Thread, Incarnation string
 		Context                                         json.RawMessage
-		Images                                          []string
 		ActivityAt                                      int64 `json:"activity_at"`
 	} `json:"input"`
 	Tools     map[string]*schema   `json:"tools"`
@@ -50,6 +49,7 @@ type observation struct {
 	PeerEOF                 bool   `json:"peer_eof"`
 	Error                   string `json:"error"`
 	ObservedAt              int64  `json:"observed_at"`
+	Incarnation             string `json:"incarnation"` // open: the session's handle
 }
 type message struct {
 	ID     json.RawMessage `json:"id"`
@@ -73,7 +73,6 @@ type derived struct {
 	Incarnation, Thread, Turn, Final, Violation, Partial             string
 	Initialized, SentInitialize, SentThread, SentTurn, SentInterrupt bool
 	NeedInspect, SentInspect, Inspected, NeedStop, Stopped, Lost     bool
-	Reused                                                           bool // codex.start found the edge's live server
 	InspectAt, ActivityAt                                            int64
 	Terminal, TerminalError                                          string // how the turn ended, and Codex's reason when it failed
 	Pending                                                          []message
@@ -144,15 +143,13 @@ func lookup(c continuation, name string) (tool, bool) {
 
 // turnInput is what a turn gives Codex: the conversation so far, when the
 // invoker passed it as context (proposal 38: a thread lasts one invocation,
-// so memory is the lineage's), each image pasted with the message as a local
-// image Codex reads from its path, then the message itself, always last.
-func turnInput(context json.RawMessage, images []string, text string) []any {
+// so memory is the lineage's), then the message itself, always last. Images
+// pasted with the message are not passed on: Codex has no read of them until
+// a recorded Skyra tool brings them back (proposal 49, decision 2).
+func turnInput(context json.RawMessage, text string) []any {
 	var input []any
 	if earlier := recall(context); earlier != "" {
 		input = append(input, map[string]string{"type": "text", "text": earlier})
-	}
-	for _, path := range images {
-		input = append(input, map[string]string{"type": "localImage", "path": path})
 	}
 	return append(input, map[string]string{"type": "text", "text": text})
 }
@@ -180,7 +177,7 @@ func recall(context json.RawMessage) string {
 }
 
 // quiet reports whether an operation only waited out its deadline with
-// nothing to read. codexio reports Go's net timeout ("i/o timeout").
+// nothing to read. service-io reports Go's net timeout ("i/o timeout").
 func quiet(o observation) bool {
 	return strings.Contains(o.Error, "i/o timeout") || strings.Contains(o.Error, "timed out") || strings.Contains(o.Error, "deadline exceeded")
 }
@@ -286,20 +283,14 @@ func decide(c continuation) (string, error) {
 			return "", fmt.Errorf("%s ended in %s", s.To, s.State)
 		}
 		switch s.To {
-		case "codex.start":
-			var started struct {
-				Incarnation string `json:"incarnation"`
-				Reused      bool   `json:"reused"`
+		case "codex.open":
+			var opened observation
+			if err := json.Unmarshal(s.Value, &opened); err != nil || opened.Incarnation == "" {
+				return "", fmt.Errorf("open did not return a session: %s", opened.Error)
 			}
-			if err := json.Unmarshal(s.Value, &started); err != nil || started.Incarnation == "" {
-				return "", errors.New("start did not return an incarnation")
-			}
-			d.Incarnation, d.Thread, d.Partial = started.Incarnation, "", ""
+			d.Incarnation, d.Thread, d.Partial = opened.Incarnation, "", ""
 			d.NeedInspect, d.SentInspect, d.Inspected = false, false, false
-			// A reused server is the edge's live one (proposal 38): it was
-			// initialized by an earlier invocation, so only a thread is new.
-			d.Initialized, d.SentInitialize, d.SentThread = started.Reused, started.Reused, false
-			d.Reused = started.Reused
+			d.Initialized, d.SentInitialize, d.SentThread = false, false, false
 		case "codex.stop":
 			var o observation
 			if err := json.Unmarshal(s.Value, &o); err != nil {
@@ -445,10 +436,9 @@ func decide(c continuation) (string, error) {
 						if m.Method == "item/completed" {
 							d.Final = m.Params.Item.Text
 						}
-					// Native read-only tools (proposal 38): view_image reads
-					// granted images and web search runs at the provider.
-					// Their reads are not recorded in the lineage.
-					case "imageView", "webSearch":
+					// Web search, a native read-only tool (proposal 38), runs
+					// at the provider. Its reads are not recorded in the lineage.
+					case "webSearch":
 						if c.Delegated {
 							d.Violation = m.Params.Item.Type
 						}
@@ -474,13 +464,13 @@ func decide(c continuation) (string, error) {
 	if c.Delegated && d.Stopped && d.Terminal != "" {
 		return finish(c, d)
 	}
-	// An idle server is the holder's to reclaim, by its backoff (proposal 38);
-	// a turn finds out by its inspect, and starts another.
+	// An idle server is the service host's to reclaim, by its backoff; a turn
+	// finds out by its inspect, and opens another.
 	if d.NeedStop && !d.Stopped {
 		return operation("codex.stop", d.Incarnation, "stop", nil, d.Partial), nil
 	}
 	if d.Incarnation == "" {
-		return emit("codex.start", map[string]any{}), nil
+		return emit("codex.open", map[string]any{"program": "codex"}), nil
 	}
 	if !d.SentInitialize && d.Thread == "" {
 		return ioCall(d.Incarnation, []string{rpc(c.Frame+":initialize", "initialize", map[string]any{"clientInfo": map[string]string{"name": "skyra", "version": "1"}, "capabilities": map[string]bool{"experimentalApi": true}})}, d.Partial), nil
@@ -498,15 +488,11 @@ func decide(c continuation) (string, error) {
 			params["model"] = c.Agent.Model
 		}
 		if c.Delegated {
-			params["config"] = map[string]any{"features.view_image": false, "web_search": "disabled"}
+			params["config"] = map[string]any{"web_search": "disabled"}
 		}
-		start := rpc(c.Frame+":thread", "thread/start", params)
-		deliver := []string{start}
-		if !d.Reused { // this invocation initialized the server: finish the handshake
-			initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
-			deliver = []string{string(initialized), start}
-		}
-		return ioCall(d.Incarnation, deliver, d.Partial), nil
+		// This invocation initialized the server: finish the handshake.
+		initialized, _ := json.Marshal(map[string]any{"method": "initialized", "params": map[string]any{}})
+		return ioCall(d.Incarnation, []string{string(initialized), rpc(c.Frame+":thread", "thread/start", params)}, d.Partial), nil
 	}
 	if d.Thread == "" {
 		return ioCall(d.Incarnation, nil, d.Partial), nil
@@ -532,7 +518,7 @@ func decide(c continuation) (string, error) {
 		return emit("system", map[string]any{"agent-context": map[string]string{"model": d.Model}}), nil
 	}
 	if !d.SentTurn {
-		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Images, c.Input.Text)})}, d.Partial), nil
+		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Text)})}, d.Partial), nil
 	}
 	if d.Turn == "" {
 		return ioCall(d.Incarnation, nil, d.Partial), nil

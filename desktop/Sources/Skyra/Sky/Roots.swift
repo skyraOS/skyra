@@ -8,7 +8,7 @@ import Foundation
 /// hand. Only the root is selectable; every star beneath it is for
 /// inspection.
 ///
-/// An actor's own operations (`codex.start`, `codex.exchange`, …) are its
+/// An actor's own operations (`codex.open`, `codex.exchange`, …) are its
 /// plumbing, not tools it uses: they are counted on the actor, not drawn.
 struct RootConstellation: Equatable {
     enum Kind: Equatable { case root, actor, tool }

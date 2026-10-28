@@ -15,21 +15,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
-	"syscall"
 	"time"
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/handshake"
-	"skyra/controller/runtime/launch"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
-
-	"skyra/controller/runtime/hold"
 )
 
 // Run is one run of skyra, started by a parent that holds fd 3.
@@ -54,7 +49,7 @@ func Run(root string) error {
 	if len(in) > maxEmission {
 		return errors.New("instance input too large")
 	}
-	_, err = Drive(root, up, nil, machine.Instance{Floor: root, Sockets: hold.Sockets(), Phase: machine.Intake}, machine.Received{Under: under, In: in})
+	_, err = Drive(root, up, nil, machine.Instance{Floor: root, Phase: machine.Intake}, machine.Received{Under: under, In: in})
 	return err
 }
 
@@ -307,8 +302,6 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 	case machine.Run:
 		trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
 		return run(x), false, nil
-	case machine.StartResident:
-		return startResident(x, root), false, nil
 	case machine.Spawn:
 		down, child, ev, err := spawn(root, x)
 		if err != nil {
@@ -410,114 +403,14 @@ func run(x machine.Run) machine.Event {
 	return machine.Executed{Obs: emission}
 }
 
-// startResident launches a registered stream target under its Horizon profile,
-// behind a holder that serves its edge's socket (runtime/hold, proposal 38).
-// If the edge already has a live resident, that one is the answer: recorded as
-// reused, so every turn of a conversation shares one. The resident sees the
-// holder as stdin and stdout and exits on EOF when the holder lets it go.
-// Nothing of the stream stays with this instance.
-func startResident(x machine.StartResident, root string) machine.Event {
-	if incarnation := hold.Hello(x.Socket); incarnation != "" {
-		trace.Logf("execute  the edge already holds resident %s: reused", incarnation)
-		out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{"incarnation": incarnation, "reused": true}})
-		return machine.Executed{Obs: out}
-	}
-	exe := x.Run.Exec
-	if launch.Installed(x.Run.Surface) {
-		exe = ""
-	} else if exe == "" {
-		return machine.Executed{Err: "surface has no verified copy to run"}
-	}
-	if err := verifiedCopy(x.Run.Surface, exe); err != nil {
-		return machine.Executed{Err: err.Error()}
-	}
-	if exe == "" {
-		exe = x.Run.Surface.Path
-	}
-	profile, env, work := x.Run.Profile, x.Run.Env, ""
-	var prepared *launch.Resident
-	var err error
-	if x.Run.Surface.ResidentProfile != "" {
-		prepared, err = launch.Prepare(x, root)
-	}
-	if err != nil {
-		return machine.Executed{Err: err.Error()}
-	}
-	if prepared != nil {
-		profile, env, work = prepared.Profile, prepared.Env, prepared.Work
-	}
-	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
-	if err != nil {
-		if prepared != nil {
-			prepared.Abort()
-		}
-		return machine.Executed{Err: err.Error()}
-	}
-	for _, fd := range fds {
-		syscall.CloseOnExec(fd)
-	}
-	local := os.NewFile(uintptr(fds[0]), "resident-connection")
-	peer := os.NewFile(uintptr(fds[1]), "resident-peer")
-	defer peer.Close()
-	argv := []string{"-p", profile, exe}
-	if prepared != nil {
-		argv = []string{"-f", prepared.ProfileFile, exe}
-	}
-	argv = append(argv, x.Run.Surface.Args...)
-	cmd := exec.Command("/usr/bin/sandbox-exec", argv...)
-	// The resident outlives this step, so it keeps none of this process's
-	// output: what it says on stderr goes to its edge's log.
-	logs, err := edgeLog(x.Socket)
-	if err != nil {
-		local.Close()
-		if prepared != nil {
-			prepared.Abort()
-		}
-		return machine.Executed{Err: err.Error()}
-	}
-	defer logs.Close()
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = peer, peer, logs
-	cmd.Env, cmd.Dir = env, work
-	if prepared != nil {
-		cmd.ExtraFiles = []*os.File{prepared.Watch}
-	}
-	if err := cmd.Start(); err != nil {
-		local.Close()
-		if prepared != nil {
-			prepared.Abort()
-		}
-		return machine.Executed{Err: err.Error()}
-	}
-	if prepared != nil {
-		prepared.Started()
-	}
-	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
-	pid := cmd.Process.Pid
-	cmd.Process.Release()
-	owner := []string{}
-	if x.Horizon.Resume != nil {
-		owner = []string{root, x.Horizon.Resume.Frame}
-	}
-	if err := startHolder(local, logs, x.Socket, incarnation, owner...); err != nil {
-		return machine.Executed{Err: "resident holder: " + err.Error()}
-	}
-	out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{
-		"pid": pid, "incarnation": incarnation,
-		"profile": record.Sum([]byte(profile))}})
-	return machine.Executed{Obs: out}
-}
-
 // verifiedCopy checks a surface's program against its registered hash and
 // publishes exactly the bytes it checked at exe, the path its profile lets
 // run (43 D5). The registered path can change between a check and an exec;
 // exe is under the floor, which nothing but the runtime can write. A copy
-// already there is checked again, not trusted. An empty exe only checks: the
-// caller runs the registered path.
+// already there is checked again, not trusted.
 func verifiedCopy(s horizon.Surface, exe string) error {
-	if exe != "" {
-		if have, err := os.ReadFile(exe); err == nil && record.Sum(have) == s.SHA256 {
-			return nil
-		}
+	if have, err := os.ReadFile(exe); err == nil && record.Sum(have) == s.SHA256 {
+		return nil
 	}
 	bin, err := os.ReadFile(s.Path)
 	if err != nil {
@@ -525,9 +418,6 @@ func verifiedCopy(s horizon.Surface, exe string) error {
 	}
 	if record.Sum(bin) != s.SHA256 {
 		return errors.New("surface binary does not match its registered hash")
-	}
-	if exe == "" {
-		return nil
 	}
 	if filepath.Base(exe) != s.SHA256 {
 		return errors.New("verified copy is not named by its hash")
@@ -556,43 +446,6 @@ func verifiedCopy(s horizon.Surface, exe string) error {
 	}
 	// Published whole or not at all: a reader never sees part of a copy.
 	return os.Rename(tmp.Name(), exe)
-}
-
-// edgeLog is where a resident and its holder write diagnostics: beside the
-// edge's socket, in the user's private directory, appended across restarts.
-func edgeLog(socket string) (*os.File, error) {
-	return os.OpenFile(strings.TrimSuffix(socket, ".sock")+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-}
-
-// skyraBinary is the skyra executable a holder runs as: this one, except
-// under a test, which is not skyra.
-var skyraBinary = os.Executable
-
-// startHolder hands the resident's end of its stream to a holder serving the
-// edge's socket, and returns once that holder answers for the incarnation.
-// Closing local here leaves the holder the stream's only keeper: when it lets
-// go, the resident reads EOF and exits.
-func startHolder(local, logs *os.File, socket, incarnation string, owner ...string) error {
-	defer local.Close()
-	self, err := skyraBinary()
-	if err != nil {
-		return err
-	}
-	args := []string{"hold", socket, incarnation}
-	args = append(args, owner...)
-	cmd := exec.Command(self, args...)
-	cmd.ExtraFiles = []*os.File{local}
-	cmd.Stderr = logs // like the resident, it outlives this step and keeps none of its output
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	cmd.Process.Release()
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if hold.Hello(socket) == incarnation {
-			return nil
-		}
-	}
-	return errors.New("did not start serving the edge")
 }
 
 // spawn performs a Spawn: start skyra again with the bytes on stdin, send it

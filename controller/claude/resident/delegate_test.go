@@ -28,7 +28,7 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 	if !strings.Contains(string(b), `"tools":[]`) {
 		t.Fatalf("reasoning-only config: %s", b)
 	}
-	c.Steps = []step{{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
+	c.Steps = []step{{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
 		{To: "claude.exchange", State: "return", Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"goal\"}"]}`), Value: json.RawMessage(`{"lines":["{\"type\":\"result\",\"subtype\":\"success\",\"session_id\":\"child-session\",\"result\":\"findings\"}"]}`)}}
 	if _, err := decide(c); err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 	if len(ts) != 1 || ts[0].Name != "delegate" || ts[0].Target != "interpreter" {
 		t.Fatalf("procedure catalog: %+v", ts)
 	}
-	c.Steps = []step{{To: "claude.start", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
+	c.Steps = []step{{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
 		{To: "claude.exchange", State: "return", Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"goal\"}"]}`), Value: json.RawMessage(`{"lines":["{\"_bridge\":\"call\",\"id\":\"call\",\"name\":\"delegate\",\"args\":{\"delegate\":{\"goal\":\"inspect\"}}}"]}`)}}
 	out, err := decide(c)
 	if err != nil || !strings.Contains(out, `"to":"interpreter"`) || !strings.Contains(out, `"goal":"inspect"`) {

@@ -26,8 +26,13 @@ adapter contracts; delegation stays the interpreter's `delegate` procedure.
 - ~~Take provider-specific launch code out of `controller/runtime`.~~ Done
   2026-10-27: `runtime/launch` prepares any provider resident; Codex and
   Claude register their pins, config and environment from `codex/launch` and
-  `claude/launch`, wired in `skyra/main.go`. `core/horizon/resident.go` and
-  the Surface's resident fields are still to go (spec, steps 5–6).
+  `claude/launch`, wired in `skyra/main.go`.
+- ~~Take long-lived processes out of the kernel.~~ Done 2026-10-27
+  ([proposal 49](proposal/49-services-behind-adapters-proposal.md)): the
+  kernel only runs a target to its exit. Codex and Claude are programs of the
+  service host (`controller/service`), reached through `service-io` by the
+  session handle the adapter's steps carry. `runtime/hold`, `runtime/launch`,
+  `core/horizon/resident.go` and every resident or connection field are gone.
 - Residents leave core and runtime:
   [proposal 49](proposal/49-services-behind-adapters-proposal.md). Every exec
   is stateless, the profile is what the actor declared at registration, and a

@@ -66,7 +66,7 @@ def main():
                 if b'cua-bridge: daemon 1 pid=' not in log or b'observation-only' not in log:
                     raise RuntimeError('real desktop observation did not start: '+log.decode(errors='replace'))
             else:
-                registry = next(p for p in (state/'runtime').glob('registry-*.json') if 'codex.start' in json.loads(p.read_text()))
+                registry = next(p for p in (state/'runtime').glob('registry-*.json') if 'codex.open' in json.loads(p.read_text()))
                 scratch = home/'notes'; scratch.mkdir()
                 for number, request in enumerate(('read:a.txt', 'write:note.txt=release note')):
                     result = subprocess.run([str(runtime/'build/controller/skyra'), 'boot', '-root', str(home/f'run-{number}'/'.skyra'), '-registry', str(registry), '-scratch', str(scratch), '-to', 'codex', '-text', request], env=env, cwd=workspace, capture_output=True, text=True, timeout=45)

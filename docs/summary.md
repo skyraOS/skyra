@@ -105,14 +105,15 @@ Selecting a procedure does not grant its dependencies. Transport operations
 currently receive an internal exemption from this work-tool restriction.
 
 A child receives only its goal as task context, without parent history, images
-or provider session identifiers. It gets a separate provider edge. Ordinary
+or provider session identifiers. It opens its own provider session. Ordinary
 child faults and refusals return `{failed:{kind,cause}}`; integrity and persistence
 failures retain the runtime's stop behavior. Delegated Codex records a stop before
-returning, while Claude uses a one-shot provider process. The parent's holder
-stays alive while its frame is unfinished, then resumes idle reclamation.
+returning, while Claude uses a one-shot provider process. The parent's session
+is reclaimed only by the service host's idle backoff, about half an hour, so a
+parent waiting longer than that on a child loses its session (proposal 49).
 
 The implementation still uses `Horizon.Agent`, `WorkTools` and `Delegated`,
-`system.agent-context`, and delegated socket/profile branches. These are current
+and `system.agent-context`. These are current
 mechanisms, not the intended final ownership boundaries. See
 [DELEGATION.md](design/DELEGATION.md) for exact semantics and verification limits.
 
@@ -189,7 +190,7 @@ either design.
    cancellation, resource loss and old-conversation compatibility.
 2. Fix public interpreter activity visibility and parent/child correlation.
 3. Establish equivalent generic contract authority and provider enforcement before
-   removing `WorkTools`, `AgentContext`, `Delegated` or resident-specific branches.
+   removing `WorkTools`, `AgentContext` or `Delegated`.
 4. Build user-owned root/frontier checkpoints and projection, then move the rest
    of the conversation application into procedures without duplicating state.
 5. Validate live provider isolation, restart behavior and remembered recurrence

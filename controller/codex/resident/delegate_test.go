@@ -29,7 +29,7 @@ func TestDelegatedThreadUsesInheritedModelAndNoNativeTools(t *testing.T) {
 	if json.Unmarshal([]byte(ex.Deliver[len(ex.Deliver)-1]), &msg) != nil {
 		t.Fatal("bad RPC")
 	}
-	if msg.Params.Model != "chosen-model" || len(msg.Params.DynamicTools) != 0 || msg.Params.Config["features.view_image"] != false || msg.Params.Config["web_search"] != "disabled" {
+	if msg.Params.Model != "chosen-model" || len(msg.Params.DynamicTools) != 0 || msg.Params.Config["web_search"] != "disabled" {
 		t.Fatalf("delegated thread configuration: %+v", msg.Params)
 	}
 }

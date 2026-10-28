@@ -11,7 +11,6 @@ package registry
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,30 +20,20 @@ import (
 	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
-	"skyra/controller/runtime/launch"
 )
 
 // Entry is one surface in the registry file. Relative paths are relative to
 // the file.
 type Entry struct {
-	WorkTool           bool                 `json:"work_tool,omitempty"`
-	Agent              *horizon.AgentConfig `json:"agent,omitempty"`
-	Path               string               `json:"path"`
-	Contract           string               `json:"contract"`
-	Connect            []string             `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
-	Host               string               `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
-	Authority          horizon.Authority    `json:"authority,omitempty"` // a grant this entry brings into the room
-	Resident           bool                 `json:"resident,omitempty"`
-	Connection         bool                 `json:"connection,omitempty"`
-	CloseConnection    bool                 `json:"close_connection,omitempty"`
-	Args               []string             `json:"args,omitempty"`
-	ResourceOwnerDepth int                  `json:"resource_owner_depth,omitempty"`
-	ResidentProfile    string               `json:"resident_profile,omitempty"`
-	ProxyHosts         []string             `json:"proxy_hosts,omitempty"`
-	ProxyPath          string               `json:"proxy_path,omitempty"`
-	Provider           *horizon.Provider    `json:"provider,omitempty"` // the model CLI a darwin-provider-v1 resident runs; hashes are pinned here
-	State              bool                 `json:"state,omitempty"`    // the actor keeps state of its own, in .skyra/<name>/ (next/32)
-	Bundle             string               `json:"bundle,omitempty"`   // versioned authored procedure bundle, provisioned before genesis
+	WorkTool  bool                 `json:"work_tool,omitempty"`
+	Agent     *horizon.AgentConfig `json:"agent,omitempty"`
+	Path      string               `json:"path"`
+	Contract  string               `json:"contract"`
+	Connect   []string             `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
+	Host      string               `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
+	Authority horizon.Authority    `json:"authority,omitempty"` // a grant this entry brings into the room
+	State     bool                 `json:"state,omitempty"`     // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle    string               `json:"bundle,omitempty"`    // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -95,7 +84,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		}
 		var bundlePath, bundleSHA string
 		if e.Bundle != "" {
-			if !e.State || !d.Continuation || e.Host != "" || e.Resident || e.Connection {
+			if !e.State || !d.Continuation || e.Host != "" {
 				return nil, room, fmt.Errorf("%s: a bundle needs a stateful continuation", name)
 			}
 			var err error
@@ -146,7 +135,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			bundleSHA = record.Sum(b)
 		}
 		if e.Host != "" {
-			if e.Path != "" || e.Resident || e.Connection || len(e.Args) > 0 || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
+			if e.Path != "" || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 {
 				return nil, room, fmt.Errorf("%s: an async surface cannot carry executable authority", name)
 			}
 			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input}
@@ -154,23 +143,6 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		}
 		if e.Path == "" {
 			return nil, room, fmt.Errorf("%s: missing executable path", name)
-		}
-		if e.Resident && e.Connection || e.CloseConnection && !e.Connection || !e.Resident && (len(e.Args) != 0 || e.ResidentProfile != "" || len(e.ProxyHosts) != 0 || e.ProxyPath != "" || e.Provider != nil) {
-			return nil, room, fmt.Errorf("%s: invalid resident or connection configuration", name)
-		}
-		if e.ResidentProfile != "" && e.ResidentProfile != "darwin-provider-v1" {
-			return nil, room, fmt.Errorf("%s: unknown resident profile %q", name, e.ResidentProfile)
-		}
-		if (e.ResidentProfile != "") != (e.Provider != nil) || e.ResidentProfile != "" && (len(e.ProxyHosts) == 0 || e.ProxyPath == "") {
-			return nil, room, fmt.Errorf("%s: a provider profile requires its provider and proxy hosts", name)
-		}
-		for _, host := range e.ProxyHosts {
-			if host == "" || host != strings.ToLower(host) || strings.ContainsAny(host, "/:@ \n\r\x00") {
-				return nil, room, fmt.Errorf("%s: invalid proxy host %q", name, host)
-			}
-		}
-		if e.ResourceOwnerDepth < 0 || e.ResourceOwnerDepth > 8 || e.ResourceOwnerDepth > 0 && !e.Resident && !e.Connection {
-			return nil, room, fmt.Errorf("%s: invalid resource owner depth", name)
 		}
 		path, err := filepath.EvalSymlinks(resolve(dir, e.Path))
 		if err != nil {
@@ -197,25 +169,6 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		if err != nil {
 			return nil, room, fmt.Errorf("%s: %w", name, err)
 		}
-		var proxyPath, proxySHA string
-		if e.ProxyPath != "" {
-			proxyPath, err = filepath.EvalSymlinks(resolve(dir, e.ProxyPath))
-			if err != nil {
-				return nil, room, err
-			}
-			var proxy []byte
-			proxy, err = os.ReadFile(proxyPath)
-			if err != nil {
-				return nil, room, err
-			}
-			proxySHA = record.Sum(proxy)
-		}
-		var provider *horizon.Provider
-		if e.Provider != nil {
-			if provider, err = pinProvider(dir, path, record.Sum(bin), *e.Provider); err != nil {
-				return nil, room, fmt.Errorf("%s provider: %w", name, err)
-			}
-		}
 		var state string
 		if e.State {
 			if !horizon.ValidState(name) {
@@ -223,18 +176,18 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 			}
 			state = name
 		}
-		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, Resident: e.Resident, Connection: e.Connection, CloseConnection: e.CloseConnection, Args: e.Args, ResourceOwnerDepth: e.ResourceOwnerDepth, ResidentProfile: e.ResidentProfile, ProxyHosts: e.ProxyHosts, ProxyPath: proxyPath, ProxySHA256: proxySHA, Provider: provider, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
 	for name, s := range reach {
 		if s.Agent == nil {
 			continue
 		}
-		if !s.Continuation || s.WorkTool || s.Resident || s.Connection || s.Host != "" || len(s.Agent.Operations) == 0 {
+		if !s.Continuation || s.WorkTool || s.Host != "" || len(s.Agent.Operations) == 0 {
 			return nil, room, fmt.Errorf("%s: invalid agent configuration", name)
 		}
 		for _, op := range s.Agent.Operations {
 			target, ok := reach[op]
-			if !ok || op == name || target.Agent != nil || target.WorkTool || !(target.Resident || target.Connection) {
+			if !ok || op == name || target.Agent != nil || target.WorkTool || target.Host != "" {
 				return nil, room, fmt.Errorf("%s: invalid agent operation %q", name, op)
 			}
 		}
@@ -334,60 +287,4 @@ func resolve(dir, p string) string {
 		return p
 	}
 	return filepath.Join(dir, p)
-}
-
-// pinProvider resolves a provider's paths and pins its program and helper by
-// content hash (proposal 47). The resident at path, with hash sum, is the
-// program itself when they are the same file.
-func pinProvider(dir, path, sum string, p horizon.Provider) (*horizon.Provider, error) {
-	if !launch.Known(p.Name) {
-		return nil, fmt.Errorf("unknown provider %q", p.Name)
-	}
-	pin := func(file string) (string, string, error) {
-		if file == "" {
-			return "", "", errors.New("missing program")
-		}
-		resolved, err := filepath.EvalSymlinks(resolve(dir, file))
-		if err != nil {
-			return "", "", err
-		}
-		if resolved, err = filepath.Abs(resolved); err != nil {
-			return "", "", err
-		}
-		if resolved == path {
-			return resolved, sum, nil
-		}
-		b, err := os.ReadFile(resolved)
-		if err != nil {
-			return "", "", err
-		}
-		return resolved, record.Sum(b), nil
-	}
-	var err error
-	if p.Program, p.ProgramSHA256, err = pin(p.Program); err != nil {
-		return nil, err
-	}
-	for i, read := range p.Reads {
-		if !filepath.IsAbs(read) {
-			return nil, fmt.Errorf("read %q is not absolute", read)
-		}
-		p.Reads[i] = filepath.Clean(read)
-	}
-	switch p.Auth {
-	case "file":
-		if !filepath.IsAbs(p.AuthPath) || p.Keychain != "" || p.Helper != "" {
-			return nil, errors.New("file auth takes an absolute auth_path and nothing else")
-		}
-		p.AuthPath, p.HelperSHA256 = filepath.Clean(p.AuthPath), ""
-	case "keychain":
-		if p.Keychain == "" || strings.ContainsAny(p.Keychain, "\"\\\n\r\x00") || p.AuthPath != "" {
-			return nil, errors.New("keychain auth takes a plain service name and a helper")
-		}
-		if p.Helper, p.HelperSHA256, err = pin(p.Helper); err != nil {
-			return nil, fmt.Errorf("helper: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unknown auth %q", p.Auth)
-	}
-	return &p, nil
 }

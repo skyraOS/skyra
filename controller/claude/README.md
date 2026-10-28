@@ -9,7 +9,7 @@ UI, token collection, custom OAuth implementation, or permission bypass.
 - print-mode argument construction and explicit session resume;
 - native tools, ambient MCP configuration, hooks and settings discovery disabled;
 - refusal of inherited API credentials and alternate provider overrides;
-- bounded stream parser retaining raw events for holder recording;
+- bounded stream parser retaining raw events for recording;
 - allowlisting of offered Skyra MCP tool names, including partial tool starts;
 - fail-closed handling of malformed streams, session changes and missing results;
 - loopback-only MCP configuration and explicit tool permission allowlist.
@@ -21,20 +21,20 @@ UI, token collection, custom OAuth implementation, or permission bypass.
 - tool delivery delegated to an injected recorded-edge callback, never local
   filesystem or process operations;
 - frame-scoped delivery IDs, concurrent retry coalescing and conflicting-retry
-  refusal; durable deduplication remains the recorded holder's responsibility;
+  refusal; durable deduplication remains the recorded adapter's responsibility;
 - bounded request bodies and generic errors that do not expose callback secrets.
 
-`start` (resident wrapper):
-- one-shot resident that manages a single turn's claude CLI subprocess;
+`start` (provider wrapper, a program of the service host):
+- one-shot session that manages a single turn's claude CLI subprocess;
 - generates an ephemeral bridge capability per turn;
 - starts loopback MCP bridge HTTP server alongside the claude process;
-- forwards claude's stream-json stdout to the holder;
+- forwards claude's stream-json stdout to the service host;
 - reads bridge result deliveries from stdin and routes to pending calls;
 - sanitizes the process environment to reject inherited API credentials.
 
 `resident` (continuation adapter):
 - stateless continuation-driven state machine for turn lifecycle;
-- starts a fresh incarnation per turn (one-shot resident model);
+- opens a fresh session per turn (one-shot model);
 - delivers turn configuration including bridge tool catalog;
 - parses stream events for session tracking and final text extraction;
 - dispatches bridge tool calls to recorded-edge targets;
@@ -42,10 +42,11 @@ UI, token collection, custom OAuth implementation, or permission bypass.
 - handles quiet exchanges, peer EOF and error states;
 - builds bridge tools from the continuation's reach and JSON Schema conversion.
 
-Registry and build entries added to the skyra script; IO operations reuse the
-existing codexio binary and holder protocol. The adapter is registered as
-`claude`; its operations are `claude.start`, `claude.exchange`, `claude.inspect`
-and `claude.stop`.
+Registry and build entries added to the skyra script; its operations are
+`service-io` on the service host (proposal 49), and the host runs
+claude-start as the `claude` program. The adapter is registered as `claude`;
+its operations are `claude.open`, `claude.exchange`, `claude.inspect` and
+`claude.stop`.
 
 The HTTP handler is a component, not a running provider. Its caller must bind
 only loopback, generate a cryptographically random per-turn capability, stop
@@ -71,12 +72,12 @@ were denied; some runtime tests timed out. Its complete report is
   the `security` on PATH: it answers `find-generic-password` and
   `add-generic-password -U -X` (token refresh) for one item, and refuses every
   other command, deletion included;
-- outside, the runtime runs it as a broker on a private socket. It serves only
-  the `Claude Code-credentials` item the surface pins, and exits with the
-  resident.
+- outside, the service host runs it as a broker on a private socket. It
+  serves only the `Claude Code-credentials` item the program registration
+  pins, and exits with the session.
 
-2026-10-23: live turns through `skyra ask` under `darwin-provider-v1`, the
-profile shared with Codex, with subscription login through the broker. Egress
+2026-10-23: live turns through `skyra ask` under the provider profile shared
+with Codex (then `darwin-provider-v1`, now rendered by the service host), with subscription login through the broker. Egress
 went through the proxy (`api.anthropic.com` allowed, Datadog telemetry
 refused), the MCP bridge connected on its pinned port, and `read` calls
 completed through it.
@@ -84,7 +85,7 @@ completed through it.
 ## Still required before enabling in the app
 
 1. ~~Externally enforced filesystem, executable and egress restrictions~~:
-   done by proposal 47. `darwin-provider-v1` is deny-default, execs only
+   done by proposal 47. The provider profile is deny-default, execs only
    claude-start's verified copy, the pinned CLI and the keychain helper, and
    reaches the network only through the egress proxy.
 2. Cancellation confirmation, process recovery and recorded session mapping.

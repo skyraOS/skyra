@@ -1,7 +1,7 @@
-// Package launch is Codex's part of a provider resident's launch (proposal
+// Package launch is Codex's part of a provider program's launch (proposal
 // 47): the version its profile is verified for, its environment, its private
 // config.toml, and the model catalog it bootstraps once its profile is
-// rendered. The runtime's launch does the rest.
+// rendered. The service host does the rest.
 package launch
 
 import (
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"skyra/controller/runtime/launch"
+	"skyra/controller/service"
 )
 
 // Pinned is the one Codex version the resident profile is verified for
@@ -30,12 +30,12 @@ const Pinned = "0.160.0"
 // its Horizon. These are top-level keys in Codex's own defaults file.
 const quiet = "include_permissions_instructions = false\ninclude_apps_instructions = false\ninclude_collaboration_mode_instructions = false\ninclude_environment_context = false\nproject_doc_max_bytes = 0\n"
 
-// Provider is Codex, as the runtime's launch registers it.
+// Provider is Codex, as the service host registers it.
 type Provider struct{}
 
 func (Provider) Pinned() string { return Pinned }
 
-func (Provider) Configure(r *launch.Run) error {
+func (Provider) Configure(r *service.Run) error {
 	home := r.Paths.Home
 	r.Paths.Config, r.Paths.Catalog = filepath.Join(home, "config.toml"), filepath.Join(r.Dir, "models.json")
 	initial := "cli_auth_credentials_store = \"file\"\nweb_search = \"disabled\"\nsandbox_mode = \"read-only\"\napproval_policy = \"never\"\n"
@@ -50,11 +50,11 @@ func (Provider) Configure(r *launch.Run) error {
 // profile, initializes and writes its model metadata; the catalog keeps those
 // models with every native tool and prompt of Codex's own turned off, and the
 // app-server's config names it.
-func (Provider) Ready(r *launch.Run) error {
+func (Provider) Ready(r *service.Run) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, home := r.Surface, r.Paths.Home
-	args := append([]string{"-f", r.ProfileFile, s.Path}, s.Args...)
+	home := r.Paths.Home
+	args := append([]string{"-f", r.ProfileFile, r.Exe}, r.Args...)
 	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", args...)
 	cmd.Dir, cmd.Env = r.Paths.Work, r.Env
 	stdin, err := cmd.StdinPipe()

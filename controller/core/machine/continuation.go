@@ -43,7 +43,6 @@ func tools(h horizon.Horizon) map[string]*contract.Schema {
 }
 
 // Paths are informational continuation data, derived from the current Horizon.
-// Resident environments describe their first launch, not every later invocation.
 func workspaceOf(h horizon.Horizon) string {
 	if len(h.Authority.Read) > 0 {
 		return h.Authority.Read[0].Path

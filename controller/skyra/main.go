@@ -13,35 +13,21 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"time"
 
-	claudelaunch "skyra/controller/claude/launch"
-	codexlaunch "skyra/controller/codex/launch"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/instance"
-	"skyra/controller/runtime/launch"
 	"skyra/controller/runtime/metric"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
-
-	"skyra/controller/runtime/hold"
 )
-
-// The model CLIs a provider resident can run (proposal 47). The runtime
-// launches them by these names and knows nothing else about them.
-func init() {
-	launch.Register("codex", codexlaunch.Provider{})
-	launch.Register("claude", claudelaunch.Provider{})
-}
 
 func main() {
 	custody.SealInherited() // nothing the launcher leaked reaches a target
@@ -101,15 +87,6 @@ func main() {
 			err = fmt.Errorf("usage: skyra resume DIR")
 		} else {
 			err = resume(os.Args[2])
-		}
-	case "hold":
-		// Started only by a resident's recorded start, holding the resident's
-		// stream at fd 3: it serves the edge's socket (proposal 38).
-		trace.Who = fmt.Sprintf("hold pid %d", os.Getpid())
-		if len(os.Args) != 4 && len(os.Args) != 6 {
-			err = fmt.Errorf("usage: skyra hold SOCKET INCARNATION [ROOT FRAME]")
-		} else {
-			err = holdResident(os.Args[2], os.Args[3], os.Args[4:]...)
 		}
 	case "instance":
 		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())
@@ -192,34 +169,5 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	if handed {
 		return machine.Instance{}, errors.New("already resumed")
 	}
-	return machine.Instance{Floor: root, Phase: machine.Running, R: rec, Self: self, Sockets: hold.Sockets()}, nil
-}
-
-// holdResident keeps the resident's stream at fd 3 behind the edge's socket.
-// The idle backoff starts at 30 s and stops the resident once its interval
-// would pass 16 min with no request: about half an hour of idleness, the old
-// rule. SKYRA_HOLD_START and SKYRA_HOLD_MAX (Go durations) override them.
-func holdResident(socket, incarnation string, owner ...string) error {
-	f := os.NewFile(3, "resident-stream")
-	c, err := net.FileConn(f)
-	f.Close()
-	if err != nil {
-		return err
-	}
-	stream, ok := c.(*net.UnixConn)
-	if !ok {
-		return errors.New("the resident's stream is not a unix socket")
-	}
-	start, max := 30*time.Second, 16*time.Minute
-	if d, err := time.ParseDuration(os.Getenv("SKYRA_HOLD_START")); err == nil {
-		start = d
-	}
-	if d, err := time.ParseDuration(os.Getenv("SKYRA_HOLD_MAX")); err == nil {
-		max = d
-	}
-	cfg := hold.Config{Socket: socket, Incarnation: incarnation, Start: start, Max: max, Log: os.Stderr}
-	if len(owner) == 2 {
-		cfg.Root, cfg.Frame = owner[0], owner[1]
-	}
-	return hold.Serve(stream, cfg)
+	return machine.Instance{Floor: root, Phase: machine.Running, R: rec, Self: self}, nil
 }

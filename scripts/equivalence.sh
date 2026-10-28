@@ -23,7 +23,6 @@ new=${2:-}
 work=$(mktemp -d /private/tmp/skyra-eq-XXXXXX)
 trap 'kill ${host:-} 2>/dev/null || true; rm -rf "$work"' EXIT
 export SKYRA_GENESIS_NONCE=00112233445566778899aabbccddeeff
-export SKYRA_HOLD_START=2s SKYRA_HOLD_MAX=8s
 
 build_skyra() { # rev dir
   if [ -z "$1" ]; then
@@ -100,7 +99,7 @@ for line in open(sys.argv[1]):
         forced += kind == "force"
         last[who] = kind
         continue
-    if (what == "execute" and "under rendered sandbox" in rest) or what == "park" or (what == "execute" and "resident" in rest):
+    if (what == "execute" and "under rendered sandbox" in rest) or what == "park":
         outward += 1
         if last.get(who) != "force":
             bad.append(f"{who}: {what} {rest.strip()} without a forced flush right before it")

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Skyra
 
-private let thinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write","codex.start","codex.exchange","codex.inspect","codex.stop"]}},{"name":"run","calls":"codex","after":["scope"]}]}}"#
+private let thinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write","codex.open","codex.exchange","codex.inspect","codex.stop"]}},{"name":"run","calls":"codex","after":["scope"]}]}}"#
 
 private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]", revision: Int = 1) -> Data {
     Data(#"{"type":"snapshot","uiIncarnation":"i","revision":\#(revision),"requests":[],"destinations":\#(roots),"conversations":\#(conversations)}"#.utf8)
@@ -98,7 +98,7 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
 }
 
 @Test func designIsPartOfThinksConstellation() throws {
-    let json = thinkJSON.replacingOccurrences(of: #""write","codex.start""#, with: #""write","codex","design","design.tools","codex.start""#)
+    let json = thinkJSON.replacingOccurrences(of: #""write","codex.open""#, with: #""write","codex","design","design.tools","codex.open""#)
     let d = try JSONDecoder().decode(Destination.self, from: Data(json.utf8))
     let c = RootConstellation(d)
     #expect(c.star("design")?.parent == "codex")
@@ -107,7 +107,7 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
 }
 
 @Test func blenderIsPartOfThinksConstellation() throws {
-    let json = thinkJSON.replacingOccurrences(of: #""write","codex.start""#, with: #""write","codex","blender","blender.tools","codex.start""#)
+    let json = thinkJSON.replacingOccurrences(of: #""write","codex.open""#, with: #""write","codex","blender","blender.tools","codex.open""#)
     let d = try JSONDecoder().decode(Destination.self, from: Data(json.utf8))
     let c = RootConstellation(d)
     #expect(c.star("blender")?.parent == "codex")
@@ -117,7 +117,7 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
 // think is one procedure whose model is a parameter (proposal 39): its
 // narrowing names no actor, and the sky draws it on the selected model,
 // with that model's adapter and none of the other's.
-private let unifiedThinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"","param":"model","reach":["echo","read","codex","codex.start","codex.exchange","claude","claude.start","claude.exchange","claude.stop"]}},{"name":"run","calls":"","via":"scope","after":["scope"]}]}}"#
+private let unifiedThinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"","param":"model","reach":["echo","read","codex","codex.open","codex.exchange","claude","claude.open","claude.exchange","claude.stop"]}},{"name":"run","calls":"","via":"scope","after":["scope"]}]}}"#
 
 @MainActor
 @Test func thinksConstellationFollowsTheModel() throws {

@@ -1,6 +1,6 @@
 // Package custody keeps what a runtime process holds from leaking into the
 // programs it starts. Frames travel as descriptors, explicitly; nothing else
-// does (proposal 38 moved connections out of the kernel, to their edges).
+// does (proposal 49 moved long-lived processes out of the kernel, behind adapters).
 package custody
 
 import (

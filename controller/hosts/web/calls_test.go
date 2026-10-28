@@ -178,7 +178,7 @@ func TestCallsFromTheLineage(t *testing.T) {
 	}
 }
 
-// The Claude adapter drives its model through claude.start and a stream of
+// The Claude adapter drives its model through claude.open and a stream of
 // claude.exchange polls. Like Codex's, those steps are the runtime, not tools
 // the model called: only the model's own tool calls are shown.
 func TestClaudeAdapterStepsAreNotCalls(t *testing.T) {
@@ -191,7 +191,7 @@ func TestClaudeAdapterStepsAreNotCalls(t *testing.T) {
 	s = commit(t, root, user, "1", record.Record{State: record.Invoke, To: "interpreter", Payload: json.RawMessage(`{"think":{"text":"read it","model":"claude","context":[]}}`)})
 	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: "system.ref.1", Payload: json.RawMessage(`{"text":"read it"}`)})
 	s = commit(t, root, s, "2", record.Record{State: record.Invoke, To: "claude", Payload: json.RawMessage(`{"text":"read it"}`)})
-	for i, to := range []string{"claude.start", "claude.exchange", "claude.exchange", "claude.inspect"} {
+	for i, to := range []string{"claude.open", "claude.exchange", "claude.exchange", "claude.inspect"} {
 		s = commit(t, root, s, fmt.Sprintf("3-%d", i), record.Record{State: record.Invoke, To: to, Payload: json.RawMessage(`{"op":"exchange"}`)})
 		s = commit(t, root, s, fmt.Sprintf("3-%dr", i), record.Record{State: record.Return, Payload: json.RawMessage(`{"lines":[]}`)})
 	}
@@ -207,7 +207,7 @@ func TestClaudeAdapterStepsAreNotCalls(t *testing.T) {
 }
 
 func TestAdapterStepsAreNotTools(t *testing.T) {
-	for _, to := range []string{"codex", "codex.exchange", "claude", "claude.start", "claude.exchange", "claude.inspect", "claude.stop", "system.ref.1"} {
+	for _, to := range []string{"codex", "codex.exchange", "claude", "claude.open", "claude.exchange", "claude.inspect", "claude.stop", "system.ref.1"} {
 		if isTool(to) {
 			t.Errorf("%s shown as a tool call", to)
 		}
