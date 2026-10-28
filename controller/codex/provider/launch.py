@@ -23,14 +23,14 @@ FEATURES = ['apps', 'plugins', 'hooks', 'daemon_auto_start', 'browser_use',
             'shell_tool', 'skill_search', 'request_permissions_tool',
             'send_message_to_user_async', 'token_budget']
 # Every prompt Codex adds of its own is off (proposal 38): Skyra's header is the
-# whole prompt. Keep in step with runtime/instance/appserver.go's quiet.
+# whole prompt. Keep in step with codex/launch/launch.go's quiet.
 QUIET = ('include_permissions_instructions = false\ninclude_apps_instructions = false\n'
          'include_collaboration_mode_instructions = false\ninclude_environment_context = false\n'
          'project_doc_max_bytes = 0\n')
 EGRESS_HOSTS = ('chatgpt.com', 'api.openai.com', 'auth.openai.com')
 # The one Codex version the isolation is verified for. Changing it means
 # rerunning controller/experiments/appserver/tool_surface.py and the probes;
-# runtime/instance/appserver.go pins the same version.
+# codex/launch/launch.go pins the same version.
 CODEX_VERSION = '0.160.0'
 
 
@@ -52,7 +52,7 @@ def direct_catalog(binary, cache_file=None):
         model['tool_mode'] = 'standard'
         model['multi_agent_version'] = 'disabled'
         model['experimental_supported_tools'] = []
-        model['apply_patch_tool_type'] = None  # no native file edits (see runtime/instance/appserver.go)
+        model['apply_patch_tool_type'] = None  # no native file edits (see codex/launch/launch.go)
         model['supports_search_tool'] = False  # deferred tool discovery stays off
         model['use_responses_lite'] = False  # the lite API omits hosted web search
         model['include_skills_usage_instructions'] = False

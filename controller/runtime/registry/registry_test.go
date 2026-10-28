@@ -9,6 +9,7 @@ import (
 
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
+	"skyra/controller/runtime/launch"
 )
 
 func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
@@ -211,6 +212,7 @@ func TestLoadNormalizesContracts(t *testing.T) {
 // program and helper pinned by content: the old per-provider profiles and a
 // provider without its profile or proxy are refused.
 func TestProviderIsPinnedWithItsProfile(t *testing.T) {
+	launch.Register("cli", nil) // the registry only asks whether the name is known
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	write := func(name, body string) {
 		t.Helper()
@@ -218,36 +220,36 @@ func TestProviderIsPinnedWithItsProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("claude-start", "wrapper")
-	write("claude", "the cli")
-	write("claude-keychain", "helper")
+	write("cli-start", "wrapper")
+	write("cli", "the cli")
+	write("cli-keychain", "helper")
 	write("proxy.py", "proxy")
 	write("contract.json", `{"input":{"type":"object"}}`)
 	keychain := func() *horizon.Provider {
-		return &horizon.Provider{Name: "claude", Program: "claude", Auth: "keychain", Keychain: "Claude Code-credentials", Helper: "claude-keychain"}
+		return &horizon.Provider{Name: "cli", Program: "cli", Auth: "keychain", Keychain: "cli-credentials", Helper: "cli-keychain"}
 	}
-	base := Entry{Path: "claude-start", Contract: "contract.json", Resident: true, ResidentProfile: "darwin-provider-v1", ProxyHosts: []string{"api.anthropic.com"}, ProxyPath: "proxy.py", Provider: keychain()}
+	base := Entry{Path: "cli-start", Contract: "contract.json", Resident: true, ResidentProfile: "darwin-provider-v1", ProxyHosts: []string{"example.com"}, ProxyPath: "proxy.py", Provider: keychain()}
 	load := func(e Entry) (horizon.Surface, error) {
 		t.Helper()
-		b, _ := json.Marshal(map[string]Entry{"claude.start": e})
+		b, _ := json.Marshal(map[string]Entry{"cli.start": e})
 		write("registry.json", string(b))
 		reach, _, err := Load(filepath.Join(dir, "registry.json"))
-		return reach["claude.start"], err
+		return reach["cli.start"], err
 	}
 	s, err := load(base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := s.Provider
-	if p == nil || p.Program != filepath.Join(dir, "claude") || p.ProgramSHA256 != record.Sum([]byte("the cli")) ||
-		p.Helper != filepath.Join(dir, "claude-keychain") || p.HelperSHA256 != record.Sum([]byte("helper")) {
+	if p == nil || p.Program != filepath.Join(dir, "cli") || p.ProgramSHA256 != record.Sum([]byte("the cli")) ||
+		p.Helper != filepath.Join(dir, "cli-keychain") || p.HelperSHA256 != record.Sum([]byte("helper")) {
 		t.Fatalf("provider not pinned: %+v", p)
 	}
-	// Codex is its own program: the pin is the surface's own hash.
-	codex := base
-	codex.Provider = &horizon.Provider{Name: "codex", Program: "claude-start", Auth: "file", AuthPath: "/Users/u/.codex/auth.json"}
-	if s, err = load(codex); err != nil || s.Provider.Program != s.Path || s.Provider.ProgramSHA256 != s.SHA256 {
-		t.Fatalf("codex: %+v %v", s.Provider, err)
+	// A provider that is its own program: the pin is the surface's own hash.
+	installed := base
+	installed.Provider = &horizon.Provider{Name: "cli", Program: "cli-start", Auth: "file", AuthPath: "/Users/u/.cli/auth.json"}
+	if s, err = load(installed); err != nil || s.Provider.Program != s.Path || s.Provider.ProgramSHA256 != s.SHA256 {
+		t.Fatalf("installed: %+v %v", s.Provider, err)
 	}
 	for name, mutate := range map[string]func(e *Entry){
 		"old appserver profile": func(e *Entry) { e.ResidentProfile = "darwin-appserver-v1" },

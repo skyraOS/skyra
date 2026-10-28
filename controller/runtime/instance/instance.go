@@ -23,6 +23,7 @@ import (
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/handshake"
+	"skyra/controller/runtime/launch"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/trace"
@@ -421,11 +422,8 @@ func startResident(x machine.StartResident, root string) machine.Event {
 		out, _ := json.Marshal(map[string]any{"to": x.Horizon.Frame, "payload": map[string]any{"incarnation": incarnation, "reused": true}})
 		return machine.Executed{Obs: out}
 	}
-	// A provider that is its own resident runs from where it was installed,
-	// checked but not copied (Codex finds its package beside it): its pinned
-	// profile allows exec of that path alone.
 	exe := x.Run.Exec
-	if v := x.Run.Surface.Provider; v != nil && v.Program == x.Run.Surface.Path {
+	if launch.Installed(x.Run.Surface) {
 		exe = ""
 	} else if exe == "" {
 		return machine.Executed{Err: "surface has no verified copy to run"}
@@ -437,21 +435,21 @@ func startResident(x machine.StartResident, root string) machine.Event {
 		exe = x.Run.Surface.Path
 	}
 	profile, env, work := x.Run.Profile, x.Run.Env, ""
-	var prepared *preparedResident
+	var prepared *launch.Resident
 	var err error
 	if x.Run.Surface.ResidentProfile != "" {
-		prepared, err = prepareProvider(x, root)
+		prepared, err = launch.Prepare(x, root)
 	}
 	if err != nil {
 		return machine.Executed{Err: err.Error()}
 	}
 	if prepared != nil {
-		profile, env, work = prepared.profile, prepared.env, prepared.work
+		profile, env, work = prepared.Profile, prepared.Env, prepared.Work
 	}
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		if prepared != nil {
-			prepared.abort()
+			prepared.Abort()
 		}
 		return machine.Executed{Err: err.Error()}
 	}
@@ -463,7 +461,7 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	defer peer.Close()
 	argv := []string{"-p", profile, exe}
 	if prepared != nil {
-		argv = []string{"-f", filepath.Join(filepath.Dir(prepared.work), "actor.sb"), exe}
+		argv = []string{"-f", prepared.ProfileFile, exe}
 	}
 	argv = append(argv, x.Run.Surface.Args...)
 	cmd := exec.Command("/usr/bin/sandbox-exec", argv...)
@@ -473,7 +471,7 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	if err != nil {
 		local.Close()
 		if prepared != nil {
-			prepared.abort()
+			prepared.Abort()
 		}
 		return machine.Executed{Err: err.Error()}
 	}
@@ -481,17 +479,17 @@ func startResident(x machine.StartResident, root string) machine.Event {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = peer, peer, logs
 	cmd.Env, cmd.Dir = env, work
 	if prepared != nil {
-		cmd.ExtraFiles = []*os.File{prepared.watch}
+		cmd.ExtraFiles = []*os.File{prepared.Watch}
 	}
 	if err := cmd.Start(); err != nil {
 		local.Close()
 		if prepared != nil {
-			prepared.abort()
+			prepared.Abort()
 		}
 		return machine.Executed{Err: err.Error()}
 	}
 	if prepared != nil {
-		prepared.actorStarted()
+		prepared.Started()
 	}
 	incarnation := fmt.Sprintf("%d-%d", cmd.Process.Pid, time.Now().UnixNano())
 	pid := cmd.Process.Pid

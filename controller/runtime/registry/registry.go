@@ -21,6 +21,7 @@ import (
 	"skyra/controller/core/contract"
 	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
+	"skyra/controller/runtime/launch"
 )
 
 // Entry is one surface in the registry file. Relative paths are relative to
@@ -339,7 +340,7 @@ func resolve(dir, p string) string {
 // content hash (proposal 47). The resident at path, with hash sum, is the
 // program itself when they are the same file.
 func pinProvider(dir, path, sum string, p horizon.Provider) (*horizon.Provider, error) {
-	if p.Name != "codex" && p.Name != "claude" {
+	if !launch.Known(p.Name) {
 		return nil, fmt.Errorf("unknown provider %q", p.Name)
 	}
 	pin := func(file string) (string, string, error) {

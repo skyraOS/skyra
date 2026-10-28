@@ -18,12 +18,15 @@ import (
 	"path/filepath"
 	"time"
 
+	claudelaunch "skyra/controller/claude/launch"
+	codexlaunch "skyra/controller/codex/launch"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/instance"
+	"skyra/controller/runtime/launch"
 	"skyra/controller/runtime/metric"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
@@ -32,6 +35,13 @@ import (
 
 	"skyra/controller/runtime/hold"
 )
+
+// The model CLIs a provider resident can run (proposal 47). The runtime
+// launches them by these names and knows nothing else about them.
+func init() {
+	launch.Register("codex", codexlaunch.Provider{})
+	launch.Register("claude", claudelaunch.Provider{})
+}
 
 func main() {
 	custody.SealInherited() // nothing the launcher leaked reaches a target

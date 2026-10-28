@@ -2,7 +2,7 @@
 // connection is an edge between two actors, so it is not the kernel's to
 // carry: the recorded start of a resident launches one holder, which owns the
 // resident's stdio and serves the edge's socket. Each recorded operation
-// (codexio) is one request to it. The holder performs the operation itself, so
+// (the adapter's io program) is one request to it. The holder performs the operation itself, so
 // output the resident writes while no step is reading waits here for the next
 // one, as it once waited in a socket carried from step to step.
 //
@@ -33,7 +33,8 @@ import (
 	"time"
 )
 
-// Request is one recorded operation on the resident: codexio's request.
+// Request is one recorded operation on the resident, as the adapter's io
+// program sends it.
 type Request struct {
 	Frame       string   `json:"frame,omitempty"` // derived by the recorded-edge worker from its runtime environment
 	Incarnation string   `json:"incarnation"`
@@ -43,7 +44,7 @@ type Request struct {
 	Prefix      string   `json:"prefix"`
 }
 
-// Observation is what an operation observed: codexio's observation.
+// Observation is what an operation observed, as the io program records it.
 type Observation struct {
 	Lines       []string `json:"lines"`
 	Partial     string   `json:"partial"`
@@ -56,14 +57,14 @@ type Observation struct {
 }
 
 const (
-	// Tool results carry a 2 MiB screenshot as base64 plus text. Codex also
-	// echoes the content in its dynamic-tool completion notifications.
+	// A tool result can carry a 2 MiB screenshot as base64 plus text, and a
+	// provider may echo it back in a notification.
 	maxLine     = 4 << 20 // one incoming protocol line, including its newline
 	maxDelivery = 4 << 20
 	maxBatch    = 256  // lines one exchange returns
 	maxStop     = 1024 // lines a stop drains
 	// Quiet is how an operation that waited out its deadline is reported;
-	// the adapter treats it as silence (codex/resident: quiet).
+	// the adapter treats it as silence.
 	Quiet = "i/o timeout: no output within the wait"
 )
 
@@ -71,7 +72,7 @@ const (
 // its idle backoff.
 type Config struct {
 	Root        string // runtime lineage, never supplied by a model
-	Frame       string // currently executing agent frame
+	Frame       string // currently executing frame
 	Socket      string
 	Incarnation string
 	Start, Max  time.Duration

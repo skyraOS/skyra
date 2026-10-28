@@ -328,7 +328,7 @@ sandbox that prohibits applying Seatbelt profiles.
   Codex and the human still emit one instruction at a time.
 - **Restore after a crash**, streaming, and the host's own restart are not built.
 - **The provider profile is pinned to Codex 0.160.0** (`launch.CODEX_VERSION`,
-  `instance.PinnedCodex`). A new version needs a fresh validation of startup,
+  `codex/launch.Pinned`). A new version needs a fresh validation of startup,
   tool exposure, file effects and egress: `tool_surface.py`, `probe.py` and
   `integration.py` in `experiments/appserver/`.
 

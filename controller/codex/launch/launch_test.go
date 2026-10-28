@@ -1,4 +1,4 @@
-package instance
+package launch
 
 import (
 	"os"
@@ -18,7 +18,7 @@ func TestResidentConfigMatchesProviderLauncher(t *testing.T) {
 	}
 	cmd := exec.Command("python3", "-B", "-c", `import sys
 from pathlib import Path
-sys.path.insert(0, '../../codex/provider')
+sys.path.insert(0, '../provider')
 from launch import configuration
 sys.stdout.write(configuration(Path('/run')))`)
 	out, err := cmd.CombinedOutput()
@@ -47,12 +47,12 @@ func TestCodexAddsNoPromptsOfItsOwn(t *testing.T) {
 			t.Fatalf("%q is not a top-level key:\n%s", line, config)
 		}
 	}
-	launcher, err := os.ReadFile("../../codex/provider/launch.py")
+	launcher, err := os.ReadFile("../provider/launch.py")
 	if err != nil {
 		t.Fatal(err)
 	}
 	py := strings.NewReplacer("('", "", "'\n         '", "", "'\n", "", "')", "", `\n`, "\n").Replace(string(launcher))
 	if !strings.Contains(py, "QUIET = "+quiet) {
-		t.Fatal("launch.py's QUIET and appserver.go's quiet differ")
+		t.Fatal("launch.py's QUIET and launch.go's quiet differ")
 	}
 }
