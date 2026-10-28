@@ -42,6 +42,11 @@ New implementation proposals:
   one deny-default profile, render and prepare for every model provider; the
   Horizon reaches both through the same lines, and what differs is a pinned
   descriptor. Includes the hand-run Claude experiment. Proposed (2026-10-23).
+- [49 — Long-lived processes behind adapters](49-services-behind-adapters-proposal.md):
+  every exec is stateless; an actor declares what it needs to run when it is
+  registered, and that is its profile; a long-lived process is a service
+  behind an adapter, and work that takes several steps is a procedure that
+  keeps the state. Residents leave core and runtime. Proposed (2026-10-27).
 
 ## The design in one paragraph
 

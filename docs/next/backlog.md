@@ -23,6 +23,16 @@ adapter contracts; delegation stays the interpreter's `delegate` procedure.
   `(allow default)` to `(deny default)`, like the Codex one.~~ Done
   2026-10-23 (`331a0cf`, [proposal 47](proposal/47-one-provider-sandbox-proposal.md)):
   both providers run under one deny-default profile, `darwin-provider-v1`.
+- ~~Take provider-specific launch code out of `controller/runtime`.~~ Done
+  2026-10-27: `runtime/launch` prepares any provider resident; Codex and
+  Claude register their pins, config and environment from `codex/launch` and
+  `claude/launch`, wired in `skyra/main.go`. `core/horizon/resident.go` and
+  the Surface's resident fields are still to go (spec, steps 5–6).
+- Residents leave core and runtime:
+  [proposal 49](proposal/49-services-behind-adapters-proposal.md). Every exec
+  is stateless, the profile is what the actor declared at registration, and a
+  long-lived process is a service behind an adapter. Its removals ship with
+  1b's record version bump.
 
 Unblocks: the rewrite. The new kernel never has to carry agent fields, and the
 kernel stops knowing about agents.
