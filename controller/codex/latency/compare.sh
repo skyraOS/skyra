@@ -1,6 +1,7 @@
 #!/bin/bash
 # Native Codex against Skyra on real Codex: the same model, effort and
-# prompts, interleaved, TRIALS rounds. See docs/OVERHEAD-VS-INFERENCE.md.
+# prompts, interleaved, TRIALS rounds. See docs/STARTUP-PER-TURN.md;
+# phases.py splits a run's startup.
 #
 #   controller/codex/latency/compare.sh 6
 #

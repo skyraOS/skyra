@@ -199,24 +199,30 @@ design decision to the line that implements it.
 
 ## Performance
 
-Against native Codex: **~2 s more startup per one-shot run and ~0.4 s per
-tool call**. Both are fixed per step and don't depend on model speed. On a
-15-second, three-tool task that comes to about 20%. Model time varies more
-than that from run to run.
+Against native Codex: **~0.9 s more startup per turn and ~0.18 s per tool
+call**. Both are fixed per step and don't depend on model speed. Every turn
+opens its own Codex session through the service host, so the startup is paid
+on each turn: about 1.15 s to `turn/start`, against 0.15–0.28 s native. That
+is half the ~2 s the old resident launch cost, and per call it is half the
+old 0.38 s.
 
-These figures predate the service host (2026-10-27). Each chat turn now opens
-its own Codex session, so the startup cost applies per turn, not once per
-conversation. It has not been re-measured yet.
+About half of each turn's startup is the kernel itself: boot, think and the
+recorded handshake, one commit per step. Taking the kernel out of the hot
+path ([50](docs/next/proposal/50-write-policies-proposal.md), tabled) should
+win most of that back, and most of each tool call's cost. That is an
+estimate, not yet measured.
 
 Replay re-derives and verifies about **47,000 records per second** from
 memory, linear in run length. A 10,000-record run takes about 0.2 s, or
 1.3 s from the tree on disk. Every published run re-verifies in under 4 ms.
 
-Everything was measured on an Apple M1 Pro, go1.25.0, 2026-10-13.
-[`docs/performance.md`](docs/performance.md) has the commits, method and
-caveats, and the full overhead write-up is in
-[`OVERHEAD-VS-INFERENCE.md`](docs/OVERHEAD-VS-INFERENCE.md). Reproduce replay
-with:
+Measured on an Apple M1 Pro, go1.25.0: startup and tool calls on 2026-10-28
+at `d6eb32a`, replay on 2026-10-13 at `9049bb7`.
+[`docs/STARTUP-PER-TURN.md`](docs/STARTUP-PER-TURN.md) has the method, the
+phase split and caveats. The earlier write-ups,
+[`docs/performance.md`](docs/performance.md) and
+[`OVERHEAD-VS-INFERENCE.md`](docs/OVERHEAD-VS-INFERENCE.md), are snapshots of
+the resident design. Reproduce replay with:
 
 ```
 go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/

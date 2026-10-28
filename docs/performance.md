@@ -1,5 +1,13 @@
 # Performance
 
+> **A snapshot at `55579a1` / `9049bb7` (2026-10-13), with the fake-path
+> update at `52c9542` (2026-10-16).** The controller overhead against native
+> Codex describes the resident design, which 49 removed (`b283d8b`). Current
+> figures: [`STARTUP-PER-TURN.md`](STARTUP-PER-TURN.md), measured at
+> `d6eb32a`: about 1.15 s to `turn/start` on every turn (+0.9 s over native)
+> and 0.18 s per tool call. The replay figures below were not rerun and
+> still stand.
+
 Two costs matter for a runtime that runs one process per step and keeps all
 state in a record tree:
 

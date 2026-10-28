@@ -2,6 +2,14 @@
 
 Date: 2026-10-13 · Apple M1 Pro, 16 GB · go1.25.0
 
+> **A snapshot at `55579a1` / `9049bb7`.** It measures the resident design,
+> which 49 removed (`b283d8b`). The startup and per-call figures against
+> native Codex are superseded by
+> [`STARTUP-PER-TURN.md`](STARTUP-PER-TURN.md), measured at `d6eb32a`. The
+> fake-path sweep and its fsync analysis were not rerun. Bug #41 below was
+> fixed in `1c0079c`. Read the code these numbers describe with
+> `git show 9049bb7:<path>`.
+
 | Measurement | Code | Notes |
 |---|---|---|
 | Fake-path sweep | `55579a1` | It builds only `controller/` binaries, so the uncommitted `models` target and launcher change were never part of it |
