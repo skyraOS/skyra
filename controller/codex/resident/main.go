@@ -29,12 +29,12 @@ type continuation struct {
 	Agents    map[string]json.RawMessage `json:"agents"`
 	Actor     string                     `json:"actor"`
 	WorkTools *[]string                  `json:"work_tools"`
-	Delegated bool                       `json:"delegated"`
 	Workspace string                     `json:"workspace"`
 	Scratch   string                     `json:"scratch"`
 	Frame     string                     `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Thread, Incarnation, Model string
+		Fresh                                                  bool
 		Context                                                json.RawMessage
 		ActivityAt                                             int64 `json:"activity_at"`
 	} `json:"input"`
@@ -427,7 +427,7 @@ func decide(c continuation) (string, error) {
 					// Web search, a native read-only tool (proposal 38), runs
 					// at the provider. Its reads are not recorded in the lineage.
 					case "webSearch":
-						if c.Delegated {
+						if c.Input.Fresh {
 							d.Violation = m.Params.Item.Type
 						}
 					case "userMessage", "reasoning", "plan", "dynamicToolCall":
@@ -447,9 +447,9 @@ func decide(c continuation) (string, error) {
 			return "", fmt.Errorf("unexpected step %s", s.To)
 		}
 	}
-	// Delegated servers have no next invocation to reuse them. Finish only
+	// Fresh servers have no next invocation to reuse them. Finish only
 	// after their recorded stop, rather than retaining an idle child server.
-	if c.Delegated && d.Stopped && d.Terminal != "" {
+	if c.Input.Fresh && d.Stopped && d.Terminal != "" {
 		return finish(c, d)
 	}
 	// An idle server is the service host's to reclaim, by its backoff; a turn
@@ -475,7 +475,7 @@ func decide(c continuation) (string, error) {
 		if c.Input.Model != "" {
 			params["model"] = c.Input.Model
 		}
-		if c.Delegated {
+		if c.Input.Fresh {
 			params["config"] = map[string]any{"web_search": "disabled"}
 		}
 		// This invocation initialized the server: finish the handshake.
@@ -520,7 +520,7 @@ func decide(c continuation) (string, error) {
 		// The attempt is reported as what it is: an observation returned to
 		// the parent, which decides what it means. Blocking it is the
 		// sandbox's job; this is the report (next/24, improvements 2a).
-		if c.Delegated && !d.Stopped {
+		if c.Input.Fresh && !d.Stopped {
 			return operation("codex.stop", d.Incarnation, "stop", nil, d.Partial), nil
 		}
 		return finish(c, d)
@@ -545,7 +545,7 @@ func decide(c continuation) (string, error) {
 	}
 
 	if d.Terminal != "" {
-		if c.Delegated && !d.Stopped {
+		if c.Input.Fresh && !d.Stopped {
 			return operation("codex.stop", d.Incarnation, "stop", nil, d.Partial), nil
 		}
 		return finish(c, d)
@@ -557,7 +557,7 @@ func decide(c continuation) (string, error) {
 func finish(c continuation, d derived) (string, error) {
 	if d.Violation != "" {
 		result := map[string]any{"text": "", "refused": "native." + d.Violation}
-		if !c.Delegated {
+		if !c.Input.Fresh {
 			result["thread"], result["incarnation"], result["activity_at"] = d.Thread, d.Incarnation, d.ActivityAt
 		}
 		return emit(c.Frame, result), nil
@@ -568,7 +568,7 @@ func finish(c continuation, d derived) (string, error) {
 		}
 		return "", fmt.Errorf("turn ended %s without an answer", d.Terminal)
 	}
-	if c.Delegated {
+	if c.Input.Fresh {
 		return emit(c.Frame, map[string]string{"text": d.Final}), nil
 	}
 	return emit(c.Frame, map[string]any{"text": d.Final, "thread": d.Thread, "incarnation": d.Incarnation, "activity_at": d.ActivityAt}), nil

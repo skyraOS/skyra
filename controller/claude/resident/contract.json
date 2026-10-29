@@ -2,7 +2,7 @@
   "input": {"type":"object","required":["text"],"fields":{
     "text":{"type":"string"},"header":{"type":"string"},"context":{"type":"any"},
     "images":{"type":"array","items":{"type":"string"}},
-    "conversation":{"type":"string"},"model":{"type":"string"},"session":{"type":"string"}
+    "conversation":{"type":"string"},"model":{"type":"string"},"fresh":{"type":"bool"},"session":{"type":"string"}
   }},
   "continuation": true
 }

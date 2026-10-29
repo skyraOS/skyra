@@ -22,7 +22,7 @@ func TestDelegateRecordedCompositionHasGoalOnlyChildContext(t *testing.T) {
 	}
 	e.Steps = []proc.Step{{To: "system", State: "return", Value: json.RawMessage(`{"reference":"system.ref.1"}`)}}
 	out, err = runDelegate(e)
-	if err != nil || string(out) != `{"payload":{"header":"delegate","model":"chosen-model","text":"inspect the code"},"to":"system.ref.1"}` {
+	if err != nil || string(out) != `{"payload":{"fresh":true,"header":"delegate","model":"chosen-model","text":"inspect the code"},"to":"system.ref.1"}` {
 		t.Fatalf("goal-only child: %s %v", out, err)
 	}
 	e.Steps = append(e.Steps, proc.Step{To: "system.ref.1", State: "return", Value: json.RawMessage(`{"text":"findings and uncertainty"}`)})

@@ -10,7 +10,7 @@ func TestDelegatedThreadUsesInheritedModelAndNoNativeTools(t *testing.T) {
 	c := turnWithCalls()
 	c.Steps = c.Steps[:2]
 	c.Actor = "codex"
-	c.Delegated = true
+	c.Input.Fresh = true
 	c.Input.Model = "chosen-model"
 	empty := []string{}
 	c.WorkTools = &empty
@@ -70,7 +70,7 @@ func TestExistingThreadReportsItsModelBeforeDelegation(t *testing.T) {
 
 func TestCompletedDelegateStopsItsProviderBeforeReturning(t *testing.T) {
 	c := turnWithCalls()
-	c.Delegated = true
+	c.Input.Fresh = true
 	c.Steps = append(c.Steps, step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": []string{}}), Value: value(map[string]any{"lines": []string{
 		`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"agentMessage","text":"findings"}}}`,
 		`{"method":"turn/completed","params":{"threadId":"thread-1","turnId":"turn-1","turn":{"id":"turn-1","status":"completed"}}}`,

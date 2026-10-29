@@ -15,7 +15,8 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 	if err := os.WriteFile(file, []byte("parent-session"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	c := continuation{Frame: "f1", Delegated: true}
+	c := continuation{Frame: "f1"}
+	c.Input.Fresh = true
 	c.Input.Text = "goal"
 	c.Input.Session = "must-not-resume"
 	empty := []string{}

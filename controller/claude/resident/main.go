@@ -31,13 +31,13 @@ type continuation struct {
 	Agents    map[string]json.RawMessage `json:"agents"`
 	Actor     string                     `json:"actor"`
 	WorkTools *[]string                  `json:"work_tools"`
-	Delegated bool                       `json:"delegated"`
 	Contracts map[string][]*schema       `json:"contracts"`
 	Workspace string                     `json:"workspace"`
 	Scratch   string                     `json:"scratch"`
 	Frame     string                     `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Session, Model string
+		Fresh                                      bool
 		Context                                    json.RawMessage
 	} `json:"input"`
 	Tools map[string]*schema `json:"tools"`
@@ -144,7 +144,7 @@ func decide(c continuation) (string, error) {
 	if c.Frame == "" {
 		return "", errors.New("no frame")
 	}
-	if c.Input.Session == "" && !c.Delegated {
+	if c.Input.Session == "" && !c.Input.Fresh {
 		c.Input.Session = loadSession()
 	}
 	if len(c.Steps) > 2000 {
@@ -229,7 +229,7 @@ func decide(c continuation) (string, error) {
 		return "", errors.New(d.Failed)
 	}
 	if d.Done {
-		if !c.Delegated {
+		if !c.Input.Fresh {
 			saveSession(d.Session)
 		}
 		return emit(c.Frame, map[string]any{
@@ -409,7 +409,7 @@ func turnConfig(c continuation) map[string]any {
 		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
 		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write")),
 	}
-	if !c.Delegated && c.Input.Session != "" {
+	if !c.Input.Fresh && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session
 	}
 	return cfg

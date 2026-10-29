@@ -127,12 +127,12 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !h.Delegated {
+				var input map[string]json.RawMessage
+				if json.Unmarshal(r.Payload, &input) != nil || string(input["header"]) != `"delegate"` {
 					continue
 				}
 				children++
-				var input map[string]json.RawMessage
-				if json.Unmarshal(r.Payload, &input) != nil || len(input) > 3 || input["text"] == nil || input["header"] == nil {
+				if len(input) > 4 || input["text"] == nil || string(input["fresh"]) != "true" {
 					t.Fatalf("child received extra context: %s", r.Payload)
 				}
 				expectedModel := "fake-codex"

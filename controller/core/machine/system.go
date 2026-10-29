@@ -46,15 +46,18 @@ const (
 	Tracing   = "trace"
 )
 
+// maxDepth bounds the frame stack a narrowing can grow from, whatever the
+// actor: a scope that keeps creating scopes is refused, not left to recurse.
+const maxDepth = 64
+
 var (
 	str      = &contract.Schema{Type: "string"}
 	strs     = &contract.Schema{Type: "array", Items: str}
 	grants   = &contract.Schema{Type: "array", Items: &contract.Schema{Type: "object", Required: []string{"path", "scope"}, Fields: map[string]*contract.Schema{"path": str, "scope": str}}}
 	narrowIn = &contract.Schema{Type: "object", Required: []string{"actor"}, Fields: map[string]*contract.Schema{
-		"actor":     str,
-		"reach":     strs,
-		"tools":     strs,
-		"delegated": {Type: "bool"},
+		"actor": str,
+		"reach": strs,
+		"tools": strs,
 		"authority": {Type: "object", Fields: map[string]*contract.Schema{
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
@@ -216,7 +219,6 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 		Authority *boundary.Authority `json:"authority"`
 		Without   []string            `json:"without"`
 		Tools     *[]string           `json:"tools"`
-		Delegated bool                `json:"delegated"`
 	}
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return boundary.Grant{}, err
@@ -224,19 +226,9 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	if _, ok := h.Reach[ask.Actor]; !ok || IsSystem(ask.Actor) {
 		return boundary.Grant{}, fmt.Errorf("%q is not an actor in reach", ask.Actor)
 	}
-	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority, WorkTools: h.WorkTools, Delegated: h.Delegated || ask.Delegated}
-	if ask.Delegated && h.Depth() > 64 {
-		return g, fmt.Errorf("delegation exceeds the runtime frame limit")
-	}
-	if ask.Delegated && h.Reach[ask.Actor].Agent != nil {
-		for _, op := range h.Reach[ask.Actor].Agent.Operations {
-			if _, ok := h.Reach[op]; !ok {
-				return g, fmt.Errorf("agent operation %q is unavailable", op)
-			}
-		}
-	}
-	if ask.Delegated && h.Reach[ask.Actor].Agent == nil {
-		return g, fmt.Errorf("%q is not an available agent", ask.Actor)
+	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority, WorkTools: h.WorkTools}
+	if h.Depth() > maxDepth {
+		return g, fmt.Errorf("narrowing exceeds the runtime frame limit of %d", maxDepth)
 	}
 	if ask.Tools != nil {
 		allowed := map[string]boundary.ToolBinding{}

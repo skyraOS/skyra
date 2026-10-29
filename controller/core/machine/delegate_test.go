@@ -45,8 +45,8 @@ func delegated(t *testing.T, h boundary.Boundary, args string) boundary.Boundary
 
 func TestDelegateScopeInheritsAuthority(t *testing.T) {
 	h := delegationRoot()
-	child := delegated(t, h, `{"actor":"agent","delegated":true}`)
-	if !reflect.DeepEqual(child.Authority, h.Authority) || !child.Delegated || child.WorkTools != nil {
+	child := delegated(t, h, `{"actor":"agent"}`)
+	if !reflect.DeepEqual(child.Authority, h.Authority) || child.WorkTools != nil {
 		t.Fatalf("inheritance: %+v", child)
 	}
 	// The model is the adapter's: narrow takes none.
@@ -56,11 +56,14 @@ func TestDelegateScopeInheritsAuthority(t *testing.T) {
 	if intakeRecord(h, `{"to":"system","payload":{"agent-context":{"model":"m"}}}`).State != record.Fault {
 		t.Fatal("agent-context is still a syscall")
 	}
+	if intakeRecord(h, `{"to":"system","payload":{"narrow":{"actor":"agent","delegated":true}}}`).State != record.Fault {
+		t.Fatal("narrow accepted a delegation mode")
+	}
 }
 
 func TestDelegateToolCeilingEnforcedAtIntakeAndInherited(t *testing.T) {
 	h := delegationRoot()
-	child := delegated(t, h, `{"actor":"agent","delegated":true,"tools":["echo"]}`)
+	child := delegated(t, h, `{"actor":"agent","tools":["echo"]}`)
 	for name, want := range map[string]record.State{"echo": record.Invoke, "write": record.Fault, "agent.start": record.Invoke} {
 		r := intakeRecord(child, `{"to":"`+name+`","payload":{"text":"x"}}`)
 		if r.State != want {
@@ -89,18 +92,18 @@ func TestDelegateToolCeilingEnforcedAtIntakeAndInherited(t *testing.T) {
 }
 
 func TestDelegateEmptyToolsRetainsOnlyExecutionMachinery(t *testing.T) {
-	child := delegated(t, delegationRoot(), `{"actor":"agent","delegated":true,"tools":[]}`)
+	child := delegated(t, delegationRoot(), `{"actor":"agent","tools":[]}`)
 	if child.WorkTools == nil || len(*child.WorkTools) != 0 {
 		t.Fatal("empty tools confused with omitted tools")
 	}
 	if intakeRecord(child, `{"to":"echo","payload":{"text":"x"}}`).State != record.Fault {
 		t.Fatal("reasoning child invoked a work tool")
 	}
-	if intakeRecord(child, `{"to":"system","payload":{"narrow":{"actor":"agent","delegated":true}}}`).State != record.Invoke {
+	if intakeRecord(child, `{"to":"system","payload":{"narrow":{"actor":"agent"}}}`).State != record.Invoke {
 		t.Fatal("execution machinery unavailable")
 	}
 	for _, name := range []string{"missing", "agent.start", "agent", "system"} {
-		payload, _ := json.Marshal(map[string]any{"actor": "agent", "delegated": true, "tools": []string{name}})
+		payload, _ := json.Marshal(map[string]any{"actor": "agent", "tools": []string{name}})
 		if _, err := narrowing(delegationRoot(), payload); err == nil {
 			t.Fatalf("accepted non-work tool %s", name)
 		}
@@ -112,7 +115,7 @@ func TestDelegateTransportLabelsResolveWithoutWidening(t *testing.T) {
 	s := echoS
 	s.WorkTool = true
 	h.Reach["repo.write"] = s
-	child := delegated(t, h, `{"actor":"agent","delegated":true,"tools":["repo_write"]}`)
+	child := delegated(t, h, `{"actor":"agent","tools":["repo_write"]}`)
 	g, err := narrowing(child, json.RawMessage(`{"actor":"agent","tools":["repo.write"]}`))
 	if err != nil || g.WorkTools == nil || (*g.WorkTools)["repo.write"].Target != "repo.write" {
 		t.Fatalf("alias changed authority: %+v %v", g, err)
@@ -128,7 +131,7 @@ func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
 	b := call("excluded", &contract.Schema{Type: "object"})
 	remember := call("remember", &contract.Schema{Type: "object"})
 	h.Reach["interpreter"] = boundary.Surface{Input: remember, Contracts: []*contract.Schema{a, b}}
-	child := delegated(t, h, `{"actor":"agent","delegated":true,"tools":["allowed"]}`)
+	child := delegated(t, h, `{"actor":"agent","tools":["allowed"]}`)
 	if intakeRecord(child, `{"to":"interpreter","payload":{"allowed":{}}}`).State != record.Invoke {
 		t.Fatal("allowed procedure refused")
 	}
@@ -147,5 +150,16 @@ func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
 	child.Reach = copyReach
 	if intakeRecord(child, `{"to":"interpreter","payload":{"new":{}}}`).State != record.Fault {
 		t.Fatal("extension widened tools")
+	}
+}
+
+func TestEveryNarrowingIsBoundedByTheFrameLimit(t *testing.T) {
+	h := delegationRoot()
+	for range maxDepth {
+		below := h
+		h.Resume = &below
+	}
+	if _, err := narrowing(h, json.RawMessage(`{"actor":"echo"}`)); err == nil {
+		t.Fatal("a narrowing past the frame limit was accepted")
 	}
 }

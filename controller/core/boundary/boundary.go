@@ -158,7 +158,6 @@ func (s Surface) All() []*contract.Schema {
 // Boundary has no Resume.
 type Boundary struct {
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
-	Delegated bool                    `json:"delegated,omitempty"`
 	Stamp     string                  `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
 	Surface   *Surface                `json:"surface,omitempty"` // what this frame runs; nil for the operator
 	Reach     map[string]Surface      `json:"reach"`             // what emissions under this Boundary may invoke
@@ -175,7 +174,6 @@ type Boundary struct {
 // Boundary it runs under when the reference is invoked.
 type Grant struct {
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
-	Delegated bool                    `json:"delegated,omitempty"`
 	Actor     string                  `json:"actor"`
 	Reach     []string                `json:"reach"`
 	Authority Authority               `json:"authority"`

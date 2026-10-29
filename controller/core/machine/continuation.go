@@ -99,7 +99,6 @@ type Continuation struct {
 	Actor     string                           `json:"actor,omitempty"`
 	Agents    map[string]*boundary.AgentConfig `json:"agents,omitempty"`
 	WorkTools *[]string                        `json:"work_tools,omitempty"`
-	Delegated bool                             `json:"delegated,omitempty"`
 	Workspace string                           `json:"workspace,omitempty"`
 	Scratch   string                           `json:"scratch,omitempty"`
 	Frame     string                           `json:"frame"`
@@ -138,7 +137,7 @@ func caller(h boundary.Boundary) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(frame record.Record, rounds []round, waiter boundary.Boundary) []byte {
-	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), WorkTools: workToolNames(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, frame.Payload)
 	}

@@ -47,7 +47,7 @@ func runDelegate(e envelope) ([]byte, error) {
 		return failure("boundary", fmt.Sprintf("%q is not an available agent", actor))
 	}
 	if len(e.Steps) == 0 {
-		scope := map[string]any{"actor": actor, "delegated": true}
+		scope := map[string]any{"actor": actor}
 		if ask.Delegate.Tools != nil {
 			scope["tools"] = *ask.Delegate.Tools
 		}
@@ -71,7 +71,9 @@ func runDelegate(e envelope) ([]byte, error) {
 		return nil, errors.New("delegate scope did not return a reference")
 	}
 	if len(e.Steps) == 1 {
-		child := map[string]string{"text": ask.Delegate.Goal, "header": "delegate"}
+		// fresh: a one-shot session that loads and keeps nothing of the
+		// caller's, and is stopped before the child returns.
+		child := map[string]any{"text": ask.Delegate.Goal, "header": "delegate", "fresh": true}
 		if ask.Delegate.Model != "" {
 			child["model"] = ask.Delegate.Model
 		}
