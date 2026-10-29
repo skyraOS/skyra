@@ -1,24 +1,15 @@
 package main
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestWorkToolVisibilityDependsOnlyOnScope(t *testing.T) {
 	for _, fresh := range []bool{false, true} {
 		for _, header := range []string{"", "delegate", "design:", "blender:"} {
-			c := continuation{Tools: map[string]*schema{"design.tools": {Type: "object"}, "blender.tools": {Type: "object"}}}
+			c := continuation{Reach: reachOf(map[string]*schema{"design.tools": {Type: "object"}, "blender.tools": {Type: "object"}}, nil)}
 			c.Input.Header, c.Input.Fresh = header, fresh
-			for _, selected := range [][]string{nil, {}, {"design_tools"}} {
-				c.Held = nil
-				if selected != nil {
-					c.Held = map[string][]*schema{}
-					for _, name := range selected {
-						target := strings.ReplaceAll(name, "_", ".")
-						c.Held[target] = []*schema{c.Tools[target]}
-					}
-				}
+			all := c.Reach
+			for _, selected := range [][]string{nil, {}, {"design.tools"}} {
+				c.Reach = holding(all, selected)
 				got := map[string]bool{}
 				for _, tool := range tools(c) {
 					got[tool.Name] = true
@@ -27,8 +18,8 @@ func TestWorkToolVisibilityDependsOnlyOnScope(t *testing.T) {
 					t.Fatalf("fresh=%v header=%q selection=%v: %v", fresh, header, selected, got)
 				}
 			}
-			delete(c.Tools, "blender.tools")
-			c.Held = nil
+			c.Reach = all
+			delete(c.Reach, "blender.tools")
 			for _, tool := range tools(c) {
 				if tool.Name == "blender_tools" {
 					t.Fatal("offered tool outside inherited reach")

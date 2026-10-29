@@ -237,8 +237,8 @@ func release(s Instance) (Instance, []Effect) {
 	}
 	stdin := []byte(s.R.Payload)
 	if self.Surface.Continuation {
-		stdin, _ = json.Marshal(Continuation{Actor: actorName(self), Held: held(self), Frame: s.Stamp(), Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
-			Workspace: workspaceOf(self), Scratch: self.Authority.Scratch, Tools: tools(self), Contracts: contracts(self), Steps: []StepView{}})
+		stdin, _ = json.Marshal(Continuation{Actor: actorName(self), Frame: s.Stamp(), Caller: caller(self), Input: s.R.Payload, Contract: against(*self.Surface, s.R.Payload),
+			Workspace: workspaceOf(self), Scratch: self.Authority.Scratch, Reach: reach(self), Steps: []StepView{}})
 	}
 	return s, []Effect{Execute{Act: runOf(self, stdin, s.Floor), Force: true}}
 }

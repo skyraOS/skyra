@@ -37,13 +37,19 @@ import (
 var declared []byte
 
 // envelope is what the kernel hands a continuation on stdin.
+// entry is one actor in reach: every contract it declares, the registered
+// one first, and the indexes of those held.
+type entry struct {
+	Contracts []*proc.Schema `json:"contracts"`
+	Held      []int          `json:"held"`
+}
+
 type envelope struct {
-	Frame     string                    `json:"frame"`
-	Input     json.RawMessage           `json:"input"`
-	Contract  *proc.Schema              `json:"contract"`
-	Tools     map[string]*proc.Schema   `json:"tools"`
-	Contracts map[string][]*proc.Schema `json:"contracts"`
-	Steps     []proc.Step               `json:"steps"`
+	Frame    string           `json:"frame"`
+	Input    json.RawMessage  `json:"input"`
+	Contract *proc.Schema     `json:"contract"`
+	Reach    map[string]entry `json:"reach"`
+	Steps    []proc.Step      `json:"steps"`
 }
 
 func main() {
@@ -367,12 +373,8 @@ func accepts(what, src string, v refine.Vars) error {
 // reachOf is every contract each name in the envelope holds.
 func reachOf(e envelope) remember.Reach {
 	reach := remember.Reach{}
-	for name, t := range e.Tools {
-		if all, ok := e.Contracts[name]; ok {
-			reach[name] = all
-		} else if t != nil {
-			reach[name] = []*proc.Schema{t}
-		}
+	for name, entry := range e.Reach {
+		reach[name] = entry.Contracts
 	}
 	return reach
 }

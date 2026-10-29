@@ -44,9 +44,8 @@ type continuation struct {
 		Text         string `json:"text"`
 		Conversation string `json:"conversation"` // optional: turns of one conversation share a Codex thread
 	} `json:"input"`
-	Tools     map[string]*schema   `json:"tools"`
-	Contracts map[string][]*schema `json:"contracts"`
-	Steps     []struct {
+	Reach proceduretools.Reach `json:"reach"`
+	Steps []struct {
 		To          string          `json:"to"`
 		Payload     json.RawMessage `json:"payload"`
 		State       string          `json:"state"`
@@ -348,15 +347,15 @@ type tool struct {
 func tools(c continuation) []tool {
 	var ts []tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[modelTools[name]] != nil {
-			ts = append(ts, tool{name: name, description: "Skyra capability " + modelTools[name], target: modelTools[name], schema: c.Tools[modelTools[name]]})
+		if c.Reach.First(modelTools[name]) != nil {
+			ts = append(ts, tool{name: name, description: "Skyra capability " + modelTools[name], target: modelTools[name], schema: c.Reach.First(modelTools[name])})
 		}
 	}
 	reserved := make([]string, 0, len(ts))
 	for _, t := range ts {
 		reserved = append(reserved, t.name)
 	}
-	for _, t := range proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember how one of your calls in this turn was done, as a procedure: call is its index among your calls, from 0. Calling the procedure later runs the same calls on new input, without you.") {
+	for _, t := range proceduretools.Procedures(c.Reach, reserved, "Remember how one of your calls in this turn was done, as a procedure: call is its index among your calls, from 0. Calling the procedure later runs the same calls on new input, without you.") {
 		ts = append(ts, tool{name: t.Name, target: t.Target, kind: t.Kind, description: t.Description, schema: t.Schema})
 	}
 	return ts
@@ -378,7 +377,7 @@ func toolEmission(c continuation, name string, args json.RawMessage) (string, er
 	for i, s := range c.Steps {
 		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	payload := proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{})
+	payload := proceduretools.Payload(t.kind, args, calls, c.Reach, proceduretools.Caller{})
 	out, err := json.Marshal(map[string]any{"to": t.target, "payload": payload})
 	return string(out), err
 }

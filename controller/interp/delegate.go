@@ -27,13 +27,7 @@ type contract struct {
 }
 
 func contractsOf(e envelope, name string) []*proc.Schema {
-	if all, ok := e.Contracts[name]; ok {
-		return all
-	}
-	if s := e.Tools[name]; s != nil {
-		return []*proc.Schema{s}
-	}
-	return nil
+	return e.Reach[name].Contracts
 }
 
 // Delegate is an interpreter procedure, like remember: its control is the

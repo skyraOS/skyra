@@ -48,7 +48,7 @@ func tools() map[string]*proc.Schema {
 func TestRememberRunsItsBody(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	st, obs := fixture(t)
-	e := envelope{Frame: strings.Repeat("1", 64), Input: ask(obs, "agent"), Tools: tools()}
+	e := envelope{Frame: strings.Repeat("1", 64), Input: ask(obs, "agent"), Reach: heldReach(tools(), nil)}
 	out, err := runRemember(store, e)
 	if err != nil || !strings.Contains(string(out), `"to":"system"`) || !strings.Contains(string(out), `"trace"`) {
 		t.Fatalf("remember's first step is the trace syscall: %s %v", out, err)
@@ -72,13 +72,13 @@ func TestRememberRunsItsBody(t *testing.T) {
 func TestRememberRefusesASecondRepresentation(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	st, obs := fixture(t)
-	first := envelope{Frame: strings.Repeat("1", 64), Input: ask(obs, "agent"), Tools: tools(), Steps: []proc.Step{ret(st)}}
+	first := envelope{Frame: strings.Repeat("1", 64), Input: ask(obs, "agent"), Reach: heldReach(tools(), nil), Steps: []proc.Step{ret(st)}}
 	if _, err := runRemember(store, first); err != nil || !store.Has(agentIn) {
 		t.Fatal(err)
 	}
 	other := tools()
 	delete(other, "echo") // another Boundary
-	again := envelope{Frame: strings.Repeat("2", 64), Input: ask(obs, "agent"), Tools: other, Steps: []proc.Step{ret(st)}}
+	again := envelope{Frame: strings.Repeat("2", 64), Input: ask(obs, "agent"), Reach: heldReach(other, nil), Steps: []proc.Step{ret(st)}}
 	out, err := runRemember(store, again)
 	if err != nil || !strings.Contains(string(out), "one representation per contract") || strings.Contains(string(out), "export") {
 		t.Fatalf("a second remember is refused before export: %s %v", out, err)
@@ -96,8 +96,7 @@ func TestRememberRefusesASecondRepresentation(t *testing.T) {
 	}
 	tl := tools()
 	tl["interpreter"] = rememberContract()
-	e := envelope{Frame: strings.Repeat("3", 64), Input: ask(obs, "interpreter"), Tools: tl,
-		Contracts: map[string][]*proc.Schema{"interpreter": {rememberContract(), agentIn}}, Steps: []proc.Step{ret(own)}}
+	e := envelope{Frame: strings.Repeat("3", 64), Input: ask(obs, "interpreter"), Reach: heldReach(tl, map[string][]*proc.Schema{"interpreter": {rememberContract(), agentIn}}), Steps: []proc.Step{ret(own)}}
 	out, err = runRemember(store, e)
 	if err != nil || !strings.Contains(string(out), "one representation per contract") {
 		t.Fatalf("remembering a procedure's own output is refused: %s %v", out, err)
@@ -106,7 +105,7 @@ func TestRememberRefusesASecondRepresentation(t *testing.T) {
 
 // A trace the kernel refused comes back as remember's refusal.
 func TestRememberPassesOnATraceRefusal(t *testing.T) {
-	e := envelope{Frame: strings.Repeat("4", 64), Input: ask(strings.Repeat("a", 64), "agent"), Tools: tools(),
+	e := envelope{Frame: strings.Repeat("4", 64), Input: ask(strings.Repeat("a", 64), "agent"), Reach: heldReach(tools(), nil),
 		Steps: []proc.Step{{State: "fault", Fault: &proc.Fault{Kind: "boundary", Cause: "trace: no invoke of agent through that contract caused this observation"}}}}
 	out, err := runRemember(proc.Store{Dir: t.TempDir()}, e)
 	if err != nil || !strings.Contains(string(out), `"refused":"trace: no invoke`) {
@@ -120,7 +119,7 @@ var resume = &proc.Schema{Title: "resume", Type: "object", Required: []string{"r
 func remembered(t *testing.T, store proc.Store) {
 	t.Helper()
 	st, obs := fixture(t)
-	if _, err := runRemember(store, envelope{Frame: strings.Repeat("9", 64), Input: ask(obs, "agent"), Tools: tools(), Steps: []proc.Step{ret(st)}}); err != nil {
+	if _, err := runRemember(store, envelope{Frame: strings.Repeat("9", 64), Input: ask(obs, "agent"), Reach: heldReach(tools(), nil), Steps: []proc.Step{ret(st)}}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -150,7 +149,7 @@ func TestSameBaseTypesNoModel(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	remembered(t, store)
 	e := envelope{Frame: strings.Repeat("5", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn,
-		Tools: tools(), Contracts: map[string][]*proc.Schema{"agent": {agentIn, resume}}}
+		Reach: heldReach(tools(), map[string][]*proc.Schema{"agent": {agentIn, resume}})}
 	for i := 0; i < 5; i++ {
 		out, err := runProcedure(store, e, agentIn)
 		if err != nil {
@@ -192,7 +191,7 @@ func TestADifferentInputFallsBackFromTheStart(t *testing.T) {
 	if err := store.Put(p, nodes); err != nil {
 		t.Fatal(err)
 	}
-	e := envelope{Frame: strings.Repeat("6", 64), Input: json.RawMessage(`{"note":"n","text":"x"}`), Contract: loose, Tools: tools()}
+	e := envelope{Frame: strings.Repeat("6", 64), Input: json.RawMessage(`{"note":"n","text":"x"}`), Contract: loose, Reach: heldReach(tools(), nil)}
 	out, err := runProcedure(store, e, loose)
 	ins := emitted(t, out)
 	if err != nil || len(ins) != 1 || ins[0].To != "agent" || string(ins[0].Payload) != `{"note":"n","text":"x"}` {
@@ -203,7 +202,7 @@ func TestADifferentInputFallsBackFromTheStart(t *testing.T) {
 		t.Fatalf("its answer is the procedure's: %s %v", out, err)
 	}
 	// The same input shape runs compiled.
-	e = envelope{Frame: strings.Repeat("7", 64), Input: json.RawMessage(`{"text":"y"}`), Contract: loose, Tools: tools()}
+	e = envelope{Frame: strings.Repeat("7", 64), Input: json.RawMessage(`{"text":"y"}`), Contract: loose, Reach: heldReach(tools(), nil)}
 	if out, _ := runProcedure(store, e, loose); emitted(t, out)[0].To != "echo" {
 		t.Fatalf("inside the refinement it runs compiled: %s", out)
 	}
@@ -217,7 +216,7 @@ func TestADifferentEdgeResumesTheModelThere(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	remembered(t, store)
 	e := envelope{Frame: strings.Repeat("8", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn,
-		Tools: tools(), Contracts: map[string][]*proc.Schema{"agent": {agentIn, resume}}}
+		Reach: heldReach(tools(), map[string][]*proc.Schema{"agent": {agentIn, resume}})}
 	out, _ := runProcedure(store, e, agentIn)
 	ins := emitted(t, out)
 	// echo answers the first call with a number: not the trace's base type.
@@ -252,7 +251,7 @@ func TestADifferentEdgeResumesTheModelThere(t *testing.T) {
 	}
 
 	// Without a resume contract, the actor is given the command.
-	e.Frame, e.Contracts = strings.Repeat("c", 64), nil
+	e.Frame, e.Reach = strings.Repeat("c", 64), heldReach(tools(), nil)
 	e.Steps = nil
 	out, _ = runProcedure(store, e, agentIn)
 	ins = emitted(t, out)
@@ -270,7 +269,7 @@ func TestADifferentEdgeResumesTheModelThere(t *testing.T) {
 func TestAFaultFallsBack(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	remembered(t, store)
-	e := envelope{Frame: strings.Repeat("d", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Tools: tools()}
+	e := envelope{Frame: strings.Repeat("d", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Reach: heldReach(tools(), nil)}
 	out, _ := runProcedure(store, e, agentIn)
 	ins := emitted(t, out)
 	fault := &proc.Fault{Kind: "boundary", Cause: `"echo" is not in reach`}
@@ -291,7 +290,7 @@ func TestTheModelWritesTheRefinements(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	st, obs := fixture(t)
 	contracts := map[string][]*proc.Schema{"agent": {agentIn, refineContract}}
-	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Tools: tools(), Contracts: contracts, Steps: []proc.Step{ret(st)}}
+	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Reach: heldReach(tools(), contracts), Steps: []proc.Step{ret(st)}}
 	out, err := runRemember(store, e)
 	ins := emitted(t, out)
 	if err != nil || ins[0].To != "agent" || !strings.Contains(string(ins[0].Payload), `"refine"`) {
@@ -332,7 +331,7 @@ func TestTheModelWritesTheRefinements(t *testing.T) {
 	}
 
 	// Inside the refinement it runs compiled; outside it, the agent.
-	run := envelope{Frame: strings.Repeat("f", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Tools: tools(), Contracts: contracts}
+	run := envelope{Frame: strings.Repeat("f", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Reach: heldReach(tools(), contracts)}
 	if out, _ := runProcedure(store, run, agentIn); emitted(t, out)[0].To != "echo" {
 		t.Fatalf("inside its refinement, compiled: %s", out)
 	}
@@ -359,8 +358,7 @@ func TestTheModelWritesTheRefinements(t *testing.T) {
 func TestAModelThatCannotRefineKeepsTheBaseTypes(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	st, obs := fixture(t)
-	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Tools: tools(),
-		Contracts: map[string][]*proc.Schema{"agent": {agentIn, refineContract}}, Steps: []proc.Step{ret(st)}}
+	e := envelope{Frame: strings.Repeat("e", 64), Input: ask(obs, "agent"), Reach: heldReach(tools(), map[string][]*proc.Schema{"agent": {agentIn, refineContract}}), Steps: []proc.Step{ret(st)}}
 	runRemember(store, e)
 	var out []byte
 	for i := 0; i < MaxAttempts; i++ {

@@ -26,20 +26,18 @@ type step struct {
 	Fault       *struct{ Kind, Cause string } `json:"fault"`
 }
 type continuation struct {
-	Actor     string               `json:"actor"`
-	Held      map[string][]*schema `json:"held"`
-	Workspace string               `json:"workspace"`
-	Scratch   string               `json:"scratch"`
-	Frame     string               `json:"frame"`
+	Actor     string `json:"actor"`
+	Workspace string `json:"workspace"`
+	Scratch   string `json:"scratch"`
+	Frame     string `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Thread, Incarnation, Model string
 		Fresh                                                  bool
 		Context                                                json.RawMessage
 		ActivityAt                                             int64 `json:"activity_at"`
 	} `json:"input"`
-	Tools     map[string]*schema   `json:"tools"`
-	Contracts map[string][]*schema `json:"contracts"`
-	Steps     []step               `json:"steps"`
+	Reach proceduretools.Reach `json:"reach"`
+	Steps []step               `json:"steps"`
 }
 type observation struct {
 	Lines                   []string `json:"lines"`
@@ -106,28 +104,28 @@ func (t tool) shared() proceduretools.Tool {
 func tools(c continuation) []tool {
 	var ts []tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[name] != nil {
+		if c.Reach.First(name) != nil {
 			description := modelTools[name]
-			if name == "desktop_observe" && c.Tools[name].Title != "" {
-				description += " " + c.Tools[name].Title
+			if name == "desktop_observe" && c.Reach.First(name).Title != "" {
+				description += " " + c.Reach.First(name).Title
 			}
 			toolName := name
 			if strings.Contains(name, ".") {
 				toolName = strings.ReplaceAll(name, ".", "_")
 			}
-			ts = append(ts, tool{name: toolName, description: description, target: name, schema: c.Tools[name], contracts: proceduretools.ContractsOf(c.Tools, c.Contracts, name)})
+			ts = append(ts, tool{name: toolName, description: description, target: name, schema: c.Reach.First(name), contracts: proceduretools.ContractsOf(c.Reach, name)})
 		}
 	}
 	reserved := make([]string, 0, len(ts))
 	for _, t := range ts {
 		reserved = append(reserved, t.name)
 	}
-	for _, t := range proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember how one of your tool calls in this turn was done, as a procedure: call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, and with no approval. Only a call that itself called tools can be remembered.") {
+	for _, t := range proceduretools.Procedures(c.Reach, reserved, "Remember how one of your tool calls in this turn was done, as a procedure: call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, and with no approval. Only a call that itself called tools can be remembered.") {
 		ts = append(ts, tool{name: t.Name, target: t.Target, kind: t.Kind, description: t.Description, schema: t.Schema, contracts: t.Contracts})
 	}
-	ts = slices.DeleteFunc(ts, func(t tool) bool { return !proceduretools.Offered(c.Held, t.shared()) })
+	ts = slices.DeleteFunc(ts, func(t tool) bool { return !proceduretools.Offered(c.Reach, t.shared()) })
 	for i := range ts {
-		if actors := proceduretools.Delegable(c.Tools, c.Contracts); ts[i].name == "delegate" && len(actors) > 0 {
+		if actors := proceduretools.Delegable(c.Reach); ts[i].name == "delegate" && len(actors) > 0 {
 			ts[i].description += " Available actors: " + strings.Join(actors, ", ") + "."
 		}
 	}
@@ -206,7 +204,7 @@ func toolEmission(c continuation, d derived, name string, args json.RawMessage) 
 	for i, s := range results {
 		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: d.Model, Tools: shared(tools(c))}))
+	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Reach, proceduretools.Caller{Actor: c.Actor, Model: d.Model, Tools: shared(tools(c))}))
 }
 
 func main() {
@@ -483,7 +481,7 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
-		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Holds(c.Held, "repo.write"))}
+		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, proceduretools.HoldsAny(c.Reach, "repo.write"))}
 		if c.Input.Model != "" {
 			params["model"] = c.Input.Model
 		}

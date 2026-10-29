@@ -10,7 +10,7 @@ import (
 
 func delegateEnvelope(input string) envelope {
 	run := &proc.Schema{Type: "object"}
-	e := envelope{Frame: "parent-slot", Input: json.RawMessage(input), Tools: map[string]*proc.Schema{"codex": run, "claude": run}}
+	e := envelope{Frame: "parent-slot", Input: json.RawMessage(input), Reach: heldReach(map[string]*proc.Schema{"codex": run, "claude": run}, nil)}
 	return e
 }
 

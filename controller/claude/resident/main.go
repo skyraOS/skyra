@@ -28,19 +28,17 @@ import (
 type schema = proceduretools.Schema
 
 type continuation struct {
-	Actor     string               `json:"actor"`
-	Held      map[string][]*schema `json:"held"`
-	Contracts map[string][]*schema `json:"contracts"`
-	Workspace string               `json:"workspace"`
-	Scratch   string               `json:"scratch"`
-	Frame     string               `json:"frame"`
+	Actor     string `json:"actor"`
+	Workspace string `json:"workspace"`
+	Scratch   string `json:"scratch"`
+	Frame     string `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Session, Model string
 		Fresh                                      bool
 		Context                                    json.RawMessage
 	} `json:"input"`
-	Tools map[string]*schema `json:"tools"`
-	Steps []step             `json:"steps"`
+	Reach proceduretools.Reach `json:"reach"`
+	Steps []step               `json:"steps"`
 }
 
 type step struct {
@@ -83,7 +81,7 @@ type derived struct {
 }
 
 // modelTools lists the tools Claude is offered. A tool appears only when it
-// is also present in the continuation's reach (c.Tools).
+// is also present in the continuation's reach (c.Reach).
 var modelTools = proceduretools.ModelTools
 
 func main() {
@@ -266,7 +264,7 @@ func decide(c continuation) (string, error) {
 			for i, s := range d.Results {
 				calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 			}
-			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: resolvedModel(c), Tools: tools(c)})), nil
+			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Reach, proceduretools.Caller{Actor: c.Actor, Model: resolvedModel(c), Tools: tools(c)})), nil
 		}
 		result := d.Results[i]
 		var br map[string]any
@@ -366,18 +364,18 @@ func toolText(s step) json.RawMessage {
 func tools(c continuation) []proceduretools.Tool {
 	var ts []proceduretools.Tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
-		if c.Tools[name] != nil {
-			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Tools[name], Contracts: proceduretools.ContractsOf(c.Tools, c.Contracts, name)})
+		if c.Reach.First(name) != nil {
+			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Reach.First(name), Contracts: proceduretools.ContractsOf(c.Reach, name)})
 		}
 	}
 	reserved := make([]string, len(ts))
 	for i, t := range ts {
 		reserved[i] = t.Name
 	}
-	ts = append(ts, proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember one of your tool calls by its index, starting at 0.")...)
-	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Offered(c.Held, t) })
+	ts = append(ts, proceduretools.Procedures(c.Reach, reserved, "Remember one of your tool calls by its index, starting at 0.")...)
+	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Offered(c.Reach, t) })
 	for i := range ts {
-		if actors := proceduretools.Delegable(c.Tools, c.Contracts); ts[i].Name == "delegate" && len(actors) > 0 {
+		if actors := proceduretools.Delegable(c.Reach); ts[i].Name == "delegate" && len(actors) > 0 {
 			ts[i].Description += " Available actors: " + strings.Join(actors, ", ") + "."
 		}
 	}
@@ -406,7 +404,7 @@ func turnConfig(c continuation) map[string]any {
 	}
 	cfg := map[string]any{
 		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
-		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Holds(c.Held, "repo.write")),
+		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, proceduretools.HoldsAny(c.Reach, "repo.write")),
 	}
 	if !c.Input.Fresh && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session

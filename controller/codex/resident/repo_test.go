@@ -28,7 +28,7 @@ func TestRepositoryToolsReachAndExactArguments(t *testing.T) {
 			args = `{"action":"go.test","package":"./controller/blender"}`
 		}
 		c := turnWithCalls(strings.ReplaceAll(name, ".", "_") + " " + args)
-		c.Tools[name] = declared.Input
+		c.Reach[name] = reachOf(map[string]*schema{name: declared.Input}, nil)[name]
 		to, out := emitted(t, c)
 		if to != name || string(out["payload"]) != args {
 			// Emission canonicalizes object keys; compare decoded values.

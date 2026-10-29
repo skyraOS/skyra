@@ -66,10 +66,10 @@ func TestExistingThreadInspectsBeforeTurnAndRestartsWhenGone(t *testing.T) {
 }
 
 func TestOnlyModelFacingToolsAreOfferedToCodex(t *testing.T) {
-	c := continuation{Frame: "frame", Tools: map[string]*schema{
+	c := continuation{Frame: "frame", Reach: reachOf(map[string]*schema{
 		"echo":       {Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}},
 		"codex.stop": {Type: "object"}, "codex.exchange": {Type: "object"},
-	}}
+	}, nil)}
 	c.Input.Text = "hello"
 	c.Steps = []step{
 		{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1", "pid": 1, "profile": "hash"})},
@@ -94,10 +94,10 @@ func TestOnlyModelFacingToolsAreOfferedToCodex(t *testing.T) {
 // turnWithCalls is a continuation whose turn has started and whose Codex has
 // asked for each tool call given, in order.
 func turnWithCalls(calls ...string) continuation {
-	c := continuation{Frame: "frame", Tools: map[string]*schema{
+	c := continuation{Frame: "frame", Reach: reachOf(map[string]*schema{
 		"echo": {Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}},
 		"read": {Type: "object", Fields: map[string]*schema{"path": {Type: "string"}}, Required: []string{"path"}},
-	}}
+	}, nil)}
 	c.Input.Text = "hello"
 	observed := func(deliver []string, lines ...string) step {
 		return step{To: "codex.exchange", State: "return", Payload: value(map[string]any{"deliver": deliver}),
@@ -146,7 +146,7 @@ func TestEachToolCallInvokesTheToolItNames(t *testing.T) {
 
 func TestAToolOutsideReachIsAViolation(t *testing.T) {
 	c := turnWithCalls(`read {"path":"x"}`)
-	delete(c.Tools, "read")
+	delete(c.Reach, "read")
 	to, m := emitted(t, c)
 	var q struct{ Deliver []string }
 	json.Unmarshal(m["payload"], &q)
@@ -167,7 +167,7 @@ func TestAToolOutsideReachIsAViolation(t *testing.T) {
 // not name an unregistered capability to make the runtime fault.
 func TestANativeAttemptIsReturnedAsAnObservation(t *testing.T) {
 	c := turnWithCalls(`read {"path":"x"}`)
-	delete(c.Tools, "read")
+	delete(c.Reach, "read")
 	to, m := emitted(t, c)
 	if to != "codex.exchange" {
 		t.Fatalf("the attempt interrupts the turn first: %s", to)
@@ -206,8 +206,7 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 	text := &schema{Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
 	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "any"}}}
 	look := &schema{Title: "look", Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
-	c := continuation{Frame: "f", Tools: map[string]*schema{"read": text, "interpreter": remember, "codex.exchange": text},
-		Contracts: map[string][]*schema{"interpreter": {remember, look}}}
+	c := continuation{Frame: "f", Reach: reachOf(map[string]*schema{"read": text, "interpreter": remember, "codex.exchange": text}, map[string][]*schema{"interpreter": {remember, look}})}
 	var names []string
 	for _, tl := range tools(c) {
 		names = append(names, tl.name)
@@ -228,7 +227,7 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 		t.Fatalf("a call that does not exist is left for intake to refuse: %s", got)
 	}
 	// Without the interpreter, nothing changes.
-	delete(c.Tools, "interpreter")
+	delete(c.Reach, "interpreter")
 	if names := tools(c); len(names) != 1 || names[0].name != "read" {
 		t.Fatalf("without the interpreter: %v", names)
 	}
@@ -239,7 +238,7 @@ func TestThreadPromptIsTheHeaderOnly(t *testing.T) {
 		"think": "You are inside Skyra, a cognitive architecture, fulfilling: think",
 		"":      "You are inside Skyra, a cognitive architecture.",
 	} {
-		c := continuation{Frame: "frame", Tools: map[string]*schema{}}
+		c := continuation{Frame: "frame", Reach: reachOf(map[string]*schema{}, nil)}
 		c.Input.Text, c.Input.Header = "hello", header
 		c.Steps = []step{
 			{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
@@ -283,7 +282,7 @@ func TestQuietWaits(t *testing.T) {
 		t.Fatalf("silence during a turn should wait again, got %s", to)
 	}
 	// Before a turn: the server should have answered initialize.
-	c = continuation{Frame: "frame", Tools: map[string]*schema{}}
+	c = continuation{Frame: "frame", Reach: reachOf(map[string]*schema{}, nil)}
 	c.Input.Text = "hello"
 	c.Steps = []step{
 		{To: "codex.open", State: "return", Value: value(map[string]any{"incarnation": "actor-1"})},
@@ -304,7 +303,7 @@ func TestQuietWaits(t *testing.T) {
 // An open that returns no session is the turn's failure, with the service
 // host's reason.
 func TestAnOpenWithoutASessionFails(t *testing.T) {
-	c := continuation{Frame: "frame", Tools: map[string]*schema{}}
+	c := continuation{Frame: "frame", Reach: reachOf(map[string]*schema{}, nil)}
 	c.Input.Text, c.Input.Header = "hello", "think"
 	c.Steps = []step{{To: "codex.open", State: "return", Value: value(map[string]any{"lines": []string{}, "error": "no program \"codex\""})}}
 	if _, err := decide(c); err == nil || !strings.Contains(err.Error(), `no program "codex"`) {
@@ -387,7 +386,7 @@ func TestReadingTheWebIsNotAViolation(t *testing.T) {
 }
 
 func TestDesignOperationsAreOfferedToParent(t *testing.T) {
-	c := continuation{Tools: map[string]*schema{"design": {Type: "object"}, "design.tools": {Type: "object"}}}
+	c := continuation{Reach: reachOf(map[string]*schema{"design": {Type: "object"}, "design.tools": {Type: "object"}}, nil)}
 	c.Input.Header = "think"
 	if ts := tools(c); len(ts) != 2 || ts[1].name != "design_tools" || ts[1].target != "design.tools" {
 		t.Fatalf("think tools: %v", ts)
@@ -399,7 +398,7 @@ func TestDesignOperationsAreOfferedToParent(t *testing.T) {
 }
 
 func TestBlenderOperationsAreOfferedToParent(t *testing.T) {
-	c := continuation{Tools: map[string]*schema{"blender": {Type: "object"}, "blender.tools": {Type: "object"}}}
+	c := continuation{Reach: reachOf(map[string]*schema{"blender": {Type: "object"}, "blender.tools": {Type: "object"}}, nil)}
 	if ts := tools(c); len(ts) != 2 || ts[1].name != "blender_tools" || ts[1].target != "blender.tools" {
 		t.Fatalf("think tools: %v", ts)
 	}

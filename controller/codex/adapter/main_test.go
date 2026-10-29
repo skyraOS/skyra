@@ -64,10 +64,10 @@ func TestInterruptFailsWhenHostDies(t *testing.T) {
 // id, and the host refuses one that differs from the first delivery.
 func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 	object := &schema{Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}}
-	c := continuation{Frame: "f", Tools: map[string]*schema{
+	c := continuation{Frame: "f", Reach: reachOf(map[string]*schema{
 		"echo": object, "agent": object, "codex": object, "system.narrow": {Type: "object"},
 		"z-tool": object, "a-tool": object,
-	}}
+	}, nil)}
 	first, _ := json.Marshal(request("f:thread", "thread/start", map[string]any{"dynamicTools": dynamicTools(c)}))
 	for i := 0; i < 200; i++ {
 		again, _ := json.Marshal(request("f:thread", "thread/start", map[string]any{"dynamicTools": dynamicTools(c)}))
@@ -85,7 +85,7 @@ func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 			t.Fatalf("%s is in reach but must not be offered to the model", name)
 		}
 	}
-	if !offered(c, "echo") || offered(continuation{Tools: map[string]*schema{}}, "echo") {
+	if !offered(c, "echo") || offered(continuation{Reach: reachOf(map[string]*schema{}, nil)}, "echo") {
 		t.Fatal("echo is offered only when it is in reach")
 	}
 }
@@ -100,8 +100,7 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 	object := &schema{Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}}
 	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "any"}}}
 	look := &schema{Title: "look", Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
-	c := continuation{Frame: "f", Tools: map[string]*schema{"echo": object, "agent": object, "interpreter": remember},
-		Contracts: map[string][]*schema{"interpreter": {remember, look}}}
+	c := continuation{Frame: "f", Reach: reachOf(map[string]*schema{"echo": object, "agent": object, "interpreter": remember}, map[string][]*schema{"interpreter": {remember, look}})}
 	var names []string
 	for _, tl := range tools(c) {
 		names = append(names, tl.name)

@@ -34,9 +34,9 @@ func TestOpenWhenNoIncarnation(t *testing.T) {
 func TestDeliverConfigAfterOpen(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
-	c.Tools = map[string]*schema{
+	c.Reach = reachOf(map[string]*schema{
 		"echo": {Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}},
-	}
+	}, nil)
 	c.Steps = []step{{
 		To: "claude.open", State: "return",
 		Value: json.RawMessage(`{"incarnation":"inc-1"}`),
@@ -70,7 +70,7 @@ func TestReadMoreOnStreamEvents(t *testing.T) {
 	streamLine := `{"type":"system","subtype":"init","session_id":"s1"}`
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
-	c.Tools = map[string]*schema{"echo": {Type: "object"}}
+	c.Reach = reachOf(map[string]*schema{"echo": {Type: "object"}}, nil)
 	c.Steps = []step{
 		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
@@ -124,7 +124,7 @@ func TestBridgeCallDispatch(t *testing.T) {
 	obs, _ := json.Marshal(map[string]any{"lines": []string{bridgeLine}, "partial": "", "delivery": "", "peer_eof": false, "error": ""})
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
-	c.Tools = map[string]*schema{"echo": {Type: "object"}}
+	c.Reach = reachOf(map[string]*schema{"echo": {Type: "object"}}, nil)
 	c.Steps = []step{
 		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
@@ -152,7 +152,7 @@ func TestBridgeResultDelivery(t *testing.T) {
 	obs, _ := json.Marshal(map[string]any{"lines": []string{bridgeLine}, "partial": "", "peer_eof": false, "error": ""})
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
-	c.Tools = map[string]*schema{"echo": {Type: "object"}}
+	c.Reach = reachOf(map[string]*schema{"echo": {Type: "object"}}, nil)
 	c.Steps = []step{
 		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
@@ -229,7 +229,7 @@ func TestToolFaultBecomesError(t *testing.T) {
 	obs, _ := json.Marshal(map[string]any{"lines": []string{bridgeLine}, "partial": "", "peer_eof": false, "error": ""})
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
-	c.Tools = map[string]*schema{"echo": {Type: "object"}}
+	c.Reach = reachOf(map[string]*schema{"echo": {Type: "object"}}, nil)
 	c.Steps = []step{
 		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 		{To: "claude.exchange", State: "return",
@@ -271,7 +271,7 @@ func TestTurnConfigIncludesSession(t *testing.T) {
 	c := continuation{Frame: "f1"}
 	c.Input.Text = "hello"
 	c.Input.Session = "prev-session"
-	c.Tools = map[string]*schema{"echo": {Type: "object"}}
+	c.Reach = reachOf(map[string]*schema{"echo": {Type: "object"}}, nil)
 	c.Steps = []step{
 		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc-1"}`)},
 	}

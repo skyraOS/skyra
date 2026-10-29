@@ -49,8 +49,8 @@ func TestNarrowingThroughSystem(t *testing.T) {
 	// The caller resumes holding it, sees it as a tool, and invokes it.
 	caller := *facet.Resume
 	caller.Stamp = "resolved"
-	if _, shown := tools(caller)[ref]; !shown {
-		t.Fatalf("a held reference is shown to the continuation: %v", tools(caller))
+	if _, shown := reach(caller)[ref]; !shown {
+		t.Fatalf("a held reference is shown to the continuation: %v", reach(caller))
 	}
 	call := intakeRecord(caller, `{"to":"`+ref+`","payload":{"text":"hi"}}`)
 	if call.State != record.Invoke || call.To != ref {
@@ -162,8 +162,8 @@ func TestAnActorExtendsItself(t *testing.T) {
 	// the agent's own program, executed against the new contract.
 	resumed := *facet.Resume
 	resumed.Stamp = "resolved"
-	if c := contracts(resumed)["agent"]; len(c) != 2 || c[1].Title != "shout" {
-		t.Fatalf("a continuation is shown every contract: %v", contracts(resumed))
+	if e := reach(resumed)["agent"]; len(e.Contracts) != 2 || e.Contracts[1].Title != "shout" || len(e.Held) != 2 {
+		t.Fatalf("a continuation is shown every contract: %v", reach(resumed))
 	}
 	call := intakeRecord(resumed, `{"to":"agent","payload":{"shout":"hi"}}`)
 	if call.State != record.Invoke {

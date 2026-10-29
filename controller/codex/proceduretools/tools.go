@@ -13,34 +13,52 @@ type Tool struct {
 	Contracts                       []*Schema // the contracts of Target a call to it may select
 }
 
-func Interpreter(reach map[string]*Schema) string {
+// Entry is one actor in a continuation's reach: every contract it declares,
+// the registered one first, and the indexes of those it holds.
+type Entry struct {
+	Contracts []*Schema `json:"contracts"`
+	Held      []int     `json:"held"`
+}
+
+// Reach is a continuation's c-list, by name.
+type Reach map[string]Entry
+
+// First is the registered contract of name, or nil when it is not in reach.
+func (r Reach) First(name string) *Schema {
+	if c := r[name].Contracts; len(c) > 0 {
+		return c[0]
+	}
+	return nil
+}
+
+// Holds reports whether contract c of name is held.
+func (r Reach) Holds(name string, c *Schema) bool {
+	e := r[name]
+	return slices.ContainsFunc(e.Held, func(i int) bool { return i < len(e.Contracts) && same(e.Contracts[i], c) })
+}
+
+func Interpreter(reach Reach) string {
 	for _, name := range slices.Sorted(maps.Keys(reach)) {
-		if s := reach[name]; s != nil && s.Title == "remember" {
+		if s := reach.First(name); s != nil && s.Title == "remember" {
 			return name
 		}
 	}
 	return ""
 }
 
-func ContractsOf(reach map[string]*Schema, contracts map[string][]*Schema, name string) []*Schema {
-	if all, ok := contracts[name]; ok {
-		return all
-	}
-	if s := reach[name]; s != nil {
-		return []*Schema{s}
-	}
-	return nil
+func ContractsOf(reach Reach, name string) []*Schema {
+	return reach[name].Contracts
 }
 
 // Procedures adds the same deterministic procedure bindings to either
 // transport's capability catalog. Reserved names keep the direct capability
 // binding when a learned title collides with it.
-func Procedures(reach map[string]*Schema, contracts map[string][]*Schema, reserved []string, rememberDescription string) []Tool {
+func Procedures(reach Reach, reserved []string, rememberDescription string) []Tool {
 	target := Interpreter(reach)
 	if target == "" {
 		return nil
 	}
-	all := ContractsOf(reach, contracts, target)
+	all := ContractsOf(reach, target)
 	ts := []Tool{
 		{Name: "remember", Target: target, Kind: "remember", Description: rememberDescription,
 			Schema: &Schema{Type: "object", Required: []string{"call"}, Fields: map[string]*Schema{"call": {Type: "number"}}}, Contracts: all[:1]},
@@ -104,11 +122,11 @@ type Caller struct {
 // Delegable is every actor in reach a delegate can hand a goal to: one with
 // a contract its child input fits. Nothing marks an actor as an agent; its
 // contract says whether it takes a goal.
-func Delegable(reach map[string]*Schema, contracts map[string][]*Schema) []string {
+func Delegable(reach Reach) []string {
 	goal := map[string]any{"text": "", "header": "delegate", "fresh": true, "model": ""}
 	var out []string
 	for _, name := range slices.Sorted(maps.Keys(reach)) {
-		if slices.ContainsFunc(ContractsOf(reach, contracts, name), func(c *Schema) bool { return Fits(c, goal) }) {
+		if slices.ContainsFunc(ContractsOf(reach, name), func(c *Schema) bool { return Fits(c, goal) }) {
 			out = append(out, name)
 		}
 	}
@@ -143,7 +161,7 @@ func Kept(offered []Tool, names []string) ([]Contract, bool) {
 // Payload translates model arguments using only model calls in their original
 // order. Provider transport steps never enter this index. Invalid remember
 // references deliberately become an incomplete request refused by intake.
-func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*Schema, contracts map[string][]*Schema, caller Caller) any {
+func Payload(kind string, args json.RawMessage, calls []Call, reach Reach, caller Caller) any {
 	switch kind {
 	case "delegate":
 		var a struct {
@@ -176,7 +194,7 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*
 		}
 		call := calls[*a.Call]
 		return map[string]any{"remember": map[string]any{"observation": call.Observation,
-			"contract": map[string]any{"target": call.Target, "schema": Selected(ContractsOf(reach, contracts, call.Target), call.Payload)}}}
+			"contract": map[string]any{"target": call.Target, "schema": Selected(ContractsOf(reach, call.Target), call.Payload)}}}
 	case "procedure":
 		var a struct {
 			Input json.RawMessage `json:"input"`
@@ -189,21 +207,15 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*
 }
 
 // Offered reports whether a tool is offered under a continuation's c-list:
-// every contract it stands for is held, as Kept keeps them. nil holds
-// everything the continuation is shown. The kernel separately checks the
-// selected contract at intake.
-func Offered(held map[string][]*Schema, t Tool) bool {
-	if held == nil {
-		return true
-	}
-	return len(t.Contracts) > 0 && !slices.ContainsFunc(t.Contracts, func(c *Schema) bool {
-		return !slices.ContainsFunc(held[t.Target], func(h *Schema) bool { return same(c, h) })
-	})
+// every contract it stands for is held, as Kept keeps them. The kernel
+// separately checks the selected contract at intake.
+func Offered(reach Reach, t Tool) bool {
+	return len(t.Contracts) > 0 && !slices.ContainsFunc(t.Contracts, func(c *Schema) bool { return !reach.Holds(t.Target, c) })
 }
 
-// Holds reports whether any contract of target is held.
-func Holds(held map[string][]*Schema, target string) bool {
-	return held == nil || len(held[target]) > 0
+// HoldsAny reports whether any contract of target is held.
+func HoldsAny(reach Reach, target string) bool {
+	return len(reach[target].Held) > 0
 }
 
 func same(a, b *Schema) bool {

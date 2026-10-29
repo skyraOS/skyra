@@ -229,3 +229,20 @@ func TestEveryNarrowingIsBoundedByTheFrameLimit(t *testing.T) {
 		t.Fatal("a narrowing past the frame limit was accepted")
 	}
 }
+
+// A continuation is shown every contract each actor declares, and which of
+// them it holds: one view, not tools beside reach.
+func TestAContinuationIsShownWhatItHoldsByContract(t *testing.T) {
+	h := delegationRoot()
+	child := delegated(t, h, `{"actor":"agent","contracts":`+keep(h, "echo")+`}`)
+	shown := reach(child)
+	if e := shown["echo"]; len(e.Contracts) != 1 || len(e.Held) != 1 || e.Held[0] != 0 {
+		t.Fatalf("echo is held: %+v", e)
+	}
+	if e := shown["write"]; len(e.Contracts) != 1 || len(e.Held) != 0 {
+		t.Fatalf("write is declared, not held: %+v", e)
+	}
+	if e := reach(h)["write"]; len(e.Held) != 1 {
+		t.Fatalf("never narrowed, everything is held: %+v", e)
+	}
+}

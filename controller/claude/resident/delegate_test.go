@@ -19,7 +19,6 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 	c.Input.Fresh = true
 	c.Input.Text = "goal"
 	c.Input.Session = "must-not-resume"
-	c.Held = map[string][]*schema{}
 	config := turnConfig(c)
 	if _, ok := config["session"]; ok {
 		t.Fatal("delegated child resumed parent session")
@@ -41,9 +40,11 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "object"}}}
 	delegate := &schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*schema{"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*schema{"goal": {Type: "string"}}}}}
-	c := continuation{Frame: "f1", Tools: map[string]*schema{"interpreter": remember}, Contracts: map[string][]*schema{"interpreter": {remember, delegate}}}
+	c := continuation{Frame: "f1", Reach: reachOf(map[string]*schema{"interpreter": remember}, map[string][]*schema{"interpreter": {remember, delegate}})}
 	c.Input.Text = "goal"
-	c.Held = map[string][]*schema{"interpreter": {delegate}}
+	e := c.Reach["interpreter"]
+	e.Held = []int{1}
+	c.Reach["interpreter"] = e
 	// Holding delegate offers it, and procedure only because it stands for
 	// the same single contract here; remember is not held.
 	names := []string{}
@@ -70,8 +71,7 @@ func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 }
 
 func TestClaudeCanonicalWorkToolHasAValidTransportLabel(t *testing.T) {
-	c := continuation{Tools: map[string]*schema{"repo.write": {Type: "object"}}}
-	c.Held = map[string][]*schema{"repo.write": {c.Tools["repo.write"]}}
+	c := continuation{Reach: reachOf(map[string]*schema{"repo.write": {Type: "object"}}, nil)}
 	ts := tools(c)
 	if len(ts) != 1 || ts[0].Name != "repo_write" || ts[0].Target != "repo.write" {
 		t.Fatalf("transport name changed ownership: %+v", ts)

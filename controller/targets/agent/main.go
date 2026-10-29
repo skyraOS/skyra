@@ -88,9 +88,10 @@ type continuation struct {
 			} `json:"refused"`
 		} `json:"resume"`
 	} `json:"input"`
-	Tools     map[string]json.RawMessage   `json:"tools"`
-	Contracts map[string][]json.RawMessage `json:"contracts"`
-	Steps     []struct {
+	Reach map[string]struct {
+		Contracts []json.RawMessage `json:"contracts"`
+	} `json:"reach"`
+	Steps []struct {
 		To          string          `json:"to"`
 		State       string          `json:"state"`
 		Value       json.RawMessage `json:"value"`
@@ -146,7 +147,7 @@ func main() {
 		return
 	}
 	if c.Input.Text == "redundant:" {
-		emit("system", map[string]any{"export": map[string]any{"schema": c.Tools["agent"]}})
+		emit("system", map[string]any{"export": map[string]any{"schema": registered(c)}})
 		return
 	}
 	if word, isExtend := strings.CutPrefix(c.Input.Text, "extend:"); isExtend {
@@ -206,7 +207,7 @@ func relay(c continuation) {
 // which only a worker may (next/32).
 func remember(c continuation, word string) {
 	remembering := map[string]any{"remember": map[string]any{
-		"observation": "", "contract": map[string]any{"target": "agent", "schema": c.Tools["agent"]}}}
+		"observation": "", "contract": map[string]any{"target": "agent", "schema": registered(c)}}}
 	switch len(c.Steps) {
 	case 0:
 		emit("agent", map[string]string{"text": "relay:" + word})
@@ -264,7 +265,7 @@ func refinements(c continuation) map[string]any {
 // look is the worker that remembers a look and runs it on new paths.
 func look(c continuation, dir string) {
 	var lookContract json.RawMessage
-	for _, s := range c.Contracts["agent"] {
+	for _, s := range c.Reach["agent"].Contracts {
 		var t struct{ Title string }
 		if json.Unmarshal(s, &t) == nil && t.Title == "look" {
 			lookContract = s
@@ -347,4 +348,12 @@ func fan(c continuation, parts []string) {
 func emit(to string, payload any) {
 	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	fmt.Println(string(b))
+}
+
+// registered is the agent's own registered contract, as its reach shows it.
+func registered(c continuation) json.RawMessage {
+	if all := c.Reach["agent"].Contracts; len(all) > 0 {
+		return all[0]
+	}
+	return nil
 }

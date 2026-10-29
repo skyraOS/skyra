@@ -28,37 +28,41 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 		Frame: o.Frame, Round: o.Round, Deps: o.Discharges, Emission: o.Emission}, nil
 }
 
-// tools is what a continuation is shown: the first contract of everything in
-// its reach. What it sees is exactly what it may invoke (frame ⊆ authority).
-// Which of them a model is offered is the adapter's choice, not the runtime's.
-func tools(h boundary.Boundary) map[string]*contract.Schema {
-	t := map[string]*contract.Schema{}
+// Entry is one actor in reach as a continuation sees it: every contract its
+// binary declares, the registered one first, and which of them it holds, by
+// index. A payload is selected against all of them; only a held one may be
+// invoked. What it sees is what it may invoke (frame ⊆ authority); which of
+// them a model is offered is the adapter's choice, not the runtime's.
+type Entry struct {
+	Contracts []*contract.Schema `json:"contracts"`
+	Held      []int              `json:"held"`
+}
+
+// reach is a Boundary's c-list as a continuation sees it: every name in
+// reach, and every reference it holds, as the actor it stands for.
+func reach(h boundary.Boundary) map[string]Entry {
+	out := map[string]Entry{}
 	for name, s := range shownReach(h) {
-		if all := s.All(); len(all) > 0 {
-			t[name] = all[0]
+		actor := name
+		if g, isRef := h.Refs[name]; isRef {
+			if _, named := h.Reach[name]; !named {
+				actor = g.Actor
+			}
 		}
+		e := Entry{Contracts: s.All(), Held: []int{}}
+		for i, c := range e.Contracts {
+			if h.Holds(actor, c) {
+				e.Held = append(e.Held, i)
+			}
+		}
+		out[name] = e
 	}
-	return t
+	return out
 }
 
 // Paths are informational continuation data, derived from the current Boundary.
 func workspaceOf(h boundary.Boundary) string {
 	return h.Authority.Workspace
-}
-
-// contracts is every contract of each name in reach that holds more than
-// one, so a continuation sees all of them (next/32, H3).
-func contracts(h boundary.Boundary) map[string][]*contract.Schema {
-	var c map[string][]*contract.Schema
-	for name, s := range shownReach(h) {
-		if all := s.All(); len(all) > 1 {
-			if c == nil {
-				c = map[string][]*contract.Schema{}
-			}
-			c[name] = all
-		}
-	}
-	return c
 }
 
 // shownReach is a Boundary's reach as a continuation sees it: every name,
@@ -92,20 +96,18 @@ func against(s boundary.Surface, input json.RawMessage) *contract.Schema {
 
 // Continuation is what a continuation reads on stdin: the frame it runs in,
 // who invoked it, the payload it was invoked with, the contract it is executed
-// against (when it has more than one), the tools it may invoke, and every step
+// against (when it has more than one), what it may invoke, and every step
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Actor     string                        `json:"actor,omitempty"`
-	Held      boundary.CList                `json:"held,omitempty"` // when narrowed by contract: the contracts of Tools and Contracts it may select
-	Workspace string                        `json:"workspace,omitempty"`
-	Scratch   string                        `json:"scratch,omitempty"`
-	Frame     string                        `json:"frame"`
-	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
-	Input     json.RawMessage               `json:"input"`
-	Contract  *contract.Schema              `json:"contract,omitempty"`
-	Tools     map[string]*contract.Schema   `json:"tools"`
-	Contracts map[string][]*contract.Schema `json:"contracts,omitempty"`
-	Steps     []StepView                    `json:"steps"`
+	Actor     string           `json:"actor,omitempty"`
+	Workspace string           `json:"workspace,omitempty"`
+	Scratch   string           `json:"scratch,omitempty"`
+	Frame     string           `json:"frame"`
+	Caller    string           `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
+	Input     json.RawMessage  `json:"input"`
+	Contract  *contract.Schema `json:"contract,omitempty"`
+	Reach     map[string]Entry `json:"reach"` // what it may invoke, by contract
+	Steps     []StepView       `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -135,7 +137,7 @@ func caller(h boundary.Boundary) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(frame record.Record, rounds []round, waiter boundary.Boundary) []byte {
-	c := Continuation{Actor: actorName(waiter), Held: held(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: actorName(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Reach: reach(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, frame.Payload)
 	}
@@ -155,25 +157,4 @@ func actorName(h boundary.Boundary) string {
 		return ""
 	}
 	return h.Name
-}
-
-// held is a narrowed Boundary's c-list as a continuation sees it, by the
-// names it is shown: every reference as the contracts of its actor. A
-// Boundary never narrowed by contract shows none: it holds all it is shown.
-func held(h boundary.Boundary) boundary.CList {
-	if h.Held == nil {
-		return nil
-	}
-	out := boundary.CList{}
-	for name := range h.Reach {
-		if c := h.HeldOf(name); len(c) > 0 {
-			out[name] = c
-		}
-	}
-	for ref, g := range h.Refs {
-		if c := h.HeldOf(g.Actor); len(c) > 0 {
-			out[ref] = c
-		}
-	}
-	return out
 }
