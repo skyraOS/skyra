@@ -9,7 +9,8 @@ import (
 )
 
 func delegateEnvelope(input string) envelope {
-	e := envelope{Frame: "parent-slot", Input: json.RawMessage(input), Agents: map[string]json.RawMessage{"codex": json.RawMessage(`{}`), "claude": json.RawMessage(`{}`)}}
+	run := &proc.Schema{Type: "object"}
+	e := envelope{Frame: "parent-slot", Input: json.RawMessage(input), Tools: map[string]*proc.Schema{"codex": run, "claude": run}}
 	return e
 }
 
@@ -45,13 +46,10 @@ func TestDelegateValidationAndExplicitActor(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "not available to the caller") || strings.Contains(string(out), `"to":"system"`) {
 		t.Fatalf("unresolved tools: %s %v", out, err)
 	}
-	// Empty tools keep no work contract, only what an agent runs through.
-	e := delegateEnvelope(`{"delegate":{"goal":"x","actor":"claude","tools":[],"contracts":[]}}`)
-	run := &proc.Schema{Type: "object"}
-	e.Agents["claude"] = json.RawMessage(`{"operations":["claude.open"]}`)
-	e.Tools = map[string]*proc.Schema{"claude": run, "claude.open": run, "codex": run}
-	out, err = runDelegate(e)
-	if err != nil || !strings.Contains(string(out), `"actor":"claude"`) || !strings.Contains(string(out), `"target":"claude.open"`) || !strings.Contains(string(out), `"target":"codex"`) || strings.Contains(string(out), "tools") {
+	// Empty tools keep no work contract: what the actor runs through is the
+	// kernel's to keep, by its registration.
+	out, err = runDelegate(delegateEnvelope(`{"delegate":{"goal":"x","actor":"claude","tools":[],"contracts":[]}}`))
+	if err != nil || !strings.Contains(string(out), `"actor":"claude"`) || !strings.Contains(string(out), `"contracts":[]`) || strings.Contains(string(out), "tools") {
 		t.Fatalf("explicit actor: %s %v", out, err)
 	}
 }

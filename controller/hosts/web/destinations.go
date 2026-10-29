@@ -52,8 +52,8 @@ func loadDestinations(registryFile string) ([]destination, error) {
 		return nil, err
 	}
 	var registry map[string]struct {
-		Bundle string           `json:"bundle"`
-		Agent  *json.RawMessage `json:"agent"`
+		Bundle string   `json:"bundle"`
+		Uses   []string `json:"uses"`
 	}
 	if err := json.Unmarshal(b, &registry); err != nil {
 		return nil, err
@@ -66,8 +66,8 @@ func loadDestinations(registryFile string) ([]destination, error) {
 	out := []destination{}
 	for _, actor := range names {
 		e := registry[actor]
-		if e.Agent != nil && !strings.Contains(actor, ".") {
-			adapters[actor] = true // a model adapter: its steps are not tool calls
+		if len(e.Uses) > 0 && !strings.Contains(actor, ".") {
+			adapters[actor] = true // runs through other actors: its steps are its operations, not tool calls
 		}
 		if e.Bundle == "" {
 			continue

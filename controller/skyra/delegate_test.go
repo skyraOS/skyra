@@ -51,7 +51,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 	}
 	for _, actor := range []string{"codex", "claude"} {
 		ops := []string{actor + ".open", actor + ".exchange", actor + ".inspect", actor + ".stop"}
-		registry[actor] = map[string]any{"path": filepath.Join(dir, actor), "contract": abs("../" + actor + "/resident/contract.json"), "agent": map[string]any{"operations": ops}}
+		registry[actor] = map[string]any{"path": filepath.Join(dir, actor), "contract": abs("../" + actor + "/resident/contract.json"), "uses": ops}
 		registry[actor+".open"] = serviceIO(dir, socket, "open-contract.json")
 		for _, op := range ops[1:] {
 			registry[op] = serviceIO(dir, socket, "contract.json")
@@ -77,7 +77,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 		{"child exit", map[string]any{"goal": "provider-exit"}, "failed", 1, "codex"},
 		{"claude child exit", map[string]any{"goal": "provider-exit", "actor": "claude"}, "failed", 1, "codex"},
 		{"excluded tool attempted", map[string]any{"goal": "tool:must not execute", "tools": []string{}}, "failed", 1, "codex"},
-		{"unknown actor", map[string]any{"goal": "x", "actor": "unknown"}, "not an available agent", 0, "codex"},
+		{"unknown actor", map[string]any{"goal": "x", "actor": "unknown"}, "not an actor in reach", 0, "codex"},
 		{"unknown tool", map[string]any{"goal": "x", "tools": []string{"missing"}}, "not available", 0, "codex"},
 		{"empty goal", map[string]any{"goal": " "}, "nonempty", 0, "codex"},
 		{"nested inherited tools", map[string]any{"goal": `delegate:{"goal":"tool:grandchild findings"}`, "tools": []string{"delegate", "echo"}}, "grandchild findings", 2, "codex"},

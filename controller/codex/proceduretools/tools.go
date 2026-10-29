@@ -101,6 +101,20 @@ type Caller struct {
 	Tools        []Tool
 }
 
+// Delegable is every actor in reach a delegate can hand a goal to: one with
+// a contract its child input fits. Nothing marks an actor as an agent; its
+// contract says whether it takes a goal.
+func Delegable(reach map[string]*Schema, contracts map[string][]*Schema) []string {
+	goal := map[string]any{"text": "", "header": "delegate", "fresh": true, "model": ""}
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(reach)) {
+		if slices.ContainsFunc(ContractsOf(reach, contracts, name), func(c *Schema) bool { return Fits(c, goal) }) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // Contract is one contract of one actor, as system.narrow keeps it.
 type Contract struct {
 	Target string  `json:"target"`

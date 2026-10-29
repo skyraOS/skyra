@@ -25,14 +25,14 @@ import (
 // Entry is one surface in the registry file. Relative paths are relative to
 // the file.
 type Entry struct {
-	Agent     *boundary.AgentConfig `json:"agent,omitempty"`
-	Path      string                `json:"path"`
-	Contract  string                `json:"contract"`
-	Connect   []string              `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
-	Host      string                `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
-	Authority boundary.Authority    `json:"authority,omitempty"` // a grant this entry brings into the root Boundary
-	State     bool                  `json:"state,omitempty"`     // the actor keeps state of its own, in .skyra/<name>/ (next/32)
-	Bundle    string                `json:"bundle,omitempty"`    // versioned authored procedure bundle, provisioned before genesis
+	Uses      []string           `json:"uses,omitempty"` // the actors it runs through, kept when it is narrowed to
+	Path      string             `json:"path"`
+	Contract  string             `json:"contract"`
+	Connect   []string           `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
+	Host      string             `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
+	Authority boundary.Authority `json:"authority,omitempty"` // a grant this entry brings into the root Boundary
+	State     bool               `json:"state,omitempty"`     // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle    string             `json:"bundle,omitempty"`    // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -178,22 +178,15 @@ func load(file string, entries map[string]Entry) (map[string]boundary.Surface, b
 			}
 			state = name
 		}
-		reach[name] = boundary.Surface{Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = boundary.Surface{Uses: e.Uses, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
 	if !root.Covers() {
 		return nil, root, fmt.Errorf("the workspace %s is under no read grant", root.Workspace)
 	}
 	for name, s := range reach {
-		if s.Agent == nil {
-			continue
-		}
-		if !s.Continuation || s.Host != "" || len(s.Agent.Operations) == 0 {
-			return nil, root, fmt.Errorf("%s: invalid agent configuration", name)
-		}
-		for _, op := range s.Agent.Operations {
-			target, ok := reach[op]
-			if !ok || op == name || target.Agent != nil || target.Host != "" {
-				return nil, root, fmt.Errorf("%s: invalid agent operation %q", name, op)
+		for _, used := range s.Uses {
+			if _, ok := reach[used]; !ok || used == name {
+				return nil, root, fmt.Errorf("%s: uses %q, which is not another entry", name, used)
 			}
 		}
 	}

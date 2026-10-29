@@ -13,7 +13,7 @@ import (
 func delegationRoot() boundary.Boundary {
 	h := operator
 	worker := agentS
-	worker.Agent = &boundary.AgentConfig{Operations: []string{"agent.start"}}
+	worker.Uses = []string{"agent.start"}
 	h.Reach = map[string]boundary.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": echoS, "write": echoS, System: Syscalls()}
 	h.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	return h
@@ -104,11 +104,19 @@ func TestHeldContractsAreEnforcedAtIntakeAndInherited(t *testing.T) {
 	}
 }
 
-func TestEmptyContractsHoldOnlySystem(t *testing.T) {
+func TestEmptyContractsHoldOnlySystemAndWhatTheActorRunsThrough(t *testing.T) {
 	h := delegationRoot()
 	child := delegated(t, h, `{"actor":"agent","contracts":[]}`)
-	if child.Held == nil || len(*child.Held) != 1 || len((*child.Held)[System]) == 0 {
+	if child.Held == nil || len(*child.Held) != 3 || len((*child.Held)[System]) == 0 || len((*child.Held)["agent"]) == 0 || len((*child.Held)["agent.start"]) == 0 {
 		t.Fatalf("empty contracts confused with omitted contracts: %+v", child.Held)
+	}
+	if intakeRecord(child, `{"to":"agent.start","payload":{"text":"x"}}`).State != record.Invoke {
+		t.Fatal("the actor cannot reach what it runs through")
+	}
+	// Narrowed by name too, it keeps them in reach.
+	g, err := narrowing(h, json.RawMessage(`{"actor":"agent","reach":[],"contracts":[]}`))
+	if err != nil || len(g.Reach) != 1 || g.Reach[0] != "agent.start" {
+		t.Fatalf("uses dropped from reach: %+v %v", g.Reach, err)
 	}
 	if intakeRecord(child, `{"to":"echo","payload":{"text":"x"}}`).State != record.Fault {
 		t.Fatal("a child holding nothing invoked echo")

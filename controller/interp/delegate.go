@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"skyra/interp/proc"
@@ -26,25 +24,6 @@ func delegateContract() *proc.Schema {
 type contract struct {
 	Target string       `json:"target"`
 	Schema *proc.Schema `json:"schema"`
-}
-
-// machinery is what a child narrowed to some tools still holds, whatever
-// they are: every available agent and the operations it runs through, so
-// the child can run and delegate in turn. Neither is a tool the model calls.
-func machinery(e envelope) []contract {
-	var kept []contract
-	for _, name := range slices.Sorted(maps.Keys(e.Agents)) {
-		var agent struct {
-			Operations []string `json:"operations"`
-		}
-		_ = json.Unmarshal(e.Agents[name], &agent)
-		for _, actor := range append([]string{name}, agent.Operations...) {
-			for _, c := range contractsOf(e, actor) {
-				kept = append(kept, contract{actor, c})
-			}
-		}
-	}
-	return kept
 }
 
 func contractsOf(e envelope, name string) []*proc.Schema {
@@ -82,9 +61,11 @@ func runDelegate(e envelope) ([]byte, error) {
 	// The calling adapter fills in actor and model when the model names no
 	// actor (proceduretools.Payload); a delegate with neither has no caller
 	// to inherit from.
+	// Any actor in reach can be delegated to: whether it takes a goal is its
+	// contract's to say, at intake. What it runs through, narrow keeps.
 	actor := ask.Delegate.Actor
-	if _, ok := e.Agents[actor]; !ok || actor == "" {
-		return failure("boundary", fmt.Sprintf("%q is not an available agent", actor))
+	if actor == "" || contractsOf(e, actor) == nil {
+		return failure("boundary", fmt.Sprintf("%q is not an actor in reach", actor))
 	}
 	if len(e.Steps) == 0 {
 		scope := map[string]any{"actor": actor}
@@ -95,7 +76,7 @@ func runDelegate(e envelope) ([]byte, error) {
 			if ask.Delegate.Contracts == nil {
 				return failure("boundary", fmt.Sprintf("tools %q are not available to the caller", *ask.Delegate.Tools))
 			}
-			scope["contracts"] = append(slices.Clone(*ask.Delegate.Contracts), machinery(e)...)
+			scope["contracts"] = *ask.Delegate.Contracts
 		}
 		return instruction("system", map[string]any{"narrow": scope}), nil
 	}

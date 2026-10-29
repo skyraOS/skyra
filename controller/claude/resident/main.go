@@ -28,13 +28,12 @@ import (
 type schema = proceduretools.Schema
 
 type continuation struct {
-	Agents    map[string]json.RawMessage `json:"agents"`
-	Actor     string                     `json:"actor"`
-	Held      map[string][]*schema       `json:"held"`
-	Contracts map[string][]*schema       `json:"contracts"`
-	Workspace string                     `json:"workspace"`
-	Scratch   string                     `json:"scratch"`
-	Frame     string                     `json:"frame"`
+	Actor     string               `json:"actor"`
+	Held      map[string][]*schema `json:"held"`
+	Contracts map[string][]*schema `json:"contracts"`
+	Workspace string               `json:"workspace"`
+	Scratch   string               `json:"scratch"`
+	Frame     string               `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Session, Model string
 		Fresh                                      bool
@@ -378,8 +377,8 @@ func tools(c continuation) []proceduretools.Tool {
 	ts = append(ts, proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember one of your tool calls by its index, starting at 0.")...)
 	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Offered(c.Held, t) })
 	for i := range ts {
-		if ts[i].Name == "delegate" && len(c.Agents) > 0 {
-			ts[i].Description += " Available actors: " + strings.Join(slices.Sorted(maps.Keys(c.Agents)), ", ") + "."
+		if actors := proceduretools.Delegable(c.Tools, c.Contracts); ts[i].Name == "delegate" && len(actors) > 0 {
+			ts[i].Description += " Available actors: " + strings.Join(actors, ", ") + "."
 		}
 	}
 	return ts

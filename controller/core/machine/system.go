@@ -270,6 +270,24 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 			}
 		}
 	}
+	// The actor keeps what it runs through, so a child can run; held by
+	// contract, it also keeps its own contracts, so it can be narrowed to in
+	// turn if it is in reach. Only what the caller holds is kept.
+	uses := h.Reach[ask.Actor].Uses
+	if ask.Reach != nil {
+		for _, name := range uses {
+			if _, ok := h.Reach[name]; ok && !slices.Contains(g.Reach, name) {
+				g.Reach = append(g.Reach, name)
+			}
+		}
+	}
+	if ask.Contracts != nil {
+		for _, name := range append([]string{ask.Actor}, uses...) {
+			if held := h.HeldOf(name); len(held) > 0 && slices.Contains(g.Reach, name) {
+				(*g.Held)[name] = held
+			}
+		}
+	}
 	slices.Sort(g.Reach)
 	if ask.Contracts != nil {
 		for name := range *g.Held {

@@ -26,12 +26,11 @@ type step struct {
 	Fault       *struct{ Kind, Cause string } `json:"fault"`
 }
 type continuation struct {
-	Agents    map[string]json.RawMessage `json:"agents"`
-	Actor     string                     `json:"actor"`
-	Held      map[string][]*schema       `json:"held"`
-	Workspace string                     `json:"workspace"`
-	Scratch   string                     `json:"scratch"`
-	Frame     string                     `json:"frame"`
+	Actor     string               `json:"actor"`
+	Held      map[string][]*schema `json:"held"`
+	Workspace string               `json:"workspace"`
+	Scratch   string               `json:"scratch"`
+	Frame     string               `json:"frame"`
 	Input     struct {
 		Text, Header, Conversation, Thread, Incarnation, Model string
 		Fresh                                                  bool
@@ -128,8 +127,8 @@ func tools(c continuation) []tool {
 	}
 	ts = slices.DeleteFunc(ts, func(t tool) bool { return !proceduretools.Offered(c.Held, t.shared()) })
 	for i := range ts {
-		if ts[i].name == "delegate" && len(c.Agents) > 0 {
-			ts[i].description += " Available actors: " + strings.Join(slices.Sorted(maps.Keys(c.Agents)), ", ") + "."
+		if actors := proceduretools.Delegable(c.Tools, c.Contracts); ts[i].name == "delegate" && len(actors) > 0 {
+			ts[i].description += " Available actors: " + strings.Join(actors, ", ") + "."
 		}
 	}
 	return ts

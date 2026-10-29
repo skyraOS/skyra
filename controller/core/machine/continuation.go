@@ -95,18 +95,17 @@ func against(s boundary.Surface, input json.RawMessage) *contract.Schema {
 // against (when it has more than one), the tools it may invoke, and every step
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
-	Actor     string                           `json:"actor,omitempty"`
-	Agents    map[string]*boundary.AgentConfig `json:"agents,omitempty"`
-	Held      boundary.CList                   `json:"held,omitempty"` // when narrowed by contract: the contracts of Tools and Contracts it may select
-	Workspace string                           `json:"workspace,omitempty"`
-	Scratch   string                           `json:"scratch,omitempty"`
-	Frame     string                           `json:"frame"`
-	Caller    string                           `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
-	Input     json.RawMessage                  `json:"input"`
-	Contract  *contract.Schema                 `json:"contract,omitempty"`
-	Tools     map[string]*contract.Schema      `json:"tools"`
-	Contracts map[string][]*contract.Schema    `json:"contracts,omitempty"`
-	Steps     []StepView                       `json:"steps"`
+	Actor     string                        `json:"actor,omitempty"`
+	Held      boundary.CList                `json:"held,omitempty"` // when narrowed by contract: the contracts of Tools and Contracts it may select
+	Workspace string                        `json:"workspace,omitempty"`
+	Scratch   string                        `json:"scratch,omitempty"`
+	Frame     string                        `json:"frame"`
+	Caller    string                        `json:"caller,omitempty"` // the name its invoker was invoked through; "" for the operator
+	Input     json.RawMessage               `json:"input"`
+	Contract  *contract.Schema              `json:"contract,omitempty"`
+	Tools     map[string]*contract.Schema   `json:"tools"`
+	Contracts map[string][]*contract.Schema `json:"contracts,omitempty"`
+	Steps     []StepView                    `json:"steps"`
 }
 
 // StepView is one slot as the continuation sees it: what it invoked, and what
@@ -136,7 +135,7 @@ func caller(h boundary.Boundary) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(frame record.Record, rounds []round, waiter boundary.Boundary) []byte {
-	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), Held: held(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: actorName(waiter), Held: held(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, frame.Payload)
 	}
@@ -150,30 +149,12 @@ func continuation(frame record.Record, rounds []round, waiter boundary.Boundary)
 	return b
 }
 
-func agentName(h boundary.Boundary) string {
-	if h.Surface != nil && h.Surface.Agent != nil {
-		return h.Name
+// actorName is the name a frame was invoked through; "" for the operator.
+func actorName(h boundary.Boundary) string {
+	if h.Surface == nil {
+		return ""
 	}
-	return ""
-}
-
-func agents(h boundary.Boundary) map[string]*boundary.AgentConfig {
-	out := map[string]*boundary.AgentConfig{}
-	for name, s := range h.Reach {
-		if s.Agent != nil {
-			available := true
-			for _, op := range s.Agent.Operations {
-				if _, ok := h.Reach[op]; !ok {
-					available = false
-					break
-				}
-			}
-			if available {
-				out[name] = s.Agent
-			}
-		}
-	}
-	return out
+	return h.Name
 }
 
 // held is a narrowed Boundary's c-list as a continuation sees it, by the

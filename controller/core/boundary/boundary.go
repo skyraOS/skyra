@@ -97,13 +97,11 @@ func stringsAllow(ceiling, requested []string) bool {
 // Surface is a registered executable: what a program is, not what it may do
 // (next/25). Its identity (the binary, pinned by content hash) and its
 // contracts. What it may reach and touch belongs to the Boundary it runs under.
-// AgentConfig identifies operator-approved agents and their private transport operations.
-type AgentConfig struct {
-	Operations []string `json:"operations"`
-}
-
 type Surface struct {
-	Agent        *AgentConfig       `json:"agent,omitempty"`
+	// Uses names the actors this program runs through (an adapter's
+	// service operations): a narrowing to it keeps them, with what is held
+	// of them, as it keeps system. They grant nothing the caller lacks.
+	Uses         []string           `json:"uses,omitempty"`
 	Path         string             `json:"path"`
 	SHA256       string             `json:"sha256"`
 	Input        *contract.Schema   `json:"input"`                  // what invoking it must fit: its registered contract
