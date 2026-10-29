@@ -244,7 +244,7 @@ go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 | Pasted images | shown in the transcript, but not given to the model until a recorded tool brings them back |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
-| Self-extension: an agent remembers a trace it ran as a procedure under its own Boundary, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
+| Self-extension: an agent remembers a trace it ran as a procedure under its own Boundary, and runs it with no approval (`remember`, `export`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
 | Procedures: remembered calls within a Boundary, run by the apprentice actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
 | Codex's and Claude's native execution | each runs under the deny-default profile its program registration declares, with egress only through an allowlisting proxy; a native attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |

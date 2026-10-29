@@ -19,7 +19,7 @@ performs its effects. Durable records and released Boundaries can be checked by
 replay. Provider processes and hosts can remain alive across these ephemeral
 steps; their live state is not reconstructed by replay alone.
 
-Procedures are the application programming model. The interpreter executes
+Procedures are the application programming model. The apprentice executes
 operator-installed or remembered compositions of ordinary contracts. Think is
 now an authored procedure, with Codex or Claude selected by a model parameter.
 Bounded delegation is implemented for both adapters. The desktop presents
@@ -43,9 +43,9 @@ sandbox exceptions also prevent claiming uniform Boundary enforcement today.
 | Recording and replay | Content-addressed records, inputs and Boundaries preserve provenance. Version 2 histories commit complete emissions so replay checks round coverage as well as discharge ownership. |
 | Accepted history | Durable acceptance receipts distinguish an accepted release from a proposed one. `system.trace` supports both single-observation traces and invocation-root plus nonempty observation-frontier reads. |
 | Reconstruction support | `ReadTreeInRoom` reconstructs the bounded accepted closure and preserves narrowed-child opacity. Operator-side `RecoverTree` reconciles recorded progress; it does not revive processes or repeat effects. |
-| Interpreter | Durable procedure bodies and frame positions; bindings, dynamic call targets, `each`, independent ready-node fan-out, and procedure-to-procedure calls. |
+| Apprentice | Durable procedure bodies and frame positions; bindings, dynamic call targets, `each`, independent ready-node fan-out, and procedure-to-procedure calls. |
 | Authored procedures | Version 1 bundles are validated and provisioned before genesis. Think, design, Blender and write workflows use this path; deployment/migration versioning remains incomplete. |
-| Remembering | `remember` compiles completed recorded work, exposes a contract through actor-owned `extend-reach`, and runs it inside base refinements. CEL refinement and model-fallback machinery exists; real-provider generalization is not established by the scripted demos. |
+| Remembering | `remember` compiles completed recorded work, exposes a contract through actor-owned `export`, and runs it inside base refinements. CEL refinement and model-fallback machinery exists; real-provider generalization is not established by the scripted demos. |
 | Provider adapters | Codex app-server and Claude CLI adapters translate provider tool requests into recorded invocations. Their transport operations remain separate registered targets in the current implementation. |
 | Ingress | Authenticated WebSockets, bounded framing, durable request admission and conflict detection. Interrupted requests become `delivery-unknown`; they are not automatically retried. |
 | Clients | Browser, terminal and desktop clients consume the conversation protocol. The desktop has procedure roots, model selection, inspectable tool outlines, history, attachments and vertical conversation cards. |
@@ -57,12 +57,12 @@ The current turn path is:
 
 ```text
 human → browser/terminal/desktop → webhost → user actor
-      → interpreter / think(text, model, context, images)
+      → apprentice / think(text, model, context, images)
       → system.narrow → selected adapter → recorded tool calls
       → procedure result → user actor → parked browser interaction
 ```
 
-`think` remains an interpreter bundle. Its dynamic target comes from the `model`
+`think` remains an apprentice bundle. Its dynamic target comes from the `model`
 parameter (`codex` or `claude`); it narrows on each invocation, then calls the
 returned reference. Prior turns still travel as a growing `context` value.
 The October 9 merge unifies Think's procedure identity and preserves old
@@ -81,7 +81,7 @@ The desktop scopes conversation navigation by procedure and selected model.
 The newly merged cards show the first user message, selection and phase, with
 scrolling and a new-conversation action. Activity is grouped under the user's
 request; provider adapter steps are hidden for both Codex and Claude, including
-configured adapters. Interpreter calls are still filtered, so public delegation
+configured adapters. Apprentice calls are still filtered, so public delegation
 and remembering activity need the visibility fix in the change plan.
 
 Conversation creation, listing, loading, closing and deletion are still partly
@@ -91,30 +91,32 @@ procedure-native conversation application proposed in
 
 ### Delegation and current resource lifetime
 
-The public interpreter contract is:
+The public apprentice contract is:
 
 ```json
 {"delegate":{"goal":"Review the change","actor":"claude","tools":["read","find"]}}
 ```
 
-Omitting `actor` inherits the caller's adapter and resolved model; an explicit
-actor uses that adapter's configured default. Omitted tools inherit the effective
-work-tool selection; `tools: []` permits no work calls. Concrete target/contract
-bindings enforce the ceiling across indirect calls and nested delegation.
-Selecting a procedure does not grant its dependencies. Transport operations
+Omitting `actor` inherits the caller's adapter and resolved model, which the
+adapter fills in; an explicit actor uses that adapter's default. Omitted tools
+inherit everything the caller holds; `tools: []` holds only `system`, the
+child's actor and what it runs through. The adapter translates tools into
+contracts, and the Boundary's c-list enforces them across indirect calls and
+nested delegation. Selecting a procedure does not grant its dependencies.
+Transport operations
 currently receive an internal exemption from this work-tool restriction.
 
 A child receives only its goal as task context, without parent history, images
 or provider session identifiers. It opens its own provider session. Ordinary
 child faults and refusals return `{failed:{kind,cause}}`; integrity and persistence
-failures retain the runtime's stop behavior. Delegated Codex records a stop before
+failures retain the runtime's stop behavior. A fresh Codex child records a stop before
 returning, while Claude uses a one-shot provider process. The parent's session
 is reclaimed only by the service host's idle backoff, about half an hour, so a
 parent waiting longer than that on a child loses its session (proposal 49).
 
-The implementation still uses `Boundary.Agent`, `WorkTools` and `Delegated`,
-and `system.agent-context`. These are current
-mechanisms, not the intended final ownership boundaries. See
+The kernel carries no agent, model, tool label or delegated mode: the model
+travels in the `delegate` payload and the child's input, and `fresh: true`
+there starts a new provider session. See
 [DELEGATION.md](design/DELEGATION.md) for exact semantics and verification limits.
 
 ## Boundaries and gaps
@@ -127,10 +129,6 @@ mechanisms, not the intended final ownership boundaries. See
   the runtime floor; disabling native tools is not equivalent to OS containment.
   The universal claims that every effect is recorded and every process has only
   Boundary-rendered authority are therefore goals, not current guarantees.
-- **The kernel still knows agent-specific representation.** Agent declarations,
-  model publication, work-tool labels and delegated mode remain in core. Surface
-  also retains resident/connection/profile fields. Moving policy out requires
-  equivalent authority enforcement before deleting these mechanisms.
 - **History reconstruction is ahead of application recovery.** Root/frontier
   reads, acceptance evidence and operator reconciliation exist. User-owned
   checkpoint publication and full conversation recovery are not wired into the
@@ -188,12 +186,10 @@ either design.
 1. Reconcile the authority and lifecycle specs into one implementable protocol,
    including fixed versus expandable scopes, provider-native recording,
    cancellation, resource loss and old-conversation compatibility.
-2. Fix public interpreter activity visibility and parent/child correlation.
-3. Establish equivalent generic contract authority and provider enforcement before
-   removing `WorkTools`, `AgentContext` or `Delegated`.
-4. Build user-owned root/frontier checkpoints and projection, then move the rest
+2. Fix public apprentice activity visibility and parent/child correlation.
+3. Build user-owned root/frontier checkpoints and projection, then move the rest
    of the conversation application into procedures without duplicating state.
-5. Validate live provider isolation, restart behavior and remembered recurrence
+4. Validate live provider isolation, restart behavior and remembered recurrence
    separately from deterministic fixtures and replay tests.
 
 The research question remains whether one bounded grant can replace repeated
@@ -207,8 +203,8 @@ comparative task-success, containment and cost evaluation remains future work.
 | Topic | Source |
 | --- | --- |
 | Runtime implementation | [controller guide](../controller/README.md), [machine](../controller/core/machine/machine.go) |
-| Procedure language and remembering | [procedures](design/procedures.md), [interpreter](../controller/interp/proc/proc.go) |
-| Current Think composition | [bundle](../controller/interp/workflows/think/bundle.json), [proposal 38](next/proposal/38-think-procedure-proposal.md) |
+| Procedure language and remembering | [procedures](design/procedures.md), [apprentice](../controller/apprentice/proc/proc.go) |
+| Current Think composition | [bundle](../controller/apprentice/workflows/think/bundle.json), [proposal 38](next/proposal/38-think-procedure-proposal.md) |
 | Unified model selection and remaining ideas | [proposal 39](next/proposal/39-unified-think-procedure-proposal.md) |
 | Accepted tree reconstruction | [tree reader](../controller/runtime/replay/tree.go), [reconciliation](../controller/runtime/replay/recover.go), [proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md) |
 | Bounded delegation | [DELEGATION.md](design/DELEGATION.md) |

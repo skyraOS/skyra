@@ -1,10 +1,19 @@
 # Separate Boundary authority from adapter configuration and delegation
 
-Status: proposed. This document specifies a refactor; it does not change runtime behavior.
+Status: implemented 2026-10-28 on `refactor/agents-out-of-boundary`. The
+trace below describes the code before the refactor and is kept as its record.
+Where the build differs from this spec: the c-list of
+[proposal 48](../next/proposal/48-sql-schemas-proposal.md) is the contract subset (a Boundary holds
+contracts, named by `Hash()`), so there is no separate fixed/expandable flag;
+`extend-reach` is `export`, and an exported contract is declared, not held;
+`Surface.Agent` became `uses`, the actors a binary runs through, kept through
+every narrowing; the delegate's model rides in the child's input, and
+`Delegated` is `fresh: true` there; old conversations do not replay
+(proposal 49, decision 1). See [DELEGATION.md](DELEGATION.md).
 
 ## Decision
 
-Delegation is the interpreter's `delegate` procedure. It is not a Boundary mode.
+Delegation is the apprentice's `delegate` procedure. It is not a Boundary mode.
 Remove `Boundary.Delegated` and `Grant.Delegated`. Do not replace them with another
 agent-mode flag in the kernel.
 
@@ -33,16 +42,16 @@ Both `Boundary.Agent` and `Grant.Agent` carry it. `Surface.Agent` is a separate
 | --- | --- | --- |
 | `core/machine/system.go`: `AgentContext`, `Syscalls`, `checkSyscall`, `changesWaiter`, `agentContext` | Registers `system.agent-context`; accepts a resolved model only from a configured agent; prevents changing an inherited model | Adapter configuration contract and adapter validation |
 | `core/machine/authority.go`: `Narrow` | Updates the waiting frame's model metadata; copies it into ordinary calls and reference invocations | Explicit procedure arguments and adapter-owned state |
-| `core/machine/system.go`: `narrowing` | Interprets `inherit_model`; identifies agents; validates available provider operations; sets child actor/model | Interpreter composition of adapter contracts |
+| `core/machine/system.go`: `narrowing` | Interprets `inherit_model`; identifies agents; validates available provider operations; sets child actor/model | Apprentice composition of adapter contracts |
 | `core/machine/continuation.go`: `Continuation`, `agentName`, `agents`, `continuation` | Constructs agent identity, model metadata, and an available-agent catalog | Adapter contracts plus operator-provisioned procedure configuration |
 | `core/machine/machine.go`: `release` | Adds the same agent fields to the initial continuation envelope | Ordinary input payload; no special agent envelope |
-| `controller/interp/main.go`: `envelope`; `controller/interp/delegate.go`: `runDelegate` | Uses `Agent` for omitted actor/model and `Agents` to validate choices | Adapter's delegate wrapper supplies resolved configuration; interpreter selects a configured adapter contract |
+| `controller/apprentice/main.go`: `envelope`; `controller/apprentice/delegate.go`: `runDelegate` | Uses `Agent` for omitted actor/model and `Agents` to validate choices | Adapter's delegate wrapper supplies resolved configuration; apprentice selects a configured adapter contract |
 | `controller/codex/resident/main.go` | Reads inherited model, observes the provider-resolved model, publishes it through `system.agent-context` | Adapter state and an ordinary configuration result |
 | `controller/claude/resident/main.go`: `resolvedModel`, `decide`, provider request construction | Resolves model and publishes it through `system.agent-context` | Adapter state and an ordinary configuration result |
 | `runtime/registry/registry.go`; `skyra` launcher | Validates `agent.operations` and stores `AgentConfig` on surfaces | Validates provisioned adapter/procedure definitions outside the generic kernel |
 
 Current flow: registry agent declaration → Surface.Agent → adapter model
-publication → syscall modifies waiting Boundary.Agent → interpreter reads it →
+publication → syscall modifies waiting Boundary.Agent → apprentice reads it →
 narrow copies it into Grant.Agent → reference invocation copies it into child
 Boundary.Agent → child continuation delivers it to the adapter.
 
@@ -54,14 +63,14 @@ Definition: `core/boundary/boundary.go`, `ToolBinding{Target, Contracts}` and
 | Dependency | Current responsibility | Replacement owner |
 | --- | --- | --- |
 | `core/boundary/tools.go`: `Internal` | Exempts system and configured agent operations from the work-tool restriction | Explicit kernel capability scope; no agent exemption |
-| `core/boundary/tools.go`: `AvailableTools` | Builds model-facing names, interpreter aliases, procedure titles, and selectable work tools | Adapter tool-catalog contract |
+| `core/boundary/tools.go`: `AvailableTools` | Builds model-facing names, apprentice aliases, procedure titles, and selectable work tools | Adapter tool-catalog contract |
 | `core/boundary/tools.go`: `ResolveTool` | Resolves names and transport aliases such as `repo_write` | Adapter binding contract |
 | `core/machine/system.go`: `narrowing` | Resolves `tools`, preserves omitted versus empty selection, rejects widening, stores concrete bindings | Adapter resolves labels; generic narrowing validates concrete targets/contracts |
 | `core/machine/authority.go`: `Narrow` | Carries the work-tool ceiling through ordinary calls and references | Generic restricted reach inherited by every invocation |
 | `core/boundary/tools.go`: `PermitsTool`; `core/machine/interpret.go`: `interpret` | Rejects calls outside the target/contract ceiling | Generic invocation-capability check |
 | `core/machine/continuation.go`: `workToolNames`, `Continuation`; `machine.go`: `release` | Serializes the ceiling back into model-facing labels | Explicit adapter input/result; generic envelope exposes reachable contracts |
 | Codex and Claude `resident/main.go`: `tools`, prompt construction | Filters tools offered to the provider and conditions repository prompt text | Adapter configuration and binding contracts |
-| `controller/codex/proceduretools/tools.go`: `Allows`, `Procedures`, `Payload` | Applies labels, discovers interpreter procedures, and translates model arguments into actual calls | Shared adapter support code, outside core |
+| `controller/codex/proceduretools/tools.go`: `Allows`, `Procedures`, `Payload` | Applies labels, discovers apprentice procedures, and translates model arguments into actual calls | Shared adapter support code, outside core |
 | `runtime/registry/registry.go`; `skyra` | Marks `Surface.WorkTool`; automatically marks bundles | Adapter catalog/procedure provisioning metadata, outside generic Surface |
 
 Current flow: registry work-tool metadata + reach → kernel builds labeled catalog
@@ -75,7 +84,7 @@ Definition: a boolean on Boundary and Grant, set through `system.narrow`.
 
 | Dependency | Current responsibility | Replacement owner |
 | --- | --- | --- |
-| `interp/delegate.go`: `runDelegate` | Sends `delegated:true` in `narrow`, then invokes the returned reference | Interpreter performs explicit configure/narrow/invoke/result composition |
+| `apprentice/delegate.go`: `runDelegate` | Sends `delegated:true` in `narrow`, then invokes the returned reference | Apprentice performs explicit configure/narrow/invoke/result composition |
 | `core/machine/system.go`: narrow schema and `narrowing` | Checks registered agents/operations, applies a 64-frame guard, propagates the flag with logical OR | Procedure selection validation; generic execution-depth limit |
 | `core/machine/authority.go`: `Narrow` | Propagates the flag through calls and grants | Delete propagation |
 | `core/machine/continuation.go`; `machine.go`: `release` | Sends the flag to adapters | Explicit adapter session and lifetime configuration |
@@ -84,7 +93,7 @@ Definition: a boolean on Boundary and Grant, set through `system.narrow`.
 | `codex/resident/main.go` | Disables native tools, changes event handling, stops the provider before completion, omits thread metadata from result | Adapter run/session contract and explicit resource close |
 | `claude/resident/main.go` | Avoids loading/saving the parent's session and resuming it | Adapter session policy and per-invocation state |
 
-Current flow: interpreter `delegate` → narrow flag → Grant → child Boundary →
+Current flow: apprentice `delegate` → narrow flag → Grant → child Boundary →
 provider socket identity + resident sandbox + continuation → adapter session,
 native-tool, result, and cleanup behavior. One boolean currently controls all
 these independent responsibilities.
@@ -95,7 +104,7 @@ these independent responsibilities.
   empty tool sets, alias resolution, model publication, and socket isolation.
 - `controller/core/boundary/boundary_os_test.go`: native image denial under
   `Delegated`.
-- `controller/interp/delegate_test.go`: expects `inherit_model` and `tools` in
+- `controller/apprentice/delegate_test.go`: expects `inherit_model` and `tools` in
   emitted narrow requests.
 - `controller/skyra/delegate_test.go`: real runtime acceptance; inspects child
   Boundary.Delegated and Boundary.WorkTools.
@@ -120,7 +129,7 @@ these independent responsibilities.
 | Human/model tool names, descriptions, aliases, argument translation | Adapter binding contracts |
 | Provider/model selection and resolution | Adapter configuration contracts and state |
 | Parent session reuse or fresh session | Adapter run/session contracts |
-| Goal-only child input, selection, composition, and failure outcome | Interpreter delegate procedure |
+| Goal-only child input, selection, composition, and failure outcome | Apprentice delegate procedure |
 | Resident acquisition, connection custody, release, isolation | Generic runtime resource operations composed by adapters/procedures |
 | Native provider behavior and compatibility requirements | Provider support code outside core/boundary |
 
@@ -148,7 +157,7 @@ shared binding logic under adapter support code, including moving the relevant
 catalog logic out of `core/boundary/tools.go`.
 
 Resolve aliases deterministically and reject collisions. A binding can select
-one interpreter contract without selecting all contracts of the interpreter.
+one apprentice contract without selecting all contracts of the apprentice.
 Returned bindings must be checked against actual held capabilities before a
 child scope is created. Neither adapter declarations nor configuration inputs
 can manufacture kernel authority.
@@ -158,7 +167,7 @@ empty list selects no work bindings. The adapter still needs its transport
 capabilities, supplied explicitly in its scoped invocation.
 
 Model-generated `delegate` arguments remain goal/actor/tools. The adapter's
-binding translates these into an interpreter call containing the caller's
+binding translates these into an apprentice call containing the caller's
 resolved adapter configuration. That configuration comes from the adapter's
 own recorded configuration/state, not model-supplied inheritance metadata.
 An explicit actor uses that adapter's default; an omitted actor uses the
@@ -193,7 +202,7 @@ preserving existing ambiguity faults. Then require that selected contract to
 be authorized by the ReachEntry. Restriction must not make an otherwise
 ambiguous payload appear valid.
 
-In a fixed child scope, all entries are non-expandable: `extend-reach` can store
+In a fixed child scope, all entries are non-expandable: `export` can store
 or expose an actor's new procedure in an eligible broader scope but cannot
 authorize it in that fixed child. Normal expandable scopes retain existing
 remember/extend behavior. This is a generic capability rule, not delegation
@@ -211,7 +220,7 @@ The exact wire format requires updating release derivation, identity encoding,
 and replay fixtures. Preserve Surface identity independently of the authorized
 contract subset; do not silently rewrite pinned registrations to narrow them.
 
-### 3. Interpreter delegate composes ordinary contracts
+### 3. Apprentice delegate composes ordinary contracts
 
 Keep the public `delegate` contract and existing failure representation.
 Its execution is an explicit recorded composition:
@@ -226,13 +235,13 @@ Its execution is an explicit recorded composition:
 5. Complete required resource cleanup, then return the child observation or
    `{failed:{kind,cause}}` to the caller.
 
-The procedure's recorded calls and interpreter frame position supply resumable
+The procedure's recorded calls and apprentice frame position supply resumable
 control. Existing `runDelegate` is currently an embedded Go implementation of
 the composition, not a JSON-installed DAG; migrate it to contract composition
 without introducing a delegation state into the machine.
 
 Keep the adapter responsible for its provider handshake, run, and stop sequence.
-The interpreter waits for the adapter's terminal return rather than duplicating
+The apprentice waits for the adapter's terminal return rather than duplicating
 provider protocol logic. Success requires completed cleanup under the chosen
 lifetime policy. Preserve the existing distinction between ordinary child
 failures and integrity/persistence failures that stop execution.
@@ -333,7 +342,7 @@ explicitly. Remove the delegation-only depth branch from `narrowing`.
    kernel-maintained instance ownership and lifetime conditions, and explicit
    provider grants. Verify parent/child/sibling isolation, cleanup, cancellation,
    and interrupted acquisition/release recovery.
-4. Rewrite interpreter delegation and adapter delegate bindings to compose the
+4. Rewrite apprentice delegation and adapter delegate bindings to compose the
    new contracts, preserving public omitted/empty tools and actor semantics.
 5. Remove AgentContext, WorkTools, Delegated from Boundary and Grant; remove
    agent-context syscall, inherit_model/delegated/tools from narrow, specialized
@@ -367,12 +376,12 @@ cannot be handled only at adapter inputs.
   release have recorded recovery semantics that avoid duplicate acquisition and
   reclaim the correct resources without closing the parent or siblings.
 - Both adapters expose binding/configuration behavior through declared contracts;
-  interpreter procedures compose them without provider-specific kernel checks.
+  apprentice procedures compose them without provider-specific kernel checks.
 - Omitted tools inherit, empty tools permit no work calls, and aliases resolve
   without widening capabilities or changing parent state.
 - Direct calls, indirect actors, procedures, nested narrow scopes, stored
   references, and extend-reach cannot bypass a fixed contract subset.
-- A selected interpreter contract does not authorize its siblings or dependencies.
+- A selected apprentice contract does not authorize its siblings or dependencies.
 - The original declared-contract ambiguity behavior remains intact.
 - Fresh tasks do not load/save the parent's session or inherit parent transcript,
   images, native image permissions, or resident ambient state.
@@ -385,4 +394,4 @@ cannot be handled only at adapter inputs.
 
 This spec adds no implementation tests by itself. Implementation should migrate
 the dependency tests listed above into generic kernel capability tests, adapter
-contract tests, interpreter composition tests, and real-runtime isolation tests.
+contract tests, apprentice composition tests, and real-runtime isolation tests.

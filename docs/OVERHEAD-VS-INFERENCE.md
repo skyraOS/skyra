@@ -298,7 +298,7 @@ adapter's round trip to the host.
 ### How it was measured
 
 The instrumentation is on branch `sync-measure`, not on main. There, every
-flush in `runtime/tree` (and `interp/proc`) goes through one helper, `flush`
+flush in `runtime/tree` (and `apprentice/proc`) goes through one helper, `flush`
 (`controller/runtime/tree/sync.go`). Two environment variables, both off by
 default, control it:
 
@@ -317,7 +317,7 @@ phase is the time from the previous phase line up to its own line. The
 release a child logs therefore includes the parent's handoff writes, which
 happen while the child waits for its Boundary.
 
-All tests (`go test ./...` in `controller/` and `controller/interp/`) pass in
+All tests (`go test ./...` in `controller/` and `controller/apprentice/`) pass in
 every mode.
 
 In isolation (`micro` benchmark, 40 runs, 400-byte file on APFS, 99% full

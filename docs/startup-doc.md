@@ -38,7 +38,7 @@ python3 controller/experiments/appserver/integration.py --live  # real model usa
 | Need | Why | Install |
 |---|---|---|
 | **macOS** | the sandbox is Seatbelt (`sandbox-exec`) | — |
-| **Go 1.25+** | builds the controller and interpreter; the latter downloads its CEL dependencies | `brew install go` |
+| **Go 1.25+** | builds the controller and apprentice; the latter downloads its CEL dependencies | `brew install go` |
 | **Node 20+** | browser UI (Next.js) | `brew install node` |
 | **Python 3.9+** | provider configuration and sandbox launcher | `brew install python` |
 | **Codex CLI 0.160.0**, logged in | verified direct-tool configuration for real chat | `npm install -g @openai/codex@0.160.0`, then `codex login` |
@@ -85,7 +85,7 @@ Ctrl-C stops the browser host and the UI; parked connections close with it.
 | `skyra replay DIR` | re-derive a finished conversation or run from its records |
 | `skyra stop` | stop actor hosts left by older Skyra versions |
 | `skyra demo` | **the stateless controller**: every scenario (a continuation calling a tool, fake Codex through the actor host, a fenced native command, the sandbox probe, a misbehaving leaf, a contract violation), each ending in a replay check |
-| `skyra test` | all deterministic checks: Go race/vet, interpreter, frontend lint/types/build and mock/real-host protocol, Swift, website replay/WASM and demos |
+| `skyra test` | all deterministic checks: Go race/vet, apprentice, frontend lint/types/build and mock/real-host protocol, Swift, website replay/WASM and demos |
 | `skyra build` | build every binary into `build/` |
 | `skyra doctor` | check prerequisites and ports |
 | `skyra help` | list the commands |

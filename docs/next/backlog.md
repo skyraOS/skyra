@@ -6,7 +6,7 @@ The order to build in. Five phases; each one makes the next smaller. Detail
 stays in the linked documents; this file only keeps the order and says what
 each step unblocks.
 
-1. Strip agent elements out of Boundary
+1. ~~Strip agent elements out of Boundary~~ Done 2026-10-28
 2. Finish the core rewrite, with the launch layer split per OS
 3. Port to Linux
 4. NVIDIA OpenShell integration
@@ -14,10 +14,19 @@ each step unblocks.
 
 ## 1. Strip agent elements out of Boundary
 
-[`BOUNDARY-CONCERNS-SPEC.md`](../design/BOUNDARY-CONCERNS-SPEC.md). Remove `Agent`,
-`WorkTools` and `Delegated` from `Boundary` and `Grant` in
-`controller/core/boundary/boundary.go`; move model configuration and tool catalogs into
-adapter contracts; delegation stays the interpreter's `delegate` procedure.
+[`BOUNDARY-CONCERNS-SPEC.md`](../design/BOUNDARY-CONCERNS-SPEC.md).
+
+- ~~Remove `Agent`, `WorkTools` and `Delegated` from `Boundary` and `Grant`;
+  move model configuration and tool catalogs into the adapters; delegation
+  stays the apprentice's `delegate` procedure.~~ Done 2026-10-28 (branch
+  `refactor/agents-out-of-boundary`). The model travels in the `delegate`
+  payload and the child's input; `fresh: true` in that input replaces
+  `Delegated`; a Boundary holds contracts in a c-list
+  ([proposal 48](proposal/48-sql-schemas-proposal.md)), checked at intake, and is named by `Hash()`;
+  `system.narrow` takes contracts, not tool labels; `Surface.Agent` and
+  `Surface.WorkTool` are gone, and a binary lists the actors it runs through
+  in `uses`. A continuation is shown one `reach`: every contract of each
+  actor and which are held. Authority stays on the Boundary for now.
 
 - ~~Move the Claude resident profile (`RenderClaudeResident`) from
   `(allow default)` to `(deny default)`, like the Codex one.~~ Done
@@ -75,8 +84,8 @@ the record version is bumped once.
     resume key, seL4's reply capability. A single-use capability in the c-list.
   - **reach → retired.** It is the contents of the c-list.
   - **room → retired.** Its facets are already `system`'s syscalls (32).
-  - **`extend-reach` → `export`.** An actor adds an entry point to itself; it
-    widens no one's reach.
+  - ~~**`extend-reach` → `export`.**~~ Done 2026-10-28. An actor adds an entry
+    point to itself; it widens no one's reach.
   - **Boundary fault → capability fault.**
   - **One word for what runs:** actor. Leaf stays only for a frame that opened
     no calls; target and surface go.

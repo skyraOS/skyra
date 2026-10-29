@@ -3,7 +3,7 @@
 Proposal: **In the proposal**, section H of [next/proposal](../next/proposal/README.md);
 the implementation plan is 32-procedures-proposal.
 Defines what self-extension is; `system.register` (28, improvements item 6)
-becomes `remember`, which ends in the Boundary's `extend-reach`. Supersedes
+becomes `remember`, which ends in the Boundary's `export`. Supersedes
 section G and review finding F10.
 
 Date: 2026-10-03  
@@ -12,23 +12,23 @@ where the build differs, the list's Status column says so). Builds on [24](../ne
 [26](../next/26-agents-and-facets.md), [27](../next/27-a-boundary-is-a-process.md),
 [29](../next/29-actors-own-their-state.md), 30 and
 [act](../next/act.md). Changes what 28 calls an agent-written tool, and what 30's
-routes are part of. Revises 30's rule: types belong to the interpreter, not
+routes are part of. Revises 30's rule: types belong to the apprentice, not
 the runtime ([Types](#types)).
 
 ## The rule
 
 > **A procedure is a whole object: what a node must do, once invoked, in order
 > to return to its parent.** It is a header and a body. To the kernel it is
-> one input contract of the interpreter actor, and nothing more: the kernel
-> sees an invoke, then emissions, then a return. The interpreter holds the
+> one input contract of the apprentice actor, and nothing more: the kernel
+> sees an invoke, then emissions, then a return. The apprentice holds the
 > body and where it is in it, as the Codex adapter holds a thread.
 
 And what that makes self-extension:
 
 > **An agent extends itself by remembering.** `remember` compiles a trace
-> that already ran into a procedure: the same contract, with the interpreter
-> as its actor in place of the one that did the work. The interpreter adds
-> that contract to itself with `extend-reach`. **An actor can only extend
+> that already ran into a procedure: the same contract, with the apprentice
+> as its actor in place of the one that did the work. The apprentice adds
+> that contract to itself with `export`. **An actor can only extend
 > itself.** It needs no approval: everything in the trace already passed
 > the Boundary's check, and every later instruction is checked again at
 > intake.
@@ -42,10 +42,10 @@ And how a Boundary grows:
 
 And where types go:
 
-> **The kernel records facts; the interpreter gives them meaning; the model
-> refines that meaning under the interpreter's direction.** The kernel checks
+> **The kernel records facts; the apprentice gives them meaning; the model
+> refines that meaning under the apprentice's direction.** The kernel checks
 > only that a message fits the capability it was sent through. Base types are
-> the interpreter's, and nothing is typed unless it is remembered. The model
+> the apprentice's, and nothing is typed unless it is remembered. The model
 > writes the refinements on the edges.
 
 And what may enter the machine:
@@ -80,7 +80,7 @@ summarize(doc: Observation<text>) -> Summary
 | Part | Is | To the kernel |
 |---|---|---|
 | **Name** | what the node is for, as the schema's `title` | nothing: a contract is **(target, schema)** |
-| **Parameters** | observations, passed by hash (21) | the schema of the interpreter's contract, checked by `Fits` |
+| **Parameters** | observations, passed by hash (21) | the schema of the apprentice's contract, checked by `Fits` |
 | **Return** | what it returns to its parent | a return, like any other |
 | **Refinement** | a predicate over the parameters: the inputs this body is valid for | nothing |
 
@@ -103,7 +103,7 @@ representation; several bodies behind one contract are versioning, later
 |---|---|---|
 | **prompt** | a model's instructions | a model, deciding each next call live |
 | **leaf** | a registered program | exec, under its rendered sandbox |
-| **procedure** | a Merkle DAG of calls | the interpreter actor |
+| **procedure** | a Merkle DAG of calls | the apprentice actor |
 
 The first two are **computation**: what happens inside one call. The third
 is **dataflow**: which calls happen, and whose output feeds whose input. A
@@ -111,9 +111,9 @@ procedure has no code in it, only wiring. A Starlark program, or any other
 language, is a leaf: computation, outside this document.
 
 Remembering keeps the contract and swaps the actor: `do-work(observation)` on
-Codex, a `prompt` body, gains `do-work(observation)` on the interpreter, a
+Codex, a `prompt` body, gains `do-work(observation)` on the apprentice, a
 `procedure` body, beside it. The two are different contracts,
-`(codex, S)` and `(interpreter, S)`; a caller invokes whichever it holds, and
+`(codex, S)` and `(apprentice, S)`; a caller invokes whichever it holds, and
 the procedure falls back to the original outside its refinement.
 
 ## Nodes
@@ -170,25 +170,25 @@ has all three:
 | **What happened when it ran** | the lineage of its turns | the trace | **the Boundary**: execution state, read through a syscall |
 
 The Boundary knows only input contracts, never the actor. A body is how the
-interpreter implements a contract, as a thread is how the Codex adapter
+apprentice implements a contract, as a thread is how the Codex adapter
 implements `codex.exchange`. The kernel never knows what a body is, or that
-a procedure started: it sees an invoke of one of the interpreter's
-contracts, the instructions the interpreter emits one after another, and a
+a procedure started: it sees an invoke of one of the apprentice's
+contracts, the instructions the apprentice emits one after another, and a
 return.
 
-### The interpreter's state is its own
+### The apprentice's state is its own
 
-The interpreter reads and writes its own state, as the adapter does: every
+The apprentice reads and writes its own state, as the adapter does: every
 procedure's nodes, and, for each running frame, where it is in the program.
 That is its bookkeeping, for its own fault tolerance; the kernel does not
 record it and does not need it.
 
 - **Replay is the kernel's.** It re-derives records from stored emissions, as
-  for every target. It never runs the interpreter, so the interpreter is
+  for every target. It never runs the apprentice, so the apprentice is
   under no determinism requirement for replay.
 - **An actor can only see its own state.** That is what the floor was for:
   `.skyra/` has been several actors' state masquerading as one. Each actor
-  gets its own directory under it (`.skyra/interpreter/`, later
+  gets its own directory under it (`.skyra/apprentice/`, later
   `.skyra/codex/`, and the Boundary's own), and its sandbox is granted that
   directory and denied the rest. Nothing in it is keyed by Boundary: a
   procedure has a stable identity once remembered, its contract; a running
@@ -198,7 +198,7 @@ record it and does not need it.
 ### Authority is checked per instruction
 
 A procedure only exists in the Boundary that remembered it, and the
-interpreter runs it there. Every instruction it emits goes through intake
+apprentice runs it there. Every instruction it emits goes through intake
 under that Boundary; an instruction outside it is a boundary fault, as for any
 target. A procedure calls another procedure only when both contracts are in
 the same Boundary, because that is the only place the name resolves.
@@ -212,7 +212,7 @@ by construction.
 A procedure lives **while some reach holds its contract**. It is added to
 the Boundary that remembered it; it lasts as long as that Boundary, and as
 anything that Boundary hands it to. When nothing holds it, nothing can call it,
-and the interpreter may drop the body. That is Agoric's rule: an object lives
+and the apprentice may drop the body. That is Agoric's rule: an object lives
 while references to it exist.
 
 ## Syscalls belong to the Boundary
@@ -224,7 +224,7 @@ syscalls, and a syscall is an ordinary emission to it. It is called `system`
 because no actor knows it is in a Boundary: each has the illusion of being the
 only process, as a Unix process calls the kernel without knowing which
 container it runs in:
-`{"to": "system", "payload": {"extend-reach": {"schema": …}}}`.
+`{"to": "system", "payload": {"export": {"schema": …}}}`.
 The room's facets (`system.narrow` today) become contracts every Boundary
 owns. Two kinds:
 
@@ -232,10 +232,10 @@ owns. Two kinds:
 |---|---|---|
 | `narrow` | the kernel | a narrowed Boundary for one actor (26) |
 | `trace` | the kernel | the hashes from an observation back to the invoke that caused it, within this Boundary |
-| `extend-reach(schema)` | the kernel | a new contract for the actor that asks, on itself |
+| `export(schema)` | the kernel | a new contract for the actor that asks, on itself |
 | a request for new capability | **the Boundary's creator** | climbs to a slot on the invocation that created this Boundary; the creator answers with an emission, as always (24, 27: the creator supervises) |
 
-### `extend-reach` needs no approval
+### `export` needs no approval
 
 `remember` compiles only what executed, and everything that executed went
 through intake under this Boundary. So a remembered procedure provably acted
@@ -245,9 +245,9 @@ future instruction is checked at intake again. Safety does not depend on
 `remember` being honest; even a forged procedure would fault on its first
 instruction outside the Boundary.
 
-So `extend-reach` adds a contract, never authority, and needs no approval in any
+So `export` adds a contract, never authority, and needs no approval in any
 Boundary, the root included. A contract is identified by **(target, schema)**,
-so `(codex, S)` and `(interpreter, S)` are different contracts.
+so `(codex, S)` and `(apprentice, S)` are different contracts.
 
 > **An actor can only extend itself.**
 
@@ -257,7 +257,7 @@ so `(codex, S)` and `(interpreter, S)` are different contracts.
   program would create an entry point that program never declared: no new
   authority, but input it never agreed to receive.
 - **Derived, never claimed.** The payload is only the schema:
-  `extend-reach(schema)`. The kernel knows who emitted it, and that is the
+  `export(schema)`. The kernel knows who emitted it, and that is the
   actor extended. "Itself" is the actor the emitter's invoke resolved to (for
   an invoke through a reference, the grant's actor), and the contract joins
   the emitter's own Boundary: an actor extends itself where it runs, never
@@ -265,10 +265,10 @@ so `(codex, S)` and `(interpreter, S)` are different contracts.
 - **It matches 26:** an agent presents its own facets, at registration; here
   an actor grows its own interface at runtime.
 - **When a human remembers,** the human is asking another actor, the
-  interpreter, to extend itself. A model can only grow its own interface;
+  apprentice, to extend itself. A model can only grow its own interface;
   to grow Python's, Python's actor would have to extend itself.
 
-The kernel's checks are what `extend-reach` means, not judgments of
+The kernel's checks are what `export` means, not judgments of
 authority:
 
 1. **The actor is the emitter.** Nothing in the payload can name another, so
@@ -305,11 +305,11 @@ replay. Applied:
 | Boundaries, reach, narrowing | **yes** | authority |
 | intake's `Fits` on the input contract | **yes** | the contract is part of what reach grants |
 | records, hashes, provenance | **yes** | replay, and the facts everything else derives from |
-| `narrow`, `trace`, `extend-reach`: the Boundary's contracts | **yes** | each reads or changes Boundary state, which only the kernel holds |
+| `narrow`, `trace`, `export`: the Boundary's contracts | **yes** | each reads or changes Boundary state, which only the kernel holds |
 | types, shapes | no | only dispatch needs them |
 | procedures, refinements, routes | no | policy |
-| where a procedure is | no | the interpreter's bookkeeping |
-| the novelty interrupt | no | an invoke the interpreter emits |
+| where a procedure is | no | the apprentice's bookkeeping |
+| the novelty interrupt | no | an invoke the apprentice emits |
 
 **This is the rule for every later change to `core`:** a proposal that puts a
 concept in the machine says which invariant could not hold with it outside.
@@ -317,13 +317,13 @@ Convenience is not a reason.
 
 The machine does not care which language runs on it, and two already do: a
 `prompt` body is natural language, run by a model; a `procedure` body is
-dataflow, run by the interpreter. Both emit the same instructions and meet
+dataflow, run by the apprentice. Both emit the same instructions and meet
 the same check. A third language is another actor, not a kernel change, as
 Unix runs C, Python and shell without its kernel knowing any of them.
 
-## The interpreter is an actor
+## The apprentice is an actor
 
-The interpreter sits above the machine as an interpreter process sits above a
+The apprentice sits above the machine as an apprentice process sits above a
 CPU:
 
 | CPU | Skyra |
@@ -332,14 +332,14 @@ CPU:
 | memory protection: every access checked, whoever made it | every emission checked at intake against its Boundary |
 | a protection fault | a boundary fault |
 | a system call | a Boundary's syscalls |
-| an interpreter process (CPython, the JVM) | the interpreter actor |
-| its program counter, in its own memory | where a procedure is, in the interpreter's state |
+| an apprentice process (CPython, the JVM) | the apprentice actor |
+| its program counter, in its own memory | where a procedure is, in the apprentice's state |
 | bytecode | nodes |
 | a tracing JIT, and its guards | `remember`, and refinements |
-| types: the language's, never the CPU's | types: the interpreter's, never the kernel's |
+| types: the language's, never the CPU's | types: the apprentice's, never the kernel's |
 
-The CPU does not know Python exists, and a broken interpreter still cannot
-read another process's memory. Here, a wrong interpreter emits the same
+The CPU does not know Python exists, and a broken apprentice still cannot
+read another process's memory. Here, a wrong apprentice emits the same
 instructions as everything else, and intake checks each one. The trusted base
 stays the size of the machine. Where the analogy breaks: a CPU does not
 record what it runs, and this machine records every transition, closer to a
@@ -349,8 +349,8 @@ CPU under `rr`.
 
 An actor in the Boundary invokes `summarize`, a contract in its reach. The
 kernel sees the emission, finds that contract, and execs the program behind
-it, the interpreter, **against that contract**: the same exec as for every
-surface. The interpreter never picks a procedure and never invokes its own
+it, the apprentice, **against that contract**: the same exec as for every
+surface. The apprentice never picks a procedure and never invokes its own
 contracts. It manages the state behind each, and on each run emits the
 instructions that move that procedure along: many executions of one program
 over durable state. On each resume:
@@ -365,11 +365,11 @@ over durable state. On each resume:
             → the machine spawns, supervises, gathers, resolves: → 1
 ```
 
-Which is the machine's existing skeleton, with the interpreter where a model
+Which is the machine's existing skeleton, with the apprentice where a model
 would be. For `summarize(doc)`:
 
 ```text
-invoke summarize(doc)       a frame of the interpreter
+invoke summarize(doc)       a frame of the apprentice
   execute                   ready: [split]           → emits split
 split returns
   resolve                   ready: [chunk×N]         → emits N instructions, one round
@@ -379,7 +379,7 @@ merge returns
   resolve                   return $out              → addresses its slot
 ```
 
-The interpreter never raises an interrupt (29). When a refinement refuses, it
+The apprentice never raises an interrupt (29). When a refinement refuses, it
 emits an invoke of the model: an ordinary instruction.
 
 ### Creating a Boundary inside a procedure
@@ -393,7 +393,7 @@ h_e   call $h_n.reference   in: {text: $doc}      after: [h_n]        → the ne
 ```
 
 The new Boundary comes back as a **node**: something to invoke, with the
-contracts it has, which are its reach. The interpreter never tells a Boundary
+contracts it has, which are its reach. The apprentice never tells a Boundary
 being created from any other invocation; both are emissions, and the kernel
 gives each its meaning. Every run sends `narrow` again and gets a fresh
 reference, so a trace that created a Boundary compiles like any other, and
@@ -401,9 +401,9 @@ nothing needs a Boundary's name.
 
 ### A procedure calling a procedure
 
-It is an instruction like any other: the interpreter emits an invoke of the
+It is an instruction like any other: the apprentice emits an invoke of the
 other procedure's name, the kernel checks it at intake, and a new frame of the
-interpreter runs it. Both are in the same Boundary, or the name does not
+apprentice runs it. Both are in the same Boundary, or the name does not
 resolve. When the call is the last node, it is a tail call: the frame is
 replaced, not stacked.
 
@@ -411,27 +411,27 @@ replaced, not stacked.
 
 In 30, the kernel computed types because routes lived in the kernel, and a
 route fired on a forged type could misdirect a return. Every consumer of a
-type is now in the interpreter: dispatch, refinements, falling back to the
+type is now in the apprentice: dispatch, refinements, falling back to the
 model. A wrong type can only cause a wrong dispatch, and a wrong dispatch
 still emits through intake under the Boundary. **Types are no longer
 security-relevant, so they leave the trusted base.**
 
 ### Facts, meaning, refinement
 
-| | Kernel: **facts** | Interpreter: **meaning** | Model: **refinement** |
+| | Kernel: **facts** | Apprentice: **meaning** | Model: **refinement** |
 |---|---|---|---|
 | What | bytes, hashes, provenance: who returned what, through which contract, under which Boundary | base types, from shape and provenance; dispatch; the refinement environment | predicates over base types, on the edges |
 | Example | "slot 3 was discharged by `summarize_chunk`, invoked through contract C, bytes sha:…" | "that is a `Summary`" | `size(doc) <= 200000` |
-| Trusted | yes: the floor | no: bounded by the Boundary | no: bounded by the interpreter's checks and the Boundary |
+| Trusted | yes: the floor | no: bounded by the Boundary | no: bounded by the apprentice's checks and the Boundary |
 
 - **Nothing is typed unless it is remembered.** Ordinary returns get no type.
-  The interpreter computes base types when it compiles a trace, and on the
+  The apprentice computes base types when it compiles a trace, and on the
   edges of a remembered procedure when it runs.
 - **Base types are ours.** The implementation (shapes, contents,
-  presentations) lives in the interpreter, which we write; the model never
+  presentations) lives in the apprentice, which we write; the model never
   defines one.
 - **Derived, never claimed, still holds.** It never meant computed by the
-  kernel; it meant not asserted by whoever emitted the value. The interpreter
+  kernel; it meant not asserted by whoever emitted the value. The apprentice
   computes base types from bytes and provenance the kernel delivered in the
   steps. It cannot invent provenance.
 - **Contract fit stays in the kernel, and is not typing.** Intake's `Fits`
@@ -439,7 +439,7 @@ security-relevant, so they leave the trusted base.**
   validation on a capability, the kernel checking a syscall's arguments, not
   knowing what a program's values mean. It also protects leaf programs that
   cannot defend themselves.
-- **P11 is partly the interpreter's now.** It writes the prompts the model
+- **P11 is partly the apprentice's now.** It writes the prompts the model
   sees, so it keeps hashes out of them. Hashes are not authority
   (`trace` reads only the requester's Boundary, whatever hash it is given), so this is defense in depth, not the floor.
 
@@ -448,7 +448,7 @@ security-relevant, so they leave the trusted base.**
 A refinement type is a base type and a predicate: a string *whose length is
 at most 200000* (Liquid Haskell, F*). The model writes the predicate; it
 describes **the inputs and returns a compiled body is valid for**, the domain
-in which the model's recorded decisions still hold. The interpreter checks
+in which the model's recorded decisions still hold. The apprentice checks
 each value at each edge as it arrives, so this is a contract in Findler and
 Felleisen's sense (2002), not a static proof, and it carries blame: a value
 outside the refinement is not the compiled body's fault, and the model takes
@@ -465,12 +465,12 @@ refinement. A value the refinement refuses falls back to the contract the
 procedure was remembered from: the original actor, Codex's `do-work`.
 
 ```text
-(interpreter, do-work)   body: procedure p1, refinement R    remembered
+(apprentice, do-work)    body: procedure p1, refinement R    remembered
 (codex, do-work)                                             the fallback
 ```
 
 30's routes, 28's checks and the refinements are one idea: **refinement types
-at every boundary, checked by the interpreter; inside the refinement the
+at every boundary, checked by the apprentice; inside the refinement the
 compiled body runs, and outside it the original actor runs.**
 
 A wrong refinement is bounded. Too loose, and the compiled body runs on input
@@ -481,13 +481,13 @@ more often than it had to: safe, and only slower.
 own refinement, chosen by predicate dispatch (Ernst, Kaplan and Chambers,
 1998), are several representations. So is remembering a run of a procedure
 that already exists: the trace leads back to the procedure's own invoke,
-`(interpreter, do-work)`, which already has its representation. Until
+`(apprentice, do-work)`, which already has its representation. Until
 versioning, both are refused.
 
 ### Falling back to the model
 
 When a refinement refuses partway through a procedure, the original actor
-**resumes at that edge**; it does not start over. The interpreter invokes it
+**resumes at that edge**; it does not start over. The apprentice invokes it
 and shows it, as names and presentations:
 
 1. the command: the input contract and the inputs;
@@ -509,46 +509,46 @@ that made the original request**, because the child never knows who called
 it:
 
 ```text
-caller   invokes interpreter {remember: {observation: <hash>,
-                                         contract: (codex, S)}}
-         (the user target is a worker, so it may carry the hash)
-interp   system {trace: {observation, contract}}               syscall: read
-kernel   walks from the observation back up to the invoke made through
-         (codex, S), within this Boundary; hands back that string of hashes
-interp   walk, compile, and (H9) ask the model for the edges     its own policy
-         → stores the procedure in its own state, under schema S
-         → system {extend-reach: {schema: S}}
-kernel   the emitter is the interpreter, and (interpreter, S) is new:
-         it joins this Boundary's reach
+caller      invokes apprentice {remember: {observation: <hash>,
+                                       contract: (codex, S)}}
+            (the user target is a worker, so it may carry the hash)
+apprentice  system {trace: {observation, contract}}               syscall: read
+kernel      walks from the observation back up to the invoke made through
+            (codex, S), within this Boundary; hands back that string of hashes
+apprentice  walk, compile, and (H9) ask the model for the edges     its own policy
+            → stores the procedure in its own state, under schema S
+            → system {export: {schema: S}}
+kernel      the emitter is the apprentice, and (apprentice, S) is new:
+            it joins this Boundary's reach, under a new hash
 ```
 
-- **`remember` is a procedure to the interpreter and an input contract to the
+- **`remember` is a procedure to the apprentice and an input contract to the
   kernel.** Its first step is a syscall; a compiled procedure's first step
   is its first instruction. It runs in the caller's Boundary, as a shared
-  call, so `trace` reads that Boundary and `extend-reach` extends it.
+  call, so `trace` reads that Boundary and `export` extends it.
 - **Naming the contract is also the check.** The walk must reach an invoke
   through that contract, inside the requester's Boundary: a caller can only
   remember work it asked for.
 - **The procedure takes the original request's contract; only the actor
   changes.** `do-work(observation)` on Codex becomes `do-work(observation)`
-  on the interpreter: `(codex, S)` did the work, `(interpreter, S)` now does
+  on the apprentice: `(codex, S)` did the work, `(apprentice, S)` now does
   it without the model, within its refinement. A second run remembered
   through the same contract would be a second representation of
-  `(interpreter, S)`: refused, in any Boundary, until versioning. The refusal
-  comes before `extend-reach`, so no Boundary is ever given a procedure
+  `(apprentice, S)`: refused, in any Boundary, until versioning. The refusal
+  comes before `export`, so no Boundary is ever given a procedure
   another Boundary remembered.
 - **`remember` is a capability of a Boundary,** like any contract in reach.
   Who may remember is who holds it, decided by reach and narrowing, never by
   which model is offered which tool.
-- **Bootstrap.** `remember`'s own body is embedded in the interpreter binary,
-  whose pinned hash commits to it. A new `remember` is a new interpreter.
+- **Bootstrap.** `remember`'s own body is embedded in the apprentice binary,
+  whose pinned hash commits to it. A new `remember` is a new apprentice.
 
 ### Reading the trace
 
 - **Within a Boundary, everything is trusted; isolation is a child Boundary.**
   An actor running in a Boundary is part of it, and entitled to read its
   execution state. `trace` reads only the requester's Boundary, so
-  the interpreter needs no notion of isolation: that check is the kernel's.
+  the apprentice needs no notion of isolation: that check is the kernel's.
 - **A trace is seen one Boundary at a time.** A call into a narrowed child
   appears as one call and its return, which are the caller's state. A
   remembered procedure calls the child; it never copies its insides.
@@ -561,7 +561,7 @@ kernel   the emitter is the interpreter, and (interpreter, S) is new:
 
 `remember` turns a trace into procedures. In the trace, a model did two
 jobs: it **decided what to call**, and it **was resumed** when its calls came
-back. Compiling gives both jobs to the interpreter. The frames, rounds and
+back. Compiling gives both jobs to the apprentice. The frames, rounds and
 discharges look the same to the kernel; only the program resumed changes.
 
 ### The trace as a Merkle tree
@@ -587,7 +587,7 @@ A model in a trace did one of two things, and only one is replaced:
 
 | What the model did | Example | Becomes |
 |---|---|---|
-| **Control**: emitted invokes, was resumed with their returns | the orchestrator deciding read, then summarize each, then merge | the interpreter: its emissions become nodes |
+| **Control**: emitted invokes, was resumed with their returns | the orchestrator deciding read, then summarize each, then merge | the apprentice: its emissions become nodes |
 | **Content**: authored a value | `summarize_chunk` writing a summary | stays a call, with a `prompt` body |
 
 A continuation's final return is control if it passes a child's observation
@@ -597,7 +597,7 @@ step stays a model call.
 ### Bindings by provenance
 
 Every value in a recorded invoke's payload came from somewhere. Values are
-content-addressed, so the interpreter finds where by matching:
+content-addressed, so the apprentice finds where by matching:
 
 | The value | Becomes |
 |---|---|
@@ -613,7 +613,7 @@ should not apply.
 
 ### The walk, and the refinement
 
-The interpreter walks the tree bottom up. Leaves become calls. At each
+The apprentice walks the tree bottom up. Leaves become calls. At each
 continuation, it does two things:
 
 1. **Compiles the continuation's control into nodes:** its own procedure,
@@ -626,7 +626,7 @@ continuation, it does two things:
    > Write the refinements: the inputs and returns for which these decisions
    > still hold. Anything outside them comes back to you.
 
-The model answers with predicates over the base types the interpreter
+The model answers with predicates over the base types the apprentice
 declared: one on the header's parameters, and one on each edge where it was
 resumed:
 
@@ -648,14 +648,14 @@ and lists, field access, the base type's presentation (`p.type`), timestamps
 and durations, boolean operators. No loops, no I/O, guaranteed to terminate,
 with a cost bounded before it runs. That is CEL (Google's Common Expression
 Language: Kubernetes admission and validation rules, Cloud IAM Conditions,
-Envoy; `cel-go` in Go), used through a fixed environment the interpreter
+Envoy; `cel-go` in Go), used through a fixed environment the apprentice
 declares: `input`, `returns`, `invoked_at`, the base types, and only pure
-functions. CEL lives in the interpreter's module; the root module and `core`
+functions. CEL lives in the apprentice's module; the root module and `core`
 keep no dependencies.
 
 - **Time is an input, never a clock.** `invoked_at` is the recorded
   timestamp of the invoke; CEL has no `now()`, and none is added.
-- **Under the interpreter's direction.** The interpreter type-checks the
+- **Under the apprentice's direction.** The apprentice type-checks the
   predicate against the declared base types, bounds its cost with CEL's
   estimator, and checks it against its own trace: a refinement that refuses
   the trace it was compiled from is wrong, `remember` refuses it, and the
@@ -671,10 +671,10 @@ keep no dependencies.
 
 - **JSON is the source,** and `remember` writes it, compiled from a trace.
   Models do not write procedures by hand.
-- **Nodes are the compiled form,** kept in the interpreter's state. The
-  interpreter only ever runs nodes.
+- **Nodes are the compiled form,** kept in the apprentice's state. The
+  apprentice only ever runs nodes.
 - **A model never sees a hash.** It reads names and presentations; the
-  interpreter maps them.
+  apprentice maps them.
 - **An SDK, later, is sugar over the source.** If the SDK can say something
   the JSON cannot, the SDK is wrong.
 
@@ -728,20 +728,20 @@ general:
 | Where | Today | Here |
 |---|---|---|
 | fan-out | was not built: one emission was one successor, and a round's size was never committed | one emission is N instructions; the machine spawns N successors, each takes one, and the emitter supervises all N, opening every slot before releasing any |
-| syscalls | the room's facets: `system.narrow`, `system.route` | the Boundary as the actor `system`, its contracts `narrow`, `trace`, `extend-reach`; `system.route` leaves |
+| syscalls | the room's facets: `system.narrow`, `system.route` | the Boundary as the actor `system`, its contracts `narrow`, `trace`, `export`; `system.route` leaves |
 | contracts | one input contract per name in reach | a target holds a set of contracts, each identified by (target, schema), selected by fit |
 | the floor | `.skyra/` is denied to every target | an actor can only see its own state: its own directory under `.skyra/` |
 | `core/machine` | the novelty interrupt; route lookup and `system.route`'s phases; shapes, type computation, type hashes and presentations | all removed; the machine keeps intake's `Fits` |
-| replay | re-derives records from stored emissions | unchanged; the interpreter's state is not the kernel's |
+| replay | re-derives records from stored emissions | unchanged; the apprentice's state is not the kernel's |
 
 And outside the machine:
 
 | Where | Here |
 |---|---|
-| a new actor | the interpreter: its own state (procedures, and where each frame is); base types; dispatch on refinements; `remember` embedded in its binary |
+| a new actor | the apprentice: its own state (procedures, and where each frame is); base types; dispatch on refinements; `remember` embedded in its binary |
 | routes (30) | refinements on edges, written by the model |
-| refinements | CEL, in the interpreter's module |
-| 30's rule | "the runtime computes types" becomes "the interpreter computes types, and only for what is remembered" |
+| refinements | CEL, in the apprentice's module |
+| 30's rule | "the runtime computes types" becomes "the apprentice computes types, and only for what is remembered" |
 | Starlark | leaves the kernel with the route runner; a Starlark program is a leaf, outside this document |
 
 ## Open questions
@@ -765,7 +765,7 @@ And outside the machine:
 - **Typing JSON in CEL.** Observations are JSON, which CEL checks as `dyn`.
   Declaring base types to CEL as object types would catch more at
   `remember`; worth doing, not required.
-- **The cost of a step.** One exec per resume. A resident interpreter removes
+- **The cost of a step.** One exec per resume. A resident apprentice removes
   it without the machine learning anything.
 
 ## After H: the Codex adapter as a procedure
