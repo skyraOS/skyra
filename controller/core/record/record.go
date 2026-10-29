@@ -50,6 +50,7 @@ type Record struct {
 	Input       string                      `json:"input"`                // sha256 of the exact bytes observed
 	State       State                       `json:"state"`                // derived
 	To          string                      `json:"to,omitempty"`         // invoke: the capability
+	Grant       *boundary.Grant             `json:"grant,omitempty"`      // invoke of a handle: the grant stored under it, which the child runs under
 	Payload     json.RawMessage             `json:"payload,omitempty"`    // invoke: its input; return: the value; fault: the observation it was derived from. Canonical JSON
 	Fault       *FaultInfo                  `json:"fault,omitempty"`      // fault: kind and cause
 	Frame       string                      `json:"frame,omitempty"`      // resolve: the frame that resumes

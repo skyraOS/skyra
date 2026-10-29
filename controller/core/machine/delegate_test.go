@@ -14,7 +14,7 @@ func delegationRoot() boundary.Boundary {
 	h := operator
 	worker := agentS
 	worker.Uses = []string{"agent.start"}
-	h.Reach = map[string]boundary.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": echoS, "write": echoS, System: Syscalls()}
+	h.Reach = map[string]boundary.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": echoS, "write": echoS}
 	h.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	return h
 }
@@ -43,7 +43,7 @@ func delegated(t *testing.T, h boundary.Boundary, args string) boundary.Boundary
 		t.Fatal(err)
 	}
 	caller := *scope.Resume
-	r = intakeRecord(caller, `{"to":"system.ref.1","payload":{"text":"goal"}}`)
+	r = intakeRecord(caller, `{"to":"`+handleFor(t, h, r)+`","payload":{"text":"goal"}}`)
 	if r.State != record.Invoke {
 		t.Fatalf("child refused: %+v", r.Fault)
 	}
@@ -104,10 +104,10 @@ func TestHeldContractsAreEnforcedAtIntakeAndInherited(t *testing.T) {
 	}
 }
 
-func TestEmptyContractsHoldOnlySystemAndWhatTheActorRunsThrough(t *testing.T) {
+func TestEmptyContractsHoldOnlyTheActorAndWhatItRunsThrough(t *testing.T) {
 	h := delegationRoot()
 	child := delegated(t, h, `{"actor":"agent","contracts":[]}`)
-	if child.Held == nil || len(*child.Held) != 3 || len((*child.Held)[System]) == 0 || len((*child.Held)["agent"]) == 0 || len((*child.Held)["agent.start"]) == 0 {
+	if child.Held == nil || len(*child.Held) != 2 || len((*child.Held)["agent"]) == 0 || len((*child.Held)["agent.start"]) == 0 {
 		t.Fatalf("empty contracts confused with omitted contracts: %+v", child.Held)
 	}
 	if intakeRecord(child, `{"to":"agent.start","payload":{"text":"x"}}`).State != record.Invoke {
@@ -122,11 +122,11 @@ func TestEmptyContractsHoldOnlySystemAndWhatTheActorRunsThrough(t *testing.T) {
 		t.Fatal("a child holding nothing invoked echo")
 	}
 	if intakeRecord(child, `{"to":"system","payload":{"narrow":{"actor":"agent"}}}`).State != record.Invoke {
-		t.Fatal("system is not held")
+		t.Fatal("a syscall was refused: system is held by no one and answers everyone")
 	}
 	missing, _ := json.Marshal([]map[string]any{{"target": "missing", "schema": echoIn}})
 	unknown, _ := json.Marshal([]map[string]any{{"target": "echo", "schema": &contract.Schema{Type: "string"}}})
-	syscall, _ := json.Marshal([]map[string]any{{"target": System, "schema": Syscalls().Contracts[0]}})
+	syscall, _ := json.Marshal([]map[string]any{{"target": System, "schema": Syscalls()[0]}})
 	for _, kept := range []string{string(missing), string(unknown), string(syscall)} {
 		if _, err := narrowing(h, json.RawMessage(`{"actor":"agent","contracts":`+kept+`}`)); err == nil {
 			t.Fatalf("narrowing kept %s", kept)
@@ -138,9 +138,9 @@ func TestEmptyContractsHoldOnlySystemAndWhatTheActorRunsThrough(t *testing.T) {
 	}
 }
 
-// A reference is invoked as its actor: it is no way around what the caller
+// A handle is invoked as its actor: it is no way around what the caller
 // holds.
-func TestAReferenceDoesNotEscapeHeldContracts(t *testing.T) {
+func TestAHandleDoesNotEscapeHeldContracts(t *testing.T) {
 	child := delegated(t, delegationRoot(), `{"actor":"agent","contracts":[]}`)
 	r := intakeRecord(child, `{"to":"system","payload":{"narrow":{"actor":"write"}}}`)
 	if r.State != record.Invoke {
@@ -150,8 +150,8 @@ func TestAReferenceDoesNotEscapeHeldContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if intakeRecord(*scope.Resume, `{"to":"system.ref.1","payload":{"text":"x"}}`).State != record.Fault {
-		t.Fatal("a reference ran an actor whose contract is not held")
+	if intakeRecord(*scope.Resume, `{"to":"`+handleFor(t, child, r)+`","payload":{"text":"x"}}`).State != record.Fault {
+		t.Fatal("a handle ran an actor whose contract is not held")
 	}
 }
 

@@ -120,7 +120,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !strings.HasPrefix(r.To, "system.ref.") {
+				if r.Grant == nil {
 					continue
 				}
 				h, err := replay.BoundaryAt(root, entry.Name())

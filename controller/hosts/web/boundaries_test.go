@@ -29,12 +29,11 @@ func TestBoundariesFromTheLineage(t *testing.T) {
 	}
 
 	// The user side and Codex run under the root Boundary: still one Boundary. Then
-	// Codex is handed a reference that keeps only read, and runs under it.
-	narrow := boundary.Grant{Actor: "codex", Reach: []string{"read"}, Authority: authority}
+	// Codex runs under a handle that keeps only read.
 	for _, h := range []boundary.Boundary{
 		{Stamp: g0 + "1", Surface: &user, Reach: reach, Authority: authority, Frame: g0 + "1"},
 		{Stamp: g0 + "2", Surface: &codex, Reach: reach, Authority: authority, Frame: g0 + "2"},
-		{Stamp: g0 + "3", Surface: &user, Reach: reach, Authority: authority, Refs: map[string]boundary.Grant{"system.ref.1": narrow}, Frame: g0 + "3"},
+		{Stamp: g0 + "3", Surface: &user, Reach: reach, Authority: authority, Frame: g0 + "3"},
 		{Stamp: g0 + "4", Surface: &codex, Reach: map[string]boundary.Surface{"read": read}, Authority: authority, Frame: g0 + "4"},
 	} {
 		if _, err := tree.PutBoundary(root, h); err != nil {

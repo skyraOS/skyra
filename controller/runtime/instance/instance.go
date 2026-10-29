@@ -215,8 +215,8 @@ func write(root string, stack []*os.File, w machine.Write) (machine.Outcome, err
 	}
 	switch w := w.(type) {
 	case machine.ObjectWrite:
-		if w.Kind == "boundaries" {
-			if err := os.MkdirAll(filepath.Join(root, "boundaries"), 0o700); err != nil {
+		if w.Kind == "boundaries" || w.Kind == "grants" {
+			if err := os.MkdirAll(filepath.Join(root, w.Kind), 0o700); err != nil {
 				return 0, err
 			}
 		}

@@ -108,10 +108,12 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 			return exit(s, fmt.Sprintf("a read of %d keys was answered with %d", len(s.Reads), len(ev.Found)))
 		}
 		switch s.Phase {
+		case Provisioning:
+			return provisioned(s, ev)
 		case Accepting:
 			return accepting(s, ev)
 		case Running:
-			if s.State() == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "boundary" {
+			if s.State() == record.Invoke && isSyscall(s.Self) {
 				return traced(s, ev)
 			}
 		case Verifying:
@@ -166,6 +168,8 @@ func boundaryWrite(h boundary.Boundary) Write { return object("boundaries", Held
 // 1. Intake: interpret the bytes as operands against the Boundary they were
 // emitted under, derive the state, and commit a record. A refused output is
 // still committed, in a state of fault: a stamp means custody, not approval.
+// Bytes that address a handle are interpreted once the grant stored under it
+// is read; an invoke of narrow commits the grant it provisions.
 //
 // The Boundary is read by id and verified here. If it does not verify there is
 // no predecessor to commit against, so this instance refuses custody.
@@ -174,17 +178,44 @@ func intake(s Instance, e Received) (Instance, []Effect) {
 	if err != nil {
 		return exit(s, "the Boundary this input was emitted under: "+err.Error())
 	}
-	r := Intaken(under, e.In)
-	s.Under, s.R, s.Phase = under, r, Stamping
-	return s, []Effect{Commit{Writes: []Write{object("inputs", e.In), recordWrite(r)}}}
+	s.Under, s.In = under, e.In
+	if handle := HandleOf(under, e.In); handle != "" {
+		s.Phase = Provisioning
+		return read(s, ObjectKey{Kind: "grants", Hash: handle})
+	}
+	return intaken(s, nil)
 }
 
-// Intaken is the record intake derives from bytes emitted under a Boundary:
-// the one derivation behind intake and replay. Replay holds the Boundary
-// already, re-derived from genesis, so it calls this directly instead of
-// handing Step bytes to verify again.
-func Intaken(under boundary.Boundary, in []byte) record.Record {
-	r := interpret(under, in)
+// provisioned: the grant under the handle, if the tree holds one. A handle
+// nothing was provisioned under is not in reach, which interpret faults.
+func provisioned(s Instance, e ReadResult) (Instance, []Effect) {
+	if e.Found[0] == nil {
+		return intaken(s, nil)
+	}
+	g, err := GrantOf(Object{Key: s.Reads[0].(ObjectKey).Hash, Raw: e.Found[0]})
+	if err != nil {
+		return exit(s, err.Error())
+	}
+	return intaken(s, &g)
+}
+
+func intaken(s Instance, g *boundary.Grant) (Instance, []Effect) {
+	r := Intaken(s.Under, s.In, g)
+	writes := []Write{object("inputs", s.In)}
+	if p, ok := provision(s.Under, r); ok {
+		writes = append(writes, object("grants", p.Raw))
+	}
+	s.R, s.In, s.Phase = r, nil, Stamping
+	return s, []Effect{Commit{Writes: append(writes, recordWrite(r))}}
+}
+
+// Intaken is the record intake derives from bytes emitted under a Boundary,
+// with the grant stored under the handle they address, if any: the one
+// derivation behind intake and replay. Replay holds the Boundary already,
+// re-derived from genesis, so it calls this directly instead of handing Step
+// bytes to verify again.
+func Intaken(under boundary.Boundary, in []byte, g *boundary.Grant) record.Record {
+	r := interpret(under, in, g)
 	r.Predecessor, r.Input = under.Stamp, record.Sum(in)
 	return r
 }
@@ -217,7 +248,7 @@ func accepting(s Instance, e ReadResult) (Instance, []Effect) {
 func release(s Instance) (Instance, []Effect) {
 	self := s.Self
 	s.Phase = Running
-	if self.Surface.System != "" {
+	if isSyscall(self) {
 		// A syscall: nothing runs; its result is derived. A trace is read
 		// from the tree first.
 		if name, args := syscall(s.R.Payload); name == Tracing {
@@ -227,7 +258,7 @@ func release(s Instance) (Instance, []Effect) {
 			}
 			return read(s, key)
 		}
-		return execute(s, Executed{Obs: runFacet(s)})
+		return execute(s, Executed{Obs: syscallResult(s)})
 	}
 	if self.Surface.Host != "" {
 		// An async surface: nothing runs here. The host takes custody and
@@ -391,14 +422,14 @@ func opensSlot(k Kid) bool { return k.Boundary.Frame == k.Stamp }
 
 // alone refuses what cannot share an emission with another instruction: a
 // return discharges the emitter's own slot, which its siblings' round waits
-// on, and an invoke that changes the Boundary of whoever waits (system.narrow)
+// on, and an invoke that changes the Boundary of whoever waits (system.export)
 // would change it once per sibling, each on its own copy.
 func alone(kids []Kid) error {
 	for _, k := range kids {
 		switch {
 		case k.R.State == record.Return:
 			return errors.New("an emission of several instructions cannot return")
-		case k.R.State == record.Invoke && k.Boundary.Surface != nil && changesWaiter(k.R, *k.Boundary.Surface):
+		case changesWaiter(k.R):
 			return fmt.Errorf("%s changes the Boundary of whoever waits on it, so it is emitted alone", k.R.To)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"skyra/controller/core/machine"
@@ -107,6 +108,9 @@ func commit(t *testing.T, root, prev string, in string, r record.Record) string 
 	return s
 }
 
+// handle is an address shaped as a handle narrow returns.
+var handle = strings.Repeat("ab", 32)
+
 func TestCallsFromTheLineage(t *testing.T) {
 	root := t.TempDir()
 	if err := tree.Init(root); err != nil {
@@ -118,7 +122,7 @@ func TestCallsFromTheLineage(t *testing.T) {
 	// reaches its agent and tools beneath it (proposal 38).
 	user := commit(t, root, s, "user", record.Record{State: record.Invoke, To: "user", Payload: json.RawMessage(`{"conversation":"c"}`)})
 	s = commit(t, root, user, "1", record.Record{State: record.Invoke, To: "apprentice", Payload: json.RawMessage(`{"think":{"text":"read it","context":[]}}`)})
-	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: "system.ref.1", Payload: json.RawMessage(`{"text":"read it"}`)})
+	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: handle, Payload: json.RawMessage(`{"text":"read it"}`)})
 	s = commit(t, root, s, "2", record.Record{State: record.Invoke, To: "codex.exchange", Payload: json.RawMessage(`{}`)})
 	s = commit(t, root, s, "3", record.Record{State: record.Return, Payload: json.RawMessage(`{}`)})
 	read := commit(t, root, s, "4", record.Record{State: record.Invoke, To: "read", Payload: json.RawMessage(`{"path":"README.md"}`)})
@@ -189,7 +193,7 @@ func TestClaudeAdapterStepsAreNotCalls(t *testing.T) {
 	s := commit(t, root, "", "genesis", record.Record{State: record.Invoke})
 	user := commit(t, root, s, "user", record.Record{State: record.Invoke, To: "user", Payload: json.RawMessage(`{"conversation":"c","procedure":"think","model":"claude"}`)})
 	s = commit(t, root, user, "1", record.Record{State: record.Invoke, To: "apprentice", Payload: json.RawMessage(`{"think":{"text":"read it","model":"claude","context":[]}}`)})
-	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: "system.ref.1", Payload: json.RawMessage(`{"text":"read it"}`)})
+	s = commit(t, root, s, "1a", record.Record{State: record.Invoke, To: handle, Payload: json.RawMessage(`{"text":"read it"}`)})
 	s = commit(t, root, s, "2", record.Record{State: record.Invoke, To: "claude", Payload: json.RawMessage(`{"text":"read it"}`)})
 	for i, to := range []string{"claude.open", "claude.exchange", "claude.exchange", "claude.inspect"} {
 		s = commit(t, root, s, fmt.Sprintf("3-%d", i), record.Record{State: record.Invoke, To: to, Payload: json.RawMessage(`{"op":"exchange"}`)})
@@ -207,7 +211,7 @@ func TestClaudeAdapterStepsAreNotCalls(t *testing.T) {
 }
 
 func TestAdapterStepsAreNotTools(t *testing.T) {
-	for _, to := range []string{"codex", "codex.exchange", "claude", "claude.open", "claude.exchange", "claude.inspect", "claude.stop", "system.ref.1"} {
+	for _, to := range []string{"codex", "codex.exchange", "claude", "claude.open", "claude.exchange", "claude.inspect", "claude.stop", handle} {
 		if isTool(to) {
 			t.Errorf("%s shown as a tool call", to)
 		}

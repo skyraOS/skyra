@@ -80,10 +80,8 @@ func Read(root string) (Metric, error) {
 			continue // not on any lineage replay accepts: never released
 		}
 		name := r.To
-		if g, ok := under.Refs[r.To]; ok {
-			if _, named := under.Reach[r.To]; !named {
-				name = g.Actor
-			}
+		if r.Grant != nil {
+			name = r.Grant.Actor
 		}
 		target, ok := under.Reach[name]
 		if !ok {

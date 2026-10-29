@@ -23,7 +23,7 @@ go build -o "$stage/bin/agent" ./targets/agent
 go build -o "$stage/bin/codex" ./codex/adapter
 go build -o "$stage/bin/host" ./hosts/actor
 go build -o "$stage/bin/fake-codex" ./codex/fake
-(cd interp && go build -o "$stage/bin/interp" .)
+(cd apprentice && go build -o "$stage/bin/apprentice" .)
 
 sock=$stage/fake.sock
 "$stage/bin/host" -sock "$sock" -state "$(mktemp -d)" -- "$stage/bin/fake-codex" 2>/dev/null &
@@ -35,7 +35,7 @@ cat > "$stage/bin/registry.json" <<JSON
 {
   "echo":  {"path": "echo",  "contract": "$ctl/targets/echo/contract.json"},
   "agent": {"path": "agent", "contract": "$ctl/targets/agent/contract.json"},
-  "interpreter": {"path": "interp", "contract": "$ctl/interp/examples/greet-contract.json", "state": true},
+  "apprentice": {"path": "apprentice", "contract": "$ctl/apprentice/examples/greet-contract.json", "state": true},
   "codex": {"path": "codex", "contract": "$ctl/codex/adapter/contract.json", "connect": ["$sock"]}
 }
 JSON
@@ -74,7 +74,7 @@ run continuation "A continuation that waits and resumes" \
   -to agent -payload '{"text":"hello"}'
 
 run remember "Work remembered as a procedure, run with no agent" \
-  "An agent does a task: it calls echo twice in one emission, then once more. The work is remembered: the interpreter reads the trace, compiles it, and adds the contract to itself with no approval. Called on new input, the procedure runs with no agent in its frame. From a narrowed Boundary without echo it faults at intake; the same contract is not remembered twice; input outside its refinement goes back to the agent. The agent is scripted, not a model, and says so." \
+  "An agent does a task: it calls echo twice in one emission, then once more. The work is remembered: the apprentice reads the trace, compiles it, and adds the contract to itself with no approval. Called on new input, the procedure runs with no agent in its frame. From a narrowed Boundary without echo it faults at intake; the same contract is not remembered twice; input outside its refinement goes back to the agent. The agent is scripted, not a model, and says so." \
   -to agent -payload '{"text":"remember:hello"}'
 
 # The index the Verify page lists, in this order.

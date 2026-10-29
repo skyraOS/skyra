@@ -216,7 +216,7 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 			}
 			name := fmt.Sprintf("r%dc%d", k, i)
 			call, _ := json.Marshal(x.To)
-			if strings.HasPrefix(x.To, "system.ref.") { // a reference: bound to the narrowing that handed it back
+			if handle(x.To) { // a handle: bound to the narrowing that handed it back
 				call, _ = c.template(x.To, input, seen, true)
 			}
 			in, _ := c.template(mustDecode(x.Payload), input, seen, false)
@@ -388,6 +388,15 @@ func search(v any, want string) ([]any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// handle reports whether a call's address is a handle narrow returned: a
+// hash, which no name in reach is.
+func handle(to string) bool {
+	if len(to) != 64 {
+		return false
+	}
+	return strings.Trim(to, "0123456789abcdef") == ""
 }
 
 func syscall(payload json.RawMessage) string {

@@ -143,7 +143,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.HasPrefix(r.To, "system.ref.") {
+			if r.Grant == nil {
 				continue
 			}
 			h, err := replay.BoundaryAt(root, e.Name())
@@ -165,7 +165,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 			}
 		}
 		if narrowed == 0 {
-			t.Fatal("Codex was not invoked through a narrowed reference")
+			t.Fatal("Codex was not invoked through a handle")
 		}
 		// Aimed at the workspace, a write changes nothing there.
 		think(t, "write:../work/pwned.txt=x")

@@ -11,73 +11,106 @@ import (
 	"skyra/controller/core/record"
 )
 
-// Narrowing through the Boundary (next/26, next/32): a caller invokes system
-// with narrow, the Boundary returns a reference and records it in the caller's reach, and invoking
-// the reference runs the actor under the narrowed Boundary. The caller's own
-// Boundary is unchanged.
+// Narrowing through system (next/26, next/32): a caller invokes system with
+// narrow, the kernel provisions the narrowed Boundary, stores it under its
+// hash and returns the hash as a handle. Invoking the handle runs the actor
+// under the provisioned Boundary. No Boundary records the handle: the
+// caller's is unchanged, and any Boundary that could provision the same
+// grant may invoke it.
 func TestNarrowingThroughSystem(t *testing.T) {
 	root := operator
 	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
-	root.Reach[System] = Syscalls()
 	root.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	agent, _ := Narrow(root, intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`), "a1")
 
-	// The facet: an ordinary invoke, checked at intake.
+	// The syscall: an ordinary invoke, checked at intake, which commits the
+	// grant it provisions.
 	ask := `{"to":"system","payload":{"narrow":{"actor":"echo","reach":[],"authority":{}}}}`
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(agent), In: []byte(ask)})
+	s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(agent), In: []byte(ask)})
 	if s.State() != record.Invoke || s.R.To != System {
 		t.Fatalf("narrow is invoked like any capability: %+v", s.R)
 	}
-	facet := selfOf(t, s)
-	ref := "system.ref.1" // a name, never the invoke's stamp: a continuation is shown it (next/30)
-	if g := facet.Resume.Refs[ref]; g.Actor != "echo" || len(g.Reach) != 0 || !reflect.DeepEqual(g.Authority, boundary.Authority{}) {
-		t.Fatalf("the waiting caller is recorded as holding the reference: %+v", facet.Resume.Refs)
+	var raw []byte
+	for _, w := range effs[0].(Commit).Writes {
+		if o, ok := w.(ObjectWrite); ok && o.Kind == "grants" {
+			raw = o.Bytes
+			stored.Store(record.Sum(o.Bytes), o.Bytes)
+		}
 	}
-	if len(agent.Refs) != 0 || len(facet.Refs) != 0 {
-		t.Fatalf("no one else holds it: %+v %+v", agent.Refs, facet.Refs)
+	g, err := GrantOf(Object{Key: record.Sum(raw), Raw: raw})
+	if err != nil || g.Actor != "echo" || len(g.Reach) != 0 || !reflect.DeepEqual(g.Authority, boundary.Authority{}) || g.Pins["echo"] != boundary.Identity(echoS) {
+		t.Fatalf("intake stores the provisioned grant, pinned to echo: %+v %v", g, err)
+	}
+	handle := record.Sum(raw)
+	call := selfOf(t, s)
+	if !reflect.DeepEqual(*call.Resume, agent) || call.Surface != nil || call.Name != System {
+		t.Fatalf("the waiting caller is unchanged, and the syscall runs nothing: %+v", call)
 	}
 
-	// Nothing runs: the kernel derives the result, which returns the reference.
-	s, effs := committing(released(s, facet))
-	spawn := spawned(t, effs) // a facet's result is handed off like any output
+	// Nothing runs: the kernel derives the result, which returns the handle.
+	s, effs = committing(released(s, call))
+	spawn := spawned(t, effs) // a syscall's result is handed off like any output
 	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(s.Self), In: spawn.Out})
-	var got struct{ Reference string }
-	if ret.State() != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Reference != ref {
-		t.Fatalf("system.narrow returns the reference: %+v", ret.R)
+	var got struct{ Handle string }
+	if ret.State() != record.Return || json.Unmarshal(ret.R.Payload, &got) != nil || got.Handle != handle {
+		t.Fatalf("system.narrow returns the handle: %+v", ret.R)
 	}
 
-	// The caller resumes holding it, sees it as a tool, and invokes it.
-	caller := *facet.Resume
+	// The caller resumes; the handle is not in its reach, but it may invoke it.
+	caller := *call.Resume
 	caller.Stamp = "resolved"
-	if _, shown := reach(caller)[ref]; !shown {
-		t.Fatalf("a held reference is shown to the continuation: %v", reach(caller))
+	if _, shown := reach(caller)[handle]; shown {
+		t.Fatalf("a handle is no name in reach: %v", reach(caller))
 	}
-	call := intakeRecord(caller, `{"to":"`+ref+`","payload":{"text":"hi"}}`)
-	if call.State != record.Invoke || call.To != ref {
-		t.Fatalf("a held reference is invoked like a name: %+v", call)
+	r := intakeRecord(caller, `{"to":"`+handle+`","payload":{"text":"hi"}}`)
+	if r.State != record.Invoke || r.To != handle || r.Grant == nil || r.Grant.Actor != "echo" {
+		t.Fatalf("a handle is invoked by its hash: %+v", r)
 	}
-	child, err := Narrow(caller, call, "c1")
-	if _, sys := child.Reach[System]; err != nil || child.Surface.Path != echoS.Path || len(child.Reach) != 1 || !sys || !reflect.DeepEqual(child.Authority, boundary.Authority{}) || child.Resume.Stamp != "resolved" {
-		t.Fatalf("the actor runs under the narrowed Boundary, waited on by the caller: %+v %v", child, err)
+	if record.Stamp(Intaken(caller, []byte(`{"to":"`+handle+`","payload":{"text":"hi"}}`), r.Grant)) != record.Stamp(r) {
+		t.Fatal("replay derives the invoke again from the record's grant")
+	}
+	child, err := Narrow(caller, r, "c1")
+	if err != nil || child.Surface.Path != echoS.Path || len(child.Reach) != 0 || !reflect.DeepEqual(child.Authority, boundary.Authority{}) || child.Resume.Stamp != "resolved" {
+		t.Fatalf("the actor runs under the provisioned Boundary, waited on by the caller: %+v %v", child, err)
 	}
 	if !reflect.DeepEqual(caller.Authority, root.Authority) || len(caller.Reach) != len(root.Reach) {
 		t.Fatalf("the caller's own Boundary is unchanged: %+v", caller)
 	}
+
+	// Any Boundary that holds what the grant holds may invoke it; one that
+	// does not, or one whose echo is another binary, may not.
+	if r := intakeRecord(root, `{"to":"`+handle+`","payload":{"text":"hi"}}`); r.State != record.Invoke {
+		t.Fatalf("the operator could provision it too: %+v", r.Fault)
+	}
+	narrower := root
+	narrower.Reach = map[string]boundary.Surface{"agent": agentS}
+	other := root
+	other.Reach = map[string]boundary.Surface{"echo": {Path: "/bin/other", SHA256: "o", Input: echoIn}, "agent": agentS}
+	for name, h := range map[string]boundary.Boundary{"without echo": narrower, "with another echo": other} {
+		in := `{"to":"` + handle + `","payload":{"text":"hi"}}`
+		r := intakeRecord(h, in)
+		if r.State != record.Fault || r.Fault.Kind != record.Boundary || !strings.Contains(r.Fault.Cause, "handle") {
+			t.Fatalf("%s: a handle never widens: %+v", name, r)
+		}
+		h.Stamp = r.Predecessor
+		if record.Stamp(Intaken(h, []byte(in), r.Grant)) != record.Stamp(r) {
+			t.Fatalf("%s: replay derives the refusal again from the record's grant", name)
+		}
+	}
 }
 
 // A narrowing may only drop what is held; anything else is a boundary fault,
-// derived at intake. A reference nobody recorded is not in reach.
+// derived at intake. A handle nothing was provisioned under is not in reach.
 func TestNarrowingCannotWiden(t *testing.T) {
 	root := operator
 	root.Reach = map[string]boundary.Surface{"echo": echoS}
-	root.Reach[System] = Syscalls()
 	root.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	for name, c := range map[string]struct{ in, cause string }{
 		"authority outside the Boundary": {`{"to":"system","payload":{"narrow":{"actor":"echo","authority":{"read":[{"path":"/etc","scope":"subpath"}]}}}}`, "outside the Boundary"},
 		"a name not in reach":            {`{"to":"system","payload":{"narrow":{"actor":"echo","reach":["shell"]}}}`, `keeps "shell"`},
 		"an actor not in reach":          {`{"to":"system","payload":{"narrow":{"actor":"shell"}}}`, `"shell" is not an actor`},
 		"the Boundary itself":            {`{"to":"system","payload":{"narrow":{"actor":"system"}}}`, "not an actor"},
-		"a reference never recorded":     {`{"to":"system.ref.1","payload":{"text":"x"}}`, "not in reach"},
+		"a handle never provisioned":     {`{"to":"` + strings.Repeat("ab", 32) + `","payload":{"text":"x"}}`, "not in reach"},
 	} {
 		r := intakeRecord(root, c.in)
 		if r.State != record.Fault || r.Fault.Kind != record.Boundary || !strings.Contains(r.Fault.Cause, c.cause) {
@@ -96,7 +129,6 @@ func TestNarrowingCannotWiden(t *testing.T) {
 func TestNarrowingWithoutDropsKindsOfAuthority(t *testing.T) {
 	root := operator
 	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
-	root.Reach[System] = Syscalls()
 	work := []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}
 	root.Authority = boundary.Authority{Read: work, Write: work, Scratch: "/private/scratch", Connect: []string{"/private/s.sock"}}
 	g, err := narrowing(root, json.RawMessage(`{"actor":"agent","reach":["echo"],"without":["write","scratch"]}`))
@@ -113,10 +145,10 @@ func TestNarrowingWithoutDropsKindsOfAuthority(t *testing.T) {
 	}
 }
 
-// rootBoundary is the operator's Boundary with the agent, echo and the syscalls.
+// rootBoundary is the operator's Boundary with the agent and echo.
 func rootBoundary() boundary.Boundary {
 	root := operator
-	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS, System: Syscalls()}
+	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
 	return root
 }
 
@@ -209,7 +241,7 @@ func TestExtendReachRefuses(t *testing.T) {
 	}
 }
 
-// An actor invoked through a reference runs in a Boundary of its own, and
+// An actor invoked through a handle runs in a Boundary of its own, and
 // extends itself there only: its caller's Boundary is untouched. An actor not
 // in its own Boundary's reach has no entry to extend.
 func TestAnActorExtendsItselfInItsOwnBoundaryOnly(t *testing.T) {
@@ -217,12 +249,12 @@ func TestAnActorExtendsItselfInItsOwnBoundaryOnly(t *testing.T) {
 	agent, _ := Narrow(root, intakeRecord(root, `{"to":"agent","payload":{"text":"x"}}`), "a1")
 	through := func(keep string) boundary.Boundary {
 		ask := intakeRecord(agent, `{"to":"system","payload":{"narrow":{"actor":"echo","reach":`+keep+`}}}`)
-		facet, _ := Narrow(agent, ask, "n1")
-		caller := *facet.Resume
+		call, _ := Narrow(agent, ask, "n1")
+		caller := *call.Resume
 		caller.Stamp = "resolved"
-		echo, err := Narrow(caller, intakeRecord(caller, `{"to":"system.ref.1","payload":{"text":"hi"}}`), "e1")
+		echo, err := Narrow(caller, intakeRecord(caller, `{"to":"`+handleFor(t, agent, ask)+`","payload":{"text":"hi"}}`), "e1")
 		if err != nil || echo.Name != "echo" || echo.Origin != "e1" {
-			t.Fatalf("a reference's actor runs in a Boundary of its own: %+v %v", echo, err)
+			t.Fatalf("a handle's actor runs in a Boundary of its own: %+v %v", echo, err)
 		}
 		return echo
 	}
@@ -357,7 +389,7 @@ func TestAContractRestatedInAnotherOrderIsTheSame(t *testing.T) {
 	two := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
 	twoS := boundary.Surface{Path: "/bin/two", SHA256: "t", Input: two, Continuation: true}
 	root := operator
-	root.Reach = map[string]boundary.Surface{"two": twoS, System: Syscalls()}
+	root.Reach = map[string]boundary.Surface{"two": twoS}
 	actor, _ := Narrow(root, intakeRecord(root, `{"to":"two","payload":{"a":"x","b":"y"}}`), "a1")
 	restated := `{"type":"object","required":["b","a"],"fields":{"a":{"type":"string"},"b":{"type":"string"}}}`
 

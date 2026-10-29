@@ -169,9 +169,9 @@ func main() {
 	}
 	last := c.Steps[len(c.Steps)-1]
 	if len(c.Steps) == 1 && isNarrow && last.Fault == nil {
-		var got struct{ Reference string }
+		var got struct{ Handle string }
 		_ = json.Unmarshal(last.Value, &got)
-		emit(got.Reference, map[string]string{"text": narrowed})
+		emit(got.Handle, map[string]string{"text": narrowed})
 		return
 	}
 	if last.Fault != nil {
@@ -219,9 +219,9 @@ func remember(c continuation, word string) {
 	case 3:
 		emit("system", map[string]any{"narrow": map[string]any{"actor": "apprentice", "reach": []string{"apprentice"}}})
 	case 4:
-		var got struct{ Reference string }
+		var got struct{ Handle string }
 		_ = json.Unmarshal(c.Steps[3].Value, &got)
-		emit(got.Reference, map[string]string{"text": "relay:" + word + ", narrowed"})
+		emit(got.Handle, map[string]string{"text": "relay:" + word + ", narrowed"})
 	case 5:
 		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
 		emit("apprentice", remembering)

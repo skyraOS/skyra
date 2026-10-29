@@ -33,7 +33,19 @@ func contractsOf(e envelope, name string) []*proc.Schema {
 // Delegate is an apprentice procedure, like remember: its control is the
 // recorded narrow/invoke/return composition, not a new actor or provider host.
 // No parent transcript or provider session is part of the child input.
-func runDelegate(e envelope) ([]byte, error) {
+//
+// The kernel provisions the child's Boundary once, through system.narrow, and
+// hands back a handle: a hash, which is all the kernel knows it by. The
+// apprentice keeps the handle in its table under a name for the scope, and
+// later delegations to the same scope invoke it directly, with no narrowing.
+// A handle the kernel refuses (this Boundary could not provision it) is
+// dropped and provisioned again.
+//
+//	no steps          → invoke the remembered handle, or narrow
+//	the narrowing     → remember its handle, and invoke it
+//	a refused handle  → forget it, and narrow
+//	the child         → its result
+func runDelegate(store proc.Store, e envelope) ([]byte, error) {
 	var ask struct {
 		Delegate struct {
 			Goal      string      `json:"goal"`
@@ -61,47 +73,78 @@ func runDelegate(e envelope) ([]byte, error) {
 	if actor == "" || contractsOf(e, actor) == nil {
 		return failure("boundary", fmt.Sprintf("%q is not an actor in reach", actor))
 	}
-	if len(e.Steps) == 0 {
-		scope := map[string]any{"actor": actor}
-		if ask.Delegate.Tools != nil {
-			// The calling adapter turned the tool names into the contracts
-			// they stand for (proceduretools.Kept), or left them out when
-			// it was not offered one of them.
-			if ask.Delegate.Contracts == nil {
-				return failure("boundary", fmt.Sprintf("tools %q are not available to the caller", *ask.Delegate.Tools))
-			}
-			scope["contracts"] = *ask.Delegate.Contracts
+	scope := map[string]any{"actor": actor}
+	if ask.Delegate.Tools != nil {
+		// The calling adapter turned the tool names into the contracts
+		// they stand for (proceduretools.Kept), or left them out when
+		// it was not offered one of them.
+		if ask.Delegate.Contracts == nil {
+			return failure("boundary", fmt.Sprintf("tools %q are not available to the caller", *ask.Delegate.Tools))
 		}
-		return instruction("system", map[string]any{"narrow": scope}), nil
+		scope["contracts"] = *ask.Delegate.Contracts
 	}
-	if len(e.Steps) > 2 {
+	named, _ := json.Marshal(scope)
+	name := "delegate " + string(named)
+	narrow := instruction("system", map[string]any{"narrow": scope})
+	// fresh: a one-shot session that loads and keeps nothing of the
+	// caller's, and is stopped before the child returns.
+	child := map[string]any{"text": ask.Delegate.Goal, "header": "delegate", "fresh": true}
+	if ask.Delegate.Model != "" {
+		child["model"] = ask.Delegate.Model
+	}
+
+	if len(e.Steps) == 0 {
+		handle, ok, err := store.Handle(name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return narrow, nil
+		}
+		return instruction(handle, child), nil
+	}
+	if len(e.Steps) > 3 {
 		return nil, errors.New("delegate has unexpected recorded steps")
 	}
 	last := e.Steps[len(e.Steps)-1]
-	if last.State != "return" {
-		kind, cause := "child", last.State
+	failed := func() ([]byte, error) {
+		kind, cause := "child", string(last.State)
 		if last.Fault != nil {
 			kind, cause = last.Fault.Kind, last.Fault.Cause
 		}
 		return failure(kind, cause)
 	}
-	var scope struct {
-		Reference string `json:"reference"`
-	}
-	if e.Steps[0].To != "system" || json.Unmarshal(e.Steps[0].Value, &scope) != nil || scope.Reference == "" {
-		return nil, errors.New("delegate scope did not return a reference")
+	if last.To == "system" {
+		if last.State != "return" {
+			return failed()
+		}
+		var got struct {
+			Handle string `json:"handle"`
+		}
+		if json.Unmarshal(last.Value, &got) != nil || got.Handle == "" {
+			return nil, errors.New("delegate scope did not return a handle")
+		}
+		if err := store.SetHandle(name, got.Handle); err != nil {
+			return nil, err
+		}
+		return instruction(got.Handle, child), nil
 	}
 	if len(e.Steps) == 1 {
-		// fresh: a one-shot session that loads and keeps nothing of the
-		// caller's, and is stopped before the child returns.
-		child := map[string]any{"text": ask.Delegate.Goal, "header": "delegate", "fresh": true}
-		if ask.Delegate.Model != "" {
-			child["model"] = ask.Delegate.Model
+		handle, _, err := store.Handle(name)
+		if err != nil {
+			return nil, err
 		}
-		return instruction(scope.Reference, child), nil
+		if handle != "" && refused(last, handle) {
+			// The remembered handle: the kernel would not run it under
+			// this Boundary. Provision the scope again.
+			if err := store.DropHandle(name); err != nil {
+				return nil, err
+			}
+			return narrow, nil
+		}
 	}
-	if last.To != scope.Reference {
-		return nil, errors.New("delegate result is from another invocation")
+	if last.State != "return" {
+		return failed()
 	}
 	var outcome struct {
 		Refused string `json:"refused"`
@@ -110,4 +153,17 @@ func runDelegate(e envelope) ([]byte, error) {
 		return failure("child", outcome.Refused)
 	}
 	return addressed(e.Frame, last.Value), nil
+}
+
+// refused reports whether a step is intake refusing the invoke of handle
+// itself: a boundary fault whose observation is that attempt, not a fault of
+// the child, which discharges the same slot.
+func refused(step proc.Step, handle string) bool {
+	if step.State != "fault" || step.Fault == nil || step.Fault.Kind != "boundary" {
+		return false
+	}
+	var attempt struct {
+		To string `json:"to"`
+	}
+	return json.Unmarshal(step.Value, &attempt) == nil && attempt.To == handle
 }

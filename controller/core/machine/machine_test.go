@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"skyra/controller/core/boundary"
@@ -37,10 +38,52 @@ func TestPrimaryBundleContractIsPassedToContinuation(t *testing.T) {
 	}
 }
 
-// intakeRecord runs the Intake phase and returns what it commits.
+// stored is the tree's grants/ for these tests: what intake committed under
+// each handle, read back when bytes address one.
+var stored sync.Map
+
+// intakeRecord runs the Intake phase and returns what it commits, answering
+// a read of a handle's grant with what an earlier intake stored.
 func intakeRecord(h boundary.Boundary, in string) record.Record {
-	_, effs := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(h), In: []byte(in)})
-	return CommittedRecord(effs)
+	return CommittedRecord(intakeEffects(h, in))
+}
+
+func intakeEffects(h boundary.Boundary, in string) []Effect {
+	s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(h), In: []byte(in)})
+	for len(effs) == 1 {
+		r, ok := effs[0].(Read)
+		if !ok {
+			break
+		}
+		var found [][]byte
+		for _, k := range r.Keys {
+			b, _ := stored.Load(k.(ObjectKey).Hash)
+			raw, _ := b.([]byte)
+			found = append(found, raw)
+		}
+		s, effs = Step(s, ReadResult{Found: found})
+	}
+	for _, e := range effs {
+		if c, ok := e.(Commit); ok {
+			for _, w := range c.Writes {
+				if o, ok := w.(ObjectWrite); ok && o.Kind == "grants" {
+					stored.Store(record.Sum(o.Bytes), o.Bytes)
+				}
+			}
+		}
+	}
+	return effs
+}
+
+// handleFor is the handle narrow returns for ask, emitted under h: the hash
+// of the grant its intake stored.
+func handleFor(t *testing.T, h boundary.Boundary, ask record.Record) string {
+	t.Helper()
+	o, ok := provision(h, ask)
+	if !ok {
+		t.Fatalf("not a narrowing: %+v", ask)
+	}
+	return o.Key
 }
 
 // The emitter supplies operands; interpret derives the state.
@@ -723,14 +766,14 @@ func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
 
 // What cannot share an emission is refused before any successor is
 // released: a return, and an invoke that changes the waiter's Boundary.
-func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
+// A narrowing changes nothing of the waiter's, so it may.
+func TestFanOutRefusesAReturnAndAnExport(t *testing.T) {
 	root := operator
 	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
-	root.Reach[System] = Syscalls()
 	echo := `{"to":"echo","payload":{"text":"a"}}`
 	for name, other := range map[string]string{
-		"a return":    `{"to":"FRAME","payload":"done"}`,
-		"a narrowing": `{"to":"system","payload":{"narrow":{"actor":"echo"}}}`,
+		"a return":  `{"to":"FRAME","payload":"done"}`,
+		"an export": `{"to":"system","payload":{"export":{"schema":{"type":"string"}}}}`,
 	} {
 		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(root), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 		self, _ := Narrow(root, ag.R, ag.Stamp())
@@ -904,7 +947,7 @@ func TestTheShellCannotPassOffContentAddressedBytes(t *testing.T) {
 // intake commits.
 func TestIntakenIsWhatIntakeCommits(t *testing.T) {
 	for _, in := range []string{`{"to":"echo","payload":{"text":"hi"}}`, `{"to":"ghost","payload":{}}`, `hello`} {
-		if a, b := record.Stamp(Intaken(operator, []byte(in))), record.Stamp(intakeRecord(operator, in)); a != b {
+		if a, b := record.Stamp(Intaken(operator, []byte(in), nil)), record.Stamp(intakeRecord(operator, in)); a != b {
 			t.Fatalf("%s: replay and intake derive different records", in)
 		}
 	}

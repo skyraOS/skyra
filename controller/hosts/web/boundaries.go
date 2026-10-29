@@ -48,8 +48,8 @@ func (p proper) view() boundaryView {
 }
 
 // boundaries derives a conversation's Boundaries from the root Boundary genesis recorded
-// and every Boundary released in it, including those a reference names before
-// anything runs under them. The root comes first, then the rest by id.
+// and every Boundary released in it. A narrowing shows once something runs
+// under its handle. The root comes first, then the rest by id.
 func boundaries(genesis *record.Record, released []boundary.Boundary) []boundaryView {
 	byID := map[string]*boundaryView{}
 	names := map[string]string{} // surface identity → its name in the root reach
@@ -90,15 +90,6 @@ func boundaries(genesis *record.Record, released []boundary.Boundary) []boundary
 			actor = names[boundary.Identity(*h.Surface)]
 		}
 		add(proper{h.Reach, h.Held, h.Authority}, actor)
-		for _, g := range h.Refs {
-			kept := map[string]boundary.Surface{}
-			for _, name := range g.Reach {
-				if s, ok := h.Reach[name]; ok {
-					kept[name] = s
-				}
-			}
-			add(proper{kept, g.Held, g.Authority}, "")
-		}
 	}
 	out := []boundaryView{}
 	if v := byID[root]; v != nil {

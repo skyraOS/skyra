@@ -30,17 +30,24 @@ sandbox, including when its parent also runs through the apprentice.
 
 - Omit `tools` to inherit the caller's effective authority and everything it holds.
 - Supply `tools` to hold only the contracts behind those tools.
-- Supply `tools: []` for a child that holds only `system`, its own actor and
-  the actors that actor runs through.
+- Supply `tools: []` for a child that holds only its own actor and the actors
+  that actor runs through. Syscalls are answered for everyone; nothing holds them.
 - Use the names the caller was offered, such as `repo_write`, or canonical
   identifiers such as `repo.write`. Labels the caller was not offered are rejected.
 
 The adapter translates the names into contracts, and the kernel narrows the
 child's Boundary to hold exactly those (proposal 48's c-list): `system.narrow`
 takes `contracts: [{target, schema}]`, never tool labels. Every invocation, by
-name or through a reference, is checked at intake against what is held.
+name or through a handle, is checked at intake against what is held.
 Calling another procedure, exporting a contract, or delegating again cannot
-widen it. A procedure whose contract is held still holds none of its
+widen it.
+
+The kernel provisions the child once: `narrow` stores the grant and returns its
+hash as a handle, and keeps no record of who holds it. The apprentice keeps the
+table, under its own state (`handles/`), keyed by the scope (actor and
+contracts). A later delegation to the same scope invokes the handle with no
+narrowing. If intake refuses it, because this Boundary could not provision that
+grant, the apprentice forgets it and narrows again. A procedure whose contract is held still holds none of its
 dependencies, and fails when it invokes one that is not. An explicit subset must
 include `delegate` for further delegation to be offered, and delegating to
 another actor needs that actor held too.

@@ -343,14 +343,14 @@ var adapters = map[string]bool{"codex": true, "claude": true}
 
 // isTool reports whether an address is a tool the agent called, rather than
 // the conversation's own plumbing: the user side, the browser, the procedure
-// actor and the Boundary's syscalls and references (through which a procedure
-// reaches its agent), and every model adapter's steps.
+// actor, the syscalls and the handles narrow returns (through which a
+// procedure reaches its agent), and every model adapter's steps.
 func isTool(to string) bool {
 	switch to {
 	case "", "user", "browser", "apprentice", "system":
 		return false
 	}
-	if strings.HasPrefix(to, "system.") {
+	if strings.HasPrefix(to, "system.") || isHandle(to) {
 		return false
 	}
 	actor, _, _ := strings.Cut(to, ".")
@@ -485,4 +485,10 @@ func desktopPreview(raw json.RawMessage) (string, string) {
 		return "", "invalid recorded screenshot"
 	}
 	return "data:" + r.Screenshot.MIMEType + ";base64," + r.Screenshot.Data, summary
+}
+
+// isHandle reports whether an address is a handle: a hash, which no name in
+// reach is.
+func isHandle(to string) bool {
+	return len(to) == 64 && strings.Trim(to, "0123456789abcdef") == ""
 }

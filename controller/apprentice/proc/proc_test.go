@@ -39,12 +39,12 @@ func world(t *testing.T, emission []byte) []Step {
 	for _, i := range ins {
 		st := Step{To: i.To, Payload: i.Payload, State: "return"}
 		switch {
-		case i.To == "echo" || strings.HasPrefix(i.To, "system.ref."):
+		case i.To == "echo" || i.To == handle:
 			var p struct{ Text string }
 			_ = json.Unmarshal(i.Payload, &p)
 			st.Value, _ = json.Marshal(p.Text)
 		case i.To == "system":
-			st.Value = raw(`{"reference":"system.ref.1"}`)
+			st.Value = raw(`{"handle":"` + handle + `"}`)
 		case i.To == "shell":
 			st.State, st.Value, st.Fault = "fault", raw(`{"to":"shell"}`), &Fault{Kind: "boundary", Cause: `"shell" is not in reach`}
 		default:
@@ -134,25 +134,28 @@ func TestNodeShapes(t *testing.T) {
 	}
 }
 
+// handle is the handle the fake kernel's narrow returns.
+const handle = "abababababababababababababababababababababababababababababababab"
+
 // Creating a Boundary inside a procedure (decisions 25, 26): narrow, then a
-// node whose call is the reference it returned. A narrow goes alone, even
-// when other calls are ready: the kernel refuses it among siblings.
-func TestNarrowThenCallTheReference(t *testing.T) {
+// node whose call is the handle it returned. A narrow fans out with the calls
+// ready beside it: it changes nothing of the waiter's.
+func TestNarrowThenCallTheHandle(t *testing.T) {
 	src := Source{Contract: greet, Order: []string{"narrow", "other", "call"},
 		Nodes: map[string]SourceNode{
 			"narrow": {Call: raw(`"system"`), In: raw(`{"narrow":{"actor":"echo","reach":[]}}`)},
 			"other":  {Call: raw(`"echo"`), In: raw(`{"text":"meanwhile"}`)},
-			"call":   {Call: b("narrow", "reference"), In: raw(`{"text":` + string(b("input", "greeting")) + `}`), After: []string{"narrow"}},
+			"call":   {Call: b("narrow", "handle"), In: raw(`{"text":` + string(b("input", "greeting")) + `}`), After: []string{"narrow"}},
 		},
 		Return: b("call"),
 	}
 	emissions, next := drive(t, src, `{"names":[],"greeting":"hi"}`)
 	want := []string{
-		`{"payload":{"narrow":{"actor":"echo","reach":[]}},"to":"system"}`,
-		`[{"payload":{"text":"meanwhile"},"to":"echo"},{"payload":{"text":"hi"},"to":"system.ref.1"}]`,
+		`[{"payload":{"text":"meanwhile"},"to":"echo"},{"payload":{"narrow":{"actor":"echo","reach":[]}},"to":"system"}]`,
+		`{"payload":{"text":"hi"},"to":"` + handle + `"}`,
 	}
 	if !reflect.DeepEqual(emissions, want) || string(next.Return) != `"hi"` {
-		t.Fatalf("narrow alone, then the call through its reference:\n%s\n%s", strings.Join(emissions, "\n"), next.Return)
+		t.Fatalf("narrow beside the other call, then the call through its handle:\n%s\n%s", strings.Join(emissions, "\n"), next.Return)
 	}
 }
 

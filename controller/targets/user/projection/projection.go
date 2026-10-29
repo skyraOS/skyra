@@ -32,13 +32,8 @@ type Boundary struct {
 	Origin    string                     `json:"origin"`
 	Reach     map[string]json.RawMessage `json:"reach"`
 	Authority json.RawMessage            `json:"authority"`
-	Refs      map[string]struct {
-		Actor     string
-		Reach     []string
-		Authority json.RawMessage
-	} `json:"refs"`
-	Forked bool      `json:"forked"`
-	Resume *Boundary `json:"resume"`
+	Forked    bool                       `json:"forked"`
+	Resume    *Boundary                  `json:"resume"`
 }
 type Tree struct {
 	Version    int                 `json:"version"`
@@ -267,7 +262,7 @@ func ConversationState(id string, root string, tr Tree, availability Availabilit
 }
 
 func modelTool(tr Tree, stamp, to string) bool {
-	if to == "" || to == "user" || to == "browser" || to == "apprentice" || to == "system" || strings.HasPrefix(to, "codex.") || strings.HasPrefix(to, "system.") {
+	if to == "" || to == "user" || to == "browser" || to == "apprentice" || to == "system" || strings.HasPrefix(to, "codex.") || strings.HasPrefix(to, "system.") || isHandle(to) {
 		return false
 	}
 	for s := tr.Records[stamp].Predecessor; s != ""; {
@@ -374,15 +369,6 @@ func views(tr Tree) []BoundaryView {
 			continue
 		}
 		add(h, h.Name, stamp == tr.Root)
-		for _, g := range h.Refs {
-			reach := map[string]json.RawMessage{}
-			for _, name := range g.Reach {
-				if s, ok := h.Reach[name]; ok {
-					reach[name] = s
-				}
-			}
-			add(Boundary{Reach: reach, Authority: g.Authority}, "", false)
-		}
 	}
 	ids := []string{}
 	for id := range all {
@@ -431,4 +417,10 @@ func AppState(incarnation string, revision int, views []View) (Snapshot, error) 
 		}
 	}
 	return out, nil
+}
+
+// isHandle reports whether an address is a handle narrow returns: a hash,
+// which no name in reach is.
+func isHandle(to string) bool {
+	return len(to) == 64 && strings.Trim(to, "0123456789abcdef") == ""
 }

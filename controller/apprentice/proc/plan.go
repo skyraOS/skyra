@@ -180,7 +180,7 @@ func ready(n Node, values map[string]any) bool {
 }
 
 // callee is a node's target: a name, or a binding to one an earlier node
-// returned (decision 26), such as a reference narrow handed back.
+// returned (decision 26), such as a handle narrow handed back.
 func callee(n Node, env Env) (string, error) {
 	v, err := Eval(n.Call, env)
 	if err != nil {
@@ -217,9 +217,10 @@ func distinct(emit []json.RawMessage) {
 	}
 }
 
-// alone keeps a syscall that changes the Boundary of whoever waits (narrow,
-// export) out of a fan-out: the kernel refuses one emitted with
-// siblings (H2), so it goes first, by itself, and the rest wait a round.
+// alone keeps a syscall that changes the Boundary of whoever waits (export)
+// out of a fan-out: the kernel refuses one emitted with siblings (H2), so it
+// goes first, by itself, and the rest wait a round. A narrowing changes
+// nothing of the waiter's: what it provisions is stored under its handle.
 func alone(n *Next) {
 	if len(n.Emit) < 2 {
 		return
@@ -232,9 +233,7 @@ func alone(n *Next) {
 		if json.Unmarshal(e, &ins) != nil || ins.To != "system" {
 			continue
 		}
-		_, narrow := ins.Payload["narrow"]
-		_, extend := ins.Payload["export"]
-		if !narrow && !extend {
+		if _, extend := ins.Payload["export"]; !extend {
 			continue
 		}
 		n.Emit, n.Round = []json.RawMessage{e}, []Call{n.Round[i]}

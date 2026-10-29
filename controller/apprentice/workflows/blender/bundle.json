@@ -60,7 +60,7 @@
           "call": {
             "$": [
               "scope",
-              "reference"
+              "handle"
             ]
           },
           "after": [

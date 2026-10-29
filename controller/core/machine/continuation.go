@@ -39,19 +39,13 @@ type Entry struct {
 }
 
 // reach is a Boundary's c-list as a continuation sees it: every name in
-// reach, and every reference it holds, as the actor it stands for.
+// reach. Handles are not in it: the kernel keeps no record of who holds one.
 func reach(h boundary.Boundary) map[string]Entry {
 	out := map[string]Entry{}
-	for name, s := range shownReach(h) {
-		actor := name
-		if g, isRef := h.Refs[name]; isRef {
-			if _, named := h.Reach[name]; !named {
-				actor = g.Actor
-			}
-		}
+	for name, s := range h.Reach {
 		e := Entry{Contracts: s.All(), Held: []int{}}
 		for i, c := range e.Contracts {
-			if h.Holds(actor, c) {
+			if h.Holds(name, c) {
 				e.Held = append(e.Held, i)
 			}
 		}
@@ -63,21 +57,6 @@ func reach(h boundary.Boundary) map[string]Entry {
 // Paths are informational continuation data, derived from the current Boundary.
 func workspaceOf(h boundary.Boundary) string {
 	return h.Authority.Workspace
-}
-
-// shownReach is a Boundary's reach as a continuation sees it: every name,
-// and every reference it holds, as the actor it stands for.
-func shownReach(h boundary.Boundary) map[string]boundary.Surface {
-	r := map[string]boundary.Surface{}
-	for name, s := range h.Reach {
-		r[name] = s
-	}
-	for ref, g := range h.Refs {
-		if s, ok := h.Reach[g.Actor]; ok {
-			r[ref] = s
-		}
-	}
-	return r
 }
 
 // against names the contract a continuation is executing, including a

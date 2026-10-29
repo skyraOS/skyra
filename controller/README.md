@@ -27,7 +27,7 @@ record tree in `.skyra/`.
 | **Operators are derived** | A target never says "invoke" or "return". It prints operands, `{"to": address, "payload": JSON}`, and `interpret` derives the state from where it stands: its own slot is a return, a name in reach an invoke; anything else is a typed fault (`malformed`, `boundary`, `contract`, `leaf`, `custody`) that carries the observation it was derived from | `machine.interpret` |
 | **Input contracts** | Every surface declares an input contract, and how it reads its input (`continuation`). It declares nothing about what it may reach, and nothing about what it returns. Fit is strict | `core/contract/`, `targets/*/contract.json` |
 | **One authority per Boundary** | Reach and OS grants belong to the Boundary, and every call shares its caller's (next/24). The sandbox is rendered from the Boundary, the same for everything under it, plus the exclusions: `.skyra/` is always denied, and exec is allowed only for the program being run | `machine.Narrow`, `boundary.Render` |
-| **The Boundary as an actor** (next/32) | Every Boundary holds `system`, whose contracts are the syscalls: `{"to": "system", "payload": {"narrow": …}}` returns a reference to a narrowed Boundary for one actor, which joins the caller's reach; invoking it runs the actor under the narrower authority. `export` adds a contract to the emitter's own reach entry, throughout its Boundary, with no approval: the actor is derived from the emitter, never named. A narrowing that asks for anything not held is a boundary fault (next/26) | `machine/system.go` |
+| **Syscalls, answered by the kernel** (next/32) | `system` is in no reach and held by no Boundary: an emission to it is checked against the syscall contracts in `system.go` and answered by the kernel, with nothing run. `{"to": "system", "payload": {"narrow": …}}` provisions a narrowed Boundary for one actor, stores the grant under its hash and returns the hash as a **handle**. No Boundary records it; invoking `{"to": "<handle>"}` runs the actor under the grant, from any Boundary that could provision the same grant itself (`reprovisions`), so a handle never widens. The apprentice keeps the table of handles it was given. `export` adds a contract to the emitter's own reach entry, throughout its Boundary, with no approval: the actor is derived from the emitter, never named. A narrowing that asks for anything not held is a boundary fault (next/26) | `machine/system.go` |
 | **Held contracts** (48) | A Boundary holds contracts, not actors: `narrow` takes `contracts: [{target, schema}]` and the child holds only those, plus `system` and the actors its actor runs through (`uses`). Selection runs against every declared contract, so ambiguity stays a fault; the selected one must then be held, or intake faults. A Boundary is named by `Hash()`, over its reach, what it holds and its authority, so an `export` makes another Boundary. A continuation reads one `reach`: every contract of each actor and which it holds | `boundary.CList`, `machine.narrowing`, `machine.interpret` |
 | **`trace`** (next/32) | A syscall that hands the requester the stamps from an observation up to the invoke made through a contract it names, found by climbing frames, with every record of the work beneath: each resolve's discharges and the chains that led to them. A call into a narrowed child appears as one call and its return. Refused (a boundary fault) when no such invoke caused the observation, or when the walk would leave the requester's Boundary | `replay.ReadTrace`, `machine.traced` |
 | **Remember** (next/32) | A worker that holds `remember` (the apprentice's registered contract) passes an observation (a step's `observation` stamp) and the contract that requested it; the apprentice reads the trace, compiles it into a procedure under that contract, and adds `(apprentice, contract)` to its own reach with `export`, with no approval. Calling it runs the remembered calls with no model step | `apprentice/`, `targets/agent` (`remember:`) |
@@ -62,7 +62,7 @@ OS, the tree or the network.
 | Package | Owns |
 |---|---|
 | [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads |
-| [`boundary`](core/boundary/) | Authority: `Surface` (identity and contracts), `Boundary` (reach, references, grants; the frame a return discharges and the continuation waiting on it), `Render` (the Seatbelt profile) |
+| [`boundary`](core/boundary/) | Authority: `Surface` (identity and contracts), `Boundary` (reach, held contracts, grants; the frame a return discharges and the continuation waiting on it), `Grant` (what a handle stands for), `Render` (the Seatbelt profile) |
 | [`record`](core/record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` |
 | [`machine`](core/machine/) | **The decision tree:** `Step`, `interpret`, `Narrow`, fan-out, resolve, the Boundary's syscalls. **Pure, enforced** |
 
@@ -149,7 +149,7 @@ root Boundary's one authority, which genesis records and everything under it
 shares until a narrowing. Exec is not a grant: a profile allows exec
 of the program being run and nothing else. Paths are resolved at registry
 load. Legacy top-level `connect` entries are folded into `authority.connect`.
-No entry may be named `system` or `system.*`: those are the Boundary's syscalls and references.
+No entry may be named `system` or `system.*`: that namespace is the kernel's.
 
 A Boundary may also carry a **scratch** directory (`authority.scratch`): read
 and write for everything under it, and, like everywhere, no exec but the
@@ -211,14 +211,16 @@ intake ─┬─ invoke  → release → execute → handoff              run th
 {"to": "<address>", "payload": <JSON>}
 
 addresses the slot its frame discharges (SKYRA_FRAME), any JSON payload                  → return
-names a capability or reference in reach, payload fits its input contract                → invoke
+names a capability in reach, payload fits its input contract                             → invoke
+names system, payload fits one syscall and asks for nothing unheld                       → invoke
+names a handle this Boundary could provision itself, payload fits its actor              → invoke
 names anything else                                                                      → fault (boundary)
 addresses nothing                                                                        → fault (leaf)
 not readable as operands                                                                 → fault (malformed)
 payload does not fit the contract of what it addresses                                   → fault (contract)
 ```
 
-No name is reserved. Every fault carries, as its payload, the observation it
+No name is reserved but `system`. Every fault carries, as its payload, the observation it
 was derived from, so a parent can pass it on.
 
 ### A continuation's input
@@ -232,8 +234,8 @@ everything it knows on stdin, and keeps nothing between runs:
  "steps": [{"to": "echo", "payload": {"text": "hello"}, "state": "return", "value": "hello"}]}
 ```
 
-`tools` is exactly its reach, references included: what it is shown is what
-it may invoke. It returns by addressing `frame`.
+`tools` is exactly its reach: what it is shown is what it may invoke. Handles
+are not in it; whoever narrowed keeps its own. It returns by addressing `frame`.
 
 ## What happens: a continuation calls a tool
 

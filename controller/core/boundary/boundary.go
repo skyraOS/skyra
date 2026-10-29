@@ -107,7 +107,6 @@ type Surface struct {
 	Input        *contract.Schema   `json:"input"`                  // what invoking it must fit: its registered contract
 	Contracts    []*contract.Schema `json:"contracts,omitempty"`    // its other contracts: a syscall's, or one the actor added to itself (next/32)
 	Continuation bool               `json:"continuation,omitempty"` // reads a Continuation on stdin; otherwise its bare payload
-	System       string             `json:"system,omitempty"`       // a syscall facet, implemented by the runtime (next/26): no binary, never registrable
 	// State names the actor's own directory under the floor (next/32,
 	// decision 24): the one part of .skyra/ its sandbox may read and write.
 	// An actor can only see its own state.
@@ -154,21 +153,25 @@ type Boundary struct {
 	Reach     map[string]Surface `json:"reach"`             // the actors emissions under this Boundary may invoke, each with every contract it declares
 	Held      *CList             `json:"held,omitempty"`    // the contracts of them it holds, when narrowed by contract; nil holds every one
 	Authority Authority          `json:"authority"`         // the OS grants everything under this Boundary runs with
-	Refs      map[string]Grant   `json:"refs,omitempty"`    // references received from system.narrow: each names a narrowed Boundary for one actor (next/26)
-	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a reference, its actor): who an export extends
+	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a handle, its actor; for a syscall, system): who an export extends
 	Origin    string             `json:"origin,omitempty"`  // the invoke that created this Boundary by a narrowing; "" for the root's. Frames that share it share one Boundary
 	Forked    bool               `json:"forked,omitempty"`  // this frame, or one below it in this Boundary, is one of several siblings (fan-out)
 	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
 	Resume    *Boundary          `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
 }
 
-// Grant is what a reference stands for: an actor in reach, and the narrowed
-// Boundary it runs under when the reference is invoked.
+// Grant is what system.narrow provisions: an actor in reach and the narrowed
+// Boundary it runs under. The kernel stores it under its hash, the handle
+// narrow returns, and knows it by nothing else: no Boundary records which
+// handles it was given. Pins names, for the actor and every name it keeps,
+// the identity of the surface the grant was made for, so a handle always runs
+// the binaries it was provisioned with.
 type Grant struct {
-	Held      *CList    `json:"held,omitempty"` // nil: the narrowed reach, every contract of it; otherwise exactly these
-	Actor     string    `json:"actor"`
-	Reach     []string  `json:"reach"`
-	Authority Authority `json:"authority"`
+	Held      *CList            `json:"held,omitempty"` // nil: the narrowed reach, every contract of it; otherwise exactly these
+	Actor     string            `json:"actor"`
+	Reach     []string          `json:"reach"`
+	Pins      map[string]string `json:"pins"`
+	Authority Authority         `json:"authority"`
 }
 
 // Depth is the number of frames in the stack that travels with this Boundary.
@@ -263,7 +266,7 @@ func StateDir(h Boundary, floor string) string {
 // ValidState reports whether a name may be an actor's state directory: one
 // plain path segment that is none of the kernel's own directories.
 func ValidState(name string) bool {
-	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "boundaries", "frames", "acceptances", "surfaces"}, name) {
+	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "boundaries", "grants", "frames", "acceptances", "surfaces"}, name) {
 		return false
 	}
 	for i, c := range name {

@@ -93,7 +93,7 @@ func run() ([]byte, error) {
 		return runRemember(store, e)
 	}
 	if proc.Same(c, delegateContract()) {
-		return runDelegate(e)
+		return runDelegate(store, e)
 	}
 	return runProcedure(store, e, c)
 }

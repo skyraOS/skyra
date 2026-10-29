@@ -259,7 +259,7 @@ so `(codex, S)` and `(apprentice, S)` are different contracts.
 - **Derived, never claimed.** The payload is only the schema:
   `export(schema)`. The kernel knows who emitted it, and that is the
   actor extended. "Itself" is the actor the emitter's invoke resolved to (for
-  an invoke through a reference, the grant's actor), and the contract joins
+  an invoke through a handle, the grant's actor), and the contract joins
   the emitter's own Boundary: an actor extends itself where it runs, never
   elsewhere.
 - **It matches 26:** an agent presents its own facets, at registration; here
@@ -388,16 +388,18 @@ Creating a Boundary is a syscall on the Boundary a procedure runs in, so it is
 an instruction like any other:
 
 ```text
-h_n   call system           {narrow: {actor: "echo", reach: [...]}}   → a reference
-h_e   call $h_n.reference   in: {text: $doc}      after: [h_n]        → the new Boundary
+h_n   call system           {narrow: {actor: "echo", reach: [...]}}   → a handle
+h_e   call $h_n.handle      in: {text: $doc}      after: [h_n]        → the new Boundary
 ```
 
 The new Boundary comes back as a **node**: something to invoke, with the
 contracts it has, which are its reach. The apprentice never tells a Boundary
 being created from any other invocation; both are emissions, and the kernel
-gives each its meaning. Every run sends `narrow` again and gets a fresh
-reference, so a trace that created a Boundary compiles like any other, and
-nothing needs a Boundary's name.
+gives each its meaning. Every run sends `narrow` again and gets the handle of
+what it provisioned (the same grant, the same hash), so a trace that created a
+Boundary compiles like any other, and nothing needs a Boundary's name. A
+narrowing changes nothing of the waiter's, so it may share a round with other
+calls.
 
 ### A procedure calling a procedure
 

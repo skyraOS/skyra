@@ -33,7 +33,7 @@ import (
 
 // Init creates the tree's directories.
 func Init(root string) error {
-	for _, d := range []string{"records", "inputs", "boundaries", "frames", "acceptances"} {
+	for _, d := range []string{"records", "inputs", "boundaries", "grants", "frames", "acceptances"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			return err
 		}

@@ -21,6 +21,7 @@ type treeFixture struct {
 	dir    string
 	root   boundary.Boundary
 	schema *contract.Schema
+	handle string // the handle of the grant an intake stored last
 }
 
 func newTreeFixture(t *testing.T) *treeFixture {
@@ -32,7 +33,7 @@ func newTreeFixture(t *testing.T) *treeFixture {
 		t.Fatal(err)
 	}
 	schema := &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": {Type: "string"}}}
-	reach := map[string]boundary.Surface{"agent": {Path: "/agent", Input: schema, Continuation: true}, "echo": {Path: "/echo", Input: schema}, "system": machine.Syscalls()}
+	reach := map[string]boundary.Surface{"agent": {Path: "/agent", Input: schema, Continuation: true}, "echo": {Path: "/echo", Input: schema}}
 	g := record.Record{State: record.Invoke, Reach: reach, Authority: &boundary.Authority{}, Author: "test", Nonce: t.Name()}
 	gs, err := tree.Commit(dir, g)
 	if err != nil {
@@ -50,7 +51,36 @@ func newTreeFixture(t *testing.T) *treeFixture {
 }
 func (f *treeFixture) emit(under boundary.Boundary, in string, fan bool, pos int, accept bool) boundary.Boundary {
 	f.t.Helper()
-	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(under), In: []byte(in)})
+	s, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(under), In: []byte(in)})
+	for len(effects) == 1 {
+		read, ok := effects[0].(machine.Read)
+		if !ok {
+			break
+		}
+		var found [][]byte
+		for _, k := range read.Keys {
+			k := k.(machine.ObjectKey)
+			b, err := tree.Read(f.dir, k.Kind, k.Hash)
+			if err != nil {
+				f.t.Fatal(err)
+			}
+			found = append(found, b)
+		}
+		s, effects = machine.Step(s, machine.ReadResult{Found: found})
+	}
+	for _, e := range effects {
+		if c, ok := e.(machine.Commit); ok {
+			for _, w := range c.Writes {
+				if o, ok := w.(machine.ObjectWrite); ok && o.Kind == "grants" {
+					handle, err := tree.Put(f.dir, "grants", o.Bytes)
+					if err != nil {
+						f.t.Fatal(err)
+					}
+					f.handle = handle
+				}
+			}
+		}
+	}
 	r := machine.CommittedRecord(effects)
 	if _, err := tree.Put(f.dir, "inputs", []byte(in)); err != nil {
 		f.t.Fatal(err)
@@ -222,15 +252,15 @@ func TestRecordedTreeRefusesOrphanAndForeignRoot(t *testing.T) {
 func TestRecordedTreeNarrowedChildOpacity(t *testing.T) {
 	f := newTreeFixture(t)
 	narrow := f.emit(f.root, `{"to":"system","payload":{"narrow":{"actor":"agent","reach":["agent","echo"]}}}`, false, 0, true)
-	nr := f.emit(narrow, `{"to":"`+narrow.Frame+`","payload":{"reference":"system.ref.1"}}`, false, 0, true)
+	nr := f.emit(narrow, `{"to":"`+narrow.Frame+`","payload":{"handle":"`+f.handle+`"}}`, false, 0, true)
 	f.settle(nr)
-	// The waiting caller acquired the reference; emulate its winning resolve.
+	// The narrowing returned the handle; emulate the caller's winning resolve.
 	join := f.join(nr.Stamp, []string{nr.Stamp}, true)
 	waiter, err := BoundaryAt(f.dir, join)
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := f.emit(waiter, `{"to":"system.ref.1","payload":{"text":"secret"}}`, false, 0, true)
+	call := f.emit(waiter, `{"to":"`+f.handle+`","payload":{"text":"secret"}}`, false, 0, true)
 	inner := f.emit(call, `{"to":"echo","payload":{"text":"private"}}`, false, 0, true)
 	tr, err := f.read(inner.Stamp)
 	if err != nil {

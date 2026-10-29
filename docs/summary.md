@@ -38,7 +38,7 @@ sandbox exceptions also prevent claiming uniform Boundary enforcement today.
 | --- | --- |
 | Step protocol | Successor intake derives and commits output before effects; release verification derives the Boundary; custody travels with frame directory descriptors. |
 | Contracts | A capability is identified by `(target, schema)`. Structural fit selects exactly one declared contract; missing or ambiguous matches fault. Returns carry observations rather than declared output contracts. |
-| Authority | Ordinary calls inherit the caller's effective Boundary. Explicit `system.narrow` returns a reference for a restricted execution. Generic Seatbelt rendering denies by default and protects the runtime floor. Provider exceptions are listed below. |
+| Authority | Ordinary calls inherit the caller's effective Boundary. Explicit `system.narrow` provisions a restricted execution and returns its handle: the hash of its grant, which the kernel stores and keeps no other record of. Generic Seatbelt rendering denies by default and protects the runtime floor. Provider exceptions are listed below. |
 | Fan-out and joining | A round opens all child slots before release; it resumes after all discharges, in emission order, with one winning claim. Generic cancellation is not implemented. |
 | Recording and replay | Content-addressed records, inputs and Boundaries preserve provenance. Version 2 histories commit complete emissions so replay checks round coverage as well as discharge ownership. |
 | Accepted history | Durable acceptance receipts distinguish an accepted release from a proposed one. `system.trace` supports both single-observation traces and invocation-root plus nonempty observation-frontier reads. |
@@ -64,7 +64,7 @@ human → browser/terminal/desktop → webhost → user actor
 
 `think` remains an apprentice bundle. Its dynamic target comes from the `model`
 parameter (`codex` or `claude`); it narrows on each invocation, then calls the
-returned reference. Prior turns still travel as a growing `context` value.
+returned handle. Prior turns still travel as a growing `context` value.
 The October 9 merge unifies Think's procedure identity and preserves old
 `think-claude` conversations through compatibility mapping. It does not implement
 all of [proposal 39](next/proposal/39-unified-think-procedure-proposal.md):
@@ -99,8 +99,8 @@ The public apprentice contract is:
 
 Omitting `actor` inherits the caller's adapter and resolved model, which the
 adapter fills in; an explicit actor uses that adapter's default. Omitted tools
-inherit everything the caller holds; `tools: []` holds only `system`, the
-child's actor and what it runs through. The adapter translates tools into
+inherit everything the caller holds; `tools: []` holds only the child's actor
+and what it runs through. The adapter translates tools into
 contracts, and the Boundary's c-list enforces them across indirect calls and
 nested delegation. Selecting a procedure does not grant its dependencies.
 Transport operations

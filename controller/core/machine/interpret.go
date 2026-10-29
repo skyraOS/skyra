@@ -21,15 +21,19 @@ import (
 //
 //	addresses the slot its frame discharges                                     → return
 //	names a capability in reach, payload fits exactly one of its contracts      → invoke
+//	names system, payload fits exactly one syscall and asks for nothing unheld  → invoke
+//	names a handle this Boundary could provision itself, payload fits the actor → invoke
 //	names anything else                                                         → fault (boundary)
 //	addresses nothing                                                           → fault (leaf)
 //	not readable as operands                                                    → fault (malformed)
 //	payload fits none of the contracts of what it addresses, or more than one   → fault (contract)
 //
-// No name is reserved: the slot is the frame's id, a stamp no capability can
-// be named. Every fault carries, as its payload, the observation of why it
-// faulted. It is total and pure, so replay derives the same state again.
-func interpret(h boundary.Boundary, out []byte) record.Record {
+// No name is reserved but system: the slot is the frame's id, a stamp no
+// capability can be named. A handle is a hash too: g is the grant stored
+// under it, read before interpret runs, or nil. Every fault carries, as its
+// payload, the observation of why it faulted. It is total and pure, so
+// replay derives the same state again.
+func interpret(h boundary.Boundary, out []byte, g *boundary.Grant) record.Record {
 	if len(out) == 0 {
 		return faulted(record.Custody, "no output", nil)
 	}
@@ -48,13 +52,26 @@ func interpret(h boundary.Boundary, out []byte) record.Record {
 		return faulted(record.Malformed, `addressed output must be exactly {"to": <address>, "payload": <JSON>}`, printed)
 	}
 	attempt := contract.Canonical(o)
-	if h.Surface != nil && to == h.Frame {
+	if (h.Surface != nil || isSyscall(h)) && to == h.Frame {
 		// Any JSON value: a return declares no contract.
 		return record.Record{State: record.Return, Payload: contract.Canonical(payload)}
 	}
+	if to == System {
+		return invokeSystem(h, payload, attempt)
+	}
+	actual := to
 	target, ok := h.Reach[to]
-	if g, isRef := h.Refs[to]; isRef && !ok {
-		target, ok = h.Reach[g.Actor]
+	if !ok && g != nil && HeldGrant(*g).Key == to {
+		if err := reprovisions(h, *g); err != nil {
+			// The refusal keeps the grant it refused, so replay derives it again.
+			r := faulted(record.Boundary, "handle "+record.Short(to)+": "+err.Error(), attempt)
+			r.Grant = g
+			return r
+		}
+		actual = g.Actor
+		target, ok = h.Reach[actual]
+	} else {
+		g = nil
 	}
 	if !ok {
 		return faulted(record.Boundary, fmt.Sprintf("%q is not in reach", to), attempt)
@@ -63,19 +80,10 @@ func interpret(h boundary.Boundary, out []byte) record.Record {
 	if err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
 	}
-	actual := to
-	if g, ref := h.Refs[to]; ref {
-		actual = g.Actor
-	}
 	if !h.Holds(actual, selected) {
 		return faulted(record.Boundary, fmt.Sprintf("%q is in reach, but this contract of %s is not held", to, actual), attempt)
 	}
-	if target.System == "boundary" {
-		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
-			return faulted(kind, to+": "+err.Error(), attempt)
-		}
-	}
-	return record.Record{State: record.Invoke, To: to, Payload: contract.Canonical(payload)}
+	return record.Record{State: record.Invoke, To: to, Grant: g, Payload: contract.Canonical(payload)}
 }
 
 // Selected is the one contract of a target that a payload fits (next/32,
@@ -84,10 +92,14 @@ func interpret(h boundary.Boundary, out []byte) record.Record {
 // contract fault; the kernel never reasons about whether two schemas overlap,
 // it refuses when an ambiguity actually occurs.
 func Selected(target boundary.Surface, payload any) (*contract.Schema, error) {
+	return selected(target.All(), payload)
+}
+
+func selected(contracts []*contract.Schema, payload any) (*contract.Schema, error) {
 	var fit []*contract.Schema
 	var first error
 	closest := false // the error kept is from a contract whose required fields the payload has
-	for _, c := range target.All() {
+	for _, c := range contracts {
 		if err := contract.Fits(c, payload); err != nil {
 			if near := hasRequired(c, payload); first == nil || near && !closest {
 				first, closest = err, near

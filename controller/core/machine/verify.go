@@ -35,6 +35,13 @@ func HeldBoundary(h boundary.Boundary) Object {
 	return Object{Key: record.Sum(b), Raw: b}
 }
 
+// HeldGrant is a grant as it is stored: its encoding under its hash, which
+// is the handle narrow returns.
+func HeldGrant(g boundary.Grant) Object {
+	b, _ := json.Marshal(g)
+	return Object{Key: record.Sum(b), Raw: b}
+}
+
 // RecordOf verifies a record read by stamp: the bytes hash to the stamp, and
 // they are the canonical encoding. Without the second check two byte strings
 // could decode to one record, and replay could see a record that was never
@@ -54,6 +61,15 @@ func BoundaryOf(o Object) (boundary.Boundary, error) {
 		return boundary.Boundary{}, fmt.Errorf("boundary %s: %w", record.Short(o.Key), err)
 	}
 	return h, nil
+}
+
+// GrantOf verifies a grant read by handle, as RecordOf verifies a record.
+func GrantOf(o Object) (boundary.Grant, error) {
+	var g boundary.Grant
+	if err := verify(o, &g, func() ([]byte, error) { return json.Marshal(g) }); err != nil {
+		return boundary.Grant{}, fmt.Errorf("grant %s: %w", record.Short(o.Key), err)
+	}
+	return g, nil
 }
 
 func verify(o Object, v any, encode func() ([]byte, error)) error {

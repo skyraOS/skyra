@@ -13,6 +13,7 @@ type Instance struct {
 	Floor string            // the .skyra path every rendered sandbox denies
 	Phase Phase             // the phase whose event this instance is waiting for
 	Under boundary.Boundary // the Boundary the input was emitted under
+	In    []byte            // the input, while the grant under the handle it addresses is read
 	R     record.Record     // what this instance committed last: its state and stamp are R's
 	Self  boundary.Boundary // this instance's own Boundary, once released
 	Out   []byte            // the target's emission, while it is handed off
@@ -57,6 +58,7 @@ type Phase string
 
 const (
 	Intake        Phase = "intake"        // waiting for bytes
+	Provisioning  Phase = "provisioning"  // reading the grant stored under the handle the bytes address
 	Stamping      Phase = "stamping"      // the input and record are being committed; then the stamp goes up
 	Release       Phase = "release"       // stamped; waiting for the parent's release
 	Accepting     Phase = "accepting"     // reading the released Boundary
@@ -160,7 +162,7 @@ func (Execute) effect() {}
 // as a resolve names every discharge, so replay can re-derive it.
 type Key interface{ key() }
 
-type ObjectKey struct { // an object by hash: records, inputs or boundaries
+type ObjectKey struct { // an object by hash: records, inputs, boundaries or grants
 	Kind string
 	Hash string
 }
@@ -189,7 +191,7 @@ func (TraceKey) key()    {}
 // are write-once names in a frame, reached through a frame handle.
 type Write interface{ write() }
 
-type ObjectWrite struct { // an object under its hash: records, inputs or boundaries
+type ObjectWrite struct { // an object under its hash: records, inputs, boundaries or grants
 	Kind  string
 	Bytes []byte
 }

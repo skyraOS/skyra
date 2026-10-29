@@ -157,7 +157,9 @@ func (w *walker) at(head string) (boundary.Boundary, error) {
 				return none, err
 			}
 		default:
-			derived = machine.Intaken(h, in)
+			// A handle's grant travels in the record; interpret checks it
+			// hashes to the handle and that h could provision it.
+			derived = machine.Intaken(h, in, rec.Grant)
 		}
 		if record.Stamp(derived) != stamp {
 			return none, fmt.Errorf("record %s is not what step derives from its input", record.Short(stamp))
@@ -258,7 +260,11 @@ func (w *walker) verifyEmission(o machine.Observation, slots []string) error {
 		return errors.New("resolve does not cover every emitted instruction")
 	}
 	for i, part := range parts {
-		r := machine.Intaken(under, part)
+		slot, err := load(w.s, slots[i])
+		if err != nil {
+			return err
+		}
+		r := machine.Intaken(under, part, slot.Grant)
 		if r.State != record.Invoke && !(len(parts) > 1 && r.State == record.Fault) {
 			return errors.New("resolve emission did not open a slot")
 		}

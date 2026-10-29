@@ -107,7 +107,7 @@ replay: 7 records re-derived from genesis by step, byte-identical      ← invar
 
 ══ agent narrows echo through its Boundary, then calls it ══  ← invariant 2
   invoke system.narrow {"actor":"echo","authority":{},"reach":[]}
-  return {"reference":"84828a5a…"}
+  return {"handle":"84828a5a…"}                            ← the grant, stored under its hash
   invoke 84828a5a… {"text":"hello"}                        ← echo runs under the narrower Boundary
 
 ══ payload breaks echo's contract ══                      ← invariant 1

@@ -12,21 +12,21 @@ import (
 	"skyra/controller/core/record"
 )
 
-// The Boundary as an actor (next/32, decisions 16, 21). Every Boundary holds the
-// name system, and its contracts are the syscalls: a syscall is an ordinary
-// emission to it, as a Unix process calls the kernel without knowing which
-// container it runs in. The runtime answers them itself, because what they
-// do (create a Boundary, read its history, add a contract to it) changes or
-// reads Boundary state, which only the kernel holds. No registry may name
-// system, or anything under system.
+// The syscalls. An emission to system is answered by the kernel itself: it
+// is in no Boundary's reach and held by none, so no registry, narrowing or
+// c-list can grant or drop it. Nothing runs; the result is derived.
 //
 //	{"to": "system", "payload": {"narrow": {"actor": "<name in reach>", "reach": [...], "contracts": [{"target": <name>, "schema": <a contract>}, ...], "authority": {...}, "without": [...]}}}
-//	   → returns {"reference": "<ref>"}: a narrowed Boundary for that actor, now in the caller's reach.
-//	     "contracts" is its c-list: the contracts it holds, besides system's.
+//	   → returns {"handle": "<sha256>"}: the kernel provisions a narrowed Boundary for that
+//	     actor, stores it under its hash, and hands the hash back. That is all it keeps:
+//	     no Boundary records the handle, so the caller keeps its own table of them.
+//	     "contracts" is its c-list: the contracts it holds.
 //	     "without" drops whole kinds of authority (read, write, mach, connect,
 //	     scratch) from what is held, so a procedure can narrow without naming paths
-//	{"to": "<ref>", "payload": <the actor's input>}
-//	   → an ordinary invoke of the actor, under the narrowed Boundary
+//	{"to": "<handle>", "payload": <the actor's input>}
+//	   → an ordinary invoke of the actor, under the provisioned Boundary. Any
+//	     Boundary that could provision the same grant itself may invoke it: a
+//	     handle never widens
 //	{"to": "system", "payload": {"export": {"schema": <a contract>}}}
 //	   → returns {"ok": true}: the emitter's own reach entry declares one more contract,
 //	     throughout its Boundary, which is another Boundary (a new Hash). A
@@ -85,19 +85,17 @@ func call(name string, in *contract.Schema) *contract.Schema {
 	return &contract.Schema{Title: name, Type: "object", Required: []string{name}, Fields: map[string]*contract.Schema{name: in}}
 }
 
-// Syscalls is the surface every Boundary holds under the name system: no
-// binary, and one contract per syscall.
-func Syscalls() boundary.Surface {
-	return boundary.Surface{System: "boundary", Contracts: []*contract.Schema{
-		call(Narrowing, narrowIn),
-		call(Exporting, extendIn),
-		call(Tracing, traceIn),
-	}}
+// Syscalls is every syscall's contract: what a payload to system must fit.
+func Syscalls() []*contract.Schema {
+	return []*contract.Schema{call(Narrowing, narrowIn), call(Exporting, extendIn), call(Tracing, traceIn)}
 }
 
-// IsSystem reports whether a name is the runtime's: system, a syscall's
-// reference, or anything else under system.
+// IsSystem reports whether a name is the runtime's: system, or anything else
+// under system. No registry may name one.
 func IsSystem(name string) bool { return name == System || strings.HasPrefix(name, SystemPrefix) }
+
+// isSyscall reports whether h is a syscall's frame: it runs nothing.
+func isSyscall(h boundary.Boundary) bool { return h.Surface == nil && h.Name == System }
 
 // syscall is the syscall a payload to system names, and its arguments.
 func syscall(payload json.RawMessage) (string, json.RawMessage) {
@@ -111,14 +109,86 @@ func syscall(payload json.RawMessage) (string, json.RawMessage) {
 	return "", nil
 }
 
+// invokeSystem is intake's derivation for an emission to system: the payload
+// fits exactly one syscall, and its arguments ask for nothing h does not hold.
+func invokeSystem(h boundary.Boundary, payload any, attempt json.RawMessage) record.Record {
+	if _, err := selected(Syscalls(), payload); err != nil {
+		return faulted(record.Contract, System+": "+err.Error(), attempt)
+	}
+	if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
+		return faulted(kind, System+": "+err.Error(), attempt)
+	}
+	return record.Record{State: record.Invoke, To: System, Payload: contract.Canonical(payload)}
+}
+
 // changesWaiter reports whether an invoke changes the Boundary of the caller
-// waiting on it: narrow records a reference there, export a contract.
-func changesWaiter(r record.Record, s boundary.Surface) bool {
-	if s.System != "boundary" {
+// waiting on it: export adds a contract there. A narrowing changes nothing:
+// what it provisions is stored under its handle, not in the caller.
+func changesWaiter(r record.Record) bool {
+	if r.State != record.Invoke || r.To != System {
 		return false
 	}
 	name, _ := syscall(r.Payload)
-	return name == Narrowing || name == Exporting
+	return name == Exporting
+}
+
+// provision is the grant an invoke of narrow stores, if r is one.
+func provision(h boundary.Boundary, r record.Record) (Object, bool) {
+	if r.State != record.Invoke || r.To != System {
+		return Object{}, false
+	}
+	name, args := syscall(r.Payload)
+	if name != Narrowing {
+		return Object{}, false
+	}
+	g, err := narrowing(h, args)
+	if err != nil {
+		return Object{}, false
+	}
+	return HeldGrant(g), true
+}
+
+// HandleOf is the handle an emission under h addresses, or "": an address
+// shaped as a hash that is neither a name in reach nor h's own slot. Intake
+// reads the grant stored under it before it derives the record.
+func HandleOf(h boundary.Boundary, out []byte) string {
+	v, err := contract.Decode(out)
+	o, _ := v.(map[string]any)
+	to, _ := o["to"].(string)
+	if _, named := h.Reach[to]; err != nil || named || to == h.Frame || !isStamp(to) {
+		return ""
+	}
+	return to
+}
+
+// reprovisions checks that h could provision g itself: narrowing h to
+// everything g names derives g again, pins included. So a handle is
+// authority only under a Boundary that holds at least what it grants, and the
+// kernel needs no record of who was handed it.
+func reprovisions(h boundary.Boundary, g boundary.Grant) error {
+	reach := g.Reach
+	if reach == nil {
+		reach = []string{}
+	}
+	ask := map[string]any{"actor": g.Actor, "reach": reach, "authority": g.Authority}
+	if g.Held != nil {
+		kept := []map[string]any{}
+		for name, held := range *g.Held {
+			for _, c := range held {
+				kept = append(kept, map[string]any{"target": name, "schema": c})
+			}
+		}
+		ask["contracts"] = kept
+	}
+	args, _ := json.Marshal(ask)
+	again, err := narrowing(h, args)
+	if err != nil {
+		return err
+	}
+	if HeldGrant(again).Key != HeldGrant(g).Key {
+		return errors.New("it grants what this Boundary does not hold")
+	}
+	return nil
 }
 
 // checkSyscall checks a syscall's arguments against the Boundary it was
@@ -238,10 +308,9 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 		return g, fmt.Errorf("narrowing exceeds the runtime frame limit of %d", maxDepth)
 	}
 	if ask.Contracts != nil {
-		// What the actor keeps, by contract: each one held here, and system's
-		// syscalls, which every Boundary holds (decision 16). An empty list
-		// keeps no other contract; left out, the caller's are kept.
-		held := boundary.CList{System: h.HeldOf(System)}
+		// What the actor keeps, by contract: each one held here. An empty
+		// list keeps no other contract; left out, the caller's are kept.
+		held := boundary.CList{}
 		for _, kept := range *ask.Contracts {
 			s, err := schemaOf(kept.Schema)
 			if err != nil {
@@ -291,7 +360,7 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	slices.Sort(g.Reach)
 	if ask.Contracts != nil {
 		for name := range *g.Held {
-			if name != System && !slices.Contains(g.Reach, name) {
+			if !slices.Contains(g.Reach, name) {
 				return boundary.Grant{}, fmt.Errorf("narrowing holds a contract of %q but does not keep it in reach", name)
 			}
 		}
@@ -320,6 +389,10 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	}
 	if !g.Authority.Covers() {
 		g.Authority.Workspace = "" // its read grant was narrowed away
+	}
+	g.Pins = map[string]string{ask.Actor: boundary.Identity(h.Reach[ask.Actor])}
+	for _, name := range g.Reach {
+		g.Pins[name] = boundary.Identity(h.Reach[name])
 	}
 	return g, nil
 }
@@ -410,40 +483,22 @@ func extended(h boundary.Boundary, origin, actor string, s *contract.Schema) bou
 	return h
 }
 
-// runFacet is what a syscall emits when it runs: nothing executes, the result
-// is derived. narrow returns the reference: the name the waiting caller now
-// holds it under, meaningful only in the reach it was recorded into.
-func runFacet(s Instance) []byte {
+// syscallResult is what a syscall emits when it runs: nothing executes, the
+// result is derived. narrow returns the handle of the grant intake stored,
+// derived again from the caller's Boundary.
+func syscallResult(s Instance) []byte {
 	var result any = map[string]bool{"ok": true}
-	if name, _ := syscall(s.R.Payload); name == Narrowing {
-		result = map[string]string{"reference": refName(s.Self.Refs)}
+	if name, args := syscall(s.R.Payload); name == Narrowing {
+		g, _ := narrowing(*s.Self.Resume, args)
+		result = map[string]string{"handle": HeldGrant(g).Key}
 	}
 	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": result})
 	return out
 }
 
-// refName names the next reference a Boundary holding refs receives. It is a
-// counter, not the invoke's stamp, because a continuation is shown its
-// references and hashes never reach a model (next/30, F1). It is in the
-// runtime's namespace, which no registry may name, so it never shadows a
-// surface.
-func refName(refs map[string]boundary.Grant) string {
-	for n := len(refs) + 1; ; n++ {
-		name := fmt.Sprintf("%sref.%d", SystemPrefix, n)
-		if _, held := refs[name]; !held {
-			return name
-		}
-	}
-}
-
-// kept is a reach restricted to the names a grant keeps. Every Boundary holds
-// system: its syscalls are the Boundary's own (decision 16), and none of them
-// can add authority.
+// kept is a reach restricted to the names a grant keeps.
 func kept(reach map[string]boundary.Surface, names []string) map[string]boundary.Surface {
 	out := map[string]boundary.Surface{}
-	if s, ok := reach[System]; ok {
-		out[System] = s
-	}
 	for _, name := range names {
 		if s, ok := reach[name]; ok {
 			out[name] = s

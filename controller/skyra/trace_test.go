@@ -152,8 +152,8 @@ func TestTraceFromAnObservationToItsInvoke(t *testing.T) {
 	for _, c := range st.Opaque {
 		call = c
 	}
-	if r := st.Records[call]; r.State != record.Invoke || r.To != "system.ref.1" {
-		t.Fatalf("the opaque call is the call through the reference: %+v", r)
+	if r := st.Records[call]; r.State != record.Invoke || r.Grant == nil || r.Grant.Actor != "echo" {
+		t.Fatalf("the opaque call is the call through the handle: %+v", r)
 	}
 	if _, err := replay.ReadTrace(root, obs, "agent", agentIn, call); !replay.Refused(err) {
 		t.Fatalf("a requester inside the narrowed child cannot read the agent's trace: %v", err)

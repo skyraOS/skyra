@@ -402,3 +402,50 @@ func (s Store) Remembering(frame string) (Remembering, bool, error) {
 func (s Store) SetRemembering(frame string, r Remembering) error {
 	return s.write("remembering", frame, r)
 }
+
+// Handle is one entry of the apprentice's handle table: a name it chose for
+// something the kernel provisioned, and the handle system.narrow returned for
+// it. The kernel knows only the hash and keeps no table of who holds one, so
+// the apprentice keeps this one, under its own state.
+type Handle struct {
+	Name   string `json:"name"`
+	Handle string `json:"handle"`
+}
+
+func handleKey(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	return hex.EncodeToString(sum[:])
+}
+
+// Handle reads the handle provisioned for name, if there is one.
+func (s Store) Handle(name string) (string, bool, error) {
+	var h Handle
+	err := s.read("handles", handleKey(name), &h)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err == nil && (h.Name != name || !hexName(h.Handle)) {
+		return "", false, fmt.Errorf("handle table entry for %q is not its own", name)
+	}
+	return h.Handle, err == nil, err
+}
+
+// SetHandle records the handle provisioned for name, replacing any before it.
+func (s Store) SetHandle(name, handle string) error {
+	if !hexName(handle) {
+		return fmt.Errorf("%q is not a handle", handle)
+	}
+	return s.write("handles", handleKey(name), Handle{name, handle})
+}
+
+// DropHandle forgets the handle for name: one the kernel no longer accepts.
+func (s Store) DropHandle(name string) error {
+	p, err := s.path("handles", handleKey(name))
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
