@@ -19,8 +19,7 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 	c.Input.Fresh = true
 	c.Input.Text = "goal"
 	c.Input.Session = "must-not-resume"
-	empty := []string{}
-	c.WorkTools = &empty
+	c.Held = map[string][]*schema{}
 	config := turnConfig(c)
 	if _, ok := config["session"]; ok {
 		t.Fatal("delegated child resumed parent session")
@@ -44,11 +43,18 @@ func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 	delegate := &schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*schema{"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*schema{"goal": {Type: "string"}}}}}
 	c := continuation{Frame: "f1", Tools: map[string]*schema{"interpreter": remember}, Contracts: map[string][]*schema{"interpreter": {remember, delegate}}}
 	c.Input.Text = "goal"
-	names := []string{"delegate"}
-	c.WorkTools = &names
-	ts := tools(c)
-	if len(ts) != 1 || ts[0].Name != "delegate" || ts[0].Target != "interpreter" {
-		t.Fatalf("procedure catalog: %+v", ts)
+	c.Held = map[string][]*schema{"interpreter": {delegate}}
+	// Holding delegate offers it, and procedure only because it stands for
+	// the same single contract here; remember is not held.
+	names := []string{}
+	for _, tl := range tools(c) {
+		names = append(names, tl.Name)
+		if tl.Target != "interpreter" {
+			t.Fatalf("procedure catalog: %+v", tl)
+		}
+	}
+	if strings.Join(names, " ") != "procedure delegate" {
+		t.Fatalf("procedure catalog: %v", names)
 	}
 	c.Steps = []step{{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
 		{To: "claude.exchange", State: "return", Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"goal\"}"]}`), Value: json.RawMessage(`{"lines":["{\"_bridge\":\"call\",\"id\":\"call\",\"name\":\"delegate\",\"args\":{\"delegate\":{\"goal\":\"inspect\"}}}"]}`)}}
@@ -64,8 +70,8 @@ func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 }
 
 func TestClaudeCanonicalWorkToolHasAValidTransportLabel(t *testing.T) {
-	names := []string{"repo_write"}
-	c := continuation{WorkTools: &names, Tools: map[string]*schema{"repo.write": {Type: "object"}}}
+	c := continuation{Tools: map[string]*schema{"repo.write": {Type: "object"}}}
+	c.Held = map[string][]*schema{"repo.write": {c.Tools["repo.write"]}}
 	ts := tools(c)
 	if len(ts) != 1 || ts[0].Name != "repo_write" || ts[0].Target != "repo.write" {
 		t.Fatalf("transport name changed ownership: %+v", ts)

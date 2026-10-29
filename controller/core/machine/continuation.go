@@ -2,7 +2,6 @@ package machine
 
 import (
 	"encoding/json"
-	"slices"
 
 	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
@@ -98,7 +97,7 @@ func against(s boundary.Surface, input json.RawMessage) *contract.Schema {
 type Continuation struct {
 	Actor     string                           `json:"actor,omitempty"`
 	Agents    map[string]*boundary.AgentConfig `json:"agents,omitempty"`
-	WorkTools *[]string                        `json:"work_tools,omitempty"`
+	Held      boundary.CList                   `json:"held,omitempty"` // when narrowed by contract: the contracts of Tools and Contracts it may select
 	Workspace string                           `json:"workspace,omitempty"`
 	Scratch   string                           `json:"scratch,omitempty"`
 	Frame     string                           `json:"frame"`
@@ -137,7 +136,7 @@ func caller(h boundary.Boundary) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(frame record.Record, rounds []round, waiter boundary.Boundary) []byte {
-	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), WorkTools: workToolNames(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), Held: held(waiter), Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, frame.Payload)
 	}
@@ -177,14 +176,23 @@ func agents(h boundary.Boundary) map[string]*boundary.AgentConfig {
 	return out
 }
 
-func workToolNames(h boundary.Boundary) *[]string {
-	if h.WorkTools == nil {
+// held is a narrowed Boundary's c-list as a continuation sees it, by the
+// names it is shown: every reference as the contracts of its actor. A
+// Boundary never narrowed by contract shows none: it holds all it is shown.
+func held(h boundary.Boundary) boundary.CList {
+	if h.Held == nil {
 		return nil
 	}
-	names := []string{}
-	for name := range *h.WorkTools {
-		names = append(names, name)
+	out := boundary.CList{}
+	for name := range h.Reach {
+		if c := h.HeldOf(name); len(c) > 0 {
+			out[name] = c
+		}
 	}
-	slices.Sort(names)
-	return &names
+	for ref, g := range h.Refs {
+		if c := h.HeldOf(g.Actor); len(c) > 0 {
+			out[ref] = c
+		}
+	}
+	return out
 }

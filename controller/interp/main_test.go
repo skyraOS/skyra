@@ -55,7 +55,7 @@ func TestRememberRunsItsBody(t *testing.T) {
 	}
 	e.Steps = []proc.Step{ret(st)}
 	out, err = runRemember(store, e)
-	if err != nil || !strings.Contains(string(out), `"extend-reach"`) || !store.Has(agentIn) {
+	if err != nil || !strings.Contains(string(out), `"export"`) || !store.Has(agentIn) {
 		t.Fatalf("then it stores the procedure and extends itself: %s %v", out, err)
 	}
 	e.Steps = append(e.Steps, ret(map[string]bool{"ok": true}))
@@ -80,8 +80,8 @@ func TestRememberRefusesASecondRepresentation(t *testing.T) {
 	delete(other, "echo") // another Boundary
 	again := envelope{Frame: strings.Repeat("2", 64), Input: ask(obs, "agent"), Tools: other, Steps: []proc.Step{ret(st)}}
 	out, err := runRemember(store, again)
-	if err != nil || !strings.Contains(string(out), "one representation per contract") || strings.Contains(string(out), "extend-reach") {
-		t.Fatalf("a second remember is refused before extend-reach: %s %v", out, err)
+	if err != nil || !strings.Contains(string(out), "one representation per contract") || strings.Contains(string(out), "export") {
+		t.Fatalf("a second remember is refused before export: %s %v", out, err)
 	}
 
 	// A run of the procedure itself: the trace ends at the interpreter's
@@ -323,7 +323,7 @@ func TestTheModelWritesTheRefinements(t *testing.T) {
 	}
 	e.Steps = append(e.Steps, ret(json.RawMessage(`{"header":"input.text.startsWith(\"relay:\")","edges":{"r0c1":"returns.r0c1 == \"relayed\""}}`)))
 	out, _ = runRemember(store, e)
-	if !strings.Contains(string(out), `"extend-reach"`) {
+	if !strings.Contains(string(out), `"export"`) {
 		t.Fatalf("a valid answer is kept, then the interpreter extends itself: %s", out)
 	}
 	p, _, _ := store.Procedure(agentIn)
@@ -367,8 +367,8 @@ func TestAModelThatCannotRefineKeepsTheBaseTypes(t *testing.T) {
 		e.Steps = append(e.Steps, ret(json.RawMessage(`{"header":"size(input.text)"}`)))
 		out, _ = runRemember(store, e)
 	}
-	if !strings.Contains(string(out), `"extend-reach"`) {
-		t.Fatalf("after %d refusals, on to extend-reach: %s", MaxAttempts, out)
+	if !strings.Contains(string(out), `"export"`) {
+		t.Fatalf("after %d refusals, on to export: %s", MaxAttempts, out)
 	}
 	if p, _, _ := store.Procedure(agentIn); p.Header.Refinement.Header != "" || p.Header.Refinement.Input == "" {
 		t.Fatalf("with its base types: %+v", p.Header.Refinement)

@@ -102,12 +102,6 @@ type AgentConfig struct {
 	Operations []string `json:"operations"`
 }
 
-// ToolBinding identifies executable contracts, rather than prompt labels alone.
-type ToolBinding struct {
-	Target    string             `json:"target"`
-	Contracts []*contract.Schema `json:"contracts"`
-}
-
 type Surface struct {
 	WorkTool     bool               `json:"work_tool,omitempty"`
 	Agent        *AgentConfig       `json:"agent,omitempty"`
@@ -147,8 +141,9 @@ func (s Surface) All() []*contract.Schema {
 // travels as JSON. The frame stack travels beside it as directory fds over
 // SCM_RIGHTS.
 //
-// Reach and Authority are the Boundary proper (next/24): what emissions under
-// it may invoke, and the OS grants everything under it runs with. Every call
+// Reach, Held and Authority are the Boundary proper (next/24): what emissions
+// under it may invoke, by actor and by contract, and the OS grants everything
+// under it runs with. Every call
 // shares its caller's; genesis holds the root's. There is no
 // global registry lookup.
 //
@@ -157,26 +152,26 @@ func (s Surface) All() []*contract.Schema {
 // emitted (its Stamp is the round that opened the slot). The operator's
 // Boundary has no Resume.
 type Boundary struct {
-	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
-	Stamp     string                  `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
-	Surface   *Surface                `json:"surface,omitempty"` // what this frame runs; nil for the operator
-	Reach     map[string]Surface      `json:"reach"`             // what emissions under this Boundary may invoke
-	Authority Authority               `json:"authority"`         // the OS grants everything under this Boundary runs with
-	Refs      map[string]Grant        `json:"refs,omitempty"`    // references received from system.narrow: each names a narrowed Boundary for one actor (next/26)
-	Name      string                  `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a reference, its actor): who an extend-reach extends
-	Origin    string                  `json:"origin,omitempty"`  // the invoke that created this Boundary by a narrowing; "" for the root's. Frames that share it share one Boundary
-	Forked    bool                    `json:"forked,omitempty"`  // this frame, or one below it in this Boundary, is one of several siblings (fan-out)
-	Frame     string                  `json:"frame"`             // the frame whose slot a return discharges
-	Resume    *Boundary               `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
+	Stamp     string             `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
+	Surface   *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
+	Reach     map[string]Surface `json:"reach"`             // the actors emissions under this Boundary may invoke, each with every contract it declares
+	Held      *CList             `json:"held,omitempty"`    // the contracts of them it holds, when narrowed by contract; nil holds every one
+	Authority Authority          `json:"authority"`         // the OS grants everything under this Boundary runs with
+	Refs      map[string]Grant   `json:"refs,omitempty"`    // references received from system.narrow: each names a narrowed Boundary for one actor (next/26)
+	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a reference, its actor): who an export extends
+	Origin    string             `json:"origin,omitempty"`  // the invoke that created this Boundary by a narrowing; "" for the root's. Frames that share it share one Boundary
+	Forked    bool               `json:"forked,omitempty"`  // this frame, or one below it in this Boundary, is one of several siblings (fan-out)
+	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
+	Resume    *Boundary          `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
 }
 
 // Grant is what a reference stands for: an actor in reach, and the narrowed
 // Boundary it runs under when the reference is invoked.
 type Grant struct {
-	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
-	Actor     string                  `json:"actor"`
-	Reach     []string                `json:"reach"`
-	Authority Authority               `json:"authority"`
+	Held      *CList    `json:"held,omitempty"` // nil: the narrowed reach, every contract of it; otherwise exactly these
+	Actor     string    `json:"actor"`
+	Reach     []string  `json:"reach"`
+	Authority Authority `json:"authority"`
 }
 
 // Depth is the number of frames in the stack that travels with this Boundary.

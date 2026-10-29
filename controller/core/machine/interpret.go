@@ -67,8 +67,8 @@ func interpret(h boundary.Boundary, out []byte) record.Record {
 	if g, ref := h.Refs[to]; ref {
 		actual = g.Actor
 	}
-	if !h.PermitsTool(actual, selected) {
-		return faulted(record.Boundary, "tool contract is excluded by delegation", attempt)
+	if !h.Holds(actual, selected) {
+		return faulted(record.Boundary, fmt.Sprintf("%q is in reach, but this contract of %s is not held", to, actual), attempt)
 	}
 	if target.System == "boundary" {
 		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {

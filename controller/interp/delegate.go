@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"skyra/interp/proc"
@@ -14,8 +16,45 @@ func delegateContract() *proc.Schema {
 	return &proc.Schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*proc.Schema{
 		"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*proc.Schema{
 			"goal": str, "actor": str, "model": str, "tools": {Type: "array", Items: str},
+			"contracts": {Type: "array", Items: &proc.Schema{Type: "object", Required: []string{"target", "schema"}, Fields: map[string]*proc.Schema{
+				"target": str, "schema": {Type: "any"},
+			}}},
 		}},
 	}}
+}
+
+type contract struct {
+	Target string       `json:"target"`
+	Schema *proc.Schema `json:"schema"`
+}
+
+// machinery is what a child narrowed to some tools still holds, whatever
+// they are: every available agent and the operations it runs through, so
+// the child can run and delegate in turn. Neither is a tool the model calls.
+func machinery(e envelope) []contract {
+	var kept []contract
+	for _, name := range slices.Sorted(maps.Keys(e.Agents)) {
+		var agent struct {
+			Operations []string `json:"operations"`
+		}
+		_ = json.Unmarshal(e.Agents[name], &agent)
+		for _, actor := range append([]string{name}, agent.Operations...) {
+			for _, c := range contractsOf(e, actor) {
+				kept = append(kept, contract{actor, c})
+			}
+		}
+	}
+	return kept
+}
+
+func contractsOf(e envelope, name string) []*proc.Schema {
+	if all, ok := e.Contracts[name]; ok {
+		return all
+	}
+	if s := e.Tools[name]; s != nil {
+		return []*proc.Schema{s}
+	}
+	return nil
 }
 
 // Delegate is an interpreter procedure, like remember: its control is the
@@ -24,10 +63,11 @@ func delegateContract() *proc.Schema {
 func runDelegate(e envelope) ([]byte, error) {
 	var ask struct {
 		Delegate struct {
-			Goal  string    `json:"goal"`
-			Actor string    `json:"actor"`
-			Model string    `json:"model"`
-			Tools *[]string `json:"tools"`
+			Goal      string      `json:"goal"`
+			Actor     string      `json:"actor"`
+			Model     string      `json:"model"`
+			Tools     *[]string   `json:"tools"`
+			Contracts *[]contract `json:"contracts"`
 		} `json:"delegate"`
 	}
 	if err := json.Unmarshal(e.Input, &ask); err != nil {
@@ -49,7 +89,13 @@ func runDelegate(e envelope) ([]byte, error) {
 	if len(e.Steps) == 0 {
 		scope := map[string]any{"actor": actor}
 		if ask.Delegate.Tools != nil {
-			scope["tools"] = *ask.Delegate.Tools
+			// The calling adapter turned the tool names into the contracts
+			// they stand for (proceduretools.Kept), or left them out when
+			// it was not offered one of them.
+			if ask.Delegate.Contracts == nil {
+				return failure("boundary", fmt.Sprintf("tools %q are not available to the caller", *ask.Delegate.Tools))
+			}
+			scope["contracts"] = append(slices.Clone(*ask.Delegate.Contracts), machinery(e)...)
 		}
 		return instruction("system", map[string]any{"narrow": scope}), nil
 	}

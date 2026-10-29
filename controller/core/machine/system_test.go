@@ -123,10 +123,10 @@ func rootBoundary() boundary.Boundary {
 const shout = `{"title":"shout","type":"object","required":["shout"],"fields":{"shout":{"type":"string"}}}`
 
 func extend(schema string) string {
-	return `{"to":"system","payload":{"extend-reach":{"schema":` + schema + `}}}`
+	return `{"to":"system","payload":{"export":{"schema":` + schema + `}}}`
 }
 
-// extend-reach (next/32, H3): an actor adds a contract to itself, with no
+// export (next/32, H3): an actor adds a contract to itself, with no
 // approval. The kernel derives the actor from the emitter; the contract joins
 // the emitter's reach entry in every frame of its Boundary; invoking it is
 // selected by fit and runs the emitter's own program.
@@ -138,7 +138,7 @@ func TestAnActorExtendsItself(t *testing.T) {
 	}
 	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(agent), In: []byte(extend(shout))})
 	if s.State() != record.Invoke || s.R.To != System {
-		t.Fatalf("extend-reach is an invoke of system: %+v", s.R)
+		t.Fatalf("export is an invoke of system: %+v", s.R)
 	}
 	facet := selfOf(t, s)
 	if got := facet.Resume.Reach["agent"].Contracts; len(got) != 1 || got[0].Title != "shout" {
@@ -155,7 +155,7 @@ func TestAnActorExtendsItself(t *testing.T) {
 	s, effs := committing(released(s, facet))
 	ret, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(s.Self), In: spawned(t, effs).Out})
 	if ret.State() != record.Return || string(ret.R.Payload) != `{"ok":true}` {
-		t.Fatalf("extend-reach returns ok: %+v", ret.R)
+		t.Fatalf("export returns ok: %+v", ret.R)
 	}
 
 	// The agent resumes holding it: it is shown, selected by fit, and runs
@@ -182,7 +182,7 @@ func TestAnActorExtendsItself(t *testing.T) {
 	}
 }
 
-// What extend-reach is not: anything that names another actor, a duplicate,
+// What export is not: anything that names another actor, a duplicate,
 // a schema the kernel cannot check, an emitter that is no actor, or a branch
 // of a fan-out.
 func TestExtendReachRefuses(t *testing.T) {
@@ -195,7 +195,7 @@ func TestExtendReachRefuses(t *testing.T) {
 		in          string
 		kind, cause string
 	}{
-		"a payload naming an actor":   {agent, `{"to":"system","payload":{"extend-reach":{"schema":` + shout + `,"actor":"echo"}}}`, record.Contract, `unknown field "actor"`},
+		"a payload naming an actor":   {agent, `{"to":"system","payload":{"export":{"schema":` + shout + `,"actor":"echo"}}}`, record.Contract, `unknown field "actor"`},
 		"a duplicate (actor, schema)": {agent, extend(`{"type":"object","required":["text"],"fields":{"text":{"type":"string"}}}`), record.Contract, "already holds"},
 		"a schema it cannot check":    {agent, extend(`{"type":"blob"}`), record.Contract, "unknown type"},
 		"a schema with unknown parts": {agent, extend(`{"type":"string","pattern":"x"}`), record.Contract, `unknown field "pattern"`},

@@ -9,7 +9,7 @@
 //	a remember              an invoke of an actor that keeps state, with {"remember": ...},
 //	                        whose return names what it remembered
 //	a call to a procedure   an invoke selected by a contract its target did not have at
-//	                        genesis: one added by extend-reach
+//	                        genesis: one added by export
 //	a model step            an invoke, beneath that call, of a continuation other than the
 //	                        procedure's own program
 //	an approval             an invoke, beneath that call, of an async surface: a human

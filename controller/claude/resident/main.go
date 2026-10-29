@@ -30,7 +30,7 @@ type schema = proceduretools.Schema
 type continuation struct {
 	Agents    map[string]json.RawMessage `json:"agents"`
 	Actor     string                     `json:"actor"`
-	WorkTools *[]string                  `json:"work_tools"`
+	Held      map[string][]*schema       `json:"held"`
 	Contracts map[string][]*schema       `json:"contracts"`
 	Workspace string                     `json:"workspace"`
 	Scratch   string                     `json:"scratch"`
@@ -267,7 +267,7 @@ func decide(c continuation) (string, error) {
 			for i, s := range d.Results {
 				calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 			}
-			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: resolvedModel(c)})), nil
+			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: resolvedModel(c), Tools: tools(c)})), nil
 		}
 		result := d.Results[i]
 		var br map[string]any
@@ -368,7 +368,7 @@ func tools(c continuation) []proceduretools.Tool {
 	var ts []proceduretools.Tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
 		if c.Tools[name] != nil {
-			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Tools[name]})
+			ts = append(ts, proceduretools.Tool{Name: strings.ReplaceAll(name, ".", "_"), Target: name, Description: modelTools[name], Schema: c.Tools[name], Contracts: proceduretools.ContractsOf(c.Tools, c.Contracts, name)})
 		}
 	}
 	reserved := make([]string, len(ts))
@@ -376,7 +376,7 @@ func tools(c continuation) []proceduretools.Tool {
 		reserved[i] = t.Name
 	}
 	ts = append(ts, proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember one of your tool calls by its index, starting at 0.")...)
-	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Allows(c.WorkTools, t.Name) })
+	ts = slices.DeleteFunc(ts, func(t proceduretools.Tool) bool { return !proceduretools.Offered(c.Held, t) })
 	for i := range ts {
 		if ts[i].Name == "delegate" && len(c.Agents) > 0 {
 			ts[i].Description += " Available actors: " + strings.Join(slices.Sorted(maps.Keys(c.Agents)), ", ") + "."
@@ -407,7 +407,7 @@ func turnConfig(c continuation) map[string]any {
 	}
 	cfg := map[string]any{
 		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
-		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write")),
+		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Holds(c.Held, "repo.write")),
 	}
 	if !c.Input.Fresh && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session

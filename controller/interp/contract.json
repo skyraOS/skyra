@@ -64,6 +64,24 @@
               "items": {
                 "type": "string"
               }
+            },
+            "contracts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "target",
+                  "schema"
+                ],
+                "fields": {
+                  "target": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "type": "any"
+                  }
+                }
+              }
             }
           }
         }

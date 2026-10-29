@@ -12,8 +12,7 @@ func TestDelegatedThreadUsesInheritedModelAndNoNativeTools(t *testing.T) {
 	c.Actor = "codex"
 	c.Input.Fresh = true
 	c.Input.Model = "chosen-model"
-	empty := []string{}
-	c.WorkTools = &empty
+	c.Held = map[string][]*schema{}
 	_, m := emitted(t, c)
 	var ex struct{ Deliver []string }
 	if json.Unmarshal(m["payload"], &ex) != nil {

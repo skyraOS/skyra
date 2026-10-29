@@ -95,7 +95,7 @@ func run() ([]byte, error) {
 
 // runRemember is remember's body (decision 8), embedded in this binary: a
 // syscall for the trace, the compile, the refinements, then one
-// extend-reach per contract a procedure was stored for. The interpreter
+// export per contract a procedure was stored for. The interpreter
 // extends itself; an actor can only extend itself.
 //
 //	no steps        → system trace: the observation, and the contract that requested it
@@ -104,7 +104,7 @@ func run() ([]byte, error) {
 //	then, for each  → ask the actor it was remembered from to write its refinements, when
 //	                  it holds a refine contract; check the answer; a refusal is shown, and it
 //	                  may try again (MaxAttempts); a valid answer replaces the base types
-//	then            → extend-reach each contract, and return what was remembered
+//	then            → export each contract, and return what was remembered
 func runRemember(store proc.Store, e envelope) ([]byte, error) {
 	var ask struct {
 		Remember struct {
@@ -207,7 +207,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		}
 	case rec.Asked == "extend":
 		if last.State != "return" {
-			return refused("extend-reach: " + cause)
+			return refused("export: " + cause)
 		}
 		rec.Extended++
 	}
@@ -222,7 +222,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		next = instruction(rec.Originals[rec.Refining], map[string]any{"refine": refineAsk(rec)})
 	case rec.Extended < len(rec.Contracts):
 		rec.Asked = "extend"
-		next = instruction("system", map[string]any{"extend-reach": map[string]any{"schema": rec.Contracts[rec.Extended]}})
+		next = instruction("system", map[string]any{"export": map[string]any{"schema": rec.Contracts[rec.Extended]}})
 	default:
 		var names []string
 		for i, c := range rec.Contracts {

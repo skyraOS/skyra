@@ -143,8 +143,8 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 				if !explicit && string(input["model"]) != `"`+expectedModel+`"` || explicit && input["model"] != nil {
 					t.Fatalf("caller model lost or leaked: %s", r.Payload)
 				}
-				if _, bounded := tc.request["tools"]; bounded && h.WorkTools == nil {
-					t.Fatal("tool ceiling lost")
+				if _, bounded := tc.request["tools"]; bounded && h.Held == nil {
+					t.Fatal("held contracts lost")
 				}
 			}
 			if children != tc.children {

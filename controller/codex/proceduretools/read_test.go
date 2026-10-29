@@ -29,3 +29,30 @@ func TestDelegateInheritsTheCallerOnlyWhenNoActorIsNamed(t *testing.T) {
 		t.Fatalf("explicit actor uses its own default: %s", got)
 	}
 }
+
+func TestDelegateToolsBecomeTheContractsTheyStandFor(t *testing.T) {
+	echo := &Schema{Type: "object"}
+	write := &Schema{Type: "string"}
+	offered := []Tool{{Name: "echo", Target: "echo", Contracts: []*Schema{echo}}, {Name: "repo_write", Target: "repo.write", Contracts: []*Schema{write}}}
+	caller := Caller{Actor: "codex", Tools: offered}
+	got, _ := json.Marshal(Payload("delegate", json.RawMessage(`{"delegate":{"goal":"g","actor":"claude","tools":["echo","repo.write"],"contracts":[{"target":"forged","schema":{"type":"any"}}]}}`), nil, nil, nil, caller))
+	if string(got) != `{"delegate":{"actor":"claude","contracts":[{"target":"echo","schema":{"type":"object"}},{"target":"repo.write","schema":{"type":"string"}}],"goal":"g","tools":["echo","repo.write"]}}` {
+		t.Fatalf("tools: %s", got)
+	}
+	got, _ = json.Marshal(Payload("delegate", json.RawMessage(`{"delegate":{"goal":"g","actor":"claude","tools":["read"]}}`), nil, nil, nil, caller))
+	if strings.Contains(string(got), "contracts") {
+		t.Fatalf("a tool the caller was not offered became a contract: %s", got)
+	}
+	got, _ = json.Marshal(Payload("delegate", json.RawMessage(`{"delegate":{"goal":"g","actor":"claude","tools":[]}}`), nil, nil, nil, caller))
+	if !strings.Contains(string(got), `"contracts":[]`) {
+		t.Fatalf("empty tools keep no contracts: %s", got)
+	}
+}
+
+func TestAToolIsOfferedWhenEverythingItStandsForIsHeld(t *testing.T) {
+	a, b := &Schema{Type: "object"}, &Schema{Type: "string"}
+	both := Tool{Target: "x", Contracts: []*Schema{a, b}}
+	if !Offered(nil, both) || Offered(map[string][]*Schema{"x": {a}}, both) || !Offered(map[string][]*Schema{"x": {b, a}}, both) {
+		t.Fatal("offered without every contract held")
+	}
+}

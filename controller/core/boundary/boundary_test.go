@@ -70,15 +70,14 @@ func TestOneProfilePerBoundaryExecOnlyTheRunningProgram(t *testing.T) {
 	}
 }
 
-// A work tool's contract restated in another order is the tool it was bound
-// as (42).
-func TestPermitsAToolRestatedInAnotherOrder(t *testing.T) {
+// A contract restated in another order is the contract held (42).
+func TestHoldsAContractRestatedInAnotherOrder(t *testing.T) {
 	bound := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
 	restated := &contract.Schema{Type: "object", Required: []string{"b", "a"}, Fields: bound.Fields}
 	other := &contract.Schema{Type: "object", Required: []string{"a"}, Fields: bound.Fields}
-	tools := map[string]ToolBinding{"t": {Target: "echo", Contracts: []*contract.Schema{bound}}}
-	h := Boundary{WorkTools: &tools}
-	if !h.PermitsTool("echo", restated) || h.PermitsTool("echo", other) {
-		t.Fatal("a restated contract is the bound tool; a different one is not")
+	held := CList{"echo": {bound}}
+	h := Boundary{Reach: map[string]Surface{"echo": {Input: bound, Contracts: []*contract.Schema{other}}}, Held: &held}
+	if !h.Holds("echo", restated) || h.Holds("echo", other) {
+		t.Fatal("a restated contract is the held one; a different one is not")
 	}
 }

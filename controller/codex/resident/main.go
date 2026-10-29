@@ -28,7 +28,7 @@ type step struct {
 type continuation struct {
 	Agents    map[string]json.RawMessage `json:"agents"`
 	Actor     string                     `json:"actor"`
-	WorkTools *[]string                  `json:"work_tools"`
+	Held      map[string][]*schema       `json:"held"`
 	Workspace string                     `json:"workspace"`
 	Scratch   string                     `json:"scratch"`
 	Frame     string                     `json:"frame"`
@@ -88,7 +88,12 @@ var modelTools = proceduretools.ModelTools
 type tool struct {
 	name, description, target string
 	schema                    *schema
-	kind                      string // "": a call with the model's arguments; remember; procedure
+	kind                      string    // "": a call with the model's arguments; remember; procedure
+	contracts                 []*schema // the contracts of target a call to it may select
+}
+
+func (t tool) shared() proceduretools.Tool {
+	return proceduretools.Tool{Name: t.name, Description: t.description, Target: t.target, Kind: t.kind, Schema: t.schema, Contracts: t.contracts}
 }
 
 // tools is everything Codex is offered, in a fixed order (next/32): the model
@@ -111,7 +116,7 @@ func tools(c continuation) []tool {
 			if strings.Contains(name, ".") {
 				toolName = strings.ReplaceAll(name, ".", "_")
 			}
-			ts = append(ts, tool{name: toolName, description: description, target: name, schema: c.Tools[name]})
+			ts = append(ts, tool{name: toolName, description: description, target: name, schema: c.Tools[name], contracts: proceduretools.ContractsOf(c.Tools, c.Contracts, name)})
 		}
 	}
 	reserved := make([]string, 0, len(ts))
@@ -119,15 +124,23 @@ func tools(c continuation) []tool {
 		reserved = append(reserved, t.name)
 	}
 	for _, t := range proceduretools.Procedures(c.Tools, c.Contracts, reserved, "Remember how one of your tool calls in this turn was done, as a procedure: call is its index among your tool calls this turn, from 0. Calling the procedure later runs the same calls on new input, without you, and with no approval. Only a call that itself called tools can be remembered.") {
-		ts = append(ts, tool{name: t.Name, target: t.Target, kind: t.Kind, description: t.Description, schema: t.Schema})
+		ts = append(ts, tool{name: t.Name, target: t.Target, kind: t.Kind, description: t.Description, schema: t.Schema, contracts: t.Contracts})
 	}
-	ts = slices.DeleteFunc(ts, func(t tool) bool { return !proceduretools.Allows(c.WorkTools, t.name) })
+	ts = slices.DeleteFunc(ts, func(t tool) bool { return !proceduretools.Offered(c.Held, t.shared()) })
 	for i := range ts {
 		if ts[i].name == "delegate" && len(c.Agents) > 0 {
 			ts[i].description += " Available actors: " + strings.Join(slices.Sorted(maps.Keys(c.Agents)), ", ") + "."
 		}
 	}
 	return ts
+}
+
+func shared(ts []tool) []proceduretools.Tool {
+	out := make([]proceduretools.Tool, len(ts))
+	for i, t := range ts {
+		out[i] = t.shared()
+	}
+	return out
 }
 
 func lookup(c continuation, name string) (tool, bool) {
@@ -194,7 +207,7 @@ func toolEmission(c continuation, d derived, name string, args json.RawMessage) 
 	for i, s := range results {
 		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: d.Model}))
+	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: d.Model, Tools: shared(tools(c))}))
 }
 
 func main() {
@@ -471,7 +484,7 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
-		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write"))}
+		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Holds(c.Held, "repo.write"))}
 		if c.Input.Model != "" {
 			params["model"] = c.Input.Model
 		}

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWorkToolVisibilityDependsOnlyOnScope(t *testing.T) {
 	for _, fresh := range []bool{false, true} {
@@ -8,9 +11,13 @@ func TestWorkToolVisibilityDependsOnlyOnScope(t *testing.T) {
 			c := continuation{Tools: map[string]*schema{"design.tools": {Type: "object"}, "blender.tools": {Type: "object"}}}
 			c.Input.Header, c.Input.Fresh = header, fresh
 			for _, selected := range [][]string{nil, {}, {"design_tools"}} {
-				c.WorkTools = nil
+				c.Held = nil
 				if selected != nil {
-					c.WorkTools = &selected
+					c.Held = map[string][]*schema{}
+					for _, name := range selected {
+						target := strings.ReplaceAll(name, "_", ".")
+						c.Held[target] = []*schema{c.Tools[target]}
+					}
 				}
 				got := map[string]bool{}
 				for _, tool := range tools(c) {
@@ -21,7 +28,7 @@ func TestWorkToolVisibilityDependsOnlyOnScope(t *testing.T) {
 				}
 			}
 			delete(c.Tools, "blender.tools")
-			c.WorkTools = nil
+			c.Held = nil
 			for _, tool := range tools(c) {
 				if tool.Name == "blender_tools" {
 					t.Fatal("offered tool outside inherited reach")

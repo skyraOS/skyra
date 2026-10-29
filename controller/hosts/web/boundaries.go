@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"slices"
 	"sort"
 
@@ -15,7 +14,7 @@ import (
 // reach and authority is the same Boundary, so a conversation that never
 // narrows has one. The webhost reads Boundaries and decides nothing.
 type boundaryView struct {
-	ID     string        `json:"id"`     // the hash of its reach (by surface identity) and authority
+	ID     string        `json:"id"`     // boundary.Hash: what it holds, by contract and surface identity, and its authority
 	Root   bool          `json:"root"`   // the root Boundary, which genesis recorded
 	Actors []string      `json:"actors"` // the surfaces that ran under it, by name
 	Reach  []surfaceView `json:"reach"`  // what emissions under it may invoke, by name
@@ -30,16 +29,12 @@ type surfaceView struct {
 // proper is the part of a Boundary that is authority, not position in a stack.
 type proper struct {
 	reach     map[string]boundary.Surface
+	held      *boundary.CList
 	authority boundary.Authority
 }
 
 func (p proper) id() string {
-	ids := map[string]string{}
-	for name, s := range p.reach {
-		ids[name] = boundary.Identity(s)
-	}
-	b, _ := json.Marshal(map[string]any{"reach": ids, "authority": p.authority})
-	return record.Sum(b)
+	return boundary.Boundary{Reach: p.reach, Held: p.held, Authority: p.authority}.Hash()
 }
 
 func (p proper) view() boundaryView {
@@ -75,7 +70,7 @@ func boundaries(genesis *record.Record, released []boundary.Boundary) []boundary
 	}
 	root := ""
 	if genesis != nil && genesis.Reach != nil {
-		p := proper{genesis.Reach, authorityOf(genesis.Authority)}
+		p := proper{genesis.Reach, nil, authorityOf(genesis.Authority)}
 		root = p.id()
 		for name, s := range genesis.Reach {
 			names[boundary.Identity(s)] = name
@@ -94,7 +89,7 @@ func boundaries(genesis *record.Record, released []boundary.Boundary) []boundary
 		if h.Surface != nil {
 			actor = names[boundary.Identity(*h.Surface)]
 		}
-		add(proper{h.Reach, h.Authority}, actor)
+		add(proper{h.Reach, h.Held, h.Authority}, actor)
 		for _, g := range h.Refs {
 			kept := map[string]boundary.Surface{}
 			for _, name := range g.Reach {
@@ -102,7 +97,7 @@ func boundaries(genesis *record.Record, released []boundary.Boundary) []boundary
 					kept[name] = s
 				}
 			}
-			add(proper{kept, g.Authority}, "")
+			add(proper{kept, g.Held, g.Authority}, "")
 		}
 	}
 	out := []boundaryView{}

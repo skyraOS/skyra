@@ -9,7 +9,8 @@ import (
 
 type Tool struct {
 	Name, Description, Target, Kind string
-	Schema                          *Schema
+	Schema                          *Schema   // what the model is shown
+	Contracts                       []*Schema // the contracts of Target a call to it may select
 }
 
 func Interpreter(reach map[string]*Schema) string {
@@ -39,14 +40,15 @@ func Procedures(reach map[string]*Schema, contracts map[string][]*Schema, reserv
 	if target == "" {
 		return nil
 	}
+	all := ContractsOf(reach, contracts, target)
 	ts := []Tool{
 		{Name: "remember", Target: target, Kind: "remember", Description: rememberDescription,
-			Schema: &Schema{Type: "object", Required: []string{"call"}, Fields: map[string]*Schema{"call": {Type: "number"}}}},
+			Schema: &Schema{Type: "object", Required: []string{"call"}, Fields: map[string]*Schema{"call": {Type: "number"}}}, Contracts: all[:1]},
 		{Name: "procedure", Target: target, Kind: "procedure", Description: "Run a remembered procedure on new input: input is what you would give the call it was remembered from.",
-			Schema: &Schema{Type: "object", Required: []string{"input"}, Fields: map[string]*Schema{"input": {Type: "any"}}}},
+			Schema: &Schema{Type: "object", Required: []string{"input"}, Fields: map[string]*Schema{"input": {Type: "any"}}}, Contracts: all[1:]},
 	}
 	reserved = append(slices.Clone(reserved), "remember", "procedure")
-	for _, s := range ContractsOf(reach, contracts, target) {
+	for _, s := range all {
 		if s == nil || s.Title == "remember" {
 			continue
 		}
@@ -63,21 +65,22 @@ func Procedures(reach map[string]*Schema, contracts map[string][]*Schema, reserv
 		if kind == "delegate" {
 			shown = withoutModel(s)
 		}
-		ts = append(ts, Tool{Name: name, Target: target, Kind: kind, Schema: shown, Description: description})
+		ts = append(ts, Tool{Name: name, Target: target, Kind: kind, Schema: shown, Description: description, Contracts: []*Schema{s}})
 	}
 	return ts
 }
 
-// withoutModel is the delegate contract as a model is shown it: the model
-// field is the adapter's to fill, never the model's to choose.
+// withoutModel is the delegate contract as a model is shown it: model and
+// contracts are the adapter's to fill, never the model's to choose.
 func withoutModel(s *Schema) *Schema {
 	inner := s.Fields["delegate"]
-	if inner == nil || inner.Fields["model"] == nil {
+	if inner == nil {
 		return s
 	}
 	shownInner := *inner
 	shownInner.Fields = maps.Clone(inner.Fields)
 	delete(shownInner.Fields, "model")
+	delete(shownInner.Fields, "contracts")
 	shown := *s
 	shown.Fields = maps.Clone(s.Fields)
 	shown.Fields["delegate"] = &shownInner
@@ -89,10 +92,39 @@ type Call struct {
 	Payload             json.RawMessage
 }
 
-// Caller is the adapter a delegate inherits from when the model names no
-// actor: its own name and the model it resolved. The adapter supplies it from
-// its recorded steps; the model's arguments never do.
-type Caller struct{ Actor, Model string }
+// Caller is the adapter a delegate is made from: its own name and the model
+// it resolved, which a delegate naming no actor inherits, and the tools it
+// offers, by which a delegate's tool names become contracts. The adapter
+// supplies it from its recorded steps; the model's arguments never do.
+type Caller struct {
+	Actor, Model string
+	Tools        []Tool
+}
+
+// Contract is one contract of one actor, as system.narrow keeps it.
+type Contract struct {
+	Target string  `json:"target"`
+	Schema *Schema `json:"schema"`
+}
+
+// Kept is the contracts the named tools stand for, by the tools offered:
+// a tool is named as offered, or with dots for its underscores (repo.write
+// for repo_write).
+// It reports false when a name is not one of them, so a delegate cannot name
+// what its caller was not offered.
+func Kept(offered []Tool, names []string) ([]Contract, bool) {
+	kept := []Contract{}
+	for _, name := range names {
+		i := slices.IndexFunc(offered, func(t Tool) bool { return t.Name == strings.ReplaceAll(name, ".", "_") })
+		if i < 0 {
+			return nil, false
+		}
+		for _, c := range offered[i].Contracts {
+			kept = append(kept, Contract{offered[i].Target, c})
+		}
+	}
+	return kept, true
+}
 
 // Payload translates model arguments using only model calls in their original
 // order. Provider transport steps never enter this index. Invalid remember
@@ -107,6 +139,13 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*
 			return args
 		}
 		delete(a.Delegate, "model")
+		delete(a.Delegate, "contracts")
+		var names *[]string
+		if json.Unmarshal(a.Delegate["tools"], &names) == nil && names != nil {
+			if kept, ok := Kept(caller.Tools, *names); ok {
+				a.Delegate["contracts"], _ = json.Marshal(kept)
+			}
+		}
 		if _, named := a.Delegate["actor"]; !named && caller.Actor != "" {
 			a.Delegate["actor"], _ = json.Marshal(caller.Actor)
 			if caller.Model != "" {
@@ -135,18 +174,28 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach map[string]*
 	}
 }
 
-// Allows applies the runtime's tool ceiling to transport names. The kernel
-// separately checks the concrete target and selected contract at intake.
-func Allows(names *[]string, name string) bool {
-	if names == nil {
+// Offered reports whether a tool is offered under a continuation's c-list:
+// every contract it stands for is held, as Kept keeps them. nil holds
+// everything the continuation is shown. The kernel separately checks the
+// selected contract at intake.
+func Offered(held map[string][]*Schema, t Tool) bool {
+	if held == nil {
 		return true
 	}
-	for _, allowed := range *names {
-		if name == allowed || strings.ReplaceAll(name, ".", "_") == strings.ReplaceAll(allowed, ".", "_") {
-			return true
-		}
-	}
-	return false
+	return len(t.Contracts) > 0 && !slices.ContainsFunc(t.Contracts, func(c *Schema) bool {
+		return !slices.ContainsFunc(held[t.Target], func(h *Schema) bool { return same(c, h) })
+	})
+}
+
+// Holds reports whether any contract of target is held.
+func Holds(held map[string][]*Schema, target string) bool {
+	return held == nil || len(held[target]) > 0
+}
+
+func same(a, b *Schema) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
 }
 
 // Failure is a procedure failure outcome, not discovered observations.

@@ -218,7 +218,7 @@ func distinct(emit []json.RawMessage) {
 }
 
 // alone keeps a syscall that changes the Boundary of whoever waits (narrow,
-// extend-reach) out of a fan-out: the kernel refuses one emitted with
+// export) out of a fan-out: the kernel refuses one emitted with
 // siblings (H2), so it goes first, by itself, and the rest wait a round.
 func alone(n *Next) {
 	if len(n.Emit) < 2 {
@@ -233,7 +233,7 @@ func alone(n *Next) {
 			continue
 		}
 		_, narrow := ins.Payload["narrow"]
-		_, extend := ins.Payload["extend-reach"]
+		_, extend := ins.Payload["export"]
 		if !narrow && !extend {
 			continue
 		}

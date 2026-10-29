@@ -86,7 +86,7 @@ func checkSuccessor(o Object, emitted []byte, parentStamp string) (record.Record
 //	invoke system, narrow        the caller's Boundary, and the waiting caller is
 //	                             recorded as holding a new reference: the grant
 //	                             its payload derives, named system.ref.<n>
-//	invoke system, extend-reach  the caller's Boundary, and the waiting caller's
+//	invoke system, export  the caller's Boundary, and the waiting caller's
 //	                             reach entry for itself holds one more contract,
 //	                             in every frame below that shares its Boundary
 //	invoke a reference           the actor, under the narrowed Boundary it names
@@ -109,7 +109,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 				return boundary.Boundary{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
 			}
 			// A Boundary of its own: created by this invoke, so named by it.
-			return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, WorkTools: g.WorkTools,
+			return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Held: g.Held,
 				Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 		}
 	}
@@ -129,7 +129,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 				refs[name] = held
 			}
 			waiter.Refs = refs
-		case Extending:
+		case Exporting:
 			c, err := extension(parent, args)
 			if err != nil {
 				return boundary.Boundary{}, err
@@ -138,7 +138,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 		}
 	}
 	return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority,
-		WorkTools: parent.WorkTools, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
+		Held: parent.Held, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several
