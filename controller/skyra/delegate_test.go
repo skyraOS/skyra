@@ -123,7 +123,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 				if !strings.HasPrefix(r.To, "system.ref.") {
 					continue
 				}
-				h, err := replay.HorizonAt(root, entry.Name())
+				h, err := replay.BoundaryAt(root, entry.Name())
 				if err != nil {
 					t.Fatal(err)
 				}

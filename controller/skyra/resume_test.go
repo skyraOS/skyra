@@ -59,7 +59,7 @@ func TestResumeFramesDoNotReachTarget(t *testing.T) {
 	t.Cleanup(func() {
 		if t.Failed() {
 			b, _ := os.ReadFile(log.Name())
-			t.Logf("runtime trace:\n%s", b)
+			t.Logf("runtime log:\n%s", b)
 		}
 	})
 	writeJSON := func(name string, v any) string {

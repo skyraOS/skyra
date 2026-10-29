@@ -106,7 +106,7 @@ browser uses, they took under 40 ms on the Xeon (`remember`: 36 ms). The
 WebAssembly runs aren't part of the benchmark command and weren't rerun here.
 
 Profiling on the Xeon showed SHA-256 taking about a third of replay time and
-JSON most of the rest, including `released()` re-marshaling a Horizon for
+JSON most of the rest, including `released()` re-marshaling a Boundary for
 each record.
 
 To reproduce:
@@ -123,7 +123,7 @@ go test -run '^$' -bench . -count 5 ./controller/runtime/replay/ ./website/expor
   - cheaper flushes (`F_FULLFSYNC` is about two-thirds of the fake path's
     overhead; see
     proposal 40)
-  - faster Horizon lookup
+  - faster Boundary lookup
 - A tool-heavy turn pays for each tool round trip: ~250 ms on the fake path
   and ~380 ms with real Codex. A 10-call agentic turn adds ~4 s of controller
   time no matter how fast the model is. That is the case to watch as models

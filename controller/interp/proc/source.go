@@ -8,7 +8,7 @@ import (
 
 // Source is a procedure as it is written: nodes by local name, bindings to
 // those names. JSON is the source; remember writes it, compiled from a
-// strand, and models never do (32, "The source and the compiled form").
+// trace, and models never do (32, "The source and the compiled form").
 // Compile turns it into nodes by hash, the only form the interpreter runs.
 type Source struct {
 	Contract   *Schema               `json:"contract"`

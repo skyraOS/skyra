@@ -29,7 +29,7 @@ backlog 2d, which keeps one kernel process looping in `Drive`.
 |---|---|
 | The CPU executes instructions | The OS executes a target (`execve`) |
 | The MMU enforces page tables | Seatbelt (Landlock on Linux) enforces the rendered profile |
-| Loading the page table on a context switch | Rendering the profile from the Horizon at exec |
+| Loading the page table on a context switch | Rendering the profile from the Boundary at exec |
 | `syscall`, the only door into ring 0 | an emission, the only way a target's effect leaves its sandbox |
 | The syscall table | `invoke`, `return`, `narrow`, `extend`, `read` (a strand): the room's `system.*` |
 | The kernel, entered on a trap, then gone | `skyra`, run once per event: read the head, `Step`, commit, provision, exit |
@@ -172,7 +172,7 @@ Stated so it can be weighed, not dismissed:
 2. Does D6 (no process per waiting frame) hold for fan-out and for deep
    delegation, or does some frame need a live process to stay resumable?
 3. Is D2's "the trap is the only door" true of today's profiles? `Render`
-   and the Codex resident profile (`core/horizon/resident.go`) start from
+   and the Codex resident profile (`core/boundary/resident.go`) start from
    `(deny default)`; the Claude resident profile (`claude_resident.go`)
    starts from `(allow default)` and only denies the floor, so for it the
    trap is not the only door.
@@ -193,13 +193,13 @@ holders and an index on disk.
 
 ### 1. What 2d has that 46 misses
 
-- **45 makes some handles long-lived.** 45 D3 makes a narrowed Horizon
+- **45 makes some handles long-lived.** 45 D3 makes a narrowed Boundary
   persist, and 45 D9 puts the kernel at one end of every OS pipe. A
   spawn-per-invoke pipe is fine, because its OS pipe exists only for the
   call. A mailbox (44) or a resident's pipe needs the kernel's end held
   between steps, and under 46 nothing is alive between steps. This is wider
   than "fd custody" for residents: it decides whether 44 can be built on 45's
-  pipes. 46 needs a named holder for these, scoped to one Horizon.
+  pipes. 46 needs a named holder for these, scoped to one Boundary.
 - **The head read grows with the tree.** `tree.HasSuccessor` reads and parses
   every record under `records/`, so a step that re-reads the head pays
   O(records). A long-lived kernel would hide this with a cache; under 46 it
@@ -232,7 +232,7 @@ delegation holds too.
 floor, so it opens doors that no human granted, which is worse than a granted
 door. Either D2 names it as an exception until it is fixed, or the Claude
 resident moves to `(deny default)` like the Codex one; phase 1 of the
-backlog, which takes agent fields out of Horizon, is a natural time to do it.
+backlog, which takes agent fields out of Boundary, is a natural time to do it.
 D2's wording should also be "the only door that no human granted": `Connect`,
 `Mach` and `Scratch` are doors by design.
 

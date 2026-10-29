@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
@@ -25,12 +25,12 @@ func longLineage(tb testing.TB, root string, rounds int) (string, int) {
 			tb.Fatal(err)
 		}
 	}
-	reach := map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	reach := map[string]boundary.Surface{"echo": echoS, "agent": agentS}
 	g0, err := tree.Commit(root, record.Record{Version: 2, State: record.Invoke, Reach: reach})
 	if err != nil {
 		tb.Fatal(err)
 	}
-	h := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+	h := boundary.Boundary{Stamp: g0, Reach: reach, Frame: g0}
 
 	put := func(in []byte, r record.Record) string {
 		if _, err := tree.Put(root, "inputs", in); err != nil {
@@ -42,8 +42,8 @@ func longLineage(tb testing.TB, root string, rounds int) (string, int) {
 		}
 		return s
 	}
-	emit := func(under horizon.Horizon, out string) (string, horizon.Horizon) {
-		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: []byte(out)})
+	emit := func(under boundary.Boundary, out string) (string, boundary.Boundary) {
+		_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(under), In: []byte(out)})
 		r := machine.CommittedRecord(effs)
 		s := put([]byte(out), r)
 		next, err := machine.Narrow(under, r, s)
@@ -52,7 +52,7 @@ func longLineage(tb testing.TB, root string, rounds int) (string, int) {
 		}
 		return s, next
 	}
-	resolve := func(discharged horizon.Horizon, discharge, emission string) (string, horizon.Horizon) {
+	resolve := func(discharged boundary.Boundary, discharge, emission string) (string, boundary.Boundary) {
 		w := discharged.Resume
 		obs, _ := json.Marshal(machine.Observation{Frame: w.Frame, Round: w.Stamp, Discharges: []string{discharge}, Emission: emission})
 		r, err := machine.Resolved(discharge, obs)

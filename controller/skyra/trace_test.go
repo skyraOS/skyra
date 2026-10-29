@@ -22,10 +22,10 @@ import (
 	"skyra/controller/runtime/tree"
 )
 
-// room builds skyra, echo and the scripted agent, and returns a function that
+// booted builds skyra, echo and the scripted agent, and returns a function that
 // boots a lineage of the agent with a payload and returns its state
 // directory, and the agent's and echo's input contracts.
-func room(t *testing.T) (func(text string) string, *contract.Schema, *contract.Schema) {
+func booted(t *testing.T) (func(text string) string, *contract.Schema, *contract.Schema) {
 	t.Helper()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -80,7 +80,7 @@ func room(t *testing.T) (func(text string) string, *contract.Schema, *contract.S
 }
 
 // agentReturn is what the agent returned to the operator: the observation
-// whose strand is read.
+// whose trace is read.
 func agentReturn(t *testing.T, root string) (string, record.Record) {
 	t.Helper()
 	head, err := boot.Head(root)
@@ -95,20 +95,20 @@ func agentReturn(t *testing.T, root string) (string, record.Record) {
 	return h.Deps[0], r
 }
 
-// strand (next/32, H4): from an observation up to the invoke made through the
+// trace (next/32, H4): from an observation up to the invoke made through the
 // contract the requester names, with every record of the work beneath it.
-func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
-	run, agentIn, echoIn := room(t)
+func TestTraceFromAnObservationToItsInvoke(t *testing.T) {
+	run, agentIn, echoIn := booted(t)
 
 	root := run("fan:hello,world")
 	obs, _ := agentReturn(t, root)
-	st, err := replay.ReadStrand(root, obs, "agent", agentIn, "")
+	st, err := replay.ReadTrace(root, obs, "agent", agentIn, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cause := st.Records[st.Chain[len(st.Chain)-1]]
 	if st.Chain[0] != obs || cause.State != record.Invoke || cause.To != "agent" {
-		t.Fatalf("the strand runs from the observation to the agent's invoke: %v", st.Chain)
+		t.Fatalf("the trace runs from the observation to the agent's invoke: %v", st.Chain)
 	}
 	var echoes []string
 	for _, r := range st.Records {
@@ -120,22 +120,22 @@ func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
 	if !reflect.DeepEqual(echoes, []string{`{"text":"hello"}`, `{"text":"world"}`}) || len(st.Records) != 7 {
 		t.Fatalf("both siblings are in it, the one off the chain too: %d records, %v", len(st.Records), echoes)
 	}
-	again, _ := replay.ReadStrand(root, obs, "agent", agentIn, "")
+	again, _ := replay.ReadTrace(root, obs, "agent", agentIn, "")
 	if !reflect.DeepEqual(st, again) {
-		t.Fatal("records are immutable: the same walk gives the same strand")
+		t.Fatal("records are immutable: the same walk gives the same trace")
 	}
 
 	// A contract that did not request the observation is refused.
-	if _, err := replay.ReadStrand(root, obs, "echo", echoIn, ""); !replay.Refused(err) {
+	if _, err := replay.ReadTrace(root, obs, "echo", echoIn, ""); !replay.Refused(err) {
 		t.Fatalf("echo did not cause the agent's return: %v", err)
 	}
 	// A child's return was caused by the agent's invoke too: the walk climbs
 	// frames, not predecessors, so it never stops at a sibling's invoke.
 	for _, s := range st.Chain {
 		if r := st.Records[s]; r.State == record.Return && s != obs {
-			sub, err := replay.ReadStrand(root, s, "agent", agentIn, "")
+			sub, err := replay.ReadTrace(root, s, "agent", agentIn, "")
 			if err != nil || sub.Chain[len(sub.Chain)-1] != st.Chain[len(st.Chain)-1] {
-				t.Fatalf("an echo return's strand reaches the agent's invoke: %v %v", sub.Chain, err)
+				t.Fatalf("an echo return's trace reaches the agent's invoke: %v %v", sub.Chain, err)
 			}
 		}
 	}
@@ -144,7 +144,7 @@ func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
 	// requester inside that child cannot walk out of it.
 	root = run("narrow:hello")
 	obs, _ = agentReturn(t, root)
-	st, err = replay.ReadStrand(root, obs, "agent", agentIn, "")
+	st, err = replay.ReadTrace(root, obs, "agent", agentIn, "")
 	if err != nil || len(st.Opaque) != 1 {
 		t.Fatalf("the narrowed child is opaque: %+v %v", st.Opaque, err)
 	}
@@ -155,19 +155,19 @@ func TestStrandFromAnObservationToItsInvoke(t *testing.T) {
 	if r := st.Records[call]; r.State != record.Invoke || r.To != "system.ref.1" {
 		t.Fatalf("the opaque call is the call through the reference: %+v", r)
 	}
-	if _, err := replay.ReadStrand(root, obs, "agent", agentIn, call); !replay.Refused(err) {
-		t.Fatalf("a requester inside the narrowed child cannot read the agent's strand: %v", err)
+	if _, err := replay.ReadTrace(root, obs, "agent", agentIn, call); !replay.Refused(err) {
+		t.Fatalf("a requester inside the narrowed child cannot read the agent's trace: %v", err)
 	}
 }
 
 // The research metric (next/32, H8), read from the records of the thesis
 // demo: one procedure remembered for the one task, a second remember of the
 // same contract refused, and of the three calls to it, one ran with zero
-// model steps and zero approvals (another, from a Horizon without echo,
+// model steps and zero approvals (another, from a Boundary without echo,
 // faulted, and the third was outside the refinement the agent wrote, so the
 // agent ran).
 func TestTheMetricFromTheRecords(t *testing.T) {
-	run, _, _ := room(t)
+	run, _, _ := booted(t)
 	root := run("remember:hello")
 	m, err := metric.Read(root)
 	if err != nil {

@@ -37,11 +37,11 @@
       <p>
         Self-extension makes it worse. An agent that writes its own tools produces
         a stream of new code, and each piece wants its own approval. Skyra moves
-        the approval: the person grants a <strong>Horizon</strong> once, and
+        the approval: the person grants a <strong>Boundary</strong> once, and
         everything inside it runs without asking, including procedures the agent
-        remembers from its own work, because a Horizon grows only by composing
+        remembers from its own work, because a Boundary grows only by composing
         what it already holds and the OS enforces the boundary on every call.
-        Asking is kept for the one case that needs a person: reaching past the Horizon.
+        Asking is kept for the one case that needs a person: reaching past the Boundary.
       </p>
     </section>
 
@@ -57,7 +57,7 @@
         <div class="box">
           <span class="num">02</span>
           <h3>Authority only narrows, and the OS enforces it.</h3>
-          <p>Every step runs under a Horizon. A call shares its caller's unless it asks the room to narrow it; nothing widens one. The macOS sandbox profile is generated from the Horizon, and an actor sees only its own state.</p>
+          <p>Every step runs under a Boundary. A call shares its caller's unless it asks <code>system</code> to narrow it; nothing widens one. The macOS sandbox profile is generated from the Boundary, and an actor sees only its own state.</p>
         </div>
         <div class="box">
           <span class="num">03</span>
@@ -80,9 +80,9 @@
       </p>
       <div class="box">
 <pre>INTAKE    receive unchecked bytes, derive the state, commit a record, reply with its stamp
-RELEASE   the parent checks the record hashes to the stamp, derives the child's Horizon,
+RELEASE   the parent checks the record hashes to the stamp, derives the child's Boundary,
           and passes it with the frame stack as directory fds over a Unix socket
-EXECUTE   run the target under a Seatbelt profile rendered from that Horizon
+EXECUTE   run the target under a Seatbelt profile rendered from that Boundary
 HANDOFF   spawn a successor per instruction emitted; open every slot before
           releasing any; exit once each has stamped
 SETTLE    a return or fault discharges the slot it answers, once
@@ -107,14 +107,14 @@ CLAIM     and exactly one sibling resumes that continuation</pre>
           <thead><tr><th>Part</th><th>Status</th></tr></thead>
           <tbody>
             <tr><td>Step protocol, custody handoff, content-addressed records</td><td class="status">built</td></tr>
-            <tr><td>One authority per Horizon; narrowing through <code>system</code>'s <code>narrow</code> syscall; sandbox rendered from the Horizon; an actor sees only its own state</td><td class="status">built · enforced</td></tr>
+            <tr><td>One authority per Boundary; narrowing through <code>system</code>'s <code>narrow</code> syscall; sandbox rendered from the Boundary; an actor sees only its own state</td><td class="status">built · enforced</td></tr>
             <tr><td>Replay re-derives every record from genesis, faults and resolves included</td><td class="status">built</td></tr>
             <tr><td>Types computed by the interpreter; refinements on the edges, written by the model when it remembers</td><td class="status">built</td></tr>
             <tr><td>Fan-out: one emission, several instructions</td><td class="status">built</td></tr>
             <tr><td>An actor sees only its own state</td><td class="status">built · enforced</td></tr>
             <tr><td>Real Codex through a stateless adapter, under Seatbelt</td><td class="status">built</td></tr>
             <tr><td>Codex's native command execution</td><td class="status">detected · interrupts the turn</td></tr>
-            <tr><td>A procedure runs only in the Horizon that remembered it; every instruction is checked at intake</td><td class="status">built · enforced</td></tr>
+            <tr><td>A procedure runs only in the Boundary that remembered it; every instruction is checked at intake</td><td class="status">built · enforced</td></tr>
             <tr><td>Self-extension: work is remembered as a procedure and runs again with zero approvals and no model step</td><td class="status">built</td></tr>
             <tr><td>Versioning (several representations per contract); metering</td><td class="status">not built</td></tr>
             <tr><td>Evaluation against Codex's own approval modes</td><td class="status">planned · Nov–Dec</td></tr>

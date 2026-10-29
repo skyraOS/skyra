@@ -18,7 +18,7 @@ For example:
 }
 ```
 
-Skyra validates each call against its tool's schema and the current Horizon,
+Skyra validates each call against its tool's schema and the current Boundary,
 invokes the tools, and returns results matched by call ID. The provider only
 needs to expose `dispatch`; Skyra owns tool validation, execution, and batching.
 
@@ -30,7 +30,7 @@ needs to expose `dispatch`; Skyra owns tool validation, execution, and batching.
 - **Keep tool-specific validation.** Dispatch must not become an unrestricted
   string-based executor. Ideally its schema contains a union of the available
   tool names and their corresponding argument schemas, scoped to the current
-  Horizon.
+  Boundary.
 - **Record each actual invocation and outcome.** Dispatch expresses the model's
   request; individual tool calls still appear in lineage and the UI.
 - **Define partial failures.** A failed call gets its own result without losing

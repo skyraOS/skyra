@@ -2,7 +2,7 @@
 // alone: procedures remembered per task, and calls to them that ran with zero
 // approvals and zero model steps.
 //
-// It reads the tree as replay does, deriving every Horizon, and claims
+// It reads the tree as replay does, deriving every Boundary, and claims
 // nothing the records do not say:
 //
 //	a task                  an invoke the operator emitted (a seed)
@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"slices"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/replay"
@@ -49,8 +49,8 @@ func (m Metric) String() string {
 type invoke struct {
 	stamp  string
 	r      record.Record
-	under  horizon.Horizon // the Horizon it was emitted under
-	target horizon.Surface
+	under  boundary.Boundary // the Boundary it was emitted under
+	target boundary.Surface
 	name   string // the name in reach it resolved to (a reference's actor)
 }
 
@@ -153,9 +153,9 @@ func added(genesis record.Record, in invoke) bool {
 	return true
 }
 
-// within reports whether a Horizon is in frame's subtree: frame is its own
+// within reports whether a Boundary is in frame's subtree: frame is its own
 // frame or one waiting below it.
-func within(h horizon.Horizon, frame string) bool {
+func within(h boundary.Boundary, frame string) bool {
 	for f := &h; f != nil; f = f.Resume {
 		if f.Frame == frame {
 			return true

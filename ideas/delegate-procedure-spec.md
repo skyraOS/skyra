@@ -50,7 +50,7 @@ Actor selection identifies who executes the goal; model selection identifies a s
 - `tools: []`: expose no tools to the child.
 - Reject unknown or unavailable tool identifiers before starting the child; do not silently widen access or ignore invalid entries.
 - Tool identifiers resolve to concrete actor-owned contracts in the caller's available tool set. They are not arbitrary operation names or executable commands.
-- Passing a tool does not grant new authority. Existing Horizon restrictions, resource boundaries, and runtime checks still apply.
+- Passing a tool does not grant new authority. Existing Boundary restrictions, resource boundaries, and runtime checks still apply.
 - Narrowing must be enforced by execution, not merely described in the child's prompt or reflected in its visible tool list.
 - Delegation must not offer an indirect route around narrowing. Any descendant remains within the delegating child's effective authority.
 

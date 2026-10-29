@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/replay"
@@ -20,8 +20,8 @@ import (
 type journal struct {
 	t    *testing.T
 	root string
-	h    horizon.Horizon
-	wait horizon.Horizon
+	h    boundary.Boundary
+	wait boundary.Boundary
 	head string
 }
 
@@ -33,12 +33,12 @@ func newJournal(t *testing.T) *journal {
 	input := &contract.Schema{Type: "object", Required: []string{"op", "owner", "incarnation", "deliver", "read_lines", "wait_ms"}, Fields: map[string]*contract.Schema{
 		"op": str, "owner": str, "incarnation": str, "deliver": arr, "read_lines": num, "wait_ms": num, "prefix": str,
 	}}
-	reach := map[string]horizon.Surface{}
+	reach := map[string]boundary.Surface{}
 	ops := []string{"start", "exchange", "tool", "park", "stop"}
 	for _, name := range ops {
-		reach[name] = horizon.Surface{Input: input}
+		reach[name] = boundary.Surface{Input: input}
 	}
-	reach["adapter"] = horizon.Surface{Input: str, Continuation: true}
+	reach["adapter"] = boundary.Surface{Input: str, Continuation: true}
 	j := &journal{t: t, root: t.TempDir()}
 	if err := tree.Init(j.root); err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func newJournal(t *testing.T) *journal {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j.h = horizon.Horizon{Stamp: stamp, Frame: stamp, Reach: reach}
+	j.h = boundary.Boundary{Stamp: stamp, Frame: stamp, Reach: reach}
 	j.intake(map[string]any{"to": "adapter", "payload": "custody experiment"}, record.Invoke)
 	return j
 }
@@ -59,7 +59,7 @@ func (j *journal) intake(v any, want record.State) {
 	if err != nil {
 		j.t.Fatal(err)
 	}
-	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(j.h), In: in})
+	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(j.h), In: in})
 	r := machine.CommittedRecord(effects)
 	if r.State != want {
 		j.t.Fatalf("intake derived %+v, want %s", r, want)

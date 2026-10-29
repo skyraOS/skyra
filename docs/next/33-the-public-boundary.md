@@ -1,4 +1,4 @@
-# The public Horizon: ingress from strangers, read-only
+# The public Boundary: ingress from strangers, read-only
 
 Proposal: **Not in the proposal.** A direction for the website
 ([`website/`](../../website/README.md)), replacing its "live mode": no model, nothing
@@ -8,7 +8,7 @@ Date: 2026-10-02
 Status: proposed. The static site it sits beside is built and deployed to the
 Mac mini (`website/deploy.sh`: Caddy on loopback, kept up by launchd; the
 tunnel is Tailscale Funnel). Builds on [20](20-boundry-crossing.md) (the rule for a
-new crossing), [24](24-the-room.md) (roots, Horizons) and 16 (ingress by
+new crossing), [24](24-the-room.md) (roots, Boundaries) and 16 (ingress by
 parking), and [32](../design/procedures.md) (procedures and system syscalls).
 
 ## The idea
@@ -16,15 +16,15 @@ parking), and [32](../design/procedures.md) (procedures and system syscalls).
 The website's live mode put Codex behind a public endpoint. That brings
 everything a public model needs: prompt injection as the normal case, a spend
 cap, and native execution
-that is only detected. All of it goes away if the public Horizon holds **no
+that is only detected. All of it goes away if the public Boundary holds **no
 model, no interpreter, and nothing that writes**:
 
-> A stranger's request is a run. It is committed under a Horizon that can only
+> A stranger's request is a run. It is committed under a Boundary that can only
 > read what is already published, and its records are handed back so the
 > stranger can replay them.
 
 What the public can do is read, and try to read further. What they get back is
-a lineage, including the fault when they reach past the Horizon. The Verify
+a lineage, including the fault when they reach past the Boundary. The Verify
 page replays it: **your own request, and your own failed attempt, checked in
 your own browser.**
 
@@ -38,18 +38,18 @@ in its reach leads there.
 | Surface | What it does | Authority |
 |---|---|---|
 | `read` | reads one published file or lists one directory (the existing target) | `read`: the published folder only, subpath scope |
-| `roots` | reports what the Horizon can see (the existing target) | none |
+| `roots` | reports what the Boundary can see (the existing target) | none |
 | `replay` | new: given a head in the public tree, re-derives it and returns the verdict and the bundle `website/export` writes | `read`: the public tree only |
 
 No `write`, no `codex`, no interpreter, no `connect`, no network. Syscalls go
 to `system`: `{"to":"system","payload":{"narrow":{…}}}` only narrows.
 The public root exposes only that syscall's contract, not `strand` or
 `extend-reach`. No actor here remembers work or adds a contract. Every
-instruction still passes intake under the public Horizon; composition
+instruction still passes intake under the public Boundary; composition
 cannot give a procedure more authority than its caller holds.
 
 The sandbox is what enforces this; the targets check nothing. A request to read
-`~/.ssh`, `../../.skyra` or the personal tree is either a horizon fault at
+`~/.ssh`, `../../.skyra` or the personal tree is either a boundary fault at
 intake or an OS denial reported as data, and either way it is a record.
 
 ## The host
@@ -78,8 +78,8 @@ POST /run   {"to": "read", "payload": {"path": "runs/index.json"}}
 
 | Question (20) | For public ingress |
 |---|---|
-| Who emits it, who checks it? | a stranger emits the request; the host checks only size and rate. The payload is untrusted bytes, interpreted at intake against the public Horizon like any target output (invariant 1) |
-| Is it authority? | no. A request names a surface and a payload. The Horizon comes from the public root's genesis, never from the request |
+| Who emits it, who checks it? | a stranger emits the request; the host checks only size and rate. The payload is untrusted bytes, interpreted at intake against the public Boundary like any target output (invariant 1) |
+| Is it authority? | no. A request names a surface and a payload. The Boundary comes from the public root's genesis, never from the request |
 | Is it state the runtime acts on? | it is an observation: the bytes received, stored and hashed. What the runtime acts on is derived from it |
 | Does it name an actor? | no new one. `read` and `roots` exist; `replay` is a leaf like them |
 | Is it a descriptor? | no. The host passes bytes to `skyra boot`; no descriptor reaches it from outside |

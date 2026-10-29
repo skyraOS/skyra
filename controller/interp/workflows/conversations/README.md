@@ -4,13 +4,13 @@ This bundle implements the reconstruction foundation of proposal 33. It
 does not replace production conversation lifecycle or sidebar routing.
 
 `reconstruct-conversation` reads the owning user adapter's checkpoint,
-invokes the Horizon's `system.strand` with its root, accepted leaves and
+invokes the Boundary's `system.trace` with its root, accepted leaves and
 selected contract, then calls the user adapter's pure projection operation.
 `reconstruct-state` applies that procedure to every supplied conversation
 reference and assembles one full app snapshot. Empty collections work.
 Neither procedure starts provider work. The reference list and live-custody
 availability must come from an authorized caller in the conversation's
-Horizon; cross-root management discovery is not implemented here.
+Boundary; cross-root management discovery is not implemented here.
 
 Register the ordinary interpreter declaration together with this bundle:
 
@@ -52,7 +52,7 @@ revives descriptors. Production acceptance notification, checkpoint
 publication and management recovery routing still need wiring.
 
 The tree result is version 1: root, normalized frontier, visible records,
-causal order, visible Horizon metadata, opacity boundaries and supplied-leaf
+causal order, visible Boundary metadata, opacity boundaries and supplied-leaf
 coverage. Visible intake faults also carry their observed input as bytes
 (base64 in JSON), including malformed emissions. Narrowed internals stay
 opaque; their final boundary results remain visible. Child completion is

@@ -13,20 +13,20 @@ import (
 
 var agentIn = &proc.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*proc.Schema{"text": {Type: "string"}}}
 
-func fixture(t *testing.T) (remember.Strand, string) {
+func fixture(t *testing.T) (remember.Trace, string) {
 	t.Helper()
 	b, err := os.ReadFile("remember/testdata/relay.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var f struct {
-		Observation string          `json:"observation"`
-		Strand      remember.Strand `json:"strand"`
+		Observation string         `json:"observation"`
+		Trace       remember.Trace `json:"trace"`
 	}
 	if err := json.Unmarshal(b, &f); err != nil {
 		t.Fatal(err)
 	}
-	return f.Strand, f.Observation
+	return f.Trace, f.Observation
 }
 
 func ask(obs, target string) json.RawMessage {
@@ -43,15 +43,15 @@ func tools() map[string]*proc.Schema {
 	return map[string]*proc.Schema{"agent": agentIn, "echo": agentIn, "interpreter": rememberContract()}
 }
 
-// remember's body: the strand, the compile, the extension, then what was
+// remember's body: the trace, the compile, the extension, then what was
 // remembered. The first step is a syscall; the interpreter extends itself.
 func TestRememberRunsItsBody(t *testing.T) {
 	store := proc.Store{Dir: t.TempDir()}
 	st, obs := fixture(t)
 	e := envelope{Frame: strings.Repeat("1", 64), Input: ask(obs, "agent"), Tools: tools()}
 	out, err := runRemember(store, e)
-	if err != nil || !strings.Contains(string(out), `"to":"system"`) || !strings.Contains(string(out), `"strand"`) {
-		t.Fatalf("remember's first step is the strand syscall: %s %v", out, err)
+	if err != nil || !strings.Contains(string(out), `"to":"system"`) || !strings.Contains(string(out), `"trace"`) {
+		t.Fatalf("remember's first step is the trace syscall: %s %v", out, err)
 	}
 	e.Steps = []proc.Step{ret(st)}
 	out, err = runRemember(store, e)
@@ -66,7 +66,7 @@ func TestRememberRunsItsBody(t *testing.T) {
 }
 
 // A second remember through the same contract is refused, from the same
-// Horizon and from another (the store is the interpreter's, not a Horizon's),
+// Boundary and from another (the store is the interpreter's, not a Boundary's),
 // before anything is stored or extended. So is remembering a run of the
 // procedure itself: a second representation of the same contract.
 func TestRememberRefusesASecondRepresentation(t *testing.T) {
@@ -77,16 +77,16 @@ func TestRememberRefusesASecondRepresentation(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := tools()
-	delete(other, "echo") // another Horizon
+	delete(other, "echo") // another Boundary
 	again := envelope{Frame: strings.Repeat("2", 64), Input: ask(obs, "agent"), Tools: other, Steps: []proc.Step{ret(st)}}
 	out, err := runRemember(store, again)
 	if err != nil || !strings.Contains(string(out), "one representation per contract") || strings.Contains(string(out), "extend-reach") {
 		t.Fatalf("a second remember is refused before extend-reach: %s %v", out, err)
 	}
 
-	// A run of the procedure itself: the strand ends at the interpreter's
+	// A run of the procedure itself: the trace ends at the interpreter's
 	// invoke of the contract it already implements.
-	own := remember.Strand{Chain: st.Chain, Records: map[string]remember.Record{}, Opaque: st.Opaque}
+	own := remember.Trace{Chain: st.Chain, Records: map[string]remember.Record{}, Opaque: st.Opaque}
 	cause := st.Chain[len(st.Chain)-1]
 	for k, r := range st.Records {
 		if k == cause {
@@ -104,19 +104,19 @@ func TestRememberRefusesASecondRepresentation(t *testing.T) {
 	}
 }
 
-// A strand the kernel refused comes back as remember's refusal.
-func TestRememberPassesOnAStrandRefusal(t *testing.T) {
+// A trace the kernel refused comes back as remember's refusal.
+func TestRememberPassesOnATraceRefusal(t *testing.T) {
 	e := envelope{Frame: strings.Repeat("4", 64), Input: ask(strings.Repeat("a", 64), "agent"), Tools: tools(),
-		Steps: []proc.Step{{State: "fault", Fault: &proc.Fault{Kind: "horizon", Cause: "strand: no invoke of agent through that contract caused this observation"}}}}
+		Steps: []proc.Step{{State: "fault", Fault: &proc.Fault{Kind: "boundary", Cause: "trace: no invoke of agent through that contract caused this observation"}}}}
 	out, err := runRemember(proc.Store{Dir: t.TempDir()}, e)
-	if err != nil || !strings.Contains(string(out), `"refused":"strand: no invoke`) {
+	if err != nil || !strings.Contains(string(out), `"refused":"trace: no invoke`) {
 		t.Fatalf("%s %v", out, err)
 	}
 }
 
 var resume = &proc.Schema{Title: "resume", Type: "object", Required: []string{"resume"}, Fields: map[string]*proc.Schema{"resume": {Type: "any"}}}
 
-// remembered stores the procedure the relay strand compiles to.
+// remembered stores the procedure the relay trace compiles to.
 func remembered(t *testing.T, store proc.Store) {
 	t.Helper()
 	st, obs := fixture(t)
@@ -220,7 +220,7 @@ func TestADifferentEdgeResumesTheModelThere(t *testing.T) {
 		Tools: tools(), Contracts: map[string][]*proc.Schema{"agent": {agentIn, resume}}}
 	out, _ := runProcedure(store, e, agentIn)
 	ins := emitted(t, out)
-	// echo answers the first call with a number: not the strand's base type.
+	// echo answers the first call with a number: not the trace's base type.
 	e.Steps = []proc.Step{
 		{To: "echo", Payload: ins[0].Payload, State: "return", Value: json.RawMessage(`42`)},
 		{To: "echo", Payload: ins[1].Payload, State: "return", Value: json.RawMessage(`"relayed"`)},
@@ -273,7 +273,7 @@ func TestAFaultFallsBack(t *testing.T) {
 	e := envelope{Frame: strings.Repeat("d", 64), Input: json.RawMessage(`{"text":"relay:new"}`), Contract: agentIn, Tools: tools()}
 	out, _ := runProcedure(store, e, agentIn)
 	ins := emitted(t, out)
-	fault := &proc.Fault{Kind: "horizon", Cause: `"echo" is not in reach`}
+	fault := &proc.Fault{Kind: "boundary", Cause: `"echo" is not in reach`}
 	e.Steps = []proc.Step{{To: "", State: "fault", Fault: fault, Payload: ins[0].Payload}, {State: "fault", Fault: fault, Payload: ins[1].Payload}}
 	out, err := runProcedure(store, e, agentIn)
 	if fell := emitted(t, out); err != nil || fell[0].To != "agent" {
@@ -311,8 +311,8 @@ func TestTheModelWritesTheRefinements(t *testing.T) {
 		t.Fatalf("it is shown names and presentations, never a hash: %s", ins[0].Payload)
 	}
 	for _, bad := range []struct{ answer, why string }{
-		{`{"header":"input.txt.startsWith(\"relay:\")"}`, "error on its own strand"},
-		{`{"header":"input.text.startsWith(\"other:\")"}`, "refuses the strand it was compiled from"},
+		{`{"header":"input.txt.startsWith(\"relay:\")"}`, "error on its own trace"},
+		{`{"header":"input.text.startsWith(\"other:\")"}`, "refuses the trace it was compiled from"},
 	} {
 		e.Steps = append(e.Steps, ret(json.RawMessage(bad.answer)))
 		out, _ = runRemember(store, e)

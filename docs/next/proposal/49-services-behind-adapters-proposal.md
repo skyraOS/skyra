@@ -11,7 +11,7 @@ above all. Residents leave the kernel and the runtime. Builds on
 [45](45-address-spaces-threads-slots-proposal.md) (the c-list). Replaces the
 resident launch of [47](47-one-provider-sandbox-proposal.md) and the
 kernel-maintained resource instance of
-[`HORIZON-CONCERNS-SPEC.md`](../../design/HORIZON-CONCERNS-SPEC.md) §4.
+[`BOUNDARY-CONCERNS-SPEC.md`](../../design/BOUNDARY-CONCERNS-SPEC.md) §4.
 
 ## Summary
 
@@ -26,7 +26,7 @@ actor is a proxy, a model or `cat` makes no difference to the kernel.
    permissions it needs to run, pinned with its hash. The contract's grant is
    tied to one API: the granular permissions one invocation through it needs
    on top of that. An invocation's profile is the union of the two (48). The
-   kernel renders nothing per Horizon and nothing per provider, and accepts
+   kernel renders nothing per Boundary and nothing per provider, and accepts
    grants only from registration.
 3. **Anything long-lived sits behind one adapter we own, in front of one
    service host we own.** The service host keeps long-lived programs running,
@@ -63,7 +63,7 @@ Recorded 2026-10-27.
 ## What a resident is today, and why it goes
 
 A resident is an exec the kernel lets outlive the step (`machine.StartResident`,
-`instance.startResident`). The kernel renders its profile from the Horizon. For
+`instance.startResident`). The kernel renders its profile from the Boundary. For
 a model CLI, the runtime first prepares a private home, an egress proxy, a
 keychain broker, the CLI's config and its model catalog (`runtime/launch`, with
 `codex/launch` and `claude/launch`). It then hands the process's stdio to a
@@ -78,7 +78,7 @@ and it pulls a lot into core and runtime:
 - **Who may use the process:** `Surface.Resident`, `Connection`,
   `CloseConnection`, `ResourceOwnerDepth`.
 - **What a provider needs to run:** `Surface.ResidentProfile`, `ProxyHosts`,
-  `ProxyPath`, `Provider`, `Args`, plus `horizon.ResidentPaths` and
+  `ProxyPath`, `Provider`, `Args`, plus `boundary.ResidentPaths` and
   `RenderResident`.
 - **Model-specific setup:** Codex's `config.toml` and model catalog, Claude's
   settings.
@@ -194,7 +194,7 @@ up, listed. Today those are hard-coded in `RenderResident`.
 
 - **The CLI's sandbox is fixed when its session opens, not rendered per call.**
   A delegate child no longer gets a narrower CLI profile. What a call may do
-  is enforced in two places instead: which contracts its Horizon holds, and
+  is enforced in two places instead: which contracts its Boundary holds, and
   every tool call the model makes. Native tools are off, so those calls come
   back through the kernel and are recorded. The CLI's own sandbox is defense
   in depth.
@@ -213,15 +213,15 @@ up, listed. Today those are hard-coded in `RenderResident`.
 |---|---|
 | `StartResident`, the resident branch of `release` | `core/machine/protocol.go`, `machine.go:244-251` |
 | `edgeSocket`, `SKYRA_RESIDENT`, `SKYRA_OWNER_FRAME`, `Run.Resident`, `Instance.Sockets` | `core/machine/execution.go`, `protocol.go` |
-| `Surface.Resident`, `Connection`, `CloseConnection`, `ResourceOwnerDepth`, `Args`, `ResidentProfile`, `ProxyHosts`, `ProxyPath`, `Provider` | `core/horizon/horizon.go`, `runtime/registry/registry.go` |
-| `ResidentPaths`, `RenderResident`, `ResidentProgram` | `core/horizon/resident.go` |
+| `Surface.Resident`, `Connection`, `CloseConnection`, `ResourceOwnerDepth`, `Args`, `ResidentProfile`, `ProxyHosts`, `ProxyPath`, `Provider` | `core/boundary/boundary.go`, `runtime/registry/registry.go` |
+| `ResidentPaths`, `RenderResident`, `ResidentProgram` | `core/boundary/resident.go` |
 | `startResident`, `startHolder`, `edgeLog` | `runtime/instance/instance.go` |
 | `runtime/launch`, `runtime/hold`, `skyra hold` | the service host |
 | `codex/launch`, `claude/launch`, `codex/resident`, `claude/resident` | registrations, and the `codex` and `claude` procedures |
 
 What remains in `runtime/instance` is `run`, `spawn`, the read and write paths
 and `park`. None of it knows that a long-lived process exists. These removals
-change Horizon bytes. Old conversations are not kept replayable (decision 1).
+change Boundary bytes. Old conversations are not kept replayable (decision 1).
 
 ## Open questions
 

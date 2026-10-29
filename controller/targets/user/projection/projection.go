@@ -1,4 +1,4 @@
-// Package projection formats Horizon-supplied conversation work for the
+// Package projection formats Boundary-supplied conversation work for the
 // existing Skyra.app snapshot protocol. It performs no I/O or provider work.
 package projection
 
@@ -24,7 +24,7 @@ type Record struct {
 	Author, Nonce                        string
 }
 type Fault struct{ Kind, Cause string }
-type Horizon struct {
+type Boundary struct {
 	Stamp     string                     `json:"stamp"`
 	Surface   json.RawMessage            `json:"surface"`
 	Frame     string                     `json:"frame"`
@@ -37,19 +37,19 @@ type Horizon struct {
 		Reach     []string
 		Authority json.RawMessage
 	} `json:"refs"`
-	Forked bool     `json:"forked"`
-	Resume *Horizon `json:"resume"`
+	Forked bool      `json:"forked"`
+	Resume *Boundary `json:"resume"`
 }
 type Tree struct {
-	Version  int                `json:"version"`
-	Root     string             `json:"root"`
-	Frontier []string           `json:"frontier"`
-	Records  map[string]Record  `json:"records"`
-	Order    []string           `json:"order"`
-	Horizons map[string]Horizon `json:"horizons"`
-	Opaque   map[string]string  `json:"opaque"`
-	Covered  map[string]string  `json:"covered"`
-	Inputs   map[string][]byte  `json:"inputs"`
+	Version    int                 `json:"version"`
+	Root       string              `json:"root"`
+	Frontier   []string            `json:"frontier"`
+	Records    map[string]Record   `json:"records"`
+	Order      []string            `json:"order"`
+	Boundaries map[string]Boundary `json:"boundaries"`
+	Opaque     map[string]string   `json:"opaque"`
+	Covered    map[string]string   `json:"covered"`
+	Inputs     map[string][]byte   `json:"inputs"`
 }
 type Availability struct {
 	InputLive        bool `json:"input_live"`
@@ -76,7 +76,7 @@ type SurfaceView struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
 }
-type HorizonView struct {
+type BoundaryView struct {
 	ID     string        `json:"id"`
 	Root   bool          `json:"root"`
 	Actors []string      `json:"actors"`
@@ -84,11 +84,11 @@ type HorizonView struct {
 	Grants int           `json:"grants"`
 }
 type Conversation struct {
-	Conversation     string        `json:"conversation"`
-	Phase            string        `json:"phase"`
-	Entries          []Entry       `json:"entries"`
-	Horizons         []HorizonView `json:"horizons"`
-	PendingRequestID *string       `json:"pendingRequestId"`
+	Conversation     string         `json:"conversation"`
+	Phase            string         `json:"phase"`
+	Entries          []Entry        `json:"entries"`
+	Boundaries       []BoundaryView `json:"boundaries"`
+	PendingRequestID *string        `json:"pendingRequestId"`
 }
 type Request struct {
 	RequestID string `json:"requestId"`
@@ -113,7 +113,7 @@ type Snapshot struct {
 // In particular only a joined outcome completes a request. No descriptor
 // liveness is inferred from historical records.
 func ConversationState(id string, root string, tr Tree, availability Availability) (View, error) {
-	out := View{Conversation: Conversation{Conversation: id, Phase: "closed", Entries: []Entry{}, Horizons: []HorizonView{}}, Requests: []Request{}}
+	out := View{Conversation: Conversation{Conversation: id, Phase: "closed", Entries: []Entry{}, Boundaries: []BoundaryView{}}, Requests: []Request{}}
 	if id == "" || tr.Version != 1 || tr.Root != root || len(tr.Frontier) == 0 {
 		return out, fmt.Errorf("invalid retained conversation tree")
 	}
@@ -146,7 +146,7 @@ func ConversationState(id string, root string, tr Tree, availability Availabilit
 		if !ok {
 			return out, fmt.Errorf("tree order names missing work")
 		}
-		h := tr.Horizons[s]
+		h := tr.Boundaries[s]
 		frame := h.Frame
 		if call, ok := tr.Opaque[s]; ok {
 			frame = call
@@ -262,7 +262,7 @@ func ConversationState(id string, root string, tr Tree, availability Availabilit
 	for i := range out.Conversation.Entries {
 		out.Conversation.Entries[i].TS = i
 	}
-	out.Conversation.Horizons = views(tr)
+	out.Conversation.Boundaries = views(tr)
 	return out, nil
 }
 
@@ -331,10 +331,10 @@ func compact(raw json.RawMessage) []byte {
 	}
 	return b.Bytes()
 }
-func views(tr Tree) []HorizonView {
-	all := map[string]*HorizonView{}
+func views(tr Tree) []BoundaryView {
+	all := map[string]*BoundaryView{}
 	rootID := ""
-	add := func(h Horizon, actor string, isRoot bool) {
+	add := func(h Boundary, actor string, isRoot bool) {
 		ids := map[string]string{}
 		for name, s := range h.Reach {
 			ids[name] = hash(compact(s))
@@ -343,7 +343,7 @@ func views(tr Tree) []HorizonView {
 		id := hash(b)
 		v := all[id]
 		if v == nil {
-			v = &HorizonView{ID: id, Actors: []string{}, Reach: []SurfaceView{}}
+			v = &BoundaryView{ID: id, Actors: []string{}, Reach: []SurfaceView{}}
 			for name, identity := range ids {
 				v.Reach = append(v.Reach, SurfaceView{name, identity})
 			}
@@ -369,7 +369,7 @@ func views(tr Tree) []HorizonView {
 		}
 	}
 	for _, stamp := range tr.Order {
-		h, ok := tr.Horizons[stamp]
+		h, ok := tr.Boundaries[stamp]
 		if !ok {
 			continue
 		}
@@ -381,7 +381,7 @@ func views(tr Tree) []HorizonView {
 					reach[name] = s
 				}
 			}
-			add(Horizon{Reach: reach, Authority: g.Authority}, "", false)
+			add(Boundary{Reach: reach, Authority: g.Authority}, "", false)
 		}
 	}
 	ids := []string{}
@@ -391,7 +391,7 @@ func views(tr Tree) []HorizonView {
 		}
 	}
 	slices.Sort(ids)
-	out := []HorizonView{}
+	out := []BoundaryView{}
 	if v := all[rootID]; v != nil {
 		out = append(out, *v)
 	}
@@ -418,7 +418,7 @@ func AppState(incarnation string, revision int, views []View) (Snapshot, error) 
 		default:
 			return out, fmt.Errorf("invalid phase")
 		}
-		if c.Entries == nil || c.Horizons == nil || v.Requests == nil {
+		if c.Entries == nil || c.Boundaries == nil || v.Requests == nil {
 			return out, fmt.Errorf("incomplete conversation projection")
 		}
 		out.Conversations = append(out.Conversations, c)

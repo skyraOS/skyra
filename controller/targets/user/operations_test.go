@@ -45,7 +45,7 @@ func TestReadCheckpointUsesOnlyActorStorage(t *testing.T) {
 	}
 }
 func TestProjectionRequiresExplicitAvailability(t *testing.T) {
-	handled, err := operation(json.RawMessage(`{"frame":"f","input":{"project-state":{"conversation":"c-1","checkpoint":{},"strand":{}}}}`))
+	handled, err := operation(json.RawMessage(`{"frame":"f","input":{"project-state":{"conversation":"c-1","checkpoint":{},"trace":{}}}}`))
 	if !handled || err == nil || !strings.Contains(err.Error(), "availability") {
 		t.Fatalf("missing availability: %v %v", handled, err)
 	}

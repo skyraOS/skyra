@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 )
 
-// Receipt publishes the acceptance of stamp under the Horizon id, after the
+// Receipt publishes the acceptance of stamp under the Boundary id, after the
 // successor has validated its release and before it acknowledges custody or
-// performs any target effect: a committed Horizon alone is a proposed release,
+// performs any target effect: a committed Boundary alone is a proposed release,
 // not proof of acceptance. The caller has already checked the id (the core
 // does, 41 V1). It reports whether the same receipt was already there; a
 // different one is ErrConflict.
@@ -22,7 +22,7 @@ func Receipt(root, stamp, id string) (existed bool, err error) {
 	}
 	// Put first makes the complete receipt durable, then link publishes its
 	// lookup by accepted record. Concurrent publishers cannot replace it.
-	b, _ := json.Marshal(struct{ Stamp, Horizon string }{stamp, id})
+	b, _ := json.Marshal(struct{ Stamp, Boundary string }{stamp, id})
 	hash, err := Put(root, "acceptances", b)
 	if err != nil {
 		return false, err
@@ -44,29 +44,29 @@ func Receipt(root, stamp, id string) (existed bool, err error) {
 	return existed, syncDir(dir, "acceptances dir")
 }
 
-// AcceptedHorizon reads a receipt and its content-addressed release. Records,
+// AcceptedBoundary reads a receipt and its content-addressed release. Records,
 // releases and receipts are separate: receipts never supply new authority.
-func AcceptedHorizon(root, stamp string) (horizon.Horizon, error) {
+func AcceptedBoundary(root, stamp string) (boundary.Boundary, error) {
 	if !validHash(stamp) {
-		return horizon.Horizon{}, fmt.Errorf("invalid accepted stamp")
+		return boundary.Boundary{}, fmt.Errorf("invalid accepted stamp")
 	}
 	b, err := os.ReadFile(filepath.Join(root, "acceptances", stamp))
 	if err != nil {
-		return horizon.Horizon{}, err
+		return boundary.Boundary{}, err
 	}
-	var receipt struct{ Stamp, Horizon string }
+	var receipt struct{ Stamp, Boundary string }
 	if err := json.Unmarshal(b, &receipt); err != nil {
-		return horizon.Horizon{}, err
+		return boundary.Boundary{}, err
 	}
-	if receipt.Stamp != stamp || !validHash(receipt.Horizon) {
-		return horizon.Horizon{}, fmt.Errorf("invalid acceptance receipt")
+	if receipt.Stamp != stamp || !validHash(receipt.Boundary) {
+		return boundary.Boundary{}, fmt.Errorf("invalid acceptance receipt")
 	}
-	h, err := LoadHorizon(root, receipt.Horizon)
+	h, err := LoadBoundary(root, receipt.Boundary)
 	if err != nil {
 		return h, err
 	}
 	if h.Stamp != stamp {
-		return h, fmt.Errorf("acceptance Horizon belongs to another record")
+		return h, fmt.Errorf("acceptance Boundary belongs to another record")
 	}
 	return h, nil
 }

@@ -41,11 +41,11 @@ filaments drifting through a field the pointer stirs ([next/31](../docs/next/31-
 Each frame is painted into a draw list (`Sky/SkyPaint.swift`) and drawn in a
 few instanced passes (`Sky/SkyRenderer.swift`); the tests draw frames
 offscreen and read them back. Over it, the conversation
-on screen's Horizons, as the webhost reads them from its lineage: each a faint
+on screen's Boundaries, as the webhost reads them from its lineage: each a faint
 region as wide as what it reaches, each surface in reach one star (its name
-shows under the pointer), shared stars where Horizons overlap, and a call's
+shows under the pointer), shared stars where Boundaries overlap, and a call's
 light flying to the star it invokes. Under the pointer, away from the
-conversation, a Horizon draws its constellation: its lines traced one at a
+conversation, a Boundary draws its constellation: its lines traced one at a
 time, its stars lit and named. The backdrop warps a little around the
 pointer, nearer stars more. It pauses when the window is hidden, the app is inactive, history is open,
 Focus is enabled, or Reduce Motion is enabled. The procedure overview shows

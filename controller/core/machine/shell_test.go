@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
@@ -100,8 +100,8 @@ func cleanExit(effs []Effect) bool {
 // released answers an instance's intake commit and its release: the parent
 // names self and passes its whole frame stack. What comes back is what the
 // instance does once it has acknowledged custody (or why it refused).
-func released(s Instance, self horizon.Horizon) (Instance, []Effect) {
-	return releasedWith(s, HeldHorizon(self), self.Depth())
+func released(s Instance, self boundary.Boundary) (Instance, []Effect) {
+	return releasedWith(s, HeldBoundary(self), self.Depth())
 }
 
 // releasedWith is released with the bytes the shell read and the number of
@@ -119,7 +119,7 @@ func releasedWith(s Instance, self Object, frames int) (Instance, []Effect) {
 	return Step(s, Executed{})
 }
 
-// emitted reports a target's output and answers the commit of the Horizon
+// emitted reports a target's output and answers the commit of the Boundary
 // its first successor intakes under: what comes back is that spawn.
 func emitted(s Instance, out []byte) (Instance, []Effect) {
 	return committing(Step(s, Executed{Obs: out}))

@@ -2,7 +2,7 @@ import Foundation
 
 // A port of tui/calls.go. When the agent invokes a tool, a light leaves the
 // core for the inner orbit and rides it while the tool runs, then comes home
-// when the call returns. A refused call flies to the Horizon's edge, just
+// when the call returns. A refused call flies to the Boundary's edge, just
 // outside the middle orbit, where a short arc of the edge glows amber and
 // fades. While any of this is on screen, meteors and glints wait.
 //
@@ -10,7 +10,7 @@ import Foundation
 
 enum CallMotion {
     static let out = 12.0 // frames from the core to the inner orbit
-    static let outEdge = 15.0 // frames from the core to the Horizon's edge
+    static let outEdge = 15.0 // frames from the core to the Boundary's edge
     static let ride = 3.0 // frames a light rides its orbit at least
     static let home = 6.0 // frames back to the core
     static let flare = 4.0 // frames a light flares out at the edge

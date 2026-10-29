@@ -18,7 +18,7 @@ const (
 	dim      = "120;128;146"
 	faint    = "60;66;80"
 	red      = "226;112;112"
-	amber    = "222;168;104" // a refused call: the Horizon doing its job
+	amber    = "222;168;104" // a refused call: the Boundary doing its job
 	callTo   = "169;201;206"
 )
 
@@ -446,8 +446,8 @@ func ledger(c call, width int) []segment {
 		if c.MS != nil {
 			out += fmt.Sprintf(" · %.1f s", float64(*c.MS)/1000)
 		}
-	case c.Fault == "horizon":
-		toColor, outColor, out = amber, amber, "outside the Horizon"
+	case c.Fault == "boundary":
+		toColor, outColor, out = amber, amber, "outside the Boundary"
 	case c.Fault == "contract":
 		toColor, outColor, out = amber, amber, "didn't fit "+c.To+"'s input"
 	default:

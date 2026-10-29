@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
@@ -19,7 +19,7 @@ import (
 type treeFixture struct {
 	t      *testing.T
 	dir    string
-	root   horizon.Horizon
+	root   boundary.Boundary
 	schema *contract.Schema
 }
 
@@ -32,8 +32,8 @@ func newTreeFixture(t *testing.T) *treeFixture {
 		t.Fatal(err)
 	}
 	schema := &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": {Type: "string"}}}
-	reach := map[string]horizon.Surface{"agent": {Path: "/agent", Input: schema, Continuation: true}, "echo": {Path: "/echo", Input: schema}, "system": machine.Syscalls()}
-	g := record.Record{State: record.Invoke, Reach: reach, Authority: &horizon.Authority{}, Author: "test", Nonce: t.Name()}
+	reach := map[string]boundary.Surface{"agent": {Path: "/agent", Input: schema, Continuation: true}, "echo": {Path: "/echo", Input: schema}, "system": machine.Syscalls()}
+	g := record.Record{State: record.Invoke, Reach: reach, Authority: &boundary.Authority{}, Author: "test", Nonce: t.Name()}
 	gs, err := tree.Commit(dir, g)
 	if err != nil {
 		t.Fatal(err)
@@ -44,13 +44,13 @@ func newTreeFixture(t *testing.T) *treeFixture {
 	}
 	f.Close()
 	fx := &treeFixture{t: t, dir: dir, schema: schema}
-	operator := horizon.Horizon{Stamp: gs, Frame: gs, Reach: reach}
+	operator := boundary.Boundary{Stamp: gs, Frame: gs, Reach: reach}
 	fx.root = fx.emit(operator, `{"to":"agent","payload":{"text":"root"}}`, false, 0, true)
 	return fx
 }
-func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, accept bool) horizon.Horizon {
+func (f *treeFixture) emit(under boundary.Boundary, in string, fan bool, pos int, accept bool) boundary.Boundary {
 	f.t.Helper()
-	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(under), In: []byte(in)})
+	_, effects := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(under), In: []byte(in)})
 	r := machine.CommittedRecord(effects)
 	if _, err := tree.Put(f.dir, "inputs", []byte(in)); err != nil {
 		f.t.Fatal(err)
@@ -82,7 +82,7 @@ func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, 
 		}
 		child.Close()
 	}
-	id, err := tree.PutHorizon(f.dir, h)
+	id, err := tree.PutBoundary(f.dir, h)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func (f *treeFixture) emit(under horizon.Horizon, in string, fan bool, pos int, 
 	}
 	return h
 }
-func (f *treeFixture) settle(h horizon.Horizon) {
+func (f *treeFixture) settle(h boundary.Boundary) {
 	f.t.Helper()
 	fd, err := os.Open(framePath(f.dir, h.Frame))
 	if err != nil {
@@ -111,7 +111,7 @@ func (f *treeFixture) read(leaves ...string) (RecordedTree, error) {
 func (f *treeFixture) join(predecessor string, deps []string, win bool) string {
 	return f.joinUnder(f.root, predecessor, deps, win)
 }
-func (f *treeFixture) joinUnder(parent horizon.Horizon, predecessor string, deps []string, win bool) string {
+func (f *treeFixture) joinUnder(parent boundary.Boundary, predecessor string, deps []string, win bool) string {
 	f.t.Helper()
 	b, _ := json.Marshal(machine.Observation{Frame: parent.Frame, Round: parent.Stamp, Discharges: deps})
 	r, err := machine.Resolved(predecessor, b)
@@ -152,7 +152,7 @@ func TestRecordedTreeInitializationAndValidation(t *testing.T) {
 		t.Fatalf("wrong contract: %v", err)
 	}
 	if _, err := ReadTree(f.dir, f.root.Frame, []string{f.root.Frame}, "agent", f.schema, "other"); !Refused(err) {
-		t.Fatalf("foreign Horizon: %v", err)
+		t.Fatalf("foreign Boundary: %v", err)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestRecordedTreeNarrowedChildOpacity(t *testing.T) {
 	f.settle(nr)
 	// The waiting caller acquired the reference; emulate its winning resolve.
 	join := f.join(nr.Stamp, []string{nr.Stamp}, true)
-	waiter, err := HorizonAt(f.dir, join)
+	waiter, err := BoundaryAt(f.dir, join)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestRecordedTreeNarrowedChildOpacity(t *testing.T) {
 	ir := f.emit(inner, `{"to":"`+inner.Frame+`","payload":"private result"}`, false, 0, true)
 	f.settle(ir)
 	joined := f.joinUnder(call, ir.Stamp, []string{ir.Stamp}, true)
-	resumed, err := HorizonAt(f.dir, joined)
+	resumed, err := BoundaryAt(f.dir, joined)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,21 +265,21 @@ func TestRecordedTreeNarrowedChildOpacity(t *testing.T) {
 		t.Fatal("boundary result lost its causal position")
 	}
 	if _, err := ReadTree(f.dir, f.root.Frame, []string{inner.Stamp}, "agent", f.schema, call.Stamp); !Refused(err) {
-		t.Fatalf("child walked out of Horizon: %v", err)
+		t.Fatalf("child walked out of Boundary: %v", err)
 	}
 }
 
-func TestRecordedTreeCrossRoomReadRequiresScopedContext(t *testing.T) {
+func TestRecordedTreeCrossGenesisReadRequiresScopedContext(t *testing.T) {
 	f := newTreeFixture(t)
 	// Two operator boots can occupy one tree directory. An empty Origin is
-	// not sufficient to treat the second room as the first one's Horizon.
-	_, err := ReadTreeInRoom(f.dir, f.root.Frame, []string{f.root.Frame}, "agent", f.schema, "", strings.Repeat("e", 64))
+	// not sufficient to treat the second genesis as the first one's Boundary.
+	_, err := ReadTreeInGenesis(f.dir, f.root.Frame, []string{f.root.Frame}, "agent", f.schema, "", strings.Repeat("e", 64))
 	if !Refused(err) {
-		t.Fatalf("foreign room read: %v", err)
+		t.Fatalf("foreign genesis read: %v", err)
 	}
-	tr, err := ReadTreeInRoom(f.dir, f.root.Frame, []string{f.root.Frame}, "agent", f.schema, "", f.root.Resume.Frame)
+	tr, err := ReadTreeInGenesis(f.dir, f.root.Frame, []string{f.root.Frame}, "agent", f.schema, "", f.root.Resume.Frame)
 	if err != nil || len(tr.Records) != 1 {
-		t.Fatalf("own room: %+v %v", tr, err)
+		t.Fatalf("own genesis: %+v %v", tr, err)
 	}
 }
 
@@ -322,7 +322,7 @@ func TestAcceptedCheckpointCrashGapUsesRecordedEvidence(t *testing.T) {
 	var projected projection.Tree
 	json.Unmarshal(raw, &projected)
 	view, err := projection.ConversationState("c-1", cp.RootInvocation, projected, projection.Availability{})
-	if err != nil || view.Conversation.Phase != "closed" || len(view.Conversation.Horizons) == 0 {
+	if err != nil || view.Conversation.Phase != "closed" || len(view.Conversation.Boundaries) == 0 {
 		t.Fatalf("recorded projection: %+v %v", view, err)
 	}
 }

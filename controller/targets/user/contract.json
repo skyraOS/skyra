@@ -96,7 +96,7 @@
             "availability",
             "checkpoint",
             "conversation",
-            "strand"
+            "trace"
           ],
           "fields": {
             "conversation": {
@@ -124,7 +124,7 @@
             "checkpoint": {
               "type": "any"
             },
-            "strand": {
+            "trace": {
               "type": "any"
             }
           }

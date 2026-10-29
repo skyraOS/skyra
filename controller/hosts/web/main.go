@@ -755,7 +755,7 @@ func (h *webhost) broadcast() {
 	views := []map[string]any{}
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.calls())
-		view := map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "horizons": c.lineage.horizonsNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure}
+		view := map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "boundaries": c.lineage.boundariesNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure}
 		if c.model != "" {
 			view["model"] = c.model
 		}

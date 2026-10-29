@@ -54,7 +54,7 @@ func operation(raw json.RawMessage) (bool, error) {
 				Conversation string                  `json:"conversation"`
 				Availability projection.Availability `json:"availability"`
 				Checkpoint   checkpoint.Checkpoint   `json:"checkpoint"`
-				Strand       projection.Tree         `json:"strand"`
+				Trace        projection.Tree         `json:"trace"`
 			}
 			if err := decode(args, &ask); err != nil {
 				return true, err
@@ -73,7 +73,7 @@ func operation(raw json.RawMessage) (bool, error) {
 					return true, fmt.Errorf("invalid continuation availability")
 				}
 			}
-			view, err := projection.ConversationState(ask.Conversation, ask.Checkpoint.RootInvocation, ask.Strand, ask.Availability)
+			view, err := projection.ConversationState(ask.Conversation, ask.Checkpoint.RootInvocation, ask.Trace, ask.Availability)
 			if err != nil {
 				return true, err
 			}

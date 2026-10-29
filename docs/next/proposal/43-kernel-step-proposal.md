@@ -30,7 +30,7 @@ The following are **not stored**:
 - state (`invoke`, `return`, `fault`, `resolve`) and the target named;
 - fault kind and cause;
 - deps;
-- **the Horizon, contract or emitter a step ran under.**
+- **the Boundary, contract or emitter a step ran under.**
 
 `Step` derives all of them, every time.
 
@@ -43,7 +43,7 @@ consistent:
 
 This closes the README's "records still store derived fields" gap.
 
-Storing the Horizon would not catch a shell bug that launched the wrong
+Storing the Boundary would not catch a shell bug that launched the wrong
 thing, because the shell would record the same wrong thing it did. That
 class of bug is closed by **enforcing the derived decision at launch**
 (D5, D6), not by recording it.
@@ -55,7 +55,7 @@ the following:
 
 ```text
 kernel (fresh image):
-  read head → Step derives state, Horizon and the next effect     (pure)
+  read head → Step derives state, Boundary and the next effect     (pure)
   claim the effect and commit                                     (D3)
   spawn the untrusted executable (D5) and wait for it to exit
   commit its raw output as an observation (CAS on the head)
@@ -142,7 +142,7 @@ leave fs-verity and IMA for later.
 
 Go cannot run code between fork and exec, and `sandbox-exec` is deprecated.
 The helper:
-- applies the profile rendered from the Horizon;
+- applies the profile rendered from the Boundary;
 - closes every fd except those granted (`POSIX_SPAWN_CLOEXEC_DEFAULT`);
 - applies the code-identity constraint;
 - then execs.
@@ -187,15 +187,15 @@ location, and the actor decides when to read it.
 
 **The slot is the message, and the mailbox is derived.**
 - Settling a slot stays write-once and is the delivery.
-- Nothing new is stored for the mailbox: it is the set of discharges under a Horizon that no read has consumed yet.
+- Nothing new is stored for the mailbox: it is the set of discharges under a Boundary that no read has consumed yet.
 - A read is recorded as an observation, so "unread" is derived (invariant 3).
 - A separate mailbox store is rejected: a message record next to a discharge record would be two records of one fact.
 
-**The Horizon owns the mailbox, keyed by `Origin`.** This is like a vat in E
+**The Boundary owns the mailbox, keyed by `Origin`.** This is like a vat in E
 or Goblins, not a per-actor mailbox as in Erlang.
-- The key is `Origin`, not the Horizon id. The id changes with every frame's `Stamp` and every `extend-reach`, while `Origin` stays the same for every frame that shares the Horizon.
+- The key is `Origin`, not the Boundary id. The id changes with every frame's `Stamp` and every `extend-reach`, while `Origin` stays the same for every frame that shares the Boundary.
 - The room's mailbox is origin `""`. Each narrowing gets its own.
-- Every frame under a Horizon may read its mailbox. This costs no new authority, because those frames already share reach and grants.
+- Every frame under a Boundary may read its mailbox. This costs no new authority, because those frames already share reach and grants.
 - A narrowed child has a different origin, so it cannot read its caller's mail. Isolation follows narrowing (invariant 2).
 - Messages are still addressed to a frame. An actor that wants only its own mail filters by frame, which is a selection, not ownership.
 - Because the mailbox is shared, a procedure can read results another frame has not consumed and refresh that actor's stale context.
@@ -233,7 +233,7 @@ what the actor saw at step N.
 | Area | Change |
 |---|---|
 | `core/record` | Record carries only observed fields (D1). The version is bumped, and replay reads both versions. |
-| `core/machine` | Derives the state, Horizon and effect from observations only, and derives claims as effects (D3). Phases tied to the handshake go away (D2). |
+| `core/machine` | Derives the state, Boundary and effect from observations only, and derives claims as effects (D3). Phases tied to the handshake go away (D2). |
 | `runtime/instance` | Claim → force → spawn → wait → commit → `execve` (D2, D3). `spawn`/`ReleaseChild`/the handshake are replaced. |
 | `runtime/handshake` | Removed once D2 lands. |
 | `runtime/tree` | A `claims` primitive. SQLite backend only if it benchmarks better (D4). |
@@ -257,8 +257,8 @@ what the actor saw at step N.
 - Fan-out and residents under D2 and D3 (D7). Fan-in under D8.
 - Unread mail when a frame ends (D8).
 - Credential handling: placeholders resolved only at authorized endpoints (borrowed from OpenShell).
-- Fault routing within a turn: horizon faults go back to the agent, authority faults go to the human.
-- Whether a Horizon can be represented entirely as the set of fds handed across the boundary.
+- Fault routing within a turn: boundary faults go back to the agent, authority faults go to the human.
+- Whether a Boundary can be represented entirely as the set of fds handed across the boundary.
 
 ## Audit — 2026-10-18
 

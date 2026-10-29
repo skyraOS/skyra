@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 	desktop "skyra/controller/cua/observation"
 	"skyra/controller/runtime/tree"
@@ -37,11 +37,11 @@ type call struct {
 type lineage struct {
 	root string
 
-	mu       sync.Mutex
-	records  map[string]lrec
-	turns    [][]call
-	released map[string]horizon.Horizon // every Horizon released in it, by id
-	horizons []horizonView
+	mu         sync.Mutex
+	records    map[string]lrec
+	turns      [][]call
+	released   map[string]boundary.Boundary // every Boundary released in it, by id
+	boundaries []boundaryView
 }
 
 type lrec struct {
@@ -50,11 +50,11 @@ type lrec struct {
 }
 
 func newLineage(root string) *lineage {
-	return &lineage{root: root, records: map[string]lrec{}, released: map[string]horizon.Horizon{}}
+	return &lineage{root: root, records: map[string]lrec{}, released: map[string]boundary.Boundary{}}
 }
 
-// refresh loads records committed and Horizons released since the last call
-// and re-derives the turns and Horizons. It reports whether either changed.
+// refresh loads records committed and Boundaries released since the last call
+// and re-derives the turns and Boundaries. It reports whether either changed.
 func (l *lineage) refresh() bool {
 	files, err := os.ReadDir(filepath.Join(l.root, "records"))
 	if err != nil {
@@ -62,7 +62,7 @@ func (l *lineage) refresh() bool {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	added := l.loadHorizons()
+	added := l.loadBoundaries()
 	for _, f := range files {
 		name := f.Name()
 		if strings.HasPrefix(name, ".") {
@@ -94,29 +94,29 @@ func (l *lineage) refresh() bool {
 			genesis = &x.r
 		}
 	}
-	var released []horizon.Horizon
+	var released []boundary.Boundary
 	for _, h := range l.released {
 		released = append(released, h)
 	}
-	views := horizons(genesis, released)
-	before, _ := json.Marshal(l.horizons)
+	views := boundaries(genesis, released)
+	before, _ := json.Marshal(l.boundaries)
 	after, _ := json.Marshal(views)
-	l.horizons = views
+	l.boundaries = views
 	return changed || string(before) != string(after)
 }
 
-// loadHorizons loads Horizons released since the last call. Caller holds mu.
-// A conversation recorded before Horizons were stored has none: it is drawn
+// loadBoundaries loads Boundaries released since the last call. Caller holds mu.
+// A conversation recorded before Boundaries were stored has none: it is drawn
 // from its genesis alone.
-func (l *lineage) loadHorizons() bool {
-	files, _ := os.ReadDir(filepath.Join(l.root, "horizons"))
+func (l *lineage) loadBoundaries() bool {
+	files, _ := os.ReadDir(filepath.Join(l.root, "boundaries"))
 	added := false
 	for _, f := range files {
 		id := f.Name()
 		if _, ok := l.released[id]; ok || strings.HasPrefix(id, ".") {
 			continue
 		}
-		h, err := tree.LoadHorizon(l.root, id)
+		h, err := tree.LoadBoundary(l.root, id)
 		if err != nil {
 			continue
 		}
@@ -126,16 +126,16 @@ func (l *lineage) loadHorizons() bool {
 	return added
 }
 
-func (l *lineage) horizonsNow() []horizonView {
+func (l *lineage) boundariesNow() []boundaryView {
 	if l == nil {
-		return []horizonView{}
+		return []boundaryView{}
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.horizons == nil {
-		return []horizonView{}
+	if l.boundaries == nil {
+		return []boundaryView{}
 	}
-	return l.horizons
+	return l.boundaries
 }
 
 func (l *lineage) snapshot() [][]call {
@@ -343,7 +343,7 @@ var adapters = map[string]bool{"codex": true, "claude": true}
 
 // isTool reports whether an address is a tool the agent called, rather than
 // the conversation's own plumbing: the user side, the browser, the procedure
-// actor and the Horizon's syscalls and references (through which a procedure
+// actor and the Boundary's syscalls and references (through which a procedure
 // reaches its agent), and every model adapter's steps.
 func isTool(to string) bool {
 	switch to {

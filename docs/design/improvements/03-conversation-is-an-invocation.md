@@ -3,20 +3,20 @@
 Date: 2026-09-26  
 Status: mostly built on the controller (next/16, `d27f4c5`): conversations
 are lineages with their history listed, the user side is Codex's parent, and a
-fault in a turn no longer ends the conversation. Not built: routing a horizon
+fault in a turn no longer ends the conversation. Not built: routing a boundary
 fault back into the same Codex turn, and continuing after the host restarts. Follows from DNA-19's browser path
 ([`history/dna19/user/`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/tree/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/user)) and the Codex actor's private thread ids.
 
 ## The claim
 
 > **One conversation is one invocation of a Possibility.** Its history is its
-> lineage. Its isolation is its Horizon. The user is the authority it was
+> lineage. Its isolation is its Boundary. The user is the authority it was
 > invoked under.
 
-A Possibility is the process, the port space, the Horizon and the root of the
+A Possibility is the process, the port space, the Boundary and the root of the
 frames it spawns: one object with five faces
 ([possibility-as-process](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/possibility-as-process.md)).
-Invoking one opens a conversation instance: its own Horizon, frames and log,
+Invoking one opens a conversation instance: its own Boundary, frames and log,
 and nothing it can reach outside them. In the controller's terms it is a
 [Potential](../../design/thoughts/11-the-potential.md) invoked as a
 continuation, and each message is one step in its lineage.
@@ -38,7 +38,7 @@ log: its own              no conversation data       log: its own mapping
 - **The runtime links them by handle, never by each other's names.** It carries
   conversation content as operands and interprets none of it.
 - This is conversation isolation by construction: a conversation can only name
-  what its Horizon maps, so it cannot address another conversation's log,
+  what its Boundary maps, so it cannot address another conversation's log,
   handle or thread.
 
 ## The log: observations only, history derived
@@ -49,7 +49,7 @@ An append-only log per conversation. Only observations are written:
 {"seq":1,"kind":"opened","conversation":"c-7f3a","ts":…}
 {"seq":2,"kind":"submitted","request":"r1","text":"Hello world","ts":…}
 {"seq":3,"kind":"returned","request":"r1","text":"Hello, world! What are we building today?","ts":…}
-{"seq":4,"kind":"faulted","request":"r3","kind_of_fault":"horizon","cause":"…","ts":…}
+{"seq":4,"kind":"faulted","request":"r3","kind_of_fault":"boundary","cause":"…","ts":…}
 ```
 
 - **Everything else is derived by replaying it:** the transcript, the phase,
@@ -76,16 +76,16 @@ stamps and fds survive, so there a conversation can resume from its lineage.
 The user is the parent the conversation was invoked under, so the AI's
 authority is always a narrowing of the user's:
 
-- **The AI's Horizon is issued by the user's side** and is always a subset of
+- **The AI's Boundary is issued by the user's side** and is always a subset of
   it. The AI cannot widen it, and cannot mint handles.
 - **Only the user can close the conversation.** The AI can finish a turn, but
   it cannot end the instance, and it cannot act in any other conversation.
 - **Authority faults escalate to the user.** When the AI needs something it
   was not granted, the fault climbs to the user, who grants it by issuing a new,
-  narrower Horizon or denies it. Either way the decision returns to the AI as an
+  narrower Boundary or denies it. Either way the decision returns to the AI as an
   observation it can cite ([02](02-no-silent-refusals.md), `design/faults.md`).
-- **Horizon faults go back to the AI**, not the user: it reached for something
-  outside its Horizon, and can adapt without the user being asked.
+- **Boundary faults go back to the AI**, not the user: it reached for something
+  outside its Boundary, and can adapt without the user being asked.
 - The user's messages and the AI's outputs are both observations in the log,
   but only the user's side can issue authority. Nothing the AI emits can change
   what it may do.

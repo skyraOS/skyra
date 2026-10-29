@@ -1,6 +1,6 @@
 # Think: the conversation that proposes
 
-Proposal: **In the proposal.** Its mechanism, a read-only Horizon made through `system.narrow`, was built by [38](proposal/38-think-procedure-proposal.md); think's own per-document proposal was removed on 2026-10-28 (in git history).
+Proposal: **In the proposal.** Its mechanism, a read-only Boundary made through `system.narrow`, was built by [38](proposal/38-think-procedure-proposal.md); think's own per-document proposal was removed on 2026-10-28 (in git history).
 
 Date: 2026-09-28  
 Status: proposed, not built. Pairs with [act](act.md). Builds on
@@ -41,7 +41,7 @@ new version of both.
 
 ## Read-only
 
-Think's Horizon reaches read leaves and nothing that writes. What it reads
+Think's Boundary reaches read leaves and nothing that writes. What it reads
 comes back as an observation authored by the leaf and enters think's register.
 The spec **cites** those observations by ID: the contract headers a function
 must match, the file it replaces, the listing it was planned against.
@@ -95,7 +95,7 @@ proposal, not something act improvises.
 Spec vN comes back to the user as an observation. The user may:
 
 - **pass it to act.** This is the approval: the one human decision. Act's
-  Horizon is derived from the contract it receives.
+  Boundary is derived from the contract it receives.
 - **pass it back to think** as a parameter, with improvement observations of
   their own. The user is the root, so they may author on the way down. Think
   continues, and the next compaction produces spec vN+1.
@@ -110,7 +110,7 @@ a new version is compacted, and act runs again against it.
 
 ## Cases the design must decide
 
-1. **Think tries to write:** a horizon fault. Nothing that writes is in reach.
+1. **Think tries to write:** a boundary fault. Nothing that writes is in reach.
 2. **Think returns its own text as the spec:** refused under 21. The spec is
    authored by the compaction leaf.
 3. **The spec cites an observation think never received:** refused before
@@ -134,8 +134,8 @@ a new version is compacted, and act runs again against it.
 
 ## Done when
 
-- Think runs under a Horizon with no write in reach, and a write attempt is a
-  horizon fault.
+- Think runs under a Boundary with no write in reach, and a write attempt is a
+  boundary fault.
 - Compaction is a leaf, triggered by the user or the threshold, and authors a
   spec and contract pair that cites observations by ID.
 - The user can pass a spec to act, or back to think with their own

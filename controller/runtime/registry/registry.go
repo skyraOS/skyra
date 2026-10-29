@@ -1,11 +1,11 @@
 // Package registry reads the operator's registry: which surfaces exist, where
 // their binaries are, and the contracts they declare. Only the operator reads
-// it, once, to build the room: genesis's root reach and its authority. There
+// it, once, at boot, to build genesis: the root reach and its authority. There
 // is no global registry after that.
 //
 // A surface carries no authority (next/25). An entry's "authority" is a grant
-// the operator brings into the room with it; every grant in the file becomes
-// the room's one authority, which everything under the root Horizon shares.
+// the operator brings into genesis with it; every grant in the file becomes
+// the root Boundary's one authority, which everything under it shares.
 package registry
 
 import (
@@ -17,23 +17,23 @@ import (
 	"slices"
 	"strings"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
 // Entry is one surface in the registry file. Relative paths are relative to
 // the file.
 type Entry struct {
-	WorkTool  bool                 `json:"work_tool,omitempty"`
-	Agent     *horizon.AgentConfig `json:"agent,omitempty"`
-	Path      string               `json:"path"`
-	Contract  string               `json:"contract"`
-	Connect   []string             `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
-	Host      string               `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
-	Authority horizon.Authority    `json:"authority,omitempty"` // a grant this entry brings into the room
-	State     bool                 `json:"state,omitempty"`     // the actor keeps state of its own, in .skyra/<name>/ (next/32)
-	Bundle    string               `json:"bundle,omitempty"`    // versioned authored procedure bundle, provisioned before genesis
+	WorkTool  bool                  `json:"work_tool,omitempty"`
+	Agent     *boundary.AgentConfig `json:"agent,omitempty"`
+	Path      string                `json:"path"`
+	Contract  string                `json:"contract"`
+	Connect   []string              `json:"connect,omitempty"`   // unix sockets it may reach: an adapter's actor host
+	Host      string                `json:"host,omitempty"`      // async (next/16): served by the actor host on this socket; no binary
+	Authority boundary.Authority    `json:"authority,omitempty"` // a grant this entry brings into the root Boundary
+	State     bool                  `json:"state,omitempty"`     // the actor keeps state of its own, in .skyra/<name>/ (next/32)
+	Bundle    string                `json:"bundle,omitempty"`    // versioned authored procedure bundle, provisioned before genesis
 }
 
 // Declared is what a program's contract file says about it: its input
@@ -46,38 +46,38 @@ type Declared struct {
 }
 
 // Load reads the registry and every contract it names, pins each binary by
-// content hash, and returns the room: its reach, and the authority everything
+// content hash, and returns the root Boundary: its reach, and the authority everything
 // under it shares.
-func Load(file string) (map[string]horizon.Surface, horizon.Authority, error) {
+func Load(file string) (map[string]boundary.Surface, boundary.Authority, error) {
 	var entries map[string]Entry
 	if err := strict(file, &entries); err != nil {
-		return nil, horizon.Authority{}, fmt.Errorf("registry: %w", err)
+		return nil, boundary.Authority{}, fmt.Errorf("registry: %w", err)
 	}
 	return load(file, entries)
 }
 
-func load(file string, entries map[string]Entry) (map[string]horizon.Surface, horizon.Authority, error) {
-	var room horizon.Authority
+func load(file string, entries map[string]Entry) (map[string]boundary.Surface, boundary.Authority, error) {
+	var root boundary.Authority
 	dir := filepath.Dir(file)
-	reach := map[string]horizon.Surface{}
+	reach := map[string]boundary.Surface{}
 	for name, e := range entries {
 		if name == "system" || strings.HasPrefix(name, "system.") {
-			return nil, room, fmt.Errorf("%s: the Horizon's syscalls are the runtime's, never registered", name)
+			return nil, root, fmt.Errorf("%s: the Boundary's syscalls are the runtime's, never registered", name)
 		}
 		var d Declared
 		if err := strict(resolve(dir, e.Contract), &d); err != nil {
-			return nil, room, fmt.Errorf("%s contract: %w", name, err)
+			return nil, root, fmt.Errorf("%s contract: %w", name, err)
 		}
 		if err := d.Input.Check(); err != nil {
-			return nil, room, fmt.Errorf("%s input contract: %w", name, err)
+			return nil, root, fmt.Errorf("%s input contract: %w", name, err)
 		}
 		for i, c := range d.Contracts {
 			if err := c.Check(); err != nil {
-				return nil, room, fmt.Errorf("%s contract %d: %w", name, i+1, err)
+				return nil, root, fmt.Errorf("%s contract %d: %w", name, i+1, err)
 			}
 		}
-		// Contracts enter the room in their normal form (42), so a root
-		// Horizon does not depend on the order a file lists required fields.
+		// Contracts enter genesis in their normal form (42), so a root
+		// Boundary does not depend on the order a file lists required fields.
 		d.Input = contract.Normal(d.Input)
 		for i, c := range d.Contracts {
 			d.Contracts[i] = contract.Normal(c)
@@ -85,39 +85,39 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		var bundlePath, bundleSHA string
 		if e.Bundle != "" {
 			if !e.State || !d.Continuation || e.Host != "" {
-				return nil, room, fmt.Errorf("%s: a bundle needs a stateful continuation", name)
+				return nil, root, fmt.Errorf("%s: a bundle needs a stateful continuation", name)
 			}
 			var err error
 			bundlePath, err = filepath.Abs(resolve(dir, e.Bundle))
 			if err != nil {
-				return nil, room, err
+				return nil, root, err
 			}
 			bundlePath, err = filepath.EvalSymlinks(bundlePath)
 			if err != nil {
-				return nil, room, err
+				return nil, root, err
 			}
 			b, err := os.ReadFile(bundlePath)
 			if err != nil {
-				return nil, room, err
+				return nil, root, err
 			}
 			var bundle struct {
 				Version    int
 				Procedures []struct{ Contract *contract.Schema }
 			}
 			if err := json.Unmarshal(b, &bundle); err != nil {
-				return nil, room, err
+				return nil, root, err
 			}
 			if bundle.Version != 1 || len(bundle.Procedures) == 0 {
-				return nil, room, fmt.Errorf("%s: invalid procedure bundle", name)
+				return nil, root, fmt.Errorf("%s: invalid procedure bundle", name)
 			}
 			bundleContracts := map[string]bool{}
 			for _, p := range bundle.Procedures {
 				if err := p.Contract.Check(); err != nil {
-					return nil, room, err
+					return nil, root, err
 				}
 				key := string(contract.Canonical(contract.Normal(p.Contract)))
 				if bundleContracts[key] {
-					return nil, room, fmt.Errorf("%s: bundle repeats a contract", name)
+					return nil, root, fmt.Errorf("%s: bundle repeats a contract", name)
 				}
 				bundleContracts[key] = true
 				// A bundle may implement the actor's primary contract itself.
@@ -127,7 +127,7 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 				}
 				for _, held := range d.Contracts {
 					if contract.Same(held, p.Contract) {
-						return nil, room, fmt.Errorf("%s: bundle repeats a declared contract", name)
+						return nil, root, fmt.Errorf("%s: bundle repeats a declared contract", name)
 					}
 				}
 				d.Contracts = append(d.Contracts, contract.Normal(p.Contract))
@@ -136,82 +136,82 @@ func load(file string, entries map[string]Entry) (map[string]horizon.Surface, ho
 		}
 		if e.Host != "" {
 			if e.Path != "" || len(e.Connect) > 0 || d.Continuation || len(e.Authority.Read)+len(e.Authority.Write)+len(e.Authority.Mach)+len(e.Authority.Connect) > 0 || e.Authority.Workspace != "" {
-				return nil, room, fmt.Errorf("%s: an async surface cannot carry executable authority", name)
+				return nil, root, fmt.Errorf("%s: an async surface cannot carry executable authority", name)
 			}
-			reach[name] = horizon.Surface{Host: e.Host, Input: d.Input}
+			reach[name] = boundary.Surface{Host: e.Host, Input: d.Input}
 			continue
 		}
 		if e.Path == "" {
-			return nil, room, fmt.Errorf("%s: missing executable path", name)
+			return nil, root, fmt.Errorf("%s: missing executable path", name)
 		}
 		path, err := filepath.EvalSymlinks(resolve(dir, e.Path))
 		if err != nil {
-			return nil, room, err
+			return nil, root, err
 		}
 		path, err = filepath.Abs(path)
 		if err != nil {
-			return nil, room, err
+			return nil, root, err
 		}
 		authority, err := normalizeAuthority(dir, e.Authority)
 		if err != nil {
-			return nil, room, fmt.Errorf("%s authority: %w", name, err)
+			return nil, root, fmt.Errorf("%s authority: %w", name, err)
 		}
 		if len(e.Connect) > 0 {
-			legacy := horizon.Authority{Connect: e.Connect}
+			legacy := boundary.Authority{Connect: e.Connect}
 			legacy, err = normalizeAuthority(dir, legacy)
 			if err != nil {
-				return nil, room, fmt.Errorf("%s connect: %w", name, err)
+				return nil, root, fmt.Errorf("%s connect: %w", name, err)
 			}
 			authority.Connect = append(authority.Connect, legacy.Connect...)
 		}
-		if authority.Workspace != "" && room.Workspace != "" && authority.Workspace != room.Workspace {
-			return nil, room, fmt.Errorf("%s: a second workspace %s; the room has %s", name, authority.Workspace, room.Workspace)
+		if authority.Workspace != "" && root.Workspace != "" && authority.Workspace != root.Workspace {
+			return nil, root, fmt.Errorf("%s: a second workspace %s; the root has %s", name, authority.Workspace, root.Workspace)
 		}
-		room = union(room, authority)
+		root = union(root, authority)
 		bin, err := os.ReadFile(path)
 		if err != nil {
-			return nil, room, fmt.Errorf("%s: %w", name, err)
+			return nil, root, fmt.Errorf("%s: %w", name, err)
 		}
 		var state string
 		if e.State {
-			if !horizon.ValidState(name) {
-				return nil, room, fmt.Errorf("%s: a name that keeps state is one plain lowercase segment, none of the kernel's", name)
+			if !boundary.ValidState(name) {
+				return nil, root, fmt.Errorf("%s: a name that keeps state is one plain lowercase segment, none of the kernel's", name)
 			}
 			state = name
 		}
-		reach[name] = horizon.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = boundary.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
-	if !room.Covers() {
-		return nil, room, fmt.Errorf("the workspace %s is under no read grant", room.Workspace)
+	if !root.Covers() {
+		return nil, root, fmt.Errorf("the workspace %s is under no read grant", root.Workspace)
 	}
 	for name, s := range reach {
 		if s.Agent == nil {
 			continue
 		}
 		if !s.Continuation || s.WorkTool || s.Host != "" || len(s.Agent.Operations) == 0 {
-			return nil, room, fmt.Errorf("%s: invalid agent configuration", name)
+			return nil, root, fmt.Errorf("%s: invalid agent configuration", name)
 		}
 		for _, op := range s.Agent.Operations {
 			target, ok := reach[op]
 			if !ok || op == name || target.Agent != nil || target.WorkTool || target.Host != "" {
-				return nil, room, fmt.Errorf("%s: invalid agent operation %q", name, op)
+				return nil, root, fmt.Errorf("%s: invalid agent operation %q", name, op)
 			}
 		}
 	}
-	return reach, room, nil
+	return reach, root, nil
 }
 
-// union adds a grant to the room's authority, keeping each grant once and
+// union adds a grant to the root authority, keeping each grant once and
 // the result in a stable order, so genesis is the same for the same file.
 // The order means nothing: the workspace is named, not the first read grant.
-func union(a, b horizon.Authority) horizon.Authority {
-	grants := func(x, y []horizon.PathGrant) []horizon.PathGrant {
+func union(a, b boundary.Authority) boundary.Authority {
+	grants := func(x, y []boundary.PathGrant) []boundary.PathGrant {
 		for _, g := range y {
 			if !slices.Contains(x, g) {
 				x = append(x, g)
 			}
 		}
-		slices.SortFunc(x, func(p, q horizon.PathGrant) int { return strings.Compare(p.Scope+" "+p.Path, q.Scope+" "+q.Path) })
+		slices.SortFunc(x, func(p, q boundary.PathGrant) int { return strings.Compare(p.Scope+" "+p.Path, q.Scope+" "+q.Path) })
 		return x
 	}
 	names := func(x, y []string) []string {
@@ -227,10 +227,10 @@ func union(a, b horizon.Authority) horizon.Authority {
 	if workspace == "" {
 		workspace = b.Workspace
 	}
-	return horizon.Authority{Read: grants(a.Read, b.Read), Write: grants(a.Write, b.Write), Mach: names(a.Mach, b.Mach), Connect: names(a.Connect, b.Connect), Workspace: workspace}
+	return boundary.Authority{Read: grants(a.Read, b.Read), Write: grants(a.Write, b.Write), Mach: names(a.Mach, b.Mach), Connect: names(a.Connect, b.Connect), Workspace: workspace}
 }
 
-func normalizeAuthority(dir string, a horizon.Authority) (horizon.Authority, error) {
+func normalizeAuthority(dir string, a boundary.Authority) (boundary.Authority, error) {
 	var err error
 	if a.Read, err = normalizePaths(dir, a.Read); err != nil {
 		return a, err
@@ -239,14 +239,14 @@ func normalizeAuthority(dir string, a horizon.Authority) (horizon.Authority, err
 		return a, err
 	}
 	if a.Workspace != "" {
-		paths, err := normalizePaths(dir, []horizon.PathGrant{{Path: a.Workspace, Scope: "subpath"}})
+		paths, err := normalizePaths(dir, []boundary.PathGrant{{Path: a.Workspace, Scope: "subpath"}})
 		if err != nil {
 			return a, err
 		}
 		a.Workspace = paths[0].Path
 	}
 	for i, sock := range a.Connect {
-		paths, err := normalizePaths(dir, []horizon.PathGrant{{Path: sock, Scope: "literal"}})
+		paths, err := normalizePaths(dir, []boundary.PathGrant{{Path: sock, Scope: "literal"}})
 		if err != nil {
 			return a, err
 		}
@@ -260,7 +260,7 @@ func normalizeAuthority(dir string, a horizon.Authority) (horizon.Authority, err
 	return a, nil
 }
 
-func normalizePaths(dir string, paths []horizon.PathGrant) ([]horizon.PathGrant, error) {
+func normalizePaths(dir string, paths []boundary.PathGrant) ([]boundary.PathGrant, error) {
 	for i, grant := range paths {
 		if grant.Path == "" || (grant.Scope != "literal" && grant.Scope != "subpath") {
 			return nil, fmt.Errorf("invalid path grant %+v", grant)

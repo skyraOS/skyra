@@ -25,7 +25,7 @@ have procedure entry points too.
 
 The human invokes contracts on the interpreter actor. The interpreter runs
 procedures describing future work, calling provider and host capabilities
-as needed. Each actor can reconstruct its own state through the Horizon's
+as needed. Each actor can reconstruct its own state through the Boundary's
 history syscall; that is independent of procedure execution.
 Codex supplies its exported thread and turn operations; their schemas are
 implementation inputs to these workflows, rather than the human-facing API.
@@ -37,7 +37,7 @@ desktop / browser / command-line caller
                   |
        installed procedure bodies
           /        |         \
- Horizon strand Codex       host / operator
+ Boundary strand Codex       host / operator
  reads          operations  operations
 ```
 
@@ -47,7 +47,7 @@ and returns its answer is only a migration bridge.
 
 UI-only behavior such as draft editing, hover, scrolling and rendering stays
 local. Human application actions enter through procedure contracts.
-Reconstruction remains an actor's call to the Horizon, even when a load
+Reconstruction remains an actor's call to the Boundary, even when a load
 procedure requests that actor's reconstructed view. Protocol decoding,
 bounded event handling, filesystem effects and custody retain their owners.
 
@@ -69,7 +69,7 @@ root represented by the conversation box. The user adapter can continue
 waiting for input using its existing continuation/parking pattern; this
 does not require an interpreter-owned conversation loop.
 
-Loading state is a syscall made by an actor to its Horizon. The Horizon
+Loading state is a syscall made by an actor to its Boundary. The Boundary
 returns recorded work bounded by root and leaves; the requesting user
 adapter derives transcript, calls, faults and recorded provider state.
 The interpreter's own use of that same syscall is for compiling procedures
@@ -135,7 +135,7 @@ do not treat it as input already consumed by the parent's next decision.
 
 ## Use `system.strand` for bounded tree reconstruction
 
-Today `core/machine/room.go` requires one `observation` and `contract`.
+Today `core/machine/system.go` requires one `observation` and `contract`.
 `runtime/replay.ReadStrand` climbs from that observation to its requesting
 invoke and collects predecessor chains and resolve discharges.
 
@@ -163,7 +163,7 @@ was invoked through the named contract.
 
 Reconstruction requirements:
 
-- Preserve requester-Horizon visibility and narrowed-child opacity on
+- Preserve requester-Boundary visibility and narrowed-child opacity on
   every branch. Knowing stamps grants no authority. Cross-root dispatch
   establishes scoped read context, not an arbitrary caller-supplied path.
 - Reuse predecessor/resolve-discharge traversal and replay validation
@@ -183,7 +183,7 @@ Reconstruction requirements:
   projection belongs in the requesting actor (the user adapter for this
   conversation), not the interpreter. Traversal stays provider-independent.
 
-Update `core/machine/room.go`, `ReadStrand` effect/dispatch in
+Update `core/machine/system.go`, `ReadStrand` effect/dispatch in
 `core/machine/machine.go` and `runtime/instance/instance.go`, and
 `runtime/replay/strand.go` for this additional reconstruction form.
 The user adapter owns the conversation's root/leaves slot. It records all
@@ -202,21 +202,21 @@ transcript cache.
 - `controller/interp/main.go: runRemember` emits
   `{"to":"system","payload":{"strand":...}}` on its first step. On resume
   it unmarshals the returned strand and calls `remember.Compile`.
-- `controller/core/machine/room.go: Syscalls` defines the Horizon's
+- `controller/core/machine/system.go: Syscalls` defines the Boundary's
   `system` surface with `narrow`, `extend-reach` and `strand`.
 - `controller/runtime/boot/boot.go` adds that surface to genesis reach.
-  `room.go: kept` retains `system` even when a child Horizon narrows reach.
+  `system.go: kept` retains `system` even when a child Boundary narrows reach.
 - `controller/core/machine/machine.go: release` recognizes the system
-  call and emits `ReadStrand`, using the requester's Horizon context.
+  call and emits `ReadStrand`, using the requester's Boundary context.
 - `controller/runtime/instance/instance.go` executes that effect with
   `runtime/replay.ReadStrand` and returns `StrandRead` to the machine.
 - `machine.tools/contracts` expose the reached system schemas in actor
   continuation envelopes. No check reserves `strand` for the interpreter;
-  any actor in that Horizon can invoke it, subject to contract/reach and
+  any actor in that Boundary can invoke it, subject to contract/reach and
   history-visibility checks.
 
 The interpreter is one syscall client. Procedures handle future work;
-the Horizon handles execution and records what happened. User-state
+the Boundary handles execution and records what happened. User-state
 reconstruction requires no procedure-language feature.
 
 ## Existing kernel path: not an implementation challenge
@@ -225,8 +225,8 @@ Use the ordinary invocation/return path already implemented:
 
 ```text
 user invokes interpreter.reconstruct-state
-    interpreter invokes system.strand in the caller's Horizon
-        Horizon returns the tree to the syscall's slot
+    interpreter invokes system.strand in the caller's Boundary
+        Boundary returns the tree to the syscall's slot
     kernel resumes the interpreter with that return
     interpreter invokes user projection and receives its return
     interpreter returns the assembled snapshot to its own slot
@@ -242,7 +242,7 @@ addressed to its own frame. `interpret` derives that as a return;
 the waiting caller. Parent routing is the kernel's existing responsibility.
 
 Do not introduce a special application router or operator bridge for this
-path. The syscall caller is already in its Horizon; a return follows its
+path. The syscall caller is already in its Boundary; a return follows its
 parent automatically. Actual app serialization/delivery remains transport
 work, not a new kernel routing rule. A separate deployment concern about
 enumerating legacy storage roots must not be confused with this call path.
@@ -311,7 +311,7 @@ Important facts from those local exports:
   generic shortcut for restoring local conversation state.
 - `thread/list` is provider-thread discovery. It is not the application's
   list of conversations: application history also includes faults,
-  procedure calls, scratch and Horizon context.
+  procedure calls, scratch and Boundary context.
 - `thread/unsubscribe`, archive, local deletion and process stop have
   distinct meanings. Closing a Skyra conversation must not accidentally
   archive or delete its provider thread.
@@ -380,13 +380,13 @@ stay closed unless a future reopen operation is specified.
 
 `conversation.list`: request authorized conversation references and
 reconstructed summaries from the user adapter/host-facing actor. That actor
-uses its root/leaves slots and the Horizon syscall. The procedure binds the
+uses its root/leaves slots and the Boundary syscall. The procedure binds the
 returned summaries into the UI result; no summary cache is required.
 
 `conversation.load`: trigger `reconstruct-state`, whose per-conversation
-procedure calls `user.read-checkpoint`, the Horizon's `system.strand`, and
+procedure calls `user.read-checkpoint`, the Boundary's `system.strand`, and
 `user.project-state`. The outer procedure assembles all visible views into
-the app's full snapshot through `user.project-app-state`. The Horizon owns
+the app's full snapshot through `user.project-app-state`. The Boundary owns
 history access, the user adapter owns projection/checkpoint semantics, and
 the interpreter composes these operations. The adapter may also reconstruct
 directly for its own recovery.
@@ -397,7 +397,7 @@ provider-thread creation through the installed procedure beneath that root.
 The procedure can complete while the user adapter remains waiting for input.
 
 `conversation.send`: route the structured action into the user adapter's
-conversation. It reconstructs state as needed via its Horizon, then invokes
+conversation. It reconstructs state as needed via its Boundary, then invokes
 the appropriate future-work procedure for start/resume/turn operations.
 Provider results become observations retained by the user adapter.
 
@@ -425,7 +425,7 @@ mandatory mutation-ledger database from this implementation plan.
 
 The interpreter owns procedure definitions and its own execution positions.
 The user adapter owns the conversation root/leaves slot and reconstructs
-its own state through the Horizon syscall from invocation records,
+its own state through the Boundary syscall from invocation records,
 returns, faults and workflow inputs. Ensure required facts are recorded:
 provider thread/session identity, scoped provider-home reference, catalog
 identity, workflow version, and human action request IDs. If a fact is not
@@ -458,7 +458,7 @@ lineage alone does not make an empty new home contain the provider history.
 A management root/bootstrap context is still needed for list/create/load
 before a conversation exists. It has scoped discovery/read/provisioning
 capabilities. Dispatching work into a conversation must use that
-conversation's Horizon; management grants never flow into model work.
+conversation's Boundary; management grants never flow into model work.
 
 Reconstructing a conversation after a host restart makes it readable. It
 does not automatically revive its enclosing invocation or old descriptors.
@@ -481,7 +481,7 @@ invokes finite procedures beneath the conversation root.
 Required provisioning: installed procedure bundles with manifests,
 declared contracts, content hashes and startup versioning. `interp install`
 currently installs one source into its store; it does not register that
-contract in a Horizon. Bundle installation and published contracts must
+contract in a Boundary. Bundle installation and published contracts must
 agree before a human entry point is exposed.
 
 Conditional operation selection and cleanup may eventually require
@@ -531,17 +531,17 @@ migration/fork operation exists. Do not invent tools at resume.
 |---|---|---|
 | `controller/interp/main.go`, `interp/proc/` | Provision installed procedures; add control only when a concrete future-work body requires it | Bundle installation; no user-state reconstruction or mandatory conversation repeat feature |
 | New `controller/interp/workflows/conversations/` | — | Authored procedure sources, manifest and public contracts for list/load/create/send/close/delete/refresh |
-| `core/machine/room.go`, `machine.go`, `runtime/instance/instance.go`, `runtime/replay/strand.go`, `runtime/tree` | Preserve single-observation mode; add root plus nonempty observations set | Multi-leaf reconstruction, merged closures, acceptance/boundary validation and checkpoint integration |
+| `core/machine/system.go`, `machine.go`, `runtime/instance/instance.go`, `runtime/replay/strand.go`, `runtime/tree` | Preserve single-observation mode; add root plus nonempty observations set | Multi-leaf reconstruction, merged closures, acceptance/boundary validation and checkpoint integration |
 | Operator/session host, provisionally `controller/hosts/application/` or refactored existing host | No separate conversation-state actor/database | Management bootstrap, scoped invocation discovery/dispatch, provisioning and resource custody |
 | `controller/hosts/web/main.go` | Remove `loadPast`, `seed`, `deleteConversation` and the lifecycle branches in `handle` after cutover; replace all-history `broadcast` | Generic interpreter invocation gateway, correlated results and subscriptions; retain authentication/transport/custody mechanics |
-| `controller/hosts/web/calls.go`, `horizons.go` | Move reusable projection code; remove `To == codex` as the sole turn delimiter | Project in the user adapter from Horizon-supplied recorded work, with workflow/system calls distinguishable from model tools |
-| `controller/targets/user/main.go`, `contract.json`, `targets/browser/contract.json` | Replace direct Codex orchestration with future-work procedure calls; introduce structured actions | Retain user continuation/parking; add root/leaves slot and direct Horizon syscall reconstruction with actor-owned state access |
+| `controller/hosts/web/calls.go`, `boundaries.go` | Move reusable projection code; remove `To == codex` as the sole turn delimiter | Project in the user adapter from Boundary-supplied recorded work, with workflow/system calls distinguishable from model tools |
+| `controller/targets/user/main.go`, `contract.json`, `targets/browser/contract.json` | Replace direct Codex orchestration with future-work procedure calls; introduce structured actions | Retain user continuation/parking; add root/leaves slot and direct Boundary syscall reconstruction with actor-owned state access |
 | `controller/codex/resident/main.go`, `contract.json` | Split monolithic text-input orchestration; remove migrated lifecycle choices once procedures own them | Versioned exported operation projections and bounded turn actor |
 | `controller/codex/io/main.go`, `contract.json` | Adapt only as needed for session-service access | Keep bounded I/O, partial lines, uncertain delivery and EOF semantics |
 | New `controller/codex/protocol/`, shared procedure-tool helper | Remove duplicate schema/tool-binding helpers from adapters | Pure schema projection and model-facing procedure binding |
 | `controller/codex/adapter/`, `hosts/actor/`, `run.sh` | Migrate shared helpers; later remove legacy conversation orchestration only after fixtures are replaced | Keep legacy transport demos until production replacement passes equivalent tests |
 | `controller/runtime/instance/appserver.go` | Replace always-fresh provider-home allocation with validated session-home provisioning | Preserve pinned version, proxy verification and sandbox construction |
-| `controller/core/machine/machine.go`, `core/horizon/`, `runtime/custody`, `runtime/park` | Audit ancestry-based resource ownership across added interpreter/service frames | Preserve validated custody; change owner targeting only if required by the session design |
+| `controller/core/machine/machine.go`, `core/boundary/`, `runtime/custody`, `runtime/park` | Audit ancestry-based resource ownership across added interpreter/service frames | Preserve validated custody; change owner targeting only if required by the session design |
 | Root `skyra` launcher and `controller/runtime/registry` | Stop registering only `remember` for the interpreter; provision user root/checkpoint storage and procedure call path | Provision bundle/contracts before genesis, pin all binaries and manifests, register scoped service capabilities |
 | `desktop/Sources/Skyra/{Connection,Protocol}.swift`, `Views/{Sidebar,Composer,ConversationView}.swift` | Remove local-only sidebar load and closed/failed → silently new conversation behavior | Procedure invocation requests, list summaries, loaded detail, explicit unavailable/error state and correlated create result |
 | `frontend/lib/{store,ws-client}.ts`, `protocol/{types,schemas}.ts`, `components/{Sidebar,Conversation}.tsx` | Same application routing migration | Explicit load on selection, cached views keyed by ID/revision, late-response protection |
@@ -608,7 +608,7 @@ descriptors, parked frames or provider connections.
    live/parked reads, fan-out joins, stale writers, orphan candidates and
    crashes between acceptance and checkpoint publication.
 2. **List/load through the interpreter.** Add scoped discovery/bootstrap,
-   the user adapter's Horizon syscall and actor-owned conversation projection.
+   the user adapter's Boundary syscall and actor-owned conversation projection.
    Both sidebars call list/load procedures. Reconstruct on demand with no
    database or persistent cache; prove reads start no provider turn.
 3. **Enclosing user invocation and procedure provisioning.** Preserve the
@@ -635,7 +635,7 @@ Acceptance tests must also cover:
   Each leaf's acceptance, root ancestry and contract are checked. The
   initial root-only frontier and nonterminal reads work; remembering stays
   compatible with the existing single-observation form.
-- Cross-Horizon reads are refused and narrowed child internals stay opaque.
+- Cross-Boundary reads are refused and narrowed child internals stay opaque.
   Cross-root references require scoped authorization.
 - Multi-leaf reconstruction excludes losing/orphan branches, deduplicates
   shared ancestors and preserves emission order. A slow/open branch stays

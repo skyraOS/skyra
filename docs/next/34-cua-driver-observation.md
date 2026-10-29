@@ -166,10 +166,10 @@ The bridge's entire API is observation-only. Even a direct caller of that
 socket cannot request input. The upstream Cua runtime must independently deny
 input too; hiding tools from Codex is not sufficient.
 
-Skyra currently shares registry socket grants across a Horizon. Do not claim
+Skyra currently shares registry socket grants across a Boundary. Do not claim
 that the adapter alone can connect. Every worker retaining this socket grant
 has the same bounded observation authority. Removing desktop access in a
-child Horizon requires removing the bridge socket grant as well as the tools.
+child Boundary requires removing the bridge socket grant as well as the tools.
 A narrower app scope requires a separately provisioned service and endpoint;
 the model cannot widen or reconfigure the existing one.
 
@@ -187,7 +187,7 @@ available, content, `truncated`, `degraded`, and an optional error object.
 Retain the upstream refusal code and cause. A successful empty read must be
 distinguishable from permission denial or inaccessible content.
 
-Intake contract/horizon faults remain kernel faults. Driver refusals and
+Intake contract/boundary faults remain kernel faults. Driver refusals and
 transport failures are adapter observations; the Codex adapter projects an
 error envelope as an unsuccessful tool result rather than presenting it as
 successful content. Do not invent a successful snapshot after a timeout.

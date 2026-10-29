@@ -1,12 +1,12 @@
 // Package handshake owns the socket between a parent and the successor it
 // spawned. Only those two hold it; the target never does.
 //
-//	parent → child   Horizon   the Horizon the bytes were emitted under
+//	parent → child   Boundary   the Boundary the bytes were emitted under
 //	child  → parent  StampMsg  hash of the child's committed record
-//	parent → child   Horizon   the child's own Horizon, plus its frame stack: the release
+//	parent → child   Boundary   the child's own Boundary, plus its frame stack: the release
 //
 // The frame stack is the call stack as capabilities: one directory fd per
-// frame, from the frame this Horizon's reply discharges down to the operator's.
+// frame, from the frame this Boundary's reply discharges down to the operator's.
 package handshake
 
 import (
@@ -22,16 +22,16 @@ type StampMsg struct {
 	Stamp string `json:"stamp"`
 }
 
-// Under names, by id, the Horizon a successor's input was emitted under.
+// Under names, by id, the Boundary a successor's input was emitted under.
 type Under struct {
-	Horizon string `json:"horizon"`
+	Boundary string `json:"boundary"`
 }
 
-// Release names the committed Horizon by id, with the manifest for
+// Release names the committed Boundary by id, with the manifest for
 // descriptors after its frame stack. The descriptors themselves travel in the
 // same datagram.
 type Release struct {
-	Horizon string `json:"horizon"` // the id of the committed Horizon: the child looks it up
+	Boundary string `json:"boundary"` // the id of the committed Boundary: the child looks it up
 
 }
 
@@ -54,7 +54,7 @@ func Pair() (*net.UnixConn, *os.File, error) {
 		syscall.CloseOnExec(fd)
 	}
 	// macOS caps a unix datagram at net.local.dgram.maxdgram (2 KiB) unless the
-	// socket's buffers are raised. A Horizon carries contracts and the
+	// socket's buffers are raised. A Boundary carries contracts and the
 	// continuations waiting on it, so give it room.
 	for _, fd := range fds {
 		for _, opt := range []int{syscall.SO_SNDBUF, syscall.SO_RCVBUF} {

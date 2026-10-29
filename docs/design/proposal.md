@@ -14,7 +14,7 @@ is agreed, and §12 lists what is still open.
 The long-running `root` process is replaced by one `skyra` binary. Each run of it
 is an **instance** that takes custody of one Move, interprets it, commits a
 record, and runs the target the record names under a sandbox generated from its
-Horizon. It supervises that target until every Move the target emits has been
+Boundary. It supervises that target until every Move the target emits has been
 taken over by a successor instance, then exits. No instance keeps state beyond
 its own life. Durable state lives in the `.skyra/` tree, and the machine is the
 lineage of instances, not any running process.
@@ -27,7 +27,7 @@ lineage of instances, not any running process.
                │                        commit R_N (fsync)
                │ ◀──────── stamp ────── stamp = hash(R_N)
                │   read R_N, verify
-               │ ── Horizon H_N ─────▶  N is live
+               │ ── Boundary H_N ─────▶  N is live
              exits                   2 EXECUTE
                                         render sandbox from H_N, spawn T
                                         supervise T, relay T's stdout
@@ -38,7 +38,7 @@ lineage of instances, not any running process.
                                         ◀────────────────────────── stamp ───
                                         read R_{N+1}, verify
                                         H_{N+1} = narrow(H_N, R_{N+1})
-                                        ── Horizon H_{N+1} ───────────────▶  N+1 is live
+                                        ── Boundary H_{N+1} ───────────────▶  N+1 is live
                                         T still running? → back to 2
                                         otherwise exit
 ```
@@ -64,7 +64,7 @@ fence, and the external `codex` and `user` boundaries.
   external executables whose contracts this proposal keeps.
 - [possibility-as-process](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/specs/2026-09-21/possibility-as-process.md):
   "authority is checked once, at provision". Here, provision is the release of a
-  Horizon.
+  Boundary.
 
 ## 1. Agreed decisions
 
@@ -75,8 +75,8 @@ fence, and the external `codex` and `user` boundaries.
 | D3 | **The stamp is a pointer, not a claim.** `stamp = hash(R)`. The parent reads `R` from the tree and verifies it. No secret is involved. Records are stored by hash and chained | 2026-09-23 | [03](thoughts/03-what-the-stamp-proves.md) |
 | D4 | **Three phases:** intake, execute, handoff. N's handoff is N+1's intake | 2026-09-23 | [04](thoughts/04-the-three-phases.md) |
 | D5 | **One commit per handoff.** There is no second stamp. The release writes nothing to disk. Custody moves at the successor's commit | 2026-09-23 | [05](thoughts/05-the-release-is-a-handle.md) |
-| D6 | **The release is the child's Horizon.** The parent computes it by narrowing its own Horizon with the child's commit. It is required to execute, and only the parent can issue it | 2026-09-23 | [06](thoughts/06-the-release-is-the-horizon.md) |
-| D7 | **The sandbox is rendered from the Horizon.** `.skyra/` is always denied, whatever the Horizon says | 2026-09-23 | [07](thoughts/07-the-sandbox-is-rendered-from-the-horizon.md) |
+| D6 | **The release is the child's Boundary.** The parent computes it by narrowing its own Boundary with the child's commit. It is required to execute, and only the parent can issue it | 2026-09-23 | [06](thoughts/06-the-release-is-the-boundary.md) |
+| D7 | **The sandbox is rendered from the Boundary.** `.skyra/` is always denied, whatever the Boundary says | 2026-09-23 | [07](thoughts/07-the-sandbox-is-rendered-from-the-boundary.md) |
 | D8 | **Leaves.** Registration marks an executable as a leaf. A leaf can only return: it cannot invoke and cannot be continued. Only non-leaves are resumed, and a non-leaf's supervisor is alive while it waits | 2026-09-23 | [08](thoughts/08-leaves.md) |
 | D9 | **Potentials and their states.** The addressed thing is a **Potential**: an executable applied to arguments, some possibly holes. Its states are named by the naming test "the system is in a state of ___": **resolve → invoke → return / fault**. Resolve covers everything before an instance takes custody and is always safe to restart. Invoke is custody. Return and fault are terminal, written once. "Waiting" and "running" are not states | 2026-09-23 | [10](thoughts/10-the-move-is-the-state.md), [11](thoughts/11-the-potential.md) |
 | — | Carried forward from 2026-09-22: one atomic write per step, write before execute, no persistent Scheduler, creation is emission, runtime registration is a checked write with first write winning, nondeterminism written before use, no secrets in the tree or in Moves | 2026-09-22 | [`improvements.md`](https://github.com/skyraOS/tony-stark-was-able-tobuild-this-in-a-cave/blob/b243b038919ea0c97781cf487c648f9e156fa1d2/history/dna19/root/improvements.md) |
@@ -119,7 +119,7 @@ resolve ──custody taken──▶ invoke ──▶ return
 
 - **A hole** is an argument that references a result not yet produced. Holes are
   filled by trusted intake, never by the executable, and may reference only
-  results the frame's Horizon can see.
+  results the frame's Boundary can see.
 - **Resolve is the runtime's own work, not a message.** That is why it has no
   wire variant. An Invoke Move creates a Potential in a state of resolve. If it
   has no holes, it leaves resolve as soon as an instance takes custody.
@@ -168,17 +168,17 @@ party to it.
 1. Read the Move from stdin.
 2. Read the tree and authorize the Move: contract and profile validation, source
    validation, parent references, the contamination fence (see open question 3
-   for which Horizon it is checked against).
+   for which Boundary it is checked against).
 3. Commit `R` and fsync (§3).
 4. Send `stamp = hash(R)` to the parent.
-5. Wait for the Horizon. Nothing executes before it arrives.
+5. Wait for the Boundary. Nothing executes before it arrives.
 
 A rejected Move is still committed and stamped. What is committed is a fault.
 **A stamp means "I have custody", not "I approve".**
 
 ### Phase 2: execute (T runs, trusted supervises)
 
-`Execute(h Horizon)` renders the sandbox from `h` (§5) and spawns exactly
+`Execute(h Boundary)` renders the sandbox from `h` (§5) and spawns exactly
 `h.surface`. The instance holds T's stdin and stdout, and frames and hashes each
 emission. It never interprets an emission.
 
@@ -195,7 +195,7 @@ The normal path of phase 3 writes nothing to the tree, because the successor's
 commit is the write. An instance commits only on the failure path (§8).
 
 **No separate holder.** A streaming target (Codex, `user`) keeps its instance
-alive through repeated execute → handoff cycles, one stamp and one Horizon per
+alive through repeated execute → handoff cycles, one stamp and one Boundary per
 emission. The instance already holds T's stdin, so it is also the party that
 delivers a Return into a live T (open question 6).
 
@@ -233,15 +233,15 @@ fail). Passing requires writing a matching record into `.skyra/`, which only
 from one still in the page cache. The successor stamps only after fsync, which
 is a property of the trusted binary.
 
-## 4. The Horizon
+## 4. The Boundary
 
-The release is the child's Horizon. One object serves as the release, the
+The release is the child's Boundary. One object serves as the release, the
 capability to execute, and the source of the sandbox.
 
 | Part | Kind | Contents |
 |---|---|---|
-| `stamp` | data | `hash(R)`. Binds the Horizon to one commit. The child checks it equals its own stamp |
-| `surface` | data | The binary (path plus content hash), args and entrypoint of what this frame may run, taken from `R` and covered by the parent's Horizon |
+| `stamp` | data | `hash(R)`. Binds the Boundary to one commit. The child checks it equals its own stamp |
+| `surface` | data | The binary (path plus content hash), args and entrypoint of what this frame may run, taken from `R` and covered by the parent's Boundary |
 | `grants` | data | What T's emissions may invoke. This is the ceiling for the frame's own children |
 | `os` | data | `fs` (read and write subpaths), `net` (outbound endpoints), `exec` (binaries T may spawn) |
 | `node` | fd | The frame's node, created by the parent and passed over the handshake socket (`SCM_RIGHTS`). The capability to act |
@@ -253,21 +253,21 @@ capability to execute, and the source of the sandbox.
 1. **It only narrows.** `H_{N+1} ⊆ H_N`. `narrow` intersects what `R_{N+1}` asks
    for with what `H_N` holds, across `grants` and `os`. If `surface` is not
    covered, the handoff faults.
-2. **It is computed, not stored.** `narrow` is pure, so any Horizon can be
+2. **It is computed, not stored.** `narrow` is pure, so any Boundary can be
    derived again by walking the chain of records from the root. This is what
    keeps the release free of disk writes (D5).
 3. **The fds are live and never recorded.** On restore they are gone.
-4. **`Execute(h Horizon)` is the whole signature.** Executable and args are not
+4. **`Execute(h Boundary)` is the whole signature.** Executable and args are not
    parameters, because they were committed in `R` and so cannot diverge from it.
    A hash passed into the child's own code would be a convention. The fd is what
    enforces the rule, because only the parent can issue it.
-5. **Frame 0.** The root's Horizon comes from the boot seed, the operator's grant.
-6. **A leaf's Horizon has empty `grants`.** `narrow` enforces this from the
+5. **Frame 0.** The root's Boundary comes from the boot seed, the operator's grant.
+6. **A leaf's Boundary has empty `grants`.** `narrow` enforces this from the
    registration, so a leaf's Invoke is committed as a fault at intake.
 
 ```go
-// Horizon can only be constructed from a verified release.
-type Horizon struct {
+// Boundary can only be constructed from a verified release.
+type Boundary struct {
 	Stamp   Hash
 	Surface Surface  // path, content hash, args
 	Grants  []Grant
@@ -275,7 +275,7 @@ type Horizon struct {
 	node    *os.File
 }
 
-func Execute(h Horizon) (*Target, error)
+func Execute(h Boundary) (*Target, error)
 ```
 
 ## 4a. Leaves and returns into a live target
@@ -303,10 +303,10 @@ Resume fds go one Invoke deep and are consumed by that Invoke's Return. Because
 a leaf has no descendants, they never travel further. A non-leaf child repeats
 the pattern one level down with its own supervisor.
 
-## 5. Containment: the sandbox is rendered from the Horizon
+## 5. Containment: the sandbox is rendered from the Boundary
 
 The only way out of the runtime is spawn. At spawn, the trusted part renders an
-SBPL profile from the Horizon and applies it to T (`sandbox_init` or
+SBPL profile from the Boundary and applies it to T (`sandbox_init` or
 `sandbox-exec -p`). Seatbelt only enforces what was rendered.
 
 ```text
@@ -314,14 +314,14 @@ H ──render──▶ SBPL profile ──apply at spawn──▶ T  (inherited
 ```
 
 - **`.skyra/` is always denied, both reads and writes.** This is a floor inside
-  `render`, not a Horizon field, so no Horizon can grant it.
+  `render`, not a Boundary field, so no Boundary can grant it.
 - **Deny by default.** Only what `h.os` lists is allowed.
-- **No drift.** Narrowing a Horizon narrows the sandbox automatically:
+- **No drift.** Narrowing a Boundary narrows the sandbox automatically:
   `profile_{N+1} ⊆ profile_N`.
 - **Pure.** `render` is deterministic, so a profile can be rendered again from
   the chain, and its hash in `R.profile` can be checked.
 - **Fixed for T's lifetime.** A running process cannot be re-sandboxed. A change
-  to a live T's Horizon (for example Codex `tools-add`) means a new frame and a
+  to a live T's Boundary (for example Codex `tools-add`) means a new frame and a
   new T.
 - **The network is coarse.** Seatbelt filters by address and port, not hostname
   (open question 8).
@@ -388,8 +388,8 @@ skyra fault           < move.json
 |---|---|---|
 | T dies without emitting | N | N commits a fault on its frame and exits |
 | N+1 dies before stamping | N | N commits a fault on its frame and exits |
-| Verification of `R_{N+1}` fails | Disputed: `R_{N+1}` exists but no Horizon was sent | N withholds the Horizon, kills N+1 and commits a fault, which invalidates descendants. Should not happen, since N+1 is trusted code |
-| N dies before sending the Horizon | N+1 (committed) | N+1 sees EOF with no Horizon. It cannot execute, having no node. Proposed: it faults its frame (open question 1) |
+| Verification of `R_{N+1}` fails | Disputed: `R_{N+1}` exists but no Boundary was sent | N withholds the Boundary, kills N+1 and commits a fault, which invalidates descendants. Should not happen, since N+1 is trusted code |
+| N dies before sending the Boundary | N+1 (committed) | N+1 sees EOF with no Boundary. It cannot execute, having no node. Proposed: it faults its frame (open question 1) |
 | N dies mid-execute | Nobody live; last durable fact is `R_N` | Restore faults `R_N`: it was in a state of invoke with no supervisor |
 | A crash while Potentials are in a state of resolve | The tree | **Nothing is faulted.** Nothing has run, so they are kept and can be started again once their holes fill |
 | Machine loses power | The tree | Restore faults every Potential in a state of invoke that no live instance holds. Potentials in a state of resolve are kept. A dangling handle (a provider thread the restarted app-server no longer knows) faults its frame |
@@ -404,15 +404,15 @@ about 28 ms with the first and about 8 ms with the second (open question 9).
 |---|---|
 | `root/kernel`: loop, admission, Scheduler, `Admit` exported | Removed. Admission is intake, and scheduling is the handoff's spawn |
 | `root/state`: Memory and Active in memory | `registry/` and `records/` in the tree |
-| `root/execution`: Bookkeeper frames mixing persistent and live fields (`frame.binding`) | Persistent fields become records. Live state exists only as fds in the Horizon of a running instance |
-| Horizon as an in-memory grant map | The Horizon is the release: computed by `narrow`, carrying the node fd, and the source of the sandbox |
+| `root/execution`: Bookkeeper frames mixing persistent and live fields (`frame.binding`) | Persistent fields become records. Live state exists only as fds in the Boundary of a running instance |
+| Boundary as an in-memory grant map | The Boundary is the release: computed by `narrow`, carrying the node fd, and the source of the sandbox |
 | `root/extension` and `root/creation`: `Mint` callback | Creation is emission. Registration is a request the next instance checks, then writes with exclusive create |
-| `root/boot`: builds entry points, registers, mints, launches peers | Boot is frame 0: it writes the root record from a seed Move and issues the first Horizon |
+| `root/boot`: builds entry points, registers, mints, launches peers | Boot is frame 0: it writes the root record from a seed Move and issues the first Boundary |
 | `root/ports`: framed endpoints and helper processes | Pipes wired at spawn, plus the handshake socket |
 | `root/trace`: in-memory ordered trace | The record chain is the trace |
 | `codex/`: all state inside one persistent process | Unchanged at first: run as T under a supervising instance, inside a rendered sandbox. Moving its decision state into the tree is a later option |
 | `user/`: `busy` flag and request ledger in memory | Same as `codex/` |
-| HMAC parent references keyed by an in-memory boot key | Possibly redundant inside a node, since Horizon fds already authenticate (open question 7) |
+| HMAC parent references keyed by an in-memory boot key | Possibly redundant inside a node, since Boundary fds already authenticate (open question 7) |
 
 ## 10. Order of work
 
@@ -427,9 +427,9 @@ Each stage leaves `go test -race ./...` green.
 3. **Content-addressed records.** Commit records by hash before dispatch, and
    fault running frames on restore. The in-memory kernel still runs, but the
    tree is authoritative.
-4. **Horizon and render.** Add the `os` section, a pure `narrow`, a pure
+4. **Boundary and render.** Add the `os` section, a pure `narrow`, a pure
    `render`, and `Execute(h)`. Apply the sandbox to Codex.
-5. **Instances.** Implement the three phases, the stamp and Horizon handshake,
+5. **Instances.** Implement the three phases, the stamp and Boundary handshake,
    and fan-in claims, and remove the kernel loop.
 6. **Re-point the `user` and `codex` boots** at instances, and retire
    `root/boot`'s direct wiring.
@@ -442,11 +442,11 @@ Stages 1 through 4 are useful even if stage 5 changes shape.
   creation, the Codex demo, the `user` browser loops) passes on instances.
 - From inside T, reads and writes of `.skyra/` both fail, including from
   processes T spawns.
-- A child Horizon narrower than its parent's renders a profile under which a
+- A child Boundary narrower than its parent's renders a profile under which a
   path allowed only to the parent is denied.
 - A made-up stamp, a stamp copied from another lineage, and a record with the
   wrong `input` are each rejected by the parent's verification.
-- An instance that never receives a Horizon cannot execute.
+- An instance that never receives a Boundary cannot execute.
 - Kill `-9` at every phase boundary of a scripted lineage. Restore faults the
   running frames and never produces a second result.
 - A leaf that emits an Invoke is faulted at intake. A leaf is never resumed.
@@ -455,7 +455,7 @@ Stages 1 through 4 are useful even if stage 5 changes shape.
 - Two concurrent returns into one fan-in: exactly one successor.
 - Two concurrent registrations of one executable ID: exactly one wins, and the
   other's frame faults.
-- Replay of a recorded lineage reproduces byte-identical records, Horizons and
+- Replay of a recorded lineage reproduces byte-identical records, Boundaries and
   rendered profiles.
 - `ls ⟨hole⟩` stays in a state of resolve until its dependency returns,
   survives a `kill -9` of every process while in resolve, then enters invoke
@@ -467,23 +467,23 @@ Stages 1 through 4 are useful even if stage 5 changes shape.
 
 ## 12. Open questions
 
-1. **EOF with no Horizon: strict or lenient?** The parent died after the child
+1. **EOF with no Boundary: strict or lenient?** The parent died after the child
    committed. Strict faults the child's frame. Lenient lets restore adopt it. I
    lean strict.
 2. **Fan-out.** When one emission carries several Invokes, is it one N+1 per
    Invoke (each with its own handshake), or one N+1 that commits all of them in
    one record? Partly answered by §1a: dependencies are Potentials, and fan-in
    is the last hole filling while the parent is in a state of resolve.
-3. **Which Horizon authorizes an emission at intake?** It was emitted under
+3. **Which Boundary authorizes an emission at intake?** It was emitted under
    `H_N`. Either the parent sends `H_N`'s data part with the bytes (cheaper,
    trusts the parent) or the child derives it from the chain (trusts less).
 4. **What does intake write through before it has its node?** Probably a
    write-once record slot the parent provides at spawn.
-5. **Does the Horizon carry T's pipes,** so the parent sets up all of T's wiring,
+5. **Does the Boundary carry T's pipes,** so the parent sets up all of T's wiring,
    or only the node?
 6. ~~**A Return into a live T.**~~ Closed by D8 and §4a: a resume fd in the
-   Horizon, going one Invoke deep.
-7. **Parent references.** With Horizon fds authenticating inside a node, are
+   Boundary, going one Invoke deep.
+7. **Parent references.** With Boundary fds authenticating inside a node, are
    HMAC references needed only across node boundaries? If they are needed at
    all, where does the key live?
 8. **Network.** Outbound 443, or a local proxy that T is limited to?
@@ -502,5 +502,5 @@ Stages 1 through 4 are useful even if stage 5 changes shape.
 14. **How long may a Potential stay in a state of resolve?** It needs a deadline or garbage
     collection, or a hole whose producer never runs keeps it forever.
 15. **Is "pure" a registration flag,** like leaf-ness? And is leaf-ness a
-    registration flag, or a Horizon with empty `grants` capped by registration
+    registration flag, or a Boundary with empty `grants` capped by registration
     ([09](thoughts/09-leaf-as-capability-vs-state.md))?

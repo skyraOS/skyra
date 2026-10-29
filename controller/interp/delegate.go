@@ -45,10 +45,10 @@ func runDelegate(e envelope) ([]byte, error) {
 		actor = e.Agent.Actor
 	}
 	if _, ok := e.Agents[actor]; !ok || actor == "" {
-		return failure("horizon", fmt.Sprintf("%q is not an available agent", actor))
+		return failure("boundary", fmt.Sprintf("%q is not an available agent", actor))
 	}
 	if ask.Delegate.Actor == nil && (e.Agent == nil || e.Agent.Model == "") {
-		return failure("horizon", "caller model is unavailable")
+		return failure("boundary", "caller model is unavailable")
 	}
 	if len(e.Steps) == 0 {
 		scope := map[string]any{"actor": actor, "delegated": true, "inherit_model": ask.Delegate.Actor == nil}

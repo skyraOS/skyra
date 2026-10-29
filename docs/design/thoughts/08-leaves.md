@@ -18,10 +18,10 @@ emission, and that emission must be a Return (or a Fault).
 | May emit | One Return or Fault | Invokes, and eventually its own Return |
 | Can be resumed (receive a Return) | Never | Yes: it is live while its children run |
 | Instance lifetime | One execute, one handoff, exit | Repeated execute and handoff while T runs |
-| Horizon `grants` | Empty. `narrow` enforces this from the registration | Whatever `narrow` allows |
+| Boundary `grants` | Empty. `narrow` enforces this from the registration | Whatever `narrow` allows |
 
 A leaf that emits an Invoke is caught at intake: the Invoke is not covered by
-the Horizon it ran under, so it is committed as a fault.
+the Boundary it ran under, so it is committed as a fault.
 
 ## Why this answers open question 6
 
@@ -73,6 +73,6 @@ Leaves are what guarantee the tree ends.
 
 - Registry entries carry `leaf: bool`. It is part of the registered surface, so
   it is checked at registration and cannot be claimed in a Move.
-- The Horizon gains a `resume` fd: present for any frame whose caller is live,
+- The Boundary gains a `resume` fd: present for any frame whose caller is live,
   and consumed by the frame's Return instance.
 - Open question 6 is closed.

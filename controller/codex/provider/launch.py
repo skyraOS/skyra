@@ -15,7 +15,7 @@ from sandbox import native_binary, render
 # Disabled Codex features. view_image and live web search stay on so Codex
 # can look at photos and read the internet until Skyra has its own tools
 # (proposal 38). Native reads are not recorded in the lineage. Image access
-# stays under the Horizon's read grants; web search runs at the provider.
+# stays under the Boundary's read grants; web search runs at the provider.
 FEATURES = ['apps', 'plugins', 'hooks', 'daemon_auto_start', 'browser_use',
             'browser_use_external', 'computer_use', 'image_generation',
             'multi_agent', 'multi_agent_v2', 'shell_snapshot', 'code_mode', 'code_mode_only',

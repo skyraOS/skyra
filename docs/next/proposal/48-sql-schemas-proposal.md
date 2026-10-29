@@ -116,33 +116,33 @@ COMMENT ON COLUMN contracts.grant_sha256 IS
     'What one invocation through this contract needs on top of its actor''s grant. NULL adds nothing.';
 ```
 
-## horizons
+## boundaries
 
-A horizon is a c-list: the contracts an invocation running under it may
+A boundary is a c-list: the contracts an invocation running under it may
 invoke. It holds nothing else.
 Each contract names its actor, and the actor and the contract each name a
-grant, so a horizon needs no grant of its own.
+grant, so a boundary needs no grant of its own.
 
-A horizon is named by the hash of its entries in canonical form: one line per
+A boundary is named by the hash of its entries in canonical form: one line per
 entry, "contract_sha256\tactor_sha256\n", sorted bytewise. A narrowing is a
-new horizon holding a subset of the parent's entries; a horizon is never
+new boundary holding a subset of the parent's entries; a boundary is never
 updated.
 
 ```sql
-CREATE TABLE horizons (
+CREATE TABLE boundaries (
     sha256 CHAR(64) PRIMARY KEY
 );
 
 CREATE TABLE c_list (
-    horizon_sha256  CHAR(64) NOT NULL REFERENCES horizons (sha256),
+    boundary_sha256  CHAR(64) NOT NULL REFERENCES boundaries (sha256),
     contract_sha256 CHAR(64) NOT NULL,
     actor_sha256    CHAR(64) NOT NULL,
-    PRIMARY KEY (horizon_sha256, contract_sha256, actor_sha256),
+    PRIMARY KEY (boundary_sha256, contract_sha256, actor_sha256),
     FOREIGN KEY (contract_sha256, actor_sha256)
         REFERENCES contracts (contract_sha256, actor_sha256)
 );
 
-COMMENT ON TABLE horizons IS
+COMMENT ON TABLE boundaries IS
     'A c-list: the contracts an invocation running under it may invoke, and nothing else.';
 ```
 
@@ -163,7 +163,7 @@ CREATE TABLE blobs (
 ## invocations
 
 Invocations form a tree: every invocation but the root has exactly one parent.
-`horizon_root` names the tree. A node is named by its path from the root: the
+`boundary_root` names the tree. A node is named by its path from the root: the
 root is `{0}`; its second invocation is `{0,2}`; that invocation's first is
 `{0,2,1}`. A child's number is its position among its parent's invocations,
 so it is fixed by the parent's decisions and is the same on every replay,
@@ -171,27 +171,27 @@ whatever order invocations finish in. The parent of a node is its path
 without the last element. Nodes are only added, never moved, so a path never
 changes.
 
-`horizon_sha256` is the horizon the invocation runs under: its parent's for an
+`boundary_sha256` is the boundary the invocation runs under: its parent's for an
 ordinary invocation, a narrower one for an invocation through a narrowing.
 `opened_by` is the parent's decision that opened it.
 
 ```sql
 CREATE TABLE invocations (
-    horizon_root    CHAR(64)  NOT NULL,
+    boundary_root    CHAR(64)  NOT NULL,
     path            INTEGER[] NOT NULL,
     parent_path     INTEGER[] GENERATED ALWAYS AS (trim_array(path, 1)) STORED,
     opened_by       INTEGER,
-    horizon_sha256  CHAR(64)  NOT NULL REFERENCES horizons (sha256),
+    boundary_sha256  CHAR(64)  NOT NULL REFERENCES boundaries (sha256),
     actor_sha256    CHAR(64)  NOT NULL,
     contract_sha256 CHAR(64)  NOT NULL,
     input_sha256    CHAR(64)  NOT NULL REFERENCES blobs (sha256),
-    PRIMARY KEY (horizon_root, path),
+    PRIMARY KEY (boundary_root, path),
     FOREIGN KEY (contract_sha256, actor_sha256)
         REFERENCES contracts (contract_sha256, actor_sha256),
     CHECK ((cardinality(path) = 1) = (opened_by IS NULL))
 );
 
-CREATE INDEX invocations_children ON invocations (horizon_root, parent_path);
+CREATE INDEX invocations_children ON invocations (boundary_root, parent_path);
 
 COMMENT ON TABLE invocations IS
     'The invocation tree. A node is one invocation of one contract, named by its path from the root.';
@@ -211,12 +211,12 @@ most one emission awaiting its decision.
 
 ```sql
 CREATE TABLE emissions (
-    horizon_root    CHAR(64)  NOT NULL,
+    boundary_root    CHAR(64)  NOT NULL,
     path            INTEGER[] NOT NULL,
     n               INTEGER   NOT NULL CHECK (n >= 1),
     emission_sha256 CHAR(64)  NOT NULL REFERENCES blobs (sha256),
-    PRIMARY KEY (horizon_root, path, n),
-    FOREIGN KEY (horizon_root, path) REFERENCES invocations (horizon_root, path)
+    PRIMARY KEY (boundary_root, path, n),
+    FOREIGN KEY (boundary_root, path) REFERENCES invocations (boundary_root, path)
 );
 
 COMMENT ON TABLE emissions IS
@@ -237,25 +237,25 @@ speaks the protocol is still a return, and its parent decides what it means.
 - `return`: the node is done, and its emission is its value.
 - `fault`: the node is done, with `cause_sha256` as its cause. The runtime
   faults a node only when it refuses what the emission asked for: a contract
-  its horizon does not hold, or a payload that fits no contract of the actor.
+  its boundary does not hold, or a payload that fits no contract of the actor.
 
 A node emits nothing after it returns or faults, and nothing while a child is
 open.
 
 ```sql
 CREATE TABLE decisions (
-    horizon_root CHAR(64)  NOT NULL,
+    boundary_root CHAR(64)  NOT NULL,
     path         INTEGER[] NOT NULL,
     n            INTEGER   NOT NULL,
     kind         TEXT      NOT NULL CHECK (kind IN ('invoke', 'return', 'fault')),
     cause_sha256 CHAR(64)           REFERENCES blobs (sha256),
-    PRIMARY KEY (horizon_root, path, n),
-    FOREIGN KEY (horizon_root, path, n) REFERENCES emissions (horizon_root, path, n),
+    PRIMARY KEY (boundary_root, path, n),
+    FOREIGN KEY (boundary_root, path, n) REFERENCES emissions (boundary_root, path, n),
     CHECK ((kind = 'fault') = (cause_sha256 IS NOT NULL))
 );
 
-ALTER TABLE invocations ADD FOREIGN KEY (horizon_root, parent_path, opened_by)
-    REFERENCES decisions (horizon_root, path, n);
+ALTER TABLE invocations ADD FOREIGN KEY (boundary_root, parent_path, opened_by)
+    REFERENCES decisions (boundary_root, path, n);
 
 COMMENT ON TABLE decisions IS
     'What the system chose to do with one emission: invoke, return or fault.';
@@ -267,10 +267,10 @@ Read, commit, execute. Processes are ephemeral: an actor runs, emits, and
 exits, and nothing holds it open.
 
 1. **Read.** The kernel reads a node's channel until the actor exits, stores
-   the bytes in `blobs`, and records them with `emit(horizon_root, node,
+   the bytes in `blobs`, and records them with `emit(boundary_root, node,
    emission)`, `node` being the path the channel belongs to. It then spawns
-   the successor with `(horizon_root, node)` and nothing else.
-2. **Commit.** The successor reads the node, its horizon and its emission
+   the successor with `(boundary_root, node)` and nothing else.
+2. **Commit.** The successor reads the node, its boundary and its emission
    awaiting decision, and decides: `decide_invoke` if the emission speaks the
    protocol and the invocation is allowed, `decide_fault` if it speaks the
    protocol and is refused, `decide_return` otherwise.
@@ -290,25 +290,25 @@ A crash at any point leaves a state the next cycle can start from:
 
 ## Capabilities only narrow
 
-The runtime cannot insert into `horizons`, `c_list`, `invocations`,
+The runtime cannot insert into `boundaries`, `c_list`, `invocations`,
 `emissions` or `decisions`. It calls functions that run as the schema's owner
 and check before they insert:
 
-- `narrow(parent, keep)` makes the horizon holding `keep`, every entry of which
-  must be in `parent`. It returns the new horizon's hash; narrowing to entries
-  that already form a horizon returns that one.
+- `narrow(parent, keep)` makes the boundary holding `keep`, every entry of which
+  must be in `parent`. It returns the new boundary's hash; narrowing to entries
+  that already form a boundary returns that one.
 - `emit(root, node, emission)` records an emission of a node that is not done,
   not waiting on a child, and has no emission awaiting a decision.
 - `decide_invoke(root, node, requested)` decides the node's emission as an
   `invoke` and opens the requested invocations as children, numbered after the
-  node's earlier children. Each must name a contract the node's horizon holds,
-  and run under a horizon holding nothing the node's does not. It returns the
+  node's earlier children. Each must name a contract the node's boundary holds,
+  and run under a boundary holding nothing the node's does not. It returns the
   children's paths.
 - `decide_return(root, node)` and `decide_fault(root, node, cause)` decide it
   as a `return` or a `fault`.
 
-None of them can widen a horizon, so no sequence of functions the runtime can
-call gives an invocation a capability its root did not hold. The root horizon
+None of them can widen a boundary, so no sequence of functions the runtime can
+call gives an invocation a capability its root did not hold. The root boundary
 and the root invocation `{0}` are inserted by the owner when a tree begins.
 Which node an emission belongs to comes from its channel; the database cannot
 see channels, so that rule is the kernel's.
@@ -320,7 +320,7 @@ CREATE TYPE capability AS (
 );
 
 CREATE TYPE invocation_request AS (
-    horizon_sha256  CHAR(64),
+    boundary_sha256  CHAR(64),
     contract_sha256 CHAR(64),
     actor_sha256    CHAR(64),
     input_sha256    CHAR(64)
@@ -337,7 +337,7 @@ BEGIN
         SELECT 1 FROM unnest(keep) k
         WHERE NOT EXISTS (
             SELECT 1 FROM c_list c
-            WHERE c.horizon_sha256 = parent
+            WHERE c.boundary_sha256 = parent
               AND c.contract_sha256 = k.contract_sha256
               AND c.actor_sha256 = k.actor_sha256))
     THEN
@@ -349,7 +349,7 @@ BEGIN
     FROM (SELECT DISTINCT k.contract_sha256 || E'\t' || k.actor_sha256 || E'\n' AS line
           FROM unnest(keep) k) lines;
 
-    INSERT INTO horizons VALUES (child) ON CONFLICT DO NOTHING;
+    INSERT INTO boundaries VALUES (child) ON CONFLICT DO NOTHING;
     INSERT INTO c_list
         SELECT DISTINCT child, k.contract_sha256, k.actor_sha256 FROM unnest(keep) k
         ON CONFLICT DO NOTHING;
@@ -364,37 +364,37 @@ AS $$
 DECLARE
     next_n INTEGER;
 BEGIN
-    PERFORM 1 FROM invocations i WHERE i.horizon_root = root AND i.path = node FOR UPDATE;
+    PERFORM 1 FROM invocations i WHERE i.boundary_root = root AND i.path = node FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'no invocation % in %', node, root;
     END IF;
     IF EXISTS (
         SELECT 1 FROM decisions d
-        WHERE d.horizon_root = root AND d.path = node AND d.kind IN ('return', 'fault'))
+        WHERE d.boundary_root = root AND d.path = node AND d.kind IN ('return', 'fault'))
     THEN
         RAISE EXCEPTION 'invocation % is done', node;
     END IF;
     IF EXISTS (
         SELECT 1 FROM invocations c
-        WHERE c.horizon_root = root AND c.parent_path = node
+        WHERE c.boundary_root = root AND c.parent_path = node
           AND NOT EXISTS (
               SELECT 1 FROM decisions d
-              WHERE d.horizon_root = root AND d.path = c.path
+              WHERE d.boundary_root = root AND d.path = c.path
                 AND d.kind IN ('return', 'fault')))
     THEN
         RAISE EXCEPTION 'invocation % is waiting on a child', node;
     END IF;
     IF EXISTS (
         SELECT 1 FROM emissions e
-        WHERE e.horizon_root = root AND e.path = node
+        WHERE e.boundary_root = root AND e.path = node
           AND NOT EXISTS (
               SELECT 1 FROM decisions d
-              WHERE d.horizon_root = root AND d.path = node AND d.n = e.n))
+              WHERE d.boundary_root = root AND d.path = node AND d.n = e.n))
     THEN
         RAISE EXCEPTION 'invocation % has an emission awaiting a decision', node;
     END IF;
     SELECT coalesce(max(e.n), 0) + 1 INTO next_n FROM emissions e
-    WHERE e.horizon_root = root AND e.path = node;
+    WHERE e.boundary_root = root AND e.path = node;
     INSERT INTO emissions VALUES (root, node, next_n, emission);
     RETURN next_n;
 END
@@ -409,12 +409,12 @@ AS $$
 DECLARE
     awaiting INTEGER;
 BEGIN
-    PERFORM 1 FROM invocations i WHERE i.horizon_root = root AND i.path = node FOR UPDATE;
+    PERFORM 1 FROM invocations i WHERE i.boundary_root = root AND i.path = node FOR UPDATE;
     SELECT e.n INTO awaiting FROM emissions e
-    WHERE e.horizon_root = root AND e.path = node
+    WHERE e.boundary_root = root AND e.path = node
       AND NOT EXISTS (
           SELECT 1 FROM decisions d
-          WHERE d.horizon_root = root AND d.path = node AND d.n = e.n);
+          WHERE d.boundary_root = root AND d.path = node AND d.n = e.n);
     IF awaiting IS NULL THEN
         RAISE EXCEPTION 'invocation % has no emission awaiting a decision', node;
     END IF;
@@ -433,14 +433,14 @@ DECLARE
     r        invocation_request;
 BEGIN
     awaiting := pending(root, node);
-    SELECT i.horizon_sha256 INTO held FROM invocations i WHERE i.horizon_root = root AND i.path = node;
+    SELECT i.boundary_sha256 INTO held FROM invocations i WHERE i.boundary_root = root AND i.path = node;
     IF coalesce(cardinality(requested), 0) = 0 THEN
         RAISE EXCEPTION 'an invoke decision opens at least one invocation';
     END IF;
     FOREACH r IN ARRAY requested LOOP
         IF NOT EXISTS (
             SELECT 1 FROM c_list l
-            WHERE l.horizon_sha256 = held
+            WHERE l.boundary_sha256 = held
               AND l.contract_sha256 = r.contract_sha256
               AND l.actor_sha256 = r.actor_sha256)
         THEN
@@ -448,26 +448,26 @@ BEGIN
         END IF;
         IF EXISTS (
             SELECT 1 FROM c_list l
-            WHERE l.horizon_sha256 = r.horizon_sha256
+            WHERE l.boundary_sha256 = r.boundary_sha256
               AND NOT EXISTS (
                   SELECT 1 FROM c_list p
-                  WHERE p.horizon_sha256 = held
+                  WHERE p.boundary_sha256 = held
                     AND p.contract_sha256 = l.contract_sha256
                     AND p.actor_sha256 = l.actor_sha256))
         THEN
-            RAISE EXCEPTION 'capability fault: % holds a contract % does not', r.horizon_sha256, held;
+            RAISE EXCEPTION 'capability fault: % holds a contract % does not', r.boundary_sha256, held;
         END IF;
     END LOOP;
 
     INSERT INTO decisions VALUES (root, node, awaiting, 'invoke', NULL);
 
     SELECT count(*) INTO k FROM invocations i
-    WHERE i.horizon_root = root AND i.parent_path = node;
+    WHERE i.boundary_root = root AND i.parent_path = node;
     FOREACH r IN ARRAY requested LOOP
         k := k + 1;
-        INSERT INTO invocations (horizon_root, path, opened_by, horizon_sha256,
+        INSERT INTO invocations (boundary_root, path, opened_by, boundary_sha256,
                                  actor_sha256, contract_sha256, input_sha256)
-        VALUES (root, node || k, awaiting, r.horizon_sha256,
+        VALUES (root, node || k, awaiting, r.boundary_sha256,
                 r.actor_sha256, r.contract_sha256, r.input_sha256);
         RETURN NEXT node || k;
     END LOOP;
@@ -493,10 +493,10 @@ END
 $$;
 
 CREATE ROLE skyra_runtime;
-REVOKE ALL ON horizons, c_list, invocations, emissions, decisions, blobs FROM PUBLIC;
+REVOKE ALL ON boundaries, c_list, invocations, emissions, decisions, blobs FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION narrow, emit, pending, decide_invoke, decide_return, decide_fault FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO skyra_runtime;
-GRANT SELECT ON horizons, c_list, invocations, emissions, decisions, blobs TO skyra_runtime;
+GRANT SELECT ON boundaries, c_list, invocations, emissions, decisions, blobs TO skyra_runtime;
 GRANT INSERT ON blobs TO skyra_runtime;
 GRANT EXECUTE ON FUNCTION narrow, emit, decide_invoke, decide_return, decide_fault TO skyra_runtime;
 ```
@@ -504,7 +504,7 @@ GRANT EXECUTE ON FUNCTION narrow, emit, decide_invoke, decide_return, decide_fau
 ## The grant an invocation runs under
 
 An invocation names a contract. The kernel looks it up in the parent's
-horizon; a contract the horizon does not hold is a capability fault, and the
+boundary; a contract the boundary does not hold is a capability fault, and the
 actor is never launched. Holding the contract is the authority: there is no
 second check against a grant of the parent's.
 

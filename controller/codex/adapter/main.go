@@ -249,7 +249,7 @@ func run() (string, error) {
 }
 
 // native names a capability Codex tried to use on its own. It is not in any
-// Horizon, so the runtime derives a horizon fault.
+// Boundary, so the runtime derives a boundary fault.
 // interrupt is adapter policy, not a runtime event. A terminal observation
 // for this exact turn is required; an RPC acknowledgement alone is insufficient.
 func (h *host) interrupt(frame, thread, turn string, from int) error {
@@ -324,8 +324,8 @@ func toolResult(id json.RawMessage, state string, value json.RawMessage, fault *
 }
 
 // modelTools are the capabilities Codex is shown, by the name it is shown
-// (a dynamic tool name has no dots). Under a shared Horizon (next/24) reach
-// holds every surface in the room, this adapter and the Horizon's syscalls
+// (a dynamic tool name has no dots). Under a shared Boundary (next/24) reach
+// holds every registered surface, this adapter and the Boundary's syscalls
 // included, so only these are offered, and only when they are in reach.
 var modelTools = map[string]string{"echo": "echo", "agent": "agent"}
 

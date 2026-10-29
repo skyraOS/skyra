@@ -6,17 +6,17 @@ The order to build in. Five phases; each one makes the next smaller. Detail
 stays in the linked documents; this file only keeps the order and says what
 each step unblocks.
 
-1. Strip agent elements out of Horizon
+1. Strip agent elements out of Boundary
 2. Finish the core rewrite, with the launch layer split per OS
 3. Port to Linux
 4. NVIDIA OpenShell integration
 5. Procedures
 
-## 1. Strip agent elements out of Horizon
+## 1. Strip agent elements out of Boundary
 
-[`HORIZON-CONCERNS-SPEC.md`](../design/HORIZON-CONCERNS-SPEC.md). Remove `Agent`,
-`WorkTools` and `Delegated` from `Horizon` and `Grant` in
-`controller/core/horizon/horizon.go`; move model configuration and tool catalogs into
+[`BOUNDARY-CONCERNS-SPEC.md`](../design/BOUNDARY-CONCERNS-SPEC.md). Remove `Agent`,
+`WorkTools` and `Delegated` from `Boundary` and `Grant` in
+`controller/core/boundary/boundary.go`; move model configuration and tool catalogs into
 adapter contracts; delegation stays the interpreter's `delegate` procedure.
 
 - ~~Move the Claude resident profile (`RenderClaudeResident`) from
@@ -32,7 +32,7 @@ adapter contracts; delegation stays the interpreter's `delegate` procedure.
   kernel only runs a target to its exit. Codex and Claude are programs of the
   service host (`controller/service`), reached through `service-io` by the
   session handle the adapter's steps carry. `runtime/hold`, `runtime/launch`,
-  `core/horizon/resident.go` and every resident or connection field are gone.
+  `core/boundary/resident.go` and every resident or connection field are gone.
 - Residents leave core and runtime:
   [proposal 49](proposal/49-services-behind-adapters-proposal.md). Every exec
   is stateless, the profile is what the actor declared at registration, and a
@@ -42,22 +42,22 @@ adapter contracts; delegation stays the interpreter's `delegate` procedure.
 Unblocks: the rewrite. The new kernel never has to carry agent fields, and the
 kernel stops knowing about agents.
 
-### 1b. Horizons, pipes and frames
+### 1b. Boundaries, pipes and frames
 
 [Proposal 45](proposal/45-address-spaces-threads-slots-proposal.md). Reach
-and Refs collapse into one table of pipes; a narrowing creates a Horizon, a
+and Refs collapse into one table of pipes; a narrowing creates a Boundary, a
 pipe leads into it, and a pipe's reply end is the slot. The frame stack moves
-out of `Horizon` into frames; fan-out is a cactus stack. Lands before 2b, so
+out of `Boundary` into frames; fan-out is a cactus stack. Lands before 2b, so
 the record version is bumped once.
 
-- **Rename while the table is being restructured.** "Horizon" names two
+- **Rename while the table is being restructured.** "Boundary" names two
   things today: the table of what an actor can reach, and the actor
   (`system`) that owns it and answers its syscalls. Split them:
   - the table is a **c-list** (KeyKOS, EROS, seL4's CNode): unforgeable
     handles held by index that only narrow when passed on. Use this term in
     code and design docs;
   - its holder is a **protection domain**, created by `narrow()` and entered
-    on syscalls. Keep "Horizon" for it or rename it too; decide in 45.
+    on syscalls. Keep "Boundary" for it or rename it too; decide in 45.
   - Explain it outside the docs as **an fd table for agents**: a process
     touches only what it holds a descriptor for, and a child inherits a
     subset. Accurate, since handles cross as real fds over Unix sockets, but
@@ -77,7 +77,7 @@ the record version is bumped once.
   - **room → retired.** Its facets are already `system`'s syscalls (32).
   - **`extend-reach` → `export`.** An actor adds an entry point to itself; it
     widens no one's reach.
-  - **Horizon fault → capability fault.**
+  - **Boundary fault → capability fault.**
   - **One word for what runs:** actor. Leaf stays only for a frame that opened
     no calls; target and surface go.
   - **`try` → keep `delegate`.** "try" reads as exception handling
@@ -86,7 +86,7 @@ the record version is bumped once.
   - **Genome and dream stay as framing** in essays and the README story; the
     API uses plainer names: the root grant, and `consolidate()` for `dream()`.
 
-Unblocks: 2b's Horizon and frame records, 2c's claim key, 2d's handle table,
+Unblocks: 2b's Boundary and frame records, 2c's claim key, 2d's handle table,
 and 44's mailboxes as buffered pipes.
 
 ## 2. Core rewrite
@@ -207,7 +207,7 @@ Unblocks: everything after. Porting before the rewrite would port `run`,
 
 Mostly the Linux side of the launch layer (2e).
 
-- Render Horizon profiles to Landlock and seccomp. Landlock stacks
+- Render Boundary profiles to Landlock and seccomp. Landlock stacks
   restrictions, so nested sandboxes are not a problem here.
 - Verified launch: `execveat` on the verified fd does not freeze the inode on
   its own (A6). Execute from immutable storage or a sealed snapshot.
@@ -235,7 +235,7 @@ compiled into a procedure without someone deciding to keep it.
   model inference is no less safe.
 - **One tool: `dispatch`** ([`one-tool.md`](../../ideas/one-tool.md)). The model sees a
   single provider-neutral tool and requests batches of calls through it; Skyra
-  validates each call against its schema and the current Horizon, runs
+  validates each call against its schema and the current Boundary, runs
   independent calls concurrently, and records every actual invocation. Goes
   with the procedure rewrite.
 
@@ -266,7 +266,7 @@ Not commitments.
 - **Shill-style contracts on capabilities** passed to scripts, instead of a
   procedural language. Shill and Plash are research prototypes: borrow the
   ideas, not the code.
-- **Fault routing within a turn:** Horizon faults go back to the agent,
+- **Fault routing within a turn:** Boundary faults go back to the agent,
   authority faults go to the human.
-- **A Horizon as the set of fds handed across the boundary.** Taken up in 1b
+- **A Boundary as the set of fds handed across the boundary.** Taken up in 1b
   as the c-list rename.

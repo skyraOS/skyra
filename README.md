@@ -20,7 +20,7 @@ per-call macOS sandboxes, hash-chained records checked by replay, and browser,
 terminal and native macOS clients on one protocol. Models propose actions;
 the runtime derives and checks what may execute. Codex and Claude both run
 under it, each in its own deny-default sandbox. An interpreter turns
-remembered execution strands into reusable procedures within the same authority
+remembered execution traces into reusable procedures within the same authority
 boundary. The chat apps are clients of that runtime, not the runtime itself.
 
 The controller uses standard-library Go; the interpreter has CEL dependencies.
@@ -43,12 +43,12 @@ itself. That is **tool acceptance fatigue**, and self-extension makes it
 worse: an agent that writes its own tools produces a stream of new code, and
 each piece wants its own approval.
 
-Skyra moves the approval. The human grants a **Horizon** once: an explicit
+Skyra moves the approval. The human grants a **Boundary** once: an explicit
 set of what an agent may invoke. Everything after that, including tools and
 procedures the agent builds for itself, runs **without approval**, because
 nothing can be created with more authority than its creator holds, and the OS
 enforces the boundary on every invocation. Asking the human is reserved for
-the one case that needs them: reaching past the Horizon.
+the one case that needs them: reaching past the Boundary.
 
 Skyra's principal is the **bounded, auditable agent**, not the process. The
 full argument, from the pains that drove it: [`docs/grips-and-invariants.md`](docs/grips-and-invariants.md).
@@ -64,7 +64,7 @@ puts every decision in one replayable function.
 | | Invariant | What it means |
 |---|---|---|
 | **1** | **The emitter is never the checker.** | Whatever a model or tool outputs is untrusted bytes. A *different* process interprets and commits it before anything acts on it. Nothing an agent emits can put the system into a state by saying so. |
-| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a **Horizon**: an explicit set of what it may invoke and touch. A call shares its caller's Horizon unless it asks the room to narrow it; nothing can widen one. The macOS sandbox profile is *generated from the Horizon*, the runtime's own state is always denied, and no target can start a program the runtime did not record. |
+| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a **Boundary**: an explicit set of what it may invoke and touch. A call shares its caller's Boundary unless it asks `system` to narrow it; nothing can widen one. The macOS sandbox profile is *generated from the Boundary*, the runtime's own state is always denied, and no target can start a program the runtime did not record. |
 | **3** | **Truth is derived, not stored.** | Only observations are stored: the bytes received, what a target emitted. Everything else is re-derived by one pure function, so replaying the record chain from genesis *is* the definition of correctness. |
 
 All three are built and shown below. For invariant 3, replay re-derives every
@@ -102,13 +102,13 @@ replay: 7 records re-derived from genesis by step, byte-identical      ← invar
 ══ echo probes .skyra/ from inside ══                     ← invariant 2
   return "hello [probe .skyra: read denied, write denied]"
 
-══ echo addresses what is outside the Horizon ══          ← invariant 1
-  fault (horizon, derived at intake): "shell" is not in reach
+══ echo addresses what is outside the Boundary ══          ← invariant 1
+  fault (boundary, derived at intake): "shell" is not in reach
 
-══ agent narrows echo through the room, then calls it ══  ← invariant 2
+══ agent narrows echo through its Boundary, then calls it ══  ← invariant 2
   invoke system.narrow {"actor":"echo","authority":{},"reach":[]}
   return {"reference":"84828a5a…"}
-  invoke 84828a5a… {"text":"hello"}                        ← echo runs under the narrower Horizon
+  invoke 84828a5a… {"text":"hello"}                        ← echo runs under the narrower Boundary
 
 ══ payload breaks echo's contract ══                      ← invariant 1
   fault (contract, derived at intake): echo: unknown field "txt"
@@ -154,7 +154,7 @@ decision is made by a fresh process that commits a record before anything runs.
 ```mermaid
 flowchart TD
     A["Agent (model)<br/>emits bytes, no authority"] --> I["Intake, in a fresh process<br/>Step derives the state"]
-    I --> H{"In the Horizon?<br/>fits the contract?"}
+    I --> H{"In the Boundary?<br/>fits the contract?"}
     H -- no --> F["Commit a fault<br/>keeps what was refused"]
     H -- yes --> C["Commit the record<br/>hash-chained, stamped"]
     C --> T["Target runs<br/>own Seatbelt profile"]
@@ -170,10 +170,10 @@ The phases in detail:
 ```text
  INTAKE    receive unchecked bytes, interpret them as operands, derive the state, commit a record,
            reply with its stamp (a hash)
- RELEASE   the parent reads the record back, checks it hashes to the stamp, derives the child's Horizon,
+ RELEASE   the parent reads the record back, checks it hashes to the stamp, derives the child's Boundary,
            commits it, and passes {its hash + the frame stack as directory fds} over a Unix socket
-           (SCM_RIGHTS); the child looks the Horizon up and re-derives it before it runs anything
- EXECUTE   run the target under a Seatbelt profile rendered from that Horizon. Its output is not parsed here
+           (SCM_RIGHTS); the child looks the Boundary up and re-derives it before it runs anything
+ EXECUTE   run the target under a Seatbelt profile rendered from that Boundary. Its output is not parsed here
  HANDOFF   spawn a successor with the raw output; open a slot if it is an invoke; exit once it has stamped
  SETTLE    a return or fault discharges the slot it answers, once
  GATHER    if every slot the waiting continuation opened is discharged, commit a resolve naming them all,
@@ -233,8 +233,8 @@ go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 | | Status |
 |---|---|
 | The step protocol, custody handoff, content-addressed records | **built**, tested |
-| One authority per Horizon, shared by every call; narrowing through the room's `system.narrow`; sandbox rendered from the Horizon; `.skyra/` denied; exec only of the program run (next/24–26) | **built**; reads, writes and exec denied from inside |
-| Horizons committed and looked up by hash; resume derives the parked work from the tree | **built** |
+| One authority per Boundary, shared by every call; narrowing through `system.narrow`; sandbox rendered from the Boundary; `.skyra/` denied; exec only of the program run (next/24–26) | **built**; reads, writes and exec denied from inside |
+| Boundaries committed and looked up by hash; resume derives the parked work from the tree | **built** |
 | Operators derived from operands; input contracts; typed faults (thought 14) | **built** |
 | Dependencies and resolve: a continuation invokes, waits, resumes (thought 13) | **built**; boot waits on a real resolve, not a poll |
 | Replay derives every record, supervisor faults and resolves included | **built** |
@@ -244,8 +244,8 @@ go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 | Pasted images | shown in the transcript, but not given to the model until a recorded tool brings them back |
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
-| Self-extension: an agent remembers a strand it ran as a procedure under its own Horizon, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
-| Procedures: remembered calls within a Horizon, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
+| Self-extension: an agent remembers a trace it ran as a procedure under its own Boundary, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
+| Procedures: remembered calls within a Boundary, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
 | Codex's and Claude's native execution | each runs under the deny-default profile its program registration declares, with egress only through an allowlisting proxy; a native attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 
@@ -275,11 +275,11 @@ Other unfinished work:
   calls (`target`, `contract`, `arguments`), with each contract owned by its
   target actor. This is interface work, not a new source of authority.
 - **Self-extension with real Codex.** The demo runs scripted and with a fake
-  Codex ([next/32](docs/design/procedures.md)): a strand remembered as a
+  Codex ([next/32](docs/design/procedures.md)): a trace remembered as a
   procedure runs with no model step and no approval, and the same procedure
   reaching further is a fault. Next: real Codex, and Codex writing its own
   refinements.
-- **Faults that route by kind, within a turn.** A horizon fault goes back to
+- **Faults that route by kind, within a turn.** A boundary fault goes back to
   the agent as an observation; an authority fault escalates to the user, who
   holds the authority and can grant it.
 - **Restore:** a conversation whose host stopped continues from its lineage.
@@ -295,7 +295,7 @@ agent fields) out of it, so it serves capabilities, never roles
 
 **The research question** ([`docs/next/research-question.md`](docs/next/research-question.md)):
 
-> Can human approval move from every action to one grant of a Horizon, so an
+> Can human approval move from every action to one grant of a Boundary, so an
 > agent extends itself without asking, while matching a conventional runtime on
 > cost and task success and containing strictly more?
 

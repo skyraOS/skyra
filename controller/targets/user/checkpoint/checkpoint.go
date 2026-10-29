@@ -26,7 +26,7 @@ type Checkpoint struct {
 	Contract       Contract `json:"contract"`
 }
 
-// Evidence is the versioned result delivered by system.strand. The adapter
+// Evidence is the versioned result delivered by system.trace. The adapter
 // accepts this only as a returned syscall step, never from human input.
 type Evidence struct {
 	Version  int               `json:"version"`
@@ -167,7 +167,7 @@ func (s Store) Advance(id string, expected Checkpoint, evidence Evidence) (Check
 			}
 		}
 		// Even malformed service output must not cross the retained root or
-		// create cycles. system.strand checks runtime acceptance; the slot
+		// create cycles. system.trace checks runtime acceptance; the slot
 		// independently checks the structural evidence it consumes.
 		state := map[string]int{}
 		var validate func(string) error

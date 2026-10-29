@@ -78,7 +78,7 @@ func TestLedgerFitsItsLine(t *testing.T) {
 	ms := int64(412)
 	for _, c := range []call{
 		{To: "read", Arg: "README.md", State: "returned", Result: "returned 13.6 kB", Stamp: "4b7d45a7e", MS: &ms},
-		{To: "native.commandExecution", State: "fault", Fault: "horizon", Stamp: "2ae3f9ec"},
+		{To: "native.commandExecution", State: "fault", Fault: "boundary", Stamp: "2ae3f9ec"},
 		{To: "read", Arg: strings.Repeat("very/long/path/", 20), State: "running", Stamp: "abc"},
 	} {
 		for _, width := range []int{40, 80, 140} {
@@ -94,10 +94,10 @@ func TestLedgerFitsItsLine(t *testing.T) {
 		}
 	}
 	var text strings.Builder
-	for _, s := range ledger(call{To: "native.commandExecution", State: "fault", Fault: "horizon", Stamp: "2ae3f9ec"}, 80) {
+	for _, s := range ledger(call{To: "native.commandExecution", State: "fault", Fault: "boundary", Stamp: "2ae3f9ec"}, 80) {
 		text.WriteString(s.text)
 	}
-	if !strings.Contains(text.String(), "outside the Horizon") {
+	if !strings.Contains(text.String(), "outside the Boundary") {
 		t.Fatalf("refused call reads %q", text.String())
 	}
 }

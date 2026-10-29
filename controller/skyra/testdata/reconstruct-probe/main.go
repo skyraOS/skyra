@@ -51,12 +51,12 @@ func run() error {
 			Conversation string
 			Availability projection.Availability
 			Checkpoint   checkpoint.Checkpoint
-			Strand       projection.Tree
+			Trace        projection.Tree
 		}
 		if err := json.Unmarshal(args, &ask); err != nil {
 			return err
 		}
-		view, err := projection.ConversationState(ask.Conversation, ask.Checkpoint.RootInvocation, ask.Strand, ask.Availability)
+		view, err := projection.ConversationState(ask.Conversation, ask.Checkpoint.RootInvocation, ask.Trace, ask.Availability)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		emit("system", map[string]any{"strand": map[string]any{"invocation": cp.RootInvocation, "observations": []string{e.Steps[0].Observation, e.Steps[1].Observation}, "contract": cp.Contract}})
+		emit("system", map[string]any{"trace": map[string]any{"invocation": cp.RootInvocation, "observations": []string{e.Steps[0].Observation, e.Steps[1].Observation}, "contract": cp.Contract}})
 	case 3:
 		if e.Steps[2].State != "return" {
 			return fmt.Errorf("reconstruction syscall failed")

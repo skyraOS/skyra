@@ -54,15 +54,15 @@ run() {
 }
 
 run answered "A question, answered with a tool" \
-  "Codex (the deterministic fake app-server) is asked a question, calls echo as a tool inside its Horizon, and answers with what echo returned. Every hop is a record." \
+  "Codex (the deterministic fake app-server) is asked a question, calls echo as a tool inside its Boundary, and answers with what echo returned. Every hop is a record." \
   -to codex -payload '{"text":"tool:hello"}'
 
-run outside "A call outside the Horizon, faulted at intake" \
-  "The target emits a call to something its Horizon does not reach: the shape of what a prompt injection asks for. Intake derives a horizon fault from the bytes; nothing outside runs." \
+run outside "A call outside the Boundary, faulted at intake" \
+  "The target emits a call to something its Boundary does not reach: the shape of what a prompt injection asks for. Intake derives a boundary fault from the bytes; nothing outside runs." \
   -to echo -payload '{"text":"hello","misbehave":"yes"}'
 
 run probe "A probe of .skyra/ from inside, denied by the OS" \
-  "The target tries to read the runtime's own state directory. The sandbox profile generated from its Horizon denies it: an actor sees only its own state, and echo has none. The probe's failure is in the record." \
+  "The target tries to read the runtime's own state directory. The sandbox profile generated from its Boundary denies it: an actor sees only its own state, and echo has none. The probe's failure is in the record." \
   -to echo -payload "{\"text\":\"hello\",\"probe\":\"$stage/runs/probe/.skyra\"}"
 
 run contract "A payload that breaks its contract" \
@@ -74,7 +74,7 @@ run continuation "A continuation that waits and resumes" \
   -to agent -payload '{"text":"hello"}'
 
 run remember "Work remembered as a procedure, run with no agent" \
-  "An agent does a task: it calls echo twice in one emission, then once more. The work is remembered: the interpreter reads the strand, compiles it, and adds the contract to itself with no approval. Called on new input, the procedure runs with no agent in its frame. From a narrowed Horizon without echo it faults at intake; the same contract is not remembered twice; input outside its refinement goes back to the agent. The agent is scripted, not a model, and says so." \
+  "An agent does a task: it calls echo twice in one emission, then once more. The work is remembered: the interpreter reads the trace, compiles it, and adds the contract to itself with no approval. Called on new input, the procedure runs with no agent in its frame. From a narrowed Boundary without echo it faults at intake; the same contract is not remembered twice; input outside its refinement goes back to the agent. The agent is scripted, not a model, and says so." \
   -to agent -payload '{"text":"remember:hello"}'
 
 # The index the Verify page lists, in this order.

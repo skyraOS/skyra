@@ -7,7 +7,7 @@ Status: to design. Found while reading how `interpret` derives a state
 ## 1. Invoke is derived from the state and the envelope's fields
 
 > **Built 2026-09-30** (`d49ce18`). Decision 1 took Agoric's decider rule: a
-> return addresses **the slot** (`Horizon.Frame`), told to targets in
+> return addresses **the slot** (`Boundary.Frame`), told to targets in
 > `SKYRA_FRAME`, so no parent name, no `SKYRA_PARENT`, and no precedence rule
 > were needed. Decision 3: unaddressed output is a `leaf` fault that keeps the
 > output. Decision 4 as proposed. Decision 5 (the recipient on return records)
@@ -40,33 +40,33 @@ name, and the registry has to protect it (`registry.go`: `"reply" is
 reserved`).
 
 The effect of a return is already structural: it always discharges
-`Horizon.Frame`, the slot the parent opened. Only the *recognition* of a return
+`Boundary.Frame`, the slot the parent opened. Only the *recognition* of a return
 depends on a word.
 
 ### The proposal
 
-The emitter's Horizon already carries its place in the stack: `Frame` (the
+The emitter's Boundary already carries its place in the stack: `Frame` (the
 slot its reply discharges) and `Resume` (the continuation waiting on it).
 `interpret` reads it:
 
 ```text
 the envelope:          {"to": <name>, "payload": <JSON>}   or unaddressed
-the state it reads:    the emitter's Horizon: its reach, and who is waiting on it
+the state it reads:    the emitter's Boundary: its reach, and who is waiting on it
 
 to names the parent (the frame waiting on this one)  → return   payload fits this surface's output contract
 to is absent (unaddressed)                           → return   same check
 to names anything else in reach                      → invoke   payload fits that capability's input contract
-to names nothing in reach, and not the parent        → fault (horizon)
+to names nothing in reach, and not the parent        → fault (boundary)
 ```
 
 It stays pure and total, so replay is unchanged in kind.
 
 ### Decisions to make
 
-1. **Record the parent's name in the Horizon.** A Horizon holds its
+1. **Record the parent's name in the Boundary.** A Boundary holds its
    `Surface` but not the name it was invoked under; that name is `To` on the
-   parent's invoke record. Add it (for example `Horizon.Name`, set in
-   `SendHorizon` when the child's frame is pushed), so `interpret` compares
+   parent's invoke record. Add it (for example `Boundary.Name`, set in
+   `SendBoundary` when the child's frame is pushed), so `interpret` compares
    names, not surfaces.
 2. **Precedence: the parent comes first.** If the parent's name is also in
    reach (an `agent` whose reach includes `agent`), `{"to": "agent"}` would be
@@ -82,7 +82,7 @@ It stays pure and total, so replay is unchanged in kind.
    (The alternative is to read unaddressed JSON as a structured payload. That
    changes what a leaf returns when its plain text happens to parse as JSON.)
 4. **The operator.** At the root (`Resume == nil`) there is no parent, so an
-   addressed emission is an invoke or a horizon fault. This matches today's
+   addressed emission is an invoke or a boundary fault. This matches today's
    "the operator holds no reply".
 5. **Record the recipient on return records.** A return could store
    `To` = the parent's name, so the lineage names both ends. This changes the
@@ -99,8 +99,8 @@ terminated.
 
 Applied here, decision 1 can name the slot instead of the parent: an
 emission is a return when it addresses **the slot it is the decider of**, the
-one `Horizon.Frame` names. That avoids giving the parent a name at all (no
-`Horizon.Name`, no `SKYRA_PARENT`), and it removes the precedence question in
+one `Boundary.Frame` names. That avoids giving the parent a name at all (no
+`Boundary.Name`, no `SKYRA_PARENT`), and it removes the precedence question in
 decision 2, since a slot and a capability can never share a name. The target
 would need its frame's slot id instead of its parent's name; weigh that
 against decision 3.
@@ -109,8 +109,8 @@ against decision 3.
 
 | Where | Change |
 |---|---|
-| `core/machine` `interpret` | Read the parent from the Horizon instead of matching `"reply"` |
-| `core/horizon` `Horizon` | Carry the name the frame was invoked under |
+| `core/machine` `interpret` | Read the parent from the Boundary instead of matching `"reply"` |
+| `core/boundary` `Boundary` | Carry the name the frame was invoked under |
 | `core/machine` `Narrow` | Refuse a reach containing the caller's name |
 | `core/machine` `runOf` | Add `SKYRA_PARENT` to the target's environment |
 | `runtime/registry` | Drop the `"reply"` reservation |
@@ -136,12 +136,12 @@ check. Item 1 fixes both.
 
 ### Fault: fits, with two weak spots
 
-Intake faults (`malformed`, `horizon`, `contract`) are derived from the
-envelope against the Horizon, and supervisor faults (`custody`) from the
+Intake faults (`malformed`, `boundary`, `contract`) are derived from the
+envelope against the Boundary, and supervisor faults (`custody`) from the
 runtime's own observation (`machine.Observed`). A target cannot emit a fault.
 That fits.
 
-**a. A fault manufactured by naming.** The Codex adapter produces a horizon
+**a. A fault manufactured by naming.** The Codex adapter produces a boundary
 fault on purpose by emitting a name it expects to be out of reach:
 
 ```go
@@ -163,7 +163,7 @@ convention. Options:
   not a name the adapter chose to trigger one.
 
 **b. The fault record drops the recipient.** `faulted()` builds a record with
-no `To`. A horizon or contract fault names *what* was refused only inside the
+no `To`. A boundary or contract fault names *what* was refused only inside the
 `Cause` string. The input bytes are stored, so replay is not affected, but the
 lineage cannot be queried by recipient without re-parsing causes. Setting
 `To` on intake faults whose envelope was readable would make the envelope's
@@ -185,40 +185,40 @@ things stand, and the bytes only fill in the fields.
 |---|---|---|
 | invoke | the envelope's `to`, checked against reach, *after* ruling out the word `"reply"` | No: item 1 |
 | return | the word `"reply"`, or no `to` | No: item 1 |
-| fault (intake) | the envelope against the Horizon | Yes, but a fault can be manufactured by naming an unregistered `native.*` capability (2a); the record drops the recipient (2b) |
+| fault (intake) | the envelope against the Boundary | Yes, but a fault can be manufactured by naming an unregistered `native.*` capability (2a); the record drops the recipient (2b) |
 | fault (supervisor) | the runtime's own observation | Yes |
 | resolve | the frame's slots in the tree | Yes |
 
-## 3. The Horizon is authority, not the model's view of it
+## 3. The Boundary is authority, not the model's view of it
 
 ### The rule
 
-> **The Horizon is the program's state of authority: what it *could* touch,
+> **The Boundary is the program's state of authority: what it *could* touch,
 > not what the model is shown. Narrowing is defined as a change to that
-> Horizon, and the tools offered to the model are a separate, smaller view
+> Boundary, and the tools offered to the model are a separate, smaller view
 > derived from it.**
 
 And its corollary:
 
-> **A frame is where a call returns; a Horizon is the authority it runs under.
+> **A frame is where a call returns; a Boundary is the authority it runs under.
 > Every invoke opens a frame. Only an invoke that narrows opens a new
-> Horizon.**
+> Boundary.**
 
-### Frame and Horizon are two things
+### Frame and Boundary are two things
 
 | | What it is | Changes when |
 |---|---|---|
 | **Frame** | The slot the caller waits on: where the return discharges | Every invoke. A call always needs somewhere to return to |
-| **Horizon** | The authority: reach and grants, what the sandbox is rendered from. This is the execution context | Only when an invoke narrows |
+| **Boundary** | The authority: reach and grants, what the sandbox is rendered from. This is the execution context | Only when an invoke narrows |
 
 So there are two kinds of invoke:
 
-- **Invoke within the Horizon.** A new frame, the same Horizon. The callee
+- **Invoke within the Boundary.** A new frame, the same Boundary. The callee
   works under the authority already granted.
-- **Narrowing invoke.** A new frame and a new, smaller Horizon: a different
+- **Narrowing invoke.** A new frame and a new, smaller Boundary: a different
   execution context.
 
-Within one Horizon, many instances run under the same authority: a
+Within one Boundary, many instances run under the same authority: a
 continuation's rounds (invoke, wait, resolve, emit again), the returns and
 faults that discharge its slots, a park and its resume. None of them may
 change it.
@@ -228,56 +228,56 @@ on an invoke, never required.
 
 ### What happens now
 
-**The frame and the Horizon are one thing.** `machine.Narrow`
+**The frame and the Boundary are one thing.** `machine.Narrow`
 (`core/machine/machine.go`) runs on every invoke and always builds a new
-Horizon: `Frame: stamp` opens the frame, `Resume: &parent` puts the caller
+Boundary: `Frame: stamp` opens the frame, `Resume: &parent` puts the caller
 beneath it, and the reach is recomputed as the parent's reach intersected with
 the callee's declared `reach` (attenuated by `delegate`). Even when nothing
-narrows, the child gets a new Horizon value, because the frame fields live
+narrows, the child gets a new Boundary value, because the frame fields live
 inside it.
 
 **The callee's registration decides the narrowing, not the invoke.** A leaf
 like `echo` declares no reach, so it always gets none. There is no way to
-invoke under the caller's Horizon as it stands, and no way to tell from the
+invoke under the caller's Boundary as it stands, and no way to tell from the
 record whether an invoke narrowed.
 
-**A position field sits in the authority.** `Horizon.Stamp` is "this frame's
+**A position field sits in the authority.** `Boundary.Stamp` is "this frame's
 latest commit" and moves on every step (`claim`: `resumed.Stamp = …`). So
-instances in one frame share authority but never share a Horizon value, and
+instances in one frame share authority but never share a Boundary value, and
 there is nothing to compare to show the authority did not change.
 
 **The model's view is an adapter convention.** `codex/resident` holds a
 hard-coded `modelTools` map, and `offered()` shows Codex only `echo` and
-`read`. The same Horizon's reach also holds `codex.start`, `codex.exchange`,
+`read`. The same Boundary's reach also holds `codex.start`, `codex.exchange`,
 `codex.inspect` and `codex.stop`, the adapter's own operations, which the
-model must never call. Nothing in the Horizon says which entries are the
+model must never call. Nothing in the Boundary says which entries are the
 model's. A new adapter would have to rediscover the rule, and a mistake in
 `modelTools` would show the model an operation it should not see.
 
 ### Direction
 
-1. **Separate the frame from the Horizon.** The frame stack (`Frame`,
-   `Resume`) is return structure; the Horizon is authority (`Surface`,
+1. **Separate the frame from the Boundary.** The frame stack (`Frame`,
+   `Resume`) is return structure; the Boundary is authority (`Surface`,
    `Reach`, grants). An invoke always pushes a frame; it produces a new
-   Horizon only when authority changes.
+   Boundary only when authority changes.
 2. **Narrowing is checked where it happens, and only there.** The one
-   transition that can produce a new Horizon is a narrowing invoke, and it is
-   checked there: the new Horizon ⊆ the old. An invoke within the Horizon
+   transition that can produce a new Boundary is a narrowing invoke, and it is
+   checked there: the new Boundary ⊆ the old. An invoke within the Boundary
    carries the same one.
-3. **The Horizon is invariant within itself.** Rounds, resumes, parks,
+3. **The Boundary is invariant within itself.** Rounds, resumes, parks,
    returns and faults hand back exactly the authority that was granted,
    checked by equality, not by subset.
-4. **Move the per-step `Stamp` out of the Horizon.** It is position, not
-   authority. With it gone, "the same Horizon" is literally the same value, and
+4. **Move the per-step `Stamp` out of the Boundary.** It is position, not
+   authority. With it gone, "the same Boundary" is literally the same value, and
    the invariant in 3 is a comparison.
-5. **Keep the callee's declared ceiling.** The Horizon is what the sandbox is
-   rendered from, so running under the caller's Horizon gives the callee the
+5. **Keep the callee's declared ceiling.** The Boundary is what the sandbox is
+   rendered from, so running under the caller's Boundary gives the callee the
    caller's full authority. That is right for a sub-continuation acting for
-   its caller and wrong for an untrusted leaf: `echo` under Codex's Horizon
+   its caller and wrong for an untrusted leaf: `echo` under Codex's Boundary
    could address `codex.start`. A callee never gets more than its
    registration allows. What goes away is only the rule that every invoke
-   *must* produce a new Horizon.
-6. **Derive the model's view from the Horizon.** Declare it per surface in
+   *must* produce a new Boundary.
+6. **Derive the model's view from the Boundary.** Declare it per surface in
    the registry or contract (for example an `offer` list, which must be a
    subset of `reach`), not in an adapter. It is a per-step view, not
    authority, so it may change between rounds without an invoke. Narrowing is
@@ -288,7 +288,7 @@ model's. A new adapter would have to rediscover the rule, and a mistake in
 - **Who chooses to narrow?** Today the callee's registration does. A caller
   might also narrow explicitly, invoking a surface with less than its ceiling.
   That would need a field in the envelope, which item 1's rule
-  (state from the Horizon and the envelope's fields) allows, as long as it can
+  (state from the Boundary and the envelope's fields) allows, as long as it can
   only narrow.
 - **Recording it.** Should an invoke record say whether it narrowed, so the
   lineage shows where execution contexts begin without re-deriving them?
@@ -376,7 +376,7 @@ checkpoint is a recorded input, and the step cap can be raised or dropped.
 ### Already covered elsewhere
 
 - The `emit("reply", …)` return: item 1.
-- Manufacturing a horizon fault by emitting `native.*`: item 2a.
+- Manufacturing a boundary fault by emitting `native.*`: item 2a.
 - The hard-coded `modelTools` list: item 3, direction 6.
 
 ### Order
@@ -493,14 +493,14 @@ a (show the output contract), f (fault kinds as part of the contract), b
 > contracts by `Check`, its grants by `Narrow`.**
 
 This is the thesis demo (README, "Where we are"; `summary.md` P9;
-`next/research-question.md`): the human grants a Horizon once, and tools the
+`next/research-question.md`): the human grants a Boundary once, and tools the
 agent builds inside it run with zero approvals. Reaching past it is a fault.
 
 ### What happens now
 
 **Not built.** The registry is read once, at genesis
 (`runtime/registry/registry.go`), and the root reach is committed in the
-genesis record. Every later Horizon is narrowed from that set. There is no
+genesis record. Every later Boundary is narrowed from that set. There is no
 transition by which a surface enters a reach after genesis.
 
 ### What a registration has to establish
@@ -519,7 +519,7 @@ states (item 1):
    language item 5 extends. A tool whose rules the language cannot say is not
    a tool the runtime can check.
 3. **The authority.** The tool's grants (read, write, exec, mach, connect) are
-   each checked against the creator's Horizon by the same rule `Narrow` uses:
+   each checked against the creator's Boundary by the same rule `Narrow` uses:
    a subset, or refused. A new tool starts as a **leaf**: no reach.
 4. **The interpreter.** A tool is usually a script. Running it needs exec of
    an interpreter and read of the script, and both must already be in the
@@ -531,13 +531,13 @@ states (item 1):
   `{"to": "register", "payload": {name, source observation, contracts, grants}}`.
   `register` is a runtime surface in reach like any other. Its input
   contract is the shape above, and its return is the new tool's name, or a
-  fault (contract: bad schema; horizon: grants outside the creator's).
+  fault (contract: bad schema; boundary: grants outside the creator's).
 - **Item 3: where the new tool lives.** Adding a name to reach changes the
-  Horizon, and item 3 says a Horizon changes only at an invoke, never
+  Boundary, and item 3 says a Boundary changes only at an invoke, never
   within a frame. So the registration is the invoke that opens the new
-  context: the creator continues in a child frame whose Horizon is its own
+  context: the creator continues in a child frame whose Boundary is its own
   plus the new leaf. The alternative is to say authority is the grants, not
-  the set of names, so a new name with no new grants leaves the Horizon
+  the set of names, so a new name with no new grants leaves the Boundary
   "the same". The first keeps item 3's invariant exact; recommend it.
 - **Item 3, direction 6: the model's view.** Registering a tool does not by
   itself show it to the model. The creator's offer list decides.
@@ -548,7 +548,7 @@ states (item 1):
 
 Genesis records the root reach (`Record.Reach`). A registration has to be
 recorded the same way: the record carries the new surface (name, sha256,
-contracts, grants), so replay can rebuild every Horizon that includes it, and
+contracts, grants), so replay can rebuild every Boundary that includes it, and
 re-derive the registration from its stored input like any intake. Replay
 re-checks that the grants were a subset of the creator's at that point in the
 lineage.
@@ -600,13 +600,13 @@ before choosing; the second works with any provider.
 Codex writes a tool, registers it, and calls it with no approval; the call is
 recorded and replays byte-identically. The same tool, rewritten to read
 outside its grants, is refused: at registration if it asks for the grant
-(horizon fault), or by the sandbox if it tries anyway. The research metric is
+(boundary fault), or by the sandbox if it tries anyway. The research metric is
 the number of agent-built tools that ran with zero approvals.
 
 ### Order
 
 After items 1, 3 and 5, which it depends on: the derived invoke, the rule for
-where a Horizon changes, and contracts the runtime can fully check. 4g first
+where a Boundary changes, and contracts the runtime can fully check. 4g first
 too, so there is one adapter to teach, and item 7, so an agent's own tools
 run under a budget.
 
@@ -614,9 +614,9 @@ run under a budget.
 
 ### The rule
 
-> **A Horizon grants a budget as well as reach.** Every step is charged
+> **A Boundary grants a budget as well as reach.** Every step is charged
 > against it, a child's budget is carved out of its parent's, and running out
-> is a fault the runtime derives, like reaching past the Horizon.
+> is a fault the runtime derives, like reaching past the Boundary.
 
 ### What happens now
 
@@ -639,7 +639,7 @@ A vat that exhausts its meter is terminated.
   does not fit. Count what the runtime observes and records: steps, wall
   time per target run (already bounded by `wait_ms` for I/O), and, for model
   surfaces, tokens reported by the provider as part of the observation.
-- **Where it lives.** In the Horizon, next to reach: a child's budget is at
+- **Where it lives.** In the Boundary, next to reach: a child's budget is at
   most what its parent has left, so metering narrows exactly like authority
   (item 3). The spend is derived from records, so replay re-derives it.
 - **What running out is.** A fault kind of its own (for example `budget`),
@@ -650,7 +650,7 @@ A vat that exhausts its meter is terminated.
 
 ### Order
 
-After item 3 (where a Horizon changes) and before item 6, so self-extension
+After item 3 (where a Boundary changes) and before item 6, so self-extension
 ships with a bound on what an agent's own tools can spend.
 
 ## 8. Records and marks: two kinds of state
@@ -725,7 +725,7 @@ same treatment: a `result` or a `deps/` slot is a mark only.
    goes through one definition, and the webhost's local rule can go.
 2. **Only if acceptance must be tamper-evident:** fold it into the chain, the
    way resolve already is. The parent commits a release record naming the
-   child's stamp before it sends the Horizon. An orphan is then visible from
+   child's stamp before it sends the Boundary. An orphan is then visible from
    records alone, and "a stamp means custody" becomes literally true. It
    costs a write and an fsync per step, and the parent writes after the
    child, so the crash rule needs restating: a record with no release record

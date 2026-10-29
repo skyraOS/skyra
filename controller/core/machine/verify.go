@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
@@ -28,9 +28,9 @@ func HeldRecord(r record.Record) Object {
 	return Object{Key: record.Sum(b), Raw: b}
 }
 
-// HeldHorizon is a Horizon as a trusted holder presents it: its encoding
+// HeldBoundary is a Boundary as a trusted holder presents it: its encoding
 // under its id.
-func HeldHorizon(h horizon.Horizon) Object {
+func HeldBoundary(h boundary.Boundary) Object {
 	b, _ := json.Marshal(h)
 	return Object{Key: record.Sum(b), Raw: b}
 }
@@ -47,11 +47,11 @@ func RecordOf(o Object) (record.Record, error) {
 	return r, nil
 }
 
-// HorizonOf verifies a Horizon read by id, as RecordOf verifies a record.
-func HorizonOf(o Object) (horizon.Horizon, error) {
-	var h horizon.Horizon
+// BoundaryOf verifies a Boundary read by id, as RecordOf verifies a record.
+func BoundaryOf(o Object) (boundary.Boundary, error) {
+	var h boundary.Boundary
 	if err := verify(o, &h, func() ([]byte, error) { return json.Marshal(h) }); err != nil {
-		return horizon.Horizon{}, fmt.Errorf("horizon %s: %w", record.Short(o.Key), err)
+		return boundary.Boundary{}, fmt.Errorf("boundary %s: %w", record.Short(o.Key), err)
 	}
 	return h, nil
 }

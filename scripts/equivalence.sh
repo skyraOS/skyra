@@ -145,6 +145,6 @@ scenario "codex (fake) tool call"      -to codex -payload '{"text":"tool:hello"}
 scenario "codex (fake) native command" -to codex -payload '{"text":"taint-child"}'
 scenario "codex (fake) remembers"      -to codex -payload '{"text":"remember:hello"}'
 scenario "echo hello"                  -to echo -payload '{"text":"hello"}'
-scenario "echo outside its Horizon"    -to echo -payload '{"text":"hello","misbehave":"yes"}'
+scenario "echo outside its Boundary"    -to echo -payload '{"text":"hello","misbehave":"yes"}'
 scenario "echo contract fault"         -to echo -payload '{"txt":"hello"}'
 exit $failed

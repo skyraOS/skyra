@@ -1,7 +1,7 @@
 // Command read is an untrusted leaf. It reads its payload on stdin, reads one
 // UTF-8 file (a range of its lines) or lists one directory, and replies with
 // what it observed as one JSON object. It checks no authority: the sandbox rendered
-// from its Horizon decides what it can open, and a denial is reported as data.
+// from its Boundary decides what it can open, and a denial is reported as data.
 // It shares no code with skyra.
 package main
 

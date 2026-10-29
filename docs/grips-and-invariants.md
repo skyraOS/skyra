@@ -30,7 +30,7 @@ Claiming less makes the claim truer.
 | 3 | **The plan is not first class.** Plan mode is a checklist the model can silently skip. A failed plan should be an event, not a line quietly dropped | **II. Every action is a typed claim; deviation is a fault** |
 | 4 | **Shell access is velocity bought with ambient authority.** One `rm -rf` from disaster, and no legible record of what ran or why | **III. Authority is one list that only narrows, enforced by the OS; provenance is structural** |
 | 5 | **Five agents cannot be watched by hand.** Reading all the code is impossible at scale, and losing fine-grained control is fine. But you must keep a high-level view of what each agent is doing and, above all, what it *cannot* touch | III |
-| 6 | **Tool acceptance fatigue.** Every effect asks: allow this command, this tool, this file? Nobody reads the fortieth prompt. People approve by reflex, then switch to full auto, and the prompts become ambient authority. An agent that writes its own tools makes it worse: every new tool is new code to approve | III, and the approval moves: **the human grants the Horizon once; anything built inside it, agent-written tools included, runs without asking** |
+| 6 | **Tool acceptance fatigue.** Every effect asks: allow this command, this tool, this file? Nobody reads the fortieth prompt. People approve by reflex, then switch to full auto, and the prompts become ambient authority. An agent that writes its own tools makes it worse: every new tool is new code to approve | III, and the approval moves: **the human grants the Boundary once; anything built inside it, agent-written tools included, runs without asking** |
 
 ## The invariants, made concrete
 
@@ -67,33 +67,33 @@ a fault, never silence.
 
 ### III. Authority is one list that only narrows, enforced by the OS; provenance is structural
 
-An agent fires nothing without a Horizon handed to it by its parent. There is
-exactly one list, the Horizon: what an agent *cannot* touch is its complement,
+An agent fires nothing without a Boundary handed to it by its parent. There is
+exactly one list, the Boundary: what an agent *cannot* touch is its complement,
 read off the same list for free. A second list is the exact overload this
 project exists to delete. Across many agents, the only composed question a
-human asks is where two Horizons overlap: set intersection over one
+human asks is where two Boundaries overlap: set intersection over one
 primitive, not a new artifact. And the audit trail is a consequence of how
 the system runs, not a log bolted on after.
 
-- **Built:** a child's Horizon is always a subset of its parent's; a
+- **Built:** a child's Boundary is always a subset of its parent's; a
   capability a parent does not hold cannot be delegated. Each invocation runs
-  under a Seatbelt sandbox generated from its Horizon, and the runtime's own
+  under a Seatbelt sandbox generated from its Boundary, and the runtime's own
   state is always denied. Every step is a content-addressed, hash-linked
   record, and replay re-derives every one of them from its stored input:
   truth is derived, not stored.
 - **Not built:** preventing (not only detecting) what Codex runs natively
   inside its own sandbox. Self-extension: an agent registering a tool it wrote
-  as a leaf under a narrower Horizon, and running it without approval. Today
+  as a leaf under a narrower Boundary, and running it without approval. Today
   the registry is read once, at genesis.
 
 ## The loop that couples all three
 
 ```text
-PROPOSE  the human and a model agree what is wanted and the Horizon it may touch: a typed contract
+PROPOSE  the human and a model agree what is wanted and the Boundary it may touch: a typed contract
 ACT      the model supplies operands; the runtime derives every step, checks every contract, and runs
          every tool as its own sandboxed leaf. The model is present only where judgment is needed
-ASK      if it needs more than its Horizon grants, it does not widen: an authority fault climbs to the
-         human, who grants a new, narrower Horizon or refuses. Escalation is renegotiation, never a grab
+ASK      if it needs more than its Boundary grants, it does not widen: an authority fault climbs to the
+         human, who grants a new, narrower Boundary or refuses. Escalation is renegotiation, never a grab
 FAULT    the world returns something no contract expects: a typed fault, back to the one who can fix it
 REMEMBER what worked is kept, so the next run starts warm (invariant I)
 ```

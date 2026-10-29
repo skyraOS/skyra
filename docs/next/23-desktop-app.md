@@ -24,7 +24,7 @@ about the actor side applies to it.
 
 ## Why it is the entry point
 
-The thesis moves approval from every action to one grant of a Horizon. Today
+The thesis moves approval from every action to one grant of a Boundary. Today
 that grant is implicit: the workspace is wherever the human happened to type
 `skyra` (22). Nobody sees it, and nobody approves it. The
 app makes it the first thing the human does:
@@ -33,7 +33,7 @@ app makes it the first thing the human does:
 |---|---|---|
 | **The grant** | the current directory, silently | the human picks a folder and sees what is being granted: read, under this path, sent to the model provider. One approval |
 | **Everything inside it** | runs with no prompt | the same. The app shows it as it happens and never asks |
-| **Reaching past it** | a horizon fault, shown in the transcript | the one moment the app interrupts: a request to cross, which the human grants or refuses (needs fault routing, below) |
+| **Reaching past it** | a boundary fault, shown in the transcript | the one moment the app interrupts: a request to cross, which the human grants or refuses (needs fault routing, below) |
 
 The app is the human's side of the approval model. It asks once, stays quiet
 after that, and speaks up only at the boundary.
@@ -57,7 +57,7 @@ running. The webhost's log goes to `~/.skyra/app-webhost.log`.
 | Question (20) | For the app |
 |---|---|
 | Who emits it, who checks it? | the app emits the human's messages and the workspace choice. The runtime checks both: messages at intake (a typed `{"to":…}` is still text), and the workspace in the same launcher code that refuses `$HOME`, `/`, `~/.skyra` and `~/.codex` today. The app does not repeat that check; it shows the refusal |
-| Is it authority? | the workspace choice becomes authority, so it enters the way it does today: as registry data the launcher writes and the runtime pins by hash. The app never builds a Horizon or a sandbox profile |
+| Is it authority? | the workspace choice becomes authority, so it enters the way it does today: as registry data the launcher writes and the runtime pins by hash. The app never builds a Boundary or a sandbox profile |
 | Is it state the runtime acts on? | no. Conversations are lineages in the tree; the app renders snapshots and keeps only view preferences |
 | Does it name an actor? | yes (Codex, the browser protocol), which is why it lives outside the runtime |
 | Is it a descriptor? | no. The app holds a WebSocket and a child process, nothing from `.skyra/` |

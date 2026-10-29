@@ -101,7 +101,7 @@ interpreter so its worker can delegate.
 
 The agent adapter records its resolved model through `system.agent-context`.
 That metadata is derived from the registered emitter and carried through the
-Horizon. It is execution metadata, not parent conversation context or a public
+Boundary. It is execution metadata, not parent conversation context or a public
 `delegate.model` argument.
 
 ## Verification

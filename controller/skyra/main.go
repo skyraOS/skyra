@@ -22,10 +22,10 @@ import (
 	"skyra/controller/runtime/custody"
 	"skyra/controller/runtime/handshake"
 	"skyra/controller/runtime/instance"
+	"skyra/controller/runtime/log"
 	"skyra/controller/runtime/metric"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
-	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
 )
 
@@ -41,7 +41,7 @@ func main() {
 		fs := flag.NewFlagSet("boot", flag.ExitOnError)
 		root := fs.String("root", "", "state directory (.skyra)")
 		reg := fs.String("registry", "", "the operator's registry of surfaces and their contracts")
-		scratch := fs.String("scratch", "", "a directory everything in the room may read and write, and run nothing from")
+		scratch := fs.String("scratch", "", "a directory everything under the root Boundary may read and write, and run nothing from")
 		to := fs.String("to", "echo", "the capability the seed addresses")
 		payload := fs.String("payload", `{"text":"hello"}`, "the seed's payload (JSON)")
 		text := fs.String("text", "", "shorthand for -payload '{\"text\": TEXT}'")
@@ -82,14 +82,14 @@ func main() {
 		}
 	case "resume":
 		// Started only by an actor host, holding a parked frame stack as fds 3..
-		trace.Who = fmt.Sprintf("resume pid %d", os.Getpid())
+		log.Who = fmt.Sprintf("resume pid %d", os.Getpid())
 		if len(os.Args) != 3 {
 			err = fmt.Errorf("usage: skyra resume DIR")
 		} else {
 			err = resume(os.Args[2])
 		}
 	case "instance":
-		trace.Who = fmt.Sprintf("inst pid %d", os.Getpid())
+		log.Who = fmt.Sprintf("inst pid %d", os.Getpid())
 		if len(os.Args) != 3 {
 			err = fmt.Errorf("usage: skyra instance DIR")
 		} else {
@@ -99,7 +99,7 @@ func main() {
 		err = fmt.Errorf("unknown mode %q", os.Args[1])
 	}
 	if err != nil {
-		trace.Logf("error    %v", err)
+		log.Logf("error    %v", err)
 		os.Exit(1)
 	}
 }
@@ -120,7 +120,7 @@ func realDir(p string) (string, error) {
 // resume continues a parked instance: the host hands back its frame stack as
 // fds 3.., and on stdin the parked stamp and the outside event, as its
 // target's output. The host holds a reference and descriptors, never
-// authority: the instance, its Horizon and the floor are derived here, from
+// authority: the instance, its Boundary and the floor are derived here, from
 // the tree (next/20, finding 1).
 func resume(root string) error {
 	var r park.Resumed
@@ -135,8 +135,8 @@ func resume(root string) error {
 		}
 		return fmt.Errorf("resume %s: %w", record.Short(r.Stamp), err)
 	}
-	trace.Who = "resume " + record.Short(r.Stamp)
-	trace.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
+	log.Who = "resume " + record.Short(r.Stamp)
+	log.Logf("resume   the host returns custody: an outside event arrived (%d bytes)", len(r.Out))
 	_, err = instance.Drive(root, nil, stack, s, machine.Executed{Obs: []byte(r.Out)})
 	return err
 }
@@ -149,7 +149,7 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	if err != nil {
 		return machine.Instance{}, err
 	}
-	self, err := replay.HorizonAt(root, r.Stamp)
+	self, err := replay.BoundaryAt(root, r.Stamp)
 	if err != nil {
 		return machine.Instance{}, err
 	}
@@ -157,7 +157,7 @@ func parked(root string, r park.Resumed) (machine.Instance, error) {
 	case rec.State != record.Invoke || self.Surface == nil || self.Surface.Host == "":
 		return machine.Instance{}, errors.New("not a parked invocation")
 	case self.Depth() != r.Frames:
-		return machine.Instance{}, fmt.Errorf("carries %d frames, its Horizon has %d", r.Frames, self.Depth())
+		return machine.Instance{}, fmt.Errorf("carries %d frames, its Boundary has %d", r.Frames, self.Depth())
 	}
 	if _, err := tree.Result(root, self.Frame); err == nil {
 		return machine.Instance{}, errors.New("already settled")

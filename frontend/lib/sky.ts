@@ -6,7 +6,7 @@
  *
  * On top of the ambient sky it draws the runtime's calls: a light leaves the
  * core for the inner orbit when the agent invokes a tool and comes home when
- * the call returns; a refused call flies to the Horizon's edge, where a short
+ * the call returns; a refused call flies to the Boundary's edge, where a short
  * arc of the edge glows amber and fades. Only those move quickly, and meteors
  * and glints wait while they do.
  */
@@ -275,7 +275,7 @@ class SkySim {
 // ---------------------------------------------------------------------------
 
 const OUT = 12; // frames from the core to the inner orbit
-const OUT_EDGE = 15; // frames from the core to the Horizon's edge
+const OUT_EDGE = 15; // frames from the core to the Boundary's edge
 const RIDE = 3; // frames a light rides its orbit at least
 const HOME = 6; // frames back to the core
 const FLARE = 4; // frames a light flares out at the edge
@@ -355,7 +355,7 @@ export class Calls {
 
   draw(g: CanvasRenderingContext2D, size: Pt, f: number, still: boolean) {
     for (const l of this.lights) {
-      // The arc where a refused call met the Horizon's edge.
+      // The arc where a refused call met the Boundary's edge.
       if (l.fault) {
         const u = f - l.at - OUT_EDGE;
         if (u >= 0 && u < ARC) {

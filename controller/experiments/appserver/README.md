@@ -22,7 +22,7 @@ adapter/Drive/replay tests, or add `--live` to use the actual sandboxed Codex
 launcher. The live suite tests OS denials, conversation, a real runtime echo
 invocation, direct interruption of a real turn, and recovery through the
 adapter. The deterministic suite tests the adapter's native-attempt detection,
-interruption, horizon fault and recovery, without relying on model compliance.
+interruption, boundary fault and recovery, without relying on model compliance.
 
 Integration evidence (2026-09-27): deterministic run
 `/private/tmp/skyra-e2e-k9fnws3d`, successful live run

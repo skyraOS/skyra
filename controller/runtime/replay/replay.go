@@ -2,11 +2,11 @@
 // checks every record against what the machine derives from its stored input.
 // Nothing is re-executed. Every kind of record is derived, none is skipped:
 //
-//	intake       interpret(the Horizon it was emitted under, the bytes received)
+//	intake       interpret(the Boundary it was emitted under, the bytes received)
 //	supervisor   Observed(the instance's stamp, what it observed)
 //	resolve      Resolved(the discharge's stamp, what it observed)
 //
-// Replay follows the Horizons the way step does: an invoke opens a frame, a
+// Replay follows the Boundaries the way step does: an invoke opens a frame, a
 // return or fault discharges the current frame's slot, and a resolve resumes
 // the continuation that was waiting on it, after every sibling it names is
 // re-derived too.
@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"slices"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 )
@@ -34,19 +34,19 @@ type Store interface {
 // forward, and returns the number of records re-derived: the chain, and every
 // sibling a resolve names.
 func Lineage(s Store, head string) (int, error) {
-	w := walker{s: s, seen: map[string]horizon.Horizon{}}
+	w := walker{s: s, seen: map[string]boundary.Boundary{}}
 	if _, err := w.at(head); err != nil {
 		return 0, err
 	}
 	return len(w.seen), nil
 }
 
-// Walker re-derives Horizons for many records, each record once: for a
+// Walker re-derives Boundaries for many records, each record once: for a
 // reader that asks about a whole tree (skyra metric).
 type Walker struct{ w walker }
 
-// At is the Horizon the record at stamp released, as HorizonAt.
-func (w *Walker) At(stamp string) (horizon.Horizon, error) { return w.w.at(stamp) }
+// At is the Boundary the record at stamp released, as BoundaryAt.
+func (w *Walker) At(stamp string) (boundary.Boundary, error) { return w.w.at(stamp) }
 
 // get reads kind/h from the store and checks that it hashes to its name.
 func get(s Store, kind, h string) ([]byte, error) {
@@ -69,28 +69,28 @@ func load(s Store, stamp string) (record.Record, error) {
 	return r, json.Unmarshal(b, &r)
 }
 
-// released reports whether a Horizon was committed: the release a parent
+// released reports whether a Boundary was committed: the release a parent
 // committed for a child.
-func released(s Store, h horizon.Horizon) bool {
+func released(s Store, h boundary.Boundary) bool {
 	b, err := json.Marshal(h)
 	if err != nil {
 		return false
 	}
-	_, err = get(s, "horizons", record.Sum(b))
+	_, err = get(s, "boundaries", record.Sum(b))
 	return err == nil
 }
 
-// walker re-derives records, each once: seen holds the Horizon each record
+// walker re-derives records, each once: seen holds the Boundary each record
 // released, so siblings that share a chain share its re-derivation.
 type walker struct {
 	s    Store
-	seen map[string]horizon.Horizon
+	seen map[string]boundary.Boundary
 }
 
 // at re-derives every record from genesis (or from the last record already
-// re-derived) to head, and returns the Horizon head released.
-func (w *walker) at(head string) (horizon.Horizon, error) {
-	var none horizon.Horizon
+// re-derived) to head, and returns the Boundary head released.
+func (w *walker) at(head string) (boundary.Boundary, error) {
+	var none boundary.Boundary
 	if head == "" {
 		return none, errors.New("empty lineage head")
 	}
@@ -108,7 +108,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		s = r.Predecessor
 	}
 	slices.Reverse(chain)
-	var h horizon.Horizon
+	var h boundary.Boundary
 	if s != "" {
 		h = w.seen[s]
 	} else {
@@ -119,7 +119,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 		if g.Predecessor != "" {
 			return none, errors.New("chain does not start at genesis")
 		}
-		h = horizon.Horizon{Stamp: chain[0], Reach: g.Reach, Frame: chain[0]}
+		h = boundary.Boundary{Stamp: chain[0], Reach: g.Reach, Frame: chain[0]}
 		if g.Authority != nil {
 			h.Authority = *g.Authority
 		}
@@ -136,7 +136,7 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 			return none, err
 		}
 		if rec.Predecessor != h.Stamp {
-			return none, fmt.Errorf("record %s does not follow the Horizon it claims", record.Short(stamp))
+			return none, fmt.Errorf("record %s does not follow the Boundary it claims", record.Short(stamp))
 		}
 		var derived record.Record
 		var o machine.Observation
@@ -165,8 +165,8 @@ func (w *walker) at(head string) (horizon.Horizon, error) {
 
 		switch {
 		case rec.Supervisor:
-			// It discharged the frame of the Horizon it was committed under.
-			h = horizon.Horizon{Stamp: stamp, Reach: h.Reach, Authority: h.Authority, Frame: h.Frame, Resume: h.Resume}
+			// It discharged the frame of the Boundary it was committed under.
+			h = boundary.Boundary{Stamp: stamp, Reach: h.Reach, Authority: h.Authority, Frame: h.Frame, Resume: h.Resume}
 		case rec.State == record.Resolve:
 			// Every other slot of the round was discharged too: re-derive
 			// each sibling's chain, and check it discharged a slot of this

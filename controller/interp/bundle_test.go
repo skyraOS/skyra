@@ -74,7 +74,7 @@ func TestConversationReconstructionBundleRunsWiring(t *testing.T) {
 		}
 	}
 	json.Unmarshal(next.Emit[0], &syscall)
-	if syscall.To != "system" || syscall.Payload["strand"].Invocation != "root" || len(syscall.Payload["strand"].Observations) != 2 {
+	if syscall.To != "system" || syscall.Payload["trace"].Invocation != "root" || len(syscall.Payload["trace"].Observations) != 2 {
 		t.Fatalf("tree wiring: %s", next.Emit[0])
 	}
 	if err := installBundle(dir, "workflows/conversations/bundle.json"); err != nil {

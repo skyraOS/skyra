@@ -12,7 +12,7 @@ import (
 // destination is a root the human can select (proposal 38): an authored
 // procedure, the actor it runs on, its contract, and its outline. Listing one
 // grants nothing; intake checks every message against the conversation's
-// Horizon.
+// Boundary.
 type destination struct {
 	Actor   string          `json:"actor"`
 	Title   string          `json:"title"`

@@ -3,13 +3,13 @@
 Proposal: **In the proposal**, section H of [next/proposal](../next/proposal/README.md);
 the implementation plan is 32-procedures-proposal.
 Defines what self-extension is; `system.register` (28, improvements item 6)
-becomes `remember`, which ends in the Horizon's `extend-reach`. Supersedes
+becomes `remember`, which ends in the Boundary's `extend-reach`. Supersedes
 section G and review finding F10.
 
 Date: 2026-10-03  
 Status: agreed in discussion, and **built** (2026-10-03, section H, `02bd1b9`…`9ee7e68`;
 where the build differs, the list's Status column says so). Builds on [24](../next/24-the-room.md),
-[26](../next/26-agents-and-facets.md), [27](../next/27-a-horizon-is-a-process.md),
+[26](../next/26-agents-and-facets.md), [27](../next/27-a-boundary-is-a-process.md),
 [29](../next/29-actors-own-their-state.md), 30 and
 [act](../next/act.md). Changes what 28 calls an agent-written tool, and what 30's
 routes are part of. Revises 30's rule: types belong to the interpreter, not
@@ -25,19 +25,19 @@ the runtime ([Types](#types)).
 
 And what that makes self-extension:
 
-> **An agent extends itself by remembering.** `remember` compiles a strand
+> **An agent extends itself by remembering.** `remember` compiles a trace
 > that already ran into a procedure: the same contract, with the interpreter
 > as its actor in place of the one that did the work. The interpreter adds
 > that contract to itself with `extend-reach`. **An actor can only extend
-> itself.** It needs no approval: everything in the strand already passed
-> the Horizon's check, and every later instruction is checked again at
+> itself.** It needs no approval: everything in the trace already passed
+> the Boundary's check, and every later instruction is checked again at
 > intake.
 
-And how a Horizon grows:
+And how a Boundary grows:
 
-> **A Horizon's reach grows only by naming compositions of what it already
-> holds. New capability comes only from whoever created the Horizon.** What a
-> Horizon was created with, its reach and its OS grants, is its genome;
+> **A Boundary's reach grows only by naming compositions of what it already
+> holds. New capability comes only from whoever created the Boundary.** What a
+> Boundary was created with, its reach and its OS grants, is its genome;
 > everything that grows inside it is composition over that.
 
 And where types go:
@@ -136,10 +136,10 @@ procedure summarize        → header, return: $out, body: [h_out]
   discharged. Calls that do not depend on each other run in parallel: a fork,
   not a choice.
 - **Calls are by target.** A node calls `merge`, not a hash, with a payload;
-  at intake the kernel resolves the target in the Horizon and selects the
+  at intake the kernel resolves the target in the Boundary and selects the
   target's contract the payload fits, like every instruction. The target may
-  also be a binding: a target an earlier node returned, such as a Horizon
-  created by `narrow` ([below](#creating-a-horizon-inside-a-procedure)).
+  also be a binding: a target an earlier node returned, such as a Boundary
+  created by `narrow` ([below](#creating-a-boundary-inside-a-procedure)).
 
 ### Choice: refinements on an edge
 
@@ -165,11 +165,11 @@ has all three:
 
 | Thing | Codex | Procedure | Owner |
 |---|---|---|---|
-| **Its input contract** | `codex.exchange` | the header | **the Horizon**: a contract in reach, (target, schema) |
+| **Its input contract** | `codex.exchange` | the header | **the Boundary**: a contract in reach, (target, schema) |
 | **What makes it work** | the thread id, and the thread behind it | the procedure, and where it is in it | **the actor**: its own state |
-| **What happened when it ran** | the lineage of its turns | the strand | **the Horizon**: execution state, read through a syscall |
+| **What happened when it ran** | the lineage of its turns | the trace | **the Boundary**: execution state, read through a syscall |
 
-The Horizon knows only input contracts, never the actor. A body is how the
+The Boundary knows only input contracts, never the actor. A body is how the
 interpreter implements a contract, as a thread is how the Codex adapter
 implements `codex.exchange`. The kernel never knows what a body is, or that
 a procedure started: it sees an invoke of one of the interpreter's
@@ -189,64 +189,64 @@ record it and does not need it.
 - **An actor can only see its own state.** That is what the floor was for:
   `.skyra/` has been several actors' state masquerading as one. Each actor
   gets its own directory under it (`.skyra/interpreter/`, later
-  `.skyra/codex/`, and the Horizon's own), and its sandbox is granted that
-  directory and denied the rest. Nothing in it is keyed by Horizon: a
+  `.skyra/codex/`, and the Boundary's own), and its sandbox is granted that
+  directory and denied the rest. Nothing in it is keyed by Boundary: a
   procedure has a stable identity once remembered, its contract; a running
-  frame's position is keyed by its frame. Horizons are never stored unless
+  frame's position is keyed by its frame. Boundaries are never stored unless
   remembered, and the actor never learns which one it is in.
 
 ### Authority is checked per instruction
 
-A procedure only exists in the Horizon that remembered it, and the
+A procedure only exists in the Boundary that remembered it, and the
 interpreter runs it there. Every instruction it emits goes through intake
-under that Horizon; an instruction outside it is a horizon fault, as for any
+under that Boundary; an instruction outside it is a boundary fault, as for any
 target. A procedure calls another procedure only when both contracts are in
-the same Horizon, because that is the only place the name resolves.
+the same Boundary, because that is the only place the name resolves.
 
-So a procedure cannot run with more authority than the Horizon it was
+So a procedure cannot run with more authority than the Boundary it was
 remembered in, and the kernel never inspects a procedure to know it. F10 holds
 by construction.
 
 ### Lifetime is reachability
 
 A procedure lives **while some reach holds its contract**. It is added to
-the Horizon that remembered it; it lasts as long as that Horizon, and as
-anything that Horizon hands it to. When nothing holds it, nothing can call it,
+the Boundary that remembered it; it lasts as long as that Boundary, and as
+anything that Boundary hands it to. When nothing holds it, nothing can call it,
 and the interpreter may drop the body. That is Agoric's rule: an object lives
 while references to it exist.
 
-## Syscalls belong to the Horizon
+## Syscalls belong to the Boundary
 
-> **A syscall is a contract owned by the Horizon its callers run in.**
+> **A syscall is a contract owned by the Boundary its callers run in.**
 
-A Horizon is an actor, addressed as `system`; its contracts are the
+A Boundary is an actor, addressed as `system`; its contracts are the
 syscalls, and a syscall is an ordinary emission to it. It is called `system`
-because no actor knows it is in a Horizon: each has the illusion of being the
+because no actor knows it is in a Boundary: each has the illusion of being the
 only process, as a Unix process calls the kernel without knowing which
 container it runs in:
 `{"to": "system", "payload": {"extend-reach": {"schema": …}}}`.
-The room's facets (`system.narrow` today) become contracts every Horizon
+The room's facets (`system.narrow` today) become contracts every Boundary
 owns. Two kinds:
 
 | Syscall | Answered by | What |
 |---|---|---|
-| `narrow` | the kernel | a narrowed Horizon for one actor (26) |
-| `strand` | the kernel | the hashes from an observation back to the invoke that caused it, within this Horizon |
+| `narrow` | the kernel | a narrowed Boundary for one actor (26) |
+| `trace` | the kernel | the hashes from an observation back to the invoke that caused it, within this Boundary |
 | `extend-reach(schema)` | the kernel | a new contract for the actor that asks, on itself |
-| a request for new capability | **the Horizon's creator** | climbs to a slot on the invocation that created this Horizon; the creator answers with an emission, as always (24, 27: the creator supervises) |
+| a request for new capability | **the Boundary's creator** | climbs to a slot on the invocation that created this Boundary; the creator answers with an emission, as always (24, 27: the creator supervises) |
 
 ### `extend-reach` needs no approval
 
 `remember` compiles only what executed, and everything that executed went
-through intake under this Horizon. So a remembered procedure provably acted
+through intake under this Boundary. So a remembered procedure provably acted
 inside it. That guarantees the procedure **will not fault** where it was
 remembered. What makes **any** procedure safe is the second fact: every
 future instruction is checked at intake again. Safety does not depend on
 `remember` being honest; even a forged procedure would fault on its first
-instruction outside the Horizon.
+instruction outside the Boundary.
 
 So `extend-reach` adds a contract, never authority, and needs no approval in any
-Horizon, the root included. A contract is identified by **(target, schema)**,
+Boundary, the root included. A contract is identified by **(target, schema)**,
 so `(codex, S)` and `(interpreter, S)` are different contracts.
 
 > **An actor can only extend itself.**
@@ -260,7 +260,7 @@ so `(codex, S)` and `(interpreter, S)` are different contracts.
   `extend-reach(schema)`. The kernel knows who emitted it, and that is the
   actor extended. "Itself" is the actor the emitter's invoke resolved to (for
   an invoke through a reference, the grant's actor), and the contract joins
-  the emitter's own Horizon: an actor extends itself where it runs, never
+  the emitter's own Boundary: an actor extends itself where it runs, never
   elsewhere.
 - **It matches 26:** an agent presents its own facets, at registration; here
   an actor grows its own interface at runtime.
@@ -279,10 +279,10 @@ authority:
 ### New capability climbs to the creator
 
 A new actor, or a new OS grant, is not composition. Only whoever created the
-Horizon can grant it, so the request climbs to a slot on the creator's
-invocation: an instance of Codex that narrowed a Horizon answers for it; the
+Boundary can grant it, so the request climbs to a slot on the creator's
+invocation: an instance of Codex that narrowed a Boundary answers for it; the
 human answers for the root. This is 24's authority fault, and it is the only
-place a Horizon's genome changes. It is designed, not built, and not part of
+place a Boundary's genome changes. It is designed, not built, and not part of
 H.
 
 ## The machine knows instructions and authority
@@ -302,10 +302,10 @@ replay. Applied:
 | Concept | In the machine? | Why |
 |---|---|---|
 | invoke, return, fault, resolve | **yes** | the instruction set |
-| Horizons, reach, narrowing | **yes** | authority |
+| Boundaries, reach, narrowing | **yes** | authority |
 | intake's `Fits` on the input contract | **yes** | the contract is part of what reach grants |
 | records, hashes, provenance | **yes** | replay, and the facts everything else derives from |
-| `narrow`, `strand`, `extend-reach`: the Horizon's contracts | **yes** | each reads or changes Horizon state, which only the kernel holds |
+| `narrow`, `trace`, `extend-reach`: the Boundary's contracts | **yes** | each reads or changes Boundary state, which only the kernel holds |
 | types, shapes | no | only dispatch needs them |
 | procedures, refinements, routes | no | policy |
 | where a procedure is | no | the interpreter's bookkeeping |
@@ -329,9 +329,9 @@ CPU:
 | CPU | Skyra |
 |---|---|
 | the instruction set | invoke, return, fault, resolve |
-| memory protection: every access checked, whoever made it | every emission checked at intake against its Horizon |
-| a protection fault | a horizon fault |
-| a system call | a Horizon's syscalls |
+| memory protection: every access checked, whoever made it | every emission checked at intake against its Boundary |
+| a protection fault | a boundary fault |
+| a system call | a Boundary's syscalls |
 | an interpreter process (CPython, the JVM) | the interpreter actor |
 | its program counter, in its own memory | where a procedure is, in the interpreter's state |
 | bytecode | nodes |
@@ -347,7 +347,7 @@ CPU under `rr`.
 
 ### Running a procedure
 
-An actor in the Horizon invokes `summarize`, a contract in its reach. The
+An actor in the Boundary invokes `summarize`, a contract in its reach. The
 kernel sees the emission, finds that contract, and execs the program behind
 it, the interpreter, **against that contract**: the same exec as for every
 surface. The interpreter never picks a procedure and never invokes its own
@@ -382,28 +382,28 @@ merge returns
 The interpreter never raises an interrupt (29). When a refinement refuses, it
 emits an invoke of the model: an ordinary instruction.
 
-### Creating a Horizon inside a procedure
+### Creating a Boundary inside a procedure
 
-Creating a Horizon is a syscall on the Horizon a procedure runs in, so it is
+Creating a Boundary is a syscall on the Boundary a procedure runs in, so it is
 an instruction like any other:
 
 ```text
 h_n   call system           {narrow: {actor: "echo", reach: [...]}}   → a reference
-h_e   call $h_n.reference   in: {text: $doc}      after: [h_n]        → the new Horizon
+h_e   call $h_n.reference   in: {text: $doc}      after: [h_n]        → the new Boundary
 ```
 
-The new Horizon comes back as a **node**: something to invoke, with the
-contracts it has, which are its reach. The interpreter never tells a Horizon
+The new Boundary comes back as a **node**: something to invoke, with the
+contracts it has, which are its reach. The interpreter never tells a Boundary
 being created from any other invocation; both are emissions, and the kernel
 gives each its meaning. Every run sends `narrow` again and gets a fresh
-reference, so a strand that created a Horizon compiles like any other, and
-nothing needs a Horizon's name.
+reference, so a trace that created a Boundary compiles like any other, and
+nothing needs a Boundary's name.
 
 ### A procedure calling a procedure
 
 It is an instruction like any other: the interpreter emits an invoke of the
 other procedure's name, the kernel checks it at intake, and a new frame of the
-interpreter runs it. Both are in the same Horizon, or the name does not
+interpreter runs it. Both are in the same Boundary, or the name does not
 resolve. When the call is the last node, it is a tail call: the frame is
 replaced, not stacked.
 
@@ -413,19 +413,19 @@ In 30, the kernel computed types because routes lived in the kernel, and a
 route fired on a forged type could misdirect a return. Every consumer of a
 type is now in the interpreter: dispatch, refinements, falling back to the
 model. A wrong type can only cause a wrong dispatch, and a wrong dispatch
-still emits through intake under the Horizon. **Types are no longer
+still emits through intake under the Boundary. **Types are no longer
 security-relevant, so they leave the trusted base.**
 
 ### Facts, meaning, refinement
 
 | | Kernel: **facts** | Interpreter: **meaning** | Model: **refinement** |
 |---|---|---|---|
-| What | bytes, hashes, provenance: who returned what, through which contract, under which Horizon | base types, from shape and provenance; dispatch; the refinement environment | predicates over base types, on the edges |
+| What | bytes, hashes, provenance: who returned what, through which contract, under which Boundary | base types, from shape and provenance; dispatch; the refinement environment | predicates over base types, on the edges |
 | Example | "slot 3 was discharged by `summarize_chunk`, invoked through contract C, bytes sha:…" | "that is a `Summary`" | `size(doc) <= 200000` |
-| Trusted | yes: the floor | no: bounded by the Horizon | no: bounded by the interpreter's checks and the Horizon |
+| Trusted | yes: the floor | no: bounded by the Boundary | no: bounded by the interpreter's checks and the Boundary |
 
 - **Nothing is typed unless it is remembered.** Ordinary returns get no type.
-  The interpreter computes base types when it compiles a strand, and on the
+  The interpreter computes base types when it compiles a trace, and on the
   edges of a remembered procedure when it runs.
 - **Base types are ours.** The implementation (shapes, contents,
   presentations) lives in the interpreter, which we write; the model never
@@ -441,7 +441,7 @@ security-relevant, so they leave the trusted base.**
   cannot defend themselves.
 - **P11 is partly the interpreter's now.** It writes the prompts the model
   sees, so it keeps hashes out of them. Hashes are not authority
-  (`strand` reads only the requester's Horizon, whatever hash it is given), so this is defense in depth, not the floor.
+  (`trace` reads only the requester's Boundary, whatever hash it is given), so this is defense in depth, not the floor.
 
 ### Refinement types
 
@@ -474,7 +474,7 @@ at every boundary, checked by the interpreter; inside the refinement the
 compiled body runs, and outside it the original actor runs.**
 
 A wrong refinement is bounded. Too loose, and the compiled body runs on input
-it should not have, under the Horizon. Too tight, and the original actor runs
+it should not have, under the Boundary. Too tight, and the original actor runs
 more often than it had to: safe, and only slower.
 
 **Versioning is later.** Several bodies behind one contract, each under its
@@ -495,14 +495,14 @@ and shows it, as names and presentations:
 3. which edge refused, and why: "`parts[2]` is `RateLimited`; this procedure
    expects `Summary`".
 
-The model continues from there. Its strand starts at that edge; remembering
+The model continues from there. Its trace starts at that edge; remembering
 it as a **branch at that edge** is a second representation, so it waits for
 versioning. The refused value is shown as data: it is the likeliest place for
-injected content, and the model still runs under the Horizon.
+injected content, and the model still runs under the Boundary.
 
 ## Remembering a result
 
-An observation comes back: the bottom of a strand. Whatever holds
+An observation comes back: the bottom of a trace. Whatever holds
 `remember` in its reach, the human's target, a model, or another actor, can
 remember how it was reached. It passes the observation **and the contract
 that made the original request**, because the child never knows who called
@@ -512,68 +512,68 @@ it:
 caller   invokes interpreter {remember: {observation: <hash>,
                                          contract: (codex, S)}}
          (the user target is a worker, so it may carry the hash)
-interp   system {strand: {observation, contract}}               syscall: read
+interp   system {trace: {observation, contract}}               syscall: read
 kernel   walks from the observation back up to the invoke made through
-         (codex, S), within this Horizon; hands back that string of hashes
+         (codex, S), within this Boundary; hands back that string of hashes
 interp   walk, compile, and (H9) ask the model for the edges     its own policy
          → stores the procedure in its own state, under schema S
          → system {extend-reach: {schema: S}}
 kernel   the emitter is the interpreter, and (interpreter, S) is new:
-         it joins this Horizon's reach
+         it joins this Boundary's reach
 ```
 
 - **`remember` is a procedure to the interpreter and an input contract to the
   kernel.** Its first step is a syscall; a compiled procedure's first step
-  is its first instruction. It runs in the caller's Horizon, as a shared
-  call, so `strand` reads that Horizon and `extend-reach` extends it.
+  is its first instruction. It runs in the caller's Boundary, as a shared
+  call, so `trace` reads that Boundary and `extend-reach` extends it.
 - **Naming the contract is also the check.** The walk must reach an invoke
-  through that contract, inside the requester's Horizon: a caller can only
+  through that contract, inside the requester's Boundary: a caller can only
   remember work it asked for.
 - **The procedure takes the original request's contract; only the actor
   changes.** `do-work(observation)` on Codex becomes `do-work(observation)`
   on the interpreter: `(codex, S)` did the work, `(interpreter, S)` now does
   it without the model, within its refinement. A second run remembered
   through the same contract would be a second representation of
-  `(interpreter, S)`: refused, in any Horizon, until versioning. The refusal
-  comes before `extend-reach`, so no Horizon is ever given a procedure
-  another Horizon remembered.
-- **`remember` is a capability of a Horizon,** like any contract in reach.
+  `(interpreter, S)`: refused, in any Boundary, until versioning. The refusal
+  comes before `extend-reach`, so no Boundary is ever given a procedure
+  another Boundary remembered.
+- **`remember` is a capability of a Boundary,** like any contract in reach.
   Who may remember is who holds it, decided by reach and narrowing, never by
   which model is offered which tool.
 - **Bootstrap.** `remember`'s own body is embedded in the interpreter binary,
   whose pinned hash commits to it. A new `remember` is a new interpreter.
 
-### Reading the strand
+### Reading the trace
 
-- **Within a Horizon, everything is trusted; isolation is a child Horizon.**
-  An actor running in a Horizon is part of it, and entitled to read its
-  execution state. `strand` reads only the requester's Horizon, so
+- **Within a Boundary, everything is trusted; isolation is a child Boundary.**
+  An actor running in a Boundary is part of it, and entitled to read its
+  execution state. `trace` reads only the requester's Boundary, so
   the interpreter needs no notion of isolation: that check is the kernel's.
-- **A strand is seen one Horizon at a time.** A call into a narrowed child
+- **A trace is seen one Boundary at a time.** A call into a narrowed child
   appears as one call and its return, which are the caller's state. A
   remembered procedure calls the child; it never copies its insides.
-- **The cost is explicit.** Any actor in a Horizon can read all of its
+- **The cost is explicit.** Any actor in a Boundary can read all of its
   execution state, including work it did not see. That is what granting a
-  Horizon means. The think/act split relies on separate Horizons, not
+  Boundary means. The think/act split relies on separate Boundaries, not
   separate actors.
 
-## Compiling a strand
+## Compiling a trace
 
-`remember` turns a strand into procedures. In the strand, a model did two
+`remember` turns a trace into procedures. In the trace, a model did two
 jobs: it **decided what to call**, and it **was resumed** when its calls came
 back. Compiling gives both jobs to the interpreter. The frames, rounds and
 discharges look the same to the kernel; only the program resumed changes.
 
-### The strand as a Merkle tree
+### The trace as a Merkle tree
 
 ```text
-strand(frame) = frame record
+trace(frame) = frame record
               → rounds (resolve records, linked through Deps)
                 → each round: the invokes it opened
                   → each invoke: its discharge, and
                       no rounds of its own   → a leaf
                       rounds of its own      → a continuation: walk it
-                      another Horizon        → opaque: one call and its return
+                      another Boundary        → opaque: one call and its return
 ```
 
 **A continuation is a frame that opened slots; a leaf is one that did not.**
@@ -583,7 +583,7 @@ bottom up through the resolve records to the frame.
 
 ### Control, not content
 
-A model in a strand did one of two things, and only one is replaced:
+A model in a trace did one of two things, and only one is replaced:
 
 | What the model did | Example | Becomes |
 |---|---|---|
@@ -606,7 +606,7 @@ content-addressed, so the interpreter finds where by matching:
 | appears nowhere upstream | a **constant**: the model chose it |
 
 A constant is kept as recorded: the procedure uses it on every run. One
-strand cannot say whether the model chose it because of this input. So the
+trace cannot say whether the model chose it because of this input. So the
 constants are shown to the model when it writes its refinements ("these
 values are fixed: 200, `out.md`"), and it can refine the edges where they
 should not apply.
@@ -639,7 +639,7 @@ edge:    returns.parts.all(p, p.type == "Summary")
 The compiled body becomes the contract's one representation, under that
 refinement; the original actor is the fallback. Until refinements are built (H9), the
 default refinement is the base types themselves: the compiled body runs only
-on input, and edges, whose base types equal the strand's.
+on input, and edges, whose base types equal the trace's.
 
 ### The refinement language
 
@@ -657,19 +657,19 @@ keep no dependencies.
   timestamp of the invoke; CEL has no `now()`, and none is added.
 - **Under the interpreter's direction.** The interpreter type-checks the
   predicate against the declared base types, bounds its cost with CEL's
-  estimator, and checks it against its own strand: a refinement that refuses
-  the strand it was compiled from is wrong, `remember` refuses it, and the
+  estimator, and checks it against its own trace: a refinement that refuses
+  the trace it was compiled from is wrong, `remember` refuses it, and the
   model is shown why.
-- **No errors on its own strand.** CEL's `||` and `&&` absorb errors
+- **No errors on its own trace.** CEL's `||` and `&&` absorb errors
   (`true || error` is `true`), which can hide a predicate reading a field that
-  never exists. A refinement whose evaluation on its own strand hits any
+  never exists. A refinement whose evaluation on its own trace hits any
   error is refused.
 - **Only ordered iteration.** Macros over a map have no defined order; the
   environment forbids `map` and `filter` over maps.
 
 ## The source and the compiled form
 
-- **JSON is the source,** and `remember` writes it, compiled from a strand.
+- **JSON is the source,** and `remember` writes it, compiled from a trace.
   Models do not write procedures by hand.
 - **Nodes are the compiled form,** kept in the interpreter's state. The
   interpreter only ever runs nodes.
@@ -680,10 +680,10 @@ keep no dependencies.
 
 ## Where procedures come from
 
-Every procedure is remembered from a strand. A `prompt` body runs, and the
-model decides each call live; the strand records the calls. With the
+Every procedure is remembered from a trace. A `prompt` body runs, and the
+model decides each call live; the trace records the calls. With the
 parameters lifted out of the specific hashes, it is a procedure for the same
-header. Later, two strands that differ only in their inputs give the general
+header. Later, two traces that differ only in their inputs give the general
 one by anti-unification (Plotkin, 1970): the shared structure, with the
 differences as parameters.
 
@@ -728,7 +728,7 @@ general:
 | Where | Today | Here |
 |---|---|---|
 | fan-out | was not built: one emission was one successor, and a round's size was never committed | one emission is N instructions; the machine spawns N successors, each takes one, and the emitter supervises all N, opening every slot before releasing any |
-| syscalls | the room's facets: `system.narrow`, `system.route` | the Horizon as the actor `system`, its contracts `narrow`, `strand`, `extend-reach`; `system.route` leaves |
+| syscalls | the room's facets: `system.narrow`, `system.route` | the Boundary as the actor `system`, its contracts `narrow`, `trace`, `extend-reach`; `system.route` leaves |
 | contracts | one input contract per name in reach | a target holds a set of contracts, each identified by (target, schema), selected by fit |
 | the floor | `.skyra/` is denied to every target | an actor can only see its own state: its own directory under `.skyra/` |
 | `core/machine` | the novelty interrupt; route lookup and `system.route`'s phases; shapes, type computation, type hashes and presentations | all removed; the machine keeps intake's `Fits` |
@@ -753,11 +753,11 @@ And outside the machine:
   continuations) or only continuations.
 - **Running the model under an attack.** The model runs on exactly the
   inputs its refinements found unusual, which is where injected content
-  sits. It runs under the Horizon, so this is bounded, but the adversarial
+  sits. It runs under the Boundary, so this is bounded, but the adversarial
   suite should aim here.
-- **Injected strands.** A strand recorded while an agent read untrusted text
+- **Injected traces.** A trace recorded while an agent read untrusted text
   can carry injected decisions; remembering it keeps them, bounded by the
-  Horizon.
+  Boundary.
 - **Versioning.** Several representations behind one contract: overloads
   chosen by refinement (first match, since most specific first would need
   implication between CEL predicates, which is not decidable in general),
@@ -794,8 +794,8 @@ What it needs that H does not have:
 3. **Repetition.** "Until the final message" is a procedure that handles one
    tool call and calls itself, with a choice on the edge: tool call, or
    final message. It needs metering.
-4. **Authored by us.** One strand gives a straight line for one number of
-   tool calls; the loop needs anti-unification across strands. The first
+4. **Authored by us.** One trace gives a straight line for one number of
+   tool calls; the loop needs anti-unification across traces. The first
    Codex procedure is written by hand, by humans, in the source format.
    Models still do not write procedures.
 

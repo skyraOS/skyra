@@ -1,6 +1,6 @@
-// Package horizon owns authority: what a frame runs, what it may reach, and
+// Package boundary owns authority: what a frame runs, what it may reach, and
 // the OS sandbox that authority renders to. It imports only package contract.
-package horizon
+package boundary
 
 import (
 	"crypto/sha256"
@@ -16,18 +16,18 @@ import (
 
 // PathGrant names one OS path. Literal grants only that path; subpath grants
 // the path and its descendants. Registry loading resolves paths before they
-// enter a Horizon, so Render never consults the filesystem.
+// enter a Boundary, so Render never consults the filesystem.
 type PathGrant struct {
 	Path  string `json:"path"`
 	Scope string `json:"scope"` // literal or subpath
 }
 
-// Authority is the OS authority a Horizon grants to everything that runs
+// Authority is the OS authority a Boundary grants to everything that runs
 // under it (next/24). Exec is not among it: a profile allows exec of the one
 // program being run and nothing else, so no grant can let a target start
 // another program without the runtime recording it.
 //
-// Scratch is a directory everything under the Horizon may read and write: a
+// Scratch is a directory everything under the Boundary may read and write: a
 // place to put work, not a place to run it. Nothing written there can be
 // executed, by the same rule that holds everywhere: a profile allows exec of
 // the program being run and nothing else. It is its own field, not a read
@@ -96,7 +96,7 @@ func stringsAllow(ceiling, requested []string) bool {
 
 // Surface is a registered executable: what a program is, not what it may do
 // (next/25). Its identity (the binary, pinned by content hash) and its
-// contracts. What it may reach and touch belongs to the Horizon it runs under.
+// contracts. What it may reach and touch belongs to the Boundary it runs under.
 // AgentConfig identifies operator-approved agents and their private transport operations.
 type AgentConfig struct {
 	Operations []string `json:"operations"`
@@ -122,7 +122,7 @@ type Surface struct {
 	Input        *contract.Schema   `json:"input"`                  // what invoking it must fit: its registered contract
 	Contracts    []*contract.Schema `json:"contracts,omitempty"`    // its other contracts: a syscall's, or one the actor added to itself (next/32)
 	Continuation bool               `json:"continuation,omitempty"` // reads a Continuation on stdin; otherwise its bare payload
-	System       string             `json:"system,omitempty"`       // a facet of the room, implemented by the runtime (next/26): no binary, never registrable
+	System       string             `json:"system,omitempty"`       // a syscall facet, implemented by the runtime (next/26): no binary, never registrable
 	// State names the actor's own directory under the floor (next/32,
 	// decision 24): the one part of .skyra/ its sandbox may read and write.
 	// An actor can only see its own state.
@@ -148,38 +148,38 @@ func (s Surface) All() []*contract.Schema {
 	return append(all, s.Contracts...)
 }
 
-// Horizon is everything a step knows besides the bytes. It is the release
+// Boundary is everything a step knows besides the bytes. It is the release
 // (D6), sent by the parent after it verifies the child's commit. The data
 // travels as JSON. The frame stack travels beside it as directory fds over
 // SCM_RIGHTS.
 //
-// Reach and Authority are the Horizon proper (next/24): what emissions under
+// Reach and Authority are the Boundary proper (next/24): what emissions under
 // it may invoke, and the OS grants everything under it runs with. Every call
-// shares its caller's; genesis holds the root's, the room's. There is no
+// shares its caller's; genesis holds the root's. There is no
 // global registry lookup.
 //
 // The rest places a step in the stack: Frame is the slot its return
 // discharges, and Resume the continuation waiting on it, as it was when it
 // emitted (its Stamp is the round that opened the slot). The operator's
-// Horizon has no Resume.
-type Horizon struct {
+// Boundary has no Resume.
+type Boundary struct {
 	Agent     *AgentContext           `json:"agent,omitempty"`
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
 	Delegated bool                    `json:"delegated,omitempty"`
 	Stamp     string                  `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
 	Surface   *Surface                `json:"surface,omitempty"` // what this frame runs; nil for the operator
-	Reach     map[string]Surface      `json:"reach"`             // what emissions under this Horizon may invoke
-	Authority Authority               `json:"authority"`         // the OS grants everything under this Horizon runs with
-	Refs      map[string]Grant        `json:"refs,omitempty"`    // references received from the room: each names a narrowed Horizon for one actor (next/26)
+	Reach     map[string]Surface      `json:"reach"`             // what emissions under this Boundary may invoke
+	Authority Authority               `json:"authority"`         // the OS grants everything under this Boundary runs with
+	Refs      map[string]Grant        `json:"refs,omitempty"`    // references received from system.narrow: each names a narrowed Boundary for one actor (next/26)
 	Name      string                  `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a reference, its actor): who an extend-reach extends
-	Origin    string                  `json:"origin,omitempty"`  // the invoke that created this Horizon by a narrowing; "" for the room's. Frames that share it share one Horizon
-	Forked    bool                    `json:"forked,omitempty"`  // this frame, or one below it in this Horizon, is one of several siblings (fan-out)
+	Origin    string                  `json:"origin,omitempty"`  // the invoke that created this Boundary by a narrowing; "" for the root's. Frames that share it share one Boundary
+	Forked    bool                    `json:"forked,omitempty"`  // this frame, or one below it in this Boundary, is one of several siblings (fan-out)
 	Frame     string                  `json:"frame"`             // the frame whose slot a return discharges
-	Resume    *Horizon                `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
+	Resume    *Boundary               `json:"resume,omitempty"`  // the continuation waiting on Frame's slot
 }
 
 // Grant is what a reference stands for: an actor in reach, and the narrowed
-// Horizon it runs under when the reference is invoked.
+// Boundary it runs under when the reference is invoked.
 type Grant struct {
 	Agent     *AgentContext           `json:"agent,omitempty"`
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
@@ -189,8 +189,8 @@ type Grant struct {
 	Authority Authority               `json:"authority"`
 }
 
-// Depth is the number of frames in the stack that travels with this Horizon.
-func (h Horizon) Depth() int {
+// Depth is the number of frames in the stack that travels with this Boundary.
+func (h Boundary) Depth() int {
 	n := 1
 	for r := h.Resume; r != nil; r = r.Resume {
 		n++
@@ -198,8 +198,8 @@ func (h Horizon) Depth() int {
 	return n
 }
 
-// Names lists what the Horizon reaches, sorted.
-func (h Horizon) Names() []string {
+// Names lists what the Boundary reaches, sorted.
+func (h Boundary) Names() []string {
 	var n []string
 	for k := range h.Reach {
 		n = append(n, k)
@@ -208,15 +208,15 @@ func (h Horizon) Names() []string {
 	return n
 }
 
-// Render turns a Horizon into a Seatbelt profile (D7): the Horizon's grants,
-// the same for everything under it, plus the exclusions no Horizon can grant
+// Render turns a Boundary into a Seatbelt profile (D7): the Boundary's grants,
+// the same for everything under it, plus the exclusions no Boundary can grant
 // or remove (next/24). Everything is denied unless listed. The floor (the
 // .skyra/ directory) is always denied but for the running actor's own state
 // directory (next/32), and exec is allowed for the one program being run and
 // nothing else: the runtime's verified copy of it (43 D5), never the path it
-// was registered at. The floor is a parameter, not a Horizon field, so no
-// Horizon can grant it.
-func Render(h Horizon, floor string) string {
+// was registered at. The floor is a parameter, not a Boundary field, so no
+// Boundary can grant it.
+func Render(h Boundary, floor string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
 	exe := Verified(h, floor)
@@ -263,7 +263,7 @@ func Render(h Horizon, floor string) string {
 // Verified is where the runtime keeps the copy of h's program it checked and
 // runs (43 D5): under the floor, which only the runtime can write, named by
 // the hash of its bytes. It is "" if the surface has no well-formed hash.
-func Verified(h Horizon, floor string) string {
+func Verified(h Boundary, floor string) string {
 	if h.Surface == nil || len(h.Surface.SHA256) != 64 || strings.Trim(h.Surface.SHA256, "0123456789abcdef") != "" {
 		return ""
 	}
@@ -271,7 +271,7 @@ func Verified(h Horizon, floor string) string {
 }
 
 // StateDir is the running actor's own directory under the floor, or "".
-func StateDir(h Horizon, floor string) string {
+func StateDir(h Boundary, floor string) string {
 	if h.Surface == nil || !ValidState(h.Surface.State) {
 		return ""
 	}
@@ -281,7 +281,7 @@ func StateDir(h Horizon, floor string) string {
 // ValidState reports whether a name may be an actor's state directory: one
 // plain path segment that is none of the kernel's own directories.
 func ValidState(name string) bool {
-	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "horizons", "frames", "acceptances", "surfaces"}, name) {
+	if name == "" || len(name) > 64 || slices.Contains([]string{"records", "inputs", "boundaries", "frames", "acceptances", "surfaces"}, name) {
 		return false
 	}
 	for i, c := range name {

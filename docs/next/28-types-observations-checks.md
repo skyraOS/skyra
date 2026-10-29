@@ -4,7 +4,7 @@ Proposal: **Not in the proposal.** Written after the proposal. **Checks and hand
 
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [24](24-the-room.md),
-[26](26-agents-and-facets.md) and [27](27-a-horizon-is-a-process.md); gives
+[26](26-agents-and-facets.md) and [27](27-a-boundary-is-a-process.md); gives
 [21](21-observation-passing.md) its values and 14
 its novelty interrupt. Replaces the `continuation` flag (25) for good.
 
@@ -26,7 +26,7 @@ its novelty interrupt. Replaces the `continuation` flag (25) for good.
   takes `input: string`. A parent can fill that slot with a type of its own,
   `Brief = {focus, instructions}`, and the result is a new type.
 - **A continuation is a type, not a flag.** An LLM shown 5–7 contracts is a
-  type whose `tools` field holds a set of types: a subset of the Horizon's
+  type whose `tools` field holds a set of types: a subset of the Boundary's
   contracts. That subset is a facet (26), and running under it is a narrowing
   (24). There is no `continuation` field anywhere.
 - **Nothing is higher level to the runtime.** It checks fit, and nothing
@@ -72,7 +72,7 @@ a failure    ─▶ the parent's handler, with the trace
   is a boundary contract: the callee's type, the parent's slot values, the
   parent's check, the parent's handler.
 - **A lax check is allowed.** `accept` weakens only the parent's own
-  acceptance. It grants no authority; authority is the Horizon's.
+  acceptance. It grants no authority; authority is the Boundary's.
 
 ## Novelty: when a check is written
 
@@ -138,7 +138,7 @@ the runtime runs it.
   check and is the metering hook of improvements item 7.
 - **Run as a runtime-owned surface.** A pinned checker binary embeds
   `go.starlark.net` and runs through the ordinary execve path under an empty
-  Horizon: the language is one wall, the sandbox a second. The controller stays
+  Boundary: the language is one wall, the sandbox a second. The controller stays
   standard-library Go; the dependency lives in that one binary. Like the room's
   facets, it cannot be registered by anyone else.
 
@@ -215,9 +215,9 @@ to the registrant's reach, the way `system.narrow`'s references are added.
 |---|---|---|
 | `Surface.Continuation`, `"continuation": true` | the stdin format | removed; every worker reads one envelope (27) |
 | `interpret` | structural fit only | structural fit; then, at a return, the parent's check for that boundary, or a novelty interrupt |
-| `record` | faults are `malformed`, `horizon`, `contract`, `leaf`, `custody` | a failure carries its trace and blame; a novelty interrupt is a state |
+| `record` | faults are `malformed`, `boundary`, `contract`, `leaf`, `custody` | a failure carries its trace and blame; a novelty interrupt is a state |
 | `core/machine` | no interrupt | an interrupt state: the slot stays open, and the parent is resumed to write the check |
-| a new runtime-owned surface | — | the Starlark checker, pinned, run under an empty Horizon |
+| a new runtime-owned surface | — | the Starlark checker, pinned, run under an empty Boundary |
 | bindings | registry entries only | named, recorded bindings: slot values, a check, a handler |
 | `Surface.Args` | the registrant's launch flags | slots the owner fills |
 
@@ -233,7 +233,7 @@ to the registrant's reach, the way `system.narrow`'s references are added.
   it is accepted as a check.
 - **Handlers' defaults.** Whether a binding without a handler faults, as today.
 - **Metering.** The step cap per check, and whether it is charged to the
-  parent's Horizon (improvements item 7).
+  parent's Boundary (improvements item 7).
 - **The size of a suite.** Every past case, or a bounded, deduplicated set
   (distinct observations by content id, improvements item 9). Long
   conversations make "every" large.
@@ -243,7 +243,7 @@ to the registrant's reach, the way `system.narrow`'s references are added.
 ## Order
 
 1. One envelope; the `continuation` flag removed (27).
-2. The checker surface: Starlark under an empty Horizon, deterministic, re-run
+2. The checker surface: Starlark under an empty Boundary, deterministic, re-run
    at replay.
 3. Bindings with checks and handlers; structural fit then the check at a
    return.

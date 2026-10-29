@@ -1,4 +1,4 @@
-package horizon
+package boundary
 
 import (
 	"os"
@@ -38,7 +38,7 @@ func TestRepositoryReadableButOnlyIdeasWritable(t *testing.T) {
 	}
 	floor := filepath.Join(repo, ".skyra")
 	surface, exe := verified(t, self, floor)
-	profile := Render(Horizon{Surface: surface, Authority: Authority{
+	profile := Render(Boundary{Surface: surface, Authority: Authority{
 		Read: []PathGrant{{Path: repo, Scope: "subpath"}}, Scratch: ideas,
 	}}, floor)
 	for _, tc := range []struct{ path, want string }{

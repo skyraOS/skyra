@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 )
@@ -20,8 +20,8 @@ func TestVerifiedCopyIsTheCheckedBytes(t *testing.T) {
 	if err := os.WriteFile(path, good, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	s := horizon.Surface{Path: path, SHA256: record.Sum(good)}
-	exe := horizon.Verified(horizon.Horizon{Surface: &s}, floor)
+	s := boundary.Surface{Path: path, SHA256: record.Sum(good)}
+	exe := boundary.Verified(boundary.Boundary{Surface: &s}, floor)
 	if err := verifiedCopy(s, exe); err != nil {
 		t.Fatal(err)
 	}

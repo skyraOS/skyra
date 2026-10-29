@@ -19,7 +19,7 @@ these decisions rest on.
    stated in a record.
 4. **Hashes are identity, not authority.** A hash identifies, verifies integrity
    and enables search. It is public and derivable; naming one grants nothing.
-   Authority is membership in the Horizon, enforced by Seatbelt.
+   Authority is membership in the Boundary, enforced by Seatbelt.
 5. **Records name both observations explicitly.** The current `Input` field
    (hash of the bytes a target emitted) becomes `output`; a new `input` field
    carries the hash of the invocation's observation. This is a new record
@@ -55,7 +55,7 @@ record {
   input:   <observation hash>  the filled-in input
   output:  <observation hash>  the filled-in output (today's `Input`)
   fit:     <schema hash>       which declared schema the runtime matched
-  horizon: <predecessor stamp> under what authority
+  boundary: <predecessor stamp> under what authority
 }
 ```
 
@@ -63,7 +63,7 @@ Today a record carries `To` as a capability name, `Payload` inline and `Input`
 as the hash of emitted bytes; the binary hash is reachable only by walking
 `Predecessor` back to genesis `Reach`. The new version states each fact
 directly. Existing `omitempty` fields let the change be versioned without
-rewriting old Horizon or record bytes. Replay consumes recorded facts; it never
+rewriting old Boundary or record bytes. Replay consumes recorded facts; it never
 queries the filesystem, process table or Security framework to replay old work.
 
 ## What a binary implements is asserted, not known
@@ -94,7 +94,7 @@ is a Node script whose native binary changes on reinstall; `exec.LookPath`
 depends on `PATH` order.
 
 No UUID table maps names to hashes. A one-to-one UUID ↔ hash table is a second
-name with a mutable source of truth. The Horizon already is the list of hashes
+name with a mutable source of truth. The Boundary already is the list of hashes
 an execution may use, it only narrows, and it is recorded.
 
 ## Behavioural search
@@ -144,7 +144,7 @@ and lost on copy; at most a hint layer.
   provider-specific branches inside the runtime. Under this direction, home
   directories, auth paths and profile fragments become configuration supplied by
   an actor and recorded with the call. This aligns with the
-  [Horizon concern spec](../design/HORIZON-CONCERNS-SPEC.md).
+  [Boundary concern spec](../design/BOUNDARY-CONCERNS-SPEC.md).
 - `controller/runtime/instance/appserver.go`: the Codex native binary is hashed
   in place under Homebrew rather than pinned, and `--version` runs outside the
   sandbox. It should be pinned like every other binary; version becomes a
@@ -165,7 +165,7 @@ and lost on copy; at most a hint layer.
 3. **Explicit bindings.** Provisioning emits binary → schemas assertions as
    records rather than only genesis `Reach`.
 4. **Move provider knowledge out of the runtime.** Resident profiles become
-   actor-supplied configuration, per the Horizon concern spec.
+   actor-supplied configuration, per the Boundary concern spec.
 5. **Behavioural index.** Derive `index/` from existing histories, read-only,
    and test the three operation classes against real data before recording
    anything new.
@@ -185,14 +185,14 @@ It informs the decisions above but does not change them.
 
 ## What the repository already does
 
-- `controller/runtime/tree/tree.go`: records, inputs and Horizons are addressed
+- `controller/runtime/tree/tree.go`: records, inputs and Boundaries are addressed
   by SHA-256. `Put` writes and syncs a temporary file, publishes by exclusive
   hard link, then syncs the directory. Existing objects are reverified. `Get`
   rejects objects whose contents do not hash to their names.
 - The same package creates frame results, dependencies and fan-in claims with
   write-once publication through directory descriptors and `os.Root`.
 - `controller/runtime/handshake/handshake.go`: a private Unix datagram socketpair
-  carries the released Horizon reference and custody descriptors via SCM_RIGHTS.
+  carries the released Boundary reference and custody descriptors via SCM_RIGHTS.
   Close-on-exec prevents accidental descriptor inheritance by targets.
 - `controller/interp/proc/proc.go`: procedure bodies and nodes have content-derived
   identities.

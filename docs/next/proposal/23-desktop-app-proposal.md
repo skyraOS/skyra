@@ -10,14 +10,14 @@ Proposes changes to [23](../23-desktop-app.md). Ids refer to the
 23's cut 3 ("an authority fault reaches the human as a request… needs fault
 routing") now has its mechanism:
 
-- **Faults climb.** A horizon fault discharges the child's frame; the parent
+- **Faults climb.** A boundary fault discharges the child's frame; the parent
   either holds the authority and invokes again with less narrowing, or faults
   upward. It climbs until someone can grant. Above the room is the human (24).
 - **The human's answer is the room's admin facet.** Granting is an invoke of
   the room's admin facet, which only the human holds (26, D1). The app is how
-  the human invokes it; the app still never builds a Horizon or a profile.
+  the human invokes it; the app still never builds a Boundary or a profile.
 - **The workspace grant is the room's creation.** Picking a folder is the
-  operator authoring genesis (B8): the room's Horizon, with the workspace in
+  operator authoring genesis (B8): the room's Boundary, with the workspace in
   it. "One approval" is literally one authored record.
 
 ## The crossing table, revised

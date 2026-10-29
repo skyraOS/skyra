@@ -73,7 +73,7 @@ check on the Invoked → Returned transition.
      record is the continuation.
    - *In a live process:* Codex mid-turn, `user` with a socket. These need a
      supervisor that stays alive and a resume fd (08).
-   "The executable itself never emits Invokes" stays as a Horizon capability
+   "The executable itself never emits Invokes" stays as a Boundary capability
    (09), but its frame can still wait.
 2. **The phase table in 09 collapses into the Move variant.** A frame whose
    latest record is an Invoke with holes is waiting. One with a filled Invoke is
@@ -92,7 +92,7 @@ check on the Invoked → Returned transition.
 - **Holes are filled by trusted intake, never by the executable.** Resolution is
   interpretation, so it belongs to `skyra`.
 - **References are capability-bounded.** A hole may name only a result the
-  frame's Horizon can see. Otherwise references become a way to read other
+  frame's Boundary can see. Otherwise references become a way to read other
   frames' results.
 - **Effects are not values.** `ls somedir` depends on the filesystem, not only
   on the string `somedir`. Having a hole point at `mkdir`'s Return encodes the

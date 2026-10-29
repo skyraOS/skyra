@@ -86,7 +86,7 @@ ssh -L 8080:127.0.0.1:8080 skyra    # then open http://localhost:8080
 ```
 
 The public, read-only ingress that would sit beside it is
-[next/33](../docs/next/33-the-public-horizon.md).
+[next/33](../docs/next/33-the-public-boundary.md).
 
 ## Not built yet
 

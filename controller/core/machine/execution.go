@@ -3,16 +3,16 @@ package machine
 import (
 	"encoding/json"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 )
 
-// runOf is the Run effect for a Horizon: its surface, under the sandbox the
-// Horizon renders to, with an environment that names only the sockets its
+// runOf is the Run effect for a Boundary: its surface, under the sandbox the
+// Boundary renders to, with an environment that names only the sockets its
 // surface was granted, and the slot it returns to.
-func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
+func runOf(h boundary.Boundary, stdin []byte, floor string) Run {
 	// A target returns by addressing the slot its frame discharges. Being told
 	// it is information, not authority: intake derives the return from the
-	// emitter's own Horizon, whatever the target believes.
+	// emitter's own Boundary, whatever the target believes.
 	env := []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=" + h.Frame}
 	for _, sock := range h.Authority.Connect {
 		env = append(env, "SKYRA_CONNECT="+sock)
@@ -36,8 +36,8 @@ func runOf(h horizon.Horizon, stdin []byte, floor string) Run {
 	if s := h.Authority.Scratch; s != "" {
 		env = append(env, "SKYRA_SCRATCH="+s)
 	}
-	if dir := horizon.StateDir(h, floor); dir != "" {
+	if dir := boundary.StateDir(h, floor); dir != "" {
 		env = append(env, "SKYRA_STATE="+dir) // the actor's own state (next/32): the profile grants it
 	}
-	return Run{Surface: *h.Surface, Exec: horizon.Verified(h, floor), Stdin: stdin, Profile: horizon.Render(h, floor), Env: env}
+	return Run{Surface: *h.Surface, Exec: boundary.Verified(h, floor), Stdin: stdin, Profile: boundary.Render(h, floor), Env: env}
 }

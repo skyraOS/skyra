@@ -7,19 +7,19 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
 
-var echoS = horizon.Surface{Path: "/bin/echo-target", SHA256: "e",
+var echoS = boundary.Surface{Path: "/bin/echo-target", SHA256: "e",
 	Input: &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": {Type: "string"}}}}
 
 // intakeRecord runs the Intake step and returns what it commits.
-func intakeRecord(h horizon.Horizon, in string) record.Record {
-	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
+func intakeRecord(h boundary.Boundary, in string) record.Record {
+	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(h), In: []byte(in)})
 	return machine.CommittedRecord(effs)
 }
 
@@ -32,11 +32,11 @@ func buildLineage(t *testing.T, root string) string {
 			t.Fatal(err)
 		}
 	}
-	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: map[string]horizon.Surface{"echo": echoS}})
+	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: map[string]boundary.Surface{"echo": echoS}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := horizon.Horizon{Stamp: g0, Reach: map[string]horizon.Surface{"echo": echoS}, Frame: g0}
+	h := boundary.Boundary{Stamp: g0, Reach: map[string]boundary.Surface{"echo": echoS}, Frame: g0}
 	var head string
 	for _, in := range []func() string{
 		func() string { return `{"to":"echo","payload":{"text":"hi"}}` },
@@ -74,8 +74,8 @@ func TestReplayCatchesForgedRecord(t *testing.T) {
 	g, _ := tree.Load(root, head)
 
 	// Forge a successor to frame 1 claiming echo invoked something outside its
-	// Horizon. It is a well-formed, correctly hashed record, but step would
-	// never derive it: it derives a horizon fault.
+	// Boundary. It is a well-formed, correctly hashed record, but step would
+	// never derive it: it derives a boundary fault.
 	in := []byte(`{"to":"shell","payload":{"text":"x"}}`)
 	tree.Put(root, "inputs", in)
 	forged, err := tree.Commit(root, record.Record{Predecessor: g.Predecessor, Input: record.Sum(in), State: record.Invoke,
@@ -123,7 +123,7 @@ func TestReplayDerivesSupervisorFaults(t *testing.T) {
 	}
 }
 
-var agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Continuation: true}
+var agentS = boundary.Surface{Path: "/bin/agent", SHA256: "a", Input: echoS.Input, Continuation: true}
 
 // commitStep stores an input and commits the record derived from it.
 func commitStep(t *testing.T, root string, in []byte, r record.Record) string {
@@ -146,11 +146,11 @@ func buildContinuation(t *testing.T, root string) (head, echoReply, agentReply s
 	for _, d := range []string{"records", "inputs"} {
 		os.MkdirAll(filepath.Join(root, d), 0o755)
 	}
-	reach := map[string]horizon.Surface{"echo": echoS, "agent": agentS}
+	reach := map[string]boundary.Surface{"echo": echoS, "agent": agentS}
 	g0, _ := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach})
-	h := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+	h := boundary.Boundary{Stamp: g0, Reach: reach, Frame: g0}
 
-	emit := func(under horizon.Horizon, out string) (string, horizon.Horizon) {
+	emit := func(under boundary.Boundary, out string) (string, boundary.Boundary) {
 		r := intakeRecord(under, out)
 		s := commitStep(t, root, []byte(out), r)
 		next, err := machine.Narrow(under, r, s)
@@ -159,7 +159,7 @@ func buildContinuation(t *testing.T, root string) (head, echoReply, agentReply s
 		}
 		return s, next
 	}
-	resolve := func(discharged horizon.Horizon, discharge string) (string, horizon.Horizon) {
+	resolve := func(discharged boundary.Boundary, discharge string) (string, boundary.Boundary) {
 		w := discharged.Resume
 		obs, _ := json.Marshal(machine.Observation{Frame: w.Frame, Round: w.Stamp, Discharges: []string{discharge}})
 		r, _ := machine.Resolved(discharge, obs)
@@ -261,7 +261,7 @@ func TestARoundIsResumedOnce(t *testing.T) {
 
 // A tree recorded before contracts had a normal form (42), whose genesis
 // lists required fields out of order, replays as it always did: nothing a
-// recorded Horizon holds is rewritten.
+// recorded Boundary holds is rewritten.
 func TestATreeWithUnsortedRequiredStillReplays(t *testing.T) {
 	root := t.TempDir()
 	for _, d := range []string{"records", "inputs"} {
@@ -269,14 +269,14 @@ func TestATreeWithUnsortedRequiredStillReplays(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	two := horizon.Surface{Path: "/bin/two", SHA256: "t", Input: &contract.Schema{Type: "object", Required: []string{"text", "n"},
+	two := boundary.Surface{Path: "/bin/two", SHA256: "t", Input: &contract.Schema{Type: "object", Required: []string{"text", "n"},
 		Fields: map[string]*contract.Schema{"text": {Type: "string"}, "n": {Type: "number"}}}}
-	reach := map[string]horizon.Surface{"two": two}
+	reach := map[string]boundary.Surface{"two": two}
 	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := horizon.Horizon{Stamp: g0, Reach: reach, Frame: g0}
+	h := boundary.Boundary{Stamp: g0, Reach: reach, Frame: g0}
 	var head string
 	for _, in := range []string{`{"to":"two","payload":{"text":"hi","n":1}}`, ""} {
 		if in == "" {

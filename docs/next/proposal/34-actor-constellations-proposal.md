@@ -7,7 +7,7 @@ Status: proposed; not implemented. Revised to agree with
 and its [reconstruct-state procedure design](reconstruct-state/README.md).
 
 An actor is a constellation; its input contracts are stars. The human can
-inspect the capabilities in a Horizon and choose a contract for future
+inspect the capabilities in a Boundary and choose a contract for future
 work. Ordinary application actions address procedures on the interpreter.
 Codex's exported thread/turn operations remain underlying capabilities,
 visible for inspection rather than the default chat destination.
@@ -17,8 +17,8 @@ Builds on [23](../23-desktop-app.md), 25,
 
 ## The ownership boundary
 
-The Horizon executes work, records what happened and owns the history
-syscall, `system.strand`. It is available to actors in that Horizon subject
+The Boundary executes work, records what happened and owns the history
+syscall, `system.strand`. It is available to actors in that Boundary subject
 to reach, contract and history-visibility checks. The interpreter is one
 caller, not the owner of that capability.
 
@@ -28,7 +28,7 @@ recorded tree, including parallel branches. A single latest observation is
 not sufficient when multiple branches are open.
 
 The interpreter may expose a `reconstruct-state` procedure that composes
-Horizon history reads and user-state projection. It may also compose
+Boundary history reads and user-state projection. It may also compose
 future provider operations into meaningful application workflows. This
 does not transfer execution/history ownership to the interpreter, and
 user recovery may call the same syscall directly.
@@ -76,14 +76,14 @@ implemented in the desktop's current text-only `submit` message.
 
 Direct underlying actor calls can remain an explicit developer/advanced
 mode if wanted. They are not the application default and cannot bypass
-Horizon intake. Do not make every visible infrastructure contract a
+Boundary intake. Do not make every visible infrastructure contract a
 one-click application action merely because it has a star.
 
 ## What is already there
 
-- `desktop/Sources/Skyra/Sky/Horizons.swift` draws regions and surface stars.
-- `controller/hosts/web/horizons.go` derives historical regions from genesis
-  and released Horizons. Its reached members currently contain name and
+- `desktop/Sources/Skyra/Sky/Boundaries.swift` draws regions and surface stars.
+- `controller/hosts/web/boundaries.go` derives historical regions from genesis
+  and released Boundaries. Its reached members currently contain name and
   surface identity, not all contract schemas.
 - Surfaces hold their initial and added input contracts. Intake selects
   exactly one by payload fit; titles are labels rather than dispatch keys.
@@ -99,7 +99,7 @@ artifacts in proposal 33, not deployed capabilities. Contract selection
 must reflect what is actually installed and reachable in the selected
 interaction.
 
-## Contracts belong to an actor in a Horizon
+## Contracts belong to an actor in a Boundary
 
 The same executable may be reached under different names and contract
 sets. Identify a selectable occurrence by actor address, contract schema
@@ -114,7 +114,7 @@ Historical stars are inspectable. Only contracts held in the live emitting
 user context are selectable for a call. A reference discovered in another
 frame's history is not transferable authority. The host derives live
 context from validated runtime/custody evidence, not a client-supplied
-Horizon ID or a reconstructed assumption that an old parked frame is live.
+Boundary ID or a reconstructed assumption that an old parked frame is live.
 
 ## Picking a contract guides input; intake still selects by fit
 
@@ -145,18 +145,18 @@ contract star / sidebar action
     → recorded return/fault → retained user observation leaves
 
 reconstruct-state procedure
-    → user checkpoint read → Horizon strand syscall → user projection
+    → user checkpoint read → Boundary strand syscall → user projection
     → complete app snapshot → WebSocket delivery → app update
 ```
 
 The user adapter can also invoke the history syscall directly to recover
 its own state. Neither path needs an interpreter conversation-loop feature
-for reconstruction. Procedures express/combine operations; the Horizon
+for reconstruction. Procedures express/combine operations; the Boundary
 executes them and records the results.
 
 Invocation and parent-return routing already exist in the kernel:
 `user → interpreter procedure → system.strand → interpreter → user`.
-Calls share the caller's Horizon; the syscall returns to its slot and the
+Calls share the caller's Boundary; the syscall returns to its slot and the
 kernel resumes the waiting parent. The procedure returns its app snapshot
 through the same mechanism. No special application routing layer is needed
 for reconstruction. Treat this as verified existing plumbing, not a build
@@ -176,7 +176,7 @@ recheck request/context at actual admission.
 
 The current app accepts a `snapshot` with `uiIncarnation`, integer
 `revision` and a full `conversations` array. Each conversation supplies
-its ID, phase, entries and optional Horizons. Emit the browser-compatible
+its ID, phase, entries and optional Boundaries. Emit the browser-compatible
 `requests` array and `pendingRequestId` as well.
 
 The app replaces its conversation collection rather than merging one
@@ -187,7 +187,7 @@ is assumed in the first implementation; caches and paginated UI messages
 can follow later.
 
 The reconstruct-state design uses ordinary nested kernel invocations,
-Horizon reads and user projection operations, then returns the
+Boundary reads and user projection operations, then returns the
 assembled snapshot. The delivery layer unwraps the interpreter's addressed
 return before forwarding the payload to the app.
 
@@ -207,7 +207,7 @@ Adding selectable contract stars requires an explicit protocol extension
 beyond today's snapshot fields. Propose an optional per-conversation live
 destination object containing a context token and actors with address and
 contract identity/title/input schema. Keep it separate from historical
-`horizons[].actors`. Add decoder/models and browser schemas before relying
+`boundaries[].actors`. Add decoder/models and browser schemas before relying
 on it: extra JSON fields being ignored is not dynamic contract rendering.
 
 The user projection operation builds that extended snapshot from authorized
@@ -262,6 +262,6 @@ checks. Do not rewrite pinned historical roots during migration.
 - How the current input-context token and optional destination fields are
   versioned across desktop/browser deployments.
 
-This proposal changes how future calls are chosen and drawn. The Horizon
+This proposal changes how future calls are chosen and drawn. The Boundary
 continues to own execution and history; the user adapter retains root/leaves;
 interpreter procedures compose capabilities and return app-compatible data.

@@ -369,7 +369,7 @@ func title(c *Schema) string {
 	return "the contract"
 }
 
-// Remembering is a remember frame's work after it compiled its strand: the
+// Remembering is a remember frame's work after it compiled its trace: the
 // contracts it stored procedures for, in the order it extends itself with
 // them (bottom up, the requested one last).
 //

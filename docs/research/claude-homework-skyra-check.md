@@ -3,7 +3,7 @@
 A review of how Skyra launches targets and renders their sandboxes, written
 after finishing the CS5600 shell lab (fork/exec, file descriptors, process
 lifetimes). Scope: `controller/runtime/instance/instance.go` (launching) and
-`controller/core/horizon/horizon.go` (profile rendering). Not a full audit.
+`controller/core/boundary/boundary.go` (profile rendering). Not a full audit.
 
 ## Why this layer matters
 
@@ -15,10 +15,10 @@ layer.
 
 ## What is already right
 
-- **`(deny default)` profiles rendered from the Horizon**, never hand-written.
+- **`(deny default)` profiles rendered from the Boundary**, never hand-written.
 - **Correct rule order.** Seatbelt applies the *last* matching rule. The
   `.skyra` floor is denied *after* the grants, and the actor's own state
-  directory is re-allowed after that (`horizon.go`, `Render`), with a comment
+  directory is re-allowed after that (`boundary.go`, `Render`), with a comment
   saying why.
 - **Exec is limited to one program** (`process-exec (literal …)`).
 - **Explicit environment, capped output, a timeout**, and `WaitDelay` so a
@@ -37,7 +37,7 @@ cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", x.Profile, x.Surf
 Between the check and the exec, the file at `x.Surface.Path` can be replaced:
 one binary is verified and another runs. `startResident` follows the same
 pattern. This matters most if anything with write access can reach that path
-(another Horizon's grant, or a self-written tool).
+(another Boundary's grant, or a self-written tool).
 
 **Fix options, simplest first:**
 
@@ -63,13 +63,13 @@ pattern. This matters most if anything with write access can reach that path
 ## Issue 2: descendants can outlive their owner (residents and the repo checker)
 
 **Scope (corrected):** ordinary `run` targets are *not* affected. Their
-profile (`Render` in `horizon.go`) is `(deny default)` and never allows
+profile (`Render` in `boundary.go`) is `(deny default)` and never allows
 `process-fork`, so they cannot create child processes at all. That is
 stronger than any process-group fix.
 
 The issue applies where forking is allowed:
 
-- **Residents**: `core/horizon/resident.go` emits `(allow process-fork)`
+- **Residents**: `core/boundary/resident.go` emits `(allow process-fork)`
   (Codex and Claude need their own subprocesses).
 - **The repo checker**: `hosts/repo/check.go` allows `process-fork`.
 
@@ -104,7 +104,7 @@ weakens "every step is recorded and replayable."
 `sandbox-exec` is **deprecated** by Apple. It still works and others rely on
 it, but it is not a promised interface. Worth listing under known gaps. The
 planned move to NVIDIA's open-source sandbox should carry over three
-properties from today's design: deny-by-default rendered from the Horizon,
+properties from today's design: deny-by-default rendered from the Boundary,
 last-match rule ordering for the floor, and single-program exec.
 
 ## Checklist

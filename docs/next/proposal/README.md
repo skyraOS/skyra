@@ -19,10 +19,10 @@ New implementation proposals:
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
   migration, workflow-control additions and state/custody boundaries.
-  A conversation is its enclosing invocation; Horizon strand reads rebuild
+  A conversation is its enclosing invocation; Boundary strand reads rebuild
   its state from retained root-invocation/accepted-leaf-set checkpoints,
   without a separate conversation database.
-  The user adapter retains that checkpoint and calls the Horizon syscall;
+  The user adapter retains that checkpoint and calls the Boundary syscall;
   interpreter procedures compose future work, not state reconstruction.
   Caching is deferred.
   Proposed (2026-10-03).
@@ -36,7 +36,7 @@ New implementation proposals:
   the header. Proposed (2026-10-06).
 - [47 — One sandbox path for Codex and Claude](47-one-provider-sandbox-proposal.md):
   one deny-default profile, render and prepare for every model provider; the
-  Horizon reaches both through the same lines, and what differs is a pinned
+  Boundary reaches both through the same lines, and what differs is a pinned
   descriptor. Includes the hand-run Claude experiment. Proposed (2026-10-23).
 - [49 — Long-lived processes behind adapters](49-services-behind-adapters-proposal.md):
   every exec is stateless; an actor declares what it needs to run when it is
@@ -55,13 +55,13 @@ New implementation proposals:
 
 ## The design in one paragraph
 
-Authority is derived from state plus proposal at every step. A Horizon is an
+Authority is derived from state plus proposal at every step. A Boundary is an
 agent's execution context: authority only, identified by its authority, the
 invoke that created it and its input contract, committed durably and handed
-over as a hash the child looks up. Every call shares its caller's Horizon
+over as a hash the child looks up. Every call shares its caller's Boundary
 unless the caller narrows (through the room's `system.narrow` facet) or calls
-another agent (whose Horizon it runs under). The room is the root Horizon,
-whose Horizon is the registry table. Returns address the slot; unaddressed
+another agent (whose Boundary it runs under). The room is the root Boundary,
+whose Boundary is the registry table. Returns address the slot; unaddressed
 output is a leaf fault; faults carry their observation and climb to whoever
 can grant. A surface is identity plus contracts. Facets group an agent's
 contracts; reach holds facets.
@@ -72,27 +72,27 @@ contracts; reach holds facets.
 
 | Id | Change | Where | Status |
 |---|---|---|---|
-| A1 | `interpret` derives return from the slot: `to` equal to the emitter's frame id is a return; a name in reach is an invoke; anything else is a horizon fault | `core/machine/machine.go:285–322` | **Built**. `d49ce18` |
+| A1 | `interpret` derives return from the slot: `to` equal to the emitter's frame id is a return; a name in reach is an invoke; anything else is a boundary fault | `core/machine/machine.go:285–322` | **Built**. `d49ce18` |
 | A2 | Unaddressed output is a `leaf` fault carrying the output, not a string return | `machine.go:292`, `core/record/record.go` (new kind `Leaf`) | **Built**. `d49ce18` |
 | A3 | Drop the `"reply"` reservation | `runtime/registry/registry.go:56` | **Built**. `d49ce18` |
 | A4 | Tell every target its slot: `SKYRA_FRAME=<frame id>` in the environment (continuations already see `frame` on stdin) | `machine.go:569` (`runOf`) | **Built**. `d49ce18` |
 | A5 | Every emitter of `"reply"` addresses its slot instead | `targets/read/main.go:65`, `codex/io/main.go:50`, `codex/resident/main.go:391`, `codex/adapter/main.go:234` (legacy), `runtime/instance/instance.go:380`, `hosts/web/main.go:314` (uses the parked instance's frame), `hosts/web/calls.go:220` | **Built**. `d49ce18`. Also `echo`, `agent`, `user`, which returned unaddressed text |
-| A6 | Faults carry their observation: the bytes that did not fit, the address outside the Horizon, what a program printed; the continuation's `StepView` exposes it | `record.FaultInfo`, `machine.go:627` (`StepView`), `machine.go:635` | **Built**. `d49ce18`. The observation is the fault record's `payload`, shown as the step's `value` |
+| A6 | Faults carry their observation: the bytes that did not fit, the address outside the Boundary, what a program printed; the continuation's `StepView` exposes it | `record.FaultInfo`, `machine.go:627` (`StepView`), `machine.go:635` | **Built**. `d49ce18`. The observation is the fault record's `payload`, shown as the step's `value` |
 | A7 | Codex's native attempt is returned as an observation (a typed `refusal` in the resident's output contract), not `native.<type>` addressed to trigger a fault | `codex/resident/main.go:367`, `codex/resident/contract.json`, `codex/adapter/main.go:292`, `hosts/web/calls.go`, `hosts/web/calls_test.go` | **Built**. `d49ce18`. The field is `refused` |
-| A8 | The fake Codex's `"tool": "reply"` bypass probe becomes a probe of naming `reply` (now a horizon fault) and of guessing a slot | `codex/fake/main.go:133` | **Built**. `d49ce18`. The probe still names `reply`: now an unoffered tool, interrupted and returned as `refused` |
+| A8 | The fake Codex's `"tool": "reply"` bypass probe becomes a probe of naming `reply` (now a boundary fault) and of guessing a slot | `codex/fake/main.go:133` | **Built**. `d49ce18`. The probe still names `reply`: now an unoffered tool, interrupted and returned as `refused` |
 | A9 | Tests: `TestInterpret`, replay, `read_test`, `resume_test`, `lineage_test` | `*_test.go` | **Built**. `d49ce18`, plus a resident test for the refusal |
 
-### B. The Horizon: durable, derived, shared (24)
+### B. The Boundary: durable, derived, shared (24)
 
 | Id | Change | Where | Status |
 |---|---|---|---|
-| B1 | The `Horizon` struct holds authority only (reach, grants). `Stamp`, `Frame` and `Resume` move out | `core/horizon/horizon.go:126` | **In part**. `a275748`. Authority is on the Horizon; `Stamp`, `Frame` and `Resume` are still in the struct |
-| B2 | Horizon id = hash(authority, the invoke that created it, its input contract) | `horizon`, `record` | **In part**. `dad1bf0`. The id is the hash of the Horizon's encoding; the (authority, invoke, contract) form waits for E |
-| B3 | A Horizon is committed durably at creation, and that commit is the release | `runtime/tree` (`horizons/`), `machine.handoff` (`:413`) | **Built**. `dad1bf0`. `.skyra/horizons/` |
-| B4 | The child is handed the Horizon's hash; its first act is a lookup, and it re-derives what it found | `machine.accept` (`:330`), `instance` `SendHorizon` (`instance.go:177`), `handshake` | **Built**. `dad1bf0`. `accept` refuses a Horizon its commit does not derive |
-| B5 | The stack lives with the Horizon in durable state; steps read it and write write-once entries. The `Resume` copy goes | `machine.gather`/`claim` (`:509`, `:532`), `instance.gather` (`instance.go:242`), `Depth()` | Not built. The Horizon is committed with its stack, but the `Resume` copy still travels and `gather`/`claim` still read it |
-| B6 | Every call shares its caller's Horizon; a Horizon is created only by a narrowing, a registration, or a call into another agent | `machine.Narrow` (`:456`) | **Built**. `a275748`. Narrowing and references in `8ba6f4c`; registration and calls into another agent are not built |
-| B7 | The Seatbelt profile is rendered per Horizon, plus the exclusions: the floor, and `process-exec` of the running program only. Exec can never be registered | `horizon.Render` (`:157`), `resident.go:21` | **Built**. `a275748`. Exec is no longer expressible as a grant; OS test for exec denial |
+| B1 | The `Boundary` struct holds authority only (reach, grants). `Stamp`, `Frame` and `Resume` move out | `core/boundary/boundary.go:126` | **In part**. `a275748`. Authority is on the Boundary; `Stamp`, `Frame` and `Resume` are still in the struct |
+| B2 | Boundary id = hash(authority, the invoke that created it, its input contract) | `boundary`, `record` | **In part**. `dad1bf0`. The id is the hash of the Boundary's encoding; the (authority, invoke, contract) form waits for E |
+| B3 | A Boundary is committed durably at creation, and that commit is the release | `runtime/tree` (`boundaries/`), `machine.handoff` (`:413`) | **Built**. `dad1bf0`. `.skyra/boundaries/` |
+| B4 | The child is handed the Boundary's hash; its first act is a lookup, and it re-derives what it found | `machine.accept` (`:330`), `instance` `SendBoundary` (`instance.go:177`), `handshake` | **Built**. `dad1bf0`. `accept` refuses a Boundary its commit does not derive |
+| B5 | The stack lives with the Boundary in durable state; steps read it and write write-once entries. The `Resume` copy goes | `machine.gather`/`claim` (`:509`, `:532`), `instance.gather` (`instance.go:242`), `Depth()` | Not built. The Boundary is committed with its stack, but the `Resume` copy still travels and `gather`/`claim` still read it |
+| B6 | Every call shares its caller's Boundary; a Boundary is created only by a narrowing, a registration, or a call into another agent | `machine.Narrow` (`:456`) | **Built**. `a275748`. Narrowing and references in `8ba6f4c`; registration and calls into another agent are not built |
+| B7 | The Seatbelt profile is rendered per Boundary, plus the exclusions: the floor, and `process-exec` of the running program only. Exec can never be registered | `boundary.Render` (`:157`), `resident.go:21` | **Built**. `a275748`. Exec is no longer expressible as a grant; OS test for exec denial |
 | B8 | The room: the derivation's root. Genesis is its creation, authored by the operator and carrying a nonce | `runtime/boot/boot.go:47` | **Built**. `dad1bf0`. Author `operator`, a 16-byte nonce |
 | B9 | Crash recovery by reading state: a record no derivation accepted is an orphan; an accepted step with no successor runs again; effects are at least once | `boot`, `webhost` (retires the `533d98d` rule) | Not built. The webhost's sibling rule stays until item 8 defines an accepted record |
 | B10 | Resume re-derives the instance from the tree; the host holds a hash, not authority (closes 20's finding 1) | `skyra/main.go:107`, `runtime/park` | **Built**. `dad1bf0`. Refuses work that is not parked, a wrong frame count, and a second resume. Closes 20's finding 1 |
@@ -102,10 +102,10 @@ contracts; reach holds facets.
 
 | Id | Change | Where | Status |
 |---|---|---|---|
-| C1 | Delete `Surface.Reach`, `Authority` and `Delegate`; they are the Horizon's | `horizon.go:85`, `registry.go:73,116,148,151`, `machine.Narrow`, the `"reach"` line in four `contract.json` files | **Built**. `a275748`. Contracts say `"continuation": true`; every registry grant joins the room's one authority |
-| C2 | Delete `Leaf()`; the stdin format (continuation or bare payload) becomes an explicit property of the surface. **Superseded by [27](../27-a-horizon-is-a-process.md):** one envelope for every worker, so the `continuation` flag goes | `horizon.go:111`, `machine.go:359` | **Built**. `a275748`. `Surface.Continuation`, declared in the contract |
-| C3 | Delete `Surface.Args`. **Corrected:** not unused; the launcher passes the real app-server's `--disable` flags through it, so it moves with C4 | `horizon.go`, `registry.go:70,79,148`, `instance.go:361`, `appserver.go:178` | Deferred. Moves with C4 |
-| C4 | Later: move the resident and network fields off the surface; network grants to the Horizon, keep-alive to control flow (a loop operator) | `horizon.go:92–100`, `instance.startResident`, `runtime/custody` | Not built. Needs the loop operator |
+| C1 | Delete `Surface.Reach`, `Authority` and `Delegate`; they are the Boundary's | `boundary.go:85`, `registry.go:73,116,148,151`, `machine.Narrow`, the `"reach"` line in four `contract.json` files | **Built**. `a275748`. Contracts say `"continuation": true`; every registry grant joins the room's one authority |
+| C2 | Delete `Leaf()`; the stdin format (continuation or bare payload) becomes an explicit property of the surface. **Superseded by [27](../27-a-boundary-is-a-process.md):** one envelope for every worker, so the `continuation` flag goes | `boundary.go:111`, `machine.go:359` | **Built**. `a275748`. `Surface.Continuation`, declared in the contract |
+| C3 | Delete `Surface.Args`. **Corrected:** not unused; the launcher passes the real app-server's `--disable` flags through it, so it moves with C4 | `boundary.go`, `registry.go:70,79,148`, `instance.go:361`, `appserver.go:178` | Deferred. Moves with C4 |
+| C4 | Later: move the resident and network fields off the surface; network grants to the Boundary, keep-alive to control flow (a loop operator) | `boundary.go:92–100`, `instance.startResident`, `runtime/custody` | Not built. Needs the loop operator |
 
 ### D. Agents and facets (26)
 
@@ -113,9 +113,9 @@ contracts; reach holds facets.
 |---|---|---|---|
 | D1 | The room's public facets `system.narrow` and `system.register`, implemented by the runtime and unregisterable; an admin facet in the human's reach | `machine`, `registry` | **In part**. `8ba6f4c`. `system.narrow` built. `system.register` needs a tool's bytes in the tree (improvements item 6); the admin facet needs faults that climb to the human |
 | D2 | Narrowing is two steps: `system.narrow` returns a reference, then the caller invokes it | `machine.interpret`, `Narrow` | **Built**. `8ba6f4c`. Demo scenario: the agent narrows echo, then calls it |
-| D3 | Reach becomes a c-list: references carried by a return are recorded by the room and added to the receiver's reach | `machine`, `record` | **In part**. `8ba6f4c`. Only for `system.narrow`: the reference is a name, `system.ref.<n>` (F1; it was the invoke's stamp), recorded in the waiting caller's `Horizon.Refs`. Returns do not yet carry references in general |
+| D3 | Reach becomes a c-list: references carried by a return are recorded by the room and added to the receiver's reach | `machine`, `record` | **In part**. `8ba6f4c`. Only for `system.narrow`: the reference is a name, `system.ref.<n>` (F1; it was the invoke's stamp), recorded in the waiting caller's `Boundary.Refs`. Returns do not yet carry references in general |
 | D4 | Registration presents facets; the registrant gets them back as references | `registry` | Not built. Needs the facet declaration format |
-| D5 | A call to another agent's facet runs under that agent's Horizon | `machine.Narrow` | Not built. Needs agents with Horizons of their own (registration) |
+| D5 | A call to another agent's facet runs under that agent's Boundary | `machine.Narrow` | Not built. Needs agents with Boundaries of their own (registration) |
 | D6 | Codex as the first agent with facets (creator: start/exchange/inspect/stop; public: the turn), replacing `ResourceOwnerDepth` | `codex/resident`, `registry-codex.json` | Not built. Needs D4 and C4 |
 
 ### E. Identity (improvements 9)
@@ -123,7 +123,7 @@ contracts; reach holds facets.
 | Id | Change | Where | Status |
 |---|---|---|---|
 | E1 | One written canonical encoding for records and declarations | `core/record`, `core/contract` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
-| E2 | Domain-separated hashes: type, content, record, frame, Horizon | `record.Stamp` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
+| E2 | Domain-separated hashes: type, content, record, frame, Boundary | `record.Stamp` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
 | E3 | Two hashes per step: content id and stamp | `record`, `replay` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
 | E4 | Ids as the path of handoffs, segmented by frame; the storage layout follows | `runtime/tree` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
 | E5 | Types and principals as records; the runtime derives a record's type | `registry`, `record` | Not built. The encoding's open questions come first: a written canonical encoding, migrate or version |
@@ -140,13 +140,13 @@ The implementation plan, with the decisions to confirm first, is
 | F1 | Audit where hashes reach a model or an external actor. The invariant: hashes go to workers, never to models | `machine.runOf`, `Continuation`, `StepView`, `targets/agent`, `codex/adapter`, `codex/resident`, `hosts/web` | Built (`12cf4f6`). One leak fixed: references are `system.ref.<n>`. Two exceptions accepted, recorded in 30 |
 | F2 | `Shape`, `Content`, `Diff` and `Present` over decoded JSON: two hashes per node, a pinned injective encoding | `core/contract/shape.go` | Built (`4f7db10`) |
 | F3 | The type of a return, `H(actor identity, contract, shape)`, derived on demand, never stored in a record | `core/contract`, `core/machine` | Built (`f496bbd`) |
-| F4 | The Starlark route runner, its own module, under an empty Horizon; no `while`, no recursion, a step cap; the `skyra` package | `targets/route` (new module), `core/machine/room.go` | Built (`3b1932a`). `if` only (decision 7); the runner imports `core/contract` |
-| F5 | Routes declared at registration, per binding, for deterministic parents | `runtime/registry`, `horizon.Surface.Routes` | Built (`82515e1`) |
-| F6 | Routing at discharge: interrupt, send or fault, at gather; a send is an invoke under the parent's Horizon | `core/machine` (`gather`, a `RunRoute` effect) | Built (`5256b2c`). "Wake" is named interrupt (kinds `novelty`, `route`, `depth`); no `RunRoute` effect: `LookupRoute`, then `Run` |
+| F4 | The Starlark route runner, its own module, under an empty Boundary; no `while`, no recursion, a step cap; the `skyra` package | `targets/route` (new module), `core/machine/room.go` | Built (`3b1932a`). `if` only (decision 7); the runner imports `core/contract` |
+| F5 | Routes declared at registration, per binding, for deterministic parents | `runtime/registry`, `boundary.Surface.Routes` | Built (`82515e1`) |
+| F6 | Routing at discharge: interrupt, send or fault, at gather; a send is an invoke under the parent's Boundary | `core/machine` (`gather`, a `RunRoute` effect) | Built (`5256b2c`). "Wake" is named interrupt (kinds `novelty`, `route`, `depth`); no `RunRoute` effect: `LookupRoute`, then `Run` |
 | F7 | The novelty interrupt (`novel` and a presentation in `StepView`) and the room's `system.route` facet | `core/machine`, `room.go`, `targets/agent` | Built (`5b1d0f3`) |
 | F8 | The log as the test suite: a rewritten route runs against its recorded cases; flips are declared | `core/machine`, `runtime/tree` | Built (`5b1d0f3`), inside `system.route` |
-| F9 | The declared `"output"` contract becomes optional, then goes | `contract.json` files, `registry`, `interpret`, `horizon.Surface` | Built (`00db79a`, `2d974a0`, `8cce174`): `Surface.Output` is gone |
-| F10 | **A route never runs with more authority than it was written with.** Store the author's authority in `RouteEntry` at `system.route`; at lookup, run a route only if the current Horizon's authority and reach are within the author's, else the return is novel. Today routes are keyed by `horizon.Identity(surface)`, so a route written under a narrowed Horizon, or under a prompt injection, fires silently in every later frame of that surface, including broader Horizons | `core/machine/write.go` (`RouteEntry`, `recorded`), `route.go` (`lookedUp`), `runtime/instance` (`lookupRoute`), `runtime/tree` | Not built. Review finding, 2026-10-01 |
+| F9 | The declared `"output"` contract becomes optional, then goes | `contract.json` files, `registry`, `interpret`, `boundary.Surface` | Built (`00db79a`, `2d974a0`, `8cce174`): `Surface.Output` is gone |
+| F10 | **A route never runs with more authority than it was written with.** Store the author's authority in `RouteEntry` at `system.route`; at lookup, run a route only if the current Boundary's authority and reach are within the author's, else the return is novel. Today routes are keyed by `boundary.Identity(surface)`, so a route written under a narrowed Boundary, or under a prompt injection, fires silently in every later frame of that surface, including broader Boundaries | `core/machine/write.go` (`RouteEntry`, `recorded`), `route.go` (`lookedUp`), `runtime/instance` (`lookupRoute`), `runtime/tree` | Not built. Review finding, 2026-10-01 |
 | F11 | Replay re-runs each route: the runner over the stored input, and the decision compared. Also check the run's `previous` and `targets` against the frame. Today replay re-derives the decision from the runner's stored output only, and 30 says replay runs it again | `runtime/replay` (`routed`) | Not built. Review finding, 2026-10-01 |
 | F12 | `system.route`'s `accept` names flipped cases by their runner input's hash, not by index: indexes come from a directory listing and shift when another frame records a run between the refusal and the retry | `core/machine/write.go` (`FlipView`, `recorded`), `routeIn` | Not built. Review finding, 2026-10-01 |
 | F13 | Replay checks `route-table/` against the `system.route` records that wrote it, so a route lookup (novel or a hit) is verifiable. With E | `runtime/replay`, `runtime/tree` | Not built. Review finding, 2026-10-01 |
@@ -177,16 +177,16 @@ Agreed 2026-10-03 ([32](../../design/procedures.md)); the plan is
 The kernel keeps instructions and authority, and never sees a procedure;
 routes and types leave it. The interpreter is an actor holding procedures in
 its own state; `remember` builds one from a strand and names it with the
-Horizon's `extend-reach`, which needs no approval: an actor can only extend itself. One representation per contract; versioning is later.
+Boundary's `extend-reach`, which needs no approval: an actor can only extend itself. One representation per contract; versioning is later.
 
 | Id | Change | Where | Status |
 |---|---|---|---|
 | H0 | The documents: 30 and its proposal marked superseded where 32 replaces them; G superseded; `summary.md` P9, P10; the root README's fan-out claim | `docs/`, `README.md` | **Built** (`02bd1b9`) |
 | H1 | Remove the route and type machinery from the kernel, the route runner, and their scenarios | `core/machine` (`route.go`, `write.go`, phases), `core/contract/shape.go`, `registry`, `tree`, `replay`, `boot`, `targets/route`, `run.sh` | **Built** (`e95930d`). `shape.go` waits in history for H5 |
 | H2 | Fan-out: one emission, N successors, each taking one instruction; the emitter supervises all N, opening every slot before releasing any | `core/machine` (`handoff`), `runtime/instance` | **Built** (`1ce5fe7`). A fan-out may not return, carry a resident connection, or hold `narrow` (which changes the waiter): those go alone. In a fan-out a fault holds a slot of its own; replay tells by the release its parent committed |
-| H3 | The Horizon as the actor `system`; contracts by (target, schema), selected by fit; `extend-reach(schema)`: an actor extends only itself | `core/machine` (`room.go`, `interpret`, `Narrow`), `core/horizon`, `replay` | **Built** (`20b6355`). A Horizon frame knows its `Name` and `Origin`; an extension reaches every frame of its Horizon in the stack. A branch of a fan-out may not extend (`Forked`). Every Horizon keeps `system` through a narrowing. Schemas gain `title` and the type `any`. The Codex adapter's one tool per contract waits for H8 |
-| H4 | `strand`: the hashes from an observation back to the invoke, through the contract the requester names | `core/machine` (`room.go`), `runtime/instance` | **Built** (`dd7e68b`). The cause is found by climbing frames (never a sibling's invoke); the walk lives in `runtime/replay` (`ReadStrand`), reached through the `ReadStrand` effect. A refusal is a supervisor fault of kind horizon, its kind derived again from its observation |
-| H5 | An actor sees only its own state; the interpreter: procedures and positions in `.skyra/interpreter/`; base types | `controller/interp` (new module), `horizon.Render`, `boot` | **Built** (`9850dcd`). A registry entry with `"state": true` owns `.skyra/<name>/`; a contract file may declare more `contracts`. Bindings are `{"$": [root, path...]}`; nodes live in `nodes/<id>`, procedures in `procedures/<contract key>`, positions in `frames/<frame>`. A faulted call returns a refusal until H7 |
+| H3 | The Boundary as the actor `system`; contracts by (target, schema), selected by fit; `extend-reach(schema)`: an actor extends only itself | `core/machine` (`room.go`, `interpret`, `Narrow`), `core/boundary`, `replay` | **Built** (`20b6355`). A Boundary frame knows its `Name` and `Origin`; an extension reaches every frame of its Boundary in the stack. A branch of a fan-out may not extend (`Forked`). Every Boundary keeps `system` through a narrowing. Schemas gain `title` and the type `any`. The Codex adapter's one tool per contract waits for H8 |
+| H4 | `strand`: the hashes from an observation back to the invoke, through the contract the requester names | `core/machine` (`room.go`), `runtime/instance` | **Built** (`dd7e68b`). The cause is found by climbing frames (never a sibling's invoke); the walk lives in `runtime/replay` (`ReadStrand`), reached through the `ReadStrand` effect. A refusal is a supervisor fault of kind boundary, its kind derived again from its observation |
+| H5 | An actor sees only its own state; the interpreter: procedures and positions in `.skyra/interpreter/`; base types | `controller/interp` (new module), `boundary.Render`, `boot` | **Built** (`9850dcd`). A registry entry with `"state": true` owns `.skyra/<name>/`; a contract file may declare more `contracts`. Bindings are `{"$": [root, path...]}`; nodes live in `nodes/<id>`, procedures in `procedures/<contract key>`, positions in `frames/<frame>`. A faulted call returns a refusal until H7 |
 | H6 | `remember`: a strand compiled to procedures, named by `extend-reach` | `controller/interp`, the registry | **Built** (`61f7368`). A step carries its discharge's stamp (`observation`) so a worker can name it. Each round runs after the one before. A return is control when every leaf is bound; a frame that authored its return stays a call. Identical instructions in one emission would be one record: the kernel refuses them, and the interpreter makes repeats distinct bytes |
 | H7 | Running a remembered procedure: dispatch, base types as the default refinement, falling back to the model at the refused edge | `controller/interp` | **Built** (`2488a27`). An edge's base type is the name called and the value's shape. A faulted call is an edge that refused. At an edge, the fallback resumes through a contract titled `resume` when the original actor holds one (the scripted agent does); otherwise, and at entry, it is given the command. The original's answer is the procedure's |
 | H8 | The demo (P9): scripted and with Codex; the research metric | `run.sh`, `targets/agent`, `codex/adapter` | **Built** (`d1a7044`), the scripted demo and the fake Codex in `run.sh`; `skyra metric`. The resident adapter offers remember and procedures, and the launcher registers the interpreter, but real Codex was not run against them here. Codex's tools are fixed at `thread/start`, so a procedure remembered in a turn is called through a `procedure` tool |
@@ -207,17 +207,17 @@ the per-document proposals say the same for their documents.
 | Commit | What |
 |---|---|
 | `d49ce18` | A: returns address the slot; faults carry their observation |
-| `a275748` | B1 (in part), B6, B7, C1, C2: one authority per Horizon; the surface is identity and contracts |
-| `dad1bf0` | B2 (in part), B3, B4, B8, B10: Horizons committed and looked up; resume from the tree; authored genesis |
+| `a275748` | B1 (in part), B6, B7, C1, C2: one authority per Boundary; the surface is identity and contracts |
+| `dad1bf0` | B2 (in part), B3, B4, B8, B10: Boundaries committed and looked up; resume from the tree; authored genesis |
 | `8ba6f4c` | D1 (narrow), D2, D3 (in part): the room's `system.narrow`; references join the caller's reach |
 | `a24fdfb` | the document edits below |
 
 ## Order
 
 1. ✅ **A** (A1–A9). No change to record encoding except the new fault kind.
-2. ✅ **C1, C2**, **B6, B7**; ◐ **B1**; C3 deferred: the surface shrinks and the Horizon becomes
+2. ✅ **C1, C2**, **B6, B7**; ◐ **B1**; C3 deferred: the surface shrinks and the Boundary becomes
    authority only, shared, rendered once. These land together.
-3. ✅ **B3, B4, B8, B10**; ◐ **B2**; ✗ **B5, B9**: the Horizon committed and looked up, the stack durable,
+3. ✅ **B3, B4, B8, B10**; ◐ **B2**; ✗ **B5, B9**: the Boundary committed and looked up, the stack durable,
    the room at genesis, crash recovery and resume from the tree.
 4. ✗ **B11**, then frame hashes.
 5. ✅ **D2**; ◐ **D1** (narrow only), **D3** (narrow's reference only); ✗ **D4, D5**: the room's facets, the c-list, facets at registration.
@@ -227,8 +227,8 @@ the per-document proposals say the same for their documents.
 8. ✓ **F** (2026-10-01, branch `self-extension`): F1 first; then F2–F3 (types), F4–F5 (routes), F6 (routing), F7
    (the interrupt), F8, F9. Self-extension (28, `system.register`) follows.
 9. ~~**G**~~ (agreed 2026-10-02): superseded by H, as is F10.
-10. ✓ **H** (agreed and built 2026-10-03, branch `sky-horizons`): H0, H1 (remove), H2 (fan-out), H3–H4 (the
-    Horizon's syscalls), H5 (the interpreter), H6–H7 (remember, and running
+10. ✓ **H** (agreed and built 2026-10-03, branch `sky-boundaries`): H0, H1 (remove), H2 (fan-out), H3–H4 (the
+    Boundary's syscalls), H5 (the interpreter), H6–H7 (remember, and running
     what it built), H8 (the demo), H9 (CEL refinements). Real Codex was not
     run against H8.
 

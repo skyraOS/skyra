@@ -7,7 +7,7 @@ Status: draft for discussion. Scope: September to December 2026, two people.
 
 ## The question
 
-> **Can human approval move from every action to one grant of a Horizon, so
+> **Can human approval move from every action to one grant of a Boundary, so
 > that an agent extends itself (builds and runs its own tools) without asking,
 > while matching a conventional agent runtime on cost and task success and
 > containing strictly more?**
@@ -27,11 +27,11 @@ writes its own tools produces new code to approve at every step.
 
 The approval is on the wrong object. A human can meaningfully decide *what an
 agent may touch*, once. They cannot meaningfully review every action inside
-that. In Skyra the decision is the Horizon, and anything created under it,
+that. In Skyra the decision is the Boundary, and anything created under it,
 including an agent-built tool or a stored procedure, can only rearrange
 authority already granted, so it needs no approval
 ([`design/faults.md`](../design/faults.md), "No approval"). The human is asked
-only when the agent reaches past the Horizon.
+only when the agent reaches past the Boundary.
 
 Operating systems assume one trusted actor per user: the process, owned by a
 human. A user now runs several semi-autonomous AI agents, and the OS has no
@@ -41,7 +41,7 @@ ambient authority (a shell, the workspace, the network) and a sandbox it
 reach is in its blast radius.
 
 The idea: give every agent and tool an explicit, narrowing capability set (a
-**Horizon**), enforce it at the OS layer, and record every step in a hash-linked
+**Boundary**), enforce it at the OS layer, and record every step in a hash-linked
 trace. The question is whether that costs anything that matters.
 
 ## The system
@@ -50,21 +50,21 @@ Two kinds of node:
 
 | Node | Is | Authority |
 |---|---|---|
-| **Continuation** | an LLM agent (for example Codex) | a Horizon with **reach**: the tools it may invoke. It can invoke leaves |
-| **Leaf** | a tool | the Horizon of its caller: leaf and continuation are behaviours, not authority. To contain a tool, its caller narrows it through the room (revised 2026-09-30, [24](24-the-room.md)) |
+| **Continuation** | an LLM agent (for example Codex) | a Boundary with **reach**: the tools it may invoke. It can invoke leaves |
+| **Leaf** | a tool | the Boundary of its caller: leaf and continuation are behaviours, not authority. To contain a tool, its caller narrows it through the room (revised 2026-09-30, [24](24-the-room.md)) |
 
 Every step runs the same way:
 
 1. **Intake:** the step receives unchecked bytes, derives the state from them
-   and the Horizon they were emitted under (its own slot is a return, a name in
+   and the Boundary they were emitted under (its own slot is a return, a name in
    reach an invoke), and commits a content-addressed record.
 2. **Release:** the parent verifies that record, derives the child's
-   **Horizon** (its own, unless it asked the room to narrow), commits it, and
+   **Boundary** (its own, unless it asked the room to narrow), commits it, and
    hands the child its hash with the frame stack's descriptors. The child looks
-   the Horizon up and re-derives it: authority is derived from state and
+   the Boundary up and re-derives it: authority is derived from state and
    proposal, never held (revised 2026-09-30).
 3. **Execute:** the target runs inside a **Seatbelt sandbox rendered from its
-   Horizon**. Deny by default; the runtime's own state is always denied.
+   Boundary**. Deny by default; the runtime's own state is always denied.
 4. **Handoff:** the target's output goes, unparsed, to a fresh successor that
    checks it. **The emitter is never the checker.**
 
@@ -81,7 +81,7 @@ verified against a control run, and 15 tests. A separate earlier runtime
 |---|---|---|
 | **Overhead** | runtime cost per step (spawn, commit, sandbox), relative to model latency | low. Measured: about 2.4 ms to spawn, 0.3–11 ms per durable write, against seconds per model call |
 | **Capability** | task success rate on the same tasks | **the real risk.** Least privilege can break tasks that ambient authority completes |
-| **Interruptions** | human decisions per task: Horizon grants plus escalations in Skyra, approval prompts in the baseline | **the headline.** The measure of approval fatigue |
+| **Interruptions** | human decisions per task: Boundary grants plus escalations in Skyra, approval prompts in the baseline | **the headline.** The measure of approval fatigue |
 | **Friction** | authority faults per task: how often the agent must escalate for more authority | a new metric, as far as we know. What ocap costs in practice |
 | **Self-extension** | agent-built tools per task, and how many ran with zero approvals | new; zero means the thesis is not exercised |
 
@@ -90,7 +90,7 @@ verified against a control run, and 15 tests. A separate earlier runtime
 | Dimension | Metric |
 |---|---|
 | **Containment** | attack success rate on an adversarial suite: prompt injections that try to exfiltrate data, write outside the workspace, reach the runtime's state, or invoke tools that are not granted |
-| **Blast radius** | what is reachable when compromised: the Horizon's complement, against the baseline's ambient authority |
+| **Blast radius** | what is reachable when compromised: the Boundary's complement, against the baseline's ambient authority |
 | **Auditability** | whether every effect is attributable to a committed record (trace completeness) |
 
 ### Baseline
@@ -109,15 +109,15 @@ containment; the claim is that it does both at once.
   time.
 - **H2, capability:** task success is within a small margin of the baseline, and
   authority faults explain the gap.
-- **H3, containment:** effects outside the Horizon succeed zero times, against a
+- **H3, containment:** effects outside the Boundary succeed zero times, against a
   nonzero rate for full auto, including effects attempted by tools the agent
   built itself. This holds by construction if the sandbox is sound, so the
-  informative number is how narrow a Horizon can be while H2 still holds.
-  *Revised 2026-09-30:* under a shared Horizon the unit of narrowing is the
-  **Horizon**, not the tool call. The claim is that effects outside **the
-  Horizon** succeed zero times; a tool shares its caller's authority unless
+  informative number is how narrow a Boundary can be while H2 still holds.
+  *Revised 2026-09-30:* under a shared Boundary the unit of narrowing is the
+  **Boundary**, not the tool call. The claim is that effects outside **the
+  Boundary** succeed zero times; a tool shares its caller's authority unless
   narrowed. Measure the narrowings a task needs (`system.narrow` invokes) and
-  the authority each Horizon holds, against the baseline's one ambient
+  the authority each Boundary holds, against the baseline's one ambient
   authority.
 - **H4, stretch, recurrence:** with stored procedures (memoized sequences of tool
   calls), repeated tasks become **cheaper** than the baseline. That would turn "as
@@ -136,11 +136,11 @@ Reusing an established suite makes the containment numbers credible. Candidates
 
 ## Scope: what this does not claim
 
-A Horizon bounds the blast radius; it does not judge intent. A prompt
-injection that misuses a tool the Horizon grants (send an email to the
+A Boundary bounds the blast radius; it does not judge intent. A prompt
+injection that misuses a tool the Boundary grants (send an email to the
 attacker, when sending email is in reach) is not stopped. Defenses that track
 data flow inside the agent address that case. The adversarial suite must
-separate attacks that need authority outside the Horizon (claimed) from
+separate attacks that need authority outside the Boundary (claimed) from
 attacks that misuse authority inside it (not claimed).
 
 ## Related work (from memory, to verify)
@@ -161,7 +161,7 @@ authority fixed by one grant and enforced by the OS per invocation.
 | When | Deliverable |
 |---|---|
 | **Late September** | Transition semantics for the authority model (invoke, return, fault, narrowing), with each invariant mapped to the mechanism that enforces it. (The nested-Seatbelt spike is retired: under thought 14, Codex's tool calls run as separate leaves after its step exits, so Codex never sandboxes anything) |
-| **October** | A real continuation: Codex under a Horizon-rendered sandbox, calling leaf tools; horizon and authority faults routed to the parent. **Self-extension:** Codex registers a tool it wrote as a leaf under a narrower Horizon and runs it with no approval |
+| **October** | A real continuation: Codex under a Boundary-rendered sandbox, calling leaf tools; boundary and authority faults routed to the parent. **Self-extension:** Codex registers a tool it wrote as a leaf under a narrower Boundary and runs it with no approval |
 | **November** | Audit and replay: hash-linked lineage, deterministic replay. Baseline harness and task set |
 | **December** | The evaluation: interruptions against Codex's approval modes, overhead, capability, friction, containment on the adversarial suite. Writeup |
 
@@ -175,9 +175,9 @@ authority fixed by one grant and enforced by the OS per invocation.
    conventional setup (containers, allow-lists)? A stronger baseline makes a
    stronger result.
 4. **Does the fatigue move to the grant?** If users simply grant broad
-   Horizons, this is full auto with extra steps. How narrow do Horizons need
+   Boundaries, this is full auto with extra steps. How narrow do Boundaries need
    to be to mean something, and can one grant stay stable across a task? The
-   Horizon is where the human's one decision now lives, so it cannot stay out
+   Boundary is where the human's one decision now lives, so it cannot stay out
    of scope in the evaluation.
 5. **How escalation works in the evaluation:** when an agent raises an authority
    fault, does a human grant it, does it fail the task, or does a policy decide?

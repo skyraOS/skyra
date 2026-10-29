@@ -4,7 +4,7 @@ import "math"
 
 // Calls in the sky. When the agent invokes a tool, a light leaves the core for
 // the inner orbit and rides it while the tool runs, then comes home when the
-// call returns. A refused call flies to the Horizon's edge, just outside the
+// call returns. A refused call flies to the Boundary's edge, just outside the
 // middle orbit, where a short arc of the edge glows amber and fades. The edge
 // is never drawn otherwise. While any of this is on screen, meteors and star
 // glints wait, so only one loud thing moves at a time.
@@ -12,12 +12,12 @@ import "math"
 // Frames are the sky's, ten a second; distances are in braille dots.
 const (
 	callOut      = 12    // frames from the core to the inner orbit
-	callOutEdge  = 15    // frames from the core to the Horizon's edge
+	callOutEdge  = 15    // frames from the core to the Boundary's edge
 	callRide     = 3     // frames a light rides its orbit at least
 	callHome     = 6     // frames back to the core
 	callFlare    = 4     // frames a light flares out at the edge
 	callArc      = 28    // frames the arc stays lit
-	horizonEdge  = 1.15  // the edge, as a share of the middle orbit's radii
+	boundaryEdge = 1.15  // the edge, as a share of the middle orbit's radii
 	callRideRate = 0.012 // radians per frame along the inner orbit
 	maxLights    = 3
 )
@@ -130,7 +130,7 @@ func (l callLight) place(width, height int, f float64) (p point, ok bool) {
 		if u > callOutEdge+callFlare {
 			return p, false
 		}
-		return onRing(width, height, 1, l.angle, horizonEdge*smoothstep(0, 1, u/callOutEdge)), true
+		return onRing(width, height, 1, l.angle, boundaryEdge*smoothstep(0, 1, u/callOutEdge)), true
 	}
 	hs := l.homeStart()
 	angle := l.angle + callRideRate*math.Max(0, math.Min(f, hs)-l.at-callOut)
@@ -162,7 +162,7 @@ func (c *callLights) draw(width, height int, f float64, putDot func(sx, sy int, 
 					if k*w < 0.08 {
 						continue
 					}
-					p := onRing(width, height, 1, a, horizonEdge)
+					p := onRing(width, height, 1, a, boundaryEdge)
 					putDot(int(math.Round(p[0])), int(math.Round(p[1])), mix(surfaceRGB, amberPeak, k*w), 4)
 				}
 			}

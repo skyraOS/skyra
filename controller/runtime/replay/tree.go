@@ -9,38 +9,38 @@ import (
 	"path/filepath"
 	"slices"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
 
-// RecordedTree is bounded recorded work, never a pretend linear strand.
+// RecordedTree is bounded recorded work, never a pretend linear trace.
 // Order follows predecessor edges and resolve dependencies in emission order.
-// Horizons contain only visible metadata; waiting frames outside Root are omitted.
+// Boundaries contain only visible metadata; waiting frames outside Root are omitted.
 type RecordedTree struct {
-	Version  int                        `json:"version"`
-	Root     string                     `json:"root"`
-	Frontier []string                   `json:"frontier"`
-	Records  map[string]record.Record   `json:"records"`
-	Opaque   map[string]string          `json:"opaque,omitempty"`
-	Order    []string                   `json:"order"`
-	Horizons map[string]horizon.Horizon `json:"horizons"`
-	Covered  map[string]string          `json:"covered,omitempty"` // supplied endpoint -> retained endpoint covering it
-	Inputs   map[string][]byte          `json:"inputs,omitempty"`  // visible refused emissions, keyed by record stamp
+	Version    int                          `json:"version"`
+	Root       string                       `json:"root"`
+	Frontier   []string                     `json:"frontier"`
+	Records    map[string]record.Record     `json:"records"`
+	Opaque     map[string]string            `json:"opaque,omitempty"`
+	Order      []string                     `json:"order"`
+	Boundaries map[string]boundary.Boundary `json:"boundaries"`
+	Covered    map[string]string            `json:"covered,omitempty"` // supplied endpoint -> retained endpoint covering it
+	Inputs     map[string][]byte            `json:"inputs,omitempty"`  // visible refused emissions, keyed by record stamp
 }
 
 // ReadTree reconstructs exactly the root/frontier closure. It does not search
 // descendants or use file times, and it verifies acceptance independently of
 // replay. A valid commit or proposed release is insufficient.
 func ReadTree(root, anchor string, leaves []string, target string, schema *contract.Schema, origin string) (RecordedTree, error) {
-	return ReadTreeInRoom(root, anchor, leaves, target, schema, origin, "")
+	return ReadTreeInGenesis(root, anchor, leaves, target, schema, origin, "")
 }
 
-// ReadTreeInRoom additionally binds runtime calls to their enclosing genesis.
-// The room is derived from the requester, never supplied in its payload.
-func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema *contract.Schema, origin, room string) (RecordedTree, error) {
+// ReadTreeInGenesis additionally binds runtime calls to their enclosing genesis.
+// The genesis is derived from the requester, never supplied in its payload.
+func ReadTreeInGenesis(root, anchor string, leaves []string, target string, schema *contract.Schema, origin, genesis string) (RecordedTree, error) {
 	none := RecordedTree{}
 	var err error
 	root, err = filepath.Abs(root)
@@ -55,16 +55,16 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 			return none, refusal("invalid observation stamp")
 		}
 	}
-	w := walker{s: dir(root), seen: map[string]horizon.Horizon{}}
+	w := walker{s: dir(root), seen: map[string]boundary.Boundary{}}
 	checked := map[string]bool{}
 	active := map[string]bool{}
-	var accepted func(string) (horizon.Horizon, error)
-	accepted = func(s string) (horizon.Horizon, error) {
+	var accepted func(string) (boundary.Boundary, error)
+	accepted = func(s string) (boundary.Boundary, error) {
 		if !stampName(s) {
-			return horizon.Horizon{}, refusal("invalid observation stamp")
+			return boundary.Boundary{}, refusal("invalid observation stamp")
 		}
 		if active[s] {
-			return horizon.Horizon{}, refusal("cyclic acceptance history")
+			return boundary.Boundary{}, refusal("cyclic acceptance history")
 		}
 		h, err := w.at(s)
 		if err != nil {
@@ -120,7 +120,7 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 				return h, refusal("supervisor record %s did not discharge its frame", record.Short(s))
 			}
 		default:
-			receipt, err := tree.AcceptedHorizon(root, s)
+			receipt, err := tree.AcceptedBoundary(root, s)
 			if err != nil {
 				return h, refusal("record %s has no accepted release", record.Short(s))
 			}
@@ -159,15 +159,15 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 		return none, err
 	}
 	if caller.Origin != origin {
-		return none, refusal("anchor is outside the requester's Horizon")
+		return none, refusal("anchor is outside the requester's Boundary")
 	}
-	if room != "" {
+	if genesis != "" {
 		outer := caller
 		for outer.Resume != nil {
 			outer = *outer.Resume
 		}
-		if outer.Frame != room {
-			return none, refusal("anchor belongs to another room")
+		if outer.Frame != genesis {
+			return none, refusal("anchor belongs to another genesis")
 		}
 	}
 	surface, ok := caller.Reach[target]
@@ -186,7 +186,7 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 		return none, err
 	}
 
-	out := RecordedTree{Version: 1, Root: anchor, Frontier: slices.Clone(leaves), Records: map[string]record.Record{}, Opaque: map[string]string{}, Horizons: map[string]horizon.Horizon{}}
+	out := RecordedTree{Version: 1, Root: anchor, Frontier: slices.Clone(leaves), Records: map[string]record.Record{}, Opaque: map[string]string{}, Boundaries: map[string]boundary.Boundary{}}
 	slices.Sort(out.Frontier)
 	out.Frontier = slices.Compact(out.Frontier)
 	// Every branch must reach the anchor by predecessor ancestry. Dependencies
@@ -244,7 +244,7 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 				boundary = *boundary.Resume
 			}
 			if boundary.Resume == nil {
-				return refusal("observation is outside the requester's Horizon")
+				return refusal("observation is outside the requester's Boundary")
 			}
 			call := boundary.Frame
 			if call == anchor {
@@ -306,7 +306,7 @@ func ReadTreeInRoom(root, anchor string, leaves []string, target string, schema 
 		// Metadata is derived, and stripped of ancestors outside the requested tree.
 		visible := frame
 		visible.Resume = nil
-		out.Horizons[s] = visible
+		out.Boundaries[s] = visible
 		return nil
 	}
 	for _, leaf := range out.Frontier {

@@ -27,12 +27,12 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
     #expect(c.entries.first?.isUser == true)
     #expect(c.entries.first?.text == "Call the echo tool with the text hi.")
     print("agent:", c.entries.last?.text ?? "")
-    // Its Horizons: the room, which the user side and the think procedure ran
+    // Its Boundaries: the root, which the user side and the think procedure ran
     // under; and think's narrowing, which Codex ran under, reaching only the
     // model's tools (proposal 38).
-    let room = try #require(c.horizons?.first { $0.root })
-    #expect(room.actors.contains("user") && room.actors.contains("interpreter") && !room.actors.contains("codex"))
-    let think = try #require(c.horizons?.first { !$0.root && $0.actors.contains("codex") })
+    let root = try #require(c.boundaries?.first { $0.root })
+    #expect(root.actors.contains("user") && root.actors.contains("interpreter") && !root.actors.contains("codex"))
+    let think = try #require(c.boundaries?.first { !$0.root && $0.actors.contains("codex") })
     #expect(think.reach.contains { $0.name == "echo" } && think.reach.contains { $0.name == "write" })
     #expect(!think.reach.contains { $0.name == "interpreter" || $0.name == "user" })
 
@@ -85,7 +85,7 @@ func theAgentWritesToItsScratchSpaceAndReadsItBack() async throws {
 
     c = try await say("write:../escape.md=no")
     #expect(c.entries.last?.text.contains("outside_scratch") == true)
-    #expect(c.horizons?.first?.reach.contains { $0.name == "write" } == true)
+    #expect(c.boundaries?.first?.reach.contains { $0.name == "write" } == true)
 
     s.delete(c.conversation)
     try await until { s.selected == nil }

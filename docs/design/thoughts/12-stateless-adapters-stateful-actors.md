@@ -75,7 +75,7 @@ process except the actor, which the runtime does not see.
   once, so every instance runs intake, execute, one handoff, then exits. Custody
   (D2) and the stamp (D3) are unchanged.
 - **The leaf/non-leaf distinction in D8, mostly.** Anything may emit Invokes
-  (tail calls). What matters is only whether the Horizon grants them.
+  (tail calls). What matters is only whether the Boundary grants them.
 
 ## What this needs
 
@@ -84,10 +84,10 @@ process except the actor, which the runtime does not see.
    the original Move.
 2. **Actor lifecycle.** An adapter Move such as `codex start` spawns the actor
    detached and returns its handle. Seatbelt is inherited, so the actor stays
-   confined by the Horizon of the Move that started it. `codex stop` ends it.
+   confined by the Boundary of the Move that started it. `codex stop` ends it.
    Open: reaping actors whose lineage is gone, after a crash.
 3. **The actor must be reachable without a parent pipe,** for example a local
-   socket. The adapter's Horizon grants that one socket (`os`), and nothing else.
+   socket. The adapter's Boundary grants that one socket (`os`), and nothing else.
 4. **Unsolicited events are pulled.** The browser does not push into the
    runtime. The `user` lineage issues `user next`, which returns the next
    message the actor buffered. Every Move is initiated by the lineage.
@@ -97,7 +97,7 @@ process except the actor, which the runtime does not see.
 ## Boot with this layering
 
 ```text
-genesis: registrations (echo, codex, codex-adapter, user, user-adapter), root Horizon
+genesis: registrations (echo, codex, codex-adapter, user, user-adapter), root Boundary
 A = codex start                           → Return(actor handle a1)
 C = codex connect ⟨actor: hole → A⟩       → Return(connection c1)
 U = user loop ⟨connection: hole → C⟩
@@ -168,7 +168,7 @@ two compose.
    a supervising instance. Does it hold each event under custody until the
    adapter step stamps?
 2. **One store or two?** The adapter runs sandboxed, so it cannot read `.skyra/`.
-   A private store (granted in its Horizon's `os.fs`) means two commit points,
+   A private store (granted in its Boundary's `os.fs`) means two commit points,
    and the handoff between them needs the stamp handshake so nothing is lost
    between the adapter's commit and the runtime's commit.
 3. Do truly unsolicited events exist once every execute waits for its own reply?

@@ -25,7 +25,7 @@ user
 
 ## Write-only
 
-Act's Horizon reaches write leaves and the continuations the contract
+Act's Boundary reaches write leaves and the continuations the contract
 proposes, and no read leaf. Everything act needs was read in think and cited
 in the spec, so it is already in the frame. If act needs something the spec
 does not cite, it cannot go and look: it raises an interrupt.
@@ -56,24 +56,24 @@ implemented by one node calling everything. It has to be grouped into
 modules, each a node with at most k children, so the work takes the shape of
 a tree. Composition comes from grown structure, not from one agent holding a
 long list of tools. Think proposes that tree in the contract; act grows it,
-node by node, each under a narrower Horizon.
+node by node, each under a narrower Boundary.
 
 This is also what makes self-extension happen: a node that needs more than k
 continuations must create structure, and every node it creates runs under a
-Horizon narrowed from its own, with no approval.
+Boundary narrowed from its own, with no approval.
 
-## The Horizon is derived from the contract
+## The Boundary is derived from the contract
 
-Act's Horizon comes from the contract it was passed:
+Act's Boundary comes from the contract it was passed:
 
 - **writes:** only the places the contract names.
 - **reach:** only the continuations the contract's tree proposes, at most k
   per node.
-- **narrowing:** each child's Horizon covers its own subtree, checked by
+- **narrowing:** each child's Boundary covers its own subtree, checked by
   `machine.Narrow` like any other edge.
 
 Passing the spec is how the user approves the boundary: they approve a plan
-they can read, and the Horizon follows from it.
+they can read, and the Boundary follows from it.
 
 ## Interrupts
 
@@ -103,7 +103,7 @@ leaf that wrote it and the spec version it implemented.
 
 ## Cases the design must decide
 
-1. **Act invokes a read leaf:** a horizon fault. No read is in reach.
+1. **Act invokes a read leaf:** a boundary fault. No read is in reach.
 2. **A node invokes more than k continuations:** refused at intake, before
    the child runs.
 3. **A function node returns code it wrote:** refused under 21. Only the write
@@ -140,11 +140,11 @@ leaf that wrote it and the spec version it implemented.
 - A contract format with function signatures and the tree.
 - The tool limit, counted at intake.
 - The interrupt transition in `core/machine`, with typed interrupts.
-- A Horizon derived from a contract.
+- A Boundary derived from a contract.
 
 ## Done when
 
-- Act runs under a Horizon derived from the contract, with no read in reach.
+- Act runs under a Boundary derived from the contract, with no read in reach.
 - Each function is one continuation invocation, and no node invokes more than
   k continuations.
 - Every returned observation was authored by a write leaf.

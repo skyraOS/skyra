@@ -16,7 +16,7 @@ func testTree() Tree {
 		"read-result": {Predecessor: "read", State: "return", Payload: json.RawMessage(`{"text":"hi"}`)},
 		"answer":      {Predecessor: "read-result", State: "return", Payload: json.RawMessage(`{"text":"hello","thread":"provider-only"}`)},
 		"joined":      {Predecessor: "answer", State: "resolve", Frame: "root", Deps: []string{"answer"}},
-	}, Horizons: map[string]Horizon{
+	}, Boundaries: map[string]Boundary{
 		"root":  {Frame: "root", Name: "user", Reach: map[string]json.RawMessage{"read": json.RawMessage(`{"path":"/read"}`)}, Authority: json.RawMessage(`{"read":[{"path":"/workspace","scope":"subpath"}]}`)},
 		"human": {Frame: "browser"}, "read-result": {Frame: "read"}, "answer": {Frame: "turn"}, "joined": {Frame: "root"},
 	}}
@@ -34,8 +34,8 @@ func TestSnapshotProjectsAcceptedWorkAndFitsAppShape(t *testing.T) {
 	if call == nil || call.To != "read" || call.State != "returned" {
 		t.Fatalf("call: %+v", call)
 	}
-	if len(view.Conversation.Horizons) == 0 || !view.Conversation.Horizons[0].Root {
-		t.Fatal("authorized Horizon visualization disappeared")
+	if len(view.Conversation.Boundaries) == 0 || !view.Conversation.Boundaries[0].Root {
+		t.Fatal("authorized Boundary visualization disappeared")
 	}
 	snap, err := AppState("webhost-1", 3, []View{view})
 	if err != nil {
@@ -95,9 +95,9 @@ func TestProjectionRejectsPartialAndInvalidPublications(t *testing.T) {
 func TestRefusedToolEmissionIsProjectedFromVisibleObservedInput(t *testing.T) {
 	tr := testTree()
 	tr.Order = []string{"root", "browser", "human", "turn", "refused", "joined"}
-	tr.Records["refused"] = Record{Predecessor: "turn", State: "fault", Fault: &Fault{Kind: "horizon", Cause: "outside reach"}}
+	tr.Records["refused"] = Record{Predecessor: "turn", State: "fault", Fault: &Fault{Kind: "boundary", Cause: "outside reach"}}
 	tr.Records["joined"] = Record{Predecessor: "refused", State: "resolve", Deps: []string{"refused"}}
-	tr.Horizons["refused"] = Horizon{Frame: "turn"}
+	tr.Boundaries["refused"] = Boundary{Frame: "turn"}
 	tr.Inputs = map[string][]byte{"refused": []byte(`{"to":"forbidden","payload":{"text":"attempt"}}`)}
 	view, err := ConversationState("c-1", "root", tr, Availability{RecoveryRequired: true})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestRefusedToolEmissionIsProjectedFromVisibleObservedInput(t *testing.T) {
 		t.Fatalf("refused turn: %+v", view)
 	}
 	c := view.Conversation.Entries[1].Call
-	if c == nil || c.To != "forbidden" || c.State != "fault" || c.Fault != "horizon" {
+	if c == nil || c.To != "forbidden" || c.State != "fault" || c.Fault != "boundary" {
 		t.Fatalf("refused tool: %+v", c)
 	}
 }

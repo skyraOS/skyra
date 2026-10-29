@@ -41,7 +41,7 @@ func main() {
 }
 
 // SKYRA_CONNECT remains the legacy single-socket view. The complete grant
-// list avoids selecting the browser/ideas socket in a shared Horizon.
+// list avoids selecting the browser/ideas socket in a shared Boundary.
 func bridgeSocket() string {
 	raw := os.Getenv("SKYRA_CONNECTIONS")
 	if raw == "" {

@@ -134,14 +134,14 @@ exists.
 
 - Only the actor the procedure was remembered from answers a wake, and its
   answer is a recorded return in the procedure's frame. A procedure lives
-  only in the Horizon that remembered it, so the model widens a refinement
-  under the same Horizon it was written in. F10 holds.
+  only in the Boundary that remembered it, so the model widens a refinement
+  under the same Boundary it was written in. F10 holds.
 - Widening is bounded the way 32 says a loose refinement is: the body still
   emits through intake.
 - Putting the shape first closes the current hole: no predicate can admit an
   unseen shape.
 - The wake shows the refused value, which is where injected text sits. An
-  injected `admit {holds: "true"}` is bounded by the Horizon and by the
+  injected `admit {holds: "true"}` is bounded by the Boundary and by the
   demand check, but the adversarial suite should aim at it.
 - Races: two frames hit the same new shape. An `admit` identical to one
   already stored is a no-op. A different predicate for the same shape

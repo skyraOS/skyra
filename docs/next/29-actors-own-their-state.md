@@ -4,7 +4,7 @@ Proposal: **Not in the proposal.** Written after the proposal. Actor state, its 
 
 Date: 2026-09-30  
 Status: agreed in discussion, not built. Builds on [26](26-agents-and-facets.md),
-[27](27-a-horizon-is-a-process.md) and [28](28-types-observations-checks.md).
+[27](27-a-boundary-is-a-process.md) and [28](28-types-observations-checks.md).
 Gives 28's novelty interrupt what it shows, and 26's creator facets and 25's
 resident fields a place to go.
 
@@ -13,7 +13,7 @@ resident fields a place to go.
 > **The runtime owns control flow. An actor owns its state.** An actor never
 > says whether it invokes or returns: the runtime derives that. What an actor
 > owns is its state and the methods over it, which live in a place the kernel
-> provisions and in no Horizon.
+> provisions and in no Boundary.
 
 ## Three interfaces
 
@@ -24,16 +24,16 @@ interrupt (28) shows the actor, and what it writes code against.
 |---|---|---|
 | **Faults and interrupts** | the runtime | receives them: what can happen to it. It never raises one |
 | **State methods** | the actor, which authors them | reads and writes its own state |
-| **Input contracts in its Horizon** | whoever it reaches | fills one to ask something of another program |
+| **Input contracts in its Boundary** | whoever it reaches | fills one to ask something of another program |
 
 The first is fixed by the runtime. The second is the actor's own. The third is
-its Horizon (24): what it may reach, and nothing more.
+its Boundary (24): what it may reach, and nothing more.
 
 ## Actors own their state
 
-- **State is not authority.** A Horizon is authority over what is outside an
+- **State is not authority.** A Boundary is authority over what is outside an
   actor. State is what the actor is. An actor's state methods are in no
-  Horizon, so no one can be granted them, narrow them, or invoke them.
+  Boundary, so no one can be granted them, narrow them, or invoke them.
 - **The kernel provisions the place.** At registration the kernel sets aside
   where the actor's state lives and where its read and write methods live. The
   registered actor writes the rest.
@@ -75,7 +75,7 @@ it:
   invoke.
 
 The check does not choose invoke or return either. It fills an input contract
-in its Horizon, or produces a value, and the runtime derives the rest. Chained,
+in its Boundary, or produces a value, and the runtime derives the rest. Chained,
 this reaches a formal return when the checks along the way are compiled
 correctly. Nothing here guarantees that the chain ends: see the open
 questions.
@@ -125,7 +125,7 @@ Under this document:
 - **State**, in the place the kernel provisions: `{thread, turn, cursor, answered}`.
 - **State methods**, authored by the adapter: open a thread, start a turn,
   record an answered call, advance the cursor.
-- **Input contracts in its Horizon**: the actor host's socket and the tools in reach.
+- **Input contracts in its Boundary**: the actor host's socket and the tools in reach.
 - **Faults and interrupts**: what it receives, such as a fault on a tool call.
 
 A run reads its state, reads new events from its cursor, and then either fills
@@ -145,7 +145,7 @@ conflict, not silent.
 | Where | Today | Here |
 |---|---|---|
 | actor state | none; each run re-derives it (the adapter by redelivery) | a place the kernel provisions at registration, reached only through the actor's methods, every read and write recorded |
-| 26's creator facets (start, exchange, inspect, stop) and `ResourceOwnerDepth` | facets in the creator's reach (D6) | the actor's state methods, in no Horizon |
+| 26's creator facets (start, exchange, inspect, stop) and `ResourceOwnerDepth` | facets in the creator's reach (D6) | the actor's state methods, in no Boundary |
 | 25's resident fields (C4) | on the surface | state the kernel provisions for the actor |
 | 28's novelty interrupt | at a return | at a return and at an input; shows the three interfaces |
 | the Codex adapter | stateless; state recovered by redelivery | `{thread, turn, cursor, answered}` as its state |
@@ -157,7 +157,7 @@ conflict, not silent.
   child itself when it is an agent that can write its own handler, or the
   invoking parent.
 - **What the place is.** Its shape in the tree, how it is keyed (per
-  registration, per conversation, per Horizon), and its record encoding, which
+  registration, per conversation, per Boundary), and its record encoding, which
   belongs with improvements item 9.
 - **What the methods are written in.** Starlark, as checks are (28), so they
   are pure and replayable; the kernel supplies reads and writes as the only
@@ -167,10 +167,10 @@ conflict, not silent.
   (`ResidentPaths`). The kernel can record what crosses the connection, not
   what happens inside. Whether that is a second kind of actor state, or state
   the actor's methods only wrap.
-- **Inspection.** With state methods in no Horizon, who can read an actor's
+- **Inspection.** With state methods in no Boundary, who can read an actor's
   state: the kernel, through the admin facet (26), or no one but the actor.
 - **Termination.** A chain of checks feeding children can cycle. Starlark's
-  step cap bounds one run, not the chain; a budget charged to the Horizon
+  step cap bounds one run, not the chain; a budget charged to the Boundary
   (improvements item 7) would, and exhausting it should interrupt, not fault
   silently.
 - **Races later.** Whether the kernel eventually serializes an actor's turns,

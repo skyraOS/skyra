@@ -5,7 +5,7 @@ import (
 	"syscall"
 	"time"
 
-	"skyra/controller/runtime/trace"
+	"skyra/controller/runtime/log"
 )
 
 // The durability policy (proposal 40, built in 41 V5).
@@ -38,7 +38,7 @@ func flush(f *os.File, what string) error {
 	t := time.Now()
 	kind, err := barrier(f)
 	if syncTrace {
-		trace.Logf("fsync    %s %s %dus", kind, what, time.Since(t).Microseconds())
+		log.Logf("fsync    %s %s %dus", kind, what, time.Since(t).Microseconds())
 	}
 	return err
 }
@@ -79,7 +79,7 @@ func Force(root string) error {
 	defer d.Close()
 	err = d.Sync()
 	if syncTrace {
-		trace.Logf("fsync    force %dus", time.Since(t).Microseconds())
+		log.Logf("fsync    force %dus", time.Since(t).Microseconds())
 	}
 	return err
 }

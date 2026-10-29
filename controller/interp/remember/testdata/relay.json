@@ -1,6 +1,6 @@
 {
  "observation": "bc0cd8ddfff6642d6470394a088f725efcdb002b9d247805a5342204effc231b",
- "strand": {
+ "trace": {
   "chain": [
    "bc0cd8ddfff6642d6470394a088f725efcdb002b9d247805a5342204effc231b",
    "9972e318a6345c890aeb26cfe6ddd14685d89c0248e92dcda477cd781239600c",

@@ -8,7 +8,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"skyra/controller/core/record"
+	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/replay"
 	"skyra/controller/runtime/tree"
 )
@@ -47,7 +47,7 @@ func (r reading) Get(kind, h string) ([]byte, error) {
 
 func main() {
 	root := flag.String("root", "", "the run's .skyra/ directory")
-	head := flag.String("head", "", "the head record (default: the one record nothing follows)")
+	head := flag.String("head", "", "the head record (default: the one record nothing follows, else the lineage's head)")
 	name := flag.String("name", "", "a short name for the run (default: the output file's)")
 	title := flag.String("title", "", "what the run shows, in a line")
 	note := flag.String("note", "", "a longer note shown with the run")
@@ -99,7 +99,9 @@ func run(root, head, name, title, note, recorded, out string) error {
 
 // leaf is the one record no other record follows: not as its predecessor,
 // and not as a discharge a resolve names. With fan-out, a sibling's last
-// record is followed only by the resolve that joins its round.
+// record is followed only by the resolve that joins its round. A tree with
+// more than one such record (work narrowed off and left open) exports from
+// the lineage's head, the one `skyra replay` checks.
 func leaf(root string) (string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, "records"))
 	if err != nil {
@@ -123,7 +125,7 @@ func leaf(root string) (string, error) {
 		}
 	}
 	if len(leaves) != 1 {
-		return "", errors.New("the tree has more than one head: pass -head")
+		return boot.Head(root)
 	}
 	return leaves[0], nil
 }

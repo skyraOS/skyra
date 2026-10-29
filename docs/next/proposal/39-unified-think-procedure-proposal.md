@@ -15,9 +15,9 @@ adding a procedure, a bundle, a table entry, and a contract key — a
 combinatorial fork for what should be a parameter.
 
 The narrow runs on every turn. `system.narrow` is a syscall that sets the
-Horizon; it should run once, when the conversation's authority is established,
+Boundary; it should run once, when the conversation's authority is established,
 not on every message the human sends. Every turn today pays for a narrow that
-derives the same Horizon its predecessor already derived.
+derives the same Boundary its predecessor already derived.
 
 History travels on the wire as a growing `context` array: the user target
 serializes the full transcript and sends it as a parameter. Each adapter
@@ -54,17 +54,17 @@ emits the next action (show the transcript, wait for the human). It replaces
 the interpreter's role for the think workflow with a purpose-built binary
 that knows both adapters.
 
-### 3. Narrow creates a Horizon once, not per turn
+### 3. Narrow creates a Boundary once, not per turn
 
-`system.narrow` creates a new Horizon — a child of the caller's, with
+`system.narrow` creates a new Boundary — a child of the caller's, with
 authority reduced to the adapter's reach. This happens once, when the
 conversation starts: the first turn narrows, the narrow creates the
-Horizon, and the reference to it is stored in the procedure target's
+Boundary, and the reference to it is stored in the procedure target's
 continuation state. Every subsequent turn invokes the adapter under that
-Horizon directly, without re-deriving it.
+Boundary directly, without re-deriving it.
 
 If the model changes mid-conversation (the user switches from Codex to
-Claude), the procedure narrows again — a new Horizon with the new actor's
+Claude), the procedure narrows again — a new Boundary with the new actor's
 reach. This is the only case where narrow runs after the first turn.
 
 ### 4. History stays local to the adapter
@@ -137,7 +137,7 @@ history server-side. No local history file that duplicates the lineage.
 - The tool set: `echo`, `read`, `find`, `roots`, `write`, plus the
   adapter's own transport operations (claude.start/exchange or
   codex.start/exchange). Attached through the narrow's reach, as 38 says.
-- The Horizon: authority derived from state plus proposal at every step.
+- The Boundary: authority derived from state plus proposal at every step.
   The narrow is still `system.narrow`; it just runs once.
 - The user target: still a continuation that manages the human's turns. It
   no longer builds the transcript for the adapter; it still shows the
@@ -174,5 +174,5 @@ history server-side. No local history file that duplicates the lineage.
 - Introduce compaction or context windowing. That is think.md's later work.
 - Add more models. But the pattern is: add an adapter, add a case in the
   procedure target. No new bundle, no new procedure.
-- Change the kernel. The narrow, the Horizon, the recorded edge — all
+- Change the kernel. The narrow, the Boundary, the recorded edge — all
   unchanged.

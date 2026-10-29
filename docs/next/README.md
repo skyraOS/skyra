@@ -14,11 +14,11 @@ became) or **not in the proposal**.
 ## In the proposal
 
 1. **[`24-the-room.md`](24-the-room.md)**: authority derived from state and
-   proposal. A Horizon is an execution context, shared by every call unless
+   proposal. A Boundary is an execution context, shared by every call unless
    narrowed, committed and handed over by hash. The room is the root; faults
    climb to whoever can grant. Built in part.
 2. **[`26-agents-and-facets.md`](26-agents-and-facets.md)**: an agent is a
-   Horizon, a facet is a group of contracts over it, reach holds facets. The
+   Boundary, a facet is a group of contracts over it, reach holds facets. The
    room's `system.narrow` is built; facets and `system.register` are not.
 3. **[`23-desktop-app.md`](23-desktop-app.md)**: `Skyra.app`, the user's entry
    point. Cuts 1 and 2 built; cut 3 waits on faults that climb to the human.
@@ -28,8 +28,8 @@ became) or **not in the proposal**.
    a limit of k continuations per node. Proposed.
 ## Not in the proposal
 
-5. **[`27-a-horizon-is-a-process.md`](27-a-horizon-is-a-process.md)**: a
-   Horizon is our process; OS processes are its workers. Near and far invokes,
+5. **[`27-a-boundary-is-a-process.md`](27-a-boundary-is-a-process.md)**: a
+   Boundary is our process; OS processes are its workers. Near and far invokes,
    the creator supervises, one stdin envelope for every program.
 6. **[`28-types-observations-checks.md`](28-types-observations-checks.md)**:
    types are contracts, observations are values. The parent owns the check on
@@ -37,7 +37,7 @@ became) or **not in the proposal**.
    is the test suite; agent-written tools as Starlark.
 7. **[`29-actors-own-their-state.md`](29-actors-own-their-state.md)**: the
    runtime owns control flow, an actor owns its state. The kernel provisions
-   where an actor's state and methods live, in no Horizon; a novelty interrupt
+   where an actor's state and methods live, in no Boundary; a novelty interrupt
    shows three interfaces. The Codex adapter as the example.
 8. **[`21-observation-passing.md`](21-observation-passing.md)**: observations
     travel by hash; continuations pass their children's observations up instead
@@ -49,7 +49,7 @@ became) or **not in the proposal**.
 11. **[`31-the-sky-dreams.md`](31-the-sky-dreams.md)**: the desktop sky as a
     machine hallucination of the tree. Every pixel derived from a record;
     Rest, Work and Dream; replay as the dream. Proposed.
-12. **[`33-the-public-horizon.md`](33-the-public-horizon.md)**: the website's
+12. **[`33-the-public-boundary.md`](33-the-public-boundary.md)**: the website's
     live mode without a model. A stranger's request is a run under a read-only
     public root; its records come back to replay. Proposed.
 13. **[`34-cua-driver-observation.md`](34-cua-driver-observation.md)**: Cua

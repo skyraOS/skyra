@@ -58,7 +58,7 @@ func TestInterruptFailsWhenHostDies(t *testing.T) {
 	}
 }
 
-// Under a shared Horizon the adapter sees the whole room in reach. It must
+// Under a shared Boundary the adapter sees every registered surface in reach. It must
 // offer Codex only its model-facing tools, and produce the same thread/start
 // bytes on every run: a resumed round delivers the line again under the same
 // id, and the host refuses one that differs from the first delivery.

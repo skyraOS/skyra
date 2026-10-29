@@ -10,24 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
 var (
 	text   = &contract.Schema{Type: "string"}
 	echoIn = &contract.Schema{Type: "object", Required: []string{"text"}, Fields: map[string]*contract.Schema{"text": text}}
-	echoS  = horizon.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn}
-	agentS = horizon.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Continuation: true}
-	both   = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
-	// Horizons as the emitter holds them: the operator (no surface), and a leaf.
-	operator = horizon.Horizon{Stamp: "g0", Reach: both, Frame: "g0"}
-	leaf     = horizon.Horizon{Stamp: "r1", Surface: &echoS, Reach: map[string]horizon.Surface{}, Frame: "r1", Resume: &operator}
+	echoS  = boundary.Surface{Path: "/bin/echo-target", SHA256: "e", Input: echoIn}
+	agentS = boundary.Surface{Path: "/bin/agent", SHA256: "a", Input: echoIn, Continuation: true}
+	both   = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
+	// Boundaries as the emitter holds them: the operator (no surface), and a leaf.
+	operator = boundary.Boundary{Stamp: "g0", Reach: both, Frame: "g0"}
+	leaf     = boundary.Boundary{Stamp: "r1", Surface: &echoS, Reach: map[string]boundary.Surface{}, Frame: "r1", Resume: &operator}
 )
 
 func TestPrimaryBundleContractIsPassedToContinuation(t *testing.T) {
-	surface := horizon.Surface{Input: echoIn, Continuation: true, BundlePath: "/write-bundle.json"}
+	surface := boundary.Surface{Input: echoIn, Continuation: true, BundlePath: "/write-bundle.json"}
 	if got := against(surface, json.RawMessage(`{"text":"hi"}`)); got != echoIn {
 		t.Fatalf("bundle's primary contract must be named in its envelope: %+v", got)
 	}
@@ -38,8 +38,8 @@ func TestPrimaryBundleContractIsPassedToContinuation(t *testing.T) {
 }
 
 // intakeRecord runs the Intake phase and returns what it commits.
-func intakeRecord(h horizon.Horizon, in string) record.Record {
-	_, effs := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(h), In: []byte(in)})
+func intakeRecord(h boundary.Boundary, in string) record.Record {
+	_, effs := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(h), In: []byte(in)})
 	return CommittedRecord(effs)
 }
 
@@ -47,7 +47,7 @@ func intakeRecord(h horizon.Horizon, in string) record.Record {
 func TestInterpret(t *testing.T) {
 	cases := []struct {
 		name    string
-		under   horizon.Horizon
+		under   boundary.Boundary
 		in      string
 		state   record.State
 		to      string // invoke: the capability
@@ -59,11 +59,11 @@ func TestInterpret(t *testing.T) {
 		{"addresses its own slot", leaf, `{"to":"r1","payload":"hi"}`, record.Return, "", `"hi"`, "", ""},
 		{"unaddressed text is a leaf fault, kept", leaf, `hello`, record.Fault, "", `"hello"`, record.Leaf, "addresses nothing"},
 		{"unaddressed JSON is a leaf fault, kept as text", leaf, `{"text":"hi"}`, record.Fault, "", `"{\"text\":\"hi\"}"`, record.Leaf, "addresses nothing"},
-		{"reply is not a name", leaf, `{"to":"reply","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"reply"}`, record.Horizon, `"reply" is not in reach`},
-		{"another frame's slot is not in reach", leaf, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Horizon, `"g0" is not in reach`},
-		{"a leaf addresses a capability", leaf, `{"to":"echo","payload":{"text":"x"}}`, record.Fault, "", `{"payload":{"text":"x"},"to":"echo"}`, record.Horizon, `"echo" is not in reach`},
-		{"out of reach", operator, `{"to":"ghost","payload":{}}`, record.Fault, "", `{"payload":{},"to":"ghost"}`, record.Horizon, "not in reach"},
-		{"the operator has no slot to return to", operator, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Horizon, `"g0" is not in reach`},
+		{"reply is not a name", leaf, `{"to":"reply","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"reply"}`, record.Boundary, `"reply" is not in reach`},
+		{"another frame's slot is not in reach", leaf, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Boundary, `"g0" is not in reach`},
+		{"a leaf addresses a capability", leaf, `{"to":"echo","payload":{"text":"x"}}`, record.Fault, "", `{"payload":{"text":"x"},"to":"echo"}`, record.Boundary, `"echo" is not in reach`},
+		{"out of reach", operator, `{"to":"ghost","payload":{}}`, record.Fault, "", `{"payload":{},"to":"ghost"}`, record.Boundary, "not in reach"},
+		{"the operator has no slot to return to", operator, `{"to":"g0","payload":"hi"}`, record.Fault, "", `{"payload":"hi","to":"g0"}`, record.Boundary, `"g0" is not in reach`},
 		{"payload does not fit", operator, `{"to":"echo","payload":{"txt":"x"}}`, record.Fault, "", `{"payload":{"txt":"x"},"to":"echo"}`, record.Contract, `unknown field "txt"`},
 		{"payload missing a field", operator, `{"to":"echo","payload":{}}`, record.Fault, "", `{"payload":{},"to":"echo"}`, record.Contract, `missing required field "text"`},
 		{"a return is any JSON: its type is computed", leaf, `{"to":"r1","payload":{"any":["thing"]}}`, record.Return, "", `{"any":["thing"]}`, "", ""},
@@ -75,7 +75,7 @@ func TestInterpret(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
+			s, effs := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(c.under), In: []byte(c.in)})
 			r := CommittedRecord(effs)
 			if s.Phase != Stamping || s.Stamp() != record.Stamp(r) || s.State() != r.State {
 				t.Fatalf("intake must derive the state and commit: %+v", s)
@@ -104,7 +104,7 @@ func TestInterpret(t *testing.T) {
 // invoke and settles a slot for a return or a fault.
 func TestStateIsTheTopLevelBranch(t *testing.T) {
 	for _, c := range []struct {
-		under  horizon.Horizon
+		under  boundary.Boundary
 		in     string
 		state  record.State
 		settle bool // the first thing after the release is the discharge, not a run
@@ -113,7 +113,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 		{leaf, `{"to":"r1","payload":"x"}`, record.Return, true},
 		{operator, `{"to":"ghost","payload":{}}`, record.Fault, true},
 	} {
-		s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(c.under), In: []byte(c.in)})
+		s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(c.under), In: []byte(c.in)})
 		if s.State() != c.state {
 			t.Fatalf("%s: state %s, want %s", c.in, s.State(), c.state)
 		}
@@ -131,7 +131,7 @@ func TestStateIsTheTopLevelBranch(t *testing.T) {
 	}
 
 	// A terminal state never executes, even if a target's output arrives.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
 	s.Phase = Running
 	_, effs := Step(s, Executed{Obs: []byte("x")})
 	if ok, err := exited(effs); !ok || err == "" {
@@ -153,11 +153,11 @@ func TestStepIsDeterministic(t *testing.T) {
 func awaiting(t *testing.T) Instance {
 	t.Helper()
 	s, _ := Step(Instance{Floor: "/state/.skyra", Phase: Intake},
-		Received{Under: HeldHorizon(operator), In: []byte(`{"to":"echo","payload":{"text":"hi"}}`)})
+		Received{Under: HeldBoundary(operator), In: []byte(`{"to":"echo","payload":{"text":"hi"}}`)})
 	return s
 }
 
-func selfOf(t *testing.T, s Instance) horizon.Horizon {
+func selfOf(t *testing.T, s Instance) boundary.Boundary {
 	t.Helper()
 	h, err := Narrow(s.Under, s.R, s.Stamp())
 	if err != nil {
@@ -190,9 +190,9 @@ func TestReleaseRefusals(t *testing.T) {
 		self   Object
 		frames int
 	}{
-		"for another commit":        {HeldHorizon(other), 2},
-		"without its frame stack":   {HeldHorizon(good), 0},
-		"missing the waiting frame": {HeldHorizon(good), 1},
+		"for another commit":        {HeldBoundary(other), 2},
+		"without its frame stack":   {HeldBoundary(good), 0},
+		"missing the waiting frame": {HeldBoundary(good), 1},
 	} {
 		_, effs := releasedWith(s, c.self, c.frames)
 		a := acts(effs)
@@ -208,7 +208,7 @@ func TestReleaseRefusals(t *testing.T) {
 func TestReleaseToSettle(t *testing.T) {
 	// The operator's own emission is refused: its fault discharges frame 0,
 	// which only the operator waits on.
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"ghost","payload":{}}`)})
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(operator), In: []byte(`{"to":"ghost","payload":{}}`)})
 	s, effs := released(s, selfOf(t, s))
 	if w := writes(t, effs); w[0].(ResultWrite).Stamp != s.Stamp() {
 		t.Fatalf("the fault discharges its slot: %#v", effs)
@@ -216,7 +216,7 @@ func TestReleaseToSettle(t *testing.T) {
 	if _, effs = Step(s, created(effs)); !cleanExit(effs) {
 		t.Fatalf("with only the operator waiting: %#v", effs)
 	}
-	s, _ = Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, _ = Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
 	s, effs = released(s, selfOf(t, s))
 	s, effs = Step(s, created(effs))
 	want := Read{Keys: []Key{ObjectKey{"records", operator.Frame}, SlotsKey{operator.Stamp}, EmissionKey{operator.Frame, operator.Stamp}}}
@@ -224,7 +224,7 @@ func TestReleaseToSettle(t *testing.T) {
 		t.Fatalf("with a continuation waiting, it reads the waiter's frame and round: %#v", effs)
 	}
 	// A slot already discharged is not discharged again.
-	s, _ = Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
+	s, _ = Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(leaf), In: []byte(`{"to":"r1","payload":"x"}`)})
 	s, _ = released(s, selfOf(t, s))
 	if _, effs := Step(s, Committed{Outcomes: []Outcome{Lost}}); !strings.Contains(exitError(effs), "already settled") {
 		t.Fatalf("a lost discharge: %#v", effs)
@@ -236,15 +236,15 @@ func exitError(effs []Effect) string {
 	return err
 }
 
-// The child re-derives the Horizon it looked up: one with the right stamp
+// The child re-derives the Boundary it looked up: one with the right stamp
 // but more reach than its commit derives is refused, and nothing runs.
 func TestReleaseMustBeWhatTheCommitDerives(t *testing.T) {
 	s := awaiting(t)
 	forged := selfOf(t, s)
-	forged.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS, "shell": echoS}
+	forged.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS, "shell": echoS}
 	_, effs := released(s, forged)
 	if !strings.Contains(exitError(effs), "not what this commit derives") {
-		t.Fatalf("a Horizon the commit does not derive must stop the instance: %#v", effs)
+		t.Fatalf("a Boundary the commit does not derive must stop the instance: %#v", effs)
 	}
 }
 
@@ -279,11 +279,11 @@ func TestHandoff(t *testing.T) {
 	s := executing(t)
 	out := []byte(`{"to":"` + s.Self.Frame + `","payload":"hi"}`)
 	s, effs := Step(s, Executed{Obs: out})
-	if !reflect.DeepEqual(effs, []Effect{Commit{Writes: []Write{horizonWrite(s.Self)}}}) {
-		t.Fatalf("the Horizon the successor intakes under is committed first: %#v", effs)
+	if !reflect.DeepEqual(effs, []Effect{Commit{Writes: []Write{boundaryWrite(s.Self)}}}) {
+		t.Fatalf("the Boundary the successor intakes under is committed first: %#v", effs)
 	}
 	s, effs = Step(s, created(effs))
-	if !reflect.DeepEqual(effs, []Effect{Execute{Act: Spawn{Under: HeldHorizon(s.Self).Key, Out: out}}}) {
+	if !reflect.DeepEqual(effs, []Effect{Execute{Act: Spawn{Under: HeldBoundary(s.Self).Key, Out: out}}}) {
 		t.Fatalf("the emission goes to a successor, uninterpreted: %#v", effs)
 	}
 
@@ -293,12 +293,12 @@ func TestHandoff(t *testing.T) {
 	if succ.State != record.Return {
 		t.Fatalf("the emission addressed the frame's slot: %+v", succ)
 	}
-	want := horizon.Horizon{Stamp: record.Stamp(succ), Reach: s.Self.Reach, Authority: s.Self.Authority, Frame: s.Self.Frame, Resume: s.Self.Resume}
-	if !reflect.DeepEqual(effs, []Effect{Commit{Writes: []Write{horizonWrite(want)}}}) {
-		t.Fatalf("a verified return opens no slot: only its Horizon is committed: %#v", effs)
+	want := boundary.Boundary{Stamp: record.Stamp(succ), Reach: s.Self.Reach, Authority: s.Self.Authority, Frame: s.Self.Frame, Resume: s.Self.Resume}
+	if !reflect.DeepEqual(effs, []Effect{Commit{Writes: []Write{boundaryWrite(want)}}}) {
+		t.Fatalf("a verified return opens no slot: only its Boundary is committed: %#v", effs)
 	}
 	s2, effs = Step(s2, created(effs))
-	if !reflect.DeepEqual(effs, []Effect{Execute{Act: ReleaseChild{Horizon: HeldHorizon(want).Key, Stamp: record.Stamp(succ)}}, Execute{Act: Exit{}}}) {
+	if !reflect.DeepEqual(effs, []Effect{Execute{Act: ReleaseChild{Boundary: HeldBoundary(want).Key, Stamp: record.Stamp(succ)}}, Execute{Act: Exit{}}}) {
 		t.Fatalf("a verified return is released to discharge this frame's slot: %#v", effs)
 	}
 	if s2.Child() != record.Stamp(succ) {
@@ -358,7 +358,7 @@ func TestHandoffRefusals(t *testing.T) {
 // back, all without processes: the whole round trip is step.
 func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	// The operator invokes the agent. It runs with a continuation: no steps yet.
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, effs := released(a, selfOf(t, a))
 	var c Continuation
 	if err := json.Unmarshal(runIn(t, effs).Stdin, &c); err != nil || c.Frame != a.Stamp() || string(c.Input) != `{"text":"hi"}` || len(c.Steps) != 0 {
@@ -369,10 +369,10 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	// a slot for it in its own frame, in this round, before releasing it.
 	call := []byte(`{"to":"echo","payload":{"text":"hi"}}`)
 	a, _ = emitted(a, call)
-	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: call})
+	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(a.Self), In: call})
 	a, effs = stampedBy(a, b.R)
 	rest := publishedRound(t, effs, call, a.Self.Stamp)
-	echoSelf := a.Kids[0].Horizon
+	echoSelf := a.Kids[0].Boundary
 	if rest[0] != (SlotWrite{Round: a.Self.Stamp, Child: b.Stamp()}) || rest[1] != (FrameWrite{Stamp: b.Stamp()}) {
 		t.Fatalf("an invoke's slot and frame are committed before it is released: %#v", rest)
 	}
@@ -384,9 +384,9 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	b, _ = released(b, echoSelf)
 	echoReturn := []byte(`{"to":"` + b.Self.Frame + `","payload":"hi"}`)
 	b, _ = emitted(b, echoReturn)
-	r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(b.Self), In: echoReturn})
+	r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(b.Self), In: echoReturn})
 	b, _ = stampedBy(b, r.R)
-	r, effs = released(r, b.Kids[0].Horizon)
+	r, effs = released(r, b.Kids[0].Boundary)
 	if w := writes(t, effs); len(w) != 1 || w[0].(ResultWrite).Stamp != r.Stamp() {
 		t.Fatalf("the return discharges echo's slot: %#v", effs)
 	}
@@ -449,7 +449,7 @@ func TestContinuationInvokesWaitsResumes(t *testing.T) {
 	}
 
 	// Its return discharges the agent's own slot, and wakes the operator.
-	final, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(g.Self), In: []byte(`{"to":"` + a.Stamp() + `","payload":"echo said \"hi\""}`)})
+	final, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(g.Self), In: []byte(`{"to":"` + a.Stamp() + `","payload":"echo said \"hi\""}`)})
 	child, _ := Narrow(g.Self, final.R, final.Stamp())
 	if final.State() != record.Return || child.Frame != a.Stamp() || child.Resume.Frame != operator.Frame {
 		t.Fatalf("the agent's return discharges its own frame, waited on by the operator: %+v", child)
@@ -502,14 +502,14 @@ func TestRemovedRoutePhasesAreRefused(t *testing.T) {
 	}
 }
 
-// Every call shares its caller's Horizon (next/24): the same reach and the
+// Every call shares its caller's Boundary (next/24): the same reach and the
 // same grants, whatever the callee is. Only the frame is new.
-func TestNarrowSharesTheCallersHorizon(t *testing.T) {
-	invoke := func(under horizon.Horizon, target string) record.Record {
+func TestNarrowSharesTheCallersBoundary(t *testing.T) {
+	invoke := func(under boundary.Boundary, target string) record.Record {
 		return intakeRecord(under, `{"to":"`+target+`","payload":{"text":"x"}}`)
 	}
 	root := operator
-	root.Authority = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
+	root.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 
 	for _, target := range []string{"echo", "agent"} {
 		h, err := Narrow(root, invoke(root, target), "r1")
@@ -522,7 +522,7 @@ func TestNarrowSharesTheCallersHorizon(t *testing.T) {
 	}
 
 	// A return or fault runs nothing: it discharges the caller's slot, under
-	// the same Horizon.
+	// the same Boundary.
 	leafUnder, _ := Narrow(root, invoke(root, "echo"), "r1")
 	ret := intakeRecord(leafUnder, `{"to":"r1","payload":"x"}`)
 	h, err := Narrow(leafUnder, ret, "r2")
@@ -531,7 +531,7 @@ func TestNarrowSharesTheCallersHorizon(t *testing.T) {
 	}
 
 	forged := record.Record{State: record.Invoke, To: "agent"}
-	if _, err := Narrow(horizon.Horizon{Stamp: "r1", Reach: map[string]horizon.Surface{}}, forged, "r2"); err == nil {
+	if _, err := Narrow(boundary.Boundary{Stamp: "r1", Reach: map[string]boundary.Surface{}}, forged, "r2"); err == nil {
 		t.Fatal("narrow granted a target outside the parent's reach")
 	}
 }
@@ -542,7 +542,7 @@ func TestMachineIsPure(t *testing.T) {
 	allowed := map[string]bool{
 		"encoding/json": true, "errors": true, "fmt": true, "unicode/utf8": true, "slices": true, "strings": true,
 		"skyra/controller/core/contract": true,
-		"skyra/controller/core/horizon":  true,
+		"skyra/controller/core/boundary": true,
 		"skyra/controller/core/record":   true,
 	}
 	files, _ := filepath.Glob("*.go")
@@ -566,9 +566,9 @@ func TestMachineIsPure(t *testing.T) {
 // An async surface is parked with its host instead of run: the host takes
 // custody, and a refusal leaves custody here, as a fault on this frame.
 func TestAsyncSurfaceParks(t *testing.T) {
-	browserS := horizon.Surface{Host: "/tmp/park.sock", Input: echoIn}
-	root := horizon.Horizon{Stamp: "g0", Frame: "g0", Reach: map[string]horizon.Surface{"browser": browserS}}
-	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(root), In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
+	browserS := boundary.Surface{Host: "/tmp/park.sock", Input: echoIn}
+	root := boundary.Boundary{Stamp: "g0", Frame: "g0", Reach: map[string]boundary.Surface{"browser": browserS}}
+	s, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(root), In: []byte(`{"to":"browser","payload":{"text":"show me"}}`)})
 	s, effs := released(s, selfOf(t, s))
 	want := []Effect{Execute{Act: Park{Host: "/tmp/park.sock", Payload: []byte(`{"text":"show me"}`), Stamp: s.Stamp(), Frames: 2}, Force: true}}
 	if s.Phase != Parking || !reflect.DeepEqual(effs, want) {
@@ -589,12 +589,12 @@ func TestAsyncSurfaceParks(t *testing.T) {
 }
 
 func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
-	s := horizon.Surface{Path: "/bin/tool"}
-	if env := runOf(horizon.Horizon{Surface: &s, Frame: "f1"}, nil, "/floor").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
+	s := boundary.Surface{Path: "/bin/tool"}
+	if env := runOf(boundary.Boundary{Surface: &s, Frame: "f1"}, nil, "/floor").Env; !reflect.DeepEqual(env, []string{"PATH=/usr/bin:/bin", "SKYRA_FRAME=f1"}) {
 		t.Fatalf("a target is told its slot; no read grant, no SKYRA_READ: %v", env)
 	}
-	grants := horizon.Authority{Read: []horizon.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}}
-	env := runOf(horizon.Horizon{Surface: &s, Authority: grants}, nil, "/floor").Env
+	grants := boundary.Authority{Read: []boundary.PathGrant{{Path: "/work", Scope: "subpath"}, {Path: "/etc/x", Scope: "literal"}}}
+	env := runOf(boundary.Boundary{Surface: &s, Authority: grants}, nil, "/floor").Env
 	if env[len(env)-1] != "SKYRA_READ=/work:/etc/x" {
 		t.Fatalf("%v", env)
 	}
@@ -605,7 +605,7 @@ func TestRunTellsATargetItsSlotAndReadGrants(t *testing.T) {
 // writes of the round's commit after its emission.
 func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Write) {
 	t.Helper()
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, _ = released(a, selfOf(t, a))
 	emission := []byte("[" + strings.Join(instructions, ",") + "]")
 	a, effs := emitted(a, emission)
@@ -614,7 +614,7 @@ func fanOut(t *testing.T, instructions ...string) (Instance, []Instance, []Write
 		if sp := spawned(t, effs); string(sp.Out) != in {
 			t.Fatalf("instruction %d is spawned with exactly its bytes: %#v", i, effs)
 		}
-		k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: []byte(in)})
+		k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(a.Self), In: []byte(in)})
 		kids = append(kids, k)
 		a, effs = stampedBy(a, k.R)
 		if i < len(instructions)-1 {
@@ -655,7 +655,7 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 	}
 	rel := releases(t, a, w)
 	for i := range kids {
-		self := a.Kids[i].Horizon
+		self := a.Kids[i].Boundary
 		if rel[i].Index != i || rel[i].NewFrame != kids[i].Stamp() || self.Frame != kids[i].Stamp() || self.Resume.Stamp != a.Self.Stamp {
 			t.Fatalf("successor %d is released into a frame of its own, in the agent's round: %#v", i, rel[i])
 		}
@@ -666,13 +666,13 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 	var returns []Instance
 	var children []Child
 	for i, k := range kids {
-		self := a.Kids[i].Horizon
+		self := a.Kids[i].Boundary
 		k, _ = released(k, self)
 		out := []byte(`{"to":"` + self.Frame + `","payload":"` + []string{"b", "a"}[i] + `"}`)
 		k, _ = emitted(k, out)
-		r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(k.Self), In: out})
+		r, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(k.Self), In: out})
 		k, _ = stampedBy(k, r.R)
-		r, effs := released(r, k.Kids[0].Horizon)
+		r, effs := released(r, k.Kids[0].Boundary)
 		r, _ = Step(r, created(effs))
 		returns = append(returns, r)
 		d := HeldRecord(r.R)
@@ -700,13 +700,13 @@ func TestFanOutResumesTheWaiterOnceWithEveryStepInOrder(t *testing.T) {
 // holds a slot of its own in the round and discharges it.
 func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
 	a, kids, w := fanOut(t, `{"to":"echo","payload":{"text":"a"}}`, `{"to":"shell","payload":{"text":"a"}}`)
-	if kids[0].State() != record.Invoke || kids[1].State() != record.Fault || kids[1].R.Fault.Kind != record.Horizon {
+	if kids[0].State() != record.Invoke || kids[1].State() != record.Fault || kids[1].R.Fault.Kind != record.Boundary {
 		t.Fatalf("only the instruction out of reach faults: %+v %+v", kids[0].R, kids[1].R)
 	}
 	if len(w) != 6 || w[1] != (SlotWrite{Round: a.Self.Stamp, Child: kids[1].Stamp(), Pos: 1}) {
 		t.Fatalf("the fault holds a slot of its own: %#v", w)
 	}
-	self := a.Kids[1].Horizon
+	self := a.Kids[1].Boundary
 	f, effs := released(kids[1], self)
 	if w := writes(t, effs); w[0].(ResultWrite).Stamp != kids[1].Stamp() || f.Self.Resume.Frame != a.Self.Frame {
 		t.Fatalf("the fault discharges its own slot: %#v", effs)
@@ -722,18 +722,18 @@ func TestFanOutFaultsOnlyTheInstructionOutOfReach(t *testing.T) {
 }
 
 // What cannot share an emission is refused before any successor is
-// released: a return, and an invoke that changes the waiter's Horizon.
+// released: a return, and an invoke that changes the waiter's Boundary.
 func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
-	room := operator
-	room.Reach = map[string]horizon.Surface{"echo": echoS, "agent": agentS}
-	room.Reach[System] = Syscalls()
+	root := operator
+	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
+	root.Reach[System] = Syscalls()
 	echo := `{"to":"echo","payload":{"text":"a"}}`
 	for name, other := range map[string]string{
 		"a return":    `{"to":"FRAME","payload":"done"}`,
 		"a narrowing": `{"to":"system","payload":{"narrow":{"actor":"echo"}}}`,
 	} {
-		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(room), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
-		self, _ := Narrow(room, ag.R, ag.Stamp())
+		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(root), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+		self, _ := Narrow(root, ag.R, ag.Stamp())
 		ag, _ = released(ag, self)
 		other = strings.ReplaceAll(other, "FRAME", ag.Self.Frame)
 		ag, effs := emitted(ag, []byte("["+echo+","+other+"]"))
@@ -742,7 +742,7 @@ func TestFanOutRefusesAReturnAndANarrowing(t *testing.T) {
 			if string(sp.Out) != in {
 				t.Fatalf("%s: spawned %s", name, sp.Out)
 			}
-			k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(ag.Self), In: sp.Out})
+			k, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(ag.Self), In: sp.Out})
 			ag, effs = stampedBy(ag, k.R)
 		}
 		if a := acts(effs); len(a) != 1 || a[0] != (KillSuccessors{}) {
@@ -811,7 +811,7 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 		}
 		return c
 	}
-	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
+	a, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(operator), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 	a, effs := released(a, selfOf(t, a))
 	if c := stdinOf(effs); c.Caller != "" {
 		t.Fatalf("the operator has no name, got caller %q", c.Caller)
@@ -819,16 +819,16 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 	// The agent invokes a continuation: that child is told the agent called it.
 	call := []byte(`{"to":"agent","payload":{"text":"again"}}`)
 	a, _ = emitted(a, call)
-	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(a.Self), In: call})
+	b, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(a.Self), In: call})
 	a, effs = stampedBy(a, b.R)
 	publishedRound(t, effs, call, a.Self.Stamp)
-	_, effs = released(b, a.Kids[0].Horizon)
+	_, effs = released(b, a.Kids[0].Boundary)
 	if c := stdinOf(effs); c.Caller != "agent" {
-		t.Fatalf("caller is derived from the Horizon, got %q", c.Caller)
+		t.Fatalf("caller is derived from the Boundary, got %q", c.Caller)
 	}
 	// A payload cannot claim a caller: the field is the kernel's, outside
 	// input, and a strict contract refuses an unknown one at intake.
-	forged, _ := Step(Instance{Phase: Intake}, Received{Under: HeldHorizon(operator), In: []byte(`{"to":"agent","payload":{"text":"x","caller":"user"}}`)})
+	forged, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(operator), In: []byte(`{"to":"agent","payload":{"text":"x","caller":"user"}}`)})
 	if forged.R.State != record.Fault || forged.R.Fault.Kind != record.Contract {
 		t.Fatalf("a payload naming a caller was not refused: %+v", forged.R)
 	}
@@ -836,7 +836,7 @@ func TestContinuationIsToldItsCaller(t *testing.T) {
 
 func TestContinuationReportsCurrentWorkspaceAndScratch(t *testing.T) {
 	// The workspace is the one named, not the first read grant.
-	h := horizon.Horizon{Authority: horizon.Authority{Read: []horizon.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/workspace", Scope: "subpath"}}, Workspace: "/workspace", Scratch: "/notes"}}
+	h := boundary.Boundary{Authority: boundary.Authority{Read: []boundary.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/workspace", Scope: "subpath"}}, Workspace: "/workspace", Scratch: "/notes"}}
 	var c Continuation
 	if e := json.Unmarshal(continuation(record.Record{Payload: json.RawMessage(`{}`)}, nil, h), &c); e != nil {
 		t.Fatal(e)
@@ -875,16 +875,16 @@ func TestTheShellCannotPassOffContentAddressedBytes(t *testing.T) {
 	}
 	in := []byte(`{"to":"echo","payload":{"text":"hi"}}`)
 	for name, under := range map[string]Object{
-		"flipped":       flipped(HeldHorizon(operator)),
-		"non-canonical": reencoded(HeldHorizon(operator)),
-		"missing":       {Key: HeldHorizon(operator).Key},
+		"flipped":       flipped(HeldBoundary(operator)),
+		"non-canonical": reencoded(HeldBoundary(operator)),
+		"missing":       {Key: HeldBoundary(operator).Key},
 	} {
 		_, effs := Step(Instance{Phase: Intake}, Received{Under: under, In: in})
-		refused("intake under a "+name+" Horizon", effs)
+		refused("intake under a "+name+" Boundary", effs)
 	}
 
 	s := awaiting(t)
-	good := HeldHorizon(selfOf(t, s))
+	good := HeldBoundary(selfOf(t, s))
 	for name, self := range map[string]Object{
 		"flipped":       flipped(good),
 		"non-canonical": reencoded(good),
@@ -914,8 +914,8 @@ func TestIntakenIsWhatIntakeCommits(t *testing.T) {
 // workspace with it; one that keeps the grant keeps the workspace, and none
 // can name another.
 func TestNarrowingKeepsTheWorkspaceOnlyWithItsGrant(t *testing.T) {
-	h := horizon.Horizon{Reach: map[string]horizon.Surface{"echo": echoS}, Authority: horizon.Authority{
-		Read: []horizon.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/work", Scope: "subpath"}}, Workspace: "/work"}}
+	h := boundary.Boundary{Reach: map[string]boundary.Surface{"echo": echoS}, Authority: boundary.Authority{
+		Read: []boundary.PathGrant{{Path: "/cache", Scope: "subpath"}, {Path: "/work", Scope: "subpath"}}, Workspace: "/work"}}
 	for payload, want := range map[string]string{
 		`{"actor":"echo"}`:                    "/work",
 		`{"actor":"echo","without":["read"]}`: "",

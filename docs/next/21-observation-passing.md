@@ -122,7 +122,7 @@ root authors task observation A
 
 Passing a hash does not grant access by itself. The runtime must check the
 invoking frame's register and the target's contract. A child receives only
-the observation IDs passed in its invocation, under its narrowed Horizon.
+the observation IDs passed in its invocation, under its narrowed Boundary.
 
 ## What this changes from the current controller
 

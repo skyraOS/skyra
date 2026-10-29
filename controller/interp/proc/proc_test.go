@@ -46,7 +46,7 @@ func world(t *testing.T, emission []byte) []Step {
 		case i.To == "system":
 			st.Value = raw(`{"reference":"system.ref.1"}`)
 		case i.To == "shell":
-			st.State, st.Value, st.Fault = "fault", raw(`{"to":"shell"}`), &Fault{Kind: "horizon", Cause: `"shell" is not in reach`}
+			st.State, st.Value, st.Fault = "fault", raw(`{"to":"shell"}`), &Fault{Kind: "boundary", Cause: `"shell" is not in reach`}
 		default:
 			t.Fatalf("no such target %q", i.To)
 		}
@@ -134,7 +134,7 @@ func TestNodeShapes(t *testing.T) {
 	}
 }
 
-// Creating a Horizon inside a procedure (decisions 25, 26): narrow, then a
+// Creating a Boundary inside a procedure (decisions 25, 26): narrow, then a
 // node whose call is the reference it returned. A narrow goes alone, even
 // when other calls are ready: the kernel refuses it among siblings.
 func TestNarrowThenCallTheReference(t *testing.T) {
@@ -163,7 +163,7 @@ func TestAFaultedCallIsWhereTheProcedureStops(t *testing.T) {
 		"z": {Call: raw(`"echo"`), In: raw(`{"text":"x"}`), After: []string{"a"}},
 	}, Return: b("z")}
 	_, next := drive(t, src, `{"names":[],"greeting":"hi"}`)
-	if next.Stuck == nil || next.Stuck.Step.Fault.Kind != "horizon" {
+	if next.Stuck == nil || next.Stuck.Step.Fault.Kind != "boundary" {
 		t.Fatalf("stuck at the faulted call: %+v", next)
 	}
 }

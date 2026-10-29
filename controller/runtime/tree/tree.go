@@ -2,7 +2,7 @@
 // the inputs they point at) and frame directories. It is the only package that
 // reads or writes .skyra/ files.
 //
-//	horizons/<id>                     a Horizon, committed when it is released: the child looks it up by its hash
+//	boundaries/<id>                     a Boundary, committed when it is released: the child looks it up by its hash
 //	frames/<F>/result                 write-once: the record that discharged F's slot
 //	frames/<F>/deps/<round>/<child>   a slot F's continuation opened in a round, before any child ran; holds its position
 //	frames/<F>/resolved-<round>       write-once fan-in claim: the resolve record that won
@@ -27,13 +27,13 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
 // Init creates the tree's directories.
 func Init(root string) error {
-	for _, d := range []string{"records", "inputs", "horizons", "frames", "acceptances"} {
+	for _, d := range []string{"records", "inputs", "boundaries", "frames", "acceptances"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
 			return err
 		}
@@ -134,27 +134,27 @@ func Commit(root string, r record.Record) (string, error) {
 	return Put(root, "records", b)
 }
 
-// PutHorizon commits a Horizon and returns its id, the hash of its encoding.
-// A Horizon is released by committing it (next/24): what crosses to the child
+// PutBoundary commits a Boundary and returns its id, the hash of its encoding.
+// A Boundary is released by committing it (next/24): what crosses to the child
 // is only the id, and the child looks it up here.
-func PutHorizon(root string, h horizon.Horizon) (string, error) {
+func PutBoundary(root string, h boundary.Boundary) (string, error) {
 	b, err := json.Marshal(h)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(root, "horizons"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "boundaries"), 0o700); err != nil {
 		return "", err
 	}
-	return Put(root, "horizons", b)
+	return Put(root, "boundaries", b)
 }
 
-// LoadHorizon reads a Horizon by id, refusing it unless it hashes to that id.
-func LoadHorizon(root, id string) (horizon.Horizon, error) {
-	b, err := Get(root, "horizons", id)
+// LoadBoundary reads a Boundary by id, refusing it unless it hashes to that id.
+func LoadBoundary(root, id string) (boundary.Boundary, error) {
+	b, err := Get(root, "boundaries", id)
 	if err != nil {
-		return horizon.Horizon{}, err
+		return boundary.Boundary{}, err
 	}
-	var h horizon.Horizon
+	var h boundary.Boundary
 	return h, json.Unmarshal(b, &h)
 }
 

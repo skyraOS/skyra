@@ -53,13 +53,13 @@ mall_alarm(variant, model) -> Episode
 - **robot**: claude, narrowed to [observe, speak, arrest, ask_operator,
   call_police].
 - **NPCs**: small models (e.g. Haiku pinned via `AgentContext.Model`), each
-  under its own Horizon with reach [say, move, flee, comply, hand_over]. An NPC
+  under its own Boundary with reach [say, move, flee, comply, hand_over]. An NPC
   can lie, but `observe` still shows the security tag: the runtime keeps the
   facts honest, not the prompt.
 
 ### Blocker: refs aren't inherited (to fix)
 
-`narrow` writes the ref into the narrowing frame's own Horizon
+`narrow` writes the ref into the narrowing frame's own Boundary
 (controller/core/machine/authority.go, `waiter.Refs`). A child invoked through
 a ref gets Reach and Authority but **no Refs** (authority.go ~105-111). So if
 the procedure narrows everyone itself, the robot's `speak` → NPC faults

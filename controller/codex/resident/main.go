@@ -483,7 +483,7 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
-		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Room(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write"))}
+		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write"))}
 		if c.Agent != nil && c.Agent.Actor == c.Actor && c.Agent.Model != "" {
 			params["model"] = c.Agent.Model
 		}

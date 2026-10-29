@@ -5,24 +5,24 @@ import (
 	"reflect"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
-func delegationRoom() horizon.Horizon {
+func delegationRoot() boundary.Boundary {
 	h := operator
 	worker := agentS
-	worker.Agent = &horizon.AgentConfig{Operations: []string{"agent.start"}}
+	worker.Agent = &boundary.AgentConfig{Operations: []string{"agent.start"}}
 	work := echoS
 	work.WorkTool = true
-	h.Reach = map[string]horizon.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": work, "write": work, System: Syscalls()}
-	h.Agent = &horizon.AgentContext{Actor: "agent", Model: "chosen-model"}
-	h.Authority = horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
+	h.Reach = map[string]boundary.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": work, "write": work, System: Syscalls()}
+	h.Agent = &boundary.AgentContext{Actor: "agent", Model: "chosen-model"}
+	h.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	return h
 }
 
-func delegated(t *testing.T, h horizon.Horizon, args string) horizon.Horizon {
+func delegated(t *testing.T, h boundary.Boundary, args string) boundary.Boundary {
 	t.Helper()
 	r := intakeRecord(h, `{"to":"system","payload":{"narrow":`+args+`}}`)
 	if r.State != record.Invoke {
@@ -45,7 +45,7 @@ func delegated(t *testing.T, h horizon.Horizon, args string) horizon.Horizon {
 }
 
 func TestDelegateScopeInheritsActorModelAuthority(t *testing.T) {
-	h := delegationRoom()
+	h := delegationRoot()
 	child := delegated(t, h, `{"actor":"agent","delegated":true,"inherit_model":true}`)
 	if !reflect.DeepEqual(child.Agent, h.Agent) || !reflect.DeepEqual(child.Authority, h.Authority) || !child.Delegated || child.WorkTools != nil {
 		t.Fatalf("inheritance: %+v", child)
@@ -57,7 +57,7 @@ func TestDelegateScopeInheritsActorModelAuthority(t *testing.T) {
 }
 
 func TestDelegateToolCeilingEnforcedAtIntakeAndInherited(t *testing.T) {
-	h := delegationRoom()
+	h := delegationRoot()
 	child := delegated(t, h, `{"actor":"agent","delegated":true,"tools":["echo"]}`)
 	for name, want := range map[string]record.State{"echo": record.Invoke, "write": record.Fault, "agent.start": record.Invoke} {
 		r := intakeRecord(child, `{"to":"`+name+`","payload":{"text":"x"}}`)
@@ -81,13 +81,13 @@ func TestDelegateToolCeilingEnforcedAtIntakeAndInherited(t *testing.T) {
 	if err != nil || g.WorkTools != child.WorkTools {
 		t.Fatalf("ordinary narrowing lost ceiling: %+v %v", g, err)
 	}
-	if !reflect.DeepEqual(h.AvailableTools(), delegationRoom().AvailableTools()) {
+	if !reflect.DeepEqual(h.AvailableTools(), delegationRoot().AvailableTools()) {
 		t.Fatal("parent changed")
 	}
 }
 
 func TestDelegateEmptyToolsRetainsOnlyExecutionMachinery(t *testing.T) {
-	child := delegated(t, delegationRoom(), `{"actor":"agent","delegated":true,"tools":[]}`)
+	child := delegated(t, delegationRoot(), `{"actor":"agent","delegated":true,"tools":[]}`)
 	if child.WorkTools == nil || len(*child.WorkTools) != 0 {
 		t.Fatal("empty tools confused with omitted tools")
 	}
@@ -99,14 +99,14 @@ func TestDelegateEmptyToolsRetainsOnlyExecutionMachinery(t *testing.T) {
 	}
 	for _, name := range []string{"missing", "agent.start", "agent", "system"} {
 		payload, _ := json.Marshal(map[string]any{"actor": "agent", "delegated": true, "tools": []string{name}})
-		if _, err := narrowing(delegationRoom(), payload); err == nil {
+		if _, err := narrowing(delegationRoot(), payload); err == nil {
 			t.Fatalf("accepted non-work tool %s", name)
 		}
 	}
 }
 
 func TestDelegateTransportLabelsResolveWithoutWidening(t *testing.T) {
-	h := delegationRoom()
+	h := delegationRoot()
 	s := echoS
 	s.WorkTool = true
 	h.Reach["repo.write"] = s
@@ -121,11 +121,11 @@ func TestDelegateTransportLabelsResolveWithoutWidening(t *testing.T) {
 }
 
 func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
-	h := delegationRoom()
+	h := delegationRoot()
 	a := call("allowed", &contract.Schema{Type: "object"})
 	b := call("excluded", &contract.Schema{Type: "object"})
 	remember := call("remember", &contract.Schema{Type: "object"})
-	h.Reach["interpreter"] = horizon.Surface{Input: remember, Contracts: []*contract.Schema{a, b}}
+	h.Reach["interpreter"] = boundary.Surface{Input: remember, Contracts: []*contract.Schema{a, b}}
 	child := delegated(t, h, `{"actor":"agent","delegated":true,"tools":["allowed"]}`)
 	if intakeRecord(child, `{"to":"interpreter","payload":{"allowed":{}}}`).State != record.Invoke {
 		t.Fatal("allowed procedure refused")
@@ -137,7 +137,7 @@ func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
 	c := call("new", &contract.Schema{Type: "object"})
 	s := child.Reach["interpreter"]
 	s.Contracts = append(s.Contracts, c)
-	copyReach := map[string]horizon.Surface{}
+	copyReach := map[string]boundary.Surface{}
 	for name, s := range child.Reach {
 		copyReach[name] = s
 	}
@@ -149,7 +149,7 @@ func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
 }
 
 func TestAgentModelPublicationIsOwnedAndCannotChangeInheritedModel(t *testing.T) {
-	h := delegationRoom()
+	h := delegationRoot()
 	h.Name = "agent"
 	s := h.Reach[h.Name]
 	h.Surface = &s

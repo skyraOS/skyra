@@ -23,14 +23,14 @@ Today they take two different paths, and only one of them is a sandbox:
 | Network | loopback to the egress proxy, host allowlist on the surface | anything, DNS included |
 | Home | private `run/home`, `CODEX_HOME` | the user's real `$HOME`, read and written |
 | Auth | `~/.codex/auth.json` symlinked in, read-only | whatever the CLI finds |
-| Horizon grants | image reads only (the `view_image` hole) | none rendered; nothing denied either |
+| Boundary grants | image reads only (the `view_image` hole) | none rendered; nothing denied either |
 | Version pin | `PinnedCodex`, checked before start | none |
 | Render | `RenderResident` | `RenderClaudeResident` |
 | Prepare | `prepareAppserver` | `prepareClaude` |
 | Tests | yes | none |
 
 The proposal: one profile name, one render function, one prepare function.
-The Horizon decides the same things for both. What differs between providers
+The Boundary decides the same things for both. What differs between providers
 (which binary, how the login is reached, which hosts the proxy allows) is a
 small pinned descriptor on the surface, not a second code path.
 
@@ -128,12 +128,12 @@ binary is checked the way `PinnedCodex` is: by `--version` before start.
    fork, exec of the verified copy and `desc.Exec`, the loader and system
    reads, the Codex mach-service list, `file-read-metadata`, the private
    `home`, `scratch` and `work` directories.
-2. **Horizon grants**, the same for both. Today the only one is the image-read
+2. **Boundary grants**, the same for both. Today the only one is the image-read
    hole (`imageRead` over `h.Authority.Read` and `Scratch`, none when
    `h.Delegated`). A provider's native reads are unrecorded observations, so
    no other shared grant renders for either provider until next/25 item 3
-   and next/26 narrow a provider's Horizon through the room. This is the
-   part that "ties grants to the render": the Horizon reaches both providers
+   and next/26 narrow a provider's Boundary through the room. This is the
+   part that "ties grants to the render": the Boundary reaches both providers
    through the same lines of code.
 3. **Auth**, by kind: `file` adds a read of `AuthPath` and a write deny on
    it; `keychain` adds the reads and the `securityd.xpc` lookup from
@@ -164,8 +164,8 @@ API credentials.
 ### D5. Tests
 
 - `RenderProvider` golden tests for both descriptors.
-- A property test: the Horizon-dependent lines of the profile are identical
-  for both descriptors given the same Horizon.
+- A property test: the Boundary-dependent lines of the profile are identical
+  for both descriptors given the same Boundary.
 - The darwin-only probe: one Claude turn and one Codex turn under the
   rendered profile, asserting success and the proxy journal's hosts. This is
   the "live isolation smoke test" `controller/claude/README.md` lists as
@@ -195,7 +195,7 @@ API credentials.
   reason for a real `HOME` is gone. Claude's `HOME` is the run's private home,
   as Codex's is, with the user's `settings.json` copied into
   `home/.claude/` and denied to writes. No `CLAUDE_CONFIG_DIR` is needed.
-- **The descriptor** is `horizon.Provider`: `name`, `program`, `reads`,
+- **The descriptor** is `boundary.Provider`: `name`, `program`, `reads`,
   `auth`, `auth_path`, `keychain`, `helper`, with hashes pinned by the
   registry. The proxy fields stay on the surface, shared by both. Version
   pins are runtime constants (`PinnedCodex`, `PinnedClaude`), checked
@@ -203,7 +203,7 @@ API credentials.
 - **Bridge port**: `prepareProvider` allocates it, `claude-start` binds
   `SKYRA_CLAUDE_BRIDGE_PORT`, and the profile allows bind and connect on that
   port only.
-- **Tests**: `TestProvidersShareTheHorizonsRules` (the property in D5),
+- **Tests**: `TestProvidersShareTheBoundariesRules` (the property in D5),
   `TestProviderProfiles`, `TestOSClaudeProfileEnforced` (Seatbelt denies the
   real `security`, `/bin/sh`, any other port and any other socket), the
   registry's `TestProviderIsPinnedWithItsProfile`, and the helper's tests.

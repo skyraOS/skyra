@@ -1,16 +1,16 @@
-// Package remember compiles a strand into procedures (next/32, "Compiling a
-// strand"). In the strand a model did two jobs: it decided what to call, and
+// Package remember compiles a trace into procedures (next/32, "Compiling a
+// trace"). In the trace a model did two jobs: it decided what to call, and
 // it was resumed when its calls came back. Compiling gives both jobs to the
 // interpreter; the frames, rounds and discharges look the same to the kernel,
 // only the program resumed changes.
 //
-//	strand(frame) = frame record
+//	trace(frame) = frame record
 //	              → rounds (resolve records, linked through their round)
 //	                → each round: the invokes it opened, in the order they were emitted
 //	                  → each invoke: its discharge, and
 //	                      no rounds of its own   → a leaf: a call
 //	                      rounds of its own      → a continuation: compiled, if its return passes up what ran
-//	                      another Horizon        → opaque: one call and its return
+//	                      another Boundary        → opaque: one call and its return
 //
 // Control, not content: a continuation's emissions become nodes; a return
 // is control when every value in it was found by provenance, and a frame
@@ -27,7 +27,7 @@ import (
 	"skyra/interp/proc"
 )
 
-// Record is a kernel record as the strand hands it over.
+// Record is a kernel record as the trace hands it over.
 type Record struct {
 	Predecessor string          `json:"predecessor"`
 	State       string          `json:"state"`
@@ -40,14 +40,14 @@ type Record struct {
 	Supervisor  bool            `json:"supervisor,omitempty"`
 }
 
-// Strand is what the kernel's strand syscall returns.
-type Strand struct {
+// Trace is what the kernel's trace syscall returns.
+type Trace struct {
 	Chain   []string          `json:"chain"`
 	Records map[string]Record `json:"records"`
 	Opaque  map[string]string `json:"opaque,omitempty"`
 }
 
-// Reach is every contract each name in the requester's Horizon holds, as its
+// Reach is every contract each name in the requester's Boundary holds, as its
 // envelope shows them.
 type Reach map[string][]*proc.Schema
 
@@ -59,7 +59,7 @@ type Compiled struct {
 	Evidence Evidence
 }
 
-// Evidence is one continuation's strand as names and presentations, never
+// Evidence is one continuation's trace as names and presentations, never
 // hashes: its command, every call it made by round (the node it became, what
 // it was given and returned, and the base type of that), its result, and the
 // constants the procedure will use on every run.
@@ -80,20 +80,20 @@ type Call struct {
 	Type    string `json:"type"`
 }
 
-// Refused is a strand remember will not compile: shown to whoever asked.
+// Refused is a trace remember will not compile: shown to whoever asked.
 type Refused string
 
 func (r Refused) Error() string { return string(r) }
 
 func refuse(format string, args ...any) error { return Refused(fmt.Sprintf(format, args...)) }
 
-// Compile turns the strand behind an observation into procedures, bottom
+// Compile turns the trace behind an observation into procedures, bottom
 // up: every procedure before the procedure that calls it, the one for the
 // requested contract last. self is the interpreter's own name in reach, the
 // target a compiled child is called through.
-func Compile(st Strand, observation, target string, schema *proc.Schema, reach Reach, self string) ([]Compiled, error) {
+func Compile(st Trace, observation, target string, schema *proc.Schema, reach Reach, self string) ([]Compiled, error) {
 	if len(st.Chain) == 0 {
-		return nil, refuse("the strand is empty")
+		return nil, refuse("the trace is empty")
 	}
 	c := compiler{st: st, reach: reach, self: self, resolves: map[string]string{}}
 	for stamp, r := range st.Records {
@@ -104,7 +104,7 @@ func Compile(st Strand, observation, target string, schema *proc.Schema, reach R
 	cause := st.Chain[len(st.Chain)-1]
 	inv, ok := st.Records[cause]
 	if !ok || inv.State != "invoke" || inv.To != target {
-		return nil, refuse("the strand does not end at an invoke of %s", target)
+		return nil, refuse("the trace does not end at an invoke of %s", target)
 	}
 	if !c.continuation(cause) {
 		return nil, refuse("%s ran as a leaf: it called nothing, so there is nothing to compile", target)
@@ -124,7 +124,7 @@ func Compile(st Strand, observation, target string, schema *proc.Schema, reach R
 }
 
 type compiler struct {
-	st       Strand
+	st       Trace
 	reach    Reach
 	self     string
 	resolves map[string]string // round → the resolve that closed it
@@ -162,7 +162,7 @@ func (c *compiler) child(discharge, round string) (string, error) {
 	for s := discharge; ; {
 		r, ok := c.st.Records[s]
 		if !ok {
-			return "", fmt.Errorf("the strand lacks %s", short(s))
+			return "", fmt.Errorf("the trace lacks %s", short(s))
 		}
 		if r.Predecessor == round {
 			return s, nil
@@ -208,11 +208,11 @@ func (c *compiler) frame(frame string, schema *proc.Schema, original string, dis
 			x, dis := c.st.Records[stamp], c.st.Records[d]
 			switch {
 			case x.State != "invoke":
-				return nil, false, refuse("an instruction in the strand faulted at intake: a strand with a fault is not remembered")
+				return nil, false, refuse("an instruction in the trace faulted at intake: a trace with a fault is not remembered")
 			case dis.State != "return":
-				return nil, false, refuse("a call to %s in the strand did not return: a strand with a fault is not remembered", x.To)
+				return nil, false, refuse("a call to %s in the trace did not return: a trace with a fault is not remembered", x.To)
 			case x.To == "system" && syscall(x.Payload) != "narrow":
-				return nil, false, refuse("the strand calls system's %s: only a narrowing is remembered", syscall(x.Payload))
+				return nil, false, refuse("the trace calls system's %s: only a narrowing is remembered", syscall(x.Payload))
 			}
 			name := fmt.Sprintf("r%dc%d", k, i)
 			call, _ := json.Marshal(x.To)

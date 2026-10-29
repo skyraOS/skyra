@@ -23,8 +23,8 @@ final class GraphicsTests: XCTestCase {
     func testRefusalAndFailureRemainDistinct() throws {
         var projection = GraphicsProjection()
         _ = projection.project(incarnation:"a",conversation:try conversation("running"),now:0)
-        XCTAssertEqual(projection.project(incarnation:"a",conversation:try conversation("fault",fault:"horizon"),now:1).cue,.refused)
-        XCTAssertEqual(projection.project(incarnation:"a",conversation:try conversation("fault",phase:"failed",fault:"horizon"),now:2).cue,.fault)
+        XCTAssertEqual(projection.project(incarnation:"a",conversation:try conversation("fault",fault:"boundary"),now:1).cue,.refused)
+        XCTAssertEqual(projection.project(incarnation:"a",conversation:try conversation("fault",phase:"failed",fault:"boundary"),now:2).cue,.fault)
     }
     func testMotionIsBoundedAndReduceMotionResetsImmediately() {
         var controller = GraphicsController()

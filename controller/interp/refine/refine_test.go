@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-var strand = Vars{
+var trace = Vars{
 	Input:     map[string]any{"text": "relay:hello"},
 	InputType: "input → {text: string}",
 	Returns:   map[string]any{"r0c0": "relay:hello", "r0c1": map[string]any{"kind": "file"}},
@@ -28,7 +28,7 @@ func TestChecks(t *testing.T) {
 	}
 }
 
-// A refinement is evaluated over the strand; an error inside it, even one
+// A refinement is evaluated over the trace; an error inside it, even one
 // || absorbed, is an error.
 func TestEval(t *testing.T) {
 	for src, want := range map[string]bool{
@@ -43,7 +43,7 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)
 		}
-		got, err := p.Eval(strand)
+		got, err := p.Eval(trace)
 		if err != nil || got != want {
 			t.Errorf("%s = %v, %v; want %v", src, got, err, want)
 		}
@@ -57,7 +57,7 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)
 		}
-		if _, err := p.Eval(strand); err == nil {
+		if _, err := p.Eval(trace); err == nil {
 			t.Errorf("%s: an error inside it must not pass", src)
 		}
 	}

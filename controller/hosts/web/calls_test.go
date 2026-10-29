@@ -112,7 +112,7 @@ func TestCallsFromTheLineage(t *testing.T) {
 	if err := tree.Init(root); err != nil {
 		t.Fatal(err)
 	}
-	fault := &record.FaultInfo{Kind: record.Horizon, Cause: `"native.commandExecution" is not in reach`}
+	fault := &record.FaultInfo{Kind: record.Boundary, Cause: `"native.commandExecution" is not in reach`}
 	s := commit(t, root, "", "genesis", record.Record{State: record.Invoke})
 	// The user side starts each turn: here by running a procedure, which
 	// reaches its agent and tools beneath it (proposal 38).
@@ -149,7 +149,7 @@ func TestCallsFromTheLineage(t *testing.T) {
 	if c := turns[0][0]; c.State != "returned" || c.Result != "returned 18 B" || c.Stamp != read {
 		t.Fatalf("returned call: %+v", c)
 	}
-	if c := turns[1][0]; c.State != "fault" || c.To != "native.commandExecution" || c.Fault != record.Horizon {
+	if c := turns[1][0]; c.State != "fault" || c.To != "native.commandExecution" || c.Fault != record.Boundary {
 		t.Fatalf("refused call: %+v", c)
 	}
 
@@ -157,7 +157,7 @@ func TestCallsFromTheLineage(t *testing.T) {
 		{Role: "user", Text: "read it"},
 		{Role: "agent", Text: "It says Skyra."},
 		{Role: "user", Text: "run ls"},
-		{Role: "agent", Text: "⚠ the agent faulted (horizon): " + fault.Cause},
+		{Role: "agent", Text: "⚠ the agent faulted (boundary): " + fault.Cause},
 		{Role: "agent", Text: "I can't run commands here."},
 	}, turns)
 	var got []string

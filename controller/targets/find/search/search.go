@@ -1,7 +1,7 @@
 // Command find is an untrusted leaf. It walks a subtree and replies with the
 // entries that fit a scope: names or paths to include and exclude, hidden
 // files, depth, kind, age, size and bounded content matches. It checks no
-// authority: the sandbox rendered from its Horizon decides what it can open,
+// authority: the sandbox rendered from its Boundary decides what it can open,
 // and a directory it may not read is counted, not an error. It shares no code
 // with skyra.
 //

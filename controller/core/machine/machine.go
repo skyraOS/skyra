@@ -13,14 +13,14 @@
 //
 // The phases:
 //
-//  1. Intake   receive bytes, interpret them as operands against the Horizon
+//  1. Intake   receive bytes, interpret them as operands against the Boundary
 //     they were emitted under, derive the state, commit a
 //     content-addressed record. The record's sha256 is the stamp.
-//  2. Release  the parent checks the stamp and sends the Horizon: which program
+//  2. Release  the parent checks the stamp and sends the Boundary: which program
 //     this instance runs, which targets it may call (Reach), and the
 //     frame stack.
 //  3. Execute  run the target inside a Seatbelt sandbox rendered from the
-//     Horizon. .skyra/ is always denied.
+//     Boundary. .skyra/ is always denied.
 //  4. Handoff  pass the target's output, unparsed, to a new successor; check its
 //     stamp, open a slot for it if it is an invoke, release it, and exit
 //     without waiting for it. An emission that is a JSON array is that many
@@ -49,7 +49,7 @@ import (
 	"fmt"
 	"strings"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
@@ -74,7 +74,7 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 			return s, []Effect{Execute{Act: Acknowledge{}}}
 		case Spawning:
 			s.Phase = Handoff
-			return s, []Effect{Execute{Act: Spawn{Under: HeldHorizon(s.Self).Key, Out: s.Outs()[len(s.Kids)]}}}
+			return s, []Effect{Execute{Act: Spawn{Under: HeldBoundary(s.Self).Key, Out: s.Outs()[len(s.Kids)]}}}
 		case Opening:
 			return opened(s, ev)
 		case Settling:
@@ -111,8 +111,8 @@ func Step(s Instance, e Event) (Instance, []Effect) {
 		case Accepting:
 			return accepting(s, ev)
 		case Running:
-			if s.State() == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "horizon" {
-				return stranded(s, ev)
+			if s.State() == record.Invoke && s.Self.Surface != nil && s.Self.Surface.System == "boundary" {
+				return traced(s, ev)
 			}
 		case Verifying:
 			return handoff(s, ev)
@@ -161,44 +161,44 @@ func recordWrite(r record.Record) Write {
 	return object("records", b)
 }
 
-func horizonWrite(h horizon.Horizon) Write { return object("horizons", HeldHorizon(h).Raw) }
+func boundaryWrite(h boundary.Boundary) Write { return object("boundaries", HeldBoundary(h).Raw) }
 
-// 1. Intake: interpret the bytes as operands against the Horizon they were
+// 1. Intake: interpret the bytes as operands against the Boundary they were
 // emitted under, derive the state, and commit a record. A refused output is
 // still committed, in a state of fault: a stamp means custody, not approval.
 //
-// The Horizon is read by id and verified here. If it does not verify there is
+// The Boundary is read by id and verified here. If it does not verify there is
 // no predecessor to commit against, so this instance refuses custody.
 func intake(s Instance, e Received) (Instance, []Effect) {
-	under, err := HorizonOf(e.Under)
+	under, err := BoundaryOf(e.Under)
 	if err != nil {
-		return exit(s, "the Horizon this input was emitted under: "+err.Error())
+		return exit(s, "the Boundary this input was emitted under: "+err.Error())
 	}
 	r := Intaken(under, e.In)
 	s.Under, s.R, s.Phase = under, r, Stamping
 	return s, []Effect{Commit{Writes: []Write{object("inputs", e.In), recordWrite(r)}}}
 }
 
-// Intaken is the record intake derives from bytes emitted under a Horizon:
-// the one derivation behind intake and replay. Replay holds the Horizon
+// Intaken is the record intake derives from bytes emitted under a Boundary:
+// the one derivation behind intake and replay. Replay holds the Boundary
 // already, re-derived from genesis, so it calls this directly instead of
 // handing Step bytes to verify again.
-func Intaken(under horizon.Horizon, in []byte) record.Record {
+func Intaken(under boundary.Boundary, in []byte) record.Record {
 	r := interpret(under, in)
 	r.Predecessor, r.Input = under.Stamp, record.Sum(in)
 	return r
 }
 
 // 2. Release: the parent answered the stamp with the id of this instance's
-// Horizon and its frame stack. Read the Horizon, verify it, check it is what
+// Boundary and its frame stack. Read the Boundary, verify it, check it is what
 // this commit derives and that the stack is whole, then commit the
 // acceptance receipt and acknowledge custody.
 func arrived(s Instance, e Executed) (Instance, []Effect) {
 	if e.Err != "" {
-		return exit(s, "no Horizon, cannot execute: "+e.Err)
+		return exit(s, "no Boundary, cannot execute: "+e.Err)
 	}
 	s.Accepting, s.Arrived, s.Phase = string(e.Obs), e.Handles, Accepting
-	return read(s, ObjectKey{Kind: "horizons", Hash: s.Accepting})
+	return read(s, ObjectKey{Kind: "boundaries", Hash: s.Accepting})
 }
 
 func accepting(s Instance, e ReadResult) (Instance, []Effect) {
@@ -208,22 +208,22 @@ func accepting(s Instance, e ReadResult) (Instance, []Effect) {
 		return s, []Effect{Execute{Act: Acknowledge{Err: err.Error()}}, Execute{Act: Exit{err.Error()}}}
 	}
 	s.Self, s.Phase = self, Acknowledging
-	return s, []Effect{Commit{Writes: []Write{AcceptanceWrite{Stamp: s.Stamp(), Horizon: s.Accepting}}}}
+	return s, []Effect{Commit{Writes: []Write{AcceptanceWrite{Stamp: s.Stamp(), Boundary: s.Accepting}}}}
 }
 
 // release, invoke: run exactly the committed surface, under a sandbox
-// rendered from the Horizon. A leaf gets its payload; a continuation gets its
+// rendered from the Boundary. A leaf gets its payload; a continuation gets its
 // payload inside a continuation (no steps yet).
 func release(s Instance) (Instance, []Effect) {
 	self := s.Self
 	s.Phase = Running
 	if self.Surface.System != "" {
-		// A syscall: nothing runs; its result is derived. A strand is read
+		// A syscall: nothing runs; its result is derived. A trace is read
 		// from the tree first.
-		if name, args := syscall(s.R.Payload); name == Stranding {
-			key, err := stranding(*self.Resume, args)
+		if name, args := syscall(s.R.Payload); name == Tracing {
+			key, err := tracing(*self.Resume, args)
 			if err != nil {
-				return refuse(s, record.Horizon, err.Error())
+				return refuse(s, record.Boundary, err.Error())
 			}
 			return read(s, key)
 		}
@@ -253,7 +253,7 @@ func parked(s Instance, e Executed) (Instance, []Effect) {
 }
 
 // 3. Execute: the target ran exactly the committed surface, under a sandbox
-// rendered from the Horizon. Its output is handed off unparsed, one
+// rendered from the Boundary. Its output is handed off unparsed, one
 // successor per instruction it carries. A target that failed or exited
 // without output is faulted by this instance, which still holds custody.
 func execute(s Instance, e Executed) (Instance, []Effect) {
@@ -270,11 +270,11 @@ func execute(s Instance, e Executed) (Instance, []Effect) {
 	return spawnNext(s)
 }
 
-// spawnNext commits the Horizon the next successor intakes under, then
+// spawnNext commits the Boundary the next successor intakes under, then
 // spawns it.
 func spawnNext(s Instance) (Instance, []Effect) {
 	s.Phase = Spawning
-	return s, []Effect{Commit{Writes: []Write{horizonWrite(s.Self)}}}
+	return s, []Effect{Commit{Writes: []Write{boundaryWrite(s.Self)}}}
 }
 
 // Instructions splits an emission into the instructions it carries (next/32,
@@ -310,9 +310,9 @@ func Instructions(out []byte) ([][]byte, error) {
 }
 
 // 4. Handoff: a successor has committed. Read the record under its stamp,
-// check it, and compute its Horizon; spawn the next instruction's successor,
+// check it, and compute its Boundary; spawn the next instruction's successor,
 // until every one is stamped. Then commit the round (its emission and every
-// new slot) and every successor's frame and Horizon, and only then release
+// new slot) and every successor's frame and Boundary, and only then release
 // every successor, so no child runs before the round's size is on disk and
 // gather never sees a partial round. The releases are the last acts.
 func stamped(s Instance, e Executed) (Instance, []Effect) {
@@ -334,7 +334,7 @@ func handoff(s Instance, e ReadResult) (Instance, []Effect) {
 	if err != nil {
 		return killAndFault(s, err.Error())
 	}
-	s.Kids = append(s.Kids, Kid{Stamp: stamp, R: r, Horizon: child})
+	s.Kids = append(s.Kids, Kid{Stamp: stamp, R: r, Boundary: child})
 	if len(s.Kids) < len(outs) {
 		return spawnNext(s)
 	}
@@ -360,7 +360,7 @@ func handoff(s Instance, e ReadResult) (Instance, []Effect) {
 		if opensSlot(k) {
 			writes = append(writes, FrameWrite{Stamp: k.Stamp})
 		}
-		writes = append(writes, horizonWrite(k.Horizon))
+		writes = append(writes, boundaryWrite(k.Boundary))
 	}
 	return s, []Effect{Commit{Writes: writes}}
 }
@@ -380,32 +380,32 @@ func opened(s Instance, e Committed) (Instance, []Effect) {
 		if opensSlot(k) {
 			next = k.Stamp
 		}
-		effs = append(effs, Execute{Act: ReleaseChild{Index: i, Horizon: HeldHorizon(k.Horizon).Key, NewFrame: next, Stamp: k.Stamp}})
+		effs = append(effs, Execute{Act: ReleaseChild{Index: i, Boundary: HeldBoundary(k.Boundary).Key, NewFrame: next, Stamp: k.Stamp}})
 	}
 	return s, append(effs, Execute{Act: Exit{}})
 }
 
 // opensSlot: the successor runs in a frame of its own, which waits in the
 // emitter's round.
-func opensSlot(k Kid) bool { return k.Horizon.Frame == k.Stamp }
+func opensSlot(k Kid) bool { return k.Boundary.Frame == k.Stamp }
 
 // alone refuses what cannot share an emission with another instruction: a
 // return discharges the emitter's own slot, which its siblings' round waits
-// on, and an invoke that changes the Horizon of whoever waits (system.narrow)
+// on, and an invoke that changes the Boundary of whoever waits (system.narrow)
 // would change it once per sibling, each on its own copy.
 func alone(kids []Kid) error {
 	for _, k := range kids {
 		switch {
 		case k.R.State == record.Return:
 			return errors.New("an emission of several instructions cannot return")
-		case k.R.State == record.Invoke && k.Horizon.Surface != nil && changesWaiter(k.R, *k.Horizon.Surface):
-			return fmt.Errorf("%s changes the Horizon of whoever waits on it, so it is emitted alone", k.R.To)
+		case k.R.State == record.Invoke && k.Boundary.Surface != nil && changesWaiter(k.R, *k.Boundary.Surface):
+			return fmt.Errorf("%s changes the Boundary of whoever waits on it, so it is emitted alone", k.R.To)
 		}
 	}
 	return nil
 }
 
-// 5. Settle: the Horizon's first frame is the slot this record discharges:
+// 5. Settle: the Boundary's first frame is the slot this record discharges:
 // discharge it, once. If a continuation waits on that slot, read what it
 // still waits on.
 func settle(s Instance) (Instance, []Effect) {
@@ -591,20 +591,20 @@ func claim(s Instance, e Committed) (Instance, []Effect) {
 	return s, []Effect{Execute{Act: Pop{}}, Execute{Act: runOf(resumed, s.Next, s.Floor), Force: true}}
 }
 
-// stranded: the walk found the strand, which is the syscall's result, or
-// refused it, which is a horizon fault of the syscall's frame.
-func stranded(s Instance, e ReadResult) (Instance, []Effect) {
+// traced: the walk found the trace, which is the syscall's result, or
+// refused it, which is a boundary fault of the syscall's frame.
+func traced(s Instance, e ReadResult) (Instance, []Effect) {
 	var got struct {
-		Strand  json.RawMessage `json:"strand"`
+		Trace   json.RawMessage `json:"trace"`
 		Refused string          `json:"refused"`
 	}
 	if err := json.Unmarshal(e.Found[0], &got); err != nil {
-		return exit(s, "strand: "+err.Error())
+		return exit(s, "trace: "+err.Error())
 	}
 	if got.Refused != "" {
-		return refuse(s, record.Horizon, "strand: "+got.Refused)
+		return refuse(s, record.Boundary, "trace: "+got.Refused)
 	}
-	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": got.Strand})
+	out, _ := json.Marshal(map[string]any{"to": s.Self.Frame, "payload": got.Trace})
 	return execute(s, Executed{Obs: out})
 }
 
@@ -642,7 +642,7 @@ func Observed(stamp string, observation []byte) record.Record {
 	var r struct {
 		Refused *record.FaultInfo `json:"refused"`
 	}
-	if json.Unmarshal(observation, &r) == nil && r.Refused != nil && r.Refused.Kind == record.Horizon &&
+	if json.Unmarshal(observation, &r) == nil && r.Refused != nil && r.Refused.Kind == record.Boundary &&
 		string(Refusal(r.Refused.Kind, r.Refused.Cause)) == string(observation) {
 		info = *r.Refused
 	}

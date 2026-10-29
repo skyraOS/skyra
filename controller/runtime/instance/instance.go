@@ -17,13 +17,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/handshake"
+	"skyra/controller/runtime/log"
 	"skyra/controller/runtime/park"
 	"skyra/controller/runtime/replay"
-	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
 )
 
@@ -34,13 +34,13 @@ func Run(root string) error {
 		return fmt.Errorf("an instance must be started by a parent: %w", err)
 	}
 	defer up.Close()
-	var named handshake.Under // the Horizon the bytes were emitted under, by id
+	var named handshake.Under // the Boundary the bytes were emitted under, by id
 	if _, err := handshake.Recv(up, &named); err != nil {
 		return err
 	}
-	under, err := object(root, "horizons", named.Horizon)
+	under, err := object(root, "boundaries", named.Boundary)
 	if err != nil {
-		return fmt.Errorf("the Horizon this input was emitted under: %w", err)
+		return fmt.Errorf("the Boundary this input was emitted under: %w", err)
 	}
 	in, err := io.ReadAll(io.LimitReader(os.Stdin, maxEmission+1))
 	if err != nil {
@@ -69,7 +69,7 @@ func Drive(root string, up *net.UnixConn, stack []*os.File, s machine.Instance, 
 	defer func() {
 		if failure != nil && len(stack) > 0 {
 			if err := tree.PublishFailure(root, stack[0], tree.Failure{Stamp: s.Stamp(), Message: failure.Error()}); err != nil {
-				trace.Logf("recovery required: %v; recording failure: %v", failure, err)
+				log.Logf("recovery required: %v; recording failure: %v", failure, err)
 			}
 		}
 		for _, down := range downs {
@@ -153,13 +153,13 @@ func readKey(root string, stack []*os.File, k machine.Key) ([]byte, error) {
 		return mutable(tree.Emission(root, k.Frame, k.Round))
 	case machine.ResultKey:
 		return mutable(tree.Result(root, k.Frame))
-	case machine.StrandKey:
+	case machine.TraceKey:
 		var st any
 		var err error
 		if k.Invocation != "" {
-			st, err = replay.ReadTreeInRoom(root, k.Invocation, k.Observations, k.Target, k.Schema, k.Origin, k.Room)
+			st, err = replay.ReadTreeInGenesis(root, k.Invocation, k.Observations, k.Target, k.Schema, k.Origin, k.Genesis)
 		} else {
-			st, err = replay.ReadStrand(root, k.Observation, k.Target, k.Schema, k.Origin)
+			st, err = replay.ReadTrace(root, k.Observation, k.Target, k.Schema, k.Origin)
 		}
 		switch {
 		case replay.Refused(err):
@@ -168,8 +168,8 @@ func readKey(root string, stack []*os.File, k machine.Key) ([]byte, error) {
 			return nil, err
 		}
 		b, _ := json.Marshal(st)
-		trace.Logf("strand   returned %d bytes of recorded work", len(b))
-		return json.Marshal(map[string]json.RawMessage{"strand": b})
+		log.Logf("trace    returned %d bytes of recorded work", len(b))
+		return json.Marshal(map[string]json.RawMessage{"trace": b})
 	}
 	return nil, fmt.Errorf("unknown read %T", k)
 }
@@ -215,8 +215,8 @@ func write(root string, stack []*os.File, w machine.Write) (machine.Outcome, err
 	}
 	switch w := w.(type) {
 	case machine.ObjectWrite:
-		if w.Kind == "horizons" {
-			if err := os.MkdirAll(filepath.Join(root, "horizons"), 0o700); err != nil {
+		if w.Kind == "boundaries" {
+			if err := os.MkdirAll(filepath.Join(root, "boundaries"), 0o700); err != nil {
 				return 0, err
 			}
 		}
@@ -226,7 +226,7 @@ func write(root string, stack []*os.File, w machine.Write) (machine.Outcome, err
 		}
 		return o, err
 	case machine.AcceptanceWrite:
-		return stored(tree.Receipt(root, w.Stamp, w.Horizon))
+		return stored(tree.Receipt(root, w.Stamp, w.Boundary))
 	case machine.FrameWrite:
 		return won(tree.MakeFrame(root, w.Stamp))
 	case machine.EmissionWrite:
@@ -246,7 +246,7 @@ func write(root string, stack []*os.File, w machine.Write) (machine.Outcome, err
 		if err != nil {
 			return 0, err
 		}
-		trace.Logf("settle   discharges the slot of %s: result → %s", record.Short(w.Frame), record.Short(w.Stamp))
+		log.Logf("settle   discharges the slot of %s: result → %s", record.Short(w.Frame), record.Short(w.Stamp))
 		return won(tree.Discharge(f, w.Stamp))
 	case machine.ClaimWrite:
 		f, err := frame(1)
@@ -255,7 +255,7 @@ func write(root string, stack []*os.File, w machine.Write) (machine.Outcome, err
 		}
 		o, err := won(tree.Claim(f, w.Round, w.Stamp))
 		if o == machine.Created {
-			trace.Logf("claim    won: resumes %s", record.Short(w.Frame))
+			log.Logf("claim    won: resumes %s", record.Short(w.Frame))
 		}
 		return o, err
 	}
@@ -270,12 +270,12 @@ func traceRecord(b []byte) {
 	stamp := record.Sum(b)
 	switch {
 	case r.Supervisor:
-		trace.Logf("fault    %s: %s (committed %s)", r.Fault.Kind, r.Fault.Cause, record.Short(stamp))
+		log.Logf("fault    %s: %s (committed %s)", r.Fault.Kind, r.Fault.Cause, record.Short(stamp))
 	case r.State == record.Resolve:
-		trace.Logf("gather   every slot of %s discharged: committed resolve %s", record.Short(r.Frame), record.Short(stamp))
+		log.Logf("gather   every slot of %s discharged: committed resolve %s", record.Short(r.Frame), record.Short(stamp))
 	default:
-		trace.Who = "inst " + record.Short(stamp)
-		trace.Logf("intake   committed %s  %s", record.Short(stamp), record.Describe(r))
+		log.Who = "inst " + record.Short(stamp)
+		log.Logf("intake   committed %s  %s", record.Short(stamp), record.Describe(r))
 	}
 }
 
@@ -290,17 +290,17 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 		var release handshake.Release
 		files, err := handshake.Recv(up, &release)
 		if err != nil {
-			return nil, false, fmt.Errorf("no Horizon, cannot execute: %w", err)
+			return nil, false, fmt.Errorf("no Boundary, cannot execute: %w", err)
 		}
-		// The core reads the Horizon, verifies it, and counts the
+		// The core reads the Boundary, verifies it, and counts the
 		// descriptors against it (41, V1 and V3): nothing is checked here.
 		*stack = files
-		trace.Logf("release  Horizon %s named (%d descriptors)", record.Short(release.Horizon), len(files))
-		return machine.Executed{Obs: []byte(release.Horizon), Handles: len(files)}, false, nil
+		log.Logf("release  Boundary %s named (%d descriptors)", record.Short(release.Boundary), len(files))
+		return machine.Executed{Obs: []byte(release.Boundary), Handles: len(files)}, false, nil
 	case machine.Acknowledge:
 		return machine.Executed{}, false, handshake.Send(up, handshake.Accepted{Error: x.Err})
 	case machine.Run:
-		trace.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
+		log.Logf("execute  %s under rendered sandbox", filepath.Base(x.Surface.Path))
 		return run(x), false, nil
 	case machine.Spawn:
 		down, child, ev, err := spawn(root, x)
@@ -310,7 +310,7 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 		*downs, *children = append(*downs, down), append(*children, child)
 		return ev, false, nil
 	case machine.KillSuccessors:
-		trace.Logf("handoff  killing %d successor(s)", len(*children))
+		log.Logf("handoff  killing %d successor(s)", len(*children))
 		for _, child := range *children {
 			child.Process.Kill()
 		}
@@ -326,7 +326,7 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 			frames = append([]*os.File{f}, *stack...)
 		}
 		down, child := (*downs)[x.Index], (*children)[x.Index]
-		if err := handshake.Send(down, handshake.Release{Horizon: x.Horizon}, frames...); err != nil {
+		if err := handshake.Send(down, handshake.Release{Boundary: x.Boundary}, frames...); err != nil {
 			return nil, false, err
 		}
 		var accepted handshake.Accepted
@@ -336,11 +336,11 @@ func act(root string, up *net.UnixConn, stack *[]*os.File, downs *[]*net.UnixCon
 		if accepted.Error != "" {
 			return nil, false, fmt.Errorf("successor refused custody: %s", accepted.Error)
 		}
-		trace.Logf("handoff  verified and released %s, custody passed, exiting", record.Short(x.Stamp))
+		log.Logf("handoff  verified and released %s, custody passed, exiting", record.Short(x.Stamp))
 		child.Process.Release() // D2: the parent does not wait on the child
 		return machine.Executed{}, false, nil
 	case machine.Park:
-		trace.Logf("park     custody passes to the host at %s; waiting on an outside event", x.Host)
+		log.Logf("park     custody passes to the host at %s; waiting on an outside event", x.Host)
 		if err := park.Send(x.Host, park.Frame{Root: root, Stamp: x.Stamp, Frames: x.Frames, Payload: x.Payload, Files: *stack}); err != nil {
 			return machine.Executed{Err: err.Error()}, false, nil
 		}
@@ -399,7 +399,7 @@ func run(x machine.Run) machine.Event {
 			return machine.Executed{Err: "target exited without emitting: " + string(lines[len(lines)-1])}
 		}
 	}
-	trace.Logf("execute  target emitted %d bytes (sha256 %s)", len(emission), record.Short(record.Sum(emission)))
+	log.Logf("execute  target emitted %d bytes (sha256 %s)", len(emission), record.Short(record.Sum(emission)))
 	return machine.Executed{Obs: emission}
 }
 
@@ -408,7 +408,7 @@ func run(x machine.Run) machine.Event {
 // run (43 D5). The registered path can change between a check and an exec;
 // exe is under the floor, which nothing but the runtime can write. A copy
 // already there is checked again, not trusted.
-func verifiedCopy(s horizon.Surface, exe string) error {
+func verifiedCopy(s boundary.Surface, exe string) error {
 	if have, err := os.ReadFile(exe); err == nil && record.Sum(have) == s.SHA256 {
 		return nil
 	}
@@ -449,7 +449,7 @@ func verifiedCopy(s horizon.Surface, exe string) error {
 }
 
 // spawn performs a Spawn: start skyra again with the bytes on stdin, send it
-// the id of the Horizon they were emitted under (the core committed it), and
+// the id of the Boundary they were emitted under (the core committed it), and
 // wait for its stamp.
 func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Event, error) {
 	self, err := os.Executable()
@@ -468,7 +468,7 @@ func spawn(root string, x machine.Spawn) (*net.UnixConn, *exec.Cmd, machine.Even
 		return nil, nil, nil, err
 	}
 	childEnd.Close()
-	if err := handshake.Send(down, handshake.Under{Horizon: x.Under}); err != nil {
+	if err := handshake.Send(down, handshake.Under{Boundary: x.Under}); err != nil {
 		return nil, nil, nil, err
 	}
 	var st handshake.StampMsg

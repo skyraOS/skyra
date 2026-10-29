@@ -212,7 +212,7 @@ function Entry({ entry: e }: { entry: ConversationEntry }) {
 
 /** One tool call, as one line: what was called, with what, and what came of it. */
 function Ledger({ call }: { call: Call }) {
-  const refused = call.state === "fault" && (call.fault === "horizon" || call.fault === "contract");
+  const refused = call.state === "fault" && (call.fault === "boundary" || call.fault === "contract");
   const broken = call.state === "fault" && !refused;
   let result: React.ReactNode;
   if (call.state === "running") {
@@ -224,8 +224,8 @@ function Ledger({ call }: { call: Call }) {
     );
   } else if (call.state === "returned") {
     result = [call.result, call.ms !== undefined ? `${(call.ms / 1000).toFixed(1)} s` : null].filter(Boolean).join(" · ");
-  } else if (call.fault === "horizon") {
-    result = "outside the Horizon";
+  } else if (call.fault === "boundary") {
+    result = "outside the Boundary";
   } else if (call.fault === "contract") {
     result = `didn't fit ${call.to}'s input`;
   } else {

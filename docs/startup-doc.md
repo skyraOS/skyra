@@ -138,12 +138,12 @@ retain old descriptions in their history; start a new conversation to inspect
 the new tool surface.
 
 **Provider isolation.** New `skyra` and `skyra ask` launches require an external
-macOS Seatbelt profile rendered from the registered Horizon. Each Codex process
+macOS Seatbelt profile rendered from the registered Boundary. Each Codex process
 has private configuration, work and scratch paths. Shell execution and file
 access outside the granted paths are blocked by the OS. `HOME`, `CODEX_HOME`
 and `TMPDIR` point into that isolated provider run.
 The adapter interrupts native attempts and confirms that the affected turn
-has ended before emitting the horizon fault. An unconfirmed interruption
+has ended before emitting the boundary fault. An unconfirmed interruption
 produces a custody fault instead. Threads retain `readOnly`/`never` policy.
 
 The provider can connect only to its local egress proxy; that proxy accepts
@@ -158,7 +158,7 @@ Provider launch state is retained under `~/.skyra/providers/`; the login is a
 symlink, not a credential copy. `SKYRA_STATE` can select an isolated state root.
 
 **The workspace.** `read` is granted one directory: where you started `skyra`,
-or `SKYRA_WORKSPACE` if set. That grant is the Horizon you approve by starting
+or `SKYRA_WORKSPACE` if set. That grant is the Boundary you approve by starting
 it; every read inside it runs with no prompt, and anything outside is denied by
 the OS. The file contents a read returns go to the model. `skyra` refuses a
 workspace that is your home directory, `/`, or that overlaps `~/.skyra` or

@@ -16,7 +16,7 @@ the weak points found while reading it. Line references are to
 | **Resolve** | The record committed when every slot of a round is discharged. It names every discharge in emission order. |
 | **Claim** | The write-once `frames/<F>/resolved-<round>`. Exactly one sibling wins it and resumes the waiter. |
 | **Custody** | At any moment, each piece of work is held by one live process or one durable commit. |
-| **Horizon** | Carries `Frame` (the slot a return discharges) and `Resume` (the Horizon of the continuation waiting on that slot). This nests, so a Horizon describes the whole stack of waiters below it (`core/horizon/horizon.go:163`). |
+| **Boundary** | Carries `Frame` (the slot a return discharges) and `Resume` (the Boundary of the continuation waiting on that slot). This nests, so a Boundary describes the whole stack of waiters below it (`core/boundary/boundary.go:163`). |
 
 ## On disk
 
@@ -24,8 +24,8 @@ the weak points found while reading it. Line references are to
 .skyra/
   records/<stamp>                       content-addressed records
   inputs/<hash>                         the exact bytes each record was derived from
-  horizons/<id>                         a Horizon, committed when it is released
-  acceptances/                          receipts: this stamp accepted this Horizon
+  boundaries/<id>                         a Boundary, committed when it is released
+  acceptances/                          receipts: this stamp accepted this Boundary
   frames/<F>/
     result                              write-once: the discharge of F's slot
     deps/<round>/<child>                a slot F's continuation opened in <round>; holds its position
@@ -51,14 +51,14 @@ one invoke, as the parent P and the successor C see them:
 P (holds custody of the target's output)           C (new process: skyra instance)
 ───────────────────────────────────────            ──────────────────────────────────
 spawn C: output on stdin, socketpair as fd 3  ──▶
-send Under{Horizon id}                        ──▶  INTAKE: interpret the bytes against that Horizon,
+send Under{Boundary id}                        ──▶  INTAKE: interpret the bytes against that Boundary,
                                                    derive the state, commit inputs/ + records/
                                               ◀──  send Stamp
 read records/<stamp>, verify that it covers the
 bytes and links to P (checkSuccessor)
-compute C's Horizon (Narrow)
-commit the round: emission, slot, frame dir, Horizon
-send Release{Horizon id} + frame stack fds    ──▶  RELEASE: read the Horizon, verify it, check it is what
+compute C's Boundary (Narrow)
+commit the round: emission, slot, frame dir, Boundary
+send Release{Boundary id} + frame stack fds    ──▶  RELEASE: read the Boundary, verify it, check it is what
   (SCM_RIGHTS)                                     the record derives and that the stack is whole,
                                                    commit an acceptance receipt
                                               ◀──  send Accepted
@@ -91,19 +91,19 @@ today only the interpreter does so in practice:
 The limits are:
 - 1 to 32 instructions (`MaxFanOut`, `core/machine/protocol.go:89`);
 - no duplicate instructions (same bytes under the same predecessor would be one record);
-- no `return` among them, and no invoke that changes the waiter's Horizon, such as `system.narrow` (`alone`).
+- no `return` among them, and no invoke that changes the waiter's Boundary, such as `system.narrow` (`alone`).
 
 The parent then works through the instructions **one at a time**:
 
-1. `spawnNext` commits the parent's Horizon and spawns successor *i*.
+1. `spawnNext` commits the parent's Boundary and spawns successor *i*.
 2. Successor *i* intakes and stamps, then blocks on the handshake, waiting for release.
-3. `handoff` verifies that stamp and computes the child's Horizon with `Fanned`. In a fan-out, a fault gets a slot of its own in the round instead of discharging the emitter's slot, so its siblings still run.
+3. `handoff` verifies that stamp and computes the child's Boundary with `Fanned`. In a fan-out, a fault gets a slot of its own in the round instead of discharging the emitter's slot, so its siblings still run.
 4. Steps 1–3 repeat until every instruction has stamped. At that point up to 32 successor processes are alive and blocked.
 5. **One commit opens the round:**
    - the emission (`emitted-<round>`);
    - one slot per child (`deps/<round>/<child>`, holding its position);
    - one frame directory per invoked child;
-   - every child's Horizon.
+   - every child's Boundary.
 6. `opened` checks that nothing was already there. A write that lost means the round was opened before, and the parent stops.
 7. The parent releases each child in order (each release waits for that child's `Accepted`), then exits.
 
@@ -114,7 +114,7 @@ every successor spawned so far and faults the parent's own frame.
 ## Fan-in: settle, gather, claim
 
 A child's eventual return or fault arrives at some later instance, the one
-that intakes it. That instance releases it under a Horizon whose `Frame` is
+that intakes it. That instance releases it under a Boundary whose `Frame` is
 the slot it answers and whose `Resume` is the waiter. Then:
 
 1. **Settle** (`settle`/`settled`): commit `frames/<F>/result` once. A losing write means the frame was already settled, and the instance exits.
@@ -174,7 +174,7 @@ and 2 apply to every waited-on child, fanned or not.
 5. **Gather cost grows with history.** Every resume walks every round of the waiter's frame and rebuilds the full `Continuation`. Over a long conversation in one frame, that is quadratic in the number of steps.
 6. **The frame stack is a chain of live fds.** Every instance holds a descriptor for every waiting frame below it, and the stack is passed by `SCM_RIGHTS` at every release and every park. Depth equals nesting.
 7. **Fan-out has special cases:**
-   - no `return` and no Horizon-changing invokes in an array;
+   - no `return` and no Boundary-changing invokes in an array;
    - a fault takes its own slot only when fanned;
    - duplicate instructions are refused because content addressing would collapse them into one record.
 

@@ -134,7 +134,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		if b, err := os.ReadFile(filepath.Join(scratch, "note.txt")); err != nil || string(b) != "x" {
 			t.Fatalf("the write did not land in scratch: %q %v (answer %s)", b, err, answer)
 		}
-		// Codex ran under the narrowed Horizon: write in reach, scratch
+		// Codex ran under the narrowed Boundary: write in reach, scratch
 		// granted, and no write grant on the workspace.
 		records, _ := os.ReadDir(filepath.Join(root, "records"))
 		narrowed := 0
@@ -146,13 +146,13 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 			if !strings.HasPrefix(r.To, "system.ref.") {
 				continue
 			}
-			h, err := replay.HorizonAt(root, e.Name())
+			h, err := replay.BoundaryAt(root, e.Name())
 			if err != nil {
 				t.Fatal(err)
 			}
 			narrowed++
 			if _, ok := h.Reach["write"]; !ok || h.Authority.Scratch == "" || len(h.Authority.Write) != 0 {
-				t.Fatalf("think's Horizon: reach %v, authority %+v", slices.Sorted(func(yield func(string) bool) {
+				t.Fatalf("think's Boundary: reach %v, authority %+v", slices.Sorted(func(yield func(string) bool) {
 					for k := range h.Reach {
 						if !yield(k) {
 							return
@@ -161,7 +161,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 				}), h.Authority)
 			}
 			if _, ok := h.Reach["read"]; !ok || len(h.Authority.Read) == 0 {
-				t.Fatalf("think's Horizon cannot read: %+v", h.Authority)
+				t.Fatalf("think's Boundary cannot read: %+v", h.Authority)
 			}
 		}
 		if narrowed == 0 {

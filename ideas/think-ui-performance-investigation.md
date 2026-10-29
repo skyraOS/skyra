@@ -50,4 +50,4 @@ The scene workload advances frames, but excludes drawable acquisition, uploads a
 Validation: the desktop suite and diagnostic workload passed (9 XCTest tests plus 58 Swift Testing cases, with the three environment-gated live cases skipped in that run). Webhost tests passed under the race detector, and `go vet ./hosts/web` passed. Regression coverage includes 100-tool overview sizing, delta history retention/order/deletion, stale or missing baselines, and acknowledgement-before-transcript behavior.
 
 
-The isolated live Think round-trip also passed: first submission, tool/Horizon results, a second turn in the same conversation, and deletion over the actual WebSocket. Its test fixture now selects Think explicitly, independent of destination ordering. The fake backend used temporary storage and was stopped after verification.
+The isolated live Think round-trip also passed: first submission, tool/Boundary results, a second turn in the same conversation, and deletion over the actual WebSocket. Its test fixture now selects Think explicitly, independent of destination ordering. The fake backend used temporary storage and was stopped after verification.

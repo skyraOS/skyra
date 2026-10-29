@@ -18,10 +18,10 @@ Reconstruction returns `snapshot`. Its required desktop fields are:
 | Object | Fields |
 |---|---|
 | Snapshot | `type: "snapshot"`, `uiIncarnation: string`, `revision: integer`, `conversations: array` |
-| Conversation | `conversation: string`, `phase: ready/pending/failed/closed`, `entries: array`; optional `horizons` |
+| Conversation | `conversation: string`, `phase: ready/pending/failed/closed`, `entries: array`; optional `boundaries` |
 | Entry | `role: string`, `text: string`, `ts: integer`; optional/nullable `requestId`, optional `call` |
 | Call | `to`, `arg`, `state`, `stamp`: strings; optional `result`, `fault`, `cause`: strings; optional integer `ms` |
-| Horizon view | `id: string`, `root: boolean`, `actors: string[]`, `reach: {name, id}[]`, `grants: integer` |
+| Boundary view | `id: string`, `root: boolean`, `actors: string[]`, `reach: {name, id}[]`, `grants: integer` |
 
 Emit the compatible superset already sent by `webhost.broadcast`: include
 `requests` at snapshot level and `pendingRequestId` on each conversation.
@@ -67,13 +67,13 @@ Two finite procedure bodies use ordinary kernel calls and returns:
    UI incarnation, integer publication revision and ordered conversation
    inputs `{conversation, availability}` authorized in the calling context.
    For each it invokes the interpreter's `reconstruct-conversation`
-   contract directly. The kernel preserves the caller's Horizon and routes
+   contract directly. The kernel preserves the caller's Boundary and routes
    the nested procedure's return to the waiting parent.
    It then invokes `user.project-app-state` to assemble the returned views
    into the exact snapshot and returns that snapshot unchanged.
 2. [reconstruct-conversation.procedure.json](reconstruct-conversation.procedure.json)
-   runs in that conversation's Horizon. It calls `user.read-checkpoint`,
-   calls the Horizon's `system.strand` with root and all observation leaves,
+   runs in that conversation's Boundary. It calls `user.read-checkpoint`,
+   calls the Boundary's `system.strand` with root and all observation leaves,
    then calls `user.project-state` with the tree/checkpoint and current
    availability evidence. Its return is an intermediate view bundle:
    `{ "conversation": <ConversationView>, "requests": <RequestRecord[]> }`.
@@ -81,7 +81,7 @@ Two finite procedure bodies use ordinary kernel calls and returns:
 
 The verified path is `user → interpreter → system.strand → interpreter
 → user`, with projection calls composed in the middle. `machine.Narrow`
-preserves the calling Horizon and waiting parent; `stranded` returns to the
+preserves the calling Boundary and waiting parent; `stranded` returns to the
 syscall frame; `settle/gather/resolve/claim` resume that parent. The
 interpreter returns the completed snapshot through exactly the same path.
 No special application router or operator bridge is required for it.
@@ -90,9 +90,9 @@ The draft sources no longer depend on an `application` dispatch actor.
 The existing host's enumeration of separate legacy conversation roots is
 a storage/deployment concern, not evidence that kernel return routing is
 missing. Do not grant cross-root reads merely from stamps, or make a new
-router a prerequisite for the normal in-Horizon reconstruction path.
+router a prerequisite for the normal in-Boundary reconstruction path.
 
-The Horizon owns the history syscall and returns the validated tree.
+The Boundary owns the history syscall and returns the validated tree.
 The user adapter owns checkpoints and user projection semantics. The
 interpreter composes those operations. A user actor may also call the same
 syscall directly for recovery; a reconstruction procedure is convenient
@@ -131,13 +131,13 @@ Formalize projection only after this direct path works.
 ## Draft operations and formatting helpers
 
 Use disjoint input wrappers and register their schemas in the relevant
-Horizons. `user` may remain one executable with several input contracts.
+Boundaries. `user` may remain one executable with several input contracts.
 
 | Target / operation | Input and result |
 |---|---|
 | `interpreter` / `reconstruct-conversation` | Receives `{conversation, availability}`; runs the nested read/project procedure through the ordinary kernel invocation path |
 | `user` / `read-checkpoint` | Receives `{conversation}`; reads the retained slot and returns `{root_invocation, leaves, contract}` as one coherent snapshot |
-| `system` / `strand` | Receives `{invocation, observations, contract}`; returns the authorized merged tree and permitted Horizon metadata; preserves existing singular-observation mode |
+| `system` / `strand` | Receives `{invocation, observations, contract}`; returns the authorized merged tree and permitted Boundary metadata; preserves existing singular-observation mode |
 | `user` / `project-state` | Receives `{conversation, availability, checkpoint, strand}`; pure projection to `{conversation, requests}` |
 | `user` / `project-app-state` | Receives `{uiIncarnation, revision, views}`; validates bundles, preserves conversation ordering, merges request records and returns the complete app snapshot |
 
@@ -177,11 +177,11 @@ assembler returns a valid empty snapshot.
 - Set `pendingRequestId` to the known outstanding request, otherwise null.
   Request status follows recorded admission/discharge, never socket ACK
   alone. Ambiguous progress must not be labeled returned.
-- Reuse Horizon projection semantics from `hosts/web/horizons.go`. Current
-  `ReadStrand` returns chain/records/opacity, not the released Horizon data
-  needed by that projector. Include authorized derived Horizon metadata
+- Reuse Boundary projection semantics from `hosts/web/boundaries.go`. Current
+  `ReadStrand` returns chain/records/opacity, not the released Boundary data
+  needed by that projector. Include authorized derived Boundary metadata
   in the proposed reconstruction result or a scoped read companion.
-  Never expose internals of opaque narrowed children. An empty `horizons`
+  Never expose internals of opaque narrowed children. An empty `boundaries`
   array is acceptable only when no authorized views are available, not
   as a silent replacement of the existing sky visualization.
 

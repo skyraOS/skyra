@@ -1,16 +1,16 @@
-# Separate Horizon authority from adapter configuration and delegation
+# Separate Boundary authority from adapter configuration and delegation
 
 Status: proposed. This document specifies a refactor; it does not change runtime behavior.
 
 ## Decision
 
-Delegation is the interpreter's `delegate` procedure. It is not a Horizon mode.
-Remove `Horizon.Delegated` and `Grant.Delegated`. Do not replace them with another
+Delegation is the interpreter's `delegate` procedure. It is not a Boundary mode.
+Remove `Boundary.Delegated` and `Grant.Delegated`. Do not replace them with another
 agent-mode flag in the kernel.
 
 Move agent/model configuration and model-facing tool bindings into contracts
 exposed by the Codex and Claude adapters. Procedures compose those contracts.
-Remove `AgentContext`, `ToolBinding`, and `WorkTools` from `core/horizon` and remove
+Remove `AgentContext`, `ToolBinding`, and `WorkTools` from `core/boundary` and remove
 their special continuation fields and syscalls.
 
 Preserve kernel enforcement of concrete invocation capabilities. An adapter's
@@ -25,15 +25,15 @@ working-tree adapter changes, rather than only committed code.
 
 ### AgentContext
 
-Definition: `controller/core/horizon/horizon.go`, `AgentContext{Actor, Model}`.
-Both `Horizon.Agent` and `Grant.Agent` carry it. `Surface.Agent` is a separate
+Definition: `controller/core/boundary/boundary.go`, `AgentContext{Actor, Model}`.
+Both `Boundary.Agent` and `Grant.Agent` carry it. `Surface.Agent` is a separate
 `AgentConfig{Operations}` that enables agent-specific kernel behavior.
 
 | Dependency | Current responsibility | Replacement owner |
 | --- | --- | --- |
-| `core/machine/room.go`: `AgentContext`, `Syscalls`, `checkSyscall`, `changesWaiter`, `agentContext` | Registers `system.agent-context`; accepts a resolved model only from a configured agent; prevents changing an inherited model | Adapter configuration contract and adapter validation |
+| `core/machine/system.go`: `AgentContext`, `Syscalls`, `checkSyscall`, `changesWaiter`, `agentContext` | Registers `system.agent-context`; accepts a resolved model only from a configured agent; prevents changing an inherited model | Adapter configuration contract and adapter validation |
 | `core/machine/authority.go`: `Narrow` | Updates the waiting frame's model metadata; copies it into ordinary calls and reference invocations | Explicit procedure arguments and adapter-owned state |
-| `core/machine/room.go`: `narrowing` | Interprets `inherit_model`; identifies agents; validates available provider operations; sets child actor/model | Interpreter composition of adapter contracts |
+| `core/machine/system.go`: `narrowing` | Interprets `inherit_model`; identifies agents; validates available provider operations; sets child actor/model | Interpreter composition of adapter contracts |
 | `core/machine/continuation.go`: `Continuation`, `agentName`, `agents`, `continuation` | Constructs agent identity, model metadata, and an available-agent catalog | Adapter contracts plus operator-provisioned procedure configuration |
 | `core/machine/machine.go`: `release` | Adds the same agent fields to the initial continuation envelope | Ordinary input payload; no special agent envelope |
 | `controller/interp/main.go`: `envelope`; `controller/interp/delegate.go`: `runDelegate` | Uses `Agent` for omitted actor/model and `Agents` to validate choices | Adapter's delegate wrapper supplies resolved configuration; interpreter selects a configured adapter contract |
@@ -42,49 +42,49 @@ Both `Horizon.Agent` and `Grant.Agent` carry it. `Surface.Agent` is a separate
 | `runtime/registry/registry.go`; `skyra` launcher | Validates `agent.operations` and stores `AgentConfig` on surfaces | Validates provisioned adapter/procedure definitions outside the generic kernel |
 
 Current flow: registry agent declaration → Surface.Agent → adapter model
-publication → syscall modifies waiting Horizon.Agent → interpreter reads it →
+publication → syscall modifies waiting Boundary.Agent → interpreter reads it →
 narrow copies it into Grant.Agent → reference invocation copies it into child
-Horizon.Agent → child continuation delivers it to the adapter.
+Boundary.Agent → child continuation delivers it to the adapter.
 
 ### ToolBinding and WorkTools
 
-Definition: `core/horizon/horizon.go`, `ToolBinding{Target, Contracts}` and
-`WorkTools *map[string]ToolBinding` on both Horizon and Grant.
+Definition: `core/boundary/boundary.go`, `ToolBinding{Target, Contracts}` and
+`WorkTools *map[string]ToolBinding` on both Boundary and Grant.
 
 | Dependency | Current responsibility | Replacement owner |
 | --- | --- | --- |
-| `core/horizon/tools.go`: `Internal` | Exempts system and configured agent operations from the work-tool restriction | Explicit kernel capability scope; no agent exemption |
-| `core/horizon/tools.go`: `AvailableTools` | Builds model-facing names, interpreter aliases, procedure titles, and selectable work tools | Adapter tool-catalog contract |
-| `core/horizon/tools.go`: `ResolveTool` | Resolves names and transport aliases such as `repo_write` | Adapter binding contract |
-| `core/machine/room.go`: `narrowing` | Resolves `tools`, preserves omitted versus empty selection, rejects widening, stores concrete bindings | Adapter resolves labels; generic narrowing validates concrete targets/contracts |
+| `core/boundary/tools.go`: `Internal` | Exempts system and configured agent operations from the work-tool restriction | Explicit kernel capability scope; no agent exemption |
+| `core/boundary/tools.go`: `AvailableTools` | Builds model-facing names, interpreter aliases, procedure titles, and selectable work tools | Adapter tool-catalog contract |
+| `core/boundary/tools.go`: `ResolveTool` | Resolves names and transport aliases such as `repo_write` | Adapter binding contract |
+| `core/machine/system.go`: `narrowing` | Resolves `tools`, preserves omitted versus empty selection, rejects widening, stores concrete bindings | Adapter resolves labels; generic narrowing validates concrete targets/contracts |
 | `core/machine/authority.go`: `Narrow` | Carries the work-tool ceiling through ordinary calls and references | Generic restricted reach inherited by every invocation |
-| `core/horizon/tools.go`: `PermitsTool`; `core/machine/interpret.go`: `interpret` | Rejects calls outside the target/contract ceiling | Generic invocation-capability check |
+| `core/boundary/tools.go`: `PermitsTool`; `core/machine/interpret.go`: `interpret` | Rejects calls outside the target/contract ceiling | Generic invocation-capability check |
 | `core/machine/continuation.go`: `workToolNames`, `Continuation`; `machine.go`: `release` | Serializes the ceiling back into model-facing labels | Explicit adapter input/result; generic envelope exposes reachable contracts |
 | Codex and Claude `resident/main.go`: `tools`, prompt construction | Filters tools offered to the provider and conditions repository prompt text | Adapter configuration and binding contracts |
 | `controller/codex/proceduretools/tools.go`: `Allows`, `Procedures`, `Payload` | Applies labels, discovers interpreter procedures, and translates model arguments into actual calls | Shared adapter support code, outside core |
 | `runtime/registry/registry.go`; `skyra` | Marks `Surface.WorkTool`; automatically marks bundles | Adapter catalog/procedure provisioning metadata, outside generic Surface |
 
 Current flow: registry work-tool metadata + reach → kernel builds labeled catalog
-→ `narrow.tools` resolves labels into bindings → Grant/Horizon carries ceiling →
+→ `narrow.tools` resolves labels into bindings → Grant/Boundary carries ceiling →
 continuation carries labels to adapter → adapter filters advertised tools →
 intake separately enforces concrete bindings.
 
 ### Delegated
 
-Definition: a boolean on Horizon and Grant, set through `system.narrow`.
+Definition: a boolean on Boundary and Grant, set through `system.narrow`.
 
 | Dependency | Current responsibility | Replacement owner |
 | --- | --- | --- |
 | `interp/delegate.go`: `runDelegate` | Sends `delegated:true` in `narrow`, then invokes the returned reference | Interpreter performs explicit configure/narrow/invoke/result composition |
-| `core/machine/room.go`: narrow schema and `narrowing` | Checks registered agents/operations, applies a 64-frame guard, propagates the flag with logical OR | Procedure selection validation; generic execution-depth limit |
+| `core/machine/system.go`: narrow schema and `narrowing` | Checks registered agents/operations, applies a 64-frame guard, propagates the flag with logical OR | Procedure selection validation; generic execution-depth limit |
 | `core/machine/authority.go`: `Narrow` | Propagates the flag through calls and grants | Delete propagation |
 | `core/machine/continuation.go`; `machine.go`: `release` | Sends the flag to adapters | Explicit adapter session and lifetime configuration |
-| `core/machine/execution.go`: `edgeSocket` | Adds Horizon.Origin to the socket key so children and siblings get fresh residents | Generic resource-instance identity/lifetime, explicitly acquired by contract |
-| `core/horizon/resident.go`: `RenderResident` | Removes the native image-read exception for child providers | Explicit provider resource grants; no renderer agent-mode branch |
+| `core/machine/execution.go`: `edgeSocket` | Adds Boundary.Origin to the socket key so children and siblings get fresh residents | Generic resource-instance identity/lifetime, explicitly acquired by contract |
+| `core/boundary/resident.go`: `RenderResident` | Removes the native image-read exception for child providers | Explicit provider resource grants; no renderer agent-mode branch |
 | `codex/resident/main.go` | Disables native tools, changes event handling, stops the provider before completion, omits thread metadata from result | Adapter run/session contract and explicit resource close |
 | `claude/resident/main.go` | Avoids loading/saving the parent's session and resuming it | Adapter session policy and per-invocation state |
 
-Current flow: interpreter `delegate` → narrow flag → Grant → child Horizon →
+Current flow: interpreter `delegate` → narrow flag → Grant → child Boundary →
 provider socket identity + resident sandbox + continuation → adapter session,
 native-tool, result, and cleanup behavior. One boolean currently controls all
 these independent responsibilities.
@@ -93,12 +93,12 @@ these independent responsibilities.
 
 - `controller/core/machine/delegate_test.go`: inheritance, contract ceilings,
   empty tool sets, alias resolution, model publication, and socket isolation.
-- `controller/core/horizon/horizon_os_test.go`: native image denial under
+- `controller/core/boundary/boundary_os_test.go`: native image denial under
   `Delegated`.
 - `controller/interp/delegate_test.go`: expects `inherit_model` and `tools` in
   emitted narrow requests.
 - `controller/skyra/delegate_test.go`: real runtime acceptance; inspects child
-  Horizon.Delegated and Horizon.WorkTools.
+  Boundary.Delegated and Boundary.WorkTools.
 - `controller/codex/resident/delegate_test.go` and
   `controller/claude/resident/delegate_test.go`: provider/session behavior.
 - Both adapters' `tool_visibility_test.go`, Codex `main_test.go`, and
@@ -113,16 +113,16 @@ these independent responsibilities.
 | --- | --- |
 | Executable identity and declared input contracts | Registered Surface |
 | Execution semantics and permitted lifetime inputs for an operation | Selected contract `(target, schema)` |
-| Concrete lifetime options requested for an execution | Invocation payload, bounded by the contract and effective Horizon |
+| Concrete lifetime options requested for an execution | Invocation payload, bounded by the contract and effective Boundary |
 | Acquired resource identity, owner, endpoint, authority, and termination condition | Kernel-maintained resource instance |
-| Which target/contract can actually be invoked | Horizon reach and generic kernel intake |
-| Files, sockets, services, scratch access | Horizon.Authority and generic sandbox rendering |
+| Which target/contract can actually be invoked | Boundary reach and generic kernel intake |
+| Files, sockets, services, scratch access | Boundary.Authority and generic sandbox rendering |
 | Human/model tool names, descriptions, aliases, argument translation | Adapter binding contracts |
 | Provider/model selection and resolution | Adapter configuration contracts and state |
 | Parent session reuse or fresh session | Adapter run/session contracts |
 | Goal-only child input, selection, composition, and failure outcome | Interpreter delegate procedure |
 | Resident acquisition, connection custody, release, isolation | Generic runtime resource operations composed by adapters/procedures |
-| Native provider behavior and compatibility requirements | Provider support code outside core/horizon |
+| Native provider behavior and compatibility requirements | Provider support code outside core/boundary |
 
 ### 1. Adapter contracts expose configuration and bindings
 
@@ -143,9 +143,9 @@ authority. It must not be a global mutable setting shared by concurrent tasks.
 
 `bindings` returns named bindings containing target, concrete contract, input
 translation, and provider-facing schema/description. This is a declared
-adapter contract with JSON input/output, not `horizon.ToolBinding`. Implement
+adapter contract with JSON input/output, not `boundary.ToolBinding`. Implement
 shared binding logic under adapter support code, including moving the relevant
-catalog logic out of `core/horizon/tools.go`.
+catalog logic out of `core/boundary/tools.go`.
 
 Resolve aliases deterministically and reject collisions. A binding can select
 one interpreter contract without selecting all contracts of the interpreter.
@@ -177,7 +177,7 @@ type ReachEntry struct {
     Contracts  []*contract.Schema // authorized subset; empty means no calls
     Expandable bool               // whether actor-owned extensions enter this scope
 }
-// Horizon.Reach: map[string]ReachEntry
+// Boundary.Reach: map[string]ReachEntry
 // Grant carries a restricted reach snapshot, not a model-facing tool catalog.
 ```
 
@@ -248,7 +248,7 @@ Fresh sessions require fresh provider resources when their ambient state or
 sandbox differs. Generic resource acquisition returns an instance handle scoped
 to its owning execution scope. Connection operations use that handle; close
 releases it. Resource identity comes from recorded acquisition/ownership, not
-`Horizon.Delegated`. Repeated resumes of one acquisition reuse it; sibling
+`Boundary.Delegated`. Repeated resumes of one acquisition reuse it; sibling
 acquisitions do not. The parent remains alive while waiting.
 
 #### Contract policy and kernel-maintained resource lifetime
@@ -257,7 +257,7 @@ A target identifies a program; a contract `(target, schema)` selects an operatio
 that program implements. A program can behave differently for each contract.
 Execution semantics that vary by operation belong to the selected contract,
 rather than an actor-wide resident mode. This does not make a contract a source
-of authority: Horizon still bounds which operation can be invoked and which
+of authority: Boundary still bounds which operation can be invoked and which
 resources it can acquire.
 
 For example, one target may expose the following contracts:
@@ -280,7 +280,7 @@ Separate declaration, request, and enforcement:
 - The selected contract declares supported execution semantics and permitted
   lifetime inputs. Its policy does not apply to sibling contracts automatically.
 - The invocation supplies concrete lifetime options within the selected contract
-  and the caller's effective Horizon.
+  and the caller's effective Boundary.
 - The kernel records the acquired resource's identity, owning execution scope,
   endpoint, effective authority, and termination condition, then maintains that
   resource until the recorded condition occurs or the resource dies.
@@ -310,13 +310,13 @@ with no image capability receives no workspace/scratch image grant. Provider
 native tool disabling remains adapter/provider configuration, with the sandbox
 providing independent enforcement. No renderer branches on agent/task mode.
 
-Move `core/horizon/resident.go` and `claude_resident.go` provider-specific policy
+Move `core/boundary/resident.go` and `claude_resident.go` provider-specific policy
 into provider runtime support as an intermediate step. The final design uses
 generic authority rendering with explicit provider resource grants. Moving files
 alone does not fix `runtime/instance/startResident` replacing the generic profile
 with a provider profile. In particular, the current Claude profile is allow-default
 except for the runtime floor, and ignores its ClaudePaths argument; it must be
-accounted for explicitly rather than described as Horizon-derived enforcement.
+accounted for explicitly rather than described as Boundary-derived enforcement.
 
 Apply runtime frame/resource limits generically, or procedure-local budgets
 explicitly. Remove the delegation-only depth branch from `narrowing`.
@@ -335,7 +335,7 @@ explicitly. Remove the delegation-only depth branch from `narrowing`.
    and interrupted acquisition/release recovery.
 4. Rewrite interpreter delegation and adapter delegate bindings to compose the
    new contracts, preserving public omitted/empty tools and actor semantics.
-5. Remove AgentContext, WorkTools, Delegated from Horizon and Grant; remove
+5. Remove AgentContext, WorkTools, Delegated from Boundary and Grant; remove
    agent-context syscall, inherit_model/delegated/tools from narrow, specialized
    envelope fields, kernel catalog/alias logic, and delegated socket/profile branches.
 6. Remove Surface.Agent and Surface.WorkTool after provisioning and adapter
@@ -343,16 +343,16 @@ explicitly. Remove the delegation-only depth branch from `narrowing`.
    using the resource design; do not claim they disappear merely by moving types.
 7. Update launcher bundles, DELEGATION.md, provider probes, and acceptance tests.
 
-Existing conversations pin registrations and serialize old Horizons. Do not
+Existing conversations pin registrations and serialize old Boundaries. Do not
 reinterpret those bytes as the new schema. Provision new conversations with the
 new protocol; either retain versioned legacy decoding/replay or explicitly require
 old conversations to finish on the old runtime. Choose and document that policy
-before rollout. Release checks compare canonical Horizons, so compatibility
+before rollout. Release checks compare canonical Boundaries, so compatibility
 cannot be handled only at adapter inputs.
 
 ## Acceptance criteria
 
-- Core Horizon, Grant, generic continuation, and machine syscall definitions
+- Core Boundary, Grant, generic continuation, and machine syscall definitions
   contain no agent model, tool label/catalog, or delegated mode.
 - A non-AI actor can use the same restricted target/contract capabilities and
   resource lifetime operations.

@@ -86,7 +86,7 @@ Grant a concrete procedure contract rather than every operation exposed by the i
 
 Article angle: gaining reusable behavior should not silently confer reusable privilege.
 
-Inspection leads: `controller/core/horizon/tools.go`; `controller/core/machine/delegate_test.go`.
+Inspection leads: `controller/core/boundary/tools.go`; `controller/core/machine/delegate_test.go`.
 
 ### Delegation is an authority operation
 
@@ -98,7 +98,7 @@ Inspection leads: `controller/core/machine/authority.go`; `controller/core/machi
 
 Instead of asking whether an arbitrary command looks safe, expose an operation with a narrower set of possible effects. Discuss bounded Git operations, guarded filesystem writes, and process restrictions as concrete examples, subject to verification.
 
-Inspection leads: `controller/core/horizon/horizon.go`; `controller/hosts/repo/git.go`; `controller/hosts/repo/write.go`.
+Inspection leads: `controller/core/boundary/boundary.go`; `controller/hosts/repo/git.go`; `controller/hosts/repo/write.go`.
 
 ### Authority outside the tool list
 

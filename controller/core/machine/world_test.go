@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
@@ -19,7 +19,7 @@ type world struct {
 	objects map[string][]byte // kind/hash
 	frames  map[string]*memFrame
 	accepts map[string]string
-	target  func(h horizon.Horizon, stdin []byte) []byte
+	target  func(h boundary.Boundary, stdin []byte) []byte
 	queue   []queued
 	steps   int
 }
@@ -46,7 +46,7 @@ type queued struct {
 	e Event
 }
 
-func newWorld(t *testing.T, target func(horizon.Horizon, []byte) []byte) *world {
+func newWorld(t *testing.T, target func(boundary.Boundary, []byte) []byte) *world {
 	return &world{t: t, objects: map[string][]byte{}, frames: map[string]*memFrame{}, accepts: map[string]string{}, target: target}
 }
 
@@ -61,13 +61,13 @@ func (w *world) frame(stamp string) *memFrame {
 
 // boot commits genesis, as boot.go does, and runs the operator's seed to the
 // end of the lineage. It returns what discharged the operator's round.
-func (w *world) boot(reach map[string]horizon.Surface, seed string) record.Record {
+func (w *world) boot(reach map[string]boundary.Surface, seed string) record.Record {
 	w.t.Helper()
 	g := record.Record{Version: 2, State: record.Invoke, Reach: reach, Author: "operator", Nonce: "n"}
 	o := HeldRecord(g)
 	w.objects["records/"+o.Key] = o.Raw
 	w.frame(o.Key)
-	h0 := horizon.Horizon{Stamp: o.Key, Reach: reach, Frame: o.Key}
+	h0 := boundary.Boundary{Stamp: o.Key, Reach: reach, Frame: o.Key}
 	root := &proc{s: Instance{Floor: "/floor/.skyra", R: g, Phase: Running, Self: h0}, stack: []string{o.Key}}
 	w.queue = append(w.queue, queued{root, Executed{Obs: []byte(seed)}})
 	for len(w.queue) > 0 {
@@ -147,7 +147,7 @@ func (w *world) acts(p *proc, as []Action) Event {
 		case Spawn:
 			child := &proc{s: Instance{Floor: p.s.Floor, Phase: Intake}, parent: p}
 			p.kids = append(p.kids, child)
-			under := Object{Key: x.Under, Raw: w.objects["horizons/"+x.Under]}
+			under := Object{Key: x.Under, Raw: w.objects["boundaries/"+x.Under]}
 			w.queue = append(w.queue, queued{child, Received{Under: under, In: x.Out}})
 			return nil // waits for the child's stamp
 		case ReleaseChild:
@@ -159,7 +159,7 @@ func (w *world) acts(p *proc, as []Action) Event {
 			// The release waits for the child's acknowledgment, which comes
 			// back as p's next event; the rest of the batch then runs.
 			p.pending = rest
-			w.queue = append(w.queue, queued{child, Executed{Obs: []byte(x.Horizon), Handles: len(child.stack)}})
+			w.queue = append(w.queue, queued{child, Executed{Obs: []byte(x.Boundary), Handles: len(child.stack)}})
 			return nil
 		case KillSuccessors:
 			for _, k := range p.kids {
@@ -229,7 +229,7 @@ func (w *world) write(p *proc, wr Write) Outcome {
 		w.objects[k] = x.Bytes
 		return Created
 	case AcceptanceWrite:
-		return exclusive(w.accepts, x.Stamp, x.Horizon)
+		return exclusive(w.accepts, x.Stamp, x.Boundary)
 	case FrameWrite:
 		if _, ok := w.frames[x.Stamp]; ok {
 			return Lost
@@ -302,7 +302,7 @@ func grammar(t *testing.T, effs []Effect) {
 // agent, which calls echo, waits, resumes with what echo said, and returns.
 // Every Step on the way keeps the loop's grammar.
 func TestALineageKeepsTheLoopsGrammar(t *testing.T) {
-	agent := func(h horizon.Horizon, stdin []byte) []byte {
+	agent := func(h boundary.Boundary, stdin []byte) []byte {
 		var c Continuation
 		if err := json.Unmarshal(stdin, &c); err != nil {
 			t.Fatalf("agent stdin: %s", stdin)
@@ -313,12 +313,12 @@ func TestALineageKeepsTheLoopsGrammar(t *testing.T) {
 		said, _ := json.Marshal("echo said " + string(c.Steps[0].Value))
 		return []byte(fmt.Sprintf(`{"to":%q,"payload":%s}`, c.Frame, said))
 	}
-	echo := func(h horizon.Horizon, stdin []byte) []byte {
+	echo := func(h boundary.Boundary, stdin []byte) []byte {
 		var in struct{ Text string }
 		_ = json.Unmarshal(stdin, &in)
 		return []byte(fmt.Sprintf(`{"to":%q,"payload":%q}`, h.Frame, in.Text))
 	}
-	w := newWorld(t, func(h horizon.Horizon, stdin []byte) []byte {
+	w := newWorld(t, func(h boundary.Boundary, stdin []byte) []byte {
 		if h.Surface.Continuation {
 			return agent(h, stdin)
 		}
@@ -333,7 +333,7 @@ func TestALineageKeepsTheLoopsGrammar(t *testing.T) {
 // Fan-out through the world: one emission of two calls, one round of two
 // slots, resolved once, the waiter resumed with both steps in order.
 func TestAFanOutLineageKeepsTheLoopsGrammar(t *testing.T) {
-	w := newWorld(t, func(h horizon.Horizon, stdin []byte) []byte {
+	w := newWorld(t, func(h boundary.Boundary, stdin []byte) []byte {
 		if !h.Surface.Continuation {
 			var in struct{ Text string }
 			_ = json.Unmarshal(stdin, &in)

@@ -1,7 +1,7 @@
 // Command service-io is the one adapter in front of the service host
 // (proposal 49): it performs one operation on a session and exits. It reaches
 // exactly one thing, the service host's socket, which it finds among the
-// sockets its Horizon grants (SKYRA_CONNECTIONS) as service.sock in a
+// sockets its Boundary grants (SKYRA_CONNECTIONS) as service.sock in a
 // skyra-service-* directory. Its observation is the operation's record; it
 // owns no process, no state and no side store.
 //

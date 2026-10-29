@@ -2,7 +2,7 @@ import Testing
 @testable import Skyra
 
 private func cardConversation(_ entries: [Entry]) -> Conversation {
-    Conversation(conversation: "c-card", phase: .ready, entries: entries, horizons: nil, procedure: "think")
+    Conversation(conversation: "c-card", phase: .ready, entries: entries, boundaries: nil, procedure: "think")
 }
 
 private func cardEntry(_ role: String, _ text: String) -> Entry {

@@ -1,4 +1,4 @@
-package horizon
+package boundary
 
 import (
 	"skyra/controller/core/contract"
@@ -24,7 +24,7 @@ func TestAuthorityAllowsByPathComponent(t *testing.T) {
 }
 
 func TestRenderOnlyDeclaredResources(t *testing.T) {
-	h := Horizon{Surface: &Surface{Path: "/private/bin/tool"}, Authority: Authority{
+	h := Boundary{Surface: &Surface{Path: "/private/bin/tool"}, Authority: Authority{
 		Read:  []PathGrant{{Path: "/private/work/input", Scope: "literal"}},
 		Write: []PathGrant{{Path: "/private/work/output", Scope: "literal"}},
 		Mach:  []string{"service.allowed"},
@@ -47,16 +47,16 @@ func TestRenderOnlyDeclaredResources(t *testing.T) {
 	}
 }
 
-// Everything under one Horizon gets the same grants; only the program being
+// Everything under one Boundary gets the same grants; only the program being
 // run changes, and it is the only thing exec is allowed for (next/24,
 // "Exclusions").
-func TestOneProfilePerHorizonExecOnlyTheRunningProgram(t *testing.T) {
+func TestOneProfilePerBoundaryExecOnlyTheRunningProgram(t *testing.T) {
 	grants := Authority{Read: []PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	ha, hb := strings.Repeat("a", 64), strings.Repeat("b", 64)
-	a := Render(Horizon{Surface: &Surface{Path: "/private/bin/a", SHA256: ha}, Authority: grants}, "/private/work/.skyra")
-	b := Render(Horizon{Surface: &Surface{Path: "/private/bin/b", SHA256: hb}, Authority: grants}, "/private/work/.skyra")
+	a := Render(Boundary{Surface: &Surface{Path: "/private/bin/a", SHA256: ha}, Authority: grants}, "/private/work/.skyra")
+	b := Render(Boundary{Surface: &Surface{Path: "/private/bin/b", SHA256: hb}, Authority: grants}, "/private/work/.skyra")
 	if strings.ReplaceAll(a, ha, "X") != strings.ReplaceAll(b, hb, "X") {
-		t.Fatalf("two programs under one Horizon must get the same profile:\n%s\n%s", a, b)
+		t.Fatalf("two programs under one Boundary must get the same profile:\n%s\n%s", a, b)
 	}
 	// What runs is the runtime's verified copy, never the registered path (43 D5).
 	if n := strings.Count(a, "(allow process-exec"); n != 1 || !strings.Contains(a, `(allow process-exec (literal "/private/work/.skyra/surfaces/`+ha+`"))`) || strings.Contains(a, "/private/bin/a") {
@@ -64,7 +64,7 @@ func TestOneProfilePerHorizonExecOnlyTheRunningProgram(t *testing.T) {
 	}
 	// A surface without a well-formed hash is allowed to run nothing.
 	for _, sum := range []string{"", "../../x", strings.Repeat("A", 64)} {
-		if p := Render(Horizon{Surface: &Surface{Path: "/private/bin/a", SHA256: sum}, Authority: grants}, "/private/work/.skyra"); strings.Contains(p, "process-exec") {
+		if p := Render(Boundary{Surface: &Surface{Path: "/private/bin/a", SHA256: sum}, Authority: grants}, "/private/work/.skyra"); strings.Contains(p, "process-exec") {
 			t.Fatalf("hash %q: exec allowed:\n%s", sum, p)
 		}
 	}
@@ -77,7 +77,7 @@ func TestPermitsAToolRestatedInAnotherOrder(t *testing.T) {
 	restated := &contract.Schema{Type: "object", Required: []string{"b", "a"}, Fields: bound.Fields}
 	other := &contract.Schema{Type: "object", Required: []string{"a"}, Fields: bound.Fields}
 	tools := map[string]ToolBinding{"t": {Target: "echo", Contracts: []*contract.Schema{bound}}}
-	h := Horizon{WorkTools: &tools}
+	h := Boundary{WorkTools: &tools}
 	if !h.PermitsTool("echo", restated) || h.PermitsTool("echo", other) {
 		t.Fatal("a restated contract is the bound tool; a different one is not")
 	}

@@ -82,7 +82,7 @@ struct Composer: View {
                     Text(grantLine).lineLimit(1).truncationMode(.middle)
                 }
                 .buttonStyle(.plain)
-                .help("The Horizon this session runs under. Click to change it.")
+                .help("The Boundary this session runs under. Click to change it.")
                 Spacer()
                 Text(session.notice).lineLimit(1).foregroundStyle(Theme.dim.color)
             }

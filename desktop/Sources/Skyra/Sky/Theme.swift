@@ -26,7 +26,7 @@ enum Theme {
     static let dim = RGB(120, 128, 146)
     static let faint = RGB(60, 66, 80)
     static let red = RGB(226, 112, 112)
-    /// A refused call: the Horizon doing its job, not a failure.
+    /// A refused call: the Boundary doing its job, not a failure.
     static let amber = RGB(222, 168, 104)
     static let callTo = RGB(169, 201, 206)
 
@@ -56,10 +56,10 @@ enum Theme {
     // The flow's filaments, by band: teal, violet, warm.
     static let filaments = [RGB(96, 168, 178), RGB(128, 112, 182), RGB(176, 140, 104)]
 
-    // Horizons: a region's light, its edge, and a surface's star.
+    // Boundaries: a region's light, its edge, and a surface's star.
     static let roomLight = RGB(5, 9, 13)
     static let narrowLight = RGB(8, 6, 14)
-    static let horizonEdge = RGB(70, 104, 118)
+    static let boundaryEdge = RGB(70, 104, 118)
     static let surfaceFloor = RGB(40, 58, 70)
     static let surfacePeak = RGB(150, 200, 208)
 

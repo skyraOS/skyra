@@ -17,13 +17,13 @@ import (
 	"syscall"
 	"time"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/instance"
+	"skyra/controller/runtime/log"
 	"skyra/controller/runtime/registry"
 	"skyra/controller/runtime/replay"
-	"skyra/controller/runtime/trace"
 	"skyra/controller/runtime/tree"
 )
 
@@ -37,7 +37,7 @@ type Outcome struct {
 // Run boots: genesis from the operator's registry, then the operator emits
 // the seed (addressed to a capability in the root reach), then boot waits for
 // its frame to resolve, prints the lineage, and replays it. A scratch
-// directory, when given, joins the room's authority: everything under the
+// directory, when given, joins the root authority: everything under the
 // root may read and write it, and run nothing from it.
 func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach bool) (Outcome, error) {
 	if err := tree.Init(root); err != nil {
@@ -52,7 +52,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 			return Outcome{}, err
 		}
 	}
-	reach[machine.System] = machine.Syscalls() // the Horizon's own contracts: its syscalls (next/32)
+	reach[machine.System] = machine.Syscalls() // the Boundary's own contracts: its syscalls (next/32)
 	for _, s := range reach {                  // each actor's own state, the one part of the floor its sandbox may touch
 		if s.State != "" {
 			if err := os.MkdirAll(filepath.Join(root, s.State), 0o700); err != nil {
@@ -81,7 +81,7 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 		}
 	}
 
-	// Genesis: the room. The root Horizon's reach and authority come from the
+	// Genesis: the root Boundary. Its reach and authority come from the
 	// operator, and everything under it shares them until a narrowing. It is
 	// the one origin with no predecessor, so it is authored, and it carries a
 	// nonce: two boots of the same registry are two histories, never one.
@@ -105,11 +105,11 @@ func Run(root, registryFile, scratch, to string, payload json.RawMessage, detach
 	if err != nil {
 		return Outcome{}, err
 	}
-	h0 := horizon.Horizon{Stamp: g0, Reach: reach, Authority: authority, Frame: g0}
-	trace.Logf("genesis  committed %s  root reach %v", record.Short(g0), h0.Names())
+	h0 := boundary.Boundary{Stamp: g0, Reach: reach, Authority: authority, Frame: g0}
+	log.Logf("genesis  committed %s  root reach %v", record.Short(g0), h0.Names())
 
 	// Boot is an instance whose target is the operator: it is already live
-	// under the root Horizon, and its target has just emitted the seed. The
+	// under the root Boundary, and its target has just emitted the seed. The
 	// seed is operands like any other output; intake derives its state.
 	seed, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	s0 := machine.Instance{Floor: root, R: genesis, Phase: machine.Running, Self: h0}

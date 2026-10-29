@@ -9,7 +9,7 @@ final class SkyModel {
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
     let calls = CallLights()
     var column: ClosedRange<Double>? // the reading column, in the sky's points: how wide the docked log is
-    var logRect: CGRect? // the conversation log, in the sky's points: a Horizon under it is not traced
+    var logRect: CGRect? // the conversation log, in the sky's points: a Boundary under it is not traced
     var origin = CGPoint.zero // the canvas's origin in the sky's points: the canvas runs under the title bar
     var roots: [Destination] = [] // the roots a human may select (proposal 38)
     var selectedRoot: String? // the one whose context is on screen: its constellation stays lit
@@ -259,7 +259,7 @@ struct SkyScene {
         g.text(.init(text: "skyra", style: .title), at: CGPoint(x: t.x + 18, y: t.y), .leading, word)
     }
 
-    /// The calls' lights, and the arc where a refused call met the Horizon's edge.
+    /// The calls' lights, and the arc where a refused call met the Boundary's edge.
     private func drawCalls(_ g: inout SkyPaint, _ dots: Point, _ f: Double) {
         let d = Sky.dot
         func at(_ p: Point) -> CGPoint { CGPoint(x: p.x * d, y: p.y * d) }

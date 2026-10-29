@@ -9,7 +9,7 @@ import (
 )
 
 // installBundle is operator provisioning, before the registered procedures
-// enter a Horizon. It validates the entire bundle before writing any node.
+// enter a Boundary. It validates the entire bundle before writing any node.
 func installBundle(dir, file string) error {
 	b, err := os.ReadFile(file)
 	if err != nil {

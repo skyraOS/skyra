@@ -39,7 +39,7 @@ struct RootConstellation: Equatable {
             if let narrowed = n.narrows { narrowings[narrowed.actor] = (n.name, narrowed.reach) }
         }
         // The actors the procedure calls, in the order its nodes are written.
-        // A narrowing is a call of the Horizon, the line's label, not a star.
+        // A narrowing is a call of the Boundary, the line's label, not a star.
         var actors: [String] = []
         for n in d.outline.nodes where n.calls != "system" && !n.calls.isEmpty && !actors.contains(n.calls) {
             actors.append(n.calls)
@@ -71,7 +71,7 @@ struct RootConstellation: Equatable {
 }
 
 /// Where the roots sit in the sky: their constellations, top right below the
-/// header, clear of the core and the Horizons around it, one under another.
+/// header, clear of the core and the Boundaries around it, one under another.
 /// The sky draws them from this and the window places each root's click
 /// target from it, so a target can never drift from its star.
 enum RootSky {
@@ -126,7 +126,7 @@ enum RootSky {
 }
 
 /// How lit each root's constellation is: the one under the pointer traces
-/// itself a line at a time and lights its stars, as a Horizon does; the
+/// itself a line at a time and lights its stars, as a Boundary does; the
 /// selected one stays traced and lit, so the context is seen around it.
 struct RootLights {
     static let speed = 0.35 // lines traced per frame

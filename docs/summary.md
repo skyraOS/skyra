@@ -11,11 +11,11 @@ notes preserve the reasoning, but their status tables can lag the code.
 
 ## Current position
 
-Skyra runs agent work through explicit contracts under a Horizon: the calls and
+Skyra runs agent work through explicit contracts under a Boundary: the calls and
 OS resources an execution holds. The controller runs once per step, derives
 invocations, returns and faults from untrusted output, records them, and hands
 custody to the successor. The core decision function is pure; the runtime shell
-performs its effects. Durable records and released Horizons can be checked by
+performs its effects. Durable records and released Boundaries can be checked by
 replay. Provider processes and hosts can remain alive across these ephemeral
 steps; their live state is not reconstructed by replay alone.
 
@@ -30,18 +30,18 @@ The next architectural work is separating generic authority from adapter
 configuration and process lifecycle. That refactor is proposed, not implemented.
 The current kernel still carries agent metadata, a work-tool ceiling, delegation
 state, and resident-specific execution fields. Provider-native operations and
-sandbox exceptions also prevent claiming uniform Horizon enforcement today.
+sandbox exceptions also prevent claiming uniform Boundary enforcement today.
 
 ## What is implemented
 
 | Area | Current behavior |
 | --- | --- |
-| Step protocol | Successor intake derives and commits output before effects; release verification derives the Horizon; custody travels with frame directory descriptors. |
+| Step protocol | Successor intake derives and commits output before effects; release verification derives the Boundary; custody travels with frame directory descriptors. |
 | Contracts | A capability is identified by `(target, schema)`. Structural fit selects exactly one declared contract; missing or ambiguous matches fault. Returns carry observations rather than declared output contracts. |
-| Authority | Ordinary calls inherit the caller's effective Horizon. Explicit `system.narrow` returns a reference for a restricted execution. Generic Seatbelt rendering denies by default and protects the runtime floor. Provider exceptions are listed below. |
+| Authority | Ordinary calls inherit the caller's effective Boundary. Explicit `system.narrow` returns a reference for a restricted execution. Generic Seatbelt rendering denies by default and protects the runtime floor. Provider exceptions are listed below. |
 | Fan-out and joining | A round opens all child slots before release; it resumes after all discharges, in emission order, with one winning claim. Generic cancellation is not implemented. |
-| Recording and replay | Content-addressed records, inputs and Horizons preserve provenance. Version 2 histories commit complete emissions so replay checks round coverage as well as discharge ownership. |
-| Accepted history | Durable acceptance receipts distinguish an accepted release from a proposed one. `system.strand` supports both single-observation strands and invocation-root plus nonempty observation-frontier reads. |
+| Recording and replay | Content-addressed records, inputs and Boundaries preserve provenance. Version 2 histories commit complete emissions so replay checks round coverage as well as discharge ownership. |
+| Accepted history | Durable acceptance receipts distinguish an accepted release from a proposed one. `system.trace` supports both single-observation traces and invocation-root plus nonempty observation-frontier reads. |
 | Reconstruction support | `ReadTreeInRoom` reconstructs the bounded accepted closure and preserves narrowed-child opacity. Operator-side `RecoverTree` reconciles recorded progress; it does not revive processes or repeat effects. |
 | Interpreter | Durable procedure bodies and frame positions; bindings, dynamic call targets, `each`, independent ready-node fan-out, and procedure-to-procedure calls. |
 | Authored procedures | Version 1 bundles are validated and provisioned before genesis. Think, design, Blender and write workflows use this path; deployment/migration versioning remains incomplete. |
@@ -112,21 +112,21 @@ returning, while Claude uses a one-shot provider process. The parent's session
 is reclaimed only by the service host's idle backoff, about half an hour, so a
 parent waiting longer than that on a child loses its session (proposal 49).
 
-The implementation still uses `Horizon.Agent`, `WorkTools` and `Delegated`,
+The implementation still uses `Boundary.Agent`, `WorkTools` and `Delegated`,
 and `system.agent-context`. These are current
 mechanisms, not the intended final ownership boundaries. See
 [DELEGATION.md](design/DELEGATION.md) for exact semantics and verification limits.
 
 ## Boundaries and gaps
 
-- **Provider authority is not uniformly Horizon-derived.** Generic workers use
-  the deny-default Horizon profile, but provider launch profiles replace it.
+- **Provider authority is not uniformly Boundary-derived.** Generic workers use
+  the deny-default Boundary profile, but provider launch profiles replace it.
   Codex parents may use native image viewing and provider web search without
   individual reads being recorded in lineage; delegated children disable those
   capabilities. Claude's current profile starts with `allow default` and denies
   the runtime floor; disabling native tools is not equivalent to OS containment.
   The universal claims that every effect is recorded and every process has only
-  Horizon-rendered authority are therefore goals, not current guarantees.
+  Boundary-rendered authority are therefore goals, not current guarantees.
 - **The kernel still knows agent-specific representation.** Agent declarations,
   model publication, work-tool labels and delegated mode remain in core. Surface
   also retains resident/connection/profile fields. Moving policy out requires
@@ -143,8 +143,8 @@ mechanisms, not the intended final ownership boundaries. See
 - **The procedure language remains a finite DAG.** It has bindings and `each`,
   but no general conditional node, explicit fault handler or durable event loop.
   Bundles exist; migrations and multiple representations per contract do not.
-- **Containment is shared within a Horizon.** A granted actor can invoke other
-  contracts that Horizon holds. Restrictions require explicit scope construction;
+- **Containment is shared within a Boundary.** A granted actor can invoke other
+  contracts that Boundary holds. Restrictions require explicit scope construction;
   a prompt injection that misuses a granted tool is not prevented by the grant.
 - **Some replay and durability limits remain.** Version 1 histories cannot prove
   complete round coverage; records still contain checked derived fields; the
@@ -156,7 +156,7 @@ mechanisms, not the intended final ownership boundaries. See
 
 ## Current architectural direction
 
-The [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md) proposes generic
+The [Boundary concern spec](design/BOUNDARY-CONCERNS-SPEC.md) proposes generic
 contract-level reach, adapter-owned configuration and tool bindings, removal of
 agent/delegation fields from core, explicit resource ownership, and a tested
 legacy replay policy. It does not change runtime behavior by itself.
@@ -212,6 +212,6 @@ comparative task-success, containment and cost evaluation remains future work.
 | Unified model selection and remaining ideas | [proposal 39](next/proposal/39-unified-think-procedure-proposal.md) |
 | Accepted tree reconstruction | [tree reader](../controller/runtime/replay/tree.go), [reconciliation](../controller/runtime/replay/recover.go), [proposal 33](next/proposal/33-procedure-adapter-extraction-proposal.md) |
 | Bounded delegation | [DELEGATION.md](design/DELEGATION.md) |
-| Authority and adapter refactor | [Horizon concern spec](design/HORIZON-CONCERNS-SPEC.md) |
+| Authority and adapter refactor | [Boundary concern spec](design/BOUNDARY-CONCERNS-SPEC.md) |
 | Desktop behavior | [desktop guide](../desktop/README.md) |
 | Research and invariants | [research question](next/research-question.md), [grips and invariants](grips-and-invariants.md) |

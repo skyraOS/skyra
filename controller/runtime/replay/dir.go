@@ -3,7 +3,7 @@
 package replay
 
 import (
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
 )
@@ -34,16 +34,16 @@ func Replay(root, head string) (int, error) {
 	return n, ResumedOnce(records)
 }
 
-// HorizonAt derives, from the tree alone, the Horizon the record at stamp
+// BoundaryAt derives, from the tree alone, the Boundary the record at stamp
 // released: the one whatever it runs, or whatever is emitted under it, runs
 // under. Every record on the way is re-derived, as Replay does. Authority is
 // never taken from anyone who holds the work (next/24, next/20 finding 1).
-func HorizonAt(root, stamp string) (horizon.Horizon, error) {
-	w := walker{s: dir(root), seen: map[string]horizon.Horizon{}}
+func BoundaryAt(root, stamp string) (boundary.Boundary, error) {
+	w := walker{s: dir(root), seen: map[string]boundary.Boundary{}}
 	return w.at(stamp)
 }
 
 // NewWalker is a Walker over a tree.
 func NewWalker(root string) *Walker {
-	return &Walker{walker{s: dir(root), seen: map[string]horizon.Horizon{}}}
+	return &Walker{walker{s: dir(root), seen: map[string]boundary.Boundary{}}}
 }

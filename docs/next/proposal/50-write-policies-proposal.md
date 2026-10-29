@@ -58,7 +58,7 @@ the exec:
 
 | Check | Who enforces it | When |
 |---|---|---|
-| What the procedure may read, and where it may write | The OS sandbox, rendered from the grant (`horizon.Render`) | On every OS call, from the profile rendered at spawn |
+| What the procedure may read, and where it may write | The OS sandbox, rendered from the grant (`boundary.Render`) | On every OS call, from the profile rendered at spawn |
 | Which actors it may invoke (Reach), with what input (contracts) | The kernel, at intake | Each emission |
 | Where its writes land in the workspace | The kernel, at a commit point | Each commit (this proposal) |
 
@@ -103,7 +103,7 @@ resumes from a checkpoint whose writes are exactly the ones already applied.
 
 A commit point is any emission by the procedure. The kernel folds the region
 at intake, before it decides the emission. There is no new mechanism: a
-system call is already an emission to `system` (`core/machine/room.go`), and
+system call is already an emission to `system` (`core/machine/system.go`), and
 each run of the interpreter is already one resume (`controller/interp/main.go`).
 
 A procedure that wants a commit with no other call emits `system.commit`:

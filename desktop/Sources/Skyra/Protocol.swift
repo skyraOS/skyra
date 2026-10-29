@@ -21,13 +21,13 @@ struct Call: Decodable, Equatable, Sendable {
     let state: String // running | returned | fault
     let result: String?
     let image: String? // recorded desktop screenshot data URL
-    let fault: String? // the fault's kind: horizon, contract, custody, malformed
+    let fault: String? // the fault's kind: boundary, contract, custody, malformed
     let cause: String?
     let stamp: String
     let ms: Int?
 
-    /// A refusal is the Horizon or a contract doing its job; anything else broke.
-    var refused: Bool { state == "fault" && (fault == "horizon" || fault == "contract") }
+    /// A refusal is the Boundary or a contract doing its job; anything else broke.
+    var refused: Bool { state == "fault" && (fault == "boundary" || fault == "contract") }
 }
 
 struct Conversation: Decodable, Equatable, Sendable, Identifiable {
@@ -35,7 +35,7 @@ struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     let conversation: String
     let phase: Phase
     let entries: [Entry]
-    let horizons: [HorizonView]? // absent from a webhost that predates them
+    let boundaries: [BoundaryView]? // absent from a webhost that predates them
     let procedure: String? // the root it runs, fixed at creation; absent or "" from before procedures
     var model: String? = nil // the model its root runs on, fixed at creation; absent for the root's default
     var id: String { conversation }
@@ -90,17 +90,17 @@ struct Destination: Decodable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// One Horizon of a conversation, as the webhost reads it from the lineage:
+/// One Boundary of a conversation, as the webhost reads it from the lineage:
 /// what it reaches and how many OS grants it carries. Frames released under
-/// the same reach and authority are one Horizon.
-struct HorizonView: Decodable, Equatable, Sendable {
+/// the same reach and authority are one Boundary.
+struct BoundaryView: Decodable, Equatable, Sendable {
     struct Member: Decodable, Equatable, Sendable {
         let name: String
-        let id: String // the surface's identity: the same surface in any Horizon
+        let id: String // the surface's identity: the same surface in any Boundary
     }
 
     let id: String
-    let root: Bool // the room
+    let root: Bool // the root Boundary, which genesis recorded
     let actors: [String] // the surfaces that ran under it
     let reach: [Member]
     let grants: Int

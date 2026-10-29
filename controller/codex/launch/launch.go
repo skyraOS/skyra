@@ -27,7 +27,7 @@ const Pinned = "0.160.0"
 // permissions and approval text, its collaboration mode, its environment
 // context, its apps text, and project documents such as AGENTS.md. Skyra's
 // header is the whole prompt; the sandbox, not a sentence, keeps the agent in
-// its Horizon. These are top-level keys in Codex's own defaults file.
+// its Boundary. These are top-level keys in Codex's own defaults file.
 const quiet = "include_permissions_instructions = false\ninclude_apps_instructions = false\ninclude_collaboration_mode_instructions = false\ninclude_environment_context = false\nproject_doc_max_bytes = 0\n"
 
 // Provider is Codex, as the service host registers it.

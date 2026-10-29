@@ -1,4 +1,4 @@
-package horizon
+package boundary
 
 import (
 	"crypto/sha256"
@@ -33,7 +33,7 @@ func TestOSExecHelper(t *testing.T) {
 	}
 }
 
-// A target cannot start another program itself, whatever its Horizon grants:
+// A target cannot start another program itself, whatever its Boundary grants:
 // only the runtime starts programs, and only through an emission it recorded.
 func TestRenderedProfileDeniesExecOfAnyOtherProgram(t *testing.T) {
 	if runtime.GOOS != "darwin" {
@@ -51,7 +51,7 @@ func TestRenderedProfileDeniesExecOfAnyOtherProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	surface, exe := verified(t, self, floor)
-	profile := Render(Horizon{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: "/bin", Scope: "subpath"}}}}, floor)
+	profile := Render(Boundary{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: "/bin", Scope: "subpath"}}}}, floor)
 	cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSExecHelper$")
 	cmd.Env = []string{"SKYRA_TEST_EXEC=1"}
 	out, err := cmd.CombinedOutput()
@@ -103,7 +103,7 @@ func TestRenderedProfileEnforcesReadGrant(t *testing.T) {
 		{"floor overrides parent grant", []PathGrant{{Path: filepath.Dir(secret), Scope: "subpath"}}, protected, "denied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			profile := Render(Horizon{Surface: surface, Authority: Authority{Read: tc.read}}, floor)
+			profile := Render(Boundary{Surface: surface, Authority: Authority{Read: tc.read}}, floor)
 			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSReadHelper$")
 			cmd.Env = []string{"SKYRA_TEST_READ_PATH=" + tc.target}
 			out, err := cmd.CombinedOutput()
@@ -165,7 +165,7 @@ func TestRenderedProfileScratchIsReadWriteNeverExec(t *testing.T) {
 		{"outside scratch", filepath.Join(outside, "tool.sh"), "denied denied denied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			profile := Render(Horizon{Surface: surface, Authority: Authority{Scratch: scratch}}, floor)
+			profile := Render(Boundary{Surface: surface, Authority: Authority{Scratch: scratch}}, floor)
 			cmd := exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestOSScratchHelper$")
 			cmd.Env = []string{"SKYRA_TEST_WRITE=" + tc.target}
 			out, err := cmd.CombinedOutput()
@@ -222,7 +222,7 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 	// A read grant that covers the whole floor changes nothing.
 	surface, exe := verified(t, self, floor)
 	surface.State = "interpreter"
-	h := Horizon{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
+	h := Boundary{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
 	if got := StateDir(h, floor); got != filepath.Join(floor, "interpreter") {
 		t.Fatalf("state dir: %s", got)
 	}
@@ -243,7 +243,7 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 	}
 	// No state named, or a name that is the kernel's: nothing of the floor.
 	for _, name := range []string{"", "records", "../x", "Interp"} {
-		if StateDir(Horizon{Surface: &Surface{Path: self, State: name}}, floor) != "" {
+		if StateDir(Boundary{Surface: &Surface{Path: self, State: name}}, floor) != "" {
 			t.Errorf("%q is no actor's state", name)
 		}
 	}
@@ -260,7 +260,7 @@ func verified(t *testing.T, path, floor string) (*Surface, string) {
 	}
 	sum := sha256.Sum256(bin)
 	surface := &Surface{Path: path, SHA256: hex.EncodeToString(sum[:])}
-	exe := Verified(Horizon{Surface: surface}, floor)
+	exe := Verified(Boundary{Surface: surface}, floor)
 	if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
 		t.Fatal(err)
 	}

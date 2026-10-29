@@ -22,7 +22,7 @@ Repository evidence, read directly:
 - `desktop/Sources/Skyra/Sky/SkyView.swift`: SkyModel owns pointer, reading column, log rect, roots, selection and ambient simulation; Metal view hit testing returns nil; background rate is 10 FPS.
 - `desktop/Sources/Skyra/Sky/SkyRenderer.swift`: existing full-screen background and instanced sprite/segment pipelines, triple in-flight buffers, bgra8Unorm target, premultiplied blend setup, exposed offscreen test hooks. This is not a general 3D renderer.
 - `desktop/Sources/Skyra/Sky/Theme.swift`: dark sRGB palette, differentiated amber refusal and red failure.
-- `desktop/Sources/Skyra/Protocol.swift`: conversation phases ready/pending/failed/closed; call states running/returned/fault; horizon and contract faults count as refusals; snapshots carry incarnation/revision and root destinations.
+- `desktop/Sources/Skyra/Protocol.swift`: conversation phases ready/pending/failed/closed; call states running/returned/fault; boundary and contract faults count as refusals; snapshots carry incarnation/revision and root destinations.
 - `frontend/package.json`: Next.js/React frontend; no current Three.js dependency.
 
 No asset was loaded, Blender installation checked, desktop build run, Penpot operation attempted, or renderer benchmark performed for this document. Source changes below are proposals.
@@ -146,7 +146,7 @@ Map existing protocol, not invented cognition:
 | pending | restrained slow orbit | turn pending, not proof of thinking |
 | running call | short arc/brief highlight | recorded call running |
 | returned call | brief green accent | call returned, not task success |
-| horizon/contract refusal | amber notch | boundary/contract refused the call |
+| boundary/contract refusal | amber notch | boundary/contract refused the call |
 | other call fault | red notch | call fault |
 | failed phase | persistent small red marker | conversation failed |
 | offline | dim core and textual connection status | disconnected, not failed agent |
@@ -310,13 +310,13 @@ Each returns structured status, changed object IDs, before/after values, source 
 
 Requests include `expectedSceneVersion` and idempotency key. Apply edits on an isolated working copy, validate, then save a new version. Conflicting scene version returns conflict, not last-writer-wins. Rollback selects a prior approved artifact; no destructive overwrite. Interactive Blender UI editing and headless jobs must not write the same source concurrently.
 
-Implementation preference: a narrow request-to-Python dispatcher executed by a registered sandboxed Blender target. A local UI bridge is optional for previews, with authenticated local transport, explicit project scope and no generic eval operation. MCP is only a transport choice; it neither grants fine-grained semantics nor replaces Horizon enforcement. A live Blender connection is not available in this session and must not be represented as existing.
+Implementation preference: a narrow request-to-Python dispatcher executed by a registered sandboxed Blender target. A local UI bridge is optional for previews, with authenticated local transport, explicit project scope and no generic eval operation. MCP is only a transport choice; it neither grants fine-grained semantics nor replaces Boundary enforcement. A live Blender connection is not available in this session and must not be represented as existing.
 
 ## 11. Security and authority
 
 Respect Skyra's emitter/checker separation: exporter output is untrusted; a separate validator authorizes promotion based on observable artifact contents. Export tool cannot mark its own output approved.
 
-Blender worker Horizon: read only granted source/assets and approved scripts; write only per-job output/cache; no network by default; no `.skyra/`, `.codex`, home-wide reads or arbitrary subprocesses. Verify executable and script identity through the runtime's existing release machinery, not self-reported hashes alone. Do not use an ambient shell to bypass registered tool recording.
+Blender worker Boundary: read only granted source/assets and approved scripts; write only per-job output/cache; no network by default; no `.skyra/`, `.codex`, home-wide reads or arbitrary subprocesses. Verify executable and script identity through the runtime's existing release machinery, not self-reported hashes alone. Do not use an ambient shell to bypass registered tool recording.
 
 Treat archives and parser inputs as attack surfaces. Reject absolute paths, traversal, external URL references, oversized/overcompressed packages, excessive geometry/textures and unsupported extension requirements. Use process memory/time quotas and cancellation; where native GPU access requires broader grants, scope and document that exception rather than claiming a perfect sandbox.
 

@@ -60,7 +60,7 @@ schema as data does not grant authority or automatically enforce the output.
 
 Use `system.strand` when source history needs reconstruction. Its existing
 contract and frontier checks remain authoritative. Resolve the source before
-narrowing the model's Horizon.
+narrowing the model's Boundary.
 
 For the first implementation, invoke the procedure beneath the source user actor
 and pass resolved evidence downward. Merely opening a new `create-spec`
@@ -215,7 +215,7 @@ spec-creation mechanism.
 
 - [`interpreter/proc/plan.go`](../controller/interp/proc/plan.go) runs
   dependency-ordered procedure nodes and evaluates a return bound to a child result.
-- [`machine/room.go`](../controller/core/machine/room.go) implements
+- [`machine/system.go`](../controller/core/machine/system.go) implements
   `system.strand`, including contract and bounded history checks.
 - [`machine/machine.go`](../controller/core/machine/machine.go) exposes child
   discharge stamps as `StepView.Observation`.

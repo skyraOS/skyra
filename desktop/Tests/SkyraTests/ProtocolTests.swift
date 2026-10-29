@@ -67,7 +67,7 @@ import Testing
      "conversations":[{"conversation":"c","phase":"pending","pendingRequestId":null,"entries":[
        {"role":"user","text":"run ls","ts":0,"requestId":"r"},
        {"role":"call","text":"native.commandExecution","ts":1,"requestId":null,
-        "call":{"to":"native.commandExecution","arg":"","state":"fault","fault":"horizon",
+        "call":{"to":"native.commandExecution","arg":"","state":"fault","fault":"boundary",
                 "cause":"\\"native.commandExecution\\" is not in reach","stamp":"2ae3f9ec"}}]}]}
     """
     guard case let .snapshot(_, _, convs, _) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {

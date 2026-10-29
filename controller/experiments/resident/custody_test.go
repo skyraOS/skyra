@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/handshake"
 )
@@ -132,8 +132,8 @@ func helperCommand(mode, floor string, sandbox bool) (*exec.Cmd, string, error) 
 		return nil, "", err
 	}
 	// The profile lets only the runtime's verified copy run (43 D5).
-	h := horizon.Horizon{Surface: &horizon.Surface{Path: self, SHA256: record.Sum(bin)}}
-	exe := horizon.Verified(h, floor)
+	h := boundary.Boundary{Surface: &boundary.Surface{Path: self, SHA256: record.Sum(bin)}}
+	exe := boundary.Verified(h, floor)
 	if have, err := os.ReadFile(exe); err != nil || record.Sum(have) != h.Surface.SHA256 {
 		if err := os.MkdirAll(filepath.Dir(exe), 0o700); err != nil {
 			return nil, "", err
@@ -146,7 +146,7 @@ func helperCommand(mode, floor string, sandbox bool) (*exec.Cmd, string, error) 
 			return nil, "", err
 		}
 	}
-	profile := horizon.Render(h, floor)
+	profile := boundary.Render(h, floor)
 	var cmd *exec.Cmd
 	if sandbox {
 		cmd = exec.Command("/usr/bin/sandbox-exec", "-p", profile, exe, "-test.run=^TestResidentHelper$")

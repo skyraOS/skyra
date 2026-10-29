@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
@@ -21,7 +21,7 @@ import (
 //
 //	addresses the slot its frame discharges                                     → return
 //	names a capability in reach, payload fits exactly one of its contracts      → invoke
-//	names anything else                                                         → fault (horizon)
+//	names anything else                                                         → fault (boundary)
 //	addresses nothing                                                           → fault (leaf)
 //	not readable as operands                                                    → fault (malformed)
 //	payload fits none of the contracts of what it addresses, or more than one   → fault (contract)
@@ -29,7 +29,7 @@ import (
 // No name is reserved: the slot is the frame's id, a stamp no capability can
 // be named. Every fault carries, as its payload, the observation of why it
 // faulted. It is total and pure, so replay derives the same state again.
-func interpret(h horizon.Horizon, out []byte) record.Record {
+func interpret(h boundary.Boundary, out []byte) record.Record {
 	if len(out) == 0 {
 		return faulted(record.Custody, "no output", nil)
 	}
@@ -57,7 +57,7 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 		target, ok = h.Reach[g.Actor]
 	}
 	if !ok {
-		return faulted(record.Horizon, fmt.Sprintf("%q is not in reach", to), attempt)
+		return faulted(record.Boundary, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
 	selected, err := Selected(target, payload)
 	if err != nil {
@@ -68,9 +68,9 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 		actual = g.Actor
 	}
 	if !h.PermitsTool(actual, selected) {
-		return faulted(record.Horizon, "tool contract is excluded by delegation", attempt)
+		return faulted(record.Boundary, "tool contract is excluded by delegation", attempt)
 	}
-	if target.System == "horizon" {
+	if target.System == "boundary" {
 		if kind, err := checkSyscall(h, contract.Canonical(payload)); err != nil {
 			return faulted(kind, to+": "+err.Error(), attempt)
 		}
@@ -83,7 +83,7 @@ func interpret(h horizon.Horizon, out []byte) record.Record {
 // target, and fit picks the schema. None fits, or more than one does, is a
 // contract fault; the kernel never reasons about whether two schemas overlap,
 // it refuses when an ambiguity actually occurs.
-func Selected(target horizon.Surface, payload any) (*contract.Schema, error) {
+func Selected(target boundary.Surface, payload any) (*contract.Schema, error) {
 	var fit []*contract.Schema
 	var first error
 	closest := false // the error kept is from a contract whose required fields the payload has

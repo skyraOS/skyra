@@ -15,7 +15,7 @@ def native_binary():
 
 
 def render(binary, home, scratch, work, auth, proxy_port=None, capture_port=None):
-    # Operator bootstrap grants, not yet derived from Horizon fields. Network
+    # Operator bootstrap grants, not yet derived from Boundary fields. Network
     # remains broadly available for inference; egress restriction is separate.
     rules = ["(version 1)", "(deny default)", "(allow process-fork)",
              f"(allow process-exec (literal {json.dumps(str(binary))}))",

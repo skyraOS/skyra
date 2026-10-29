@@ -217,7 +217,7 @@ func distinct(emit []json.RawMessage) {
 	}
 }
 
-// alone keeps a syscall that changes the Horizon of whoever waits (narrow,
+// alone keeps a syscall that changes the Boundary of whoever waits (narrow,
 // extend-reach) out of a fan-out: the kernel refuses one emitted with
 // siblings (H2), so it goes first, by itself, and the rest wait a round.
 func alone(n *Next) {

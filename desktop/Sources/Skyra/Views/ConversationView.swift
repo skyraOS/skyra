@@ -153,7 +153,7 @@ struct Ledger: View {
         case "returned": return (call.result ?? "returned") + (call.ms.map { String(format: " · %.1f s", Double($0) / 1000) } ?? "")
         default:
             switch call.fault {
-            case "horizon": return "outside the Horizon"
+            case "boundary": return "outside the Boundary"
             case "contract": return "didn't fit \(call.to)'s input"
             default: return call.cause ?? call.fault ?? "fault"
             }

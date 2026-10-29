@@ -110,7 +110,7 @@ The README's "Why I Built It" becomes "Why I'm Building It."
   machines (PRs #20–#22). A `voice_event_v1` schema lands. A "major
   architecture overhaul" brings an Internal Router, an Estimator, an External
   Router and a Job Registry, plus a context engine and an adaptation design.
-- **Mar 6:** importance vectors (`[global, regional]` with time horizons), a
+- **Mar 6:** importance vectors (`[global, regional]` with time boundaries), a
   long-term memory store, and a revision that makes domain agents the
   doorkeepers of a unified heap. A gaps register (G1–G21) tracks what is open.
 - **Mar 7:** the `skyrad` universal daemon model, an execution loop, an object
@@ -333,7 +333,7 @@ On Sep 1 the thesis was frozen for the first time, in
 a user now runs N semi-autonomous agents. Skyra's principal abstraction is
 therefore the **bounded, auditable agent**. Five observed grips collapse into
 three invariants: compiled cognition, the plan as a typed contract, and
-capability-bounded authority under one list (the **Horizon**).
+capability-bounded authority under one list (the **Boundary**).
 
 ### DNA-15 → DNA-19: ownership, then a real process boundary (Sep 8–22)
 
@@ -387,7 +387,7 @@ step.** Each run:
 1. takes custody of one Move;
 2. checks it and durably records it as a content-addressed record;
 3. runs the target inside a macOS Seatbelt sandbox **generated from the
-   Horizon**;
+   Boundary**;
 4. hands the output to a fresh successor, and exits.
 
 The machine is the chain of records in `.skyra/`, not any process. The three
@@ -425,8 +425,8 @@ invariants:
 ### Sep 30 – Oct 3: the room, routes, procedures, the website
 
 - **The room** (next/24–29, Sep 30):
-  - one authority per Horizon, shared by every call;
-  - Horizons committed and looked up by hash;
+  - one authority per Boundary, shared by every call;
+  - Boundaries committed and looked up by hash;
   - resume derived from the tree, and an authored genesis;
   - `system.narrow`, so references a caller receives join its reach.
 
@@ -436,13 +436,13 @@ invariants:
   discharge, a novelty interrupt, and "the log is the test suite." Output
   contracts become optional and are then removed.
 - **The sky and the website** (Oct 2):
-  - the sky rendered in Metal, with roots and write targets drawn as horizons;
+  - the sky rendered in Metal, with roots and write targets drawn as boundaries;
   - a **Blueprint site** that replays recorded runs in the visitor's browser;
   - deployment to the Mac mini over Tailscale Funnel, with a resume page.
 - **Section H, procedures** (next/32, Oct 3):
   - H1 removes the route and type machinery from the kernel *two days after it
     was built*;
-  - then come fan-out, the Horizon as the actor system, contracts by
+  - then come fan-out, the Boundary as the actor system, contracts by
     `(target, schema)`, `strand`, and per-actor state;
   - **`remember`** compiles a recorded strand into a procedure, which then runs
     without the model inside CEL refinements.
@@ -470,7 +470,7 @@ invariants:
     a work-tool ceiling.
 - **Oct 8–9:**
   - scoped adapter tools;
-  - `HORIZON-CONCERNS-SPEC.md`, which proposes moving agent and delegation
+  - `BOUNDARY-CONCERNS-SPEC.md`, which proposes moving agent and delegation
     fields out of the kernel;
   - conversation cards with first-message excerpts;
   - `think` made into one procedure with a `model` parameter.
@@ -494,14 +494,14 @@ invariants:
 **Built:**
 - the step protocol and custody handoff;
 - hash-chained records checked by replay;
-- per-call sandboxes rendered from the Horizon;
+- per-call sandboxes rendered from the Boundary;
 - narrowing, fan-out and procedures, including `remember`;
 - Codex and Claude adapters and bounded delegation;
 - browser, terminal and desktop clients;
 - Homebrew packaging.
 
 **Open, from `docs/summary.md`:**
-- Provider authority is not yet uniformly derived from the Horizon. Native
+- Provider authority is not yet uniformly derived from the Boundary. Native
   image viewing and web search are not recorded individually, and Claude's
   profile starts from `allow default`.
 - The kernel still carries agent-specific fields.
@@ -521,7 +521,7 @@ invariants:
 The names changed every few weeks. These ideas did not:
 
 1. **The user/system split.** Jarvis/Stark (v.02) → Pathos/Logos (v.04) →
-   Think/Act (v.05) → user/kernel → the human grants a Horizon once.
+   Think/Act (v.05) → user/kernel → the human grants a Boundary once.
 2. **The model is never its own judge.** "A command is not trusted because a
    model emitted it" (Feb–Mar) → only world-derived observations settle
    claims (dna-v3) → *the emitter is never the checker* (invariant 1).

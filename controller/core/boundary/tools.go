@@ -1,4 +1,4 @@
-package horizon
+package boundary
 
 import (
 	"maps"
@@ -10,7 +10,7 @@ import (
 
 // Internal names are execution machinery, never selectable work tools. Agent
 // invocations retain the work ceiling, including when reached indirectly.
-func (h Horizon) Internal(name string) bool {
+func (h Boundary) Internal(name string) bool {
 	if name == "system" || strings.HasPrefix(name, "system.") {
 		return true
 	}
@@ -24,7 +24,7 @@ func (h Horizon) Internal(name string) bool {
 
 // AvailableTools resolves concrete actor-owned contracts. A bounded child can
 // select only bindings already held; extensions never reset this ceiling.
-func (h Horizon) AvailableTools() map[string]ToolBinding {
+func (h Boundary) AvailableTools() map[string]ToolBinding {
 	if h.WorkTools != nil {
 		return *h.WorkTools
 	}
@@ -63,7 +63,7 @@ func (h Horizon) AvailableTools() map[string]ToolBinding {
 	return out
 }
 
-func (h Horizon) PermitsTool(target string, schema *contract.Schema) bool {
+func (h Boundary) PermitsTool(target string, schema *contract.Schema) bool {
 	if h.WorkTools == nil || h.Internal(target) {
 		return true
 	}

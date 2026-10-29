@@ -423,7 +423,7 @@ func turnConfig(c continuation) map[string]any {
 	}
 	cfg := map[string]any{
 		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
-		"system_prompt": prompt.Room(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write")),
+		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write")),
 	}
 	if !c.Delegated && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session

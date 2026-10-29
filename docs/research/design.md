@@ -23,18 +23,18 @@ them.
 
 > Skyra's principal is the **bounded, auditable agent**, not the process.
 
-The human approves a boundary once (a **Horizon**), not every tool. The OS
+The human approves a boundary once (a **Boundary**), not every tool. The OS
 enforces that boundary on every call, including calls to tools and procedures
-the agent built for itself. Nothing created under a Horizon can hold more
+the agent built for itself. Nothing created under a Boundary can hold more
 authority than its creator, so building inside it needs no approval. The human
-is asked only when work reaches past the Horizon.
+is asked only when work reaches past the Boundary.
 
 The contribution is coupling, not invention. Permissions, plans and audit logs
 exist already; Skyra makes them part of the execution graph instead of
 bolting them on beside it.
 
 **Research question:** can human approval move from every action to one grant
-of a Horizon, so an agent extends itself without asking, while matching a
+of a Boundary, so an agent extends itself without asking, while matching a
 conventional runtime on cost and task success and containing strictly more?
 
 ## 3. Goals and non-goals
@@ -50,7 +50,7 @@ conventional runtime on cost and task success and containing strictly more?
 **Non-goals (for now)**
 
 - Distributed execution across hosts. It is a bet, not a driven requirement.
-- Preventing misuse of a tool that was legitimately granted. A Horizon bounds
+- Preventing misuse of a tool that was legitimately granted. A Boundary bounds
   blast radius; it does not judge intent.
 - Platforms other than macOS (enforcement uses Seatbelt).
 
@@ -59,7 +59,7 @@ conventional runtime on cost and task success and containing strictly more?
 | | Invariant | Consequence |
 |---|---|---|
 | **1** | **The emitter is never the checker.** | Everything a model or tool emits is untrusted bytes. A different process interprets and commits it before anything acts on it. Nothing an agent says can put the system into a state. |
-| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a Horizon. A call shares its caller's Horizon unless it asks the room to narrow it; nothing widens one. The sandbox profile is rendered from the Horizon, and the runtime's own state is always denied. |
+| **2** | **Authority only narrows, and the OS enforces it.** | Every step runs under a Boundary. A call shares its caller's Boundary unless it asks the room to narrow it; nothing widens one. The sandbox profile is rendered from the Boundary, and the runtime's own state is always denied. |
 | **3** | **Truth is derived, not stored.** | Only observations are stored. Everything else is re-derived by one pure function, so replay from genesis is the definition of correctness. |
 
 ## 5. Architecture at a glance
@@ -77,7 +77,7 @@ flowchart TB
     I["instance.Drive<br/>performs effects, decides nothing"]
   end
   R[(".skyra/ record tree<br/>content-addressed, hash-chained")]
-  subgraph Targets["Targets, each run under a Seatbelt profile rendered from its Horizon"]
+  subgraph Targets["Targets, each run under a Seatbelt profile rendered from its Boundary"]
     U[user continuation]
     P[interpreter<br/>procedures, remember, delegate]
     A[Codex / Claude adapters]
@@ -106,19 +106,19 @@ effect may have an unknown outcome. There is no in-memory state to reconcile.
 
 | Concept | Definition |
 |---|---|
-| **Horizon** | The authority an execution holds: its **reach** (targets and the contracts it may invoke on each) and OS grants (read/write paths, Mach services, sockets). Committed by hash; a child re-derives it before running. |
+| **Boundary** | The authority an execution holds: its **reach** (targets and the contracts it may invoke on each) and OS grants (read/write paths, Mach services, sockets). Committed by hash; a child re-derives it before running. |
 | **Contract** | A capability is identified by `(target, schema)`. A payload must structurally fit exactly one declared contract; none or several is a `contract` fault. |
 | **Observation** | Bytes received: an invocation's input or a target's output. Stored by hash. |
-| **Record** | The committed, hash-linked statement of one step: what was derived, from which observation, under which Horizon. |
+| **Record** | The committed, hash-linked statement of one step: what was derived, from which observation, under which Boundary. |
 | **Continuation** | A stateful participant (an LLM adapter, the user, the interpreter). It reads its input, its reach and every prior step, and prints one output. |
-| **Leaf** | A tool. Runs under its caller's Horizon unless the caller narrows it. |
-| **Room / `system`** | The syscalls every Horizon holds: `narrow`, `extend-reach`, `strand`. |
+| **Leaf** | A tool. Runs under its caller's Boundary unless the caller narrows it. |
+| **Room / `system`** | The syscalls every Boundary holds: `narrow`, `extend-reach`, `strand`. |
 | **Procedure** | A durable composition of ordinary contract calls, run by the interpreter. |
 
 **Operators are derived, never declared.** A target prints operands,
 `{"to": address, "payload": JSON}`. The runtime derives the state from where
 the emitter stands: addressing its own slot is a return, naming something in
-reach is an invoke, anything else is a typed fault (`malformed`, `horizon`,
+reach is an invoke, anything else is a typed fault (`malformed`, `boundary`,
 `contract`, `leaf`, `custody`). A refused output is still committed, as a fault
 that keeps what was refused. A stamp means custody, not approval.
 
@@ -128,9 +128,9 @@ that keeps what was refused. A stamp means custody, not approval.
 INTAKE   receive unchecked bytes, interpret as operands, derive the state,
          commit a record, reply with its stamp (a hash)
 RELEASE  the parent reads the record back, checks the stamp, derives and commits
-         the child's Horizon, passes {hash + frame stack as directory fds}
-         over a Unix socket (SCM_RIGHTS); the child re-derives the Horizon
-EXECUTE  run the target under a Seatbelt profile rendered from that Horizon
+         the child's Boundary, passes {hash + frame stack as directory fds}
+         over a Unix socket (SCM_RIGHTS); the child re-derives the Boundary
+EXECUTE  run the target under a Seatbelt profile rendered from that Boundary
 HANDOFF  spawn a successor with the raw output; open a slot if it is an invoke;
          exit once the successor has stamped
 SETTLE   a return or fault discharges the slot it answers, exactly once
@@ -148,15 +148,15 @@ CLAIM    exactly one sibling wins and resumes that continuation
 
 ## 8. Authority
 
-- A Horizon is one list. What an agent *cannot* touch is its complement.
-- Ordinary calls inherit the caller's effective Horizon.
-- `system.narrow` returns a **reference** to a restricted Horizon for one
+- A Boundary is one list. What an agent *cannot* touch is its complement.
+- Ordinary calls inherit the caller's effective Boundary.
+- `system.narrow` returns a **reference** to a restricted Boundary for one
   actor; invoking that reference runs the actor under the narrower authority.
-  Asking for anything not held is a `horizon` fault.
+  Asking for anything not held is a `boundary` fault.
 - `system.extend-reach` lets an actor add a contract it already backs (for
   example a remembered procedure) to its own reach entry, with no approval: it
   rearranges authority already granted.
-- The Seatbelt profile is rendered from the Horizon and denies by default.
+- The Seatbelt profile is rendered from the Boundary and denies by default.
   `.skyra/` is always denied, and exec is allowed only for the program being
   run. Binaries are pinned by SHA-256; a mismatch is a custody fault.
 - Provider processes run under registered profiles with private state and a
@@ -225,7 +225,7 @@ conversation is its lineage: saved, listed and replayable.
 ## 13. Code layout
 
 ```text
-controller/core/      pure: contract, horizon, record, machine (the decision tree)
+controller/core/      pure: contract, boundary, record, machine (the decision tree)
 controller/runtime/   I/O around one step: instance, tree, replay, boot,
                       registry, handshake, custody, park, metric
 controller/targets/   sandboxed programs: read, write, roots, user, browser, ...
@@ -243,20 +243,20 @@ builds on `core/`, and target programs share no code with either.
 
 **Built and tested:** the step protocol and custody handoff; content-addressed
 records with full replay; derived operators and typed faults; one authority per
-Horizon with narrowing and Seatbelt rendering; fan-out with join and claim;
+Boundary with narrowing and Seatbelt rendering; fan-out with join and claim;
 ingress by parking; multi-turn conversations in three clients; the interpreter,
 authored procedures, `remember`, refinements; bounded delegation for both
 Codex and Claude.
 
 **Known gaps (stated plainly):**
 
-- **Provider authority is not uniformly Horizon-derived.** Provider launch
+- **Provider authority is not uniformly Boundary-derived.** Provider launch
   profiles replace the generic deny-default profile. Codex parents may use
   native image viewing and web search without per-read records; Claude's
   profile starts from `allow default` minus the runtime floor. "Every effect is
-  recorded" and "every process holds only Horizon-rendered authority" are goals,
+  recorded" and "every process holds only Boundary-rendered authority" are goals,
   not current guarantees.
-- **The kernel still knows about agents.** `Horizon.Agent`, `WorkTools`,
+- **The kernel still knows about agents.** `Boundary.Agent`, `WorkTools`,
   `Delegated` and `system.agent-context` live in core.
 - **Recovery trails reconstruction.** Accepted-tree reads exist; user-owned
   checkpoints and full conversation recovery are not wired in.
@@ -269,8 +269,8 @@ Codex and Claude.
 ## 15. Direction (proposed, not implemented)
 
 1. **Separate authority from adapter configuration**
-   ([Horizon concern spec](../design/HORIZON-CONCERNS-SPEC.md)). Delegation becomes
-   purely the interpreter's procedure, not a Horizon mode. Model configuration
+   ([Boundary concern spec](../design/BOUNDARY-CONCERNS-SPEC.md)). Delegation becomes
+   purely the interpreter's procedure, not a Boundary mode. Model configuration
    and tool catalogs move into adapter contracts. The kernel restricts generic
    `(target, contract)` capabilities without knowing providers, models or tool
    labels. Equivalent enforcement must exist before the old fields are removed.

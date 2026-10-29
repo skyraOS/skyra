@@ -29,7 +29,7 @@ import (
 type Frame struct {
 	Root    string          `json:"root"`    // the .skyra it belongs to
 	Stamp   string          `json:"stamp"`   // the parked invoke; its frame is the slot the event returns to
-	Frames  int             `json:"frames"`  // how many of Files are the frame stack; resume checks it against the derived Horizon
+	Frames  int             `json:"frames"`  // how many of Files are the frame stack; resume checks it against the derived Boundary
 	Payload json.RawMessage `json:"payload"` // what the invocation asked of the host
 	Files   []*os.File      `json:"-"`       // the frame stack and resources: custody
 }

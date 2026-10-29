@@ -42,7 +42,7 @@ in the same function.
 
 Transport has two planes on purpose. **Data** carries what the target says,
 which is untrusted and never interpreted by the sender. **Control** carries what
-custody says (Horizons, stamps, node fds), which only trusted `skyra` processes
+custody says (Boundaries, stamps, node fds), which only trusted `skyra` processes
 hold. They should never share a channel.
 
 ## Every I/O operation, bucketed
@@ -53,23 +53,23 @@ the world. Those four waits are the only places events come from.
 | # | Operation | Bucket | Effect | Block | Produces | Where now | Right home? |
 |---|---|---|---|---|---|---|---|
 | 1 | Take the inherited socket on fd 3 | Transport: control | — | | | `instance.Run` | ✗ Outside `Drive` |
-| 2 | Read the parent's Horizon | Transport: control | — | yes | part of `Received` | `instance.Run` | ✗ Outside `Drive` |
+| 2 | Read the parent's Boundary | Transport: control | — | yes | part of `Received` | `instance.Run` | ✗ Outside `Drive` |
 | 3 | Read all of stdin | Transport: data | — | yes | part of `Received` | `instance.Run` | ✗ Outside `Drive` |
 | 4 | Write the input to `inputs/<hash>` | Bookkeeping | `StoreInput` | | | `tree.Put` | ✓ |
 | 5 | Write the record to `records/<stamp>` | Bookkeeping | `Commit` | | | `tree.Commit` | ✓ |
 | 6 | Send the stamp to the parent | Transport: control | `SendStamp` | | | `handshake.Send` | ✓ |
-| 7 | Wait for the Horizon plus node fd | Transport: control | `SendStamp` | yes | `Released` | `handshake.Recv` in `Drive` | ~ One effect covers two operations (#6, #7) |
+| 7 | Wait for the Boundary plus node fd | Transport: control | `SendStamp` | yes | `Released` | `handshake.Recv` in `Drive` | ~ One effect covers two operations (#6, #7) |
 | 8 | Read the target binary and check its hash | Execute | `Run` | | `Emitted{Err}` | `instance.run` | ~ Execute has no home of its own |
 | 9 | Start the target under `sandbox-exec`, write args, read one line, wait | Execute + Process + Transport: data | `Run` | yes | `Emitted{Out}` | `instance.run` | ✗ Three buckets in one function |
 | 10 | Locate own binary; create a socketpair | Process + Transport: control | `Spawn` | | | `instance.spawn` | ✗ Two buckets |
 | 11 | Start `skyra instance` with bytes on stdin and the socket on fd 3 | Process + Transport: data | `Spawn` | | | `instance.spawn` | ✗ Two buckets |
-| 12 | Send the Horizon the bytes were emitted under | Transport: control | `Spawn` | | | `instance.spawn` | ~ |
+| 12 | Send the Boundary the bytes were emitted under | Transport: control | `Spawn` | | | `instance.spawn` | ~ |
 | 13 | Wait for the successor's stamp | Transport: control | `Spawn` | yes | `Stamped{Err}` | `instance.spawn` | ~ |
 | 14 | Read the successor's record by stamp | Bookkeeping | `Spawn` | | `Stamped{R}` | `tree.Load` in `instance.spawn` | ✗ Bookkeeping hidden inside a process effect |
 | 15 | Kill the successor | Process | `KillSuccessor` | | | `Drive` | ~ No process home |
-| 16 | Create and open `frames/<stamp>/` | Bookkeeping | `SendHorizon` | | | `tree.OpenFrame` in `Drive` | ✗ Bookkeeping inside a transport effect |
-| 17 | Send the Horizon plus node fd | Transport: control | `SendHorizon` | | | `handshake.Send` | ✓ |
-| 18 | Stop tracking the successor process | Process | `SendHorizon` | | | `Drive` | ✗ Process inside a transport effect |
+| 16 | Create and open `frames/<stamp>/` | Bookkeeping | `SendBoundary` | | | `tree.OpenFrame` in `Drive` | ✗ Bookkeeping inside a transport effect |
+| 17 | Send the Boundary plus node fd | Transport: control | `SendBoundary` | | | `handshake.Send` | ✓ |
+| 18 | Stop tracking the successor process | Process | `SendBoundary` | | | `Drive` | ✗ Process inside a transport effect |
 | 19 | Write `result` once through the node fd | Bookkeeping | `Settle` | | | `tree.Settle` | ✓ |
 | 20 | Close fds and sockets | Transport + Process | `Exit` | | | deferred in `Drive` | ~ |
 | — | Log lines | Observation | every effect | | | `trace.Logf` | ✓ |
@@ -85,7 +85,7 @@ need, and each should be a composition of single-bucket effects.
 | Protocol | Built from | Operations |
 |---|---|---|
 | **Handshake, child side** (accept custody) | Transport: control, Bookkeeping | #1–3 receive, #4–5 commit, #6 stamp, #7 await release |
-| **Handshake, parent side** (hand off) | Process, Transport: data, Transport: control, Bookkeeping | #10–11 start successor, #12 send Horizon, #13 await stamp, #14 load record, #16 open frame, #17 release, #18 stop tracking |
+| **Handshake, parent side** (hand off) | Process, Transport: data, Transport: control, Bookkeeping | #10–11 start successor, #12 send Boundary, #13 await stamp, #14 load record, #16 open frame, #17 release, #18 stop tracking |
 | **Supervisor fault** | Bookkeeping | commit a fault (#5), settle (#19); plus #15 kill when verification fails |
 | **Apply** (reduction) | Execute, Process, Transport: data | #8 hash check, #9 run target and read its output |
 | **Return / Fault** (reduction) | Bookkeeping | #19 settle |
@@ -97,7 +97,7 @@ Two things stand out:
    bookkeeping write. Everything else is the handshake.
 2. **The handshake is where the buckets tangle.** `spawn` does process, data
    transport, control transport and bookkeeping in one function, and the
-   `SendHorizon` case does bookkeeping, transport and process.
+   `SendBoundary` case does bookkeeping, transport and process.
 
 ## Handlers: step picks, drive calls
 
@@ -114,17 +114,17 @@ it impure and break replay. It names the handler; `drive` calls it.
 
 **Rule: a handler never decides.** A handler is a fixed sequence of primitives
 that runs until the next wait and returns what came back as an event. Every
-decision (verify the stamp, narrow the Horizon, fault or proceed) happens
+decision (verify the stamp, narrow the Boundary, fault or proceed) happens
 between handlers, in `step`. That rule is what fixes where the handlers split.
 
 **The handler table**
 
 | State | Handler | Primitives (fixed order) | Returns |
 |---|---|---|---|
-| invoke, return, fault | `acceptCustody` | `Store(input)` · `Store(record)` · `Send(stamp)` · `Await(horizon)` | `Released` |
+| invoke, return, fault | `acceptCustody` | `Store(input)` · `Store(record)` · `Send(stamp)` · `Await(boundary)` | `Released` |
 | invoke | `apply` | `Verify(binary)` · `Start(target, profile)` · `Wait` | `Emitted` |
 | invoke | `startSuccessor` | `Start(skyra, stdin, fd3)` · `Send(under)` · `Await(stamp)` · `Load(stamp)` | `Stamped` |
-| invoke | `release` | `OpenFrame?` · `Send(horizon, node)` · `ReleaseProcess` | — |
+| invoke | `release` | `OpenFrame?` · `Send(boundary, node)` · `ReleaseProcess` | — |
 | return, fault | `settle` | `Settle(result)` | — |
 | invoke | `fault` | `Kill?` · `Store(fault)` · `Settle(fault)` | — |
 | resolve | — | (no handler yet: holes are not in the minimal shape) | — |
@@ -141,8 +141,8 @@ one owner.
 | `Load(stamp)` | Bookkeeping | `tree` | `startSuccessor` | `tree.Load` ✓ |
 | `OpenFrame(stamp)` | Bookkeeping | `tree` | `release` | `tree.OpenFrame` ✓ |
 | `Settle(result)` | Bookkeeping | `tree` | `settle`, `fault` | `tree.Settle` ✓ |
-| `Send(msg, fd?)` (stamp, under, horizon + node) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor`, `release` | `handshake.Send` ✓ |
-| `Await(kind)` (horizon, stamp) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor` | `handshake.Recv` ✓ |
+| `Send(msg, fd?)` (stamp, under, boundary + node) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor`, `release` | `handshake.Send` ✓ |
+| `Await(kind)` (boundary, stamp) | Transport: control | `handshake` (→ `control`) | `acceptCustody`, `startSuccessor` | `handshake.Recv` ✓ |
 | `Verify(binary)` | Execute | `execute` (new) | `apply` | inline in `instance.run` ✗ |
 | `Start(target, profile)` | Execute, on top of Process | `execute` (new) | `apply` | inline in `instance.run` (`sandbox-exec`) ✗ |
 | `Start(skyra, stdin, fd3)` | Process (with Transport: data for stdin) | `process` (new) | `startSuccessor` | inline in `instance.spawn` ✗ |
@@ -258,7 +258,7 @@ One package per primitive bucket, with the protocols composed in pure code
 
 With single-bucket effects, the effect list would read like the table above. For
 example, the parent side of the handshake becomes
-`StartSuccessor → SendHorizon(under) → AwaitStamp → LoadRecord → OpenFrame → SendRelease → ReleaseProcess`,
+`StartSuccessor → SendBoundary(under) → AwaitStamp → LoadRecord → OpenFrame → SendRelease → ReleaseProcess`,
 each performed by exactly one bucket.
 
 ## Open

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/park"
@@ -13,12 +13,12 @@ import (
 )
 
 // commit stores an input and commits what intake derives from it under h.
-func commit(t *testing.T, root string, h horizon.Horizon, in string) (record.Record, string) {
+func commit(t *testing.T, root string, h boundary.Boundary, in string) (record.Record, string) {
 	t.Helper()
 	if _, err := tree.Put(root, "inputs", []byte(in)); err != nil {
 		t.Fatal(err)
 	}
-	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldHorizon(h), In: []byte(in)})
+	_, effs := machine.Step(machine.Instance{Phase: machine.Intake}, machine.Received{Under: machine.HeldBoundary(h), In: []byte(in)})
 	r := machine.CommittedRecord(effs)
 	stamp, err := tree.Commit(root, r)
 	if err != nil {
@@ -35,13 +35,13 @@ func TestResumeDerivesTheParkedInstance(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := &contract.Schema{Type: "string"}
-	reach := map[string]horizon.Surface{"browser": {Host: "/tmp/park.sock", Input: text}}
-	room := horizon.Authority{Read: []horizon.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
-	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach, Authority: &room, Author: "operator", Nonce: "n"})
+	reach := map[string]boundary.Surface{"browser": {Host: "/tmp/park.sock", Input: text}}
+	authority := boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
+	g0, err := tree.Commit(root, record.Record{State: record.Invoke, Reach: reach, Authority: &authority, Author: "operator", Nonce: "n"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h0 := horizon.Horizon{Stamp: g0, Reach: reach, Authority: room, Frame: g0}
+	h0 := boundary.Boundary{Stamp: g0, Reach: reach, Authority: authority, Frame: g0}
 	r, invoke := commit(t, root, h0, `{"to":"browser","payload":"show"}`)
 
 	s, err := parked(root, park.Resumed{Stamp: invoke, Frames: 2})

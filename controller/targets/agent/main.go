@@ -7,8 +7,8 @@
 // Its whole policy: with no steps yet, ask echo to repeat the text; once echo
 // has answered, return what it said to the slot its frame discharges.
 //
-// With text "narrow:<text>", it first asks its Horizon (system, narrow) for echo under a narrowed
-// Horizon (no reach, no grants), then asks echo through the reference it got
+// With text "narrow:<text>", it first asks its Boundary (system, narrow) for echo under a narrowed
+// Boundary (no reach, no grants), then asks echo through the reference it got
 // back (next/26).
 //
 // With text "fan:<a>,<b>,...", it asks echo for every part in one emission
@@ -27,9 +27,9 @@
 // nothing.
 //
 // With text "remember:<text>", it is a worker that remembers (next/32, H6,
-// H8): it asks agent to relay, remembers that strand through agent's
+// H8): it asks agent to relay, remembers that trace through agent's
 // contract, calls the procedure on new input (no agent runs), calls it again
-// from a Horizon narrowed to keep it but drop echo, tries to remember the
+// from a Boundary narrowed to keep it but drop echo, tries to remember the
 // same contract a second time, calls the procedure on input outside the
 // refinement the agent wrote (H9: the agent runs), and returns what each step
 // gave back.

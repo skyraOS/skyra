@@ -96,7 +96,7 @@ Each line of the controller log was timestamped for a `tool:hello` run with
 |---|---|
 | process start → `genesis` | ~30 ms |
 | `intake` (commit record) | 25–35 ms |
-| `release` (Horizon lookup) | 10–40 ms |
+| `release` (Boundary lookup) | 10–40 ms |
 | `execute` adapter → emitted (spawn Codex adapter, host round trip) | 30–70 ms |
 | `execute` echo → emitted | ~17 ms |
 | `settle` | ~15 ms |
@@ -269,7 +269,7 @@ Closed since the first draft:
   steps or per-step cost, not waiting. Ways to do that:
   - fewer process launches per round trip
   - fewer fsynced commits per step (intake + gather ≈ 60 ms)
-  - faster Horizon lookup
+  - faster Boundary lookup
 - A tool-heavy turn pays for each tool round trip: ~250 ms on the fake path
   and ~380 ms with real Codex through the resident. A 10-call agentic turn
   adds ~4 s of controller time no matter how fast the model is. That is the
@@ -315,7 +315,7 @@ default, control it:
 Phases were attributed by timestamping every stderr line on arrival. Each
 phase is the time from the previous phase line up to its own line. The
 release a child logs therefore includes the parent's handoff writes, which
-happen while the child waits for its Horizon.
+happen while the child waits for its Boundary.
 
 All tests (`go test ./...` in `controller/` and `controller/interp/`) pass in
 every mode.
@@ -340,7 +340,7 @@ per-step medians of 3 traced trials:
 |---|---|---|---|---|---|
 | process start → `genesis` | 2 | 23 (10) | 14 (2) | 15 (0) | 17 (0) |
 | `intake`: store input + commit record, ×5 | 20 | 117 (97) | 34 (13) | 24 (0) | 25 (0) |
-| `release`: parent's handoff writes + Horizon lookup, ×5 | 20 | 91 (83) | 18 (10) | 7 (0) | 15 (0) |
+| `release`: parent's handoff writes + Boundary lookup, ×5 | 20 | 91 (83) | 18 (10) | 7 (0) | 15 (0) |
 | acceptance receipt before `execute`, ×2 | 6 | 31 (28) | 6 (4) | 2 (0) | 7 (0) |
 | `execute` → emitted, ×3 | 0 | 95 (0) | 83 (0) | 95 (0) | 92 (0) |
 | acceptance receipt before `settle`, ×2 | 6 | 31 (29) | 6 (3) | 2 (0) | 2 (0) |
@@ -369,8 +369,8 @@ The flushes for one record, in order:
 | Write | Flushes |
 |---|---|
 | intake: `inputs/` (file, dir), `records/` (file, dir) | 4 |
-| release of an invoke that opens a slot: `emitted-` (file, frame dir), slot (file, deps/round dir), `deps/` dir, frame dir, `horizons/` (file, dir) | 8 |
-| release of a return: `horizons/` (file, dir) | 2 |
+| release of an invoke that opens a slot: `emitted-` (file, frame dir), slot (file, deps/round dir), `deps/` dir, frame dir, `boundaries/` (file, dir) | 8 |
+| release of a return: `boundaries/` (file, dir) | 2 |
 | acceptance receipt: `acceptances/` (file, dir), lookup link (dir) | 3 |
 | settle: `result` (file, frame dir) | 2 |
 | fan-in claim: `resolved-` (file, frame dir) | 2 |
@@ -473,8 +473,8 @@ install or update.
 | `echo` target, bare | 3.4 ms | 3.0 ms |
 | `sandbox-exec -p <echo profile> echo` | 11.2 ms | 10.3 ms |
 
-The profile was rendered by `horizon.Render` from a real run's accepted
-Horizon, with the binary path changed to `/usr/bin/true` for the `true` rows.
+The profile was rendered by `boundary.Render` from a real run's accepted
+Boundary, with the binary path changed to `/usr/bin/true` for the `true` rows.
 
 **Rejected as stated.** `sandbox-exec` adds ~7.5 ms per target, but a
 trivial profile costs the same as the real one, and `-f` costs the same as
@@ -484,33 +484,33 @@ That is ~7.5 ms of the ~12 ms `echo` execute step. A one-off profile cache
 wouldn't remove it. Applying the sandbox without the extra exec
 (`sandbox_init` in a pre-exec helper) might; that is unmeasured.
 
-### `release` (the 10–40 ms Horizon lookup)
+### `release` (the 10–40 ms Boundary lookup)
 
-The child's `release` phase runs from its `intake` line to `Horizon …
+The child's `release` phase runs from its `intake` line to `Boundary …
 looked up`. Almost none of it is the lookup:
 
-- **Child:** sends its stamp, then waits. On receipt it calls `LoadHorizon`,
-  which reads `horizons/<id>`, re-hashes it, and `json.Unmarshal`s it. That
+- **Child:** sends its stamp, then waits. On receipt it calls `LoadBoundary`,
+  which reads `boundaries/<id>`, re-hashes it, and `json.Unmarshal`s it. That
   takes <1 ms.
 - **Parent, in that window:**
   1. `tree.Load` of the child's record: read and re-hash.
   2. `issueRelease`: `checkSuccessor` plus `Narrow`, which re-derives the
-     child's Horizon from its own. This is pure, under 1 ms.
+     child's Boundary from its own. This is pure, under 1 ms.
   3. Then the handoff writes:
      - **Invoke that opens a slot:** `StoreInput` (deduplicated: stat, read,
        re-hash, no write), `PublishEmission` (2 flushes), `OpenDep` (4),
-       `OpenFrame` (mkdir), `PutHorizon` (2). That is **8 F_FULLFSYNC,
+       `OpenFrame` (mkdir), `PutBoundary` (2). That is **8 F_FULLFSYNC,
        ~32 ms**.
-     - **Return:** only `PutHorizon`: **2 F_FULLFSYNC, ~9 ms**.
+     - **Return:** only `PutBoundary`: **2 F_FULLFSYNC, ~9 ms**.
 
 **The variance is the step kind, not the lookup.** An invoke's release costs
 ~35 ms and a return's ~10 ms. Without flushes both take 1–3 ms.
 
 After `release`, the child does more before it acts:
 
-- `machine.accept` re-derives the Horizon again (`Narrow`, JSON-encode both,
+- `machine.accept` re-derives the Boundary again (`Narrow`, JSON-encode both,
   compare).
-- `tree.Accept` re-reads and re-hashes the Horizon a second time and writes
+- `tree.Accept` re-reads and re-hashes the Boundary a second time and writes
   the receipt (3 flushes, ~15 ms).
 
 Only then does `execute` or `settle` begin.
@@ -519,7 +519,7 @@ Only then does `execute` or `settle` begin.
 
 | Earlier line | What it actually is |
 |---|---|
-| `intake` 25–35 ms | 4 flushes (~20 ms), plus 6 for the first instance, which includes boot's `PutHorizon` of the root |
+| `intake` 25–35 ms | 4 flushes (~20 ms), plus 6 for the first instance, which includes boot's `PutBoundary` of the root |
 | `release` 10–40 ms | the parent's 2 or 8 flushes |
 | `settle` ~15 ms | the acceptance receipt's 3 flushes |
 | `gather` ~30 ms | settle's 2 flushes plus intake's 4 |

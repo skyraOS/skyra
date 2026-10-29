@@ -4,11 +4,11 @@ Status: idea, not started. Written from a code read on 2026-10-09.
 
 ## The idea
 
-Boot does one thing: it commits genesis and emits a seed to `setup`, then gets out of the way. At that point a Horizon already exists, so everything after genesis runs as ordinary Horizon execution: recorded, sandboxed, replayable. Setup is the skyra binary running itself as a target (`skyra setup`). It reads a predefined manifest, emits the installs (models, adapters, procedure bundles) as invocations, and then hands off to the user experience.
+Boot does one thing: it commits genesis and emits a seed to `setup`, then gets out of the way. At that point a Boundary already exists, so everything after genesis runs as ordinary Boundary execution: recorded, sandboxed, replayable. Setup is the skyra binary running itself as a target (`skyra setup`). It reads a predefined manifest, emits the installs (models, adapters, procedure bundles) as invocations, and then hands off to the user experience.
 
 ```
 skyra boot            genesis → seed {to: setup, manifest, then} → exit
-  skyra setup         a continuation under the root Horizon
+  skyra setup         a continuation under the root Boundary
     round 1           install / admit what the manifest names    (fan-out, one spawn each)
     gather            every install's result returns to setup
     round 2           seed the user experience: `then`
@@ -17,7 +17,7 @@ skyra boot            genesis → seed {to: setup, manifest, then} → exit
 
 Three stages:
 
-1. **Genesis.** Only what a Horizon needs to run: the syscalls, `setup`, and the room's ceiling.
+1. **Genesis.** Only what a Boundary needs to run: the syscalls, `setup`, and the room's ceiling.
 2. **Setup.** Reads the manifest and installs what it names (codex, claude, interpreter bundles, tools).
 3. **User experience.** What the user sees when it starts: the chosen procedure (think, design…), the model, and the first prompt.
 
@@ -58,7 +58,7 @@ What goes wrong:
 
 - **`machine.Step` stays pure.** "Is it installed?" is a read effect whose answer returns as an event.
 - **The read has to be of the tree, not of mutable actor state.** `replay/strand.go`: "records are immutable, so the same walk gives the same strand." Installs are records, and "already installed" means an install record exists in the room.
-- **The ceiling.** `room.go:36–39`: a narrowing may only drop what is held, and an extension adds a contract, never authority. Below genesis, nothing can add an actor or a grant.
+- **The ceiling.** `system.go:36–39`: a narrowing may only drop what is held, and an extension adds a contract, never authority. Below genesis, nothing can add an actor or a grant.
 
 ## Open decisions
 

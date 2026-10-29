@@ -1,8 +1,8 @@
 // Command write is an untrusted leaf. It writes UTF-8 text to one file in
-// the scratch space its Horizon grants (SKYRA_SCRATCH), and replies with what
+// the scratch space its Boundary grants (SKYRA_SCRATCH), and replies with what
 // it wrote as one JSON object. A path is relative to the scratch space and
 // may not leave it. It checks no authority: the sandbox rendered from its
-// Horizon decides what it can open, and nothing written there can be run.
+// Boundary decides what it can open, and nothing written there can be run.
 // A refusal is reported as data. It shares no code with skyra.
 package main
 

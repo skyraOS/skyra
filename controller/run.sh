@@ -68,11 +68,11 @@ scenario() {
 }
 
 scenario return "agent: a continuation calls echo, waits, resumes" -to agent -payload '{"text":"hello"}'
-scenario return "agent narrows echo through its Horizon, then calls it" -to agent -payload '{"text":"narrow:hello"}'
+scenario return "agent narrows echo through its Boundary, then calls it" -to agent -payload '{"text":"narrow:hello"}'
 # Fan-out (next/32, H2): one emission, two instructions, one round of two slots.
 scenario return "fan-out: the agent asks echo twice in one emission" -to agent -payload '{"text":"fan:hello,world"}'
 scenario return "fan-out: one instruction out of reach faults, its sibling runs" -to agent -payload '{"text":"fan:hello,!shell"}'
-# The Horizon's syscalls (next/32, H3): the agent adds a contract to itself, then calls itself through it.
+# The Boundary's syscalls (next/32, H3): the agent adds a contract to itself, then calls itself through it.
 scenario return "extend-reach: the agent adds a contract to itself and is invoked through it" -to agent -payload '{"text":"extend:hello"}'
 scenario contract "extend-reach: a contract the actor already holds is refused" -to agent -payload '{"text":"redundant:"}'
 # The interpreter (next/32, H5): a procedure installed by hand in its own state runs through the
@@ -82,10 +82,10 @@ echo
 echo "══ interpreter: a hand-installed procedure fans out through the kernel ══"
 ./bin/interp install "$root/interpreter" interp/examples/greet.json
 run_boot return -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}'
-# The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's strand, then calls the
-# procedure it became: no model step, no approval. From a Horizon without echo it faults at intake;
+# The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's trace, then calls the
+# procedure it became: no model step, no approval. From a Boundary without echo it faults at intake;
 # the same contract is not remembered twice; an actor cannot extend itself with what it holds.
-scenario return "remember (P9): the agent's strand becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
+scenario return "remember (P9): the agent's trace becomes a procedure, run with no agent" -to agent -payload '{"text":"remember:hello"}'
 ./bin/skyra metric "$root"
 # Running what was remembered (next/32, H7): inside its base types the procedure runs alone;
 # a listing where a file was read is outside them, and the agent resumes at that edge.
@@ -93,11 +93,11 @@ scenario return "refinement: a procedure runs inside its base types, and falls b
 ./bin/skyra metric "$root"
 scenario return "codex (fake) asks for echo, through the actor host" -to codex -payload '{"text":"tool:hello"}'
 scenario return "codex (fake) runs a native command: fenced" -to codex -payload '{"text":"taint-child"}'
-# Codex remembers (next/32, H8): remember is in its Horizon's reach, so it is offered. Codex has the
+# Codex remembers (next/32, H8): remember is in its Boundary's reach, so it is offered. Codex has the
 # agent relay, remembers that call, and calls the procedure it became: no agent runs for it.
 scenario return "codex (fake) remembers a call of its own and calls the procedure" -to codex -payload '{"text":"remember:hello"}'
 ./bin/skyra metric "$root"
 scenario return "echo hello"                      -to echo -payload '{"text":"hello"}'
 scenario return "echo probes .skyra/ from inside" -to echo -payload "{\"text\":\"hello\",\"probe\":\"$(cd "$(mktemp -d)" && pwd -P)/.skyra\"}"
-scenario horizon "echo addresses what is outside the Horizon" -to echo -payload '{"text":"hello","misbehave":"yes"}'
+scenario boundary "echo addresses what is outside the Boundary" -to echo -payload '{"text":"hello","misbehave":"yes"}'
 scenario contract "payload breaks echo's contract"  -to echo -payload '{"txt":"hello"}'

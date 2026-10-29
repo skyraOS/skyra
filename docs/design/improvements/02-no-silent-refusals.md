@@ -32,7 +32,7 @@ This is custody applied to the caller: at every moment a Move is held by one
 live process or one durable commit, and whoever holds it owes the waiting slot
 exactly one discharge.
 
-- **Refusal is a fault to the caller's slot**, with a typed kind (`horizon`,
+- **Refusal is a fault to the caller's slot**, with a typed kind (`boundary`,
   `authority`, `malformed`, `custody`) and its cause. The controller already
   does this at intake: a rejected Move is committed and stamped *as a fault*
   and settles the parent frame ("a stamp means custody, not approval"). The
@@ -47,7 +47,7 @@ exactly one discharge.
 - **No cancellation.** Wait for all (thought 13's join rule); a late answer to
   a discharged slot is refused by the slot's `O_EXCL` claim, and that refusal
   is itself traced.
-- **Faults route by kind** (`design/faults.md`): a horizon fault goes back to
+- **Faults route by kind** (`design/faults.md`): a boundary fault goes back to
   the agent as an observation, an authority fault escalates to the holder of
   the authority, and only a proven unmediated effect is fatal. DNA-19 retires
   the whole conversation for all of them.

@@ -39,7 +39,7 @@ The runtime knows the apprentice's bundle format.
 - `runtime/boot/boot.go` (the `BundlePath` block in `Run`): checks the
   bundle's hash, then runs `<binary> install-bundle <state> <bundle>` before
   genesis.
-- `core/horizon/horizon.go` (`Surface.BundlePath`, `BundleSHA256`) and
+- `core/boundary/boundary.go` (`Surface.BundlePath`, `BundleSHA256`) and
   `core/machine/continuation.go` (`against`): a bundle changes which
   contract a continuation is told it executes.
 
@@ -49,12 +49,12 @@ like everyone else's?
 
 ### 2. Agent fields and the agent-context syscall
 
-Agent conventions live in the Horizon and the room.
+Agent conventions live in the Boundary and the room.
 
-- `core/horizon/horizon.go`: `Surface.Agent` (`AgentConfig`, the agent's
+- `core/boundary/boundary.go`: `Surface.Agent` (`AgentConfig`, the agent's
   private operations), and `Agent`, `WorkTools` and `Delegated` on both
-  `Horizon` and `Grant`.
-- `core/machine/room.go`: the `system.agent-context` syscall
+  `Boundary` and `Grant`.
+- `core/machine/system.go`: the `system.agent-context` syscall
   (`AgentContext`, `agentContext`), which records a provider model; and the
   delegation branches of `narrowing`.
 - `core/machine/continuation.go`: `agentName`, `agents`, `workToolNames`,
@@ -69,7 +69,7 @@ a grant the kernel checks without knowing what an agent is?
 
 ### 3. Comments
 
-`core/horizon/tools.go` ("the same deterministic interpreter binding as the
+`core/boundary/tools.go` ("the same deterministic interpreter binding as the
 transports") and `core/contract/contract.go` (the interpreter's contracts)
 describe kernel code in the apprentice's terms. Small, but a sign of where
 the convention leaks.

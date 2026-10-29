@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/record"
 )
 
@@ -22,7 +22,7 @@ func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
 	write("interp", "installer binary")
 	write("contract.json", `{"input":{"type":"string"},"continuation":true}`)
 	entry := Entry{Path: "interp", Contract: "contract.json", State: true, Bundle: "bundle.json"}
-	loadEntry := func() (horizon.Surface, error) {
+	loadEntry := func() (boundary.Surface, error) {
 		t.Helper()
 		b, _ := json.Marshal(map[string]Entry{"interpreter": entry})
 		write("registry.json", string(b))
@@ -80,7 +80,7 @@ func TestLoadNormalizesAndRejectsGrants(t *testing.T) {
 		}
 	}
 	write("literal")
-	reach, room, err := Load(file)
+	reach, root, err := Load(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestLoadNormalizesAndRejectsGrants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := room.Read[0].Path; got != filepath.Join(canonicalDir, "input") {
+	if got := root.Read[0].Path; got != filepath.Join(canonicalDir, "input") {
 		t.Fatalf("symlink alias was not resolved: %s", got)
 	}
 	write("anything")
@@ -101,9 +101,9 @@ func TestLoadNormalizesAndRejectsGrants(t *testing.T) {
 }
 
 // A surface is identity plus contracts (next/25): every grant in the file
-// becomes the room's one authority, exec cannot be granted at all, and a
+// becomes the root Boundary's one authority, exec cannot be granted at all, and a
 // contract cannot declare what its program may reach.
-func TestLoadBuildsTheRoom(t *testing.T) {
+func TestLoadBuildsTheRootBoundary(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"a", "b"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o700); err != nil {
@@ -120,7 +120,7 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	load := func(body string) (map[string]horizon.Surface, horizon.Authority, error) {
+	load := func(body string) (map[string]boundary.Surface, boundary.Authority, error) {
 		file := filepath.Join(dir, "registry.json")
 		if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -128,16 +128,16 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 		return Load(file)
 	}
 	canonical, _ := filepath.EvalSymlinks(dir)
-	reach, room, err := load(`{
+	reach, root, err := load(`{
 		"a": {"path": "a", "contract": "leaf.json", "authority": {"read": [{"path": "` + dir + `", "scope": "subpath"}]}},
 		"b": {"path": "b", "contract": "continuation.json", "authority": {"read": [{"path": "` + dir + `", "scope": "subpath"}], "mach": ["service.b"]}}
 	}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := horizon.Authority{Read: []horizon.PathGrant{{Path: canonical, Scope: "subpath"}}, Mach: []string{"service.b"}}
-	if !reflect.DeepEqual(room, want) {
-		t.Fatalf("every grant joins the room once: %+v", room)
+	want := boundary.Authority{Read: []boundary.PathGrant{{Path: canonical, Scope: "subpath"}}, Mach: []string{"service.b"}}
+	if !reflect.DeepEqual(root, want) {
+		t.Fatalf("every grant joins the root once: %+v", root)
 	}
 	if reach["a"].Continuation || !reach["b"].Continuation {
 		t.Fatalf("how a program reads its input is its own declaration: %+v", reach)
@@ -157,7 +157,7 @@ func TestLoadBuildsTheRoom(t *testing.T) {
 }
 
 // Every contract the repository ships loads the way genesis loads it: a
-// contract that does not is a room that never boots.
+// contract that does not is a registry that never boots.
 func TestEveryShippedContractLoads(t *testing.T) {
 	var files []string
 	for _, pattern := range []string{"../../targets/*/contract.json", "../../codex/*/contract.json", "../../codex/*/*-contract.json"} {
@@ -179,7 +179,7 @@ func TestEveryShippedContractLoads(t *testing.T) {
 	}
 }
 
-// Contracts enter the room in their normal form (42): the root Horizon does
+// Contracts enter genesis in their normal form (42): the root Boundary does
 // not depend on the order a file lists its required fields.
 func TestLoadNormalizesContracts(t *testing.T) {
 	dir := t.TempDir()
@@ -207,7 +207,7 @@ func TestLoadNormalizesContracts(t *testing.T) {
 	}
 }
 
-// The workspace is named by an entry, never the first read grant: the room's
+// The workspace is named by an entry, never the first read grant: the root's
 // grants are sorted, so another entry's grant can come first (here a cache
 // directory, as the models entry's does).
 func TestTheWorkspaceIsNamedNotTheFirstReadGrant(t *testing.T) {
@@ -220,7 +220,7 @@ func TestTheWorkspaceIsNamedNotTheFirstReadGrant(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "tool"), []byte("tool"), 0o700)
 	os.WriteFile(filepath.Join(dir, "contract.json"), []byte(`{"input":{"type":"string"}}`), 0o600)
-	load := func(read, models horizon.Authority) (horizon.Authority, error) {
+	load := func(read, models boundary.Authority) (boundary.Authority, error) {
 		t.Helper()
 		b, _ := json.Marshal(map[string]Entry{
 			"read":   {Path: "tool", Contract: "contract.json", Authority: read},
@@ -228,21 +228,23 @@ func TestTheWorkspaceIsNamedNotTheFirstReadGrant(t *testing.T) {
 		})
 		file := filepath.Join(dir, "registry.json")
 		os.WriteFile(file, b, 0o600)
-		_, room, err := Load(file)
-		return room, err
+		_, root, err := Load(file)
+		return root, err
 	}
-	grant := func(d string) []horizon.PathGrant { return []horizon.PathGrant{{Path: filepath.Join(dir, d), Scope: "subpath"}} }
-	room, err := load(horizon.Authority{Read: grant("work"), Workspace: "work"}, horizon.Authority{Read: grant("a-cache")})
+	grant := func(d string) []boundary.PathGrant {
+		return []boundary.PathGrant{{Path: filepath.Join(dir, d), Scope: "subpath"}}
+	}
+	root, err := load(boundary.Authority{Read: grant("work"), Workspace: "work"}, boundary.Authority{Read: grant("a-cache")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if room.Read[0].Path != filepath.Join(dir, "a-cache") || room.Workspace != filepath.Join(dir, "work") {
-		t.Fatalf("the workspace followed the grants' order: %+v", room)
+	if root.Read[0].Path != filepath.Join(dir, "a-cache") || root.Workspace != filepath.Join(dir, "work") {
+		t.Fatalf("the workspace followed the grants' order: %+v", root)
 	}
-	if _, err := load(horizon.Authority{Read: grant("work"), Workspace: "elsewhere"}, horizon.Authority{}); err == nil {
+	if _, err := load(boundary.Authority{Read: grant("work"), Workspace: "elsewhere"}, boundary.Authority{}); err == nil {
 		t.Fatal("accepted a workspace under no read grant")
 	}
-	if _, err := load(horizon.Authority{Read: grant("work"), Workspace: "work"}, horizon.Authority{Read: grant("a-cache"), Workspace: "a-cache"}); err == nil {
+	if _, err := load(boundary.Authority{Read: grant("work"), Workspace: "work"}, boundary.Authority{Read: grant("a-cache"), Workspace: "a-cache"}); err == nil {
 		t.Fatal("accepted two workspaces")
 	}
 }

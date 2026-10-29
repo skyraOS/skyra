@@ -2,7 +2,7 @@
 // from its own state, as an interpreter process sits above a CPU. The kernel
 // never sees a procedure. It sees an invoke of one of the interpreter's
 // contracts, the instructions the interpreter emits, and a return; every
-// instruction is checked at intake under the Horizon it runs in, like any
+// instruction is checked at intake under the Boundary it runs in, like any
 // other target's. It shares no code with skyra.
 //
 // Each run is one resume. The kernel execs it against the contract that was
@@ -95,12 +95,12 @@ func run() ([]byte, error) {
 }
 
 // runRemember is remember's body (decision 8), embedded in this binary: a
-// syscall for the strand, the compile, the refinements, then one
+// syscall for the trace, the compile, the refinements, then one
 // extend-reach per contract a procedure was stored for. The interpreter
 // extends itself; an actor can only extend itself.
 //
-//	no steps        → system strand: the observation, and the contract that requested it
-//	the strand      → compile it; refuse a contract that already has a procedure, before
+//	no steps        → system trace: the observation, and the contract that requested it
+//	the trace      → compile it; refuse a contract that already has a procedure, before
 //	                  anything is stored; store every procedure, under its base types
 //	then, for each  → ask the actor it was remembered from to write its refinements, when
 //	                  it holds a refine contract; check the answer; a refusal is shown, and it
@@ -124,7 +124,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		return addressed(e.Frame, map[string]string{"refused": why}), nil
 	}
 	if len(e.Steps) == 0 {
-		return instruction("system", map[string]any{"strand": map[string]any{"observation": r.Observation,
+		return instruction("system", map[string]any{"trace": map[string]any{"observation": r.Observation,
 			"contract": map[string]any{"target": r.Contract.Target, "schema": r.Contract.Schema}}}), nil
 	}
 	last := e.Steps[len(e.Steps)-1]
@@ -144,9 +144,9 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		if last.State != "return" {
 			return refused(cause)
 		}
-		var st remember.Strand
+		var st remember.Trace
 		if err := json.Unmarshal(last.Value, &st); err != nil {
-			return nil, fmt.Errorf("strand: %w", err)
+			return nil, fmt.Errorf("trace: %w", err)
 		}
 		reach := reachOf(e)
 		self := selfName(reach)
@@ -162,15 +162,15 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 			return nil, err
 		}
 		// One representation per contract (decision 28), refused before
-		// anything is stored, so no Horizon is given a procedure another
-		// Horizon remembered.
+		// anything is stored, so no Boundary is given a procedure another
+		// Boundary remembered.
 		for i, c := range compiled {
 			if store.Has(c.Source.Contract) {
 				return refused(fmt.Sprintf("%s (from %s) already has a procedure: one representation per contract", titleOf(c.Source.Contract), c.Source.Original))
 			}
 			for _, other := range compiled[:i] {
 				if proc.Same(other.Source.Contract, c.Source.Contract) {
-					return refused(fmt.Sprintf("%s is remembered twice in one strand", titleOf(c.Source.Contract)))
+					return refused(fmt.Sprintf("%s is remembered twice in one trace", titleOf(c.Source.Contract)))
 				}
 			}
 		}
@@ -287,7 +287,7 @@ func refineAsk(rec proc.Remembering) map[string]any {
 
 // refinements checks the model's answer for the procedure being refined, and
 // returns the refinement it makes: each predicate type-checks, has a bounded
-// cost, accepts its own strand, and hits no error on it.
+// cost, accepts its own trace, and hits no error on it.
 func refinements(store proc.Store, rec proc.Remembering, answer json.RawMessage) (*proc.Refinement, error) {
 	var a struct {
 		Header string            `json:"header"`
@@ -350,7 +350,7 @@ func refinements(store proc.Store, rec proc.Remembering, answer json.RawMessage)
 	return &ref, nil
 }
 
-// accepts checks one refinement against its own strand.
+// accepts checks one refinement against its own trace.
 func accepts(what, src string, v refine.Vars) error {
 	prg, err := refine.Compile(src)
 	if err != nil {
@@ -359,9 +359,9 @@ func accepts(what, src string, v refine.Vars) error {
 	ok, err := prg.Eval(v)
 	switch {
 	case err != nil:
-		return fmt.Errorf("%s hits an error on its own strand: %v", what, err)
+		return fmt.Errorf("%s hits an error on its own trace: %v", what, err)
 	case !ok:
-		return fmt.Errorf("%s refuses the strand it was compiled from", what)
+		return fmt.Errorf("%s refuses the trace it was compiled from", what)
 	}
 	return nil
 }
@@ -496,7 +496,7 @@ func refusedInput(ref *proc.Refinement, c *proc.Schema, in any) string {
 
 // refusedEdge checks every node that has returned: its refinement, where the
 // model wrote one, else the base type of what it returned (decision 10),
-// which must be the strand's.
+// which must be the trace's.
 func refusedEdge(p proc.Procedure, nodes map[string]proc.Node, values map[string]any) *edge {
 	ref := p.Header.Refinement
 	if ref == nil {

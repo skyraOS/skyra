@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 )
 
 // State is the state the system is in at a record, named by the test "the
@@ -28,7 +28,7 @@ const (
 // runtime derives one.
 const (
 	Malformed = "malformed" // the output cannot be read as operands
-	Horizon   = "horizon"   // it names a capability outside its Horizon
+	Boundary  = "boundary"  // it names a capability outside its Boundary
 	Contract  = "contract"  // the payload does not fit the capability's input contract
 	Custody   = "custody"   // the protocol broke: no output, a dead successor, a failed stamp
 	Leaf      = "leaf"      // the output addresses nothing: it did not follow the protocol, and is kept as the fault's observation
@@ -44,22 +44,22 @@ type FaultInfo struct {
 // them; replay derives it again and must get the same bytes. Predecessor is
 // the custody chain: the record whose holder committed this one.
 type Record struct {
-	Version     int                        `json:"version,omitempty"`    // genesis: 2 commits complete round emissions
-	Emission    string                     `json:"emission,omitempty"`   // resolve: hash of the complete emission
-	Predecessor string                     `json:"predecessor"`          // the stamp of the Horizon it was emitted under; "" only for genesis
-	Input       string                     `json:"input"`                // sha256 of the exact bytes observed
-	State       State                      `json:"state"`                // derived
-	To          string                     `json:"to,omitempty"`         // invoke: the capability
-	Payload     json.RawMessage            `json:"payload,omitempty"`    // invoke: its input; return: the value; fault: the observation it was derived from. Canonical JSON
-	Fault       *FaultInfo                 `json:"fault,omitempty"`      // fault: kind and cause
-	Frame       string                     `json:"frame,omitempty"`      // resolve: the frame that resumes
-	Round       string                     `json:"round,omitempty"`      // resolve: the round whose slots are all discharged
-	Deps        []string                   `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
-	Reach       map[string]horizon.Surface `json:"reach,omitempty"`      // genesis only: the root Horizon's reach
-	Authority   *horizon.Authority         `json:"authority,omitempty"`  // genesis only: the grants everything under the root shares
-	Author      string                     `json:"author,omitempty"`     // genesis only: who created the room (next/24: the one authored origin)
-	Nonce       string                     `json:"nonce,omitempty"`      // genesis only: makes this act, and every stamp after it, unique
-	Supervisor  bool                       `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
+	Version     int                         `json:"version,omitempty"`    // genesis: 2 commits complete round emissions
+	Emission    string                      `json:"emission,omitempty"`   // resolve: hash of the complete emission
+	Predecessor string                      `json:"predecessor"`          // the stamp of the Boundary it was emitted under; "" only for genesis
+	Input       string                      `json:"input"`                // sha256 of the exact bytes observed
+	State       State                       `json:"state"`                // derived
+	To          string                      `json:"to,omitempty"`         // invoke: the capability
+	Payload     json.RawMessage             `json:"payload,omitempty"`    // invoke: its input; return: the value; fault: the observation it was derived from. Canonical JSON
+	Fault       *FaultInfo                  `json:"fault,omitempty"`      // fault: kind and cause
+	Frame       string                      `json:"frame,omitempty"`      // resolve: the frame that resumes
+	Round       string                      `json:"round,omitempty"`      // resolve: the round whose slots are all discharged
+	Deps        []string                    `json:"deps,omitempty"`       // resolve: the discharges, one per slot: the bottom-up link (thought 13)
+	Reach       map[string]boundary.Surface `json:"reach,omitempty"`      // genesis only: the root Boundary's reach
+	Authority   *boundary.Authority         `json:"authority,omitempty"`  // genesis only: the grants everything under the root shares
+	Author      string                      `json:"author,omitempty"`     // genesis only: who booted it (next/24: the one authored origin)
+	Nonce       string                      `json:"nonce,omitempty"`      // genesis only: makes this act, and every stamp after it, unique
+	Supervisor  bool                        `json:"supervisor,omitempty"` // derived from a custody observation, not from a target's output
 }
 
 // Sum is the content address of any bytes.
@@ -87,7 +87,7 @@ func Short(stamp string) string {
 	return stamp[:8]
 }
 
-// brief is a payload short enough for one line: a long one (a strand) is
+// brief is a payload short enough for one line: a long one (a trace) is
 // cut, with its size.
 func brief(p json.RawMessage) string {
 	const most = 240

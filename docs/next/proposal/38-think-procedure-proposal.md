@@ -67,7 +67,7 @@ actor it runs on. No actor hardcodes where a user's message goes.
   the agent's turn: its `text` field when it has one, its JSON otherwise.
 - **Codex is never invoked directly.** The user actor emits no `codex`
   instruction of its own; Codex is reached only through think's body, which is
-  what a procedure is for. It stays in the Horizon, because think invokes it,
+  what a procedure is for. It stays in the Boundary, because think invokes it,
   and the UI shows it for inspection only. The user actor's Codex-specific
   fields (`thread`, `incarnation`; `targets/user/main.go:72–116`) go.
 - **Calls are grouped by the user's request**, everything under the turn it
@@ -93,9 +93,9 @@ The tool set is the `reach` of the narrowing node, nothing else:
   `write`. `remember` and procedures are left out of the first version; they
   return with 37.
 - **The workspace is read-only, as everywhere.** Only `read` is granted the
-  workspace; `write` is a general actor in the Horizon whose only grant is the
+  workspace; `write` is a general actor in the Boundary whose only grant is the
   conversation's scratch space, which the user and Codex may both use. Every
-  call Codex makes shares the narrowed Horizon, which holds no write grant on
+  call Codex makes shares the narrowed Boundary, which holds no write grant on
   the workspace, so the rendered profile allows none. `system.narrow` refuses
   anything the caller does not hold.
 - **A narrower procedure narrows further.** A procedure that must not write at
@@ -117,7 +117,7 @@ interpreter ↔ codex; the second is the one that holds an app-server.
 
 - **The envelope names the caller.** Every invocation has a parent. The
   kernel adds `caller` to a continuation's envelope, derived from the
-  Horizon's `Resume` chain, so it cannot be forged. Today the envelope carries
+  Boundary's `Resume` chain, so it cannot be forged. Today the envelope carries
   `frame`, `input`, `contract`, `tools`, `contracts` and `steps`, and no
   caller (`interp/main.go:40`).
 - **An endpoint is an actor within this conversation's lineage**, not an
@@ -128,7 +128,7 @@ interpreter ↔ codex; the second is the one that holds an app-server.
   edge, the app-server's address and the last invocation.
 - **Every invocation resets the backoff.** The adapter writes the invocation
   to its state, then reaches the app-server at the edge's address, a socket
-  granted through the Horizon like any other authority.
+  granted through the Boundary like any other authority.
 - **The app-server's holder pings with exponential backoff.** A program may
   start no other program unrecorded, so the holder is started by the recorded
   `codex.start`, as the app-server is today. It serves the edge's socket,
@@ -204,7 +204,7 @@ adapter. Codex's own prompts are turned off as well, in the app-server's private
 its environment context, its apps text and project documents such as
 `AGENTS.md` (`include_*_instructions`, `include_environment_context`,
 `project_doc_max_bytes = 0`). The agent need not be told it is read-only:
-the sandbox keeps it in its Horizon. A capture of Codex's actual inference
+the sandbox keeps it in its Boundary. A capture of Codex's actual inference
 request (`experiments/appserver/tool_surface.py`, no model call) shows only
 the tools, the header, and the message. The model provider may still add a
 system prompt of its own on its side, which no client setting reaches.
@@ -216,7 +216,7 @@ enabled (`--enable view_image`), the thread keeps its local
 environment (Codex binds the tool to one; `environments: []` hid it), and
 `apply_patch`, which an environment would also bring, is removed by model
 metadata. The app-server's profile may read image files, and only image
-files, under the Horizon's read grants, never under the floor; the adapter
+files, under the Boundary's read grants, never under the floor; the adapter
 accepts the `imageView` item. Both launchers enable live web search
 (`web_search = "live"`, `use_responses_lite = false` in their protected
 model catalogs, since the lite API omits hosted tools); the adapter accepts
@@ -292,7 +292,7 @@ deterministic because the lookup is itself recorded.
   `{actor, title, schema, outline}`, where `outline` is the node and edge
   structure plus each narrowed actor's reach; and each conversation's
   `procedure`. Listing a root grants nothing: intake still checks every
-  message against the conversation's Horizon.
+  message against the conversation's Boundary.
 - **Remembered procedures need their outline from the interpreter.** Their
   nodes are compiled into the interpreter's state, not a bundle file, so
   reading their outline needs a small interpreter command or a read of its
@@ -315,7 +315,7 @@ deterministic because the lookup is itself recorded.
    fake requires the field.
 4. **The think bundle**, installed at boot: the narrowing and the run nodes.
    Tests: a write lands in scratch and never in the workspace; the narrowed
-   Horizon has `write` and scratch but no workspace write grant; replay
+   Boundary has `write` and scratch but no workspace write grant; replay
    re-derives the narrowing and the prompt.
 5. **The user actor:** the procedure table, the procedure seeded at creation,
    text and answers by convention, earlier turns as one `context`
@@ -375,15 +375,15 @@ Steps 1–4, on `main` (2026-10-06):
 | 4. The think bundle | `interp/workflows/think`; `system.narrow` gains `without` to drop kinds of authority without naming paths |
 | 5. The user actor (branch `think-steps-5-7`) | `targets/user`: the procedure table, `{think: {text, context}}`, answers by convention, no Codex instruction or fields; the web host seeds `procedure: "think"`; the launcher registers the think bundle; `hosts/web/calls.go` starts a turn at any invoke the user side makes; the Codex adapter gives Codex the context ahead of the message |
 | 6. The snapshot protocol (branch `think-steps-5-7`) | `hosts/web/destinations.go` derives each root's outline from its bundle at startup; snapshots carry `destinations` and each conversation's `procedure`; `open-conversation` names a root, an unknown one is `unknown-procedure`; the browser schema, store and mock and the Swift decoder follow; the shared check holds mock and real host to the same roots |
-| 7. The desktop (branch `think-steps-5-7`) | the session's selected root (`Connection.swift`); the sidebar lists the roots, then the selected root's conversations, then History; `Sky/Roots.swift` lays each root's outline out top right in the sky, and the Metal sky draws it in the stars' own style: faint at rest, traced and named under the pointer as a Horizon is, and kept lit while selected; an invisible button over each root star takes the click, the keyboard and VoiceOver; History is collapsed; the composer names the root it sends to |
+| 7. The desktop (branch `think-steps-5-7`) | the session's selected root (`Connection.swift`); the sidebar lists the roots, then the selected root's conversations, then History; `Sky/Roots.swift` lays each root's outline out top right in the sky, and the Metal sky draws it in the stars' own style: faint at rest, traced and named under the pointer as a Boundary is, and kept lit while selected; an invisible button over each root star takes the click, the keyboard and VoiceOver; History is collapsed; the composer names the root it sends to |
 
 Decisions (2026-10-06), which the code relies on by omission:
 
 - **The kernel grants an edge socket as trusted core.** A connection
   surface's profile may connect to exactly its edge's socket. The kernel adds
   that grant when it renders the profile, from the adapter and caller names it
-  derived; it needs no Horizon authority of its own to do so, so the socket is
-  not listed in `Horizon.Authority`.
+  derived; it needs no Boundary authority of its own to do so, so the socket is
+  not listed in `Boundary.Authority`.
 - **An actor's rules about its own connection belong in its adapter, not the
   core.** The core keeps no fan-out rule about connections; the old "an
   emission of several instructions cannot carry custody of a resource" went
@@ -417,7 +417,7 @@ Where the code departs from the text:
   on its output; the backoff is the idle schedule (30 s doubling to 16 min).
 - **The recorded `connection`, `close_connection` and
   `resource_owner_depth` fields stay in the surface.** Replay looks every
-  re-derived Horizon up by the hash of its encoding, so removing them would
+  re-derived Boundary up by the hash of its encoding, so removing them would
   stop older histories replaying. The runtime no longer acts on the last two.
 - **`think` is in the launcher's registry as of step 5.** Inside think, Codex's
   narrowed reach does not include the interpreter, so it is never offered
@@ -448,11 +448,11 @@ Where the code departs from the text:
   Deleting removes only the conversation's own directory. Owning the list in
   the user actor's state, each conversation a branch of one long-lived
   invocation (33's model), is a later step.
-- **The Horizon constellation is gone from the sky.** The surface stars and
+- **The Boundary constellation is gone from the sky.** The surface stars and
   region glows in the middle, and their hover tracing, are removed: the roots
   are the sky's constellations now. Calls still fly from the core, each to its
   star in the context's constellation (a `read` to `read`), so the machine's
-  messages are seen flowing. The Horizons stay in the snapshot.
+  messages are seen flowing. The Boundaries stay in the snapshot.
 - **Only the context takes the highlight color.** Another root under the
   pointer traces its lines and names its stars in the sky's quiet label tones;
   the selected root alone is drawn, and stays, in the highlight.
@@ -465,5 +465,5 @@ Where the code departs from the text:
   (`codex.*`) are counted on it rather than drawn, and a narrowing is a line,
   not a star.
 - **The room no longer lists Codex.** Codex runs under think's narrowed
-  Horizon, its own region in the sky, whose reach is the model's tools and
+  Boundary, its own region in the sky, whose reach is the model's tools and
   Codex's operations; the desktop live test checks that shape.

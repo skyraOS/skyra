@@ -2,7 +2,7 @@ package replay
 
 import (
 	"encoding/json"
-	"skyra/controller/core/horizon"
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/machine"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/tree"
@@ -50,13 +50,13 @@ func TestReplayChecksCompleteRoundInEmissionOrder(t *testing.T) {
 	if err := tree.Init(root); err != nil {
 		t.Fatal(err)
 	}
-	reach := map[string]horizon.Surface{"agent": agentS, "echo": echoS}
+	reach := map[string]boundary.Surface{"agent": agentS, "echo": echoS}
 	g, _ := tree.Commit(root, record.Record{Version: 2, State: record.Invoke, Reach: reach})
-	operator := horizon.Horizon{Stamp: g, Frame: g, Reach: reach}
-	emit := func(under horizon.Horizon, out string, fanned bool) (string, horizon.Horizon) {
+	operator := boundary.Boundary{Stamp: g, Frame: g, Reach: reach}
+	emit := func(under boundary.Boundary, out string, fanned bool) (string, boundary.Boundary) {
 		r := intakeRecord(under, out)
 		stamp := commitStep(t, root, []byte(out), r)
-		var h horizon.Horizon
+		var h boundary.Boundary
 		var err error
 		if fanned {
 			h, err = machine.Fanned(under, r, stamp)
@@ -67,7 +67,7 @@ func TestReplayChecksCompleteRoundInEmissionOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		if fanned {
-			if _, err := tree.PutHorizon(root, h); err != nil {
+			if _, err := tree.PutBoundary(root, h); err != nil {
 				t.Fatal(err)
 			}
 		}

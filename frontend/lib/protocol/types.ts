@@ -39,7 +39,7 @@ export interface Call {
   result?: string;
   /** Exact screenshot returned by desktop_observe, read from its record. */
   image?: string;
-  /** fault: its kind (horizon, contract, custody, malformed) and cause */
+  /** fault: its kind (boundary, contract, custody, malformed) and cause */
   fault?: string;
   cause?: string;
   /** The invoke's stamp, or the fault's. */

@@ -3,24 +3,24 @@ package machine
 import (
 	"encoding/json"
 
+	"skyra/controller/core/boundary"
 	"skyra/controller/core/contract"
-	"skyra/controller/core/horizon"
 	"skyra/controller/core/record"
 )
 
 // Instance is the state of one instance as it moves through its phases.
 type Instance struct {
-	Floor string          // the .skyra path every rendered sandbox denies
-	Phase Phase           // the phase whose event this instance is waiting for
-	Under horizon.Horizon // the Horizon the input was emitted under
-	R     record.Record   // what this instance committed last: its state and stamp are R's
-	Self  horizon.Horizon // this instance's own Horizon, once released
-	Out   []byte          // the target's emission, while it is handed off
-	Kids  []Kid           // the successors stamped and verified so far, in instruction order
-	Next  []byte          // a resumed continuation's input, while the claim is decided
-	Held  record.Record   // the resolve record, while the claim is decided
+	Floor string            // the .skyra path every rendered sandbox denies
+	Phase Phase             // the phase whose event this instance is waiting for
+	Under boundary.Boundary // the Boundary the input was emitted under
+	R     record.Record     // what this instance committed last: its state and stamp are R's
+	Self  boundary.Boundary // this instance's own Boundary, once released
+	Out   []byte            // the target's emission, while it is handed off
+	Kids  []Kid             // the successors stamped and verified so far, in instruction order
+	Next  []byte            // a resumed continuation's input, while the claim is decided
+	Held  record.Record     // the resolve record, while the claim is decided
 
-	Accepting string  // the id of the Horizon a release named, while it is read and accepted
+	Accepting string  // the id of the Boundary a release named, while it is read and accepted
 	Arrived   int     // how many descriptors arrived with that release (41, V3)
 	Reads     []Key   // the keys of the read in flight: a ReadResult answers them in order
 	Cause     string  // a supervisor's observation, held while its successors are killed
@@ -59,15 +59,15 @@ const (
 	Intake        Phase = "intake"        // waiting for bytes
 	Stamping      Phase = "stamping"      // the input and record are being committed; then the stamp goes up
 	Release       Phase = "release"       // stamped; waiting for the parent's release
-	Accepting     Phase = "accepting"     // reading the released Horizon
+	Accepting     Phase = "accepting"     // reading the released Boundary
 	Acknowledging Phase = "acknowledging" // the acceptance receipt is being committed
 	Acknowledged  Phase = "acknowledged"  // custody is being acknowledged to the parent
-	Running       Phase = "running"       // the target is running, or the strand is being read; waiting for its output
+	Running       Phase = "running"       // the target is running, or the trace is being read; waiting for its output
 	Parking       Phase = "parking"       // custody is being handed to an actor host; waiting to hear whether it took it
-	Spawning      Phase = "spawning"      // the Horizon a successor intakes under is being committed
+	Spawning      Phase = "spawning"      // the Boundary a successor intakes under is being committed
 	Handoff       Phase = "handoff"       // the successor is intaking the output; waiting for its stamp
 	Verifying     Phase = "verifying"     // reading the record under the successor's stamp
-	Opening       Phase = "opening"       // the round's emission, slots, frames and Horizons are being committed
+	Opening       Phase = "opening"       // the round's emission, slots, frames and Boundaries are being committed
 	Killing       Phase = "killing"       // successors are being killed before this instance faults
 	Settling      Phase = "settling"      // a discharge is being committed
 	Gather        Phase = "gather"        // reading what the waiter still waits on
@@ -76,11 +76,11 @@ const (
 )
 
 // Kid is a successor this instance supervises during handoff: its stamp, its
-// record, and the Horizon it will be released with.
+// record, and the Boundary it will be released with.
 type Kid struct {
-	Stamp   string
-	R       record.Record
-	Horizon horizon.Horizon
+	Stamp    string
+	R        record.Record
+	Boundary boundary.Boundary
 }
 
 // MaxFanOut bounds the instructions one emission may carry: every successor
@@ -92,7 +92,7 @@ const MaxFanOut = 32
 // commit, or the last execute of a batch.
 type Event interface{ event() }
 
-type Received struct { // → Intake: the bytes, and the Horizon they were emitted under, as read by id
+type Received struct { // → Intake: the bytes, and the Boundary they were emitted under, as read by id
 	Under Object
 	In    []byte
 }
@@ -105,7 +105,7 @@ type ReadResult struct{ Found [][]byte }
 type Committed struct{ Outcomes []Outcome }
 
 // Executed answers an execute: what came back (an emission, a stamp, a
-// release's Horizon id), how many descriptors arrived with it, or why it
+// release's Boundary id), how many descriptors arrived with it, or why it
 // failed.
 type Executed struct {
 	Obs     []byte
@@ -160,7 +160,7 @@ func (Execute) effect() {}
 // as a resolve names every discharge, so replay can re-derive it.
 type Key interface{ key() }
 
-type ObjectKey struct { // an object by hash: records, inputs or horizons
+type ObjectKey struct { // an object by hash: records, inputs or boundaries
 	Kind string
 	Hash string
 }
@@ -169,44 +169,44 @@ type EmissionKey struct {            // the hash of the emission a round of a fr
 	Frame, Round string
 }
 type ResultKey struct{ Frame string } // the stamp of the record that discharged a frame's slot
-type StrandKey struct {               // the strand walk: {"strand":…} or {"refused":"…"}
+type TraceKey struct {                // the trace walk: {"trace":…} or {"refused":"…"}
 	Observation  string
 	Invocation   string // tree mode: retained root, with a nonempty accepted frontier
 	Observations []string
 	Target       string
 	Schema       *contract.Schema
-	Origin       string // the requester's Horizon: the walk stays inside it
-	Room         string // the enclosing genesis; different boots are not one Horizon
+	Origin       string // the requester's Boundary: the walk stays inside it
+	Genesis      string // the enclosing genesis; different boots are not one Boundary
 }
 
 func (ObjectKey) key()   {}
 func (SlotsKey) key()    {}
 func (EmissionKey) key() {}
 func (ResultKey) key()   {}
-func (StrandKey) key()   {}
+func (TraceKey) key()    {}
 
 // Write is one write of a commit. Objects are content-addressed; the rest
 // are write-once names in a frame, reached through a frame handle.
 type Write interface{ write() }
 
-type ObjectWrite struct { // an object under its hash: records, inputs or horizons
+type ObjectWrite struct { // an object under its hash: records, inputs or boundaries
 	Kind  string
 	Bytes []byte
 }
-type AcceptanceWrite struct{ Stamp, Horizon string } // evidence that this instance accepted the release of Stamp under Horizon
-type FrameWrite struct{ Stamp string }               // a new frame directory, for a successor that runs in a frame of its own
-type EmissionWrite struct{ Round, Hash string }      // this frame's round seals its full emission, before any child runs
-type SlotWrite struct {                              // a slot in this frame's round, before its child runs
+type AcceptanceWrite struct{ Stamp, Boundary string } // evidence that this instance accepted the release of Stamp under Boundary
+type FrameWrite struct{ Stamp string }                // a new frame directory, for a successor that runs in a frame of its own
+type EmissionWrite struct{ Round, Hash string }       // this frame's round seals its full emission, before any child runs
+type SlotWrite struct {                               // a slot in this frame's round, before its child runs
 	Round, Child string
 	Pos          int // the instruction's position in the emission: a round's steps come back in this order
 }
 type ResultWrite struct { // discharge this frame's slot (frame handle 0), once
 	Stamp string
-	Frame string // the frame it discharges: for the trace only
+	Frame string // the frame it discharges: for the log only
 }
 type ClaimWrite struct { // the fan-in claim on the waiting frame (frame handle 1): Lost if a sibling won
 	Round, Stamp string
-	Frame        string // the frame that resumes: for the trace only
+	Frame        string // the frame that resumes: for the log only
 }
 
 func (ObjectWrite) write()     {}
@@ -223,21 +223,21 @@ type Action interface{ action() }
 type SendStamp struct{ Stamp string } // tell the parent this stamp; its release is the result
 type Acknowledge struct{ Err string } // tell the parent whether this instance accepted custody
 type Run struct {                     // run the target; its emission is the result
-	Surface horizon.Surface
+	Surface boundary.Surface
 	Exec    string // the verified copy of the surface's program, which is what runs (43 D5)
 	Stdin   []byte
 	Profile string
 	Env     []string // the target's whole environment: nothing is inherited
 }
-type Spawn struct { // start the successor, hand it the bytes and the id of the Horizon they were emitted under; its stamp is the result
+type Spawn struct { // start the successor, hand it the bytes and the id of the Boundary they were emitted under; its stamp is the result
 	Under string
 	Out   []byte
 }
-type ReleaseChild struct { // issue a successor's release: its Horizon id and its frame stack
+type ReleaseChild struct { // issue a successor's release: its Boundary id and its frame stack
 	Index    int    // which successor, in instruction order
-	Horizon  string // the id of the Horizon it is released with
+	Boundary string // the id of the Boundary it is released with
 	NewFrame string // the frame pushed for it, or "": it is handed this instance's stack
-	Stamp    string // its stamp: for the trace only
+	Stamp    string // its stamp: for the log only
 }
 type KillSuccessors struct{} // kill every successor spawned so far
 type Pop struct{}            // drop the discharged frame (handle 0): the resumed continuation holds the rest

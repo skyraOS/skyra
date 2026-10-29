@@ -103,7 +103,7 @@ parent-liveness mode does not end a daemon outside Cua's embedded mode, which
 the bridge does not use.
 
 The adapter gets the bridge socket, not the upstream driver socket. Skyra's
-shared Horizon may also include browser/ideas service grants; the adapter
+shared Boundary may also include browser/ideas service grants; the adapter
 selects only its designated bridge from the complete `SKYRA_CONNECTIONS` list.
 No new filesystem grant is needed.
 

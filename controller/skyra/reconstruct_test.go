@@ -75,7 +75,7 @@ func TestReconstructionProcedureThroughRealRuntime(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
 		t.Fatalf("procedure did not return a snapshot: %v\n%s", err, out)
 	}
-	if snap.Type != "snapshot" || snap.UIIncarnation != "fixture" || snap.Revision != 1 || len(snap.Conversations) != 1 || snap.Conversations[0].Conversation != "c-probe" || len(snap.Conversations[0].Horizons) == 0 {
+	if snap.Type != "snapshot" || snap.UIIncarnation != "fixture" || snap.Revision != 1 || len(snap.Conversations) != 1 || snap.Conversations[0].Conversation != "c-probe" || len(snap.Conversations[0].Boundaries) == 0 {
 		t.Fatalf("snapshot: %+v", snap)
 	}
 	if !strings.Contains(string(out), "replay:") {

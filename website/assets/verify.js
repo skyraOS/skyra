@@ -86,7 +86,7 @@ function draw(animate) {
     state.textContent = i === 0 ? "genesis" : s.state || "?";
     const to = document.createElement("span");
     to.className = "to";
-    to.textContent = i === 0 ? "the room" : summary(s);
+    to.textContent = i === 0 ? "the root Boundary" : summary(s);
     to.title = s.describe;
     const stamp = document.createElement("span");
     stamp.textContent = short(s.stamp);
@@ -168,22 +168,22 @@ function procedureDemo() {
     const end = [...records].find(([, r]) => r.state === "return" &&
       JSON.parse(working.objects["inputs/" + r.input]).to === frame);
     if (!end) continue;
-    const strand = new Set();
+    const trace = new Set();
     const visit = (stamp) => {
-      if (strand.has(stamp)) return;
-      strand.add(stamp);
+      if (trace.has(stamp)) return;
+      trace.add(stamp);
       if (stamp === frame) return;
       const r = records.get(stamp);
       if (r.predecessor) visit(r.predecessor);
       for (const dep of r.deps || []) visit(dep);
     };
     visit(end[0]);
-    if ([...strand].some((stamp) => {
+    if ([...trace].some((stamp) => {
       const r = records.get(stamp);
       return r.state === "fault" || (r.state === "invoke" && ["agent", "codex"].includes(r.to));
     })) continue;
     completed++;
-    for (const stamp of strand) labels.add(stamp);
+    for (const stamp of trace) labels.add(stamp);
   }
   return { labels, metric: `${completed} of ${calls.length} calls: zero model steps, zero approvals` };
 }

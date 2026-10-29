@@ -13,7 +13,7 @@ handled differently:
 | Terminal? | yes | no: resumable |
 | Discharges the dependency? | yes, with a fault | **no**: the dependency stays open while the decision is pending |
 | Procedure | propagate; a continuation may recover | suspend, ask, then resume or turn into a fault |
-| Kinds | custody, malformed move, horizon, authority | novelty, procedure |
+| Kinds | custody, malformed move, boundary, authority | novelty, procedure |
 | Routed to | the parent (discharges its dependency) | an LLM (produces what is missing) |
 
 The dividing question, the same one CPUs use: **can the work resume after
@@ -40,10 +40,10 @@ faults: they are returns.
 |---|---|---|---|---|
 | **Custody fault** | the protocol | the target died without emitting; the successor died before stamping; a stamp failed verification | the instance still holding custody | "supervisor fault" (`Supervisor: true`) |
 | **Malformed move fault** | the bytes | they do not parse as exactly one Move; unknown fields | the successor, at intake | "fault (rejected at intake)", parse errors |
-| **Horizon fault** | the authority, attempted | an Invoke names a target not in reach, for example a leaf that invokes | the successor, at intake | "fault (rejected at intake)", "not in reach" |
-| **Authority fault** | the authority, insufficient | a child cannot fulfil its contract under its Horizon: "I cannot continue without more authority" | the successor, at intake, which confirms the request is outside the child's reach | not modelled |
+| **Boundary fault** | the authority, attempted | an Invoke names a target not in reach, for example a leaf that invokes | the successor, at intake | "fault (rejected at intake)", "not in reach" |
+| **Authority fault** | the authority, insufficient | a child cannot fulfil its contract under its Boundary: "I cannot continue without more authority" | the successor, at intake, which confirms the request is outside the child's reach | not modelled |
 
-**Horizon fault versus authority fault: trying versus asking.** A horizon fault
+**Boundary fault versus authority fault: trying versus asking.** A boundary fault
 is a child that *tried* to invoke outside its reach: a violation. An authority
 fault is a child that *asks* for authority it lacks: a legitimate request. Both
 are terminal for the child and both go to its parent, but the parent can tell a
@@ -52,7 +52,7 @@ misbehaving child from one that needs help.
 ### Authority fault
 
 **Definition.** A child **cannot fulfil its contract under the conditions it was
-given**: its Horizon does not let it do what the contract requires. It signals
+given**: its Boundary does not let it do what the contract requires. It signals
 "I cannot continue without more authority".
 
 **Still runtime-proven.** The child asks, for example with an Invoke to a reserved
@@ -68,13 +68,13 @@ decides:
 child: needs X, X not in its reach
   → authority fault: discharges the child's slot in its parent's frame
   → parent's continuation:
-      holds X → creates a new invocation whose Horizon includes X (a plan)
+      holds X → creates a new invocation whose Boundary includes X (a plan)
       lacks X → default: propagate; the parent faults too, discharging its own parent's slot
   → the fault climbs the stack until an ancestor can act, or it reaches the operator
 ```
 
 Escalation is ordinary fault propagation, with no special mechanism. **Plans**
-enter where an ancestor holds the authority and creates a new Horizon with it.
+enter where an ancestor holds the authority and creates a new Boundary with it.
 Plans are otherwise out of scope here.
 
 ### A faulted dependency is the parent's view, not a fourth kind
@@ -154,7 +154,7 @@ deviation from a typed contract is caught by shape, not only by identity.
 - **Structural fit.** "Fits" means shape (fields and types), not values, and it
   must be decidable purely and deterministically, so replay reproduces the same
   verdict. Echo's return contract is `{value: string}`, whatever the text says.
-- **Contracts reach the step through the Horizon.** `step` is pure and cannot
+- **Contracts reach the step through the Boundary.** `step` is pure and cannot
   read memory. Each surface in `Reach` carries its contract pairs, like its path
   and hash. The check stays in intake, and the checker stays the successor.
 
@@ -162,10 +162,10 @@ deviation from a typed contract is caught by shape, not only by identity.
 
 **Definition.** A **procedure** is the series of invocations mapped to an input
 contract: how to turn an input of that contract into calls on the surfaces the
-Horizon reaches. Procedures are keyed by input contract alone and stored in
+Boundary reaches. Procedures are keyed by input contract alone and stored in
 durable memory.
 
-A **procedure interrupt** fires when **the Horizon exists and a child Potential is
+A **procedure interrupt** fires when **the Boundary exists and a child Potential is
 in reach, but the parent has no input contract for that Potential yet.** The
 parent may touch the Potential but does not know how to call it. With no input
 contract there is no key, so no procedure can be found or built.
@@ -174,11 +174,11 @@ contract there is no key, so no procedure can be found or built.
 What is missing is knowledge (how to call it), not permission. That is a memory
 miss, so it is an interrupt, not a fault.
 
-**A procedure is not a plan.** A plan is what happens when a Horizon is created:
-deciding what an invocation may touch. A procedure works inside a Horizon that
+**A procedure is not a plan.** A plan is what happens when a Boundary is created:
+deciding what an invocation may touch. A procedure works inside a Boundary that
 already exists. Plans are out of scope here.
 
-**No approval.** The Horizon already bounds what any procedure can touch, so
+**No approval.** The Boundary already bounds what any procedure can touch, so
 authority is settled before the procedure exists. A procedure is only an
 arrangement of calls within that authority. Intake still checks it: every
 invocation in it must be in reach, or it is an admission fault.
@@ -223,12 +223,12 @@ Both route to an LLM: an agent produces what durable memory lacks.
 |---|---|---|
 | Custody fault | `Record.Supervisor = true` | rename the flag to a fault kind: `Kind: custody` |
 | Malformed move fault | `State: fault`, `Move == nil`, parse error in `Reason` | `Kind: malformed` |
-| Horizon fault | `State: fault`, `Move == nil`, "not in reach" in `Reason` | `Kind: horizon` |
+| Boundary fault | `State: fault`, `Move == nil`, "not in reach" in `Reason` | `Kind: boundary` |
 | Target failure | `State: fault`, `Move.Fault` set ("emitted") | not a fault: a return checked against the contract; novel shapes interrupt |
 | Authority fault | not modelled | needs a way to ask (e.g. an `escalate` surface) and `Kind: authority` |
 | Faulted dependency | not modelled (no dependencies yet) | arrives with `frames/<owner>/deps/<index>` |
 | Novelty interrupt | not modelled (no contracts yet) | needs contract pairs in `Surface`, and resolve |
-| Procedure interrupt | not modelled (the seed's input contract is hand-written) | needs input contracts per reachable Potential, a procedure store keyed by them, and a non-leaf Horizon |
+| Procedure interrupt | not modelled (the seed's input contract is hand-written) | needs input contracts per reachable Potential, a procedure store keyed by them, and a non-leaf Boundary |
 
 ## Open
 
@@ -238,7 +238,7 @@ Both route to an LLM: an agent produces what durable memory lacks.
 2. **The `Fault` Move variant.** If target failures are returns, targets never
    emit `Fault`. It becomes how runtime-proven faults travel up the stack. Should
    intake treat a target-emitted `Fault` as a malformed move?
-3. **How an authority request is expressed:** an `escalate` surface every Horizon
+3. **How an authority request is expressed:** an `escalate` surface every Boundary
    reaches, or something else. Its arguments must name what is needed precisely
    enough for intake to confirm it is outside the child's reach.
 4. **Who accepts a novel contract**, and is the review itself a Move (an Invoke
@@ -246,8 +246,8 @@ Both route to an LLM: an agent produces what durable memory lacks.
    procedure above assumes yes.
 5. **Where contract memory lives:** in genesis and registrations only, or in a
    separate content-addressed store that learned contracts are added to.
-6. **Plans.** What happens when a Horizon is created. Deliberately out of scope
-   here; procedures assume the Horizon already exists.
+6. **Plans.** What happens when a Boundary is created. Deliberately out of scope
+   here; procedures assume the Boundary already exists.
 7. **What an input contract is, concretely,** since both interrupts key on it:
    the target plus the shape of its arguments?
 8. **The record for a novel Return:** a field on the Return record (`novel:

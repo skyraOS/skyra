@@ -1,5 +1,5 @@
-// Package trace owns the process's log lines on stderr.
-package trace
+// Package log owns the process's log lines on stderr.
+package log
 
 import (
 	"fmt"

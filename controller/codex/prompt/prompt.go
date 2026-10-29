@@ -17,7 +17,9 @@ func Base(header string) string {
 	return Prefix + ", fulfilling: " + header
 }
 
-func Room(header, read, scratch string, repository bool) string {
+// Environment is the base prompt plus where the invocation's tools resolve paths and
+// what it may write.
+func Environment(header, read, scratch string, repository bool) string {
 	base := Base(header)
 	if read == "" && scratch == "" && !repository {
 		return base

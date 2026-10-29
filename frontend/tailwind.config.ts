@@ -18,7 +18,7 @@ const config: Config = {
         },
         accent: "#7ec4cc",
         green: "#60c4a6",
-        // A refused call: the Horizon doing its job, not a failure.
+        // A refused call: the Boundary doing its job, not a failure.
         amber: "#dea868",
         // Something broke: the backend, custody.
         fault: "#e27070",
