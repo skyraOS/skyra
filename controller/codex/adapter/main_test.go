@@ -92,7 +92,7 @@ func TestThreadStartOffersOnlyModelToolsInAFixedOrder(t *testing.T) {
 
 func mustMarshal(v any) []byte { b, _ := json.Marshal(v); return b }
 
-// With the interpreter in reach (next/32), Codex is offered remember, which
+// With the apprentice in reach (next/32), Codex is offered remember, which
 // names one of its own calls by index, procedure, and one tool per procedure
 // that exists, by title. The adapter, a worker, turns remember into the
 // observation's stamp and the contract the call went through.
@@ -100,7 +100,7 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 	object := &schema{Type: "object", Fields: map[string]*schema{"text": {Type: "string"}}, Required: []string{"text"}}
 	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "any"}}}
 	look := &schema{Title: "look", Type: "object", Required: []string{"path"}, Fields: map[string]*schema{"path": {Type: "string"}}}
-	c := continuation{Frame: "f", Reach: reachOf(map[string]*schema{"echo": object, "agent": object, "interpreter": remember}, map[string][]*schema{"interpreter": {remember, look}})}
+	c := continuation{Frame: "f", Reach: reachOf(map[string]*schema{"echo": object, "agent": object, "apprentice": remember}, map[string][]*schema{"apprentice": {remember, look}})}
 	var names []string
 	for _, tl := range tools(c) {
 		names = append(names, tl.name)
@@ -120,14 +120,14 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 		} `json:"fault"`
 	}{To: "agent", Payload: json.RawMessage(`{"text":"relay:x"}`), State: "return", Observation: "obs"})
 	out, err := toolEmission(c, "remember", json.RawMessage(`{"call":0}`))
-	want := `{"payload":{"remember":{"contract":{"schema":{"type":"object","fields":{"text":{"type":"string"}},"required":["text"]},"target":"agent"},"observation":"obs"}},"to":"interpreter"}`
+	want := `{"payload":{"remember":{"contract":{"schema":{"type":"object","fields":{"text":{"type":"string"}},"required":["text"]},"target":"agent"},"observation":"obs"}},"to":"apprentice"}`
 	if err != nil || out != want {
 		t.Fatalf("remember:\n got %s\nwant %s", out, want)
 	}
-	if out, _ := toolEmission(c, "procedure", json.RawMessage(`{"input":{"text":"new"}}`)); out != `{"payload":{"text":"new"},"to":"interpreter"}` {
+	if out, _ := toolEmission(c, "procedure", json.RawMessage(`{"input":{"text":"new"}}`)); out != `{"payload":{"text":"new"},"to":"apprentice"}` {
 		t.Fatalf("procedure: %s", out)
 	}
-	if out, _ := toolEmission(c, "look", json.RawMessage(`{"path":"p"}`)); out != `{"payload":{"path":"p"},"to":"interpreter"}` {
+	if out, _ := toolEmission(c, "look", json.RawMessage(`{"path":"p"}`)); out != `{"payload":{"path":"p"},"to":"apprentice"}` {
 		t.Fatalf("a titled procedure: %s", out)
 	}
 }

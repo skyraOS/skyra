@@ -347,7 +347,7 @@ var adapters = map[string]bool{"codex": true, "claude": true}
 // reaches its agent), and every model adapter's steps.
 func isTool(to string) bool {
 	switch to {
-	case "", "user", "browser", "interpreter", "system":
+	case "", "user", "browser", "apprentice", "system":
 		return false
 	}
 	if strings.HasPrefix(to, "system.") {

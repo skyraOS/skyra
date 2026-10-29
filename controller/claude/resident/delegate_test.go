@@ -37,20 +37,20 @@ func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
 	}
 }
 
-func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
+func TestClaudeDispatchesDelegateThroughApprentice(t *testing.T) {
 	remember := &schema{Title: "remember", Type: "object", Required: []string{"remember"}, Fields: map[string]*schema{"remember": {Type: "object"}}}
 	delegate := &schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*schema{"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*schema{"goal": {Type: "string"}}}}}
-	c := continuation{Frame: "f1", Reach: reachOf(map[string]*schema{"interpreter": remember}, map[string][]*schema{"interpreter": {remember, delegate}})}
+	c := continuation{Frame: "f1", Reach: reachOf(map[string]*schema{"apprentice": remember}, map[string][]*schema{"apprentice": {remember, delegate}})}
 	c.Input.Text = "goal"
-	e := c.Reach["interpreter"]
+	e := c.Reach["apprentice"]
 	e.Held = []int{1}
-	c.Reach["interpreter"] = e
+	c.Reach["apprentice"] = e
 	// Holding delegate offers it, and procedure only because it stands for
 	// the same single contract here; remember is not held.
 	names := []string{}
 	for _, tl := range tools(c) {
 		names = append(names, tl.Name)
-		if tl.Target != "interpreter" {
+		if tl.Target != "apprentice" {
 			t.Fatalf("procedure catalog: %+v", tl)
 		}
 	}
@@ -60,10 +60,10 @@ func TestClaudeDispatchesDelegateThroughInterpreter(t *testing.T) {
 	c.Steps = []step{{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
 		{To: "claude.exchange", State: "return", Payload: json.RawMessage(`{"deliver":["{\"prompt\":\"goal\"}"]}`), Value: json.RawMessage(`{"lines":["{\"_bridge\":\"call\",\"id\":\"call\",\"name\":\"delegate\",\"args\":{\"delegate\":{\"goal\":\"inspect\"}}}"]}`)}}
 	out, err := decide(c)
-	if err != nil || !strings.Contains(out, `"to":"interpreter"`) || !strings.Contains(out, `"goal":"inspect"`) {
+	if err != nil || !strings.Contains(out, `"to":"apprentice"`) || !strings.Contains(out, `"goal":"inspect"`) {
 		t.Fatalf("procedure dispatch: %s %v", out, err)
 	}
-	c.Steps = append(c.Steps, step{To: "interpreter", State: "return", Value: json.RawMessage(`{"failed":{"kind":"child","cause":"provider exited"}}`)})
+	c.Steps = append(c.Steps, step{To: "apprentice", State: "return", Value: json.RawMessage(`{"failed":{"kind":"child","cause":"provider exited"}}`)})
 	out, err = decide(c)
 	if err != nil || !strings.Contains(out, `\"_bridge\":\"error\"`) || !strings.Contains(out, "provider exited") {
 		t.Fatalf("failure delivery: %s %v", out, err)

@@ -190,7 +190,7 @@ type procedure struct{ Actor string }
 // procedures is held here for now (proposal 38, step 5); later the UI's
 // selection carries what a procedure runs on.
 var procedures = map[string]procedure{
-	"think":   {Actor: "interpreter"},
+	"think":   {Actor: "apprentice"},
 	"design":  {Actor: "design"},
 	"blender": {Actor: "blender"},
 }

@@ -267,7 +267,7 @@ func ConversationState(id string, root string, tr Tree, availability Availabilit
 }
 
 func modelTool(tr Tree, stamp, to string) bool {
-	if to == "" || to == "user" || to == "browser" || to == "interpreter" || to == "system" || strings.HasPrefix(to, "codex.") || strings.HasPrefix(to, "system.") {
+	if to == "" || to == "user" || to == "browser" || to == "apprentice" || to == "system" || strings.HasPrefix(to, "codex.") || strings.HasPrefix(to, "system.") {
 		return false
 	}
 	for s := tr.Records[stamp].Predecessor; s != ""; {

@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "procedures": [
+    {
+      "contract": {
+        "title": "think",
+        "type": "object",
+        "required": [
+          "think"
+        ],
+        "fields": {
+          "think": {
+            "type": "object",
+            "required": [
+              "context",
+              "images",
+              "model",
+              "text"
+            ],
+            "fields": {
+              "text": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "context": {
+                "type": "any"
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "order": [
+        "scope",
+        "run"
+      ],
+      "nodes": {
+        "scope": {
+          "call": "system",
+          "in": {
+            "narrow": {
+              "actor": {
+                "$": [
+                  "input",
+                  "think",
+                  "model"
+                ]
+              },
+              "reach": [
+                "echo",
+                "read",
+                "find",
+                "roots",
+                "write",
+                "codex",
+                "codex.open",
+                "codex.exchange",
+                "codex.inspect",
+                "codex.stop",
+                "claude",
+                "claude.open",
+                "claude.exchange",
+                "claude.inspect",
+                "claude.stop",
+                "apprentice"
+              ]
+            }
+          }
+        },
+        "run": {
+          "call": {
+            "$": [
+              "scope",
+              "reference"
+            ]
+          },
+          "after": [
+            "scope"
+          ],
+          "in": {
+            "header": "think",
+            "text": {
+              "$": [
+                "input",
+                "think",
+                "text"
+              ]
+            },
+            "context": {
+              "$": [
+                "input",
+                "think",
+                "context"
+              ]
+            },
+            "images": {
+              "$": [
+                "input",
+                "think",
+                "images"
+              ]
+            }
+          }
+        }
+      },
+      "return": {
+        "$": [
+          "run"
+        ]
+      }
+    }
+  ]
+}

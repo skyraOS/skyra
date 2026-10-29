@@ -30,14 +30,14 @@ func TestReconstructionProcedureThroughRealRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	interp := filepath.Join(dir, "interp")
-	build := exec.CommandContext(ctx, "go", "build", "-o", interp, ".")
-	build.Dir = "../interp"
+	apprentice := filepath.Join(dir, "apprentice")
+	build := exec.CommandContext(ctx, "go", "build", "-o", apprentice, ".")
+	build.Dir = "../apprentice"
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build interpreter: %v %s", err, out)
+		t.Fatalf("build apprentice: %v %s", err, out)
 	}
 	root := filepath.Join(dir, ".skyra")
-	bundle, _ := filepath.Abs("../interp/workflows/conversations/bundle.json")
+	bundle, _ := filepath.Abs("../apprentice/workflows/conversations/bundle.json")
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	// The fixture owns the same finite helper contracts as the production user
 	// adapter, plus a root contract used only to drive this experiment.
@@ -52,9 +52,9 @@ func TestReconstructionProcedureThroughRealRuntime(t *testing.T) {
 	userContract := filepath.Join(dir, "user-contract.json")
 	os.WriteFile(userContract, b, 0600)
 	registry := map[string]any{
-		"user":        map[string]any{"path": filepath.Join(dir, "user"), "contract": userContract, "state": true},
-		"echo":        map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
-		"interpreter": map[string]any{"path": interp, "contract": abs("../interp/contract.json"), "state": true, "bundle": bundle},
+		"user":       map[string]any{"path": filepath.Join(dir, "user"), "contract": userContract, "state": true},
+		"echo":       map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
+		"apprentice": map[string]any{"path": apprentice, "contract": abs("../apprentice/contract.json"), "state": true, "bundle": bundle},
 	}
 	b, _ = json.Marshal(registry)
 	reg := filepath.Join(dir, "registry.json")

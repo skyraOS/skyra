@@ -13,10 +13,10 @@ import (
 // through the reference the narrowing returned (proposal 38).
 func TestThinkIsARootWithItsOutline(t *testing.T) {
 	dir := t.TempDir()
-	bundle, _ := filepath.Abs("../../interp/workflows/think/bundle.json")
+	bundle, _ := filepath.Abs("../../apprentice/workflows/think/bundle.json")
 	registry := map[string]any{
-		"echo":        map[string]any{"path": "echo", "contract": "c.json"},
-		"interpreter": map[string]any{"path": "interp", "contract": "c.json", "state": true, "bundle": bundle},
+		"echo":       map[string]any{"path": "echo", "contract": "c.json"},
+		"apprentice": map[string]any{"path": "apprentice", "contract": "c.json", "state": true, "bundle": bundle},
 	}
 	b, _ := json.Marshal(registry)
 	file := filepath.Join(dir, "registry.json")
@@ -27,7 +27,7 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 		t.Fatalf("destinations: %+v %v", ds, err)
 	}
 	think := ds[0]
-	if think.Actor != "interpreter" || think.Title != "think" || len(think.Schema) == 0 {
+	if think.Actor != "apprentice" || think.Title != "think" || len(think.Schema) == 0 {
 		t.Fatalf("think: %+v", think)
 	}
 	nodes := think.Outline.Nodes
@@ -37,7 +37,7 @@ func TestThinkIsARootWithItsOutline(t *testing.T) {
 	if nodes[0].Calls != "system" || nodes[0].Narrows == nil {
 		t.Fatalf("scope narrows from input: %+v", nodes[0])
 	}
-	want := []string{"echo", "read", "find", "roots", "write", "codex", "codex.open", "codex.exchange", "codex.inspect", "codex.stop", "claude", "claude.open", "claude.exchange", "claude.inspect", "claude.stop", "interpreter"}
+	want := []string{"echo", "read", "find", "roots", "write", "codex", "codex.open", "codex.exchange", "codex.inspect", "codex.stop", "claude", "claude.open", "claude.exchange", "claude.inspect", "claude.stop", "apprentice"}
 	if !reflect.DeepEqual(nodes[0].Narrows.Reach, want) {
 		t.Fatalf("narrowed reach: %v", nodes[0].Narrows.Reach)
 	}

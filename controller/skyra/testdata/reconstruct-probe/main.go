@@ -1,5 +1,5 @@
 // An end-to-end fixture: the enclosing actor retains its own checkpoint,
-// and later asks the real interpreter to compose a read from that checkpoint.
+// and later asks the real apprentice to compose a read from that checkpoint.
 package main
 
 import (
@@ -104,7 +104,7 @@ func run() error {
 		if _, err := store.Advance("c-probe", cp, ev); err != nil {
 			return err
 		}
-		emit("interpreter", map[string]any{"reconstruct-state": map[string]any{"uiIncarnation": "fixture", "revision": 1, "conversations": []any{map[string]any{"conversation": "c-probe", "availability": projection.Availability{}}}}})
+		emit("apprentice", map[string]any{"reconstruct-state": map[string]any{"uiIncarnation": "fixture", "revision": 1, "conversations": []any{map[string]any{"conversation": "c-probe", "availability": projection.Availability{}}}}})
 	case 4:
 		if e.Steps[3].State != "return" {
 			return fmt.Errorf("reconstruction procedure failed")

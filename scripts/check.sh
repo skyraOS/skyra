@@ -5,7 +5,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 go test -race -count=1 ./controller/... ./tui/... ./website/export/...
 go vet ./controller/... ./tui/... ./website/export/...
-(cd controller/interp && go test -race -count=1 ./... && go vet ./...)
+(cd controller/apprentice && go test -race -count=1 ./... && go vet ./...)
 if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app/Contents/Developer ]; then
  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi

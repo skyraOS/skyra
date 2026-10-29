@@ -37,7 +37,7 @@ func (r Reach) Holds(name string, c *Schema) bool {
 	return slices.ContainsFunc(e.Held, func(i int) bool { return i < len(e.Contracts) && same(e.Contracts[i], c) })
 }
 
-func Interpreter(reach Reach) string {
+func Apprentice(reach Reach) string {
 	for _, name := range slices.Sorted(maps.Keys(reach)) {
 		if s := reach.First(name); s != nil && s.Title == "remember" {
 			return name
@@ -54,7 +54,7 @@ func ContractsOf(reach Reach, name string) []*Schema {
 // transport's capability catalog. Reserved names keep the direct capability
 // binding when a learned title collides with it.
 func Procedures(reach Reach, reserved []string, rememberDescription string) []Tool {
-	target := Interpreter(reach)
+	target := Apprentice(reach)
 	if target == "" {
 		return nil
 	}

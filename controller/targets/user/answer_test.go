@@ -37,8 +37,8 @@ func TestTheModelIsAParameterOfThink(t *testing.T) {
 	}
 }
 
-func TestTheTableRunsThinkOnTheInterpreter(t *testing.T) {
-	if p, ok := procedures["think"]; !ok || p.Actor != "interpreter" {
+func TestTheTableRunsThinkOnTheApprentice(t *testing.T) {
+	if p, ok := procedures["think"]; !ok || p.Actor != "apprentice" {
 		t.Fatalf("think: %+v", p)
 	}
 	if _, ok := procedures["codex"]; ok {

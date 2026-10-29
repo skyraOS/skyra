@@ -45,7 +45,7 @@ usage: skyra [command]
   replay DIR    re-derive a finished conversation or run from its records
   stop          stop any actor hosts left by an older Skyra version
   demo          the stateless controller: every scenario, each ending in a replay check
-  test          controller, interpreter, browser, desktop, website and demos
+  test          controller, apprentice, browser, desktop, website and demos
   doctor        check prerequisites
   build         build every binary into build/
 
@@ -91,8 +91,8 @@ controller_build() {
   if [ "$(uname -s)" = Darwin ]; then
     clang -fobjc-arc -framework AppKit -framework CoreGraphics "$ROOT/controller/cua/windows.m" -o "$BUILD/controller/cua-windows"
   fi
-  # The interpreter is its own module (next/32).
-  (cd "$ROOT/controller/interp" && go build -o "$BUILD/controller/interp" .)
+  # The apprentice is its own module (next/32).
+  (cd "$ROOT/controller/apprentice" && go build -o "$BUILD/controller/apprentice" .)
   go build -o "$BUILD/tui" ./tui
 }
 
@@ -171,10 +171,10 @@ registry={
  'claude.inspect':io('contract.json'),
  'claude.stop':io('contract.json'),
  'user':{'path':str(build/'user'),'contract':str(root/'controller/targets/user/contract.json')},
- # The interpreter (next/32): remember, the procedures it builds, in its own state,
+ # The apprentice (next/32): remember, the procedures it builds, in its own state,
  # and the authored procedures a conversation runs (think, proposal 38).
- 'interpreter':{'path':str(build/'interp'),'contract':str(root/'controller/interp/contract.json'),'state':True,
-                'bundle':str(root/'controller/interp/workflows/think/bundle.json')},
+ 'apprentice':{'path':str(build/'apprentice'),'contract':str(root/'controller/apprentice/contract.json'),'state':True,
+                'bundle':str(root/'controller/apprentice/workflows/think/bundle.json')},
  'browser':{'host':os.environ['SKYRA_REGISTRY_PARK'],'contract':str(root/'controller/targets/browser/contract.json')}
 }
 # Claude runs under the same provider profile as Codex. Its login stays in the
@@ -202,25 +202,25 @@ if desktop_config:
     contract_path.write_text(json.dumps(contract,sort_keys=True))
     registry['desktop_observe']={'path':str(build/'desktop-observe'),'contract':str(contract_path),
         'authority':{'connect':[str(socket)]}}
-    bundle=json.loads((root/'controller/interp/workflows/think/bundle.json').read_text())
+    bundle=json.loads((root/'controller/apprentice/workflows/think/bundle.json').read_text())
     bundle['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].append('desktop_observe')
     bundle_path=cache/(launch+'-desktop-think.json')
     bundle_path.write_text(json.dumps(bundle,sort_keys=True))
-    registry['interpreter']['bundle']=str(bundle_path)
+    registry['apprentice']['bundle']=str(bundle_path)
 # In this workspace, write is an authored procedure: raw write, then commit.
 # The Git host receives only an observation; no actor gains Git authority.
 ideas_socket=os.environ.get('SKYRA_IDEAS_SOCKET','')
 if workspace==root.resolve(strict=True) and not (root/"skyra-release.json").exists():
     if not ideas_socket: sys.exit('skyra: ideas commit host is not running')
     registry['write.file']=registry['write']
-    registry['write']={'path':str(build/'interp'),'contract':str(root/'controller/interp/workflows/write/contract.json'),
-                       'state':True,'bundle':str(root/'controller/interp/workflows/write/bundle.json')}
+    registry['write']={'path':str(build/'apprentice'),'contract':str(root/'controller/apprentice/workflows/write/contract.json'),
+                       'state':True,'bundle':str(root/'controller/apprentice/workflows/write/bundle.json')}
     registry['ideas.commit']={'host':ideas_socket,'contract':str(root/'controller/hosts/ideas/contract.json')}
-    think=json.loads(Path(registry['interpreter']['bundle']).read_text())
+    think=json.loads(Path(registry['apprentice']['bundle']).read_text())
     think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['write.file','ideas.commit'])
     think_file=cache/(launch+'-think-ideas-bundle.json')
     think_file.write_text(json.dumps(think,sort_keys=True))
-    registry['interpreter']['bundle']=str(think_file)
+    registry['apprentice']['bundle']=str(think_file)
 # Repository edits and Git run through recorded host actors. The execve
 # contract is just target + argv; its host binds git to this repository.
 if workspace==root.resolve(strict=True) and not (root/"skyra-release.json").exists():
@@ -231,15 +231,15 @@ if workspace==root.resolve(strict=True) and not (root/"skyra-release.json").exis
     registry['repo.write']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/write-contract.json')}
     registry['execve']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/contract.json')}
     registry['repo.check']={'host':repo_socket,'contract':str(root/'controller/hosts/repo/check-contract.json')}
-    think=json.loads(Path(registry['interpreter']['bundle']).read_text())
+    think=json.loads(Path(registry['apprentice']['bundle']).read_text())
     think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['repo.write','execve','repo.check'])
     think_file=cache/(launch+'-think-repo-bundle.json')
     think_file.write_text(json.dumps(think,sort_keys=True))
-    registry['interpreter']['bundle']=str(think_file)
+    registry['apprentice']['bundle']=str(think_file)
 # Design is callable from think and has its own root. Dependencies remain in
 # reach for nested invocation; only the design worker is offered design.tools.
-registry['design']={'path':str(build/'interp'),'contract':str(root/'controller/interp/workflows/design/contract.json'),
- 'state':True,'bundle':str(root/'controller/interp/workflows/design/bundle.json')}
+registry['design']={'path':str(build/'apprentice'),'contract':str(root/'controller/apprentice/workflows/design/contract.json'),
+ 'state':True,'bundle':str(root/'controller/apprentice/workflows/design/bundle.json')}
 registry['design.tools']={'path':str(build/'design-tools'),'contract':str(root/'controller/design/contract.json')}
 penpot_socket=os.environ.get('SKYRA_PENPOT_SOCKET')
 if penpot_socket:
@@ -248,14 +248,14 @@ if penpot_socket:
     if not socket.is_absolute() or not stat.S_ISSOCK(socket.stat().st_mode) or socket.parent.stat().st_mode & 0o077:
         sys.exit('skyra: Penpot bridge must be private')
     registry['design.tools']['authority']={'connect':[str(socket)]}
-think=json.loads(Path(registry['interpreter']['bundle']).read_text())
+think=json.loads(Path(registry['apprentice']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['design','design.tools'])
 think_file=cache/(launch+'-think-design-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
-registry['interpreter']['bundle']=str(think_file)
+registry['apprentice']['bundle']=str(think_file)
 # Bounded offline Blender authoring is a recorded procedure, not global MCP.
-registry['blender']={'path':str(build/'interp'),'contract':str(root/'controller/interp/workflows/blender/contract.json'),
- 'state':True,'bundle':str(root/'controller/interp/workflows/blender/bundle.json')}
+registry['blender']={'path':str(build/'apprentice'),'contract':str(root/'controller/apprentice/workflows/blender/contract.json'),
+ 'state':True,'bundle':str(root/'controller/apprentice/workflows/blender/bundle.json')}
 registry['blender.tools']={'path':str(build/'blender-tools'),'contract':str(root/'controller/blender/contract.json')}
 blender_socket=os.environ.get('SKYRA_BLENDER_SOCKET')
 if blender_socket:
@@ -264,11 +264,11 @@ if blender_socket:
     if not socket.is_absolute() or not stat.S_ISSOCK(socket.stat().st_mode) or socket.parent.stat().st_mode & 0o077:
         sys.exit('skyra: Blender bridge must be private')
     registry['blender.tools']['authority']={'connect':[str(socket)]}
-think=json.loads(Path(registry['interpreter']['bundle']).read_text())
+think=json.loads(Path(registry['apprentice']['bundle']).read_text())
 think['procedures'][0]['nodes']['scope']['in']['narrow']['reach'].extend(['blender','blender.tools'])
 think_file=cache/(launch+'-think-blender-bundle.json')
 think_file.write_text(json.dumps(think,sort_keys=True))
-registry['interpreter']['bundle']=str(think_file)
+registry['apprentice']['bundle']=str(think_file)
 # Each built binary is registered by a copy stored under its own hash. A
 # conversation pins its binaries' hashes at genesis, so a rebuild must never
 # change a file one points at: it adds new copies and leaves the old ones.
@@ -502,7 +502,7 @@ serve() {
   if [ "$PACKAGED" = 0 ]; then
     local stamp="$BUILD/.source-stamp"
     local fingerprint
-    fingerprint=$(cd "$ROOT" && { cat go.mod go.sum controller/interp/go.mod controller/interp/go.sum 2>/dev/null; find controller tui -name '*.go' -o -name '*.m' | sort | xargs cat; } | shasum -a 256 | cut -d' ' -f1)
+    fingerprint=$(cd "$ROOT" && { cat go.mod go.sum controller/apprentice/go.mod controller/apprentice/go.sum 2>/dev/null; find controller tui -name '*.go' -o -name '*.m' | sort | xargs cat; } | shasum -a 256 | cut -d' ' -f1)
     if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$fingerprint" ]; then
       say "building (source changed)"
       controller_build

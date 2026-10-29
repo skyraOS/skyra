@@ -9,7 +9,7 @@ let revision = 0;
 // The roots a human may select, as the real host derives them from think's
 // bundle (proposal 38). The shared check holds both to the same shape.
 const tools = ["echo", "read", "find", "roots", "write", "codex.open", "codex.exchange", "codex.inspect", "codex.stop"];
-const destinations = [{ actor: "interpreter", title: "think",
+const destinations = [{ actor: "apprentice", title: "think",
  schema: { title: "think", type: "object", required: ["think"], fields: { think: { type: "object", required: ["text", "context"], fields: { text: { type: "string" }, context: { type: "any" } } } } },
  outline: { nodes: [
   { name: "scope", calls: "system", after: [], narrows: { actor: "codex", reach: tools } },

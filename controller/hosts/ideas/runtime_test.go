@@ -27,10 +27,10 @@ func TestWriteProcedureThroughSandboxAndGitHost(t *testing.T) {
 			t.Fatalf("build %s: %v %s", name, err, out)
 		}
 	}
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "interp"), ".")
-	cmd.Dir = "../../interp"
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "apprentice"), ".")
+	cmd.Dir = "../../apprentice"
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build interp: %v %s", err, out)
+		t.Fatalf("build apprentice: %v %s", err, out)
 	}
 	// Darwin's Unix socket path limit is shorter than t.TempDir's path.
 	socketDir, err := os.MkdirTemp("/tmp", "skyra-ideas-")
@@ -61,7 +61,7 @@ func TestWriteProcedureThroughSandboxAndGitHost(t *testing.T) {
 	}
 	abs := func(path string) string { out, _ := filepath.Abs(path); return out }
 	reg := map[string]any{
-		"write":        map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../../interp/workflows/write/contract.json"), "state": true, "bundle": abs("../../interp/workflows/write/bundle.json")},
+		"write":        map[string]any{"path": filepath.Join(dir, "apprentice"), "contract": abs("../../apprentice/workflows/write/contract.json"), "state": true, "bundle": abs("../../apprentice/workflows/write/bundle.json")},
 		"write.file":   map[string]any{"path": filepath.Join(dir, "write"), "contract": abs("../../targets/write/contract.json")},
 		"ideas.commit": map[string]any{"host": sock, "contract": abs("contract.json")},
 	}

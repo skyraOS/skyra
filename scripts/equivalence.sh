@@ -40,7 +40,7 @@ c="$ROOT/controller"
 (cd "$ROOT" && for t in echo:targets/echo agent:targets/agent codex:codex/adapter host:hosts/actor fake-codex:codex/fake read:targets/read; do
   go build -trimpath -o "$work/bin/${t%%:*}" "./controller/${t#*:}"
 done)
-(cd "$c/interp" && go build -trimpath -o "$work/bin/interp" .)
+(cd "$c/apprentice" && go build -trimpath -o "$work/bin/apprentice" .)
 
 look="$work/look"
 mkdir -p "$look/sub"
@@ -50,7 +50,7 @@ cat > "$work/bin/registry.json" <<JSON
 {
   "echo":  {"path": "echo",  "contract": "$c/targets/echo/contract.json"},
   "agent": {"path": "agent", "contract": "$c/targets/agent/contract.json"},
-  "interpreter": {"path": "interp", "contract": "$c/interp/examples/greet-contract.json", "state": true},
+  "apprentice": {"path": "apprentice", "contract": "$c/apprentice/examples/greet-contract.json", "state": true},
   "read":  {"path": "read",  "contract": "$c/targets/read/contract.json", "authority": {"read": [{"path": "$look", "scope": "subpath"}]}},
   "codex": {"path": "codex", "contract": "$c/codex/adapter/contract.json", "connect": ["$sock"]}
 }
@@ -77,7 +77,7 @@ run_one() {
   local build=$1; shift
   rm -rf "$work/root"; mkdir -p "$work/root"
   start_host
-  if [ "$1" = interp ]; then shift; "$work/bin/interp" install "$root/interpreter" "$c/interp/examples/greet.json" >/dev/null; fi
+  if [ "$1" = apprentice ]; then shift; "$work/bin/apprentice" install "$root/apprentice" "$c/apprentice/examples/greet.json" >/dev/null; fi
   SKYRA_SYNC_TRACE=${CHECK_SYNC:-} "$work/$build/skyra" boot -root "$root" -registry "$work/bin/registry.json" "$@" >"$work/out" 2>&1 || true
   stop_host
   grep -q '^replay: .*byte-identical$' "$work/out" || { echo "  replay did not pass under $build:"; sed 's/^/    /' "$work/out"; return 1; }
@@ -138,7 +138,7 @@ scenario "fan-out"                     -to agent -payload '{"text":"fan:hello,wo
 scenario "fan-out, one out of reach"   -to agent -payload '{"text":"fan:hello,!shell"}'
 scenario "extend-reach"                -to agent -payload '{"text":"extend:hello"}'
 scenario "extend-reach refused"        -to agent -payload '{"text":"redundant:"}'
-scenario "interpreter procedure"       interp -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}'
+scenario "apprentice procedure"       apprentice -to apprentice -payload '{"names":["ada","bo"],"greeting":"hi"}'
 scenario "remember"                    -to agent -payload '{"text":"remember:hello"}'
 scenario "refinement"                  -to agent -payload "{\"text\":\"look:$look\"}"
 scenario "codex (fake) tool call"      -to codex -payload '{"text":"tool:hello"}'

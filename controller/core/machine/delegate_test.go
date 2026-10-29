@@ -61,7 +61,7 @@ func TestNarrowingInheritsAuthorityAndContracts(t *testing.T) {
 		t.Fatalf("inheritance: %+v", child)
 	}
 	// Models, delegation and tool labels are the adapters' and the
-	// interpreter's: narrow takes none of them.
+	// apprentice's: narrow takes none of them.
 	for _, payload := range []string{
 		`{"narrow":{"actor":"agent","inherit_model":true}}`,
 		`{"narrow":{"actor":"agent","delegated":true}}`,
@@ -160,26 +160,26 @@ func TestHeldIsByContractRatherThanActor(t *testing.T) {
 	a := call("allowed", &contract.Schema{Type: "object"})
 	b := call("excluded", &contract.Schema{Type: "object"})
 	remember := call("remember", &contract.Schema{Type: "object"})
-	h.Reach["interpreter"] = boundary.Surface{Input: remember, Contracts: []*contract.Schema{a, b}}
-	kept, _ := json.Marshal([]map[string]any{{"target": "interpreter", "schema": a}})
+	h.Reach["apprentice"] = boundary.Surface{Input: remember, Contracts: []*contract.Schema{a, b}}
+	kept, _ := json.Marshal([]map[string]any{{"target": "apprentice", "schema": a}})
 	child := delegated(t, h, `{"actor":"agent","contracts":`+string(kept)+`}`)
-	if intakeRecord(child, `{"to":"interpreter","payload":{"allowed":{}}}`).State != record.Invoke {
+	if intakeRecord(child, `{"to":"apprentice","payload":{"allowed":{}}}`).State != record.Invoke {
 		t.Fatal("allowed procedure refused")
 	}
-	if intakeRecord(child, `{"to":"interpreter","payload":{"excluded":{}}}`).State != record.Fault {
+	if intakeRecord(child, `{"to":"apprentice","payload":{"excluded":{}}}`).State != record.Fault {
 		t.Fatal("another contract on the same actor escaped")
 	}
 	// A contract the actor adds to itself is declared, not held.
 	c := call("new", &contract.Schema{Type: "object"})
-	s := child.Reach["interpreter"]
+	s := child.Reach["apprentice"]
 	s.Contracts = append(s.Contracts, c)
 	copyReach := map[string]boundary.Surface{}
 	for name, s := range child.Reach {
 		copyReach[name] = s
 	}
-	copyReach["interpreter"] = s
+	copyReach["apprentice"] = s
 	child.Reach = copyReach
-	if intakeRecord(child, `{"to":"interpreter","payload":{"new":{}}}`).State != record.Fault {
+	if intakeRecord(child, `{"to":"apprentice","payload":{"new":{}}}`).State != record.Fault {
 		t.Fatal("an export widened what is held")
 	}
 }

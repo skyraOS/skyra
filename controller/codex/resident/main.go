@@ -94,9 +94,9 @@ func (t tool) shared() proceduretools.Tool {
 }
 
 // tools is everything Codex is offered, in a fixed order (next/32): the model
-// tools in reach; when the interpreter is in reach, remember (by the index of
+// tools in reach; when the apprentice is in reach, remember (by the index of
 // one of this turn's own calls: the adapter, a worker, holds its observation)
-// and procedure (its input goes to the interpreter, which runs the procedure
+// and procedure (its input goes to the apprentice, which runs the procedure
 // whose contract it fits); and one tool per procedure that exists when the
 // thread starts, labelled by its contract's title, never a hash. Codex's
 // tools are fixed at thread/start, so a procedure remembered in this thread

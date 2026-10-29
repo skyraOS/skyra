@@ -48,7 +48,7 @@
 // Run against refine (next/32, H9), it writes the refinements of a procedure
 // remembered from it, in CEL: which inputs and returns its decisions still
 // hold for. Its first answer reads a field that does not exist, so the
-// interpreter refuses it and shows why; its second is right.
+// apprentice refuses it and shows why; its second is right.
 package main
 
 import (
@@ -213,20 +213,20 @@ func remember(c continuation, word string) {
 		emit("agent", map[string]string{"text": "relay:" + word})
 	case 1:
 		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
-		emit("interpreter", remembering)
+		emit("apprentice", remembering)
 	case 2:
-		emit("interpreter", map[string]string{"text": "relay:" + word + ", again"})
+		emit("apprentice", map[string]string{"text": "relay:" + word + ", again"})
 	case 3:
-		emit("system", map[string]any{"narrow": map[string]any{"actor": "interpreter", "reach": []string{"interpreter"}}})
+		emit("system", map[string]any{"narrow": map[string]any{"actor": "apprentice", "reach": []string{"apprentice"}}})
 	case 4:
 		var got struct{ Reference string }
 		_ = json.Unmarshal(c.Steps[3].Value, &got)
 		emit(got.Reference, map[string]string{"text": "relay:" + word + ", narrowed"})
 	case 5:
 		remembering["remember"].(map[string]any)["observation"] = c.Steps[0].Observation
-		emit("interpreter", remembering)
+		emit("apprentice", remembering)
 	case 6:
-		emit("interpreter", map[string]string{"text": "plain words"})
+		emit("apprentice", map[string]string{"text": "plain words"})
 	default:
 		said := map[string]any{}
 		for i, name := range []string{"task", "remembered", "procedure", "narrow", "narrowed", "again", "outside its refinement"} {
@@ -275,12 +275,12 @@ func look(c continuation, dir string) {
 	case 0:
 		emit("agent", map[string]string{"path": dir + "/a.txt"})
 	case 1:
-		emit("interpreter", map[string]any{"remember": map[string]any{
+		emit("apprentice", map[string]any{"remember": map[string]any{
 			"observation": c.Steps[0].Observation, "contract": map[string]any{"target": "agent", "schema": lookContract}}})
 	case 2:
-		emit("interpreter", map[string]string{"path": dir + "/b.txt"})
+		emit("apprentice", map[string]string{"path": dir + "/b.txt"})
 	case 3:
-		emit("interpreter", map[string]string{"path": dir + "/sub"})
+		emit("apprentice", map[string]string{"path": dir + "/sub"})
 	default:
 		said := map[string]any{}
 		for i, name := range []string{"a.txt, by the agent", "remembered", "b.txt, by the procedure", "sub, by the procedure"} {

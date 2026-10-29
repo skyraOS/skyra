@@ -11,8 +11,8 @@ go build -o bin/codex ./codex/adapter
 go build -o bin/host ./hosts/actor
 go build -o bin/fake-codex ./codex/fake
 go build -o bin/read ./targets/read
-# The interpreter is its own module (next/32): the controller stays standard-library Go.
-(cd interp && go build -o ../bin/interp .)
+# The apprentice is its own module (next/32): the controller stays standard-library Go.
+(cd apprentice && go build -o ../bin/apprentice .)
 
 # The actor host in front of a deterministic fake Codex app-server (codex/fake/).
 # A unix socket path must be short, and real (the sandbox matches real paths).
@@ -38,7 +38,7 @@ cat > bin/registry.json <<JSON
 {
   "echo":  {"path": "echo",  "contract": "../targets/echo/contract.json"},
   "agent": {"path": "agent", "contract": "../targets/agent/contract.json"},
-  "interpreter": {"path": "interp", "contract": "../interp/examples/greet-contract.json", "state": true},
+  "apprentice": {"path": "apprentice", "contract": "../apprentice/examples/greet-contract.json", "state": true},
   "read":  {"path": "read",  "contract": "../targets/read/contract.json", "authority": {"read": [{"path": "$look", "scope": "subpath"}]}},
   "codex": {"path": "codex", "contract": "../codex/adapter/contract.json", "connect": ["$sock"]}
 }
@@ -75,13 +75,13 @@ scenario return "fan-out: one instruction out of reach faults, its sibling runs"
 # The Boundary's syscalls (next/32, H3): the agent adds a contract to itself, then calls itself through it.
 scenario return "extend-reach: the agent adds a contract to itself and is invoked through it" -to agent -payload '{"text":"extend:hello"}'
 scenario contract "extend-reach: a contract the actor already holds is refused" -to agent -payload '{"text":"redundant:"}'
-# The interpreter (next/32, H5): a procedure installed by hand in its own state runs through the
+# The apprentice (next/32, H5): a procedure installed by hand in its own state runs through the
 # kernel, its fork and its each fanned out in one emission. The kernel sees only instructions.
 root=$(cd "$(mktemp -d)" && pwd -P)/.skyra
 echo
-echo "══ interpreter: a hand-installed procedure fans out through the kernel ══"
-./bin/interp install "$root/interpreter" interp/examples/greet.json
-run_boot return -root "$root" -registry bin/registry.json -to interpreter -payload '{"names":["ada","bo"],"greeting":"hi"}'
+echo "══ apprentice: a hand-installed procedure fans out through the kernel ══"
+./bin/apprentice install "$root/apprentice" apprentice/examples/greet.json
+run_boot return -root "$root" -registry bin/registry.json -to apprentice -payload '{"names":["ada","bo"],"greeting":"hi"}'
 # The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's trace, then calls the
 # procedure it became: no model step, no approval. From a Boundary without echo it faults at intake;
 # the same contract is not remembered twice; an actor cannot extend itself with what it holds.

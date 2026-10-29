@@ -80,7 +80,7 @@ func TestCheck(t *testing.T) {
 }
 
 // The normal form (42): testdata/normal.json lists each case and its normal
-// form. proc.Schema.Canonical in the interpreter reads the same file and
+// form. proc.Schema.Canonical in the apprentice reads the same file and
 // must reproduce the same bytes, so the two cannot drift.
 func TestNormalForm(t *testing.T) {
 	for _, c := range normalCases(t) {

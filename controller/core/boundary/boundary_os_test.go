@@ -214,22 +214,22 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 		t.Fatal(err)
 	}
 	floor := filepath.Join(base, ".skyra")
-	for _, d := range []string{"interpreter", "other", "records"} {
+	for _, d := range []string{"apprentice", "other", "records"} {
 		if err := os.MkdirAll(filepath.Join(floor, d), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// A read grant that covers the whole floor changes nothing.
 	surface, exe := verified(t, self, floor)
-	surface.State = "interpreter"
+	surface.State = "apprentice"
 	h := Boundary{Surface: surface, Authority: Authority{Read: []PathGrant{{Path: base, Scope: "subpath"}}, Write: []PathGrant{{Path: base, Scope: "subpath"}}}}
-	if got := StateDir(h, floor); got != filepath.Join(floor, "interpreter") {
+	if got := StateDir(h, floor); got != filepath.Join(floor, "apprentice") {
 		t.Fatalf("state dir: %s", got)
 	}
 	for dir, want := range map[string]string{
-		"interpreter": "allowed,allowed",
-		"other":       "denied,denied",
-		"records":     "denied,denied",
+		"apprentice": "allowed,allowed",
+		"other":      "denied,denied",
+		"records":    "denied,denied",
 	} {
 		cmd := exec.Command("/usr/bin/sandbox-exec", "-p", Render(h, floor), exe, "-test.run=^TestOSStateHelper$")
 		cmd.Env = []string{"SKYRA_TEST_STATE_DIR=" + filepath.Join(floor, dir)}
@@ -242,7 +242,7 @@ func TestAnActorSeesOnlyItsOwnState(t *testing.T) {
 		}
 	}
 	// No state named, or a name that is the kernel's: nothing of the floor.
-	for _, name := range []string{"", "records", "../x", "Interp"} {
+	for _, name := range []string{"", "records", "../x", "Apprentice"} {
 		if StateDir(Boundary{Surface: &Surface{Path: self, State: name}}, floor) != "" {
 			t.Errorf("%q is no actor's state", name)
 		}

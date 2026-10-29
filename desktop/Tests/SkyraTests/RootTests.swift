@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Skyra
 
-private let thinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write","codex.open","codex.exchange","codex.inspect","codex.stop"]}},{"name":"run","calls":"codex","after":["scope"]}]}}"#
+private let thinkJSON = #"{"actor":"apprentice","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write","codex.open","codex.exchange","codex.inspect","codex.stop"]}},{"name":"run","calls":"codex","after":["scope"]}]}}"#
 
 private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]", revision: Int = 1) -> Data {
     Data(#"{"type":"snapshot","uiIncarnation":"i","revision":\#(revision),"requests":[],"destinations":\#(roots),"conversations":\#(conversations)}"#.utf8)
@@ -117,7 +117,7 @@ private func snapshot(_ conversations: String, roots: String = "[\(thinkJSON)]",
 // think is one procedure whose model is a parameter (proposal 39): its
 // narrowing names no actor, and the sky draws it on the selected model,
 // with that model's adapter and none of the other's.
-private let unifiedThinkJSON = #"{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"","param":"model","reach":["echo","read","codex","codex.open","codex.exchange","claude","claude.open","claude.exchange","claude.stop"]}},{"name":"run","calls":"","via":"scope","after":["scope"]}]}}"#
+private let unifiedThinkJSON = #"{"actor":"apprentice","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"","param":"model","reach":["echo","read","codex","codex.open","codex.exchange","claude","claude.open","claude.exchange","claude.stop"]}},{"name":"run","calls":"","via":"scope","after":["scope"]}]}}"#
 
 @MainActor
 @Test func thinksConstellationFollowsTheModel() throws {
@@ -183,7 +183,7 @@ private let unifiedThinkJSON = #"{"actor":"interpreter","title":"think","schema"
     let tools = (0..<100).map { "tool\($0)" }
     let node = Destination.Node(name: "scope", calls: "system", after: [],
         narrows: .init(actor: "codex", reach: tools))
-    let destination = Destination(actor: "interpreter", title: "think", outline: .init(nodes: [
+    let destination = Destination(actor: "apprentice", title: "think", outline: .init(nodes: [
         node, .init(name: "run", calls: "codex", after: ["scope"], narrows: nil)
     ]))
     let figure = RootSky.place([destination], in: CGSize(width: 1280, height: 758))[0]

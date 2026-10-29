@@ -19,15 +19,15 @@ func TestBundleContractsAndContentArePinnedTogether(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("interp", "installer binary")
+	write("apprentice", "installer binary")
 	write("contract.json", `{"input":{"type":"string"},"continuation":true}`)
-	entry := Entry{Path: "interp", Contract: "contract.json", State: true, Bundle: "bundle.json"}
+	entry := Entry{Path: "apprentice", Contract: "contract.json", State: true, Bundle: "bundle.json"}
 	loadEntry := func() (boundary.Surface, error) {
 		t.Helper()
-		b, _ := json.Marshal(map[string]Entry{"interpreter": entry})
+		b, _ := json.Marshal(map[string]Entry{"apprentice": entry})
 		write("registry.json", string(b))
 		reach, _, err := Load(filepath.Join(dir, "registry.json"))
-		return reach["interpreter"], err
+		return reach["apprentice"], err
 	}
 	body := `{"version":1,"procedures":[{"contract":{"type":"object","required":["load"],"fields":{"load":{"type":"string"}}},"nodes":[]}]}`
 	write("bundle.json", body)

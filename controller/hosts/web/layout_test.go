@@ -56,7 +56,7 @@ func TestAProcedureMustNameADirectory(t *testing.T) {
 	bundle := filepath.Join(dir, "bundle.json")
 	os.WriteFile(bundle, []byte(`{"version":1,"procedures":[{"contract":{"title":"../escape","type":"object"},"nodes":{}}]}`), 0o600)
 	reg := filepath.Join(dir, "registry.json")
-	os.WriteFile(reg, []byte(`{"interpreter":{"bundle":"`+bundle+`"}}`), 0o600)
+	os.WriteFile(reg, []byte(`{"apprentice":{"bundle":"`+bundle+`"}}`), 0o600)
 	if _, err := loadDestinations(reg); err == nil {
 		t.Fatal("a procedure whose title is a path was accepted")
 	}

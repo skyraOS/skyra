@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
-          cache-dependency-path: controller/interp/go.sum
+          cache-dependency-path: controller/apprentice/go.sum
       - name: Validate release inputs and credentials
         env:
           CERTIFICATE: ${{ secrets.SKYRA_SIGNING_P12 }}

@@ -140,7 +140,7 @@ Repository scratch `write` saves one file under `ideas/` and automatically recor
 only that file on `skyra/ideas`, with agent author and configured user committer.
 The user's current HEAD and staging area are preserved; nothing is pushed.
 The reply includes commit, branch, or commit_error. See the
-[write workflow](../../interp/workflows/write/README.md).
+[write workflow](../../apprentice/workflows/write/README.md).
 Other workspace selections retain plain scratch writes.
 
 Run `go test ./controller/...` for contracts, guards, local disposable Git

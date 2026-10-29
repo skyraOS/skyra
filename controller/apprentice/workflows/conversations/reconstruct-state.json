@@ -1,0 +1,93 @@
+{
+  "contract": {
+    "title": "reconstruct-state",
+    "type": "object",
+    "required": [
+      "reconstruct-state"
+    ],
+    "fields": {
+      "reconstruct-state": {
+        "type": "object",
+        "required": [
+          "conversations",
+          "revision",
+          "uiIncarnation"
+        ],
+        "fields": {
+          "uiIncarnation": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "conversations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["availability", "conversation"],
+              "fields": {
+                "conversation": {"type": "string"},
+                "availability": {"type": "any"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": [
+    "views",
+    "snapshot"
+  ],
+  "nodes": {
+    "views": {
+      "call": "apprentice",
+      "each": {
+        "$": [
+          "input",
+          "reconstruct-state",
+          "conversations"
+        ]
+      },
+      "in": {
+        "reconstruct-conversation": {
+          "$": ["item"]
+        }
+      }
+    },
+    "snapshot": {
+      "call": "user",
+      "after": [
+        "views"
+      ],
+      "in": {
+        "project-app-state": {
+          "uiIncarnation": {
+            "$": [
+              "input",
+              "reconstruct-state",
+              "uiIncarnation"
+            ]
+          },
+          "revision": {
+            "$": [
+              "input",
+              "reconstruct-state",
+              "revision"
+            ]
+          },
+          "views": {
+            "$": [
+              "views"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "return": {
+    "$": [
+      "snapshot"
+    ]
+  }
+}

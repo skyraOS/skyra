@@ -11,7 +11,7 @@
   {"case": "an array's items",
    "in":     {"type": "array", "items": {"type": "object", "required": ["z", "y"], "fields": {"y": {"type": "bool"}, "z": {"type": "null"}}}},
    "normal": {"type": "array", "items": {"type": "object", "required": ["y", "z"], "fields": {"y": {"type": "bool"}, "z": {"type": "null"}}}}},
-  {"case": "a title is kept: the interpreter routes by it",
+  {"case": "a title is kept: the apprentice routes by it",
    "in":     {"title": "greet", "type": "object", "required": ["n", "g"], "fields": {"g": {"type": "string"}, "n": {"type": "string"}}},
    "normal": {"title": "greet", "type": "object", "required": ["g", "n"], "fields": {"g": {"type": "string"}, "n": {"type": "string"}}}},
   {"case": "already normal",

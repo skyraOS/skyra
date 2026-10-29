@@ -34,10 +34,10 @@ try {
  // The roots a human may select, each with its outline derived from its
  // definition (proposal 38): think narrows Codex, then calls it.
  const think = initial.destinations.find(d=>d.title==="think");
- assert(think && think.actor==="interpreter" && think.schema.title==="think", `think is a root: ${JSON.stringify(initial.destinations)}`);
+ assert(think && think.actor==="apprentice" && think.schema.title==="think", `think is a root: ${JSON.stringify(initial.destinations)}`);
  const [scope, run] = think.outline.nodes;
  assert.equal(scope.calls,"system"); assert.equal(scope.narrows.actor,"codex");
- assert(scope.narrows.reach.includes("write") && !scope.narrows.reach.includes("interpreter"), `codex's narrowed reach: ${scope.narrows.reach}`);
+ assert(scope.narrows.reach.includes("write") && !scope.narrows.reach.includes("apprentice"), `codex's narrowed reach: ${scope.narrows.reach}`);
  assert.equal(run.calls,"codex"); assert.deepEqual(run.after,["scope"]);
  assert(!initial.destinations.some(d=>d.title==="codex"), "codex is inspectable, never a root");
  client.send({type:"open-conversation",requestId:"open-unknown",procedure:"codex"});

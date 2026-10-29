@@ -37,17 +37,17 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "interp"), ".")
-	cmd.Dir = "../interp"
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "apprentice"), ".")
+	cmd.Dir = "../apprentice"
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build interpreter: %v %s", err, out)
+		t.Fatalf("build apprentice: %v %s", err, out)
 	}
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	socket := startService(t, dir, map[string]string{"codex": filepath.Join(dir, "fake-codex"), "claude": filepath.Join(dir, "fake-claude")})
 	registry := map[string]any{
-		"echo":        map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
-		"read":        map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json")},
-		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true},
+		"echo":       map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
+		"read":       map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json")},
+		"apprentice": map[string]any{"path": filepath.Join(dir, "apprentice"), "contract": abs("../apprentice/contract.json"), "state": true},
 	}
 	for _, actor := range []string{"codex", "claude"} {
 		ops := []string{actor + ".open", actor + ".exchange", actor + ".inspect", actor + ".stop"}

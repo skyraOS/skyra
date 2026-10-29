@@ -12,7 +12,7 @@ import (
 )
 
 // operation is the user actor's finite read/projection surface. The calling
-// interpreter composes these calls; it does not own the checkpoint or view.
+// apprentice composes these calls; it does not own the checkpoint or view.
 func operation(raw json.RawMessage) (bool, error) {
 	var e struct {
 		Frame string

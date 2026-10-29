@@ -31,10 +31,10 @@ func aConversationRoundTripsThroughTheWebhost() async throws {
     // under; and think's narrowing, which Codex ran under, reaching only the
     // model's tools (proposal 38).
     let root = try #require(c.boundaries?.first { $0.root })
-    #expect(root.actors.contains("user") && root.actors.contains("interpreter") && !root.actors.contains("codex"))
+    #expect(root.actors.contains("user") && root.actors.contains("apprentice") && !root.actors.contains("codex"))
     let think = try #require(c.boundaries?.first { !$0.root && $0.actors.contains("codex") })
     #expect(think.reach.contains { $0.name == "echo" } && think.reach.contains { $0.name == "write" })
-    #expect(!think.reach.contains { $0.name == "interpreter" || $0.name == "user" })
+    #expect(!think.reach.contains { $0.name == "apprentice" || $0.name == "user" })
 
     // A second message continues the same conversation.
     s.draft = "again"

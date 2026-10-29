@@ -44,7 +44,7 @@ func TestResolvedModelStaysInTheAdapter(t *testing.T) {
 }
 
 func TestDelegateFailurePresentedAsUnsuccessfulToolResult(t *testing.T) {
-	r := toolResult(json.RawMessage(`"call"`), step{To: "interpreter", State: "return", Value: json.RawMessage(`{"failed":{"kind":"custody","cause":"provider exited"}}`)})
+	r := toolResult(json.RawMessage(`"call"`), step{To: "apprentice", State: "return", Value: json.RawMessage(`{"failed":{"kind":"custody","cause":"provider exited"}}`)})
 	b, _ := json.Marshal(r)
 	if !strings.Contains(string(b), `"success":false`) || !strings.Contains(string(b), "provider exited") {
 		t.Fatalf("child failure became success: %s", b)

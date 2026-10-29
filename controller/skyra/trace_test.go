@@ -41,19 +41,19 @@ func booted(t *testing.T) (func(text string) string, *contract.Schema, *contract
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "interp"), ".")
-	build.Dir = "../interp" // its own module
+	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "apprentice"), ".")
+	build.Dir = "../apprentice" // its own module
 	out, err := build.CombinedOutput()
 	cancel()
 	if err != nil {
-		t.Fatalf("build the interpreter: %v\n%s", err, out)
+		t.Fatalf("build the apprentice: %v\n%s", err, out)
 	}
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	reg := filepath.Join(dir, "registry.json")
 	body, _ := json.Marshal(map[string]any{
-		"echo":        map[string]string{"path": "echo", "contract": abs("../targets/echo/contract.json")},
-		"agent":       map[string]string{"path": "agent", "contract": abs("../targets/agent/contract.json")},
-		"interpreter": map[string]any{"path": "interp", "contract": abs("../interp/contract.json"), "state": true},
+		"echo":       map[string]string{"path": "echo", "contract": abs("../targets/echo/contract.json")},
+		"agent":      map[string]string{"path": "agent", "contract": abs("../targets/agent/contract.json")},
+		"apprentice": map[string]any{"path": "apprentice", "contract": abs("../apprentice/contract.json"), "state": true},
 	})
 	if err := os.WriteFile(reg, body, 0o600); err != nil {
 		t.Fatal(err)

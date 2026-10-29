@@ -45,7 +45,7 @@ type narrowing struct {
 // loadDestinations reads every authored procedure the operator's registry
 // installs: each entry that names a bundle contributes its procedures as
 // roots on that entry. Remembered procedures, whose nodes live in the
-// interpreter's state, are not roots yet.
+// apprentice's state, are not roots yet.
 func loadDestinations(registryFile string) ([]destination, error) {
 	b, err := os.ReadFile(registryFile)
 	if err != nil {

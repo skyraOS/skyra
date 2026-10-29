@@ -18,7 +18,7 @@ import (
 	"skyra/controller/runtime/tree"
 )
 
-// think (proposal 38, step 4) through the real runtime: the interpreter runs
+// think (proposal 38, step 4) through the real runtime: the apprentice runs
 // the bundle, which narrows Codex to read-only tools for this invocation only
 // and runs it with the header as its whole prompt. The fake Codex stands in
 // for the provider and refuses any thread without Skyra's prompt.
@@ -40,10 +40,10 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "interp"), ".")
-	build.Dir = "../interp"
+	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(dir, "apprentice"), ".")
+	build.Dir = "../apprentice"
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build interpreter: %v %s", err, out)
+		t.Fatalf("build apprentice: %v %s", err, out)
 	}
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	workspace := filepath.Join(dir, "work")
@@ -63,7 +63,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		"claude":          map[string]any{"path": filepath.Join(dir, "codex"), "contract": abs("../claude/resident/contract.json"), "state": true},
 		"claude.open":     serviceIO(dir, socket, "open-contract.json"),
 		"claude.exchange": io(), "claude.inspect": io(), "claude.stop": io(),
-		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true, "bundle": abs("../interp/workflows/think/bundle.json")},
+		"apprentice": map[string]any{"path": filepath.Join(dir, "apprentice"), "contract": abs("../apprentice/contract.json"), "state": true, "bundle": abs("../apprentice/workflows/think/bundle.json")},
 	}
 	b, _ := json.Marshal(registry)
 	reg := filepath.Join(dir, "registry.json")
@@ -84,7 +84,7 @@ func TestThinkThroughRealRuntime(t *testing.T) {
 		payload, _ := json.Marshal(map[string]any{"think": map[string]any{"text": text, "model": "codex", "context": earlier, "images": []string{}}})
 		runCtx, runCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer runCancel()
-		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "interpreter", "-payload", string(payload))
+		cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-scratch", scratch, "-to", "apprentice", "-payload", string(payload))
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("think %q: %v\n%s", text, err, out)

@@ -115,13 +115,13 @@ import Testing
 // derived from the procedure's definition, and each conversation names the
 // root it runs (proposal 38).
 @Test func rootsAndTheirOutlinesDecode() throws {
-    let raw = #"{"type":"snapshot","uiIncarnation":"i","revision":1,"requests":[],"conversations":[{"conversation":"c1","phase":"ready","entries":[],"pendingRequestId":null,"procedure":"think"}],"destinations":[{"actor":"interpreter","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write"]}},{"name":"run","calls":"codex","after":["scope"]}]}}]}"#
+    let raw = #"{"type":"snapshot","uiIncarnation":"i","revision":1,"requests":[],"conversations":[{"conversation":"c1","phase":"ready","entries":[],"pendingRequestId":null,"procedure":"think"}],"destinations":[{"actor":"apprentice","title":"think","schema":{"title":"think"},"outline":{"nodes":[{"name":"scope","calls":"system","after":[],"narrows":{"actor":"codex","reach":["echo","read","roots","write"]}},{"name":"run","calls":"codex","after":["scope"]}]}}]}"#
     guard case let .snapshot(_, _, convs, roots) = try JSONDecoder().decode(ServerMessage.self, from: Data(raw.utf8)) else {
         Issue.record("not a snapshot"); return
     }
     #expect(convs.first?.procedure == "think")
     let think = try #require(roots.first)
-    #expect(think.actor == "interpreter" && think.title == "think")
+    #expect(think.actor == "apprentice" && think.title == "think")
     #expect(think.outline.nodes.first?.narrows?.actor == "codex")
     #expect(think.outline.nodes.first?.narrows?.reach.contains("write") == true)
     #expect(think.outline.nodes.last?.calls == "codex" && think.outline.nodes.last?.after == ["scope"])

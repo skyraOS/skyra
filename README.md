@@ -19,11 +19,11 @@ whole run can be replayed and checked.
 per-call macOS sandboxes, hash-chained records checked by replay, and browser,
 terminal and native macOS clients on one protocol. Models propose actions;
 the runtime derives and checks what may execute. Codex and Claude both run
-under it, each in its own deny-default sandbox. An interpreter turns
+under it, each in its own deny-default sandbox. An apprentice turns
 remembered execution traces into reusable procedures within the same authority
 boundary. The chat apps are clients of that runtime, not the runtime itself.
 
-The controller uses standard-library Go; the interpreter has CEL dependencies.
+The controller uses standard-library Go; the apprentice has CEL dependencies.
 The implementation and its remaining gaps are listed [below](#where-we-are).
 
 ```sh
@@ -192,7 +192,7 @@ The phases in detail:
   invoke, and every step it has taken, and prints one output.
 - **No secrets anywhere.** A stamp is a hash, verified by reading the tree.
 
-The controller is standard-library Go; the interpreter is a separate module with CEL dependencies. Start
+The controller is standard-library Go; the apprentice is a separate module with CEL dependencies. Start
 with [`controller/core/machine/machine.go`](controller/core/machine/machine.go); the
 [controller README](controller/README.md) walks every package and maps each
 design decision to the line that implements it.
@@ -245,7 +245,7 @@ go test -run '^$' -bench . ./controller/runtime/replay/ ./website/export/
 | A fault in a turn is shown and the conversation goes on | **built**; routing it back into the same Codex turn is not |
 | Tail calls, fan-out of several children at once | **built**: a version 2 round commits the full emission, and replay checks every distinct terminal slot in instruction order |
 | Self-extension: an agent remembers a trace it ran as a procedure under its own Boundary, and runs it with no approval (`remember`, `extend-reach`: [next/32](docs/design/procedures.md)) | **built**: scripted and with a fake Codex; real Codex is offered `remember` but was not yet run with it |
-| Procedures: remembered calls within a Boundary, run by the interpreter actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
+| Procedures: remembered calls within a Boundary, run by the apprentice actor without the model, inside refinements the model writes in CEL; outside them the model runs ([next/32](docs/design/procedures.md)) | **built** |
 | Codex's and Claude's native execution | each runs under the deny-default profile its program registration declares, with egress only through an allowlisting proxy; a native attempt interrupts the turn and is returned to the user side as an observation |
 | Invariant 3 fully: records still store derived fields (checked by replay), and the shell still checks the binary hash itself | known gaps |
 

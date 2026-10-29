@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "procedures": [
+    {
+      "contract": {
+        "title": "reconstruct-conversation",
+        "type": "object",
+        "required": [
+          "reconstruct-conversation"
+        ],
+        "fields": {
+          "reconstruct-conversation": {
+            "type": "object",
+            "required": [
+              "availability",
+              "conversation"
+            ],
+            "fields": {
+              "conversation": {
+                "type": "string"
+              },
+              "availability": {
+                "type": "any"
+              }
+            }
+          }
+        }
+      },
+      "order": [
+        "checkpoint",
+        "trace",
+        "view"
+      ],
+      "nodes": {
+        "checkpoint": {
+          "call": "user",
+          "in": {
+            "read-checkpoint": {
+              "conversation": {
+                "$": [
+                  "input",
+                  "reconstruct-conversation",
+                  "conversation"
+                ]
+              }
+            }
+          }
+        },
+        "trace": {
+          "call": "system",
+          "after": [
+            "checkpoint"
+          ],
+          "in": {
+            "trace": {
+              "invocation": {
+                "$": [
+                  "checkpoint",
+                  "root_invocation"
+                ]
+              },
+              "observations": {
+                "$": [
+                  "checkpoint",
+                  "leaves"
+                ]
+              },
+              "contract": {
+                "$": [
+                  "checkpoint",
+                  "contract"
+                ]
+              }
+            }
+          }
+        },
+        "view": {
+          "call": "user",
+          "after": [
+            "trace"
+          ],
+          "in": {
+            "project-state": {
+              "conversation": {
+                "$": [
+                  "input",
+                  "reconstruct-conversation",
+                  "conversation"
+                ]
+              },
+              "availability": {
+                "$": [
+                  "input",
+                  "reconstruct-conversation",
+                  "availability"
+                ]
+              },
+              "checkpoint": {
+                "$": [
+                  "checkpoint"
+                ]
+              },
+              "trace": {
+                "$": [
+                  "trace"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "return": {
+        "$": [
+          "view"
+        ]
+      }
+    },
+    {
+      "contract": {
+        "title": "reconstruct-state",
+        "type": "object",
+        "required": [
+          "reconstruct-state"
+        ],
+        "fields": {
+          "reconstruct-state": {
+            "type": "object",
+            "required": [
+              "conversations",
+              "revision",
+              "uiIncarnation"
+            ],
+            "fields": {
+              "uiIncarnation": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "number"
+              },
+              "conversations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "availability",
+                    "conversation"
+                  ],
+                  "fields": {
+                    "conversation": {
+                      "type": "string"
+                    },
+                    "availability": {
+                      "type": "any"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "order": [
+        "views",
+        "snapshot"
+      ],
+      "nodes": {
+        "views": {
+          "call": "apprentice",
+          "each": {
+            "$": [
+              "input",
+              "reconstruct-state",
+              "conversations"
+            ]
+          },
+          "in": {
+            "reconstruct-conversation": {
+              "$": [
+                "item"
+              ]
+            }
+          }
+        },
+        "snapshot": {
+          "call": "user",
+          "after": [
+            "views"
+          ],
+          "in": {
+            "project-app-state": {
+              "uiIncarnation": {
+                "$": [
+                  "input",
+                  "reconstruct-state",
+                  "uiIncarnation"
+                ]
+              },
+              "revision": {
+                "$": [
+                  "input",
+                  "reconstruct-state",
+                  "revision"
+                ]
+              },
+              "views": {
+                "$": [
+                  "views"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "return": {
+        "$": [
+          "snapshot"
+        ]
+      }
+    }
+  ]
+}

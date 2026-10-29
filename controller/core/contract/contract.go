@@ -79,7 +79,7 @@ func Canonical(v any) json.RawMessage {
 
 // Normal is a copy of s in its normal form: every Required, at every depth,
 // sorted and deduplicated (42). Two contracts that differ only in the order
-// of their required fields are one contract. The interpreter's
+// of their required fields are one contract. The apprentice's
 // proc.Schema.Canonical computes the same form; testdata/normal.json holds
 // the cases both must reproduce.
 func Normal(s *Schema) *Schema {
