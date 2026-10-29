@@ -41,10 +41,9 @@ const (
 	System       = "system"
 	SystemPrefix = "system."
 
-	Narrowing    = "narrow"
-	Extending    = "extend-reach"
-	Tracing      = "trace"
-	AgentContext = "agent-context"
+	Narrowing = "narrow"
+	Extending = "extend-reach"
+	Tracing   = "trace"
 )
 
 var (
@@ -52,11 +51,10 @@ var (
 	strs     = &contract.Schema{Type: "array", Items: str}
 	grants   = &contract.Schema{Type: "array", Items: &contract.Schema{Type: "object", Required: []string{"path", "scope"}, Fields: map[string]*contract.Schema{"path": str, "scope": str}}}
 	narrowIn = &contract.Schema{Type: "object", Required: []string{"actor"}, Fields: map[string]*contract.Schema{
-		"actor":         str,
-		"reach":         strs,
-		"tools":         strs,
-		"inherit_model": {Type: "bool"},
-		"delegated":     {Type: "bool"},
+		"actor":     str,
+		"reach":     strs,
+		"tools":     strs,
+		"delegated": {Type: "bool"},
 		"authority": {Type: "object", Fields: map[string]*contract.Schema{
 			"read": grants, "write": grants, "mach": strs, "connect": strs, "scratch": str,
 		}},
@@ -87,7 +85,6 @@ func Syscalls() boundary.Surface {
 		call(Narrowing, narrowIn),
 		call(Extending, extendIn),
 		call(Tracing, traceIn),
-		call(AgentContext, &contract.Schema{Type: "object", Required: []string{"model"}, Fields: map[string]*contract.Schema{"model": str}}),
 	}}
 }
 
@@ -114,7 +111,7 @@ func changesWaiter(r record.Record, s boundary.Surface) bool {
 		return false
 	}
 	name, _ := syscall(r.Payload)
-	return name == Narrowing || name == Extending || name == AgentContext
+	return name == Narrowing || name == Extending
 }
 
 // checkSyscall checks a syscall's arguments against the Boundary it was
@@ -124,10 +121,6 @@ func checkSyscall(h boundary.Boundary, payload json.RawMessage) (string, error) 
 	switch name, args := syscall(payload); name {
 	case Narrowing:
 		if _, err := narrowing(h, args); err != nil {
-			return record.Boundary, err
-		}
-	case AgentContext:
-		if _, err := agentContext(h, args); err != nil {
 			return record.Boundary, err
 		}
 	case Extending:
@@ -218,13 +211,12 @@ func isStamp(s string) bool {
 // asks for anything not held is a boundary fault.
 func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, error) {
 	var ask struct {
-		Actor        string              `json:"actor"`
-		Reach        *[]string           `json:"reach"`
-		Authority    *boundary.Authority `json:"authority"`
-		Without      []string            `json:"without"`
-		Tools        *[]string           `json:"tools"`
-		InheritModel bool                `json:"inherit_model"`
-		Delegated    bool                `json:"delegated"`
+		Actor     string              `json:"actor"`
+		Reach     *[]string           `json:"reach"`
+		Authority *boundary.Authority `json:"authority"`
+		Without   []string            `json:"without"`
+		Tools     *[]string           `json:"tools"`
+		Delegated bool                `json:"delegated"`
 	}
 	if err := json.Unmarshal(payload, &ask); err != nil {
 		return boundary.Grant{}, err
@@ -232,7 +224,7 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	if _, ok := h.Reach[ask.Actor]; !ok || IsSystem(ask.Actor) {
 		return boundary.Grant{}, fmt.Errorf("%q is not an actor in reach", ask.Actor)
 	}
-	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority, Agent: h.Agent, WorkTools: h.WorkTools, Delegated: h.Delegated || ask.Delegated}
+	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority, WorkTools: h.WorkTools, Delegated: h.Delegated || ask.Delegated}
 	if ask.Delegated && h.Depth() > 64 {
 		return g, fmt.Errorf("delegation exceeds the runtime frame limit")
 	}
@@ -245,15 +237,6 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	}
 	if ask.Delegated && h.Reach[ask.Actor].Agent == nil {
 		return g, fmt.Errorf("%q is not an available agent", ask.Actor)
-	}
-	if h.Reach[ask.Actor].Agent != nil {
-		g.Agent = &boundary.AgentContext{Actor: ask.Actor}
-		if ask.InheritModel {
-			if h.Agent == nil || h.Agent.Actor != ask.Actor || h.Agent.Model == "" {
-				return g, fmt.Errorf("caller model is unavailable for %q", ask.Actor)
-			}
-			g.Agent.Model = h.Agent.Model
-		}
 	}
 	if ask.Tools != nil {
 		allowed := map[string]boundary.ToolBinding{}
@@ -436,22 +419,4 @@ func kept(reach map[string]boundary.Surface, names []string) map[string]boundary
 		}
 	}
 	return out
-}
-
-// Only a configured agent adapter records its resolved provider model. The
-// actor identity is derived from the emitter, not accepted as an argument.
-func agentContext(h boundary.Boundary, payload json.RawMessage) (*boundary.AgentContext, error) {
-	var ask struct {
-		Model string `json:"model"`
-	}
-	if err := json.Unmarshal(payload, &ask); err != nil {
-		return nil, err
-	}
-	if h.Surface == nil || h.Surface.Agent == nil || strings.TrimSpace(ask.Model) == "" {
-		return nil, fmt.Errorf("only an agent records a nonempty resolved model")
-	}
-	if h.Agent != nil && h.Agent.Actor == h.Name && h.Agent.Model != "" && h.Agent.Model != ask.Model {
-		return nil, fmt.Errorf("resolved model differs from inherited model")
-	}
-	return &boundary.AgentContext{Actor: h.Name, Model: ask.Model}, nil
 }

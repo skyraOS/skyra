@@ -26,18 +26,17 @@ type step struct {
 	Fault       *struct{ Kind, Cause string } `json:"fault"`
 }
 type continuation struct {
-	Agents    map[string]json.RawMessage     `json:"agents"`
-	Actor     string                         `json:"actor"`
-	Agent     *struct{ Actor, Model string } `json:"agent"`
-	WorkTools *[]string                      `json:"work_tools"`
-	Delegated bool                           `json:"delegated"`
-	Workspace string                         `json:"workspace"`
-	Scratch   string                         `json:"scratch"`
-	Frame     string                         `json:"frame"`
+	Agents    map[string]json.RawMessage `json:"agents"`
+	Actor     string                     `json:"actor"`
+	WorkTools *[]string                  `json:"work_tools"`
+	Delegated bool                       `json:"delegated"`
+	Workspace string                     `json:"workspace"`
+	Scratch   string                     `json:"scratch"`
+	Frame     string                     `json:"frame"`
 	Input     struct {
-		Text, Header, Conversation, Thread, Incarnation string
-		Context                                         json.RawMessage
-		ActivityAt                                      int64 `json:"activity_at"`
+		Text, Header, Conversation, Thread, Incarnation, Model string
+		Context                                                json.RawMessage
+		ActivityAt                                             int64 `json:"activity_at"`
 	} `json:"input"`
 	Tools     map[string]*schema   `json:"tools"`
 	Contracts map[string][]*schema `json:"contracts"`
@@ -69,7 +68,6 @@ type message struct {
 type derived struct {
 	SentResume                                                       bool
 	Model                                                            string
-	PublishedModel                                                   bool
 	Incarnation, Thread, Turn, Final, Violation, Partial             string
 	Initialized, SentInitialize, SentThread, SentTurn, SentInterrupt bool
 	NeedInspect, SentInspect, Inspected, NeedStop, Stopped, Lost     bool
@@ -189,13 +187,14 @@ func offered(c continuation, name string) bool {
 
 // toolEmission is the instruction a tool call becomes. results are this
 // turn's tool steps, in the order Codex's calls were invoked.
-func toolEmission(c continuation, results []step, name string, args json.RawMessage) string {
+func toolEmission(c continuation, d derived, name string, args json.RawMessage) string {
+	results := d.Results
 	t, _ := lookup(c, name)
 	calls := make([]proceduretools.Call, len(results))
 	for i, s := range results {
 		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts))
+	return emit(t.target, proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: d.Model}))
 }
 
 func main() {
@@ -247,17 +246,6 @@ func decide(c continuation) (string, error) {
 		d.Thread = ""
 	}
 	for _, s := range c.Steps {
-		if s.To == "system" {
-			var q map[string]json.RawMessage
-			_ = json.Unmarshal(s.Payload, &q)
-			if _, ok := q["agent-context"]; ok {
-				if s.State != "return" {
-					return "", errors.New("failed to record agent model")
-				}
-				d.PublishedModel = true
-				continue
-			}
-		}
 		if !strings.HasPrefix(s.To, "codex.") {
 			// A tool's return or fault is an observation for Codex, in the same turn.
 			d.Results = append(d.Results, s)
@@ -484,8 +472,8 @@ func decide(c continuation) (string, error) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
 		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, c.Tools["repo.write"] != nil && proceduretools.Allows(c.WorkTools, "repo_write"))}
-		if c.Agent != nil && c.Agent.Actor == c.Actor && c.Agent.Model != "" {
-			params["model"] = c.Agent.Model
+		if c.Input.Model != "" {
+			params["model"] = c.Input.Model
 		}
 		if c.Delegated {
 			params["config"] = map[string]any{"web_search": "disabled"}
@@ -505,17 +493,16 @@ func decide(c continuation) (string, error) {
 			return ioCall(d.Incarnation, nil, d.Partial), nil
 		}
 	}
-	if c.Actor != "" && d.Thread != "" && !d.PublishedModel {
-		if d.Model == "" && c.Input.Thread != "" {
-			if !d.SentResume {
-				return ioCall(d.Incarnation, []string{rpc(c.Frame+":resume", "thread/resume", map[string]any{"threadId": d.Thread, "approvalPolicy": "never", "sandbox": "read-only"})}, d.Partial), nil
-			}
-			return ioCall(d.Incarnation, nil, d.Partial), nil
-		}
-		if d.Model == "" {
+	// A delegate that names no actor inherits this thread's model, so learn
+	// it before the turn: thread/start reports it, a resumed thread is asked.
+	if c.Actor != "" && d.Thread != "" && d.Model == "" {
+		if c.Input.Thread == "" {
 			return "", errors.New("thread did not report its resolved model")
 		}
-		return emit("system", map[string]any{"agent-context": map[string]string{"model": d.Model}}), nil
+		if !d.SentResume {
+			return ioCall(d.Incarnation, []string{rpc(c.Frame+":resume", "thread/resume", map[string]any{"threadId": d.Thread, "approvalPolicy": "never", "sandbox": "read-only"})}, d.Partial), nil
+		}
+		return ioCall(d.Incarnation, nil, d.Partial), nil
 	}
 	if !d.SentTurn {
 		return ioCall(d.Incarnation, []string{rpc(c.Frame+":turn", "turn/start", map[string]any{"threadId": d.Thread, "input": turnInput(c.Input.Context, c.Input.Text)})}, d.Partial), nil
@@ -547,7 +534,7 @@ func decide(c continuation) (string, error) {
 			if len(args) == 0 {
 				args = json.RawMessage(`{}`)
 			}
-			return toolEmission(c, d.Results, call.Params.Tool, args), nil
+			return toolEmission(c, d, call.Params.Tool, args), nil
 		}
 		if t, _ := lookup(c, call.Params.Tool); d.Results[i].To != t.target {
 			return "", fmt.Errorf("tool call %s asked for %s, but step %d invoked %s", id(call.ID), call.Params.Tool, i, d.Results[i].To)

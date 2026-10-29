@@ -1,6 +1,6 @@
 {
   "input": {"type":"object","required":["text"],"fields":{
-    "text":{"type":"string"},"header":{"type":"string"},"context":{"type":"any"},"images":{"type":"array","items":{"type":"string"}},"conversation":{"type":"string"},
+    "text":{"type":"string"},"header":{"type":"string"},"context":{"type":"any"},"images":{"type":"array","items":{"type":"string"}},"conversation":{"type":"string"},"model":{"type":"string"},
     "thread":{"type":"string"},"incarnation":{"type":"string"},"activity_at":{"type":"number"}
   }},
   "continuation": true

@@ -97,7 +97,6 @@ func against(s boundary.Surface, input json.RawMessage) *contract.Schema {
 // it has taken, with what came back. It is stateless: everything it knows is here.
 type Continuation struct {
 	Actor     string                           `json:"actor,omitempty"`
-	Agent     *boundary.AgentContext           `json:"agent,omitempty"`
 	Agents    map[string]*boundary.AgentConfig `json:"agents,omitempty"`
 	WorkTools *[]string                        `json:"work_tools,omitempty"`
 	Delegated bool                             `json:"delegated,omitempty"`
@@ -139,7 +138,7 @@ func caller(h boundary.Boundary) string {
 // continuation is what the waiter reads when it resumes: every step of every
 // round, in the order they were emitted.
 func continuation(frame record.Record, rounds []round, waiter boundary.Boundary) []byte {
-	c := Continuation{Actor: agentName(waiter), Agent: waiter.Agent, Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
+	c := Continuation{Actor: agentName(waiter), Agents: agents(waiter), WorkTools: workToolNames(waiter), Delegated: waiter.Delegated, Frame: record.Stamp(frame), Caller: caller(waiter), Input: frame.Payload, Workspace: workspaceOf(waiter), Scratch: waiter.Authority.Scratch, Tools: tools(waiter), Contracts: contracts(waiter), Steps: []StepView{}}
 	if waiter.Surface != nil {
 		c.Contract = against(*waiter.Surface, frame.Payload)
 	}

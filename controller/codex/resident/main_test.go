@@ -216,15 +216,15 @@ func TestRememberAndProceduresAreOffered(t *testing.T) {
 		t.Fatalf("tools: %v", names)
 	}
 	results := []step{{To: "read", Payload: json.RawMessage(`{"path":"a"}`), State: "return", Observation: "obs"}}
-	got := toolEmission(c, results, "remember", json.RawMessage(`{"call":0}`))
+	got := toolEmission(c, derived{Results: results}, "remember", json.RawMessage(`{"call":0}`))
 	want := `{"payload":{"remember":{"contract":{"schema":{"type":"object","fields":{"path":{"type":"string"}},"required":["path"]},"target":"read"},"observation":"obs"}},"to":"interpreter"}`
 	if got != want {
 		t.Fatalf("remember:\n got %s\nwant %s", got, want)
 	}
-	if got := toolEmission(c, results, "procedure", json.RawMessage(`{"input":{"path":"b"}}`)); got != `{"payload":{"path":"b"},"to":"interpreter"}` {
+	if got := toolEmission(c, derived{Results: results}, "procedure", json.RawMessage(`{"input":{"path":"b"}}`)); got != `{"payload":{"path":"b"},"to":"interpreter"}` {
 		t.Fatalf("procedure: %s", got)
 	}
-	if got := toolEmission(c, results, "remember", json.RawMessage(`{"call":3}`)); !strings.Contains(got, `{"remember":{}}`) {
+	if got := toolEmission(c, derived{Results: results}, "remember", json.RawMessage(`{"call":3}`)); !strings.Contains(got, `{"remember":{}}`) {
 		t.Fatalf("a call that does not exist is left for intake to refuse: %s", got)
 	}
 	// Without the interpreter, nothing changes.

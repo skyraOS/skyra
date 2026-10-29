@@ -17,7 +17,6 @@ func delegationRoot() boundary.Boundary {
 	work := echoS
 	work.WorkTool = true
 	h.Reach = map[string]boundary.Surface{"agent": worker, "other": worker, "agent.start": {Path: "/bin/service-io", SHA256: "h", Input: echoIn}, "echo": work, "write": work, System: Syscalls()}
-	h.Agent = &boundary.AgentContext{Actor: "agent", Model: "chosen-model"}
 	h.Authority = boundary.Authority{Read: []boundary.PathGrant{{Path: "/private/work", Scope: "subpath"}}}
 	return h
 }
@@ -44,15 +43,18 @@ func delegated(t *testing.T, h boundary.Boundary, args string) boundary.Boundary
 	return child
 }
 
-func TestDelegateScopeInheritsActorModelAuthority(t *testing.T) {
+func TestDelegateScopeInheritsAuthority(t *testing.T) {
 	h := delegationRoot()
-	child := delegated(t, h, `{"actor":"agent","delegated":true,"inherit_model":true}`)
-	if !reflect.DeepEqual(child.Agent, h.Agent) || !reflect.DeepEqual(child.Authority, h.Authority) || !child.Delegated || child.WorkTools != nil {
+	child := delegated(t, h, `{"actor":"agent","delegated":true}`)
+	if !reflect.DeepEqual(child.Authority, h.Authority) || !child.Delegated || child.WorkTools != nil {
 		t.Fatalf("inheritance: %+v", child)
 	}
-	other := delegated(t, h, `{"actor":"other","delegated":true}`)
-	if other.Agent.Actor != "other" || other.Agent.Model != "" {
-		t.Fatalf("explicit actor should use its default: %+v", other.Agent)
+	// The model is the adapter's: narrow takes none.
+	if intakeRecord(h, `{"to":"system","payload":{"narrow":{"actor":"agent","inherit_model":true}}}`).State != record.Fault {
+		t.Fatal("narrow accepted a model option")
+	}
+	if intakeRecord(h, `{"to":"system","payload":{"agent-context":{"model":"m"}}}`).State != record.Fault {
+		t.Fatal("agent-context is still a syscall")
 	}
 }
 
@@ -145,22 +147,5 @@ func TestDelegateChecksContractsRatherThanActorAlone(t *testing.T) {
 	child.Reach = copyReach
 	if intakeRecord(child, `{"to":"interpreter","payload":{"new":{}}}`).State != record.Fault {
 		t.Fatal("extension widened tools")
-	}
-}
-
-func TestAgentModelPublicationIsOwnedAndCannotChangeInheritedModel(t *testing.T) {
-	h := delegationRoot()
-	h.Name = "agent"
-	s := h.Reach[h.Name]
-	h.Surface = &s
-	if _, err := agentContext(h, json.RawMessage(`{"model":"chosen-model"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := agentContext(h, json.RawMessage(`{"model":"different"}`)); err == nil {
-		t.Fatal("inherited model changed")
-	}
-	h.Surface = &echoS
-	if _, err := agentContext(h, json.RawMessage(`{"model":"chosen-model"}`)); err == nil {
-		t.Fatal("work tool impersonated agent")
 	}
 }

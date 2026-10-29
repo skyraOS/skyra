@@ -378,7 +378,7 @@ func toolEmission(c continuation, name string, args json.RawMessage) (string, er
 	for i, s := range c.Steps {
 		calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 	}
-	payload := proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts)
+	payload := proceduretools.Payload(t.kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{})
 	out, err := json.Marshal(map[string]any{"to": t.target, "payload": payload})
 	return string(out), err
 }

@@ -11,7 +11,7 @@ func TestDelegatedThreadUsesInheritedModelAndNoNativeTools(t *testing.T) {
 	c.Steps = c.Steps[:2]
 	c.Actor = "codex"
 	c.Delegated = true
-	c.Agent = &struct{ Actor, Model string }{"codex", "chosen-model"}
+	c.Input.Model = "chosen-model"
 	empty := []string{}
 	c.WorkTools = &empty
 	_, m := emitted(t, c)
@@ -34,18 +34,13 @@ func TestDelegatedThreadUsesInheritedModelAndNoNativeTools(t *testing.T) {
 	}
 }
 
-func TestAgentModelPublicationDoesNotConsumeModelToolIndexes(t *testing.T) {
+func TestResolvedModelStaysInTheAdapter(t *testing.T) {
 	c := turnWithCalls(`echo {"text":"findings"}`)
 	c.Actor = "codex"
 	c.Steps[2].Value = json.RawMessage(strings.Replace(string(c.Steps[2].Value), `\"approvalPolicy\":\"never\"`, `\"model\":\"chosen-model\",\"approvalPolicy\":\"never\"`, 1))
 	to, m := emitted(t, c)
-	if to != "system" || !strings.Contains(string(m["payload"]), `"model":"chosen-model"`) {
-		t.Fatalf("resolved model was not recorded: %s %s", to, m["payload"])
-	}
-	c.Steps = append(c.Steps, step{To: "system", Payload: m["payload"], State: "return", Value: json.RawMessage(`{"ok":true}`)})
-	to, m = emitted(t, c)
 	if to != "echo" || string(m["payload"]) != `{"text":"findings"}` {
-		t.Fatalf("metadata became a model tool result: %s %s", to, m["payload"])
+		t.Fatalf("model tool call was not the next step: %s %s", to, m["payload"])
 	}
 }
 
@@ -68,8 +63,8 @@ func TestExistingThreadReportsItsModelBeforeDelegation(t *testing.T) {
 	}
 	c.Steps = append(c.Steps, step{To: to, State: "return", Payload: m["payload"], Value: value(map[string]any{"lines": []string{`{"id":"frame:resume","result":{"thread":{"id":"thread-existing"},"model":"chosen-model","approvalPolicy":"never","sandbox":{"type":"readOnly","networkAccess":false}}}`}})})
 	to, m = emitted(t, c)
-	if to != "system" || !strings.Contains(string(m["payload"]), `"model":"chosen-model"`) {
-		t.Fatalf("model unavailable to delegation: %s %s", to, m["payload"])
+	if to != "codex.exchange" || !strings.Contains(string(m["payload"]), "turn/start") {
+		t.Fatalf("turn did not start after the model was learned: %s %s", to, m["payload"])
 	}
 }
 

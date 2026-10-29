@@ -28,18 +28,17 @@ import (
 type schema = proceduretools.Schema
 
 type continuation struct {
-	Agents    map[string]json.RawMessage     `json:"agents"`
-	Actor     string                         `json:"actor"`
-	Agent     *struct{ Actor, Model string } `json:"agent"`
-	WorkTools *[]string                      `json:"work_tools"`
-	Delegated bool                           `json:"delegated"`
-	Contracts map[string][]*schema           `json:"contracts"`
-	Workspace string                         `json:"workspace"`
-	Scratch   string                         `json:"scratch"`
-	Frame     string                         `json:"frame"`
+	Agents    map[string]json.RawMessage `json:"agents"`
+	Actor     string                     `json:"actor"`
+	WorkTools *[]string                  `json:"work_tools"`
+	Delegated bool                       `json:"delegated"`
+	Contracts map[string][]*schema       `json:"contracts"`
+	Workspace string                     `json:"workspace"`
+	Scratch   string                     `json:"scratch"`
+	Frame     string                     `json:"frame"`
 	Input     struct {
-		Text, Header, Conversation, Session string
-		Context                             json.RawMessage
+		Text, Header, Conversation, Session, Model string
+		Context                                    json.RawMessage
 	} `json:"input"`
 	Tools map[string]*schema `json:"tools"`
 	Steps []step             `json:"steps"`
@@ -71,18 +70,17 @@ type bridgeCall struct {
 }
 
 type derived struct {
-	PublishedModel bool
-	Incarnation    string
-	ConfigSent     bool
-	Session        string
-	FinalText      string
-	Done           bool
-	Failed         string
-	Partial        string
-	Calls          []bridgeCall
-	Results        []step
-	Answered       map[string]bool
-	ActivityAt     int64
+	Incarnation string
+	ConfigSent  bool
+	Session     string
+	FinalText   string
+	Done        bool
+	Failed      string
+	Partial     string
+	Calls       []bridgeCall
+	Results     []step
+	Answered    map[string]bool
+	ActivityAt  int64
 }
 
 // modelTools lists the tools Claude is offered. A tool appears only when it
@@ -156,17 +154,6 @@ func decide(c continuation) (string, error) {
 	d := derived{Answered: map[string]bool{}}
 
 	for _, s := range c.Steps {
-		if s.To == "system" {
-			var q map[string]json.RawMessage
-			_ = json.Unmarshal(s.Payload, &q)
-			if _, ok := q["agent-context"]; ok {
-				if s.State != "return" {
-					return "", errors.New("failed to record agent model")
-				}
-				d.PublishedModel = true
-				continue
-			}
-		}
 		if !strings.HasPrefix(s.To, "claude.") {
 			d.Results = append(d.Results, s)
 			continue
@@ -252,9 +239,6 @@ func decide(c continuation) (string, error) {
 		}), nil
 	}
 
-	if c.Actor != "" && !d.PublishedModel {
-		return emit("system", map[string]any{"agent-context": map[string]string{"model": resolvedModel(c)}}), nil
-	}
 	if d.Incarnation == "" {
 		return emit("claude.open", map[string]any{"program": "claude"}), nil
 	}
@@ -283,7 +267,7 @@ func decide(c continuation) (string, error) {
 			for i, s := range d.Results {
 				calls[i] = proceduretools.Call{Target: s.To, Observation: s.Observation, Payload: s.Payload}
 			}
-			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts)), nil
+			return emit(t.Target, proceduretools.Payload(t.Kind, args, calls, c.Tools, c.Contracts, proceduretools.Caller{Actor: c.Actor, Model: resolvedModel(c)})), nil
 		}
 		result := d.Results[i]
 		var br map[string]any
@@ -409,8 +393,8 @@ func lookup(c continuation, name string) (proceduretools.Tool, bool) {
 	return proceduretools.Tool{}, false
 }
 func resolvedModel(c continuation) string {
-	if c.Agent != nil && c.Agent.Actor == c.Actor && c.Agent.Model != "" {
-		return c.Agent.Model
+	if c.Input.Model != "" {
+		return c.Input.Model
 	}
 	return provider.DefaultModel
 }

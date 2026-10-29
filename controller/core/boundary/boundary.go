@@ -102,12 +102,6 @@ type AgentConfig struct {
 	Operations []string `json:"operations"`
 }
 
-// AgentContext carries execution metadata, never conversation history.
-type AgentContext struct {
-	Actor string `json:"actor"`
-	Model string `json:"model,omitempty"`
-}
-
 // ToolBinding identifies executable contracts, rather than prompt labels alone.
 type ToolBinding struct {
 	Target    string             `json:"target"`
@@ -163,7 +157,6 @@ func (s Surface) All() []*contract.Schema {
 // emitted (its Stamp is the round that opened the slot). The operator's
 // Boundary has no Resume.
 type Boundary struct {
-	Agent     *AgentContext           `json:"agent,omitempty"`
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
 	Delegated bool                    `json:"delegated,omitempty"`
 	Stamp     string                  `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
@@ -181,7 +174,6 @@ type Boundary struct {
 // Grant is what a reference stands for: an actor in reach, and the narrowed
 // Boundary it runs under when the reference is invoked.
 type Grant struct {
-	Agent     *AgentContext           `json:"agent,omitempty"`
 	WorkTools *map[string]ToolBinding `json:"work_tools,omitempty"`
 	Delegated bool                    `json:"delegated,omitempty"`
 	Actor     string                  `json:"actor"`

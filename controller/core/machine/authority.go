@@ -109,7 +109,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 				return boundary.Boundary{}, fmt.Errorf("reference %q names %q, which is not in the parent's reach", r.To, g.Actor)
 			}
 			// A Boundary of its own: created by this invoke, so named by it.
-			return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Agent: g.Agent, WorkTools: g.WorkTools, Delegated: g.Delegated,
+			return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, WorkTools: g.WorkTools, Delegated: g.Delegated,
 				Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 		}
 	}
@@ -129,12 +129,6 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 				refs[name] = held
 			}
 			waiter.Refs = refs
-		case AgentContext:
-			context, err := agentContext(parent, args)
-			if err != nil {
-				return boundary.Boundary{}, err
-			}
-			waiter.Agent = context
 		case Extending:
 			c, err := extension(parent, args)
 			if err != nil {
@@ -144,7 +138,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 		}
 	}
 	return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: parent.Reach, Refs: parent.Refs, Authority: parent.Authority,
-		Agent: parent.Agent, WorkTools: parent.WorkTools, Delegated: parent.Delegated, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
+		WorkTools: parent.WorkTools, Delegated: parent.Delegated, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several

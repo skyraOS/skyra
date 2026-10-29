@@ -13,7 +13,7 @@ func delegateContract() *proc.Schema {
 	str := &proc.Schema{Type: "string"}
 	return &proc.Schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*proc.Schema{
 		"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*proc.Schema{
-			"goal": str, "actor": str, "tools": {Type: "array", Items: str},
+			"goal": str, "actor": str, "model": str, "tools": {Type: "array", Items: str},
 		}},
 	}}
 }
@@ -25,7 +25,8 @@ func runDelegate(e envelope) ([]byte, error) {
 	var ask struct {
 		Delegate struct {
 			Goal  string    `json:"goal"`
-			Actor *string   `json:"actor"`
+			Actor string    `json:"actor"`
+			Model string    `json:"model"`
 			Tools *[]string `json:"tools"`
 		} `json:"delegate"`
 	}
@@ -38,20 +39,15 @@ func runDelegate(e envelope) ([]byte, error) {
 	if strings.TrimSpace(ask.Delegate.Goal) == "" {
 		return failure("contract", "delegate goal must be nonempty")
 	}
-	actor := ""
-	if ask.Delegate.Actor != nil {
-		actor = *ask.Delegate.Actor
-	} else if e.Agent != nil {
-		actor = e.Agent.Actor
-	}
+	// The calling adapter fills in actor and model when the model names no
+	// actor (proceduretools.Payload); a delegate with neither has no caller
+	// to inherit from.
+	actor := ask.Delegate.Actor
 	if _, ok := e.Agents[actor]; !ok || actor == "" {
 		return failure("boundary", fmt.Sprintf("%q is not an available agent", actor))
 	}
-	if ask.Delegate.Actor == nil && (e.Agent == nil || e.Agent.Model == "") {
-		return failure("boundary", "caller model is unavailable")
-	}
 	if len(e.Steps) == 0 {
-		scope := map[string]any{"actor": actor, "delegated": true, "inherit_model": ask.Delegate.Actor == nil}
+		scope := map[string]any{"actor": actor, "delegated": true}
 		if ask.Delegate.Tools != nil {
 			scope["tools"] = *ask.Delegate.Tools
 		}
@@ -75,7 +71,11 @@ func runDelegate(e envelope) ([]byte, error) {
 		return nil, errors.New("delegate scope did not return a reference")
 	}
 	if len(e.Steps) == 1 {
-		return instruction(scope.Reference, map[string]string{"text": ask.Delegate.Goal, "header": "delegate"}), nil
+		child := map[string]string{"text": ask.Delegate.Goal, "header": "delegate"}
+		if ask.Delegate.Model != "" {
+			child["model"] = ask.Delegate.Model
+		}
+		return instruction(scope.Reference, child), nil
 	}
 	if last.To != scope.Reference {
 		return nil, errors.New("delegate result is from another invocation")

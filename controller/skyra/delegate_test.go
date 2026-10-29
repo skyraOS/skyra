@@ -132,15 +132,16 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 				}
 				children++
 				var input map[string]json.RawMessage
-				if json.Unmarshal(r.Payload, &input) != nil || len(input) != 2 || input["text"] == nil || input["header"] == nil {
+				if json.Unmarshal(r.Payload, &input) != nil || len(input) > 3 || input["text"] == nil || input["header"] == nil {
 					t.Fatalf("child received extra context: %s", r.Payload)
 				}
 				expectedModel := "fake-codex"
 				if tc.rootActor == "claude" {
 					expectedModel = provider.DefaultModel
 				}
-				if _, explicit := tc.request["actor"]; !explicit && (h.Agent == nil || h.Agent.Model != expectedModel) {
-					t.Fatalf("caller model lost: %+v", h.Agent)
+				_, explicit := tc.request["actor"]
+				if !explicit && string(input["model"]) != `"`+expectedModel+`"` || explicit && input["model"] != nil {
+					t.Fatalf("caller model lost or leaked: %s", r.Payload)
 				}
 				if _, bounded := tc.request["tools"]; bounded && h.WorkTools == nil {
 					t.Fatal("tool ceiling lost")
