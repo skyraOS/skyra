@@ -45,8 +45,8 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 	socket := startService(t, dir, map[string]string{"codex": filepath.Join(dir, "fake-codex"), "claude": filepath.Join(dir, "fake-claude")})
 	registry := map[string]any{
-		"echo":        map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json"), "work_tool": true},
-		"read":        map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json"), "work_tool": true},
+		"echo":        map[string]any{"path": filepath.Join(dir, "echo"), "contract": abs("../targets/echo/contract.json")},
+		"read":        map[string]any{"path": filepath.Join(dir, "read"), "contract": abs("../targets/read/contract.json")},
 		"interpreter": map[string]any{"path": filepath.Join(dir, "interp"), "contract": abs("../interp/contract.json"), "state": true},
 	}
 	for _, actor := range []string{"codex", "claude"} {

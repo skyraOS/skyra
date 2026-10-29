@@ -25,7 +25,6 @@ import (
 // Entry is one surface in the registry file. Relative paths are relative to
 // the file.
 type Entry struct {
-	WorkTool  bool                  `json:"work_tool,omitempty"`
 	Agent     *boundary.AgentConfig `json:"agent,omitempty"`
 	Path      string                `json:"path"`
 	Contract  string                `json:"contract"`
@@ -179,7 +178,7 @@ func load(file string, entries map[string]Entry) (map[string]boundary.Surface, b
 			}
 			state = name
 		}
-		reach[name] = boundary.Surface{WorkTool: e.WorkTool || e.Bundle != "", Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
+		reach[name] = boundary.Surface{Agent: e.Agent, Path: path, SHA256: record.Sum(bin), Input: d.Input, Contracts: d.Contracts, Continuation: d.Continuation, State: state, BundlePath: bundlePath, BundleSHA256: bundleSHA}
 	}
 	if !root.Covers() {
 		return nil, root, fmt.Errorf("the workspace %s is under no read grant", root.Workspace)
@@ -188,12 +187,12 @@ func load(file string, entries map[string]Entry) (map[string]boundary.Surface, b
 		if s.Agent == nil {
 			continue
 		}
-		if !s.Continuation || s.WorkTool || s.Host != "" || len(s.Agent.Operations) == 0 {
+		if !s.Continuation || s.Host != "" || len(s.Agent.Operations) == 0 {
 			return nil, root, fmt.Errorf("%s: invalid agent configuration", name)
 		}
 		for _, op := range s.Agent.Operations {
 			target, ok := reach[op]
-			if !ok || op == name || target.Agent != nil || target.WorkTool || target.Host != "" {
+			if !ok || op == name || target.Agent != nil || target.Host != "" {
 				return nil, root, fmt.Errorf("%s: invalid agent operation %q", name, op)
 			}
 		}

@@ -282,8 +282,6 @@ def pinned(path):
         fd,tmp=tempfile.mkstemp(dir=dest.parent); os.close(fd)
         shutil.copy2(p,tmp); os.replace(tmp,dest)
     return str(dest)
-for tool_name in ('echo','read','find','roots','write','repo.check','repo.write','execve','design','design.tools','blender','blender.tools','desktop_observe'):
-    if tool_name in registry: registry[tool_name]['work_tool']=True
 for entry in registry.values():
     if 'path' in entry and Path(entry['path']).parent==build:
         entry['path']=pinned(entry['path'])

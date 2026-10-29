@@ -103,7 +103,6 @@ type AgentConfig struct {
 }
 
 type Surface struct {
-	WorkTool     bool               `json:"work_tool,omitempty"`
 	Agent        *AgentConfig       `json:"agent,omitempty"`
 	Path         string             `json:"path"`
 	SHA256       string             `json:"sha256"`
