@@ -72,6 +72,16 @@ New implementation proposals:
   pure control. An experiment
   in two settings (interior nodes see contents, or only presentations), with
   measures read from the records. Experiment (2026-11-03).
+- [55 — One tool trees: the invariant](55-one-tool-trees-invariant-proposal.md):
+  54's functional core in Lean. A contract is a binary and its input shape;
+  an observation is typed by its contract and its own output shape. Valid
+  observations are a leaf's, a goal, or a context `create_observation`
+  registered; each Prop has a Bool the core runs, proven equal. Given an
+  agent's contract and its reach, decide: refused (it is in its own reach),
+  a leaf (at most one contract), or a node. An agent passes only what is in
+  its scope, on invoke or return. Novelty, by base type and apart from
+  validity: has this binary seen this input, has this contract returned this
+  output shape. Draft (2026-11-03).
 
 ## The design in one paragraph
 
