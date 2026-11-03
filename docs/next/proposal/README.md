@@ -52,6 +52,26 @@ New implementation proposals:
   the kernel serves capabilities, never roles. Procedure bundles, the agent
   fields and the agent-context syscall are Skyra conventions living in core
   and runtime; candidates to move out. To look at (2026-10-28).
+- [52 — The kernel provisions; skyra-spawn controls; the apprentice means](52-kernel-provisions-apprentice-spawns-proposal.md):
+  Linux first. The kernel starts `skyra-spawn` and leaves. `skyra-spawn` is
+  system-level control: channels, forks, Landlock, exec, waiting and break
+  reports. The apprentice holds one socket to it and works only with the
+  meaning of messages. The protocol is versioned contracts on `skyra-spawn`
+  (`plan/1`, `result/1`), naming binaries by hash. Draft (2026-10-29).
+- [53 — Capabilities, information flow, and need-to-know](53-capabilities-and-information-flow-proposal.md):
+  one state with views per position. Capabilities say what a position may
+  do; information flow says where a value may go (confidentiality, an
+  allowlist on the source) and what may enter a node (integrity, an
+  allowlist on the sink), over the leaves of the observation's lineage.
+  Opt-in, fail closed, no release privileges. Need-to-know (focus) is the
+  apprentice's and decides a model step's lineage. Draft (2026-11-03).
+- [54 — One tool per model](54-one-tool-per-model-experiment-proposal.md):
+  a model may act only when its focus holds at most one tool; otherwise
+  it delegates subsets of its tools with named observations, or returns.
+  Zero-tool leaves write content, one-tool leaves act, interior nodes are
+  pure control. An experiment
+  in two settings (interior nodes see contents, or only presentations), with
+  measures read from the records. Experiment (2026-11-03).
 
 ## The design in one paragraph
 
