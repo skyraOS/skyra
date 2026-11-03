@@ -39,7 +39,7 @@ The adapter translates the names into contracts, and the kernel narrows the
 child's Boundary to hold exactly those (proposal 48's c-list): `system.narrow`
 takes `contracts: [{target, schema}]`, never tool labels. Every invocation, by
 name or through a handle, is checked at intake against what is held.
-Calling another procedure, exporting a contract, or delegating again cannot
+Calling another procedure, proposing a contract, or delegating again cannot
 widen it.
 
 The kernel provisions the child once: `narrow` stores the grant and returns its
@@ -104,8 +104,8 @@ for each binary, the actors it runs through:
 This excerpt omits the transport registrations and OS authority grants; keep the
 usual registrations and boundaries. Each name in `uses` must be registered. No
 entry is marked as an agent or a work tool: what a model is offered is its
-adapter's catalog, read from the continuation's `reach` (every contract each
-actor declares, and which are held). The apprentice's contract declares
+adapter's catalog, read from the continuation's `reach` (the contracts each
+actor in reach may be invoked through). The apprentice's contract declares
 `delegate` alongside `remember`, and `think` retains the apprentice so its
 worker can delegate.
 

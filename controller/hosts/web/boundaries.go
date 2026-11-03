@@ -14,7 +14,7 @@ import (
 // reach and authority is the same Boundary, so a conversation that never
 // narrows has one. The webhost reads Boundaries and decides nothing.
 type boundaryView struct {
-	ID     string        `json:"id"`     // boundary.Hash: what it holds, by contract and surface identity, and its authority
+	ID     string        `json:"id"`     // boundary.Hash: what it reaches, by contract and program, and its authority
 	Root   bool          `json:"root"`   // the root Boundary, which genesis recorded
 	Actors []string      `json:"actors"` // the surfaces that ran under it, by name
 	Reach  []surfaceView `json:"reach"`  // what emissions under it may invoke, by name
@@ -23,25 +23,24 @@ type boundaryView struct {
 
 type surfaceView struct {
 	Name string `json:"name"`
-	ID   string `json:"id"` // the surface's identity: the same surface under any name, in any Boundary
+	ID   string `json:"id"` // the surface's program: the same surface under any name, in any Boundary, whichever contracts it keeps
 }
 
 // proper is the part of a Boundary that is authority, not position in a stack.
 type proper struct {
 	reach     map[string]boundary.Surface
-	held      *boundary.CList
 	authority boundary.Authority
 }
 
 func (p proper) id() string {
-	return boundary.Boundary{Reach: p.reach, Held: p.held, Authority: p.authority}.Hash()
+	return boundary.Boundary{Reach: p.reach, Authority: p.authority}.Hash()
 }
 
 func (p proper) view() boundaryView {
 	v := boundaryView{ID: p.id(), Actors: []string{},
 		Grants: len(p.authority.Read) + len(p.authority.Write) + len(p.authority.Mach) + len(p.authority.Connect)}
 	for name, s := range p.reach {
-		v.Reach = append(v.Reach, surfaceView{name, boundary.Identity(s)})
+		v.Reach = append(v.Reach, surfaceView{name, boundary.Program(s)})
 	}
 	sort.Slice(v.Reach, func(i, j int) bool { return v.Reach[i].Name < v.Reach[j].Name })
 	return v
@@ -70,26 +69,26 @@ func boundaries(genesis *record.Record, released []boundary.Boundary) []boundary
 	}
 	root := ""
 	if genesis != nil && genesis.Reach != nil {
-		p := proper{genesis.Reach, nil, authorityOf(genesis.Authority)}
+		p := proper{genesis.Reach, authorityOf(genesis.Authority)}
 		root = p.id()
 		for name, s := range genesis.Reach {
-			names[boundary.Identity(s)] = name
+			names[boundary.Program(s)] = name
 		}
 		add(p, "")
 	}
 	for _, h := range released {
 		for name, s := range h.Reach {
-			if _, ok := names[boundary.Identity(s)]; !ok {
-				names[boundary.Identity(s)] = name
+			if _, ok := names[boundary.Program(s)]; !ok {
+				names[boundary.Program(s)] = name
 			}
 		}
 	}
 	for _, h := range released {
 		actor := ""
 		if h.Surface != nil {
-			actor = names[boundary.Identity(*h.Surface)]
+			actor = names[boundary.Program(*h.Surface)]
 		}
-		add(proper{h.Reach, h.Held, h.Authority}, actor)
+		add(proper{h.Reach, h.Authority}, actor)
 	}
 	out := []boundaryView{}
 	if v := byID[root]; v != nil {

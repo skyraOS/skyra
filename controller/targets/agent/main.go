@@ -18,7 +18,7 @@
 // discharged, it returns what came back, in the order it asked.
 //
 // With text "extend:<text>", it adds a contract to itself (system,
-// export: next/32), "shout", then invokes itself through it. Run
+// propose: next/32), "shout", then invokes itself through it. Run
 // against shout, it returns its input in capitals.
 //
 // With text "relay:<text>", it does a task (next/32, H8): it asks echo for
@@ -147,7 +147,7 @@ func main() {
 		return
 	}
 	if c.Input.Text == "redundant:" {
-		emit("system", map[string]any{"export": map[string]any{"schema": registered(c)}})
+		emit("system", map[string]any{"propose": map[string]any{"schema": registered(c)}})
 		return
 	}
 	if word, isExtend := strings.CutPrefix(c.Input.Text, "extend:"); isExtend {
@@ -299,12 +299,12 @@ func look(c continuation, dir string) {
 func extend(c continuation, word string) {
 	switch len(c.Steps) {
 	case 0:
-		emit("system", map[string]any{"export": map[string]any{"schema": map[string]any{
+		emit("system", map[string]any{"propose": map[string]any{"schema": map[string]any{
 			"title": "shout", "type": "object", "required": []string{"shout"},
 			"fields": map[string]any{"shout": map[string]string{"type": "string"}}}}})
 	case 1:
 		if f := c.Steps[0].Fault; f != nil {
-			emit(c.Frame, fmt.Sprintf("export failed (%s): %s", f.Kind, f.Cause))
+			emit(c.Frame, fmt.Sprintf("propose failed (%s): %s", f.Kind, f.Cause))
 			return
 		}
 		emit("agent", map[string]string{"shout": word})

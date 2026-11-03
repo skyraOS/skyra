@@ -1,9 +1,13 @@
 package main
 
-import "skyra/controller/codex/proceduretools"
+import (
+	"slices"
 
-// reachOf is a continuation's reach that holds everything: first is each
-// name's registered contract, contracts every contract of a name with more.
+	"skyra/controller/codex/proceduretools"
+)
+
+// reachOf is a continuation's reach: first is each name's registered
+// contract, contracts every contract of a name with more.
 func reachOf(first map[string]*schema, contracts map[string][]*schema) proceduretools.Reach {
 	r := proceduretools.Reach{}
 	for name, s := range first {
@@ -11,16 +15,12 @@ func reachOf(first map[string]*schema, contracts map[string][]*schema) procedure
 		if all == nil {
 			all = []*schema{s}
 		}
-		held := make([]int, len(all))
-		for i := range held {
-			held[i] = i
-		}
-		r[name] = proceduretools.Entry{Contracts: all, Held: held}
+		r[name] = proceduretools.Entry{Contracts: all}
 	}
 	return r
 }
 
-// holding is r with only the named actors held, all of each; nil names hold
+// holding is r with only the named actors kept, all of each; nil names keep
 // everything, as r does.
 func holding(r proceduretools.Reach, names []string) proceduretools.Reach {
 	if names == nil {
@@ -28,15 +28,9 @@ func holding(r proceduretools.Reach, names []string) proceduretools.Reach {
 	}
 	out := proceduretools.Reach{}
 	for name, e := range r {
-		e.Held = []int{}
-		for _, n := range names {
-			if n == name {
-				for i := range e.Contracts {
-					e.Held = append(e.Held, i)
-				}
-			}
+		if slices.Contains(names, name) {
+			out[name] = e
 		}
-		out[name] = e
 	}
 	return out
 }

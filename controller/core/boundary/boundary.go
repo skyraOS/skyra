@@ -99,8 +99,8 @@ func stringsAllow(ceiling, requested []string) bool {
 // contracts. What it may reach and touch belongs to the Boundary it runs under.
 type Surface struct {
 	// Uses names the actors this program runs through (an adapter's
-	// service operations): a narrowing to it keeps them, with what is held
-	// of them, as it keeps system. They grant nothing the caller lacks.
+	// service operations): a narrowing to it keeps them, with every contract
+	// of them the caller has, as it keeps system. They grant nothing the caller lacks.
 	Uses         []string           `json:"uses,omitempty"`
 	Path         string             `json:"path"`
 	SHA256       string             `json:"sha256"`
@@ -137,7 +137,7 @@ func (s Surface) All() []*contract.Schema {
 // travels as JSON. The frame stack travels beside it as directory fds over
 // SCM_RIGHTS.
 //
-// Reach, Held and Authority are the Boundary proper (next/24): what emissions
+// Reach and Authority are the Boundary proper (next/24): what emissions
 // under it may invoke, by actor and by contract, and the OS grants everything
 // under it runs with. Every call
 // shares its caller's; genesis holds the root's. There is no
@@ -150,10 +150,9 @@ func (s Surface) All() []*contract.Schema {
 type Boundary struct {
 	Stamp     string             `json:"stamp"`             // this frame's latest commit; the predecessor of whatever is emitted under it
 	Surface   *Surface           `json:"surface,omitempty"` // what this frame runs; nil for the operator
-	Reach     map[string]Surface `json:"reach"`             // the actors emissions under this Boundary may invoke, each with every contract it declares
-	Held      *CList             `json:"held,omitempty"`    // the contracts of them it holds, when narrowed by contract; nil holds every one
+	Reach     map[string]Surface `json:"reach"`             // the actors emissions under this Boundary may invoke, each with the contracts it may be invoked through
 	Authority Authority          `json:"authority"`         // the OS grants everything under this Boundary runs with
-	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a handle, its actor; for a syscall, system): who an export extends
+	Name      string             `json:"name,omitempty"`    // the name in reach Surface was invoked through (for a handle, its actor; for a syscall, system): who a proposal extends
 	Origin    string             `json:"origin,omitempty"`  // the invoke that created this Boundary by a narrowing; "" for the root's. Frames that share it share one Boundary
 	Forked    bool               `json:"forked,omitempty"`  // this frame, or one below it in this Boundary, is one of several siblings (fan-out)
 	Frame     string             `json:"frame"`             // the frame whose slot a return discharges
@@ -164,10 +163,10 @@ type Boundary struct {
 // Boundary it runs under. The kernel stores it under its hash, the handle
 // narrow returns, and knows it by nothing else: no Boundary records which
 // handles it was given. Pins names, for the actor and every name it keeps,
-// the identity of the surface the grant was made for, so a handle always runs
-// the binaries it was provisioned with.
+// the program the grant was made for, so a handle always runs the binaries
+// it was provisioned with.
 type Grant struct {
-	Held      *CList            `json:"held,omitempty"` // nil: the narrowed reach, every contract of it; otherwise exactly these
+	Contracts *CList            `json:"contracts,omitempty"` // nil: every contract of the narrowed reach, as the caller has it; otherwise exactly these
 	Actor     string            `json:"actor"`
 	Reach     []string          `json:"reach"`
 	Pins      map[string]string `json:"pins"`
@@ -291,4 +290,12 @@ func Identity(s Surface) string {
 	b, _ := json.Marshal(s)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
+}
+
+// Program is a surface's identity without its contracts: the program it
+// runs, the same whichever of its contracts a Boundary keeps. A narrowing
+// drops contracts and a proposal adds one; neither makes another program.
+func Program(s Surface) string {
+	s.Input, s.Contracts = nil, nil
+	return Identity(s)
 }

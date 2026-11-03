@@ -84,8 +84,8 @@ func checkSuccessor(o Object, emitted []byte, parentStamp string) (record.Record
 // narrowing is provisioned through system.narrow and invoked by its handle:
 //
 //	invoke system                the syscall's frame, which runs nothing; for an
-//	                             export, the waiting caller's reach entry for itself
-//	                             holds one more contract, in every frame below that
+//	                             propose, the waiting caller's reach entry for itself
+//	                             has one more contract, in every frame below that
 //	                             shares its Boundary
 //	invoke a handle              the actor, under the grant stored under the handle,
 //	                             which intake read and put in the record
@@ -107,18 +107,18 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 			return boundary.Boundary{}, fmt.Errorf("handle %s names %q, which is not in the parent's reach", record.Short(r.To), g.Actor)
 		}
 		// A Boundary of its own: created by this invoke, so named by it.
-		return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach), Authority: g.Authority, Held: g.Held,
+		return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: kept(parent.Reach, g.Reach, g.Contracts), Authority: g.Authority,
 			Name: g.Actor, Origin: stamp, Frame: stamp, Resume: &waiter}, nil
 	}
 	if r.To == System {
-		if name, args := syscall(r.Payload); name == Exporting {
+		if name, args := syscall(r.Payload); name == Proposing {
 			c, err := extension(parent, args)
 			if err != nil {
 				return boundary.Boundary{}, err
 			}
 			waiter = extended(parent, parent.Origin, parent.Name, c)
 		}
-		return boundary.Boundary{Stamp: stamp, Reach: parent.Reach, Authority: parent.Authority, Held: parent.Held,
+		return boundary.Boundary{Stamp: stamp, Reach: parent.Reach, Authority: parent.Authority,
 			Name: System, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 	}
 	s, ok := parent.Reach[r.To]
@@ -126,7 +126,7 @@ func Narrow(parent boundary.Boundary, r record.Record, stamp string) (boundary.B
 		return boundary.Boundary{}, fmt.Errorf("%q is not in the parent's reach", r.To)
 	}
 	return boundary.Boundary{Stamp: stamp, Surface: &s, Reach: parent.Reach, Authority: parent.Authority,
-		Held: parent.Held, Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
+		Name: r.To, Origin: parent.Origin, Forked: parent.Forked, Frame: stamp, Resume: &waiter}, nil
 }
 
 // Fanned is Narrow for a successor that took one instruction of several

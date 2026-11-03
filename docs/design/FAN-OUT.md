@@ -84,7 +84,7 @@ today only the apprentice does so in practice:
 
 - **Procedures fan out.** When several steps of a procedure do not depend on each other and are ready in the same round, `apprentice/proc/plan.go` joins them into one array (`Emission`). It also works around the kernel's limits listed below:
   - `distinct` pads repeated calls so they stay distinct records;
-  - `alone` moves `narrow`/`export` into a round of their own.
+  - `alone` moves `narrow`/`propose` into a round of their own.
 - **Models do not fan out.** The Codex and Claude adapters (`codex/resident/main.go`, `claude/resident/main.go`) emit exactly one instruction per step. Codex's app-server hands over tool calls one request at a time, so a model that calls several tools in a turn produces several steps one after another, not a fan-out. Batching a model's calls into one emission would be new adapter work: the README's "single-tool dispatch".
 - **Scripted and test targets** emit arrays directly.
 

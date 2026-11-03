@@ -70,14 +70,29 @@ func TestOneProfilePerBoundaryExecOnlyTheRunningProgram(t *testing.T) {
 	}
 }
 
-// A contract restated in another order is the contract held (42).
-func TestHoldsAContractRestatedInAnotherOrder(t *testing.T) {
+// A contract restated in another order is the contract kept (42).
+func TestKeepsAContractRestatedInAnotherOrder(t *testing.T) {
 	bound := &contract.Schema{Type: "object", Required: []string{"a", "b"}, Fields: map[string]*contract.Schema{"a": {Type: "string"}, "b": {Type: "string"}}}
 	restated := &contract.Schema{Type: "object", Required: []string{"b", "a"}, Fields: bound.Fields}
 	other := &contract.Schema{Type: "object", Required: []string{"a"}, Fields: bound.Fields}
-	held := CList{"echo": {bound}}
-	h := Boundary{Reach: map[string]Surface{"echo": {Input: bound, Contracts: []*contract.Schema{other}}}, Held: &held}
-	if !h.Holds("echo", restated) || h.Holds("echo", other) {
-		t.Fatal("a restated contract is the held one; a different one is not")
+	s := Keep(Surface{Input: bound, Contracts: []*contract.Schema{other}}, []*contract.Schema{restated})
+	if !s.Declares(restated) || s.Declares(other) || s.Input != bound {
+		t.Fatal("a restated contract is the kept one; a different one is not")
+	}
+}
+
+// A narrowing makes another Boundary, not another program.
+func TestKeepingFewerContractsIsTheSameProgram(t *testing.T) {
+	a := &contract.Schema{Type: "string"}
+	b := &contract.Schema{Type: "number"}
+	s := Surface{Path: "/bin/x", SHA256: strings.Repeat("a", 64), Input: a, Contracts: []*contract.Schema{b}}
+	kept := Keep(s, []*contract.Schema{b})
+	if Program(kept) != Program(s) || kept.Input != nil || len(kept.All()) != 1 {
+		t.Fatalf("dropping a contract changed the program, or kept the dropped one: %+v", kept)
+	}
+	whole := Boundary{Reach: map[string]Surface{"x": s}}
+	narrowed := Boundary{Reach: map[string]Surface{"x": kept}}
+	if whole.Hash() == narrowed.Hash() {
+		t.Fatal("a Boundary that keeps fewer contracts is the same Boundary")
 	}
 }

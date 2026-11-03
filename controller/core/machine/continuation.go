@@ -28,14 +28,13 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 		Frame: o.Frame, Round: o.Round, Deps: o.Discharges, Emission: o.Emission}, nil
 }
 
-// Entry is one actor in reach as a continuation sees it: every contract its
-// binary declares, the registered one first, and which of them it holds, by
-// index. A payload is selected against all of them; only a held one may be
-// invoked. What it sees is what it may invoke (frame ⊆ authority); which of
-// them a model is offered is the adapter's choice, not the runtime's.
+// Entry is one actor in reach as a continuation sees it: the contracts it may
+// be invoked through, the registered one first when it is kept. A payload is
+// selected against them. What it sees is what it may invoke (frame ⊆
+// authority); which of them a model is offered is the adapter's choice, not
+// the runtime's.
 type Entry struct {
 	Contracts []*contract.Schema `json:"contracts"`
-	Held      []int              `json:"held"`
 }
 
 // reach is a Boundary's c-list as a continuation sees it: every name in
@@ -43,13 +42,7 @@ type Entry struct {
 func reach(h boundary.Boundary) map[string]Entry {
 	out := map[string]Entry{}
 	for name, s := range h.Reach {
-		e := Entry{Contracts: s.All(), Held: []int{}}
-		for i, c := range e.Contracts {
-			if h.Holds(name, c) {
-				e.Held = append(e.Held, i)
-			}
-		}
-		out[name] = e
+		out[name] = Entry{Contracts: append([]*contract.Schema{}, s.All()...)}
 	}
 	return out
 }
@@ -60,9 +53,11 @@ func workspaceOf(h boundary.Boundary) string {
 }
 
 // against names the contract a continuation is executing, including a
-// procedure actor whose bundle implements its single primary contract.
+// procedure actor whose bundle implements its single primary contract. It is
+// left out only when the registered contract is the one the frame has, and
+// named when a narrowing kept another without it.
 func against(s boundary.Surface, input json.RawMessage) *contract.Schema {
-	if len(s.All()) < 2 && s.BundlePath == "" {
+	if len(s.All()) < 2 && s.Input != nil && s.BundlePath == "" {
 		return nil
 	}
 	v, err := contract.Decode(input)

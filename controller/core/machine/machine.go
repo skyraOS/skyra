@@ -422,7 +422,7 @@ func opensSlot(k Kid) bool { return k.Boundary.Frame == k.Stamp }
 
 // alone refuses what cannot share an emission with another instruction: a
 // return discharges the emitter's own slot, which its siblings' round waits
-// on, and an invoke that changes the Boundary of whoever waits (system.export)
+// on, and an invoke that changes the Boundary of whoever waits (system.propose)
 // would change it once per sibling, each on its own copy.
 func alone(kids []Kid) error {
 	for _, k := range kids {

@@ -20,23 +20,25 @@ import (
 //	   → returns {"handle": "<sha256>"}: the kernel provisions a narrowed Boundary for that
 //	     actor, stores it under its hash, and hands the hash back. That is all it keeps:
 //	     no Boundary records the handle, so the caller keeps its own table of them.
-//	     "contracts" is its c-list: the contracts it holds.
+//	     "contracts" is its c-list: the contracts it keeps of what is in reach;
+//	     an actor it keeps none of leaves its reach.
 //	     "without" drops whole kinds of authority (read, write, mach, connect,
 //	     scratch) from what is held, so a procedure can narrow without naming paths
 //	{"to": "<handle>", "payload": <the actor's input>}
 //	   → an ordinary invoke of the actor, under the provisioned Boundary. Any
 //	     Boundary that could provision the same grant itself may invoke it: a
 //	     handle never widens
-//	{"to": "system", "payload": {"export": {"schema": <a contract>}}}
-//	   → returns {"ok": true}: the emitter's own reach entry declares one more contract,
-//	     throughout its Boundary, which is another Boundary (a new Hash). A
-//	     Boundary narrowed by contract does not hold it: an export never widens
+//	{"to": "system", "payload": {"propose": {"schema": <a contract>}}}
+//	   → returns {"ok": true}: the emitter's own reach entry has one more contract,
+//	     throughout its Boundary, which is another Boundary (a new Hash). What
+//	     is in reach is what may be invoked, so the new contract may be: it adds
+//	     an entry point to the emitter, never authority
 //	{"to": "system", "payload": {"trace": {"observation": <stamp>, "contract": {"target": <name>, "schema": <a contract>}}}}
 //	   → returns the trace: the stamps from the observation up to the invoke made
 //	     through that contract, with every record of the work beneath it (H4)
 //
 // A narrowing may only drop what is held. "reach", "contracts" and "authority"
-// are what the actor keeps; left out, it keeps all of the caller's. An export adds a
+// are what the actor keeps; left out, it keeps all of the caller's. A proposal adds a
 // contract, never authority: the actor is the emitter, derived, never named,
 // so an actor can only extend itself (decision 17).
 const (
@@ -44,7 +46,7 @@ const (
 	SystemPrefix = "system."
 
 	Narrowing = "narrow"
-	Exporting = "export"
+	Proposing = "propose"
 	Tracing   = "trace"
 )
 
@@ -87,7 +89,7 @@ func call(name string, in *contract.Schema) *contract.Schema {
 
 // Syscalls is every syscall's contract: what a payload to system must fit.
 func Syscalls() []*contract.Schema {
-	return []*contract.Schema{call(Narrowing, narrowIn), call(Exporting, extendIn), call(Tracing, traceIn)}
+	return []*contract.Schema{call(Narrowing, narrowIn), call(Proposing, extendIn), call(Tracing, traceIn)}
 }
 
 // IsSystem reports whether a name is the runtime's: system, or anything else
@@ -122,14 +124,14 @@ func invokeSystem(h boundary.Boundary, payload any, attempt json.RawMessage) rec
 }
 
 // changesWaiter reports whether an invoke changes the Boundary of the caller
-// waiting on it: export adds a contract there. A narrowing changes nothing:
+// waiting on it: propose adds a contract there. A narrowing changes nothing:
 // what it provisions is stored under its handle, not in the caller.
 func changesWaiter(r record.Record) bool {
 	if r.State != record.Invoke || r.To != System {
 		return false
 	}
 	name, _ := syscall(r.Payload)
-	return name == Exporting
+	return name == Proposing
 }
 
 // provision is the grant an invoke of narrow stores, if r is one.
@@ -171,10 +173,10 @@ func reprovisions(h boundary.Boundary, g boundary.Grant) error {
 		reach = []string{}
 	}
 	ask := map[string]any{"actor": g.Actor, "reach": reach, "authority": g.Authority}
-	if g.Held != nil {
+	if g.Contracts != nil {
 		kept := []map[string]any{}
-		for name, held := range *g.Held {
-			for _, c := range held {
+		for name, cs := range *g.Contracts {
+			for _, c := range cs {
 				kept = append(kept, map[string]any{"target": name, "schema": c})
 			}
 		}
@@ -200,7 +202,7 @@ func checkSyscall(h boundary.Boundary, payload json.RawMessage) (string, error) 
 		if _, err := narrowing(h, args); err != nil {
 			return record.Boundary, err
 		}
-	case Exporting:
+	case Proposing:
 		return extending(h, args)
 	case Tracing:
 		if _, err := tracing(h, args); err != nil {
@@ -303,27 +305,27 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	if _, ok := h.Reach[ask.Actor]; !ok || IsSystem(ask.Actor) {
 		return boundary.Grant{}, fmt.Errorf("%q is not an actor in reach", ask.Actor)
 	}
-	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority, Held: h.Held}
+	g := boundary.Grant{Actor: ask.Actor, Authority: h.Authority}
 	if h.Depth() > maxDepth {
 		return g, fmt.Errorf("narrowing exceeds the runtime frame limit of %d", maxDepth)
 	}
 	if ask.Contracts != nil {
-		// What the actor keeps, by contract: each one held here. An empty
-		// list keeps no other contract; left out, the caller's are kept.
+		// What the actor keeps, by contract: each one in reach here. An
+		// empty list keeps no other contract; left out, the caller's are kept.
 		held := boundary.CList{}
 		for _, kept := range *ask.Contracts {
 			s, err := schemaOf(kept.Schema)
 			if err != nil {
 				return g, err
 			}
-			if IsSystem(kept.Target) || !h.Holds(kept.Target, s) {
-				return g, fmt.Errorf("narrowing keeps a contract of %q that is not held", kept.Target)
+			if IsSystem(kept.Target) || !h.Reach[kept.Target].Declares(s) {
+				return g, fmt.Errorf("narrowing keeps a contract of %q that is not in reach", kept.Target)
 			}
 			if !slices.ContainsFunc(held[kept.Target], func(c *contract.Schema) bool { return contract.Same(c, s) }) {
 				held[kept.Target] = append(held[kept.Target], s)
 			}
 		}
-		g.Held = &held
+		g.Contracts = &held
 	}
 	if ask.Reach == nil {
 		for name := range h.Reach {
@@ -339,9 +341,9 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 			}
 		}
 	}
-	// The actor keeps what it runs through, so a child can run; held by
+	// The actor keeps what it runs through, so a child can run; narrowed by
 	// contract, it also keeps its own contracts, so it can be narrowed to in
-	// turn if it is in reach. Only what the caller holds is kept.
+	// turn if it is in reach. Only what the caller has is kept.
 	uses := h.Reach[ask.Actor].Uses
 	if ask.Reach != nil {
 		for _, name := range uses {
@@ -352,16 +354,16 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	}
 	if ask.Contracts != nil {
 		for _, name := range append([]string{ask.Actor}, uses...) {
-			if held := h.HeldOf(name); len(held) > 0 && slices.Contains(g.Reach, name) {
-				(*g.Held)[name] = held
+			if all := h.Reach[name].All(); len(all) > 0 && slices.Contains(g.Reach, name) {
+				(*g.Contracts)[name] = all
 			}
 		}
 	}
 	slices.Sort(g.Reach)
 	if ask.Contracts != nil {
-		for name := range *g.Held {
+		for name := range *g.Contracts {
 			if !slices.Contains(g.Reach, name) {
-				return boundary.Grant{}, fmt.Errorf("narrowing holds a contract of %q but does not keep it in reach", name)
+				return boundary.Grant{}, fmt.Errorf("narrowing keeps a contract of %q but does not keep it in reach", name)
 			}
 		}
 	}
@@ -390,14 +392,14 @@ func narrowing(h boundary.Boundary, payload json.RawMessage) (boundary.Grant, er
 	if !g.Authority.Covers() {
 		g.Authority.Workspace = "" // its read grant was narrowed away
 	}
-	g.Pins = map[string]string{ask.Actor: boundary.Identity(h.Reach[ask.Actor])}
+	g.Pins = map[string]string{ask.Actor: boundary.Program(h.Reach[ask.Actor])}
 	for _, name := range g.Reach {
-		g.Pins[name] = boundary.Identity(h.Reach[name])
+		g.Pins[name] = boundary.Program(h.Reach[name])
 	}
 	return g, nil
 }
 
-// extending checks an export payload under h, the emitter's Boundary
+// extending checks a proposal payload under h, the emitter's Boundary
 // (decision 17): the actor is the emitter, the name its invoke resolved to;
 // the schema is one the kernel can check; and (actor, schema) is not
 // already there. It returns the fault kind for what fails.
@@ -414,7 +416,7 @@ func extending(h boundary.Boundary, payload json.RawMessage) (string, error) {
 
 var errNotTheEmitters = errors.New("not the emitter's to extend")
 
-// extension derives the contract an export adds, under h.
+// extension derives the contract a proposal adds, under h.
 func extension(h boundary.Boundary, payload json.RawMessage) (*contract.Schema, error) {
 	var ask struct {
 		Schema json.RawMessage `json:"schema"`
@@ -496,13 +498,23 @@ func syscallResult(s Instance) []byte {
 	return out
 }
 
-// kept is a reach restricted to the names a grant keeps.
-func kept(reach map[string]boundary.Surface, names []string) map[string]boundary.Surface {
+// kept is a reach restricted to the names a grant keeps, and to the
+// contracts it keeps of them.
+func kept(reach map[string]boundary.Surface, names []string, contracts *boundary.CList) map[string]boundary.Surface {
 	out := map[string]boundary.Surface{}
 	for _, name := range names {
-		if s, ok := reach[name]; ok {
-			out[name] = s
+		s, ok := reach[name]
+		if !ok {
+			continue
 		}
+		if contracts != nil {
+			// Narrowed by contract: an actor it keeps no contract of cannot
+			// be invoked, so it is not in reach.
+			if s = boundary.Keep(s, (*contracts)[name]); len(s.All()) == 0 {
+				continue
+			}
+		}
+		out[name] = s
 	}
 	return out
 }

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"skyra/controller/codex/proceduretools"
 )
 
 func TestDelegationIgnoresAndPreservesSavedParentSession(t *testing.T) {
@@ -42,11 +44,9 @@ func TestClaudeDispatchesDelegateThroughApprentice(t *testing.T) {
 	delegate := &schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*schema{"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*schema{"goal": {Type: "string"}}}}}
 	c := continuation{Frame: "f1", Reach: reachOf(map[string]*schema{"apprentice": remember}, map[string][]*schema{"apprentice": {remember, delegate}})}
 	c.Input.Text = "goal"
-	e := c.Reach["apprentice"]
-	e.Held = []int{1}
-	c.Reach["apprentice"] = e
-	// Holding delegate offers it, and procedure only because it stands for
-	// the same single contract here; remember is not held.
+	c.Reach["apprentice"] = proceduretools.Entry{Contracts: []*schema{delegate}}
+	// Keeping delegate offers it, and procedure only because it stands for
+	// the same single contract here; remember is not kept.
 	names := []string{}
 	for _, tl := range tools(c) {
 		names = append(names, tl.Name)

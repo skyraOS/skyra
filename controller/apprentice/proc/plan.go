@@ -217,7 +217,7 @@ func distinct(emit []json.RawMessage) {
 	}
 }
 
-// alone keeps a syscall that changes the Boundary of whoever waits (export)
+// alone keeps a syscall that changes the Boundary of whoever waits (propose)
 // out of a fan-out: the kernel refuses one emitted with siblings (H2), so it
 // goes first, by itself, and the rest wait a round. A narrowing changes
 // nothing of the waiter's: what it provisions is stored under its handle.
@@ -233,7 +233,7 @@ func alone(n *Next) {
 		if json.Unmarshal(e, &ins) != nil || ins.To != "system" {
 			continue
 		}
-		if _, extend := ins.Payload["export"]; !extend {
+		if _, extend := ins.Payload["propose"]; !extend {
 			continue
 		}
 		n.Emit, n.Round = []json.RawMessage{e}, []Call{n.Round[i]}

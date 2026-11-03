@@ -772,8 +772,8 @@ func TestFanOutRefusesAReturnAndAnExport(t *testing.T) {
 	root.Reach = map[string]boundary.Surface{"echo": echoS, "agent": agentS}
 	echo := `{"to":"echo","payload":{"text":"a"}}`
 	for name, other := range map[string]string{
-		"a return":  `{"to":"FRAME","payload":"done"}`,
-		"an export": `{"to":"system","payload":{"export":{"schema":{"type":"string"}}}}`,
+		"a return":   `{"to":"FRAME","payload":"done"}`,
+		"a proposal": `{"to":"system","payload":{"propose":{"schema":{"type":"string"}}}}`,
 	} {
 		ag, _ := Step(Instance{Phase: Intake}, Received{Under: HeldBoundary(root), In: []byte(`{"to":"agent","payload":{"text":"hi"}}`)})
 		self, _ := Narrow(root, ag.R, ag.Stamp())

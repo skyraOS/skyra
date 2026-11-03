@@ -13,17 +13,17 @@ type Tool struct {
 	Contracts                       []*Schema // the contracts of Target a call to it may select
 }
 
-// Entry is one actor in a continuation's reach: every contract it declares,
-// the registered one first, and the indexes of those it holds.
+// Entry is one actor in a continuation's reach: the contracts it may be
+// invoked through, the registered one first when it is kept.
 type Entry struct {
 	Contracts []*Schema `json:"contracts"`
-	Held      []int     `json:"held"`
 }
 
 // Reach is a continuation's c-list, by name.
 type Reach map[string]Entry
 
-// First is the registered contract of name, or nil when it is not in reach.
+// First is the first contract of name, the registered one when it is kept, or
+// nil when nothing of it is in reach.
 func (r Reach) First(name string) *Schema {
 	if c := r[name].Contracts; len(c) > 0 {
 		return c[0]
@@ -31,15 +31,17 @@ func (r Reach) First(name string) *Schema {
 	return nil
 }
 
-// Holds reports whether contract c of name is held.
+// Holds reports whether name may be invoked through contract c.
 func (r Reach) Holds(name string, c *Schema) bool {
-	e := r[name]
-	return slices.ContainsFunc(e.Held, func(i int) bool { return i < len(e.Contracts) && same(e.Contracts[i], c) })
+	return slices.ContainsFunc(r[name].Contracts, func(d *Schema) bool { return same(d, c) })
 }
 
+// Apprentice is the actor in reach that remembers or delegates: one with a
+// contract titled remember or delegate. A narrowing may keep either without
+// the other, so neither alone marks it.
 func Apprentice(reach Reach) string {
 	for _, name := range slices.Sorted(maps.Keys(reach)) {
-		if s := reach.First(name); s != nil && s.Title == "remember" {
+		if slices.ContainsFunc(reach[name].Contracts, func(s *Schema) bool { return s != nil && (s.Title == "remember" || s.Title == "delegate") }) {
 			return name
 		}
 	}
@@ -59,11 +61,19 @@ func Procedures(reach Reach, reserved []string, rememberDescription string) []To
 		return nil
 	}
 	all := ContractsOf(reach, target)
+	var remembers, procedures []*Schema
+	for _, s := range all {
+		if s != nil && s.Title == "remember" {
+			remembers = append(remembers, s)
+		} else {
+			procedures = append(procedures, s)
+		}
+	}
 	ts := []Tool{
 		{Name: "remember", Target: target, Kind: "remember", Description: rememberDescription,
-			Schema: &Schema{Type: "object", Required: []string{"call"}, Fields: map[string]*Schema{"call": {Type: "number"}}}, Contracts: all[:1]},
+			Schema: &Schema{Type: "object", Required: []string{"call"}, Fields: map[string]*Schema{"call": {Type: "number"}}}, Contracts: remembers},
 		{Name: "procedure", Target: target, Kind: "procedure", Description: "Run a remembered procedure on new input: input is what you would give the call it was remembered from.",
-			Schema: &Schema{Type: "object", Required: []string{"input"}, Fields: map[string]*Schema{"input": {Type: "any"}}}, Contracts: all[1:]},
+			Schema: &Schema{Type: "object", Required: []string{"input"}, Fields: map[string]*Schema{"input": {Type: "any"}}}, Contracts: procedures},
 	}
 	reserved = append(slices.Clone(reserved), "remember", "procedure")
 	for _, s := range all {
@@ -207,15 +217,15 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach Reach, calle
 }
 
 // Offered reports whether a tool is offered under a continuation's c-list:
-// every contract it stands for is held, as Kept keeps them. The kernel
+// every contract it stands for is in reach, as Kept keeps them. The kernel
 // separately checks the selected contract at intake.
 func Offered(reach Reach, t Tool) bool {
 	return len(t.Contracts) > 0 && !slices.ContainsFunc(t.Contracts, func(c *Schema) bool { return !reach.Holds(t.Target, c) })
 }
 
-// HoldsAny reports whether any contract of target is held.
+// HoldsAny reports whether target may be invoked through any contract.
 func HoldsAny(reach Reach, target string) bool {
-	return len(reach[target].Held) > 0
+	return len(reach[target].Contracts) > 0
 }
 
 func same(a, b *Schema) bool {

@@ -5,7 +5,9 @@ trace below describes the code before the refactor and is kept as its record.
 Where the build differs from this spec: the c-list of
 [proposal 48](../next/proposal/48-sql-schemas-proposal.md) is the contract subset (a Boundary holds
 contracts, named by `Hash()`), so there is no separate fixed/expandable flag;
-`extend-reach` is `export`, and an exported contract is declared, not held;
+`extend-reach` is `propose`; since 2026-10-29 there is no declared-but-not-held:
+a Boundary's reach is the contracts it may invoke, selection runs against those
+alone, and a proposed contract is in reach where it is proposed;
 `Surface.Agent` became `uses`, the actors a binary runs through, kept through
 every narrowing; the delegate's model rides in the child's input, and
 `Delegated` is `fresh: true` there; old conversations do not replay
@@ -202,7 +204,7 @@ preserving existing ambiguity faults. Then require that selected contract to
 be authorized by the ReachEntry. Restriction must not make an otherwise
 ambiguous payload appear valid.
 
-In a fixed child scope, all entries are non-expandable: `export` can store
+In a fixed child scope, all entries are non-expandable: `propose` can store
 or expose an actor's new procedure in an eligible broader scope but cannot
 authorize it in that fixed child. Normal expandable scopes retain existing
 remember/extend behavior. This is a generic capability rule, not delegation

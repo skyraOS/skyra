@@ -86,6 +86,9 @@ the record version is bumped once.
   - **room → retired.** Its facets are already `system`'s syscalls (32).
   - ~~**`extend-reach` → `export`.**~~ Done 2026-10-28. An actor adds an entry
     point to itself; it widens no one's reach.
+  - ~~**`export` → `propose`.**~~ Done 2026-10-29. Same syscall, renamed.
+  - ~~**Declared vs held → one list.**~~ Done 2026-10-29. What is in reach is
+    what may be invoked; a narrowing drops contracts from reach.
   - **Boundary fault → capability fault.**
   - **One word for what runs:** actor. Leaf stays only for a frame that opened
     no calls; target and surface go.

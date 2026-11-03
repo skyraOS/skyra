@@ -49,11 +49,11 @@ func TestDelegateToolsBecomeTheContractsTheyStandFor(t *testing.T) {
 	}
 }
 
-func TestAToolIsOfferedWhenEverythingItStandsForIsHeld(t *testing.T) {
+func TestAToolIsOfferedWhenEverythingItStandsForIsInReach(t *testing.T) {
 	a, b := &Schema{Type: "object"}, &Schema{Type: "string"}
 	both := Tool{Target: "x", Contracts: []*Schema{a, b}}
-	held := func(i ...int) Reach { return Reach{"x": {Contracts: []*Schema{a, b}, Held: i}} }
-	if !Offered(held(0, 1), both) || Offered(held(0), both) || Offered(held(), both) || !Offered(held(1, 0), both) {
-		t.Fatal("offered without every contract held")
+	kept := func(cs ...*Schema) Reach { return Reach{"x": {Contracts: cs}} }
+	if !Offered(kept(a, b), both) || Offered(kept(a), both) || Offered(kept(), both) || !Offered(kept(b, a), both) {
+		t.Fatal("offered without every contract in reach")
 	}
 }

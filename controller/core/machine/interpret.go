@@ -76,12 +76,8 @@ func interpret(h boundary.Boundary, out []byte, g *boundary.Grant) record.Record
 	if !ok {
 		return faulted(record.Boundary, fmt.Sprintf("%q is not in reach", to), attempt)
 	}
-	selected, err := Selected(target, payload)
-	if err != nil {
+	if _, err := Selected(target, payload); err != nil {
 		return faulted(record.Contract, to+": "+err.Error(), attempt)
-	}
-	if !h.Holds(actual, selected) {
-		return faulted(record.Boundary, fmt.Sprintf("%q is in reach, but this contract of %s is not held", to, actual), attempt)
 	}
 	return record.Record{State: record.Invoke, To: to, Grant: g, Payload: contract.Canonical(payload)}
 }

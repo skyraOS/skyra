@@ -37,11 +37,10 @@ import (
 var declared []byte
 
 // envelope is what the kernel hands a continuation on stdin.
-// entry is one actor in reach: every contract it declares, the registered
-// one first, and the indexes of those held.
+// entry is one actor in reach: the contracts it may be invoked through, the
+// registered one first when it is kept.
 type entry struct {
 	Contracts []*proc.Schema `json:"contracts"`
-	Held      []int          `json:"held"`
 }
 
 type envelope struct {
@@ -100,7 +99,7 @@ func run() ([]byte, error) {
 
 // runRemember is remember's body (decision 8), embedded in this binary: a
 // syscall for the trace, the compile, the refinements, then one
-// export per contract a procedure was stored for. The apprentice
+// propose per contract a procedure was stored for. The apprentice
 // extends itself; an actor can only extend itself.
 //
 //	no steps        → system trace: the observation, and the contract that requested it
@@ -109,7 +108,7 @@ func run() ([]byte, error) {
 //	then, for each  → ask the actor it was remembered from to write its refinements, when
 //	                  it holds a refine contract; check the answer; a refusal is shown, and it
 //	                  may try again (MaxAttempts); a valid answer replaces the base types
-//	then            → export each contract, and return what was remembered
+//	then            → propose each contract, and return what was remembered
 func runRemember(store proc.Store, e envelope) ([]byte, error) {
 	var ask struct {
 		Remember struct {
@@ -212,7 +211,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		}
 	case rec.Asked == "extend":
 		if last.State != "return" {
-			return refused("export: " + cause)
+			return refused("propose: " + cause)
 		}
 		rec.Extended++
 	}
@@ -227,7 +226,7 @@ func runRemember(store proc.Store, e envelope) ([]byte, error) {
 		next = instruction(rec.Originals[rec.Refining], map[string]any{"refine": refineAsk(rec)})
 	case rec.Extended < len(rec.Contracts):
 		rec.Asked = "extend"
-		next = instruction("system", map[string]any{"export": map[string]any{"schema": rec.Contracts[rec.Extended]}})
+		next = instruction("system", map[string]any{"propose": map[string]any{"schema": rec.Contracts[rec.Extended]}})
 	default:
 		var names []string
 		for i, c := range rec.Contracts {

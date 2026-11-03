@@ -3,7 +3,7 @@
 Proposal: **In the proposal**, section H of [next/proposal](../next/proposal/README.md);
 the implementation plan is 32-procedures-proposal.
 Defines what self-extension is; `system.register` (28, improvements item 6)
-becomes `remember`, which ends in the Boundary's `export`. Supersedes
+becomes `remember`, which ends in the Boundary's `propose`. Supersedes
 section G and review finding F10.
 
 Date: 2026-10-03  
@@ -28,7 +28,7 @@ And what that makes self-extension:
 > **An agent extends itself by remembering.** `remember` compiles a trace
 > that already ran into a procedure: the same contract, with the apprentice
 > as its actor in place of the one that did the work. The apprentice adds
-> that contract to itself with `export`. **An actor can only extend
+> that contract to itself with `propose`. **An actor can only extend
 > itself.** It needs no approval: everything in the trace already passed
 > the Boundary's check, and every later instruction is checked again at
 > intake.
@@ -224,7 +224,7 @@ syscalls, and a syscall is an ordinary emission to it. It is called `system`
 because no actor knows it is in a Boundary: each has the illusion of being the
 only process, as a Unix process calls the kernel without knowing which
 container it runs in:
-`{"to": "system", "payload": {"export": {"schema": …}}}`.
+`{"to": "system", "payload": {"propose": {"schema": …}}}`.
 The room's facets (`system.narrow` today) become contracts every Boundary
 owns. Two kinds:
 
@@ -232,10 +232,10 @@ owns. Two kinds:
 |---|---|---|
 | `narrow` | the kernel | a narrowed Boundary for one actor (26) |
 | `trace` | the kernel | the hashes from an observation back to the invoke that caused it, within this Boundary |
-| `export(schema)` | the kernel | a new contract for the actor that asks, on itself |
+| `propose(schema)` | the kernel | a new contract for the actor that asks, on itself |
 | a request for new capability | **the Boundary's creator** | climbs to a slot on the invocation that created this Boundary; the creator answers with an emission, as always (24, 27: the creator supervises) |
 
-### `export` needs no approval
+### `propose` needs no approval
 
 `remember` compiles only what executed, and everything that executed went
 through intake under this Boundary. So a remembered procedure provably acted
@@ -245,7 +245,7 @@ future instruction is checked at intake again. Safety does not depend on
 `remember` being honest; even a forged procedure would fault on its first
 instruction outside the Boundary.
 
-So `export` adds a contract, never authority, and needs no approval in any
+So `propose` adds a contract, never authority, and needs no approval in any
 Boundary, the root included. A contract is identified by **(target, schema)**,
 so `(codex, S)` and `(apprentice, S)` are different contracts.
 
@@ -257,7 +257,7 @@ so `(codex, S)` and `(apprentice, S)` are different contracts.
   program would create an entry point that program never declared: no new
   authority, but input it never agreed to receive.
 - **Derived, never claimed.** The payload is only the schema:
-  `export(schema)`. The kernel knows who emitted it, and that is the
+  `propose(schema)`. The kernel knows who emitted it, and that is the
   actor extended. "Itself" is the actor the emitter's invoke resolved to (for
   an invoke through a handle, the grant's actor), and the contract joins
   the emitter's own Boundary: an actor extends itself where it runs, never
@@ -268,7 +268,7 @@ so `(codex, S)` and `(apprentice, S)` are different contracts.
   apprentice, to extend itself. A model can only grow its own interface;
   to grow Python's, Python's actor would have to extend itself.
 
-The kernel's checks are what `export` means, not judgments of
+The kernel's checks are what `propose` means, not judgments of
 authority:
 
 1. **The actor is the emitter.** Nothing in the payload can name another, so
@@ -305,7 +305,7 @@ replay. Applied:
 | Boundaries, reach, narrowing | **yes** | authority |
 | intake's `Fits` on the input contract | **yes** | the contract is part of what reach grants |
 | records, hashes, provenance | **yes** | replay, and the facts everything else derives from |
-| `narrow`, `trace`, `export`: the Boundary's contracts | **yes** | each reads or changes Boundary state, which only the kernel holds |
+| `narrow`, `trace`, `propose`: the Boundary's contracts | **yes** | each reads or changes Boundary state, which only the kernel holds |
 | types, shapes | no | only dispatch needs them |
 | procedures, refinements, routes | no | policy |
 | where a procedure is | no | the apprentice's bookkeeping |
@@ -519,7 +519,7 @@ kernel      walks from the observation back up to the invoke made through
             (codex, S), within this Boundary; hands back that string of hashes
 apprentice  walk, compile, and (H9) ask the model for the edges     its own policy
             → stores the procedure in its own state, under schema S
-            → system {export: {schema: S}}
+            → system {propose: {schema: S}}
 kernel      the emitter is the apprentice, and (apprentice, S) is new:
             it joins this Boundary's reach, under a new hash
 ```
@@ -527,7 +527,7 @@ kernel      the emitter is the apprentice, and (apprentice, S) is new:
 - **`remember` is a procedure to the apprentice and an input contract to the
   kernel.** Its first step is a syscall; a compiled procedure's first step
   is its first instruction. It runs in the caller's Boundary, as a shared
-  call, so `trace` reads that Boundary and `export` extends it.
+  call, so `trace` reads that Boundary and `propose` extends it.
 - **Naming the contract is also the check.** The walk must reach an invoke
   through that contract, inside the requester's Boundary: a caller can only
   remember work it asked for.
@@ -537,7 +537,7 @@ kernel      the emitter is the apprentice, and (apprentice, S) is new:
   it without the model, within its refinement. A second run remembered
   through the same contract would be a second representation of
   `(apprentice, S)`: refused, in any Boundary, until versioning. The refusal
-  comes before `export`, so no Boundary is ever given a procedure
+  comes before `propose`, so no Boundary is ever given a procedure
   another Boundary remembered.
 - **`remember` is a capability of a Boundary,** like any contract in reach.
   Who may remember is who holds it, decided by reach and narrowing, never by
@@ -730,7 +730,7 @@ general:
 | Where | Today | Here |
 |---|---|---|
 | fan-out | was not built: one emission was one successor, and a round's size was never committed | one emission is N instructions; the machine spawns N successors, each takes one, and the emitter supervises all N, opening every slot before releasing any |
-| syscalls | the room's facets: `system.narrow`, `system.route` | the Boundary as the actor `system`, its contracts `narrow`, `trace`, `export`; `system.route` leaves |
+| syscalls | the room's facets: `system.narrow`, `system.route` | the Boundary as the actor `system`, its contracts `narrow`, `trace`, `propose`; `system.route` leaves |
 | contracts | one input contract per name in reach | a target holds a set of contracts, each identified by (target, schema), selected by fit |
 | the floor | `.skyra/` is denied to every target | an actor can only see its own state: its own directory under `.skyra/` |
 | `core/machine` | the novelty interrupt; route lookup and `system.route`'s phases; shapes, type computation, type hashes and presentations | all removed; the machine keeps intake's `Fits` |
