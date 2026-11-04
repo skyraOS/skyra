@@ -53,6 +53,8 @@ The kernel's cycle, `Read* Commit? Execute*` (`core/machine`), and its rule:
 everything read comes back raw and unverified, and the core checks it itself
 before it uses it. The shell is one more source of untrusted bytes: it can
 fail or withhold, but it cannot pass off anything addressed by its hash.
+One read is not addressed by a hash, a guard's CEL answer, and it is trusted
+(see "What is trusted").
 
 Hashing is in the core. It is pure, and verifying a read needs it, as the
 kernel's machine hashes through `record.Sum`. A hash is SHA-256 over the
@@ -70,8 +72,10 @@ BaseOf       = sha256(["skyra/base/v1",       binary, [passed base ids…], shap
 RefinementOf = sha256(["skyra/refinement/v1", base id, guard])
 ```
 
-The guard is `"default"`, or `{"written": cel}`. When the default guard
-carries its CEL, the refinement tag becomes `v2`.
+The guard is `"default"`, or `{"written": cel}`. The default guard carries
+no CEL yet (55's `Guard.default`), so its code is not in the hash. When it
+carries its CEL, that code goes into the hash, and the refinement tag
+becomes `v2`.
 
 ### Read: what is verified
 
@@ -95,16 +99,29 @@ carries its CEL, the refinement tag becomes `v2`.
 7. **`self`** is never read from a payload: the root's comes from
    provisioning, a child's from the core (55, invariant 10).
 
+### What is trusted
+
+A guard's CEL answer (`CELKey`) is not addressed by a hash, so checks 1 to 7
+do not cover it: the shell's answer decides `EnterOf` and `NextOf`. It is
+trusted, for now. `Step` records every answer, and replay uses the recorded
+answers; it does not evaluate the CEL again. A shell that answers wrongly
+once is believed on every replay. Evaluating again on replay, and faulting
+on a difference, is possible because CEL is pure; it is not done yet.
+
 ### Interpret: a turn's reply
 
 As the kernel's `interpret` derives a state from an emitter's operands,
 total and pure, `Step` derives a call from a turn's reply:
 
-8. **Exactly one call the `Offer` allows**: `Goal`, `Delegate` and `Return`
-   only for a delegate node, `Invoke` only for an invoke node and only of its
-   contract, `EffectObservation` only for an effect node, `Exit` for every
-   kind (55, `offered`). Anything else is a fault, never an exit status.
-9. **Every name it uses is in the agent's scope** (`mayPass`).
+8. **One call, every instruction in it one the `Offer` allows**, each
+   checked on its own: `Goal` and `Delegate` only for a delegate node,
+   `Invoke` only for an invoke node and only of its contract,
+   `EffectObservation` only for an effect node, `Return` and `Exit` for
+   every kind (55, `offered`). An effect node's call holds one instruction;
+   `Return` and `Exit` go alone; a call holds at most 32. Anything else is a
+   fault, never an exit status.
+9. **Every reference is in the agent's scope** (`mayPass`), or names an
+   earlier instruction of the same call, never a later one.
 10. **Every contract it passes is held** (`passable`); the child's kind is
     `classify`'s.
 11. **A `Return`** passes `mayReturn` (something; for an invoke or delegate
@@ -169,7 +186,8 @@ crash (52's recovery, later), the tree is rebuilt by replaying the recorded
 events through `Step`, the way the kernel's machine is pure so that replay
 re-derives a lineage. Every observation is made by `observe` again, never
 decoded from bytes. The core imports nothing of the kernel or of
-`skyra-spawn`: the shell hands back bytes, and turns them into events.
+`skyra-spawn`: the shell hands back bytes, and `Step` turns them into
+events.
 
 ## Agents as instruction nodes
 
@@ -282,7 +300,7 @@ type Agent struct {
 	Depth    int
 	Received []Observation       // what it was passed
 	Scope    []Observation       // grows by Receive
-	Names    map[string]Named    // obs-1, obs-2, …: what the model refers to
+	Names    map[int]Named       // 0, 1, 2, …: the integers the model refers to
 	Waiting  []AgentID           // what this turn's call started, not yet returned
 	Phase    Phase
 }
@@ -307,16 +325,17 @@ observation's name. The core holds names, types and lineage.
 
 ```
 Provisioning ─ Classify ─┬─ refused ───────────────────────────────→ Faulted
-                         └─ kind → Offered
+                         └─ kind → Offered → Entering
 Entering ─ InputNovelty, entry guard (CELKey) → EnterOf ─┬─ model ──→ Thinking
-                                                          └─ procedure (remember off: never)
-Thinking ─ Turn → its reply, one call:
-   ├─ EffectObservation (effect) → Observe(effect) → Done: the parent takes it
-   ├─ Invoke   (invk) → Invoking   ─ Returned → Observe(effect) → BaseOf → See → guard → NextOf → Thinking
+                                                          └─ procedure → the remembered calls, in place of the model → Done
+                                                             (remember off: never taken)
+Thinking ─ Turn → its reply, one call; each instruction on its own:
+   ├─ EffectObservation (effect) → Observe(effect) → the default CEL: create_return → Done: the parent takes it
+   ├─ Invoke   (invk) → Invoking   ─ Returned, per element → Observe(effect) → BaseOf → See → guard → NextOf → Thinking
    ├─ Goal     (dlgt) → Observe(effect): a new name in scope → Thinking
    ├─ Delegate (dlgt) → Delegating ─ Passable, MayPass; each child → Provisioning, in the tree, passed the observations named
    │                     └─ every child Returned → Receive(ret) → BaseOf → See → guard → NextOf → Thinking
-   ├─ Return   (dlgt) → MayReturn, NodeMayReturn → Done, or refused back to Thinking
+   ├─ Return   (all)  → MayReturn, NodeMayReturn → Done, or refused: a fault → Faulted
    └─ Exit     (all)  → Observe(effect) → Done
 Done / Faulted → the parent's Delegating takes the return
 ```
@@ -372,9 +391,10 @@ type Replied struct {            // a turn's reply, raw: interpreted into a Call
 	Out   []byte
 }
 type Returned struct {           // an observation came back, with its shape
-	Agent AgentID
-	Shape Schema
-	Err   string
+	Agent   AgentID
+	Element int                  // which instruction of the call it answers, by position
+	Shape   Schema
+	Err     string
 }
 type Stopped struct {            // a node's crash, timeout or kill: always a fault
 	Agent  AgentID
@@ -383,16 +403,22 @@ type Stopped struct {            // a node's crash, timeout or kill: always a fa
 
 type Outcome uint8 // Created, Identical, Conflict, Lost: the kernel's
 
-type Call interface{ call() }    // what interpret derives from a reply
+type Call []Instruction          // what interpret derives from a reply: one call, many instructions
+
+type Instruction interface{ instruction() }
 type Invoke struct{ Contract Contract }
 type Goal struct{ Text string }  // creates a goal, an effect; the text goes to the shell
 type EffectObservation struct{ Text string } // what an effect node writes, an effect
-type Delegate struct {           // creates nothing: passes what is named
-	Observations []string
+type Delegate struct {           // creates nothing: passes what is referred to
+	Observations []Ref
 	Contracts    []Contract
 }
-type Return struct{ Members []string }
+type Return struct{ Members []Ref }
 type Exit struct{ Reason string }
+
+type Ref interface{ ref() }      // what the model refers to: an integer, never content
+type InScope int                 // an observation in the agent's scope, by its name
+type Earlier int                 // the result of an earlier instruction of this call, by position
 
 type Effect interface{ effect() }
 
@@ -407,7 +433,7 @@ type HistoryKey struct{}                   // the input records
 type CELKey struct {                       // a guard's CEL over named values, answered by apprentice/refine
 	Base   BaseID
 	CEL    string
-	Inputs []string
+	Inputs []int                 // the observations it reads, by name
 }
 
 type Write interface{ write() }
@@ -426,13 +452,13 @@ type Turn struct {               // one run of an agent's actor; its reply is Re
 	Binary    Binary
 	Authority string             // the agent's grant
 	Offer     Offer
-	Names     []string           // in scope; the shell renders their values
+	Names     []int              // in scope; the shell renders their values
 }
 type InvokeContract struct {     // an invoke node's invoke; its reply comes back as Returned
 	Agent     AgentID
 	Contract  Contract
 	Authority string             // the invoke node's grant
-	Name      string             // the observation it will be
+	Element   int                // its position in the call; its Returned carries it back
 }
 ```
 
@@ -445,7 +471,7 @@ kernel's machine, and fails on any other.
 
 ## The apprentice's contracts
 
-Proposed, not settled. The binary is the apprentice's, with its own hash;
+Settled (see "Open", 1). The binary is the apprentice's, with its own hash;
 each kind of observation it makes is its own contract of that binary (one
 binary, many shapes, each its own contract, as 55 allows). Some are
 privileged: never shown to a model, never offered downstream.
@@ -590,8 +616,8 @@ out of the count and out of the self check.
 Each kind is named for the one procedure it holds: an effect node writes
 (`effect_observation`), an invoke node invokes its one contract (`invoke`),
 a delegate delegates (`delegate`, with `goal`); `exit` and `return` are
-every kind's. With three kinds, an effect node is the
-bottom of the tree. The kinds of observation keep their names: an effect has no members, a
+every kind's. With three kinds, effect and invoke nodes are both leaves:
+neither delegates. The kinds of observation keep their names: an effect has no members, a
 computation has members, and a computation is what a delegate returns.
 
 Only a delegate node makes a computation; effect and invoke nodes make only
@@ -649,9 +675,9 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
 
 ## Plan
 
-1. **Settle the open questions** below; write the answers here.
-2. **`Core.lean` for the apprentice's contracts**, if settled so; 55's copy and
-   the vectors follow.
+1. **Settle the open questions** below; write the answers here. Done.
+2. **`Core.lean` for the apprentice's contracts**; 55's copy and the vectors
+   follow. Done.
 3. **The decision layer** in `controller/apprentice/tree`: the port, the
    vector replay, one property test per invariant, the purity test, and the
    hashes, pinned by known answers. Done.
@@ -667,8 +693,8 @@ Stop for review after each step.
 
 ## Open
 
-1. **The apprentice's contracts.** Settled: `goal` is given to nodes,
-   never to effect or invoke nodes; `exit` is in every agent's reach, and calling it is an
+1. **The apprentice's contracts.** Settled: `goal` is given to delegate
+   nodes, never to effect or invoke nodes; `exit` is in every agent's reach, and calling it is an
    instruction, which arrives at `observe`; the apprentice's contracts never
    count toward `classify` and are loaded into reach by kind; a node is an
    effect (0 contracts in reach), an invoke (1) or a delegate (2 or more),
