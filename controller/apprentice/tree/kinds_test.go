@@ -60,7 +60,7 @@ var (
 	pool   = append(append([]Contract{self, selfOther}, others...), app.all()...)
 )
 
-var kinds = []Kind{KindEffect, KindInvoke, KindDelegate}
+var kinds = []Kind{KindEffect, KindAct, KindDelegate}
 
 // --- the spec, written out apart from the code ---
 
@@ -85,7 +85,7 @@ func spec(self Contract, reach []Contract) (Kind, bool) {
 	case 0:
 		return KindEffect, true
 	case 1:
-		return KindInvoke, true
+		return KindAct, true
 	default:
 		return KindDelegate, true
 	}
@@ -142,7 +142,7 @@ func TestKindByCount(t *testing.T) {
 		want  Kind
 	}{
 		{nil, KindEffect},
-		{[]Contract{x}, KindInvoke},
+		{[]Contract{x}, KindAct},
 		{[]Contract{x, y}, KindDelegate},
 		{[]Contract{x, y, z}, KindDelegate},
 		{[]Contract{x, x2, y, z}, KindDelegate},
@@ -160,8 +160,8 @@ func TestDuplicatesCountOnce(t *testing.T) {
 		reach []Contract
 		want  Kind
 	}{
-		{[]Contract{x, x}, KindInvoke},
-		{[]Contract{x, x, x, x}, KindInvoke},
+		{[]Contract{x, x}, KindAct},
+		{[]Contract{x, x, x, x}, KindAct},
 		{[]Contract{x, y, x, y}, KindDelegate},
 	} {
 		if got, ok := Classify(app, self, tc.reach); !ok || got != tc.want {
@@ -243,7 +243,7 @@ func TestTotality(t *testing.T) {
 func TestLoadedByKind(t *testing.T) {
 	want := map[Kind][]Contract{
 		KindEffect:   {app.Exit(), app.Return(), app.EffectObservation()},
-		KindInvoke:   {app.Exit(), app.Return(), app.Invoke()},
+		KindAct:      {app.Exit(), app.Return(), app.Invoke()},
 		KindDelegate: {app.Exit(), app.Return(), app.Delegate(), app.Goal()},
 	}
 	for _, k := range kinds {
@@ -298,9 +298,9 @@ func effectOf(t *testing.T, k Kind, c Contract) Observation {
 // has members; never both, never neither.
 func TestEffectIffNoMembers(t *testing.T) {
 	goal := effectOf(t, KindDelegate, app.Goal())
-	exit := effectOf(t, KindInvoke, app.Exit())
+	exit := effectOf(t, KindAct, app.Exit())
 	wrote := effectOf(t, KindEffect, app.EffectObservation())
-	came := effectOf(t, KindInvoke, x)
+	came := effectOf(t, KindAct, x)
 	for _, o := range []Observation{goal, exit, wrote, came} {
 		if len(o.Members()) != 0 || !o.IsEffect() || o.IsComputation() {
 			t.Errorf("an observation with %d members: effect %v, computation %v", len(o.Members()), o.IsEffect(), o.IsComputation())
@@ -320,7 +320,7 @@ func TestEffectIffNoMembers(t *testing.T) {
 // Only a delegate makes a computation: with members, an effect or invoke
 // node is refused.
 func TestOnlyDelegateMakesComputation(t *testing.T) {
-	came := effectOf(t, KindInvoke, x)
+	came := effectOf(t, KindAct, x)
 	for _, k := range kinds {
 		_, ok := Observe(app, k, typeOf(app.Delegate(), shapeA), []Observation{came})
 		if ok != (k == KindDelegate) {
@@ -337,7 +337,7 @@ func TestOnlyDelegateMakesComputation(t *testing.T) {
 func TestEffectsByKind(t *testing.T) {
 	may := map[Kind][]Contract{
 		KindEffect:   {app.Exit(), app.EffectObservation()},
-		KindInvoke:   {app.Exit(), x},
+		KindAct:      {app.Exit(), x},
 		KindDelegate: {app.Exit(), app.Goal(), app.Description(), app.Reach()},
 	}
 	for _, k := range kinds {
@@ -394,9 +394,9 @@ func newReturnWorld(t *testing.T) returnWorld {
 	return returnWorld{
 		goal:  effectOf(t, KindDelegate, app.Goal()),
 		wrote: effectOf(t, KindEffect, app.EffectObservation()),
-		came:  effectOf(t, KindInvoke, x),
-		child: effectOf(t, KindInvoke, y),
-		other: effectOf(t, KindInvoke, z),
+		came:  effectOf(t, KindAct, x),
+		child: effectOf(t, KindAct, y),
+		other: effectOf(t, KindAct, z),
 	}
 }
 
@@ -412,18 +412,18 @@ func TestMayReturn(t *testing.T) {
 		returned []Observation
 		want     bool
 	}{
-		{"invoke returns what came back", KindInvoke, nil, []Observation{w.came}, true},
-		{"invoke returns what it was passed", KindInvoke, nil, []Observation{w.child}, true},
+		{"invoke returns what came back", KindAct, nil, []Observation{w.came}, true},
+		{"invoke returns what it was passed", KindAct, nil, []Observation{w.child}, true},
 		{"delegate returns a child's", KindDelegate, []Observation{w.goal}, []Observation{w.child}, true},
 		{"delegate returns two children's", KindDelegate, []Observation{w.goal}, []Observation{w.child, w.other}, true},
 		{"delegate returns its own goal", KindDelegate, []Observation{w.goal}, []Observation{w.goal}, false},
 		{"delegate hides its goal among children's", KindDelegate, []Observation{w.goal}, []Observation{w.child, w.goal, w.other}, false},
-		{"invoke returns what its model created", KindInvoke, []Observation{w.wrote}, []Observation{w.wrote}, false},
-		{"invoke hides what its model created", KindInvoke, []Observation{w.wrote}, []Observation{w.came, w.wrote}, false},
+		{"invoke returns what its model created", KindAct, []Observation{w.wrote}, []Observation{w.wrote}, false},
+		{"invoke hides what its model created", KindAct, []Observation{w.wrote}, []Observation{w.came, w.wrote}, false},
 		{"effect returns what it wrote", KindEffect, []Observation{w.wrote}, []Observation{w.wrote}, true},
 		{"effect returns what it wrote and was passed", KindEffect, []Observation{w.wrote}, []Observation{w.child, w.wrote}, true},
 		{"effect returns nothing", KindEffect, []Observation{w.wrote}, nil, false},
-		{"invoke returns nothing", KindInvoke, nil, nil, false},
+		{"invoke returns nothing", KindAct, nil, nil, false},
 		{"delegate returns nothing", KindDelegate, []Observation{w.goal}, nil, false},
 	} {
 		if got := MayReturn(tc.kind, tc.created, tc.returned); got != tc.want {

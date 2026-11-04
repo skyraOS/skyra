@@ -177,7 +177,7 @@ func TestNodeMayReturnIff(t *testing.T) {
 
 // --- the store ---
 
-var bases = []BaseID{"base:x", "base:y", "base:z"}
+var bases = domain
 
 // Every store reachable from the empty one in at most three operations.
 func stores() []Store {
@@ -267,21 +267,21 @@ func TestStore(t *testing.T) {
 	}
 }
 
-func TestNextContinueIff(t *testing.T) {
+func TestRetContinueIff(t *testing.T) {
 	for _, n := range []Seen{SeenSeen, SeenUnseen} {
 		for _, g := range []bool{true, false} {
-			if (NextOf(n, g) == NextContinue) != (n == SeenSeen && g) {
-				t.Errorf("next_continue_iff: %v %v", n, g)
+			if (ReturnOf(n, g) == ReturnContinue) != (n == SeenSeen && g) {
+				t.Errorf("ret_continue_iff: %v %v", n, g)
 			}
 		}
 	}
 }
 
-func TestEnterProcedureIff(t *testing.T) {
-	for _, n := range []InputBaseNovelty{InputSeen, InputUnseen} {
+func TestInvokeProcedureIff(t *testing.T) {
+	for _, n := range []Seen{SeenSeen, SeenUnseen} {
 		for _, g := range []bool{true, false} {
-			if (EnterOf(n, g) == EnterProcedure) != (n == InputSeen && g) {
-				t.Errorf("enter_procedure_iff: %v %v", n, g)
+			if (InvokeOf(n, g) == InvokeProcedure) != (n == SeenSeen && g) {
+				t.Errorf("invoke_procedure_iff: %v %v", n, g)
 			}
 		}
 	}
@@ -307,13 +307,13 @@ func TestOffered(t *testing.T) {
 	for _, k := range kinds {
 		for _, p := range reaches(others, 2) {
 			o := Offered(app, k, p)
-			if len(o.Invoke) != 0 && k != KindInvoke {
+			if len(o.Invoke) != 0 && k != KindAct {
 				t.Errorf("offered_invoke: %v invokes", k)
 			}
 			if !slices.Equal(o.Apprentice, Loaded(app, k)) {
 				t.Errorf("offered_apprentice: %v", k)
 			}
-			if k == KindInvoke && !slices.Equal(o.Invoke, p) || k == KindDelegate && !slices.Equal(o.PassOnly, p) {
+			if k == KindAct && !slices.Equal(o.Invoke, p) || k == KindDelegate && !slices.Equal(o.PassOnly, p) {
 				t.Errorf("offered: %v is not given what it was passed", k)
 			}
 		}
@@ -330,6 +330,51 @@ func TestLoadedNeverPrivileged(t *testing.T) {
 		for _, c := range l {
 			if !app.Mine(c) {
 				t.Errorf("loaded_mine: %v loads %s", k, name(c))
+			}
+		}
+	}
+}
+
+// --- the two edges ---
+
+// input_eq_iff, return_eq_iff, base_eq_iff: an edge's base type is one
+// exactly when its parts are, over every binary, passed list and shape here.
+func TestEdgesEqIff(t *testing.T) {
+	type in struct {
+		b Binary
+		p []ReturnBase
+	}
+	var ins []in
+	for _, b := range []Binary{hb, binX} {
+		for _, p := range [][]ReturnBase{nil, domain[:1], domain[:2], {domain[1], domain[0]}} {
+			ins = append(ins, in{b, p})
+		}
+	}
+	shapes := []Schema{shapeA, shapeS}
+	for _, x := range ins {
+		for _, y := range ins {
+			ix, iy := must(CreateInvoke(x.b, x.p)), must(CreateInvoke(y.b, y.p))
+			same := x.b == y.b && slices.Equal(x.p, y.p)
+			if (ix == iy) != same {
+				t.Fatalf("input_eq_iff: %v %v", x, y)
+			}
+			for _, ox := range shapes {
+				for _, oy := range shapes {
+					if (must(CreateReturn(ix, ox)) == must(CreateReturn(iy, oy))) != (same && ox == oy) {
+						t.Fatalf("base_eq_iff: %v %s, %v %s", x, ox, y, oy)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestDoUnseenIff(t *testing.T) {
+	is := []InputBase{must(CreateInvoke(hb, nil)), must(CreateInvoke(binX, nil)), must(CreateInvoke(hb, domain[:1]))}
+	for _, history := range [][]InputBase{nil, is[:1], is[1:], is} {
+		for _, i := range is {
+			if (Do(history, i) == SeenUnseen) != !slices.Contains(history, i) {
+				t.Fatalf("do_unseen_iff")
 			}
 		}
 	}

@@ -55,7 +55,7 @@ def jDir : Dir → Json
 
 def jKind : Kind → Json
   | .effect => .str "effect"
-  | .invoke => .str "invoke"
+  | .act => .str "act"
   | .delegate => .str "delegate"
 
 def jOffer (o : Offer) : Json :=
@@ -69,26 +69,21 @@ def jApprentice (a : Apprentice) : Json :=
     ("delegate", jContract a.delegate), ("goal", jContract a.goal),
     ("create_description", jContract a.description), ("package_reach", jContract a.reach)]
 
-def jInputBase (i : InputBase) : Json :=
-  Json.mkObj [("binary", jBinary i.binary), ("observations", jList jType i.observations)]
-
-def jInputBaseNovelty : InputBaseNovelty → Json
-  | .seen => .str "seen"
-  | .unseen => .str "unseen"
+def jInputBase (i : InputBase) : Json := .str i.val
 
 def jSeen : Seen → Json
   | .seen => .str "seen"
   | .unseen => .str "unseen"
 
-def jNext : Next → Json
+def jReturnResult : ReturnResult → Json
   | .continue => .str "continue"
   | .fallback => .str "fallback"
 
-def jEnter : Enter → Json
+def jInvokeResult : InvokeResult → Json
   | .procedure => .str "procedure"
   | .model => .str "model"
 
-def jBase (b : BaseId) : Json := .str b.val
+def jBase (b : ReturnBase) : Json := .str b.val
 
 def jGuard : Guard b → Json
   | .default => .str "default"
@@ -96,7 +91,7 @@ def jGuard : Guard b → Json
 
 /-- A store over a finite domain of base types: what is known, and the guard
 in every slot of the domain that has one. -/
-def jStore (domain : List BaseId) (s : Store) : Json :=
+def jStore (domain : List ReturnBase) (s : Store) : Json :=
   Json.mkObj [("known", jList jBase s.known),
     ("guards", .arr (domain.filterMap fun b =>
       (s.guards b).map fun g => Json.mkObj [("base", jBase b), ("guard", jGuard g)]).toArray)]
@@ -121,7 +116,7 @@ def schemas : List Schema := [⟨""⟩, Schema.empty, shapeIn, shapeStr, shapeOu
 
 def outputs : List Schema := [shapeStr, shapeOut]
 
-def kinds : List Kind := [.effect, .invoke, .delegate]
+def kinds : List Kind := [.effect, .act, .delegate]
 
 def bApp : Binary := ⟨"cdhash:" ++ hex 'f' 40⟩
 
@@ -170,10 +165,10 @@ def world : Option World := do
   let tw ← ObservationType.of app.effectObservation shapeStr
   let tr ← ObservationType.of app.root shapeStr
   let td ← ObservationType.of app.delegate shapeOut
-  let e1 ← observe app .invoke t1 []
-  let e2 ← observe app .invoke t2 []
+  let e1 ← observe app .act t1 []
+  let e2 ← observe app .act t2 []
   let g1 ← observe app .delegate tg []
-  let x1 ← observe app .invoke tx []
+  let x1 ← observe app .act tx []
   let w1 ← observe app .effect tw []
   let r0 ← rootObservation app tr
   let k1 ← observe app .delegate td [g1, e1]
@@ -187,21 +182,35 @@ def contracts (w : World) : List Contract := [w.c1, w.c2, w.c3] ++ w.app.contrac
 def types (w : World) : List ObservationType :=
   (contracts w).flatMap fun c => outputs.filterMap (ObservationType.of c)
 
-/-! ## Base types and refinement types -/
+/-! ## The two edges, and refinement types -/
 
-def domain : List BaseId := [⟨"base:x"⟩, ⟨"base:y"⟩, ⟨"base:z"⟩]
-def cels : List String := ["cel-1", "cel-2"]
-
-/-- The hash the `refinement` vectors use. Lean never computes a real hash;
-the Go test passes the same function. -/
+/-- The hashes the vectors use. Lean never computes a real hash; the Go test
+passes the same functions. -/
 def toy : Hashes where
-  base b is o := ⟨"base(" ++ b.val ++ "," ++ toString (is.map (·.val)) ++ "," ++ o.val ++ ")"⟩
+  input b ps := "input(" ++ b.val ++ "," ++ toString (ps.map (·.val)) ++ ")"
+  ret i o := "return(" ++ i.val ++ "," ++ o.val ++ ")"
   refine b g := ⟨"refine(" ++ b.val ++ "," ++
     (match g with | .default => "default" | .written cel => "written:" ++ cel) ++ ")"⟩
 
+def bA : Binary := ⟨"cdhash:" ++ hex 'a' 40⟩
+def bB : Binary := ⟨"sha256:" ++ hex '1' 64⟩
+
+/-- Two inputs with nothing passed, one per binary. -/
+def inputs : List InputBase := [bA, bB].filterMap (createInvoke toy · [])
+
+/-- Three return base types: two shapes back from one input, one from the
+other. -/
+def domain : List ReturnBase :=
+  match inputs with
+  | [iA, iB] => [(iA, shapeOut), (iA, shapeIn), (iB, shapeOut)].filterMap
+      fun (i, o) => createReturn toy i o
+  | _ => []
+
+def cels : List String := ["cel-1", "cel-2"]
+
 inductive Op
-  | see (b : BaseId)
-  | rewrite (b : BaseId) (cel : String)
+  | see (b : ReturnBase)
+  | rewrite (b : ReturnBase) (cel : String)
 
 def Op.apply (s : Store) : Op → Option Store
   | .see b => some (_root_.see s b).2
@@ -299,14 +308,21 @@ def files (w : World) : List (String × List Json) :=
       case (Json.mkObj [("kind", jKind k),
           ("passed", jList jContract passed)])
         (jOffer (offered w.app k passed))),
-    ("inputBaseNovelty",
-      let bA : Binary := ⟨"cdhash:" ++ hex 'a' 40⟩
-      let bB : Binary := ⟨"sha256:" ++ hex '1' 64⟩
-      let ibs : List InputBase :=
-        [⟨bA, []⟩, ⟨bA, [w.t1]⟩, ⟨bA, [w.t1, w.t2]⟩, ⟨bA, [w.t2, w.t1]⟩, ⟨bB, [w.t1]⟩]
+    ("createInvoke", binaries.flatMap fun b => (upTo domain 2).map fun ps =>
+      case (Json.mkObj [("binary", jBinary b), ("passed", jList jBase ps)])
+        (jOpt jInputBase (createInvoke toy b ps))),
+    ("createReturn", (inputs ++ (domain.take 2).filterMap (createInvoke toy bA [·])).flatMap
+      fun i => schemas.map fun o =>
+        case (Json.mkObj [("input", jInputBase i), ("shape", jSchema o)])
+          (jOpt jBase (createReturn toy i o))),
+    ("do",
+      let ibs : List InputBase := match domain with
+        | [d0, d1, _] => [(bA, []), (bA, [d0]), (bA, [d0, d1]), (bA, [d1, d0]), (bB, [d0])].filterMap
+            fun (b, ps) => createInvoke toy b ps
+        | _ => []
       (subsets ibs).flatMap fun history => ibs.map fun i =>
         case (Json.mkObj [("history", jList jInputBase history), ("input", jInputBase i)])
-          (jInputBaseNovelty (inputBaseNovelty history i))),
+          (jSeen («do» history i))),
     ("see", stores.flatMap fun s => domain.map fun b =>
       let (n, s') := see s b
       case (Json.mkObj [("store", jStore domain s), ("base", jBase b)])
@@ -317,11 +333,11 @@ def files (w : World) : List (String × List Json) :=
     ("refinement", stores.flatMap fun s => domain.map fun b =>
       case (Json.mkObj [("store", jStore domain s), ("base", jBase b)])
         (jOpt (fun r => .str r.val) (refinement toy s b))),
-    ("next", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
-      case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)]) (jNext (next n g))),
-    ("enter", [InputBaseNovelty.seen, .unseen].flatMap fun n => [true, false].map fun g =>
-      case (Json.mkObj [("novelty", jInputBaseNovelty n), ("guardHolds", .bool g)])
-        (jEnter (enter n g))) ]
+    ("ret", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
+      case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)]) (jReturnResult (ret n g))),
+    ("invoke", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
+      case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)])
+        (jInvokeResult (invoke n g))) ]
 
 /-- One case per line, so a change shows as a line in a diff. -/
 def render (name : String) (cases : List Json) : String :=

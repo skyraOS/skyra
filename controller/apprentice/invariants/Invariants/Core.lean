@@ -134,10 +134,10 @@ theorem Apprentice.contracts_nodup (a : Apprentice) : a.contracts.Nodup := by
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hw
   exact hw.2
 
-/-- What a node is: decided from its reach (see "Effect, invoke or delegate"). -/
+/-- What a node is: decided from its reach (see "Effect, act or delegate"). -/
 inductive Kind
   | effect    -- no contract in reach: it writes
-  | invoke    -- one: it invokes it
+  | act       -- one: it acts, invoking it
   | delegate  -- two or more: it delegates
   deriving DecidableEq
 
@@ -190,12 +190,12 @@ instance : DecidableEq Observation := Observation.decEq
 
 /-- What an effect may come through, by the kind of node that sends it: an
 exit, from every kind; a goal, a description and a packaged reach, from a
-delegate; what an effect node wrote; what came back through an invoke node's
+delegate; what an effect node wrote; what came back through an act node's
 contract, outside the apprentice. -/
 def effectThrough (a : Apprentice) (k : Kind) (c : Contract) : Bool :=
   c == a.exit || (k == .delegate && c == a.goal) ||
   (k == .delegate && c == a.description) || (k == .delegate && c == a.reach) ||
-  (k == .effect && c == a.effectObservation) || (k == .invoke && !a.mine c)
+  (k == .effect && c == a.effectObservation) || (k == .act && !a.mine c)
 
 /-- What `observe` admits. No members: an effect, through what its kind may
 make one through. Members: a computation, only from a delegate, through
@@ -238,7 +238,7 @@ theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputatio
   simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, beq_iff_eq] at ha
   exact ⟨ha.1.1, ha.1.2⟩
 
-/-- An effect node and an invoke node make only effects. -/
+/-- An effect node and an act node make only effects. -/
 theorem observe_effect_or_invoke (h : observe a k t ms = some o) (hk : k ≠ .delegate) :
     o.isEffect = true := by
   rw [Observation.effect_xor_computation]
@@ -326,7 +326,7 @@ theorem nodeMayReturn_iff :
       ∀ o ∈ returned, ∀ x ∈ lineage o, ∀ r ∈ received, x ∉ lineage r := by
   simp [nodeMayReturn, List.all_eq_true]
 
-/-- What `return` may pass: something; and for an invoke or delegate node,
+/-- What `return` may pass: something; and for an act or delegate node,
 nothing its model created directly. An effect node may return what it wrote.
 `created` is the frame's own: what its model made, never a field on an
 observation. -/
@@ -338,71 +338,121 @@ theorem mayReturn_iff :
       returned ≠ [] ∧ (k = .effect ∨ ∀ r ∈ returned, r ∉ created) := by
   simp [mayReturn, List.all_eq_true]
 
-/-- An input at base type: the binary that received it, and the types of the
-observations passed, in order. -/
+/-- An input base type, by its hash: the binary invoked, and the return base
+types of what it was passed, in order. Its constructor is private: every one
+is made by `createInvoke`. -/
 structure InputBase where
-  binary       : Binary
-  observations : List ObservationType
+  private mk ::
+  val : String
   deriving DecidableEq
 
-inductive InputBaseNovelty
-  | seen
-  | unseen
+/-- A return base type, by its hash: the input base type it answers, and the
+shape of what came back. No guard is in it. Its constructor is private: every
+one is made by `createReturn`, which takes an input base type, so every
+return answers an invoke. -/
+structure ReturnBase where
+  private mk ::
+  val : String
+  deriving DecidableEq
 
-def inputBaseNovelty (history : List InputBase) (i : InputBase) : InputBaseNovelty :=
-  if i ∈ history then .seen else .unseen
-
-/-- A refinement type, by its hash: a base type and its guard's code. -/
+/-- A refinement type, by its hash: a return base type and its guard's code. -/
 structure RefinementId where
   val : String
   deriving DecidableEq
 
-/-- A base type, by its hash: the binary, the base types it was passed, in
-order, and the shape of what came back. No guard is in it. -/
-structure BaseId where
-  val : String
-  deriving DecidableEq
-
-/-- A guard over one base type. `default` until the model writes one: the
-shell registers the default CEL for it. A guard for one base type is not a
-guard for another. -/
-inductive Guard (b : BaseId)
+/-- A guard over one return base type. `default` until the model writes one:
+the shell registers the default CEL for it. A guard for one return base type
+is not a guard for another. -/
+inductive Guard (b : ReturnBase)
   | default
   | written (cel : String)
   deriving DecidableEq
 
 /-- How the runtime hashes. Lean never computes a hash: Go does, and Lean
-takes the ids as values. -/
+takes the hashes as values. -/
 structure Hashes where
-  base   : Binary → List BaseId → Schema → BaseId
-  refine : (b : BaseId) → Guard b → RefinementId
+  input  : Binary → List ReturnBase → String
+  ret    : InputBase → Schema → String
+  refine : (b : ReturnBase) → Guard b → RefinementId
 
 /-- What is assumed of the hashes: no collisions. Every theorem that needs it
 takes it as a hypothesis. -/
 def Hashes.Sound (h : Hashes) : Prop :=
-  (∀ {b₁ b₂ i₁ i₂ o₁ o₂}, h.base b₁ i₁ o₁ = h.base b₂ i₂ o₂ →
-      b₁ = b₂ ∧ i₁ = i₂ ∧ o₁ = o₂) ∧
+  (∀ {b₁ b₂ p₁ p₂}, h.input b₁ p₁ = h.input b₂ p₂ → b₁ = b₂ ∧ p₁ = p₂) ∧
+  (∀ {i₁ i₂ o₁ o₂}, h.ret i₁ o₁ = h.ret i₂ o₂ → i₁ = i₂ ∧ o₁ = o₂) ∧
   (∀ {b₁ b₂} {g₁ : Guard b₁} {g₂ : Guard b₂}, h.refine b₁ g₁ = h.refine b₂ g₂ → b₁ = b₂)
 
-/-- The guards: a function from base type to at most one guard. -/
-def Guards := (b : BaseId) → Option (Guard b)
+/-- Down an edge (`create_invoke`): the one way to an input base type.
+Refuses a binary without a known scheme and digest. -/
+def createInvoke (h : Hashes) (b : Binary) (passed : List ReturnBase) : Option InputBase :=
+  if b.wellFormed then some ⟨h.input b passed⟩ else none
 
-/-- Put a guard in a base type's one slot. -/
-def Guards.set (g : Guards) (b : BaseId) (x : Guard b) : Guards :=
+/-- Up an edge (`create_return`): the one way to a return base type. It takes
+the input base type it answers. Refuses a shape that is not well formed. -/
+def createReturn (h : Hashes) (i : InputBase) (shape : Schema) : Option ReturnBase :=
+  if shape.wellFormed then some ⟨h.ret i shape⟩ else none
+
+/-- Same binary, same return base types passed: one input base type; and
+only then. -/
+theorem input_eq_iff {h : Hashes} (hs : h.Sound) (h₁ : createInvoke h b₁ p₁ = some x₁)
+    (h₂ : createInvoke h b₂ p₂ = some x₂) : x₁ = x₂ ↔ b₁ = b₂ ∧ p₁ = p₂ := by
+  unfold createInvoke at h₁ h₂
+  split at h₁ <;> split at h₂ <;> cases h₁ <;> cases h₂
+  constructor
+  · intro e; exact hs.1 (congrArg InputBase.val e)
+  · rintro ⟨rfl, rfl⟩; rfl
+
+/-- Same input base type, same shape back: one return base type; and only
+then. -/
+theorem return_eq_iff {h : Hashes} (hs : h.Sound) (h₁ : createReturn h i₁ o₁ = some r₁)
+    (h₂ : createReturn h i₂ o₂ = some r₂) : r₁ = r₂ ↔ i₁ = i₂ ∧ o₁ = o₂ := by
+  unfold createReturn at h₁ h₂
+  split at h₁ <;> split at h₂ <;> cases h₁ <;> cases h₂
+  constructor
+  · intro e; exact hs.2.1 (congrArg ReturnBase.val e)
+  · rintro ⟨rfl, rfl⟩; rfl
+
+/-- Same binary, same return base types passed, same shape back: one return
+base type, whichever node it came from; and only then. -/
+theorem base_eq_iff {h : Hashes} (hs : h.Sound)
+    (hi₁ : createInvoke h b₁ p₁ = some i₁) (hi₂ : createInvoke h b₂ p₂ = some i₂)
+    (hr₁ : createReturn h i₁ o₁ = some r₁) (hr₂ : createReturn h i₂ o₂ = some r₂) :
+    r₁ = r₂ ↔ b₁ = b₂ ∧ p₁ = p₂ ∧ o₁ = o₂ := by
+  rw [return_eq_iff hs hr₁ hr₂, input_eq_iff hs hi₁ hi₂, and_assoc]
+
+inductive Seen
+  | seen
+  | unseen
+  deriving DecidableEq
+
+/-- Do: an input base type came down an edge. Seen when the system has been
+handed it before. -/
+def «do» (history : List InputBase) (i : InputBase) : Seen :=
+  if i ∈ history then .seen else .unseen
+
+theorem do_unseen_iff : «do» history i = .unseen ↔ i ∉ history := by
+  unfold «do»; split <;> simp_all
+
+/-- The guards: a function from return base type to at most one guard. -/
+def Guards := (b : ReturnBase) → Option (Guard b)
+
+/-- Put a guard in a return base type's one slot. -/
+def Guards.set (g : Guards) (b : ReturnBase) (x : Guard b) : Guards :=
   fun a => if h : a = b then some (h ▸ x) else g a
 
-theorem Guards.set_same (g : Guards) (b : BaseId) (x : Guard b) : g.set b x b = some x := by
+theorem Guards.set_same (g : Guards) (b : ReturnBase) (x : Guard b) : g.set b x b = some x := by
   simp [Guards.set]
 
 theorem Guards.set_other (g : Guards) (h : a ≠ b) (x : Guard b) : g.set b x a = g a := by
   simp [Guards.set, h]
 
-/-- Two levels, kept apart. `known` is the base level: the base types the
-system recognizes. A hash not in it is unseen; it has no slot. `guards` is
-the refinement level: one slot per known base type. Not keyed by parent: the
-base type already holds the binary and what it was passed. -/
+/-- Two levels, kept apart. `known` is the base level: the return base types
+the system recognizes. A hash not in it is unseen; it has no slot. `guards`
+is the refinement level: one slot per known return base type. Not keyed by
+parent: the return base type already holds, through its input base type, the
+binary and what it was passed. -/
 structure Store where
-  known  : List BaseId
+  known  : List ReturnBase
   guards : Guards
 
 /-- Every known base type has exactly one guard, and only a known one has
@@ -415,16 +465,11 @@ def Store.empty : Store := ⟨[], fun _ => none⟩
 theorem Store.empty_wellFormed : Store.empty.WellFormed := by
   intro b; simp [Store.empty]
 
-inductive Seen
-  | seen
-  | unseen
-  deriving DecidableEq
-
-/-- A return of base type `b` came back. Lean decides whether the system
+/-- A return of return base type `b` came back. Lean decides whether the system
 recognizes the hash. On unseen, `b` becomes known, and its slot is made with
 its one guard, the default. The shell reacts: on unseen it registers the
 default CEL for `b`. -/
-def see (s : Store) (b : BaseId) : Seen × Store :=
+def see (s : Store) (b : ReturnBase) : Seen × Store :=
   if b ∈ s.known then (.seen, s)
   else (.unseen, ⟨b :: s.known, s.guards.set b .default⟩)
 
@@ -457,7 +502,7 @@ theorem see_wellFormed (hs : s.WellFormed) : (see s b).2.WellFormed := by
 
 /-- A guard broke, the model ran, and wrote another. It overwrites the one
 slot. An unknown base type has no slot to overwrite. -/
-def rewrite (s : Store) (b : BaseId) (cel : String) : Option Store :=
+def rewrite (s : Store) (b : ReturnBase) (cel : String) : Option Store :=
   if b ∈ s.known then some ⟨s.known, s.guards.set b (.written cel)⟩ else none
 
 theorem rewrite_known (hr : rewrite s b cel = some s') : s'.known = s.known := by
@@ -475,8 +520,8 @@ theorem rewrite_wellFormed (hs : s.WellFormed) (hr : rewrite s b cel = some s') 
     · simp [Guards.set_other _ h, hs a]
   · cases hr
 
-/-- A base type's refinement type: its base and its one guard, hashed. -/
-def refinement (h : Hashes) (s : Store) (b : BaseId) : Option RefinementId :=
+/-- A return base type's refinement type: its base and its one guard, hashed. -/
+def refinement (h : Hashes) (s : Store) (b : ReturnBase) : Option RefinementId :=
   (s.guards b).map (h.refine b)
 
 /-- In a well-formed store, a base type has a refinement type exactly when it
@@ -496,49 +541,41 @@ theorem refinement_base {h : Hashes} (hs : h.Sound) (h₁ : refinement h s b₁ 
   simp only [refinement, Option.map_eq_some_iff] at h₁ h₂
   obtain ⟨x₁, -, rfl⟩ := h₁
   obtain ⟨x₂, -, e⟩ := h₂
-  exact (hs.2 e).symm
+  exact (hs.2.2 e).symm
 
-/-- Same binary, same base types passed, same shape back: one base type,
-whichever node it came from; and only then. -/
-theorem base_eq_iff {h : Hashes} (hs : h.Sound) :
-    h.base b₁ i₁ o₁ = h.base b₂ i₂ o₂ ↔ b₁ = b₂ ∧ i₁ = i₂ ∧ o₁ = o₂ := by
-  constructor
-  · exact hs.1
-  · rintro ⟨rfl, rfl, rfl⟩; rfl
-
-/-- What the apprentice does after an observation comes back. -/
-inductive Next
+/-- The return guard: what the apprentice does after a return comes back. -/
+inductive ReturnResult
   | continue  -- take the next instruction; no model
   | fallback  -- an assumption broke; the model runs
 
-/-- An unseen shape broke an assumption; a seen one continues only while its
+/-- An unseen return broke an assumption; a seen one continues only while its
 guard holds. -/
-def next : Seen → (guardHolds : Bool) → Next
+def ret : Seen → (guardHolds : Bool) → ReturnResult
   | .unseen, _     => .fallback
   | .seen,   true  => .continue
   | .seen,   false => .fallback
 
-theorem next_continue_iff : next n g = .continue ↔ n = .seen ∧ g = true := by
-  cases n <;> cases g <;> simp [next]
+theorem ret_continue_iff : ret n g = .continue ↔ n = .seen ∧ g = true := by
+  cases n <;> cases g <;> simp [ret]
 
-/-- What the core does when a child is invoked. -/
-inductive Enter
-  | procedure  -- the entry guard holds: the remembered procedure runs; no model
+/-- The invoke guard: what the core does when a child is invoked. -/
+inductive InvokeResult
+  | procedure  -- the invoke guard holds: the remembered procedure runs; no model
   | model      -- an assumption broke; the model runs
 
-def enter : InputBaseNovelty → (guardHolds : Bool) → Enter
+def invoke : Seen → (guardHolds : Bool) → InvokeResult
   | .unseen, _     => .model
   | .seen,   true  => .procedure
   | .seen,   false => .model
 
-theorem enter_procedure_iff : enter n g = .procedure ↔ n = .seen ∧ g = true := by
-  cases n <;> cases g <;> simp [enter]
+theorem invoke_procedure_iff : invoke n g = .procedure ↔ n = .seen ∧ g = true := by
+  cases n <;> cases g <;> simp [invoke]
 
 /-- The kind, from the contracts counted. -/
 def kind (counted : List Contract) : Kind :=
   match counted.eraseDups.length with
   | 0 => .effect
-  | 1 => .invoke
+  | 1 => .act
   | _ => .delegate
 
 /-- The contracts that count: the reach, the apprentice's taken out. -/
@@ -561,8 +598,8 @@ theorem classify_effect_iff :
       self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 0 := by
   unfold classify kind; split <;> (try split) <;> simp_all
 
-theorem classify_invoke_iff :
-    classify a self reach = some .invoke ↔
+theorem classify_act_iff :
+    classify a self reach = some .act ↔
       self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
   unfold classify kind; split <;> (try split) <;> simp_all
 
@@ -595,11 +632,11 @@ theorem classify_apprentice_before (h : ∀ c ∈ extra, a.mine c = true) :
 
 /-- The apprentice's contracts for a kind, loaded into its reach after the
 kind is known: `exit` and `return` for every kind; `effect_observation` for
-an effect node; `invoke` for an invoke node; `delegate` and `goal` for a
+an effect node; `invoke` for an act node; `delegate` and `goal` for a
 delegate. -/
 def loaded (a : Apprentice) : Kind → List Contract
   | .effect   => [a.exit, a.ret, a.effectObservation]
-  | .invoke   => [a.exit, a.ret, a.invoke]
+  | .act      => [a.exit, a.ret, a.invoke]
   | .delegate => [a.exit, a.ret, a.delegate, a.goal]
 
 theorem loaded_mine (h : c ∈ loaded a k) : a.mine c = true := by
@@ -640,11 +677,11 @@ structure Offer where
 
 def offered (a : Apprentice) : Kind → (passed : List Contract) → Offer
   | .effect,   _      => ⟨[], [], loaded a .effect⟩
-  | .invoke,   passed => ⟨passed, [], loaded a .invoke⟩
+  | .act,      passed => ⟨passed, [], loaded a .act⟩
   | .delegate, passed => ⟨[], passed, loaded a .delegate⟩
 
-/-- Only an invoke node invokes a contract outside the apprentice. -/
-theorem offered_invoke (h : (offered a k p).invoke ≠ []) : k = .invoke := by
+/-- Only an act node invokes a contract outside the apprentice. -/
+theorem offered_invoke (h : (offered a k p).invoke ≠ []) : k = .act := by
   cases k <;> simp_all [offered]
 
 theorem offered_delegate_invokes_nothing : (offered a .delegate p).invoke = [] := rfl

@@ -1,4 +1,4 @@
-{"function":"next","cases":[
+{"function":"ret","cases":[
 {"in":{"guardHolds":true,"seen":"seen"},"out":"continue"},
 {"in":{"guardHolds":false,"seen":"seen"},"out":"fallback"},
 {"in":{"guardHolds":true,"seen":"unseen"},"out":"fallback"},

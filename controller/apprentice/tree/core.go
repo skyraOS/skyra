@@ -151,7 +151,7 @@ type Kind uint8
 const (
 	_            Kind = iota
 	KindEffect        // no contract in reach: it writes
-	KindInvoke        // one: it invokes it
+	KindAct           // one: it acts, invoking it
 	KindDelegate      // two or more: it delegates
 )
 
@@ -159,8 +159,8 @@ func (k Kind) String() string {
 	switch k {
 	case KindEffect:
 		return "effect"
-	case KindInvoke:
-		return "invoke"
+	case KindAct:
+		return "act"
 	case KindDelegate:
 		return "delegate"
 	}
@@ -203,10 +203,10 @@ func nodup(xs []Observation) bool {
 // effectThrough is what an effect may come through, by the kind of node that
 // sends it: an exit, from every kind; a goal, a description and a packaged
 // reach, from a delegate; what an effect node wrote; what came back through
-// an invoke node's contract, outside the apprentice.
+// an act node's contract, outside the apprentice.
 func effectThrough(a Apprentice, k Kind, c Contract) bool {
 	return c == a.exit || k == KindDelegate && (c == a.goal || c == a.description || c == a.reach) ||
-		k == KindEffect && c == a.effectObservation || k == KindInvoke && !a.Mine(c)
+		k == KindEffect && c == a.effectObservation || k == KindAct && !a.Mine(c)
 }
 
 // Admits is what Observe admits. No members: an effect, through what its
@@ -295,7 +295,7 @@ func NodeMayReturn(received, returned []Observation) bool {
 	return true
 }
 
-// MayReturn is what return may pass: something; and for an invoke or
+// MayReturn is what return may pass: something; and for an act or
 // delegate node, nothing its model created directly. An effect node may
 // return what it wrote. created is the frame's own: what its model made,
 // never a field on an observation.
@@ -314,125 +314,34 @@ func MayReturn(k Kind, created, returned []Observation) bool {
 	return true
 }
 
-// --- novelty ---
+// --- the two edges ---
 
-// An InputBase is an input at base type: the binary that received it, and
-// the types of the observations passed, in order.
-type InputBase struct {
-	Binary       Binary
-	Observations []ObservationType
+// An InputBase is an input base type, by its hash: the binary invoked, and
+// the return base types of what it was passed, in order. Every one is made
+// by CreateInvoke.
+type InputBase struct{ id string }
+
+// A ReturnBase is a return base type, by its hash: the input base type it
+// answers, and the shape of what came back. No guard is in it. Every one is
+// made by CreateReturn, which takes an input base type, so every return
+// answers an invoke.
+type ReturnBase struct{ id string }
+
+func (i InputBase) String() string  { return i.id }
+func (r ReturnBase) String() string { return r.id }
+
+// hashes is how the core hashes; the vector tests pass Lean's toy ones.
+type hashes struct {
+	input func(Binary, []ReturnBase) string
+	ret   func(InputBase, Schema) string
 }
 
-type InputBaseNovelty uint8
-
+// The domain tags. Each kind of id hashes its own tag first, so no two kinds
+// of id share one, whatever their parts; the version keeps a changed format
+// from matching old records.
 const (
-	_ InputBaseNovelty = iota
-	InputSeen
-	InputUnseen
-)
-
-func InputNovelty(history []InputBase, i InputBase) InputBaseNovelty {
-	for _, h := range history {
-		if h.Binary == i.Binary && slices.Equal(h.Observations, i.Observations) {
-			return InputSeen
-		}
-	}
-	return InputUnseen
-}
-
-// --- base types and refinement types ---
-
-// A BaseID is a base type, by its hash: the binary, the base types it was
-// passed, in order, and the shape of what came back. No guard is in it.
-type BaseID string
-
-// A RefinementID is a refinement type, by its hash: a base type and its
-// guard's code.
-type RefinementID string
-
-// A Guard is the default until the model writes one.
-type Guard struct {
-	written bool
-	cel     string
-}
-
-func DefaultGuard() Guard           { return Guard{} }
-func WrittenGuard(cel string) Guard { return Guard{true, cel} }
-
-func (g Guard) Written() (string, bool) { return g.cel, g.written }
-
-// A Store is two levels, kept apart. known is the base level: the base types
-// the system recognizes, newest first. A hash not in it is unseen; it has no
-// slot. guards is the refinement level: one slot per known base type.
-type Store struct {
-	known  []BaseID
-	guards map[BaseID]Guard
-}
-
-func EmptyStore() Store { return Store{} }
-
-func (s Store) Known() []BaseID { return slices.Clone(s.known) }
-
-// Guard is a base type's slot: none for one the system does not recognize.
-func (s Store) Guard(b BaseID) (Guard, bool) {
-	g, ok := s.guards[b]
-	return g, ok
-}
-
-func (s Store) set(b BaseID, g Guard) Store {
-	guards := make(map[BaseID]Guard, len(s.guards)+1)
-	for k, v := range s.guards {
-		guards[k] = v
-	}
-	guards[b] = g
-	return Store{s.known, guards}
-}
-
-type Seen uint8
-
-const (
-	_ Seen = iota
-	SeenSeen
-	SeenUnseen
-)
-
-// See: a return of base type b came back. On unseen, b becomes known, and
-// its slot is made with its one guard, the default.
-func See(s Store, b BaseID) (Seen, Store) {
-	if slices.Contains(s.known, b) {
-		return SeenSeen, s
-	}
-	t := s.set(b, DefaultGuard())
-	t.known = append([]BaseID{b}, s.known...)
-	return SeenUnseen, t
-}
-
-// Rewrite: a guard broke, the model ran, and wrote another. It overwrites
-// the one slot. An unknown base type has no slot to overwrite.
-func Rewrite(s Store, b BaseID, cel string) (Store, bool) {
-	if !slices.Contains(s.known, b) {
-		return Store{}, false
-	}
-	return s.set(b, WrittenGuard(cel)), true
-}
-
-// Refinement is a base type's refinement type: its base and its one guard,
-// hashed by refine.
-func Refinement(refine func(BaseID, Guard) RefinementID, s Store, b BaseID) (RefinementID, bool) {
-	g, ok := s.guards[b]
-	if !ok {
-		return "", false
-	}
-	return refine(b, g), true
-}
-
-// --- the hashes ---
-
-// The domain tags. Each kind of id hashes its own tag first, so a base type
-// and a refinement type never share an id, whatever their parts; the version
-// keeps a changed format from matching old records.
-const (
-	baseTag       = "skyra/base/v1"
+	inputTag      = "skyra/input/v1"
+	returnTag     = "skyra/return/v1"
 	refinementTag = "skyra/refinement/v1"
 )
 
@@ -453,60 +362,185 @@ func sum(v any) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-// BaseOf is a base type's id: the binary, the base types passed, in order,
-// and the shape back. No guard is in it.
-func BaseOf(b Binary, passed []BaseID, shape Schema) BaseID {
-	ps := make([]string, len(passed))
-	for i, p := range passed {
-		ps[i] = string(p)
-	}
-	return BaseID(sum([]any{baseTag, string(b), ps, string(shape)}))
+var sha = hashes{
+	input: func(b Binary, passed []ReturnBase) string {
+		ps := make([]string, len(passed))
+		for i, p := range passed {
+			ps[i] = p.id
+		}
+		return sum([]any{inputTag, string(b), ps})
+	},
+	ret: func(i InputBase, shape Schema) string {
+		return sum([]any{returnTag, i.id, string(shape)})
+	},
 }
 
-// RefinementOf is a refinement type's id: a base type and its guard, the
-// default as "default", a written one as {"written": cel}.
-func RefinementOf(b BaseID, g Guard) RefinementID {
+// CreateInvoke is down an edge (create_invoke): the one way to an input base
+// type. It refuses a binary without a known scheme and digest.
+func CreateInvoke(b Binary, passed []ReturnBase) (InputBase, bool) {
+	return createInvoke(sha, b, passed)
+}
+
+func createInvoke(h hashes, b Binary, passed []ReturnBase) (InputBase, bool) {
+	if !b.WellFormed() {
+		return InputBase{}, false
+	}
+	return InputBase{h.input(b, passed)}, true
+}
+
+// CreateReturn is up an edge (create_return): the one way to a return base
+// type. It takes the input base type it answers, and refuses a shape that is
+// not well formed.
+func CreateReturn(i InputBase, shape Schema) (ReturnBase, bool) {
+	return createReturn(sha, i, shape)
+}
+
+func createReturn(h hashes, i InputBase, shape Schema) (ReturnBase, bool) {
+	if !shape.WellFormed() {
+		return ReturnBase{}, false
+	}
+	return ReturnBase{h.ret(i, shape)}, true
+}
+
+type Seen uint8
+
+const (
+	_ Seen = iota
+	SeenSeen
+	SeenUnseen
+)
+
+// Do: an input base type came down an edge. Seen when the system has been
+// handed it before.
+func Do(history []InputBase, i InputBase) Seen {
+	if slices.Contains(history, i) {
+		return SeenSeen
+	}
+	return SeenUnseen
+}
+
+// --- refinement types ---
+
+// A RefinementID is a refinement type, by its hash: a return base type and
+// its guard's code.
+type RefinementID string
+
+// A Guard is the default until the model writes one.
+type Guard struct {
+	written bool
+	cel     string
+}
+
+func DefaultGuard() Guard           { return Guard{} }
+func WrittenGuard(cel string) Guard { return Guard{true, cel} }
+
+func (g Guard) Written() (string, bool) { return g.cel, g.written }
+
+// RefinementOf is a refinement type's id: a return base type and its guard,
+// the default as "default", a written one as {"written": cel}.
+func RefinementOf(b ReturnBase, g Guard) RefinementID {
 	var guard any = "default"
 	if cel, ok := g.Written(); ok {
 		guard = map[string]string{"written": cel}
 	}
-	return RefinementID(sum([]any{refinementTag, string(b), guard}))
+	return RefinementID(sum([]any{refinementTag, b.id, guard}))
 }
 
-// --- control ---
+// A Store is two levels, kept apart. known is the base level: the return
+// base types the system recognizes, newest first. A hash not in it is
+// unseen; it has no slot. guards is the refinement level: one slot per known
+// return base type.
+type Store struct {
+	known  []ReturnBase
+	guards map[ReturnBase]Guard
+}
 
-// Next is what the apprentice does after an observation comes back.
-type Next uint8
+func EmptyStore() Store { return Store{} }
+
+func (s Store) Known() []ReturnBase { return slices.Clone(s.known) }
+
+// Guard is a return base type's slot: none for one the system does not
+// recognize.
+func (s Store) Guard(b ReturnBase) (Guard, bool) {
+	g, ok := s.guards[b]
+	return g, ok
+}
+
+func (s Store) set(b ReturnBase, g Guard) Store {
+	guards := make(map[ReturnBase]Guard, len(s.guards)+1)
+	for k, v := range s.guards {
+		guards[k] = v
+	}
+	guards[b] = g
+	return Store{s.known, guards}
+}
+
+// See: a return of return base type b came back. On unseen, b becomes
+// known, and its slot is made with its one guard, the default.
+func See(s Store, b ReturnBase) (Seen, Store) {
+	if slices.Contains(s.known, b) {
+		return SeenSeen, s
+	}
+	t := s.set(b, DefaultGuard())
+	t.known = append([]ReturnBase{b}, s.known...)
+	return SeenUnseen, t
+}
+
+// Rewrite: a guard broke, the model ran, and wrote another. It overwrites
+// the one slot. An unknown return base type has no slot to overwrite.
+func Rewrite(s Store, b ReturnBase, cel string) (Store, bool) {
+	if !slices.Contains(s.known, b) {
+		return Store{}, false
+	}
+	return s.set(b, WrittenGuard(cel)), true
+}
+
+// Refinement is a return base type's refinement type: its base and its one
+// guard, hashed by refine.
+func Refinement(refine func(ReturnBase, Guard) RefinementID, s Store, b ReturnBase) (RefinementID, bool) {
+	g, ok := s.guards[b]
+	if !ok {
+		return "", false
+	}
+	return refine(b, g), true
+}
+
+// --- the guards ---
+
+// A ReturnResult is the return guard's: what the apprentice does after a
+// return comes back.
+type ReturnResult uint8
 
 const (
-	_            Next = iota
-	NextContinue      // take the next instruction; no model
-	NextFallback      // an assumption broke; the model runs
+	_              ReturnResult = iota
+	ReturnContinue              // take the next instruction; no model
+	ReturnFallback              // an assumption broke; the model runs
 )
 
-// NextOf: an unseen shape broke an assumption; a seen one continues only
+// ReturnOf: an unseen return broke an assumption; a seen one continues only
 // while its guard holds.
-func NextOf(n Seen, guardHolds bool) Next {
+func ReturnOf(n Seen, guardHolds bool) ReturnResult {
 	if n == SeenSeen && guardHolds {
-		return NextContinue
+		return ReturnContinue
 	}
-	return NextFallback
+	return ReturnFallback
 }
 
-// Enter is what the core does when a child is invoked.
-type Enter uint8
+// An InvokeResult is the invoke guard's: what the core does when a child is
+// invoked.
+type InvokeResult uint8
 
 const (
-	_              Enter = iota
-	EnterProcedure       // the entry guard holds: the remembered procedure runs; no model
-	EnterModel           // an assumption broke; the model runs
+	_               InvokeResult = iota
+	InvokeProcedure              // the invoke guard holds: the remembered procedure runs; no model
+	InvokeModel                  // an assumption broke; the model runs
 )
 
-func EnterOf(n InputBaseNovelty, guardHolds bool) Enter {
-	if n == InputSeen && guardHolds {
-		return EnterProcedure
+func InvokeOf(n Seen, guardHolds bool) InvokeResult {
+	if n == SeenSeen && guardHolds {
+		return InvokeProcedure
 	}
-	return EnterModel
+	return InvokeModel
 }
 
 // --- what a node is ---
@@ -533,7 +567,7 @@ func kind(cs []Contract) Kind {
 	case 0:
 		return KindEffect
 	case 1:
-		return KindInvoke
+		return KindAct
 	}
 	return KindDelegate
 }
@@ -557,7 +591,7 @@ func Loaded(a Apprentice, k Kind) []Contract {
 	switch k {
 	case KindEffect:
 		return []Contract{a.exit, a.ret, a.effectObservation}
-	case KindInvoke:
+	case KindAct:
 		return []Contract{a.exit, a.ret, a.invoke}
 	case KindDelegate:
 		return []Contract{a.exit, a.ret, a.delegate, a.goal}
@@ -586,7 +620,7 @@ type Offer struct {
 
 func Offered(a Apprentice, k Kind, passed []Contract) Offer {
 	switch k {
-	case KindInvoke:
+	case KindAct:
 		return Offer{slices.Clone(passed), nil, Loaded(a, k)}
 	case KindDelegate:
 		return Offer{nil, slices.Clone(passed), Loaded(a, k)}

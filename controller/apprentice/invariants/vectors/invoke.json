@@ -1,0 +1,6 @@
+{"function":"invoke","cases":[
+{"in":{"guardHolds":true,"seen":"seen"},"out":"procedure"},
+{"in":{"guardHolds":false,"seen":"seen"},"out":"model"},
+{"in":{"guardHolds":true,"seen":"unseen"},"out":"model"},
+{"in":{"guardHolds":false,"seen":"unseen"},"out":"model"}
+]}

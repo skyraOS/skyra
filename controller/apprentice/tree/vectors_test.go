@@ -69,9 +69,9 @@ type jObs struct {
 }
 
 type jStore struct {
-	Known  []BaseID `json:"known"`
+	Known  []string `json:"known"`
 	Guards []struct {
-		Base  BaseID          `json:"base"`
+		Base  string          `json:"base"`
 		Guard json.RawMessage `json:"guard"`
 	} `json:"guards"`
 }
@@ -127,7 +127,7 @@ func obsOf(t *testing.T, raw json.RawMessage) []Observation {
 
 func kindOf(t *testing.T, raw json.RawMessage) Kind {
 	t.Helper()
-	for _, k := range []Kind{KindEffect, KindInvoke, KindDelegate} {
+	for _, k := range []Kind{KindEffect, KindAct, KindDelegate} {
 		if k.String() == dec[string](t, raw) {
 			return k
 		}
@@ -139,7 +139,10 @@ func kindOf(t *testing.T, raw json.RawMessage) Kind {
 func storeOf(t *testing.T, raw json.RawMessage) Store {
 	t.Helper()
 	j := dec[jStore](t, raw)
-	s := Store{known: j.Known}
+	s := Store{}
+	for _, k := range j.Known {
+		s.known = append(s.known, ReturnBase{k})
+	}
 	for _, g := range j.Guards {
 		var guard Guard
 		if string(g.Guard) != `"default"` {
@@ -147,14 +150,39 @@ func storeOf(t *testing.T, raw json.RawMessage) Store {
 				Written string `json:"written"`
 			}](t, g.Guard).Written)
 		}
-		s = s.set(g.Base, guard)
+		s = s.set(ReturnBase{g.Base}, guard)
 	}
 	return s
 }
 
 // --- encoding the Go's answers as Lean writes them ---
 
-var domain = []BaseID{"base:x", "base:y", "base:z"}
+// Lean's toy hashes, written out the same way: Lean's toString of a list is
+// "[a, b]".
+var toyHashes = hashes{
+	input: func(b Binary, passed []ReturnBase) string {
+		ps := make([]string, len(passed))
+		for i, p := range passed {
+			ps[i] = p.id
+		}
+		return "input(" + string(b) + ",[" + strings.Join(ps, ", ") + "])"
+	},
+	ret: func(i InputBase, o Schema) string { return "return(" + i.id + "," + string(o) + ")" },
+}
+
+var (
+	shapeOut = Schema(`{"items":{"type":"number"},"type":"array"}`)
+	shapeIn  = Schema(`{"properties":{"path":{"type":"string"}},"type":"object"}`)
+)
+
+// domain is Lean's: three return base types, two shapes back from one input
+// and one from another, made the same way.
+var domain = func() []ReturnBase {
+	iA := must(createInvoke(toyHashes, Binary("cdhash:"+strings.Repeat("a", 40)), nil))
+	iB := must(createInvoke(toyHashes, Binary("sha256:"+strings.Repeat("1", 64)), nil))
+	return []ReturnBase{must(createReturn(toyHashes, iA, shapeOut)),
+		must(createReturn(toyHashes, iA, shapeIn)), must(createReturn(toyHashes, iB, shapeOut))}
+}()
 
 func eContract(c Contract) any { return map[string]any{"binary": c.binary, "shape": c.shape} }
 
@@ -197,17 +225,17 @@ func eStore(s Store) any {
 			if cel, w := g.Written(); w {
 				jg = map[string]any{"written": cel}
 			}
-			guards = append(guards, map[string]any{"base": b, "guard": jg})
+			guards = append(guards, map[string]any{"base": b.id, "guard": jg})
 		}
 	}
-	return map[string]any{"known": eList(s.known, func(b BaseID) any { return b }), "guards": guards}
+	return map[string]any{"known": eList(s.known, func(b ReturnBase) any { return b.id }), "guards": guards}
 }
 
-func toy(b BaseID, g Guard) RefinementID {
+func toy(b ReturnBase, g Guard) RefinementID {
 	if cel, w := g.Written(); w {
-		return RefinementID("refine(" + string(b) + ",written:" + cel + ")")
+		return RefinementID("refine(" + b.id + ",written:" + cel + ")")
 	}
-	return RefinementID("refine(" + string(b) + ",default)")
+	return RefinementID("refine(" + b.id + ",default)")
 }
 
 func pick[T comparable](t *testing.T, raw json.RawMessage, names map[string]T) T {
@@ -221,12 +249,10 @@ func pick[T comparable](t *testing.T, raw json.RawMessage, names map[string]T) T
 
 var (
 	seens   = map[string]Seen{"seen": SeenSeen, "unseen": SeenUnseen}
-	inputs  = map[string]InputBaseNovelty{"seen": InputSeen, "unseen": InputUnseen}
-	nexts   = map[Next]string{NextContinue: "continue", NextFallback: "fallback"}
-	enters  = map[Enter]string{EnterProcedure: "procedure", EnterModel: "model"}
+	returns = map[ReturnResult]string{ReturnContinue: "continue", ReturnFallback: "fallback"}
+	invokes = map[InvokeResult]string{InvokeProcedure: "procedure", InvokeModel: "model"}
 	dirs    = map[string]Dir{"invoke": DirInvoke, "ret": DirRet}
 	seenStr = map[Seen]string{SeenSeen: "seen", SeenUnseen: "unseen"}
-	inStr   = map[InputBaseNovelty]string{InputSeen: "seen", InputUnseen: "unseen"}
 )
 
 // The apprentice every case uses: apprenticeOf.json's first case.
@@ -243,18 +269,22 @@ func vectorApprentice(t *testing.T) Apprentice {
 
 type replay func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any
 
-func inputBases(t *testing.T, raw json.RawMessage) []InputBase {
+// Input and return base types are rebuilt as Lean wrote them, made in the
+// package: every one Lean writes was made by createInvoke or createReturn.
+func inputsOf(t *testing.T, raw json.RawMessage) []InputBase {
 	t.Helper()
 	var out []InputBase
-	for _, j := range dec[[]struct {
-		Binary       Binary  `json:"binary"`
-		Observations []jType `json:"observations"`
-	}](t, raw) {
-		i := InputBase{Binary: j.Binary}
-		for _, o := range j.Observations {
-			i.Observations = append(i.Observations, o.get(t))
-		}
-		out = append(out, i)
+	for _, id := range dec[[]string](t, raw) {
+		out = append(out, InputBase{id})
+	}
+	return out
+}
+
+func returnsOf(t *testing.T, raw json.RawMessage) []ReturnBase {
+	t.Helper()
+	var out []ReturnBase
+	for _, id := range dec[[]string](t, raw) {
+		out = append(out, ReturnBase{id})
 	}
 	return out
 }
@@ -314,27 +344,34 @@ var replays = map[string]replay{
 		return map[string]any{"invoke": eList(o.Invoke, eContract), "passOnly": eList(o.PassOnly, eContract),
 			"apprentice": eList(o.Apprentice, eContract)}
 	},
-	"inputBaseNovelty": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		i := inputBases(t, json.RawMessage("["+string(in["input"])+"]"))[0]
-		return inStr[InputNovelty(inputBases(t, in["history"]), i)]
+	"createInvoke": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		i, ok := createInvoke(toyHashes, dec[Binary](t, in["binary"]), returnsOf(t, in["passed"]))
+		return eOpt(i, ok, func(i InputBase) any { return i.id })
+	},
+	"createReturn": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		r, ok := createReturn(toyHashes, InputBase{dec[string](t, in["input"])}, dec[Schema](t, in["shape"]))
+		return eOpt(r, ok, func(r ReturnBase) any { return r.id })
+	},
+	"do": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		return seenStr[Do(inputsOf(t, in["history"]), InputBase{dec[string](t, in["input"])})]
 	},
 	"see": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		n, s := See(storeOf(t, in["store"]), dec[BaseID](t, in["base"]))
+		n, s := See(storeOf(t, in["store"]), ReturnBase{dec[string](t, in["base"])})
 		return map[string]any{"seen": seenStr[n], "store": eStore(s)}
 	},
 	"rewrite": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		s, ok := Rewrite(storeOf(t, in["store"]), dec[BaseID](t, in["base"]), dec[string](t, in["cel"]))
+		s, ok := Rewrite(storeOf(t, in["store"]), ReturnBase{dec[string](t, in["base"])}, dec[string](t, in["cel"]))
 		return eOpt(s, ok, eStore)
 	},
 	"refinement": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		r, ok := Refinement(toy, storeOf(t, in["store"]), dec[BaseID](t, in["base"]))
+		r, ok := Refinement(toy, storeOf(t, in["store"]), ReturnBase{dec[string](t, in["base"])})
 		return eOpt(r, ok, func(r RefinementID) any { return r })
 	},
-	"next": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		return nexts[NextOf(pick(t, in["seen"], seens), dec[bool](t, in["guardHolds"]))]
+	"ret": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		return returns[ReturnOf(pick(t, in["seen"], seens), dec[bool](t, in["guardHolds"]))]
 	},
-	"enter": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		return enters[EnterOf(pick(t, in["novelty"], inputs), dec[bool](t, in["guardHolds"]))]
+	"invoke": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		return invokes[InvokeOf(pick(t, in["seen"], seens), dec[bool](t, in["guardHolds"]))]
 	},
 }
 

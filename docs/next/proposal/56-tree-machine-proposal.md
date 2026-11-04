@@ -38,7 +38,7 @@ own (see "Read, interpret, commit, execute"):
 
 - **Read** and **Commit** stay in the process, answered by the apprentice's
   loop from its state directory. The cycle continues.
-- **Execute** leaves it: an agent's turn, and an invoke node's invoke of its
+- **Execute** leaves it: an agent's turn, and an act node's invoke of its
   contract. Each is a node of an `instruction/1` on fd 3; `skyra-spawn`
   checks it against the socket's grant, writes it ahead, runs it, and
   answers with `result/1`, which becomes the next event. Records go out as
@@ -63,14 +63,20 @@ canonical JSON of its parts (as `JSON.stringify` writes it), written
 computed by `Step`, never handed to it.
 
 Each kind of id hashes its domain tag first. An id in the records is only a
-string, and the tag is the one place it holds which kind it is: a base type
-and a refinement type never share an id, whatever their parts, and the
-version keeps a changed format from matching old records.
+string, and the tag is the one place it holds which kind it is: an input
+base type, a return base type and a refinement type never share an id,
+whatever their parts, and the version keeps a changed format from matching
+old records.
 
 ```
-BaseOf       = sha256(["skyra/base/v1",       binary, [passed base ids…], shape])
-RefinementOf = sha256(["skyra/refinement/v1", base id, guard])
+CreateInvoke = sha256(["skyra/input/v1",      binary, [passed return base ids…]])
+CreateReturn = sha256(["skyra/return/v1",     input base id, shape back])
+RefinementOf = sha256(["skyra/refinement/v1", return base id, guard])
 ```
+
+The two edges mint the two base types (55, "The two edges"): `create_invoke`
+down an edge, `create_return` up one. A return base type hashes the input
+base type it answers, so every return answers an invoke.
 
 The guard is `"default"`, or `{"written": cel}`. The default guard carries
 no CEL yet (55's `Guard.default`), so its code is not in the hash. When it
@@ -102,7 +108,7 @@ becomes `v2`.
 ### What is trusted
 
 A guard's CEL answer (`CELKey`) is not addressed by a hash, so checks 1 to 7
-do not cover it: the shell's answer decides `EnterOf` and `NextOf`. It is
+do not cover it: the shell's answer decides `InvokeOf` and `ReturnOf`. It is
 trusted, for now. `Step` records every answer, and replay uses the recorded
 answers; it does not evaluate the CEL again. A shell that answers wrongly
 once is believed on every replay. Evaluating again on replay, and faulting
@@ -115,7 +121,7 @@ total and pure, `Step` derives a call from a turn's reply:
 
 8. **One call, every instruction in it one the `Offer` allows**, each
    checked on its own: `Goal` and `Delegate` only for a delegate node,
-   `Invoke` only for an invoke node and only of its contract,
+   `Invoke` only for an act node and only of its contract,
    `EffectObservation` only for an effect node, `Return` and `Exit` for
    every kind (55, `offered`). An effect node's call holds one instruction;
    `Return` and `Exit` go alone; a call holds at most 32. Anything else is a
@@ -200,7 +206,7 @@ an agent makes comes back to `Step` as a reply: nothing goes around it.
   is one call: `Goal`, `Delegate`, `Invoke`, `EffectObservation`, `Return`
   or `Exit`. The actor keeps
   nothing between turns; what the turn needs, the input carries.
-- **An invoke node's invoke** is a node of the contract's binary, with the invoke node's
+- **An act node's invoke** is a node of the contract's binary, with the act node's
   grant as its `authority` (Landlock under 52), as 55 says a replayed call
   runs. Its reply is the value that came back, which the shell keeps under
   the observation's name; `Step` gets its shape (`Returned`).
@@ -233,27 +239,23 @@ type Observation struct {
 	typ     ObservationType
 	members []Observation // none: an effect; some: a computation
 }
-type Kind uint8 // Effect (0 in reach), Invoke (1), Delegate (2 or more)
+type Kind uint8 // Effect (0 in reach), Act (1), Delegate (2 or more)
 type Offer struct {
 	Invoke, PassOnly, Apprentice []Contract
 }
 type Dir uint8 // Invoke, Ret
-type InputBase struct {
-	Binary       Binary
-	Observations []ObservationType
-}
-type BaseID string
+type InputBase struct{ id string }   // made only by CreateInvoke
+type ReturnBase struct{ id string }  // made only by CreateReturn
 type RefinementID string
-type Guard struct{ written bool; cel string }                 // DefaultGuard() or WrittenGuard(cel)
-type Store struct{ known []BaseID; guards map[BaseID]Guard }  // EmptyStore, See, Rewrite
-type Seen uint8
-type Next uint8
-type Enter uint8
-type InputBaseNovelty uint8
+type Guard struct{ written bool; cel string }                         // DefaultGuard() or WrittenGuard(cel)
+type Store struct{ known []ReturnBase; guards map[ReturnBase]Guard }  // EmptyStore, See, Rewrite
+type Seen uint8         // Do's and See's
+type ReturnResult uint8 // the return guard's: continue, fallback
+type InvokeResult uint8 // the invoke guard's: procedure, model
 
 func Identify(Binary, Schema) (Contract, bool)
 func TypeOf(Contract, Schema) (ObservationType, bool)
-func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal Contract) (Apprentice, bool)
+func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal, description, reach Contract) (Apprentice, bool)
 func Admits(a Apprentice, sender Kind, t ObservationType, ms []Observation) bool
 func Observe(a Apprentice, sender Kind, t ObservationType, ms []Observation) (Observation, bool)
 func RootObservation(a Apprentice, t ObservationType) (Observation, bool)
@@ -266,17 +268,17 @@ func Classify(a Apprentice, self Contract, reach []Contract) (Kind, bool)
 func Loaded(a Apprentice, k Kind) []Contract
 func Passable(held, passed []Contract) bool
 func Offered(a Apprentice, k Kind, passed []Contract) Offer
-func InputNovelty(history []InputBase, i InputBase) InputBaseNovelty
-func See(s Store, b BaseID) (Seen, Store)
-func Rewrite(s Store, b BaseID, cel string) (Store, bool)
-func Refinement(hash func(BaseID, Guard) RefinementID, s Store, b BaseID) (RefinementID, bool)
-
-// The hashes, in the core: SHA-256 over the canonical JSON of the domain tag
-// and the parts (see "Read, interpret, commit, execute").
-func BaseOf(b Binary, passed []BaseID, shape Schema) BaseID
-func RefinementOf(b BaseID, g Guard) RefinementID
-func NextOf(Seen, bool) Next
-func EnterOf(InputBaseNovelty, bool) Enter
+// The two edges, hashed in the core: SHA-256 over the canonical JSON of the
+// domain tag and the parts (see "Read, interpret, commit, execute").
+func CreateInvoke(b Binary, passed []ReturnBase) (InputBase, bool)
+func CreateReturn(i InputBase, shape Schema) (ReturnBase, bool)
+func Do(history []InputBase, i InputBase) Seen
+func See(s Store, b ReturnBase) (Seen, Store)
+func Rewrite(s Store, b ReturnBase, cel string) (Store, bool)
+func Refinement(hash func(ReturnBase, Guard) RefinementID, s Store, b ReturnBase) (RefinementID, bool)
+func RefinementOf(b ReturnBase, g Guard) RefinementID
+func ReturnOf(Seen, bool) ReturnResult
+func InvokeOf(Seen, bool) InvokeResult
 ```
 
 ## State
@@ -308,7 +310,7 @@ type Agent struct {
 
 type Named struct {
 	Obs  Observation
-	Base BaseID                  // its base type, once hashed
+	Base ReturnBase              // the return base type it came back under
 }
 ```
 
@@ -327,21 +329,21 @@ observation's name. The core holds names, types and lineage.
 ```
 Provisioning ─ Classify ─┬─ refused ───────────────────────────────→ Faulted
                          └─ kind → Offered → Entering
-Entering ─ InputNovelty, entry guard (CELKey) → EnterOf ─┬─ model ──→ Thinking
+Entering ─ CreateInvoke → Do, invoke guard (CELKey) → InvokeOf ─┬─ model ──→ Thinking
                                                           └─ procedure → the remembered calls, in place of the model → Done
                                                              (remember off: never taken)
 Thinking ─ Turn → its reply, one call; each instruction on its own:
    ├─ EffectObservation (effect) → Observe(effect) → the default CEL: create_return → Done: the parent takes it
-   ├─ Invoke   (invk) → Invoking   ─ Returned, per element → Observe(effect) → BaseOf → See → guard → NextOf → Thinking
+   ├─ Invoke   (act)  → Invoking   ─ Returned, per element → Observe(effect) → CreateReturn → See → return guard → ReturnOf → Thinking
    ├─ Goal     (dlgt) → Observe(effect): a new name in scope → Thinking
    ├─ Delegate (dlgt) → Delegating ─ Passable, MayPass; each child → Provisioning, in the tree, passed the observations named
-   │                     └─ every child Returned → Receive(ret) → BaseOf → See → guard → NextOf → Thinking
+   │                     └─ every child Returned → Receive(ret) → CreateReturn → See → return guard → ReturnOf → Thinking
    ├─ Return   (all)  → MayReturn, NodeMayReturn → Done, or refused: a fault → Faulted
    └─ Exit     (all)  → Observe(effect) → Done
 Done / Faulted → the parent's Delegating takes the return
 ```
 
-With `remember` off, `EnterOf` and `NextOf` are always computed and
+With `remember` off, `InvokeOf` and `ReturnOf` are always computed and
 recorded, and the agent always goes to `Thinking`: whether each would have
 held is recorded (55, "Plan").
 
@@ -352,7 +354,7 @@ with an array, and `Step` interprets each element on its own (check 8, per
 element). Every node they start goes out in one `instruction/1`, and the turn
 waits for all of them; their results come back together.
 
-- **Who gets an array.** Delegate and invoke nodes. An effect node's call is
+- **Who gets an array.** Delegate and act nodes. An effect node's call is
   one instruction.
 - **Positional references.** An element may name the result of an earlier
   element of the same array by its position, so `goal(str)` and the
@@ -429,17 +431,17 @@ type Execute struct{ Act Action }
 
 type Key interface{ key() }
 type ObjectKey struct{ Kind, Hash string } // a guard, a base type, an event: by hash
-type ChainKey struct{ Base BaseID }        // the guard records of a base type
+type ChainKey struct{ Base ReturnBase }    // the guard records of a return base type
 type HistoryKey struct{}                   // the input records
 type CELKey struct {                       // a guard's CEL over named values, answered by apprentice/refine
-	Base   BaseID
+	Base   ReturnBase
 	CEL    string
 	Inputs []int                 // the observations it reads, by name
 }
 
 type Write interface{ write() }
 type GuardWrite struct{ Bytes []byte }               // a guard, under its refinement id
-type ReplacesWrite struct{ Base BaseID; Replaces RefinementID; By RefinementID } // write-once: Lost if another won
+type ReplacesWrite struct{ Base ReturnBase; Replaces RefinementID; By RefinementID } // write-once: Lost if another won
 type HistoryWrite struct{ Bytes []byte }
 type RecordWrite struct {                            // record/1: decisions, observations, guards
 	Kind  string
@@ -455,10 +457,10 @@ type Turn struct {               // one run of an agent's actor; its reply is Re
 	Offer     Offer
 	Names     []int              // in scope; the shell renders their values
 }
-type InvokeContract struct {     // an invoke node's invoke; its reply comes back as Returned
+type InvokeContract struct {     // an act node's invoke; its reply comes back as Returned
 	Agent     AgentID
 	Contract  Contract
-	Authority string             // the invoke node's grant
+	Authority string             // the act node's grant
 	Element   int                // its position in the call; its Returned carries it back
 }
 ```
@@ -484,7 +486,7 @@ privileged: never shown to a model, never offered downstream.
 | exit | every kind | an agent giving up, with a reason |
 | return | every kind | `return<T>`: an agent's return to its parent, general purpose, through `create_return` |
 | effect_observation | effect nodes | what an effect node writes, a string: it creates at this level |
-| invoke | invoke nodes | invokes the node's one contract |
+| invoke | act nodes | invokes the node's one contract |
 | delegate | delegate nodes | composes a child's input and delegates it |
 | goal | delegate nodes | `goal(str)`: a goal, returned as an observation that can be passed |
 | create_description | none: run by `delegate`'s CEL before the model's point | the description, `"Compose and Delegate the following goal: "`, a member of the `delegate` computation |
@@ -544,8 +546,9 @@ wrapper<T> = { <caller_type>: [T] }
 ```
 
 `create_return` and the default CEL on an effect are both `wrapper<T>`.
-Because the shape is fixed, a return's base type is `BaseOf(the returner's
-binary, the base types it was passed, wrapper's shape)`: two returns differ
+Because the shape is fixed, a return's base type is `CreateReturn(the
+returner's input base type, wrapper's shape)`, its input base type the
+returner's binary and the base types it was passed: two returns differ
 by who returned and what they were given, never by what the array holds.
 What it holds is told apart by value, in the guard's CEL.
 
@@ -607,23 +610,23 @@ once; an agent whose own binary is in its reach is refused):
 | Contracts in reach | The node is | It makes |
 |---|---|---|
 | 0 | an **effect** | effects: what it writes, from nothing it observed |
-| 1 | an **invoke** | effects: what came back through its one contract |
+| 1 | an **act** | effects: what came back through its one contract |
 | 2 or more | a **delegate** | computations: its return, made of its children's observations |
 
 And an observation is what it has:
 
 - **An effect has no members.** Every observation a syscall produces is an
   effect: a goal, an exit, the root's endowment, what an effect node wrote,
-  what came back through an invoke node's contract.
+  what came back through an act node's contract.
 - **A computation has members.** It is made only from observations already
-  in scope: a delegate node's return.
+  in scope: the `delegate` computation, a child's input.
 
 **Refused, first.** An agent whose own binary is among the binaries in its
 reach is none of the three (55, `classify_none_iff`). The check compares
 binaries, not contracts, so an agent cannot reach itself through another
 shape of its own binary. It comes before the count: such an agent is
 refused whatever its count, 0 and 1 included. What it rules out is an agent
-running itself as a contract: an invoke node whose one contract is its own binary
+running itself as a contract: an act node whose one contract is its own binary
 would start a whole run of its actor and pass it off as one effect, a
 computation disguised as an effect; a node would start more of itself
 outside `Delegate`, with no `passable`, `mayPass`, `observe` or depth bound,
@@ -636,16 +639,16 @@ kind is known and are the apprentice's binary, not the agent's, so they are
 out of the count and out of the self check.
 
 Each kind is named for the one procedure it holds: an effect node writes
-(`effect_observation`), an invoke node invokes its one contract (`invoke`),
+(`effect_observation`), an act node invokes its one contract (`invoke`),
 a delegate delegates (`delegate`, with `goal`); `exit` and `return` are
-every kind's. With three kinds, effect and invoke nodes are both leaves:
+every kind's. With three kinds, effect and act nodes are both leaves:
 neither delegates. The kinds of observation keep their names: an effect has no members, a
 computation has members, and a computation is what a delegate returns.
 
-Only a delegate node makes a computation; effect and invoke nodes make only
+Only a delegate node makes a computation; effect and act nodes make only
 effects. The apprentice's contracts for the kind are then loaded into its
 reach: `exit` and `return` for every kind; `effect_observation` for an
-effect node; `invoke` for an invoke node; `delegate` and `goal` for a
+effect node; `invoke` for an act node; `delegate` and `goal` for a
 delegate node.
 
 Creating a goal is an effect: a delegate node calls `goal(str)`, and the
@@ -672,7 +675,7 @@ level, and every test is named for what it proves:
   leaves the result unchanged, refused included. Loading the kind's contracts does not change the kind.
   An observation is an effect iff it has no members, a computation iff it
   has members. `observe` makes a computation only for a delegate node,
-  and only effects for effect and invoke nodes.
+  and only effects for effect and act nodes.
 - **Vectors, exhaustive.** Every reach of length 0 to 4 over a set that
   holds distinct contracts, two shapes of one binary, the agent's own
   binary, and each of the apprentice's contracts, with repeats; and every
@@ -727,16 +730,16 @@ apprentice, in `Core.lean`; `create_return` is the fixed shape
 ## Open
 
 1. **The apprentice's contracts.** Settled: `goal` is given to delegate
-   nodes, never to effect or invoke nodes; `exit` is in every agent's reach, and calling it is an
+   nodes, never to effect or act nodes; `exit` is in every agent's reach, and calling it is an
    instruction, which arrives at `observe`; the apprentice's contracts never
    count toward `classify` and are loaded into reach by kind; a node is an
-   effect (0 contracts in reach), an invoke (1) or a delegate (2 or more),
+   effect (0 contracts in reach), an act (1) or a delegate (2 or more),
    decided in the `observe` phase; an effect has no members and a
    computation has members, and every observation a syscall produces, an
    exit and a goal included, is an effect; an effect node writes through
    `effect_observation`; a child's input is the observations passed, with
    no context made around them.
-2. **An invoke node's return.** Settled: every kind returns through
+2. **An act node's return.** Settled: every kind returns through
    `return`, checked by `mayReturn` and `nodeMayReturn`.
 3. **Where the shape comes from.** Settled: a return's is `create_return`'s,
    and an effect's is the default CEL's, `{ <caller_type>: [<observation>] }`;
@@ -747,7 +750,7 @@ apprentice, in `Core.lean`; `create_return` is the fixed shape
    observations is one wrapper around one array. A generic guard (`guard<T>`)
    never reads the value and never fails.
 4. **Delegates in parallel.** Settled: one call carries an array of
-   instructions, for delegate and invoke nodes, with positional references;
+   instructions, for delegate and act nodes, with positional references;
    every node it starts is in one `instruction/1`, which is within 52's one
    instruction in flight.
 5. **Where CEL runs.** Settled, for now: a guard's CEL is a pure function of
@@ -760,15 +763,19 @@ apprentice, in `Core.lean`; `create_return` is the fixed shape
    vectors and the Go.
 7. **`create_return`.** Settled: it is the fixed shape `wrapper<T>` =
    `{ <caller_type>: [T] }`, not an observation, shared by every wrapper that
-   passes. A return's base type is the returner's binary, the base types it
-   was passed, and that shape; what it holds is told apart by CEL.
+   passes. A return's base type is `CreateReturn` of the returner's input
+   base type and that shape; what it holds is told apart by CEL.
 8. **The child's actor.** Recommended: one actor contract runs every child,
    supplied once by the kernel in `Started`, as the root's `self` is, and
    held as `Tree.Actor`. A child's `Self` is that contract, so `classify`
    refuses an actor whose own binary is in the child's reach.
 9. **What an invoke receives.** `Invoke` has no input. Recommended: it
-   carries `Observations []Ref`, passed as the contract's input; their base
-   types are the ones passed in `BaseOf`.
+   carries `Observations []Ref`, wrapped by `create_invoke` as the
+   contract's input; their return base types are the ones its input base
+   type is minted from. Also open: whether a delegate's child is invoked
+   through `create_invoke` around the `delegate` computation (recommended,
+   so `delegate` composes and invoke carries), or given the parts with no
+   computation made (which would leave nothing with members).
 10. **The root's endowment.** Recommended: `Started` carries the
     endowment's output shape; the root's observation is
     `rootObservation(TypeOf(app.root, shape))`, its value kept by the shell
