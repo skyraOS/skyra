@@ -489,15 +489,24 @@ The observations passed follow the three parts, as members of the
 `delegate` computation. Each is unique within the frame.
 
 `return<T>` is generic, the apprentice's handle for every kind, built by one
-general-purpose `create_return`. `create_return` defines the shape: the
-observations returned, in one array, under the name of the node returning
-them, with any required fields added beside it:
+general-purpose `create_return`. `create_return` is an observation type,
+with the caller's type as the name inside it, and the observations returned
+under it, in one array:
 
 ```
 create_return {
-  <name of the node>: Obs[]
+  <caller_type>: [obs1, obs2]
 }
 ```
+
+`<caller_type>` is the caller's kind (`effect`, `invoke` or `delegate`),
+unique within the frame. It cannot be the observation's type: that is not
+known when the frame pops, only once the apprentice interprets what came
+back.
+
+Every `create_` function is a wrapper of this kind: it says the observation
+it wraps is allowed to be here, as `observe` admits it, and adds no content
+of its own.
 
 So the shape of a return comes from `create_return`, not from the model and
 not from the shell. It passes; it does not create: what the
@@ -515,6 +524,25 @@ description is one: `create_description` runs first, in the CEL written for
 the model runs. It is never in the model's reach. Its guard is an exact
 string match and its string is fixed, so it always holds: the model never
 wakes for it, and its base type never varies.
+
+An effect has a default CEL implementation, and each contract may override
+it. The default does two things, with generic guards, so no model wakes for
+either. A generic guard is over the type it guards (`guard<T>`): it
+never reads the value, so it never fails. A changed value breaks no guard
+here; it can only break one where it is received.
+
+1. **Creates the observation**, through `observe`.
+2. **Returns it to the parent**, in one boring shape:
+
+```
+{ <caller_type>: [<observation>] }
+```
+
+`delegate`, `invoke` and `return` each override the default with their own
+CEL, to handle their own types: `delegate` composes, `invoke` handles what
+its contract brings back, and `return` is `create_return`. So the shape of
+an effect is the default's, never the model's and never the shell's, and
+what came back is told apart by its value, which is CEL's.
 
 The apprentice's contracts never count toward `classify`. The kind is
 decided from the contracts an agent was passed, apart from the apprentice's;
@@ -651,10 +679,14 @@ Stop for review after each step.
    no context made around them.
 2. **An invoke node's return.** Settled: every kind returns through
    `return`, checked by `mayReturn` and `nodeMayReturn`.
-3. **Where the shape comes from.** Settled for a return: `create_return`
-   defines it (see "Contracts are procedures"). What an invoke node's
-   contract brings back is still to be settled: `Returned` carries its shape,
-   and the core never computes one.
+3. **Where the shape comes from.** Settled: a return's is `create_return`'s,
+   and an effect's is the default CEL's, `{ <caller_type>: [<observation>] }`;
+   `delegate`, `invoke` and `return` override it (see "Contracts are
+   procedures"). Every `create_` function is a wrapper saying the
+   observation is allowed to be here. `<caller_type>` is the
+   caller's kind, unique within the frame. A return of several
+   observations is one wrapper around one array. A generic guard (`guard<T>`)
+   never reads the value and never fails.
 4. **Delegates in parallel.** Settled: one call carries an array of
    instructions, for delegate and invoke nodes, with positional references;
    every node it starts is in one `instruction/1`, which is within 52's one
