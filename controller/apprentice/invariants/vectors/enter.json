@@ -1,0 +1,6 @@
+{"function":"enter","cases":[
+{"in":{"guardHolds":true,"novelty":"seen"},"out":"procedure"},
+{"in":{"guardHolds":false,"novelty":"seen"},"out":"model"},
+{"in":{"guardHolds":true,"novelty":"unseen"},"out":"model"},
+{"in":{"guardHolds":false,"novelty":"unseen"},"out":"model"}
+]}

@@ -2,9 +2,124 @@
 
 Date: 2026-11-03
 
-Status: **draft; step 1 done.** The functional core of [54](54-one-tool-per-model-experiment-proposal.md),
-linked into the apprentice. Typechecks in core Lean 4.35; every theorem rests
-only on `propext`, `Classical.choice` and `Quot.sound`.
+Status: **draft.** The functional core of [54](54-one-tool-per-model-experiment-proposal.md):
+specified and proven in Lean, run as a Go package that agrees with it on
+every vector Lean writes. Typechecks in core Lean 4.35.
+
+The Lean is [`controller/apprentice/invariants/Invariants/Core.lean`](../../../controller/apprentice/invariants/Invariants/Core.lean),
+the source of truth. The blocks below are a copy of it, in order;
+`check-proposal.sh` there fails if they differ. A change goes to `Core.lean`
+first.
+
+## The invariants
+
+Every invariant the system holds, with the theorem that proves it, or what
+it rests on when Lean does not. The sections below are the proofs.
+
+**Identity**
+
+1. A contract is its binary and its input shape, nothing else; every one is
+   made by `identify` (`contract_identity`, `identify_parts`).
+2. An observation type is its contract and its own output shape; every one is
+   made by `ObservationType.of` (`observation_identity`).
+3. Values never enter a type. Value is CEL's.
+
+**Observations**
+
+4. `observe` is the only way to an observation from an instruction, and
+   `rootObservation` the root's endowment. `Observation`'s constructor is
+   private, so validity throughout a lineage is by construction
+   (`observe_eq_some`). Across the Go package boundary it rests on unexported
+   fields.
+5. An effect has no members; a computation has members. Every observation is
+   exactly one (`Observation.effect_iff`, `Observation.computation_iff`,
+   `Observation.effect_xor_computation`).
+6. The caller never says what it sends: `observe` decides by what it has, and
+   admits by the kind of node sending it. An exit comes from every kind; a
+   goal from a delegate; what an effect node writes, through
+   `effect_observation`, from an effect node; what came back through a
+   contract outside the apprentice, from an invoke node.
+7. Only a delegate makes a computation, through `delegate`, no member twice
+   (`observe_computation`); an effect or invoke node makes only effects
+   (`observe_effect_or_invoke`). Nothing becomes an effect through `observe`,
+   `root`, `return`, `invoke` or `delegate` (`observe_not_through`). An exit
+   the system forces is a fault.
+
+**Kind and authority**
+
+8. The apprentice is one binary and its contracts: `observe`, `root`, `exit`,
+   `return`, `effect_observation`, `invoke`, `delegate`, `goal`; each of that
+   binary, none twice (`Apprentice.contracts_mine`,
+   `Apprentice.contracts_nodup`).
+9. The apprentice's contracts never count, for the self check or the kind
+   (`classify_apprentice_before`, `classify_apprentice_after`).
+10. No agent reaches its own binary, at every count (`classify_none_iff`).
+11. No contract in reach is an effect node, one an invoke node, two or more a
+    delegate (`classify_effect_iff`, `classify_invoke_iff`,
+    `classify_delegate_iff`). Decided in the `observe` phase.
+12. The kind decides what is loaded: `exit` and `return` for every kind;
+    `effect_observation` for an effect node; `invoke` for an invoke node;
+    `delegate` and `goal` for a delegate. `observe` and `root` are never
+    loaded, and loading never changes the kind (`loaded_mine`,
+    `loaded_never_privileged`, `classify_loaded`).
+13. Only an invoke node invokes a contract outside the apprentice; a delegate
+    only passes on (`offered_invoke`, `offered_delegate_invokes_nothing`,
+    `offered_effect_invokes_nothing`, `offered_apprentice`).
+14. A parent passes only contracts it holds (`passable_iff`).
+15. `self` comes from the kernel, never a payload. The Go enforces it.
+
+**Scope**
+
+16. An agent passes only what is in its scope: what it was passed, what its
+    children returned, what it created (`mayPass_iff`). An observation is
+    obtained only by endowment, creation or introduction.
+17. A child starts with only what it is passed; a parent keeps its scope and
+    adds what is returned (`receive`).
+18. A return holds something. An invoke or delegate node returns nothing its
+    model created directly; an effect node may return what it wrote
+    (`mayReturn_iff`). Passing is not creating. Nothing returned meets the
+    lineage of what the node was passed (`nodeMayReturn_iff`).
+19. Refusal is by refinement type: two observations of one refinement type
+    are the same. Uniqueness is the system's interpretation; there is no
+    stamp. Until Lean takes refinement ids, it compares `ObservationType`.
+
+**Base types, refinement types and guards**
+
+20. A base type is the binary, the base types passed, in order, and the
+    shape back, hashed; not the parent, the path, the depth, the goal, or any
+    guard (`base_eq_iff`). Refinement types are never part of a base type.
+21. A refinement type is a base type and its guard, hashed.
+22. Two levels, kept apart: the base types the system recognizes (`known`),
+    and a guard slot for each (`guards`). Every known base type has exactly
+    one guard, and only a known one has any (`Store.WellFormed`,
+    `refinement_known`); so one refinement type each (`one_refinement`).
+23. A guard belongs to one base type and cannot move (`refinement_base`;
+    `Guard b` is indexed by `b`).
+24. Unseen is a hash the system does not recognize: no slot at all
+    (`see_unseen_iff`). On first sight the base type becomes known and its
+    slot is made with the default guard; no other slot is touched
+    (`see_known`, `see_other`, `see_wellFormed`).
+25. A rewrite overwrites the one slot of a known base type; an unknown one
+    has no slot (`rewrite`, `rewrite_wellFormed`).
+26. `known` only grows: seen stays seen (`see_grows`, `rewrite_known`).
+27. The one assumption is no hash collisions, written once (`Hashes.Sound`)
+    and taken as a hypothesis. Lean never computes a hash.
+
+**Control**
+
+28. Two paths, never a third: a return continues without the model only when
+    its base type is seen and its guard holds (`next_continue_iff`); an
+    invoke runs a procedure only when its input base type is seen and its
+    entry guard holds (`enter_procedure_iff`). Anything else falls back.
+29. Novelty measures, never refuses; validity refuses.
+30. A replayed procedure is still its subtree in the records: the original
+    invoke grants, each observation through the kind it was first made by.
+    Not yet proven.
+31. Guards decide and never execute; only `skyra-spawn` execs, enforced by
+    the OS. On macOS, in part, until 52 is built.
+
+Not settled: the default guard's value, which `Guard.default` does not yet
+carry.
 
 ## Contract identity proof
 
@@ -75,8 +190,9 @@ now, and the one place a canonical check goes when Lean takes it from
 
 A contract is identified by the pair, never by a second hash of it. Two
 contracts are the same exactly when their binaries and shapes are; no proof
-assumes anything about collisions. One binary may have several shapes, each
-its own contract. A return shape waits until the trees need one.
+of a contract's identity assumes anything about collisions (base and
+refinement types do, and say so: see "Base types and refinement types"). One binary may have several shapes, each
+its own contract. A return's shape is `create_return`'s (see [56](56-tree-machine-proposal.md)).
 
 ## Observation identity proof
 
@@ -126,60 +242,89 @@ is not settled: shapes the contract declares, or the input it is passed to.
 ## Observe: the one way to an observation
 
 ```lean
-/-- The shape of a context: an array of references to observations, as
-`contract.Normal` writes it. Each member carries its own type. -/
-def Schema.context : Schema := ⟨"{\"type\":\"array\",\"items\":{\"type\":\"string\"}}"⟩
+/-- The apprentice: one binary, and its contracts, each of that binary and
+none twice. Some are privileged (`observe`, `root`): never loaded into a
+reach. Its constructor is private: every one is made by `Apprentice.of`. -/
+structure Apprentice where
+  private mk ::
+  binary            : Binary
+  observe           : Contract
+  root              : Contract
+  exit              : Contract
+  ret               : Contract  -- `return`
+  effectObservation : Contract
+  invoke            : Contract
+  delegate          : Contract
+  goal              : Contract
+  wf : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal].all
+          (·.binary == binary) && decide
+          [observe, root, exit, ret, effectObservation, invoke, delegate, goal].Nodup) = true
 
-/-- The shape of a goal: the text a parent hands its child. -/
-def Schema.goal : Schema := ⟨"{\"type\":\"string\"}"⟩
+def Apprentice.contracts (a : Apprentice) : List Contract :=
+  [a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal]
 
-/-- The shape of an exit status: why an agent gave up, in its own words. -/
-def Schema.exitStatus : Schema := ⟨"{\"type\":\"string\"}"⟩
+/-- The one way to an apprentice. Refuses a contract of another binary, or
+one contract in two places. -/
+def Apprentice.of (binary : Binary) (observe root exit ret effectObservation invoke delegate goal : Contract) :
+    Option Apprentice :=
+  if h : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal].all
+            (·.binary == binary) && decide
+            [observe, root, exit, ret, effectObservation, invoke, delegate, goal].Nodup) = true
+  then some ⟨binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal, h⟩
+  else none
 
-/-- The narrow interfaces through which `observe` is granted. -/
-inductive Interface
-  | effect       -- what came back from a leaf's one contract, or what it wrote
-  | computation  -- a goal or a context, as a node delegates; a node's return
-  | exit         -- an agent giving up, with a reason
-  deriving DecidableEq
+/-- A contract of the apprentice's binary. -/
+def Apprentice.mine (a : Apprentice) (c : Contract) : Bool := c.binary == a.binary
 
-/-- An agent is a leaf or a node; `classify` decides which (see "Leaf or node"). -/
+theorem Apprentice.contracts_mine (a : Apprentice) (h : c ∈ a.contracts) : a.mine c = true := by
+  have hw := a.wf
+  simp only [Bool.and_eq_true, List.all_eq_true, beq_iff_eq] at hw
+  simp only [Apprentice.mine, beq_iff_eq]
+  exact hw.1 c h
+
+theorem Apprentice.contracts_nodup (a : Apprentice) : a.contracts.Nodup := by
+  have hw := a.wf
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hw
+  exact hw.2
+
+/-- What a node is: decided from its reach (see "Effect, invoke or delegate"). -/
 inductive Kind
-  | leaf
-  | node
+  | effect    -- no contract in reach: it writes
+  | invoke    -- one: it invokes it
+  | delegate  -- two or more: it delegates
   deriving DecidableEq
 
-/-- The interfaces each kind observes through. -/
-def Kind.interfaces : Kind → List Interface
-  | .leaf => [.effect, .exit]
-  | .node => [.computation, .exit]
-
-/-- An observation's place in the records, assigned as it is recorded. -/
-abbrev Stamp := Nat
-
-/-- An observation: its stamp, the contract and kind of the agent that created
-it, the interface it was created through, its type, and the observations it
-was made from. Its constructor is private: `observe` is the only way to make
-one. -/
+/-- An observation: its type, and the observations it was made from. Its
+constructor is private: `observe` and `rootObservation` are the only ways to
+make one. -/
 inductive Observation
-  | private mk (stamp : Stamp) (creator : Contract) (kind : Kind) (via : Interface)
-      (type : ObservationType) (members : List Observation)
+  | private mk (type : ObservationType) (members : List Observation)
 
-def Observation.stamp   : Observation → Stamp            | .mk s _ _ _ _ _  => s
-def Observation.creator : Observation → Contract         | .mk _ c _ _ _ _  => c
-def Observation.kind    : Observation → Kind             | .mk _ _ k _ _ _  => k
-def Observation.via     : Observation → Interface        | .mk _ _ _ v _ _  => v
-def Observation.type    : Observation → ObservationType  | .mk _ _ _ _ t _  => t
-def Observation.members : Observation → List Observation | .mk _ _ _ _ _ ms => ms
+def Observation.type    : Observation → ObservationType  | .mk t _  => t
+def Observation.members : Observation → List Observation | .mk _ ms => ms
+
+/-- An effect has no members; a computation has members. -/
+def Observation.isEffect (o : Observation) : Bool := o.members.isEmpty
+def Observation.isComputation (o : Observation) : Bool := !o.members.isEmpty
+
+theorem Observation.effect_iff {o : Observation} : o.isEffect = true ↔ o.members = [] := by
+  simp [Observation.isEffect]
+
+theorem Observation.computation_iff {o : Observation} : o.isComputation = true ↔ o.members ≠ [] := by
+  simp [Observation.isComputation]
+
+/-- Every observation is exactly one of the two. -/
+theorem Observation.effect_xor_computation {o : Observation} : o.isEffect = !o.isComputation := by
+  simp [Observation.isEffect, Observation.isComputation]
 
 mutual
 def Observation.decEq : (a b : Observation) → Decidable (a = b)
-  | .mk s₁ c₁ k₁ v₁ t₁ ms₁, .mk s₂ c₂ k₂ v₂ t₂ ms₂ =>
-    if h : s₁ = s₂ ∧ c₁ = c₂ ∧ k₁ = k₂ ∧ v₁ = v₂ ∧ t₁ = t₂ then
+  | .mk t₁ ms₁, .mk t₂ ms₂ =>
+    if ht : t₁ = t₂ then
       match Observation.decEqList ms₁ ms₂ with
-      | isTrue hm  => isTrue (by obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := h; subst hm; rfl)
-      | isFalse hm => isFalse (by intro e; cases e; exact hm rfl)
-    else isFalse (by intro e; cases e; exact h ⟨rfl, rfl, rfl, rfl, rfl⟩)
+      | isTrue hm  => isTrue (by subst ht; subst hm; rfl)
+      | isFalse hm => isFalse (by intro h; cases h; exact hm rfl)
+    else isFalse (by intro h; cases h; exact ht rfl)
 
 def Observation.decEqList : (a b : List Observation) → Decidable (a = b)
   | [], [] => isTrue rfl
@@ -196,90 +341,119 @@ end
 
 instance : DecidableEq Observation := Observation.decEq
 
-/-- What each interface admits, given `observe`'s own contract. -/
-def admits (self : Contract) : Interface → ObservationType → List Observation → Bool
-  | .effect,      t, ms => ms.isEmpty && t.contract != self
-  | .exit,        t, ms => ms.isEmpty && t.contract == self && t.output == Schema.exitStatus
-  | .computation, t, [] => t.contract == self && t.output == Schema.goal
-  | .computation, t, ms => t.contract == self && t.output == Schema.context &&
-                           decide (ms.map (·.stamp)).Nodup
+/-- What an effect may come through, by the kind of node that sends it: an
+exit, from every kind; a goal, from a delegate; what an effect node wrote;
+what came back through an invoke node's contract, outside the apprentice. -/
+def effectThrough (a : Apprentice) (k : Kind) (c : Contract) : Bool :=
+  c == a.exit || (k == .delegate && c == a.goal) ||
+  (k == .effect && c == a.effectObservation) || (k == .invoke && !a.mine c)
 
-/-- The one function that creates observations. `self` is `observe`'s own
-contract; `caller` is the agent creating it, and `kind` decides the
-interfaces it holds. `stamp` is the record it will be, after every member's. -/
-def observe (self caller : Contract) (kind : Kind) (stamp : Stamp) (via : Interface)
-    (type : ObservationType) (members : List Observation) : Option Observation :=
-  if via ∈ kind.interfaces ∧ admits self via type members = true ∧
-     members.all (·.stamp < stamp) = true
-  then some (.mk stamp caller kind via type members) else none
+/-- What `observe` admits. No members: an effect, through what its kind may
+make one through. Members: a computation, only from a delegate, through
+`delegate`, none twice. -/
+def admits (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observation) : Bool :=
+  if ms.isEmpty then effectThrough a k t.contract
+  else k == .delegate && t.contract == a.delegate && decide ms.Nodup
+
+/-- The one function that creates observations from an instruction. The
+caller never says what it sends: an effect or a computation is decided by
+what it has, and admitted by the kind of node that sent it. -/
+def observe (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observation) :
+    Option Observation :=
+  if admits a k t ms = true then some (.mk t ms) else none
+
+/-- The root's endowment: an effect through `root`, with no instruction
+before it. Privileged: no node sends it. -/
+def rootObservation (a : Apprentice) (t : ObservationType) : Option Observation :=
+  if t.contract == a.root then some (.mk t []) else none
 
 theorem observe_eq_some :
-    observe self caller kind stamp via type members = some o ↔
-      via ∈ kind.interfaces ∧ admits self via type members = true ∧
-      (∀ m ∈ members, m.stamp < stamp) ∧
-      o.stamp = stamp ∧ o.creator = caller ∧ o.kind = kind ∧
-      o.via = via ∧ o.type = type ∧ o.members = members := by
+    observe a k t ms = some o ↔ admits a k t ms = true ∧ o.type = t ∧ o.members = ms := by
   unfold observe
   split
   · rename_i h
-    obtain ⟨hg, ha, hs⟩ := h
-    simp only [List.all_eq_true, decide_eq_true_eq] at hs
     constructor
-    · intro e; cases e; exact ⟨hg, ha, hs, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · rintro ⟨-, -, -, h₁, h₂, h₃, h₄, h₅, h₆⟩
-      cases o
-      simp_all [Observation.stamp, Observation.creator, Observation.kind,
-        Observation.via, Observation.type, Observation.members]
+    · intro e; cases e; exact ⟨h, rfl, rfl⟩
+    · rintro ⟨-, ht, hm⟩
+      cases o; simp_all [Observation.type, Observation.members]
   · rename_i h
     simp only [reduceCtorEq, false_iff]
-    rintro ⟨hg, ha, hs, -⟩
-    exact h ⟨hg, ha, by simpa [List.all_eq_true] using hs⟩
+    rintro ⟨ha, -⟩; exact h ha
+
+/-- Only a delegate makes a computation, and only through `delegate`. -/
+theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputation = true) :
+    k = .delegate ∧ t.contract = a.delegate := by
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, hm⟩ := h
+  rw [Observation.computation_iff, hm] at hc
+  simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, beq_iff_eq] at ha
+  exact ⟨ha.1.1, ha.1.2⟩
+
+/-- An effect node and an invoke node make only effects. -/
+theorem observe_effect_or_invoke (h : observe a k t ms = some o) (hk : k ≠ .delegate) :
+    o.isEffect = true := by
+  rw [Observation.effect_xor_computation]
+  cases hc : o.isComputation
+  · rfl
+  · exact absurd (observe_computation h hc).1 hk
+
+/-- Nothing is made through `observe`, `root`, `return`, `invoke` or
+`delegate` as an effect: `observe` and `root` are privileged, `return`
+passes, `invoke` brings back what its contract's type says, and `delegate`
+composes. -/
+theorem observe_not_through (h : observe a k t [] = some o)
+    (hc : t.contract ∈ [a.observe, a.root, a.ret, a.invoke, a.delegate]) : False := by
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, -⟩ := h
+  have hn := a.contracts_nodup
+  have hm : a.mine t.contract = true := a.contracts_mine (by
+    simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
+    rcases hc with h | h | h | h | h <;> simp [h])
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hn
+  simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
+    Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+  rcases ha with (((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  all_goals first
+    | (rw [e] at hm; simp at hm; done)
+    | (rcases hc with hc | hc | hc | hc | hc <;> rw [hc] at e <;>
+        first | (rw [e] at hn; simp at hn; done) | (simp_all; done))
 ```
 
 `observe` is the boundary. It is the only function that creates an
-observation: `Observation`'s constructor is private, so nothing outside this
-file can make one any other way, and every member of an observation was made
-by `observe` before it. Validity throughout a lineage is by construction;
-there is nothing else to check. Protecting it means protecting this file (see
-"The Go shell"), and re-validating what comes back from outside it (see
-"Records").
+observation from an instruction: `Observation`'s constructor is private, so
+nothing outside this file can make one any other way, and every member of an
+observation was made before it. Validity throughout a lineage is by
+construction; there is nothing else to check. Protecting it means protecting
+this file (see "The Go shell"). The root's endowment is the one observation
+with no instruction before it, made by `rootObservation`, through `root`.
 
-`observe` is never granted whole. It is granted through narrow interfaces,
-each admitting one kind of observation:
+An observation is an effect or a computation, by what it has:
 
-- **`effect`**, granted to leaves. Typed by the contract the leaf invoked (a
-  tool's, or for a leaf that writes, its own) and the shape of what came
-  back; never by `observe`'s own contract. No members.
-- **`computation`**, granted to nodes, through `delegate`. A goal (no
-  members, the goal shape) or a context (members, in order, none twice, the
-  context shape). Typed by `observe`'s own contract: it is what made them.
-  A node's return is a computation too (see "Scope").
-- **`exit`**, granted to both. An agent giving up, willingly, with a reason.
-  An exit the system forces is a fault, never an exit status.
+- **An effect** has no members. Every observation-producing syscall is one:
+  an exit, from every kind; a goal, from a delegate, through `goal`; what an
+  effect node wrote, through `effect_observation`; what came back through an
+  invoke node's contract, outside the apprentice; the root's endowment.
+- **A computation** has members, none twice, in order. Only a delegate makes
+  one, through `delegate`: the description, the goal, the reach packaged, and
+  the observations passed. A child's input is that computation.
 
-So effects come only from leaves, and computations only from nodes; an exit
-from either. An observation records the interface it came through, so a goal
-and an exit status, both strings, are never confused. `classify` decides an
-agent's kind, and the kind decides its interfaces (`Kind.interfaces`); the
-observation records both, with its creator, so it carries its own grant.
-They are granted after the kind is known, so they never count toward the
-reach that decides it.
-
-Every observation has a stamp: its place in the records, assigned as it is
-recorded, and later than every member's. Two observations of the same type
-from the same creator, two sibling listings, are two stamps and so two
-observations; Lean never compares their values, which it never holds. The
-stamps are the records' to keep unique; a context's members are checked by
-stamp, none twice.
+The caller never says which it sends. `observe` takes the kind of node
+sending, decided in the `observe` phase by `classify` (see "Effect, invoke or
+delegate"), and admits what that kind may make. Nothing is made as an effect
+through `observe` or `root`, which are privileged, `return`, which passes,
+`invoke`, which brings back what the contract's type says, or `delegate`,
+which composes. An exit the system forces is a fault, never an exit status.
 
 An observation's type has two halves, typed apart here: the contract it came
 back through (the input half) and its own output shape (the return half). At
 runtime they are joined in its hash.
 
-A context's members are a list, in the order passed: order is part of what a
-child is shown, so `[a, b]` and `[b, a]` are different contexts. No
-observation appears twice in one context. The members' types stay on the
-members, so a context holds them without restating them.
+A computation's members are a list, in the order passed: order is part of
+what a child is shown, so `[a, b]` and `[b, a]` are different computations.
+The members' types stay on the members, so a computation holds them without
+restating them.
 
 ## Inputs
 
@@ -288,9 +462,9 @@ members, so a context holds them without restating them.
 def Schema.empty : Schema := ⟨"{\"type\":\"object\"}"⟩
 ```
 
-A child's input is one context: its goal first, then the observations passed
-to it, in order. A delegated child's context is never empty: it always holds
-its goal. `{}` is the input of a contract that takes none. Nothing else is
+A child's input is one computation, the delegate's: the description, the
+goal, the reach packaged, then the observations passed to it, in order. It is
+never empty: it always holds its goal. `{}` is the input of a contract that takes none. Nothing else is
 assumed of a callee's declared shape.
 
 ## Scope
@@ -316,7 +490,7 @@ def receive : Dir → (receiver passed : List Observation) → List Observation
 
 /-- An observation and every observation it was made from. -/
 def lineage : Observation → List Observation
-  | .mk s c k v t ms => .mk s c k v t ms :: ms.attach.flatMap fun ⟨m, _⟩ => lineage m
+  | .mk t ms => .mk t ms :: ms.attach.flatMap fun ⟨m, _⟩ => lineage m
 
 /-- What a node's return may hold: nothing in the lineage of what it was
 passed. -/
@@ -328,94 +502,41 @@ theorem nodeMayReturn_iff :
       ∀ o ∈ returned, ∀ x ∈ lineage o, ∀ r ∈ received, x ∉ lineage r := by
   simp [nodeMayReturn, List.all_eq_true]
 
-/-- A contract cannot call itself to create observations: of what a node
-returns, only an exit status may be its own. -/
-def creatorMayReturn (self : Contract) (returned : List Observation) : Bool :=
-  returned.all fun m => m.creator != self || m.via == .exit
+/-- What `return` may pass: something; and for an invoke or delegate node,
+nothing its model created directly. An effect node may return what it wrote.
+`created` is the frame's own: what its model made, never a field on an
+observation. -/
+def mayReturn (k : Kind) (created returned : List Observation) : Bool :=
+  !returned.isEmpty && (k == .effect || returned.all fun r => !decide (r ∈ created))
 
-theorem creatorMayReturn_iff :
-    creatorMayReturn self returned = true ↔
-      ∀ m ∈ returned, m.creator = self → m.via = .exit := by
-  simp [creatorMayReturn, List.all_eq_true, Decidable.imp_iff_not_or]
-
-/-- A node returns one observation: a computation of its own, with members,
-its children's observations or its exit status, never content of its own. -/
-def nodeReturn (self : Contract) (received : List Observation) (o : Observation) : Bool :=
-  o.via == .computation && o.creator == self && !o.members.isEmpty &&
-  nodeMayReturn received o.members && creatorMayReturn self o.members
-
-theorem nodeReturn_iff :
-    nodeReturn self received o = true ↔
-      o.via = .computation ∧ o.creator = self ∧ o.members ≠ [] ∧
-      (∀ m ∈ o.members, ∀ x ∈ lineage m, ∀ r ∈ received, x ∉ lineage r) ∧
-      (∀ m ∈ o.members, m.creator = self → m.via = .exit) := by
-  simp only [nodeReturn, Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true',
-    List.isEmpty_eq_false_iff, nodeMayReturn_iff, creatorMayReturn_iff, and_assoc]
-
-/-- The core supplies a child's actor, never its parent's binary: Claude
-delegates only to Codex, and Codex only to Claude. The model sees `delegate`
-and nothing of which actor runs. -/
-def alternates (parent child : Contract) : Bool := parent.binary != child.binary
-
-/-- So what a child creates is never its parent's own: the creator rule
-refuses only what a node created itself. -/
-theorem alternates_child_may_return (h : alternates parent child = true)
-    (hm : ∀ m ∈ returned, m.creator = child) : creatorMayReturn parent returned = true := by
-  rw [creatorMayReturn_iff]
-  intro m hmr hc
-  have := hm m hmr
-  simp [alternates] at h
-  exact absurd (by rw [← hc, this]) h
+theorem mayReturn_iff :
+    mayReturn k created returned = true ↔
+      returned ≠ [] ∧ (k = .effect ∨ ∀ r ∈ returned, r ∉ created) := by
+  simp [mayReturn, List.all_eq_true]
 ```
 
 An agent may pass only what is in its scope: what it was passed, what its
-children returned, and what it created through the interfaces it holds. The
-direction says who the sender is: on invoke the parent, on return the child.
-An observation is obtained only by endowment (the root's spec), creation
-(through `observe`), or introduction (passed on invoke or return), the
-object-capability rule. The runtime supplies the sender's scope as a value,
-from the records; Lean checks it. On invoke what is checked is the context's
-members: the goal and the context are new, created as they are passed.
+children returned, and what it created. The direction says who the sender
+is: on invoke the parent, on return the child. An observation is obtained
+only by endowment (`rootObservation`), creation (through `observe`), or
+introduction (passed on invoke or return), the object-capability rule. The
+runtime supplies the sender's scope as a value, from the records; Lean
+checks it.
 
-A node returns one observation, and only its outer shape is the node's: a
-computation it created through `observe`. Its members are its children's
-observations, or its exit status:
+Every kind returns through `return`, and its shape is `create_return`'s: the
+observations returned, in one array, under the name of the node returning
+them. The model emits integers into it, references to observations in scope;
+passing is not creating. A return holds something, and:
 
-```
-node_n_observation { child_observation: <some_obs> }
-node_n_observation { exit: "reason" }
-```
+- **An invoke or delegate node** returns nothing its model created directly.
+  A violation is a fault. What its model created is the frame's own, known
+  from its state, never a field on an observation.
+- **An effect node** may return what it wrote.
 
-Never content of its own. A node that returns `""` or `{}` has written an
-observation itself, which only `observe` may do, and a computation with no
-members is not a return.
-
-Two rules hold of the members, each closing what the other leaves open:
-
-- **A contract cannot call itself to create observations** (`creatorMayReturn`,
-  the rule once called echo). Of what a node returns, only an exit status may
-  be its own creation; a goal or a context it made for a child is never
-  handed back up as a result.
-- **No member may meet the lineage of what the node was passed**
-  (`nodeMayReturn`): it would be found twice on one edge, once going down and
-  once coming back. A goal the parent made is the parent's creation, not the
-  node's, so the creator rule alone would let it back up; this rule does not.
-
-Both are checked by instance: a member is its stamp, so two siblings of one
-type never collide.
-
-So a node that has not delegated has one thing it may return, its exit
-status. Nothing is assumed about what a node should return beyond this.
-
-The creator rule checks by contract, and it does not refuse a node's
-children, because a child never runs its parent's binary (`alternates`). The
-core supplies every child's actor: Claude delegates only to Codex, and Codex
-only to Claude. The model sees only `delegate`; which actor runs the child is
-never in its prompt, its tools or its payload. So what a child creates is
-never its parent's own (`alternates_child_may_return`). A grandchild may
-share its grandparent's contract, but it is never a direct member: a node's
-return is checked with `mayPass` against its scope, like every other pass,
-and its scope holds what its children returned, not what is inside them.
+Nothing returned may meet the lineage of what the node was passed
+(`nodeMayReturn`): it would be found twice on one edge, once going down and
+once coming back. Nothing is assumed about what a node should return beyond
+this.
 
 ## Novelty
 
@@ -431,36 +552,257 @@ inductive InputBaseNovelty
   | seen
   | unseen
 
-inductive ObservationBaseNovelty
-  | seen
-  | unseen
-
 def inputBaseNovelty (history : List InputBase) (i : InputBase) : InputBaseNovelty :=
   if i ∈ history then .seen else .unseen
-
-def observationBaseNovelty (history : List ObservationType) (o : ObservationType) :
-    ObservationBaseNovelty :=
-  if o ∈ history then .seen else .unseen
 ```
 
 Novelty is by base type, never by value, and split by direction, as one input
 gives many observations. An input is unseen when this binary has not been
-handed this sequence of types before. An observation is unseen when this
-contract (binary and input shape) has not returned this output shape before.
+handed this sequence of types before. An observation is unseen when the system
+does not recognize its base type's hash (`see`, below).
 The goal is typed like any observation; its base type never varies, so it
 does not change an input's novelty.
 
 Novelty is apart from validity: validity refuses, novelty measures. The
 runtime supplies the history; Lean answers.
 
+## Base types and refinement types
+
+```lean
+/-- A refinement type, by its hash: a base type and its guard's code. -/
+structure RefinementId where
+  val : String
+  deriving DecidableEq
+
+/-- A base type, by its hash: the binary, the base types it was passed, in
+order, and the shape of what came back. No guard is in it. -/
+structure BaseId where
+  val : String
+  deriving DecidableEq
+
+/-- A guard over one base type. `default` until the model writes one: the
+shell registers the default CEL for it. A guard for one base type is not a
+guard for another. -/
+inductive Guard (b : BaseId)
+  | default
+  | written (cel : String)
+  deriving DecidableEq
+
+/-- How the runtime hashes. Lean never computes a hash: Go does, and Lean
+takes the ids as values. -/
+structure Hashes where
+  base   : Binary → List BaseId → Schema → BaseId
+  refine : (b : BaseId) → Guard b → RefinementId
+
+/-- What is assumed of the hashes: no collisions. Every theorem that needs it
+takes it as a hypothesis. -/
+def Hashes.Sound (h : Hashes) : Prop :=
+  (∀ {b₁ b₂ i₁ i₂ o₁ o₂}, h.base b₁ i₁ o₁ = h.base b₂ i₂ o₂ →
+      b₁ = b₂ ∧ i₁ = i₂ ∧ o₁ = o₂) ∧
+  (∀ {b₁ b₂} {g₁ : Guard b₁} {g₂ : Guard b₂}, h.refine b₁ g₁ = h.refine b₂ g₂ → b₁ = b₂)
+
+/-- The guards: a function from base type to at most one guard. -/
+def Guards := (b : BaseId) → Option (Guard b)
+
+/-- Put a guard in a base type's one slot. -/
+def Guards.set (g : Guards) (b : BaseId) (x : Guard b) : Guards :=
+  fun a => if h : a = b then some (h ▸ x) else g a
+
+theorem Guards.set_same (g : Guards) (b : BaseId) (x : Guard b) : g.set b x b = some x := by
+  simp [Guards.set]
+
+theorem Guards.set_other (g : Guards) (h : a ≠ b) (x : Guard b) : g.set b x a = g a := by
+  simp [Guards.set, h]
+
+/-- Two levels, kept apart. `known` is the base level: the base types the
+system recognizes. A hash not in it is unseen; it has no slot. `guards` is
+the refinement level: one slot per known base type. Not keyed by parent: the
+base type already holds the binary and what it was passed. -/
+structure Store where
+  known  : List BaseId
+  guards : Guards
+
+/-- Every known base type has exactly one guard, and only a known one has
+any. -/
+def Store.WellFormed (s : Store) : Prop :=
+  ∀ b, (s.guards b).isSome = true ↔ b ∈ s.known
+
+def Store.empty : Store := ⟨[], fun _ => none⟩
+
+theorem Store.empty_wellFormed : Store.empty.WellFormed := by
+  intro b; simp [Store.empty]
+
+inductive Seen
+  | seen
+  | unseen
+  deriving DecidableEq
+
+/-- A return of base type `b` came back. Lean decides whether the system
+recognizes the hash. On unseen, `b` becomes known, and its slot is made with
+its one guard, the default. The shell reacts: on unseen it registers the
+default CEL for `b`. -/
+def see (s : Store) (b : BaseId) : Seen × Store :=
+  if b ∈ s.known then (.seen, s)
+  else (.unseen, ⟨b :: s.known, s.guards.set b .default⟩)
+
+/-- Unseen is a hash the system does not recognize. -/
+theorem see_unseen_iff : (see s b).1 = .unseen ↔ b ∉ s.known := by
+  unfold see; split <;> simp_all
+
+/-- After `see`, the base type is known. -/
+theorem see_known : b ∈ (see s b).2.known := by
+  unfold see; split <;> simp_all
+
+/-- `known` only grows. -/
+theorem see_grows (ha : a ∈ s.known) : a ∈ (see s b).2.known := by
+  unfold see; split <;> simp_all
+
+/-- `see` touches no other base type's guard. -/
+theorem see_other (h : a ≠ b) : (see s b).2.guards a = s.guards a := by
+  unfold see; split <;> simp [Guards.set_other _ h]
+
+/-- `see` keeps the store well formed: a slot is made exactly when a base
+type becomes known. -/
+theorem see_wellFormed (hs : s.WellFormed) : (see s b).2.WellFormed := by
+  intro a
+  unfold see
+  split
+  · exact hs a
+  · by_cases h : a = b
+    · subst h; simp [Guards.set_same]
+    · simp [Guards.set_other _ h, h, hs a]
+
+/-- A guard broke, the model ran, and wrote another. It overwrites the one
+slot. An unknown base type has no slot to overwrite. -/
+def rewrite (s : Store) (b : BaseId) (cel : String) : Option Store :=
+  if b ∈ s.known then some ⟨s.known, s.guards.set b (.written cel)⟩ else none
+
+theorem rewrite_known (hr : rewrite s b cel = some s') : s'.known = s.known := by
+  unfold rewrite at hr; split at hr <;> cases hr; rfl
+
+theorem rewrite_wellFormed (hs : s.WellFormed) (hr : rewrite s b cel = some s') :
+    s'.WellFormed := by
+  unfold rewrite at hr
+  split at hr
+  · rename_i hb
+    cases hr
+    intro a
+    by_cases h : a = b
+    · subst h; simp [Guards.set_same, hb]
+    · simp [Guards.set_other _ h, hs a]
+  · cases hr
+
+/-- A base type's refinement type: its base and its one guard, hashed. -/
+def refinement (h : Hashes) (s : Store) (b : BaseId) : Option RefinementId :=
+  (s.guards b).map (h.refine b)
+
+/-- In a well-formed store, a base type has a refinement type exactly when it
+is known. -/
+theorem refinement_known (hs : s.WellFormed) :
+    (refinement h s b).isSome = true ↔ b ∈ s.known := by
+  simp only [refinement, Option.isSome_map]; exact hs b
+
+/-- One refinement type per base type. -/
+theorem one_refinement (h₁ : refinement h s b = some r₁) (h₂ : refinement h s b = some r₂) :
+    r₁ = r₂ := by
+  rw [h₁] at h₂; exact Option.some.inj h₂
+
+/-- A refinement type belongs to one base type: a guard cannot move. -/
+theorem refinement_base {h : Hashes} (hs : h.Sound) (h₁ : refinement h s b₁ = some r)
+    (h₂ : refinement h s' b₂ = some r) : b₁ = b₂ := by
+  simp only [refinement, Option.map_eq_some_iff] at h₁ h₂
+  obtain ⟨x₁, -, rfl⟩ := h₁
+  obtain ⟨x₂, -, e⟩ := h₂
+  exact (hs.2 e).symm
+
+/-- Same binary, same base types passed, same shape back: one base type,
+whichever node it came from; and only then. -/
+theorem base_eq_iff {h : Hashes} (hs : h.Sound) :
+    h.base b₁ i₁ o₁ = h.base b₂ i₂ o₂ ↔ b₁ = b₂ ∧ i₁ = i₂ ∧ o₁ = o₂ := by
+  constructor
+  · exact hs.1
+  · rintro ⟨rfl, rfl, rfl⟩; rfl
+```
+
+A base type is a hash of three things: the binary, the base types it was
+passed, in order, and the shape of what came back. A refinement type is a
+hash of a base type and its guard's code. Refinement types are never part of
+a base type: two nodes with one binary, handed observations of the same base
+types and returning the same shape, are one base type, wherever they sit in
+the tree, whatever guards stand upstream.
+
+Equality is by hash, so it is string equality, and Lean never computes a
+hash: Go does, and hands Lean the ids. What that assumes is written once,
+`Hashes.Sound` (no collisions), and every theorem that needs it takes it as a
+hypothesis.
+
+Two levels, kept apart (`Store`). The base level is `known`: the base types
+the system recognizes. A base type is unseen when the system does not
+recognize its hash: it has no slot at all, not an empty one. The refinement
+level is `guards`: one slot per known base type, holding its one guard. A
+slot is made exactly when a base type becomes known, so every known base type
+has exactly one guard and only a known one has any (`Store.WellFormed`).
+Neither level is keyed by parent: the base type already holds the binary and
+what it was passed, and a child never knows its parent exists. The parent
+matters to the records of what happened, and to remembering, which is off.
+
+When a return comes back, Lean decides (`see`): seen, or unseen. On unseen
+the base type becomes known, and its slot is made with its one guard, the
+default. That is an invariant of the system, so it is Lean's. The shell
+reacts: on unseen it registers the default CEL for that base type. When a
+guard breaks, the model runs and writes another, which overwrites the one
+slot (`rewrite`); the base type is the same and stays known, and its
+refinement type is the new hash. An unknown base type has no slot to
+rewrite. `known` only grows (`see_grows`, `rewrite_known`), and both keep the
+store well formed (`see_wellFormed`, `rewrite_wellFormed`).
+
+So there is one refinement type per base type (`one_refinement`), and a
+guard cannot move to another base type (`refinement_base`): its refinement
+type hashes in the base type it was written for, and `Guard b` is indexed by
+it.
+
+A rewrite of base type `T`'s guard may cascade, by design: a new guard means
+the behavior changed. It runs both ways along the tree's edges: down, to
+every node passed an observation of `T`, and up, to the node it was returned
+to. On each side,
+each guard meets what now comes to it. Where one holds, it absorbs the change
+and the cascade stops there. Where one breaks, the model runs and rewrites
+it, and that new refinement type is a change for its own neighbours in turn,
+up and down. `T` itself stays seen; the cascade goes only as far as guards
+cannot absorb it. A rewrite changes no base type, so every guard downstream
+keeps its slot, and the guard decides.
+
+### Example: the path is not in the type
+
+One observation is passed down a tree by two paths: 11 deep on the left, 9
+deep on the right. At the bottom of each, the same binary is handed it, and
+returns the same shape.
+
+```
+left:   n1 → n2 → … → n11 → B(obs) → [string]
+right:  m1 → m2 → … → m9  → B(obs) → [string]
+```
+
+Both returns have one refinement type. The base type is the binary, the
+base types passed, and the shape back, and all three agree:
+
+- **The binary**: `B` on both sides.
+- **What it was passed**: `obs`, whose base type travels with it. A
+  pass is an introduction, never a new observation, so 11 hops or 9 leave it
+  unchanged.
+- **The shape back**: `[string]` on both sides.
+
+So one base type, one guard, one refinement type. Depth is not in the hash,
+and neither is the path.
+
+They differ only if what `B` is handed differs: another observation in its
+input, one of another base type, or the same ones in another order
+(`[a, b]` is not `[b, a]`). The goal does not count: its base type never
+varies.
+
 ## Guards
 
 ```lean
-/-- The default guard, until the model writes one: the value last returned
-(`returns.r0c0`), or the input (`input`), matched whole. `json` is the value
-as `contract.Normal` writes it; JSON is a CEL literal. -/
-def defaultGuard (ref json : String) : String := ref ++ " == " ++ json
-
 /-- What the apprentice does after an observation comes back. -/
 inductive Next
   | continue  -- take the next instruction; no model
@@ -468,7 +810,7 @@ inductive Next
 
 /-- An unseen shape broke an assumption; a seen one continues only while its
 guard holds. -/
-def next : ObservationBaseNovelty → (guardHolds : Bool) → Next
+def next : Seen → (guardHolds : Bool) → Next
   | .unseen, _     => .fallback
   | .seen,   true  => .continue
   | .seen,   false => .fallback
@@ -491,8 +833,7 @@ apprentice's refinement environment (`apprentice/refine`: `input`,
 many shapes, has as many guards as shapes it has returned.
 
 Until the model writes one, a shape's guard is the default: a string match
-on the value last returned (`defaultGuard`: the value as JSON, which is a CEL
-literal, matched whole). It is overwritten when the same input returns the
+on the value last returned. It is overwritten when the same input returns the
 same shape with a different value: the world changed under the procedure, and
 the model, falling back, writes a guard that covers more.
 
@@ -574,10 +915,10 @@ system runs what is encoded and decides nothing. The default entry guard is a
 string match on the whole input: reuse only for an identical input, until the
 model writes one that covers more.
 
-A procedure replays its calls under the original leaf grants, and creates
-each observation through the interface it was first created through. So a
+A procedure replays its calls under the original invoke grants, and creates
+each observation as the kind that first created it. So a
 procedure in place of a subtree is still that subtree in the records:
-lineage, scope and the circular check hold as they did for the model.
+lineage, scope and `nodeMayReturn` hold as they did for the model.
 
 ### Who executes
 
@@ -586,7 +927,7 @@ Guards decide; they never run anything. On both paths:
 ```
 CEL guard         holds / breaks                       pure, no effects
 Lean next/enter   continue / fallback / procedure      policy
-apprentice        writes the plan                      meaning; cannot exec
+apprentice        writes the instruction               meaning; cannot exec
 skyra-spawn       checks the grant, execs              mechanism; the only exec
 ```
 
@@ -595,57 +936,131 @@ could route around ([52](52-kernel-provisions-apprentice-spawns-proposal.md)):
 the apprentice's seccomp filter denies `fork`, `pipe` and `exec`, and its one
 authority is a socket to `skyra-spawn`, bound to its grant. `skyra-spawn`
 alone execs pinned binaries, and only those the asking socket's grant allows.
-A procedure's replayed call runs in the Landlock domain of the leaf grant it
-was learned under, as the model's leaf would have.
+A procedure's replayed call runs in the Landlock domain of the invoke grant it
+was learned under, as the model's invoke node would have.
 
 **For now, on macOS:** 52 is Linux only and not built. The experiment runs
 under today's kernel, which mediates every hop, with Seatbelt allowing exec
 only for the program being run. That enforces part of the rule, not "only
 `skyra-spawn` execs"; accepted until 52 exists.
 
-## Leaf or node
+## Effect, invoke or delegate
 
 ```lean
-def kind (reach : List Contract) : Kind :=
-  if reach.length ≤ 1 then .leaf else .node
+/-- The kind, from the contracts counted. -/
+def kind (counted : List Contract) : Kind :=
+  match counted.eraseDups.length with
+  | 0 => .effect
+  | 1 => .invoke
+  | _ => .delegate
 
-/-- What the core runs: the agent's contract and the contracts in its reach,
-as values. `none` refuses an agent whose own binary is in its reach. -/
-def classify (self : Contract) (reach : List Contract) : Option Kind :=
-  if self.binary ∈ reach.map (·.binary) then none else some (kind reach.eraseDups)
+/-- The contracts that count: the reach, the apprentice's taken out. -/
+def counted (a : Apprentice) (reach : List Contract) : List Contract :=
+  reach.filter (!a.mine ·)
+
+/-- What the core runs, in the `observe` phase: the apprentice, the agent's
+contract and the contracts in its reach, as values. The apprentice's
+contracts count for neither the self check nor the kind. `none` refuses an
+agent whose own binary is in the rest of its reach, at every count. -/
+def classify (a : Apprentice) (self : Contract) (reach : List Contract) : Option Kind :=
+  if self.binary ∈ (counted a reach).map (·.binary) then none else some (kind (counted a reach))
 
 theorem classify_none_iff :
-    classify self reach = none ↔ self.binary ∈ reach.map (·.binary) := by
+    classify a self reach = none ↔ self.binary ∈ (counted a reach).map (·.binary) := by
   unfold classify; split <;> simp_all
 
-theorem classify_leaf_iff :
-    classify self reach = some .leaf ↔
-      self.binary ∉ reach.map (·.binary) ∧ reach.eraseDups.length ≤ 1 := by
+theorem classify_effect_iff :
+    classify a self reach = some .effect ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 0 := by
   unfold classify kind; split <;> (try split) <;> simp_all
 
-theorem classify_node_iff :
-    classify self reach = some .node ↔
-      self.binary ∉ reach.map (·.binary) ∧ 2 ≤ reach.eraseDups.length := by
-  unfold classify kind; split <;> (try split) <;> simp_all <;> omega
+theorem classify_invoke_iff :
+    classify a self reach = some .invoke ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
+  unfold classify kind; split <;> (try split) <;> simp_all
+
+theorem classify_delegate_iff :
+    classify a self reach = some .delegate ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧ 2 ≤ (counted a reach).eraseDups.length := by
+  unfold classify kind
+  by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
+  · simp [hb]
+  · simp only [hb, ite_false, Option.some.injEq, not_false_eq_true, true_and]
+    generalize (counted a reach).eraseDups.length = n
+    match n with
+    | 0 => simp
+    | 1 => simp
+    | n + 2 => simp
+
+/-- The apprentice's contracts never count: adding any of them, before or
+after, leaves the result unchanged, refused included. -/
+theorem classify_apprentice_after (h : ∀ c ∈ extra, a.mine c = true) :
+    classify a self (reach ++ extra) = classify a self reach := by
+  have : extra.filter (!a.mine ·) = [] := by
+    simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
+  unfold classify counted; rw [List.filter_append, this, List.append_nil]
+
+theorem classify_apprentice_before (h : ∀ c ∈ extra, a.mine c = true) :
+    classify a self (extra ++ reach) = classify a self reach := by
+  have : extra.filter (!a.mine ·) = [] := by
+    simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
+  unfold classify counted; rw [List.filter_append, this, List.nil_append]
+
+/-- The apprentice's contracts for a kind, loaded into its reach after the
+kind is known: `exit` and `return` for every kind; `effect_observation` for
+an effect node; `invoke` for an invoke node; `delegate` and `goal` for a
+delegate. -/
+def loaded (a : Apprentice) : Kind → List Contract
+  | .effect   => [a.exit, a.ret, a.effectObservation]
+  | .invoke   => [a.exit, a.ret, a.invoke]
+  | .delegate => [a.exit, a.ret, a.delegate, a.goal]
+
+theorem loaded_mine (h : c ∈ loaded a k) : a.mine c = true := by
+  apply a.contracts_mine
+  cases k <;> simp only [loaded, List.mem_cons, List.not_mem_nil, or_false] at h <;>
+    rcases h with rfl | rfl | rfl | rfl <;> simp [Apprentice.contracts]
+
+/-- Loading never changes the kind. -/
+theorem classify_loaded :
+    classify a self (reach ++ loaded a k) = classify a self reach :=
+  classify_apprentice_after fun _ h => loaded_mine h
+
+/-- `observe` and `root` are never loaded. -/
+theorem loaded_never_privileged : a.observe ∉ loaded a k ∧ a.root ∉ loaded a k := by
+  have hn := a.contracts_nodup
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hn
+  cases k <;> simp only [loaded, List.mem_cons, List.not_mem_nil, or_false, not_or] <;> simp_all
 ```
 
-The core passes an agent's contract and its reach as values, and Lean
-decides: refused, a leaf, or a node. No contract of an agent's own binary is
-in its reach, and duplicates count once. The theorems say what a leaf is and
-what it is not: one contract in reach or none, never its own binary.
+The core passes the apprentice, an agent's contract and its reach as values,
+and Lean decides, in the `observe` phase: refused, an effect node, an invoke
+node, or a delegate. The apprentice's contracts are taken out first; they
+count for neither the self check nor the kind. Then no contract of the
+agent's own binary may be in what is left, at every count, and duplicates
+count once:
+
+- **No contract: an effect node.** It writes, through `effect_observation`.
+- **One: an invoke node.** It invokes that contract.
+- **Two or more: a delegate.** It passes them on, through `delegate`.
 
 Two identities, each the stricter for its question. The self check compares
 binaries, so an agent cannot reach itself through another of its shapes. The
 count compares contracts, so two shapes of one binary are two contracts, and
-make a node. Either other choice would open a hole.
+make a delegate. Either other choice would open a hole.
+
+Once the kind is known, the apprentice's contracts for it are loaded into
+the reach (`loaded`). They are handles with their CEL filled in, run when
+selected. `observe` and `root` are privileged and never loaded, and loading
+never changes the kind.
 
 Two things this invariant does not cover, on purpose:
 
 - **A contract may be wide.** The count is per contract, and nothing bounds
   what one contract covers: a shape of `{"type":"any"}`, or one contract over
-  many subcommands, is one contract and so a leaf. The rule is only as narrow
-  as the contracts registered. A concession for now; the experiment registers
-  narrow ones.
+  many subcommands, is one contract and so an invoke node. The rule is only
+  as narrow as the contracts registered. A concession for now; the
+  experiment registers narrow ones.
 - **`self` must be honest.** The theorems hold for the `self` they are given.
   It is the actor being provisioned, supplied by the kernel at pass time,
   never by a parent's payload. The Go enforces this.
@@ -655,17 +1070,13 @@ Two things this invariant does not cover, on purpose:
 **Pass time** is the parent's act: it chooses the contracts and the
 observations a child gets. Checked, in order:
 
-0. **The actor.** The core picks the child's actor, the other binary from
-   the parent's (`alternates`). The model never names one.
 1. **The Boundary.** Every contract passed is held by the parent
    (`passable`).
 2. **The observations.** Every one passed is in the parent's scope
-   (`mayPass`); the goal and the context are created through `computation`.
+   (`mayPass`); the goal is an effect made through `goal`, and the child's
+   input the computation made through `delegate`.
 3. **The kind.** `classify` runs on the child's contract and the contracts
-   passed. Only now is it known to be a leaf or a node.
-
-On return, a node's one observation is checked by `nodeReturn`, and its
-members by `mayPass` against the node's scope.
+   passed. Only now is it known to be an effect, invoke or delegate node.
 
 ```lean
 /-- Pass time: every contract passed is held by the parent. -/
@@ -677,261 +1088,145 @@ theorem passable_iff : passable held passed = true ↔ passed ⊆ held := by
 ```
 
 A child's actor (the model that runs it) is supplied by the core through
-`delegate`, never drawn from the parent's reach, and never the parent's own
-binary. So reach need not shrink
+`delegate`, never drawn from the parent's reach. So reach need not shrink
 from parent to child, and a node may grant its whole reach to one child: its
 actor's binary is not among what it is passed. A run may loop; the depth
 bound stops it.
 
 **Provision time** is the kernel's act: it grants the child what its kind
-allows. A contract is held with one of two rights: to invoke it, or only to
-pass it on.
+allows. A contract outside the apprentice is held with one of two rights: to
+invoke it, or only to pass it on. The apprentice's contracts for the kind are
+loaded beside them.
 
 ```lean
-/-- What an agent is provisioned with, from its kind. -/
+/-- What an agent is provisioned with, from its kind: the contracts it may
+invoke, those it may only pass on, and the apprentice's contracts loaded for
+its kind. -/
 structure Offer where
-  invoke     : List Contract   -- contracts it may call
-  passOnly   : List Contract   -- contracts it may only pass on
-  delegate   : Bool
-  interfaces : List Interface  -- how it may observe
+  invoke     : List Contract
+  passOnly   : List Contract
+  apprentice : List Contract
 
-def offered : Kind → (passed : List Contract) → Offer
-  | .leaf, passed => ⟨passed, [], false, Kind.leaf.interfaces⟩
-  | .node, passed => ⟨[], passed, true, Kind.node.interfaces⟩
+def offered (a : Apprentice) : Kind → (passed : List Contract) → Offer
+  | .effect,   _      => ⟨[], [], loaded a .effect⟩
+  | .invoke,   passed => ⟨passed, [], loaded a .invoke⟩
+  | .delegate, passed => ⟨[], passed, loaded a .delegate⟩
 
-theorem offered_interfaces : (offered k p).interfaces = k.interfaces := by
+/-- Only an invoke node invokes a contract outside the apprentice. -/
+theorem offered_invoke (h : (offered a k p).invoke ≠ []) : k = .invoke := by
+  cases k <;> simp_all [offered]
+
+theorem offered_delegate_invokes_nothing : (offered a .delegate p).invoke = [] := rfl
+theorem offered_effect_invokes_nothing : (offered a .effect p).invoke = [] := rfl
+
+theorem offered_apprentice : (offered a k p).apprentice = loaded a k := by
   cases k <;> rfl
-
-theorem offered_effect_iff : .effect ∈ (offered k p).interfaces ↔ k = .leaf := by
-  cases k <;> simp [offered, Kind.interfaces]
-
-theorem offered_computation_iff : .computation ∈ (offered k p).interfaces ↔ k = .node := by
-  cases k <;> simp [offered, Kind.interfaces]
-
-theorem offered_exit : .exit ∈ (offered k p).interfaces := by
-  cases k <;> simp [offered, Kind.interfaces]
-
-theorem offered_delegate_iff : (offered k p).delegate = true ↔ k = .node := by
-  cases k <;> simp [offered]
-
-theorem offered_node_invokes_nothing : (offered .node p).invoke = [] := rfl
 ```
 
-- **A leaf** may invoke the contract it was passed, if any, and observes
-  through `effect` and `exit`. It does not hold `delegate`.
-- **A node** may only pass on the contracts it was passed, holds `delegate`,
-  and observes through `computation` and `exit`. It invokes nothing else.
+- **An effect node** invokes nothing outside the apprentice. It writes,
+  through `effect_observation`.
+- **An invoke node** may invoke the contract it was passed, through
+  `invoke`.
+- **A delegate** may only pass on the contracts it was passed, through
+  `delegate`, and makes goals through `goal`. It invokes nothing.
+
+Every kind holds `exit` and `return`.
 
 Pass-only is the right a pure-control node needs; capability systems keep
 passing on apart from using (seL4's Grant right, SPKI's propagate flag).
 
-## Records: re-validated when rebuilt
-
-```lean
-/-- A contract as Go keeps it: its binary and its shape, as text. -/
-structure ContractRecord where
-  binary : String
-  shape  : String
-  deriving DecidableEq
-
-def Contract.record (c : Contract) : ContractRecord := ⟨c.binary.val, c.shape.val⟩
-
-def ContractRecord.identify (r : ContractRecord) : Option Contract :=
-  _root_.identify ⟨r.binary⟩ ⟨r.shape⟩
-
-theorem ContractRecord.identify_record (r : ContractRecord) (h : r.identify = some c) :
-    c.record = r := by
-  obtain ⟨hb, hs⟩ := identify_eq_some.mp h
-  simp [Contract.record, hb, hs]
-
-/-- An observation as Go keeps it: plain values, its members by their
-records. Anything may build one; only `rebuild` makes an observation of it. -/
-inductive Record
-  | mk (stamp : Stamp) (creator : ContractRecord) (kind : Kind) (via : Interface)
-      (contract : ContractRecord) (output : String) (members : List Record)
-
-mutual
-def Observation.record : Observation → Record
-  | .mk s c k v t ms => .mk s c.record k v t.contract.record t.output.val (Observation.records ms)
-
-def Observation.records : List Observation → List Record
-  | []      => []
-  | o :: os => o.record :: Observation.records os
-end
-
-mutual
-/-- Re-validate a record: its contracts identified, its type made by
-`ObservationType.of`, its members rebuilt first, and the observation made by
-`observe`, as if for the first time. -/
-def Record.rebuild (self : Contract) : Record → Option Observation
-  | .mk stamp creator kind via contract output members => do
-    let caller ← creator.identify
-    let c ← contract.identify
-    let type ← ObservationType.of c ⟨output⟩
-    let ms ← Record.rebuildAll self members
-    observe self caller kind stamp via type ms
-
-def Record.rebuildAll (self : Contract) : List Record → Option (List Observation)
-  | []      => some []
-  | r :: rs => do
-    let o ← r.rebuild self
-    let os ← Record.rebuildAll self rs
-    pure (o :: os)
-end
-
-mutual
-/-- What a rebuild gives back is the record it was given. -/
-theorem Record.rebuild_record : ∀ (r : Record) (o : Observation),
-    r.rebuild self = some o → o.record = r
-  | .mk stamp creator kind via contract output members, o, h => by
-    simp only [Record.rebuild, Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-    obtain ⟨caller, hcaller, c, hc, type, htype, ms, hms, ho⟩ := h
-    obtain ⟨-, -, -, hs, hcr, hk, hv, ht, hm⟩ := observe_eq_some.mp ho
-    obtain ⟨htc, hto⟩ := ObservationType.of_eq_some.mp htype
-    have hrs := Record.rebuildAll_records members ms hms
-    cases o
-    simp only [Observation.stamp, Observation.creator, Observation.kind, Observation.via,
-      Observation.type, Observation.members] at hs hcr hk hv ht hm
-    subst hs hcr hk hv ht hm
-    simp [Observation.record, hrs, htc, hto, ContractRecord.identify_record _ hcaller,
-      ContractRecord.identify_record _ hc]
-
-theorem Record.rebuildAll_records : ∀ (rs : List Record) (os : List Observation),
-    Record.rebuildAll self rs = some os → Observation.records os = rs
-  | [], os, h => by simp [Record.rebuildAll] at h; subst h; rfl
-  | r :: rs, os, h => by
-    simp only [Record.rebuildAll, Option.bind_eq_bind, Option.bind_eq_some_iff,
-      Option.pure_def, Option.some.injEq] at h
-    obtain ⟨o, ho, os', hos, rfl⟩ := h
-    simp [Observation.records, Record.rebuild_record r o ho, Record.rebuildAll_records rs os' hos]
-end
-```
-
-`Observation`'s constructor is private, which protects observations only
-while they are inside Lean. Go keeps them as records, and hands them back for
-`mayPass`, `nodeReturn` and the next `observe`. A record is plain values and
-anything may build one, so a record is never trusted: `rebuild` makes it an
-observation again by the same path it was first made, identifying every
-contract, making its type with `ObservationType.of`, rebuilding every member
-first, and calling `observe`. A forged record has no observation, and what a
-rebuild gives back is exactly the record it was given (`rebuild_record`).
-
-So the exported functions take records, never observations: every one
-rebuilds what it is handed before it checks anything. Records are re-checked
-on every use, never cached as checked.
-
-What `rebuild` cannot know is whether the record is the one the records hold.
-A stamp the records never assigned, or a creator and kind other than what the
-kernel provisioned, rebuild as long as they are consistent. Those facts are
-the runtime's: Go reads records from `.skyra/` and never from a payload.
-
 ## The Go shell
 
-Lean is the functional core: policy. Go is the imperative shell: mechanism.
-Go computes facts, asks Lean, and carries out the answer; it decides nothing.
+The functional core is policy; the imperative shell is mechanism. The core
+is specified and proven in Lean, and runs as one Go package, `core`, that
+agrees with the Lean on every vector the Lean writes (see "Plan"). Where this
+proposal says Lean decides, the running decision is `core`'s. The shell
+computes facts, asks `core`, and carries out the answer; it decides nothing.
 
-| Go does | With Lean's |
+| The shell does | With the core's |
 |---|---|
 | Computes each binary's hash (cdhash or SHA-256) and canonical shapes | `identify`, `ObservationType.of` |
+| Supplies the apprentice's binary and contracts | `Apprentice.of` |
 | Supplies `self`: the actor being provisioned, from the kernel, never from a payload | `classify` |
-| Picks the child's actor: the other of Claude and Codex. The model is never shown it | `alternates` |
 | Reads the parent's reach at pass time | `passable` |
-| Reads each agent's scope from the records, and what a node was passed | `mayPass`, `receive`, `nodeReturn`, `creatorMayReturn` |
-| Creates every observation by calling `observe`, with the caller's contract and kind and the next record stamp, and records it | `observe` |
-| Hands back records, never observations; each is rebuilt before any check | `Record.rebuild` |
-| Grants what the kind allows: invoke or pass-only rights, `delegate`, interfaces. Faults an invoke of a pass-only contract at intake | `offered` |
-| Builds the prompt and the tools offered from the `Offer` | `offered` |
-| Reads the history of inputs and observations from the records | `inputBaseNovelty`, `observationBaseNovelty` |
-| Evaluates a shape's guard in CEL (`apprentice/refine`), writing the default guard until the model writes one | `defaultGuard`, `next` |
-| At invoke, evaluates the entry guard, and runs the remembered procedure in place of the model, its calls under the original leaf grants | `enter` |
+| Reads each agent's scope from the records, what a node was passed, and what its model created | `mayPass`, `receive`, `mayReturn`, `nodeMayReturn` |
+| Creates every observation by calling `observe` with the sender's kind, and records it; the root's by `rootObservation` | `observe`, `rootObservation` |
+| Grants what the kind allows: invoke or pass-only rights, and the apprentice's contracts for it. Faults an invoke of a pass-only contract in the `observe` phase | `offered`, `loaded` |
+| Builds the prompt and the contracts offered from the `Offer` | `offered` |
+| Reads the history of inputs from the records | `inputBaseNovelty` |
+| Hashes base and refinement types, and hands Lean the ids | `Hashes` |
+| On unseen, registers the default CEL for that base type; on a rewrite, the model's | `see`, `rewrite` |
+| Evaluates a shape's guard in CEL (`apprentice/refine`), writing the default string match until the model writes one | `next` |
+| At invoke, evaluates the entry guard, and runs the remembered procedure in place of the model, its calls under the original invoke grants | `enter` |
 | Runs the model; stops a run at the depth bound. A forced stop is a fault, never an exit status | |
 
-`observe` is the boundary, so the file that defines it is protected: its
-hash is pinned in the Go build, CI runs `#print axioms` on every theorem and
-accepts only `propext`, `Classical.choice` and `Quot.sound`, Go calls only
-functions that take plain values, and the Go that calls them is protected
-with it.
+`observe` is the boundary. In `core`, `Observation` has only unexported
+fields and `observe` is the only function that makes one, so nothing outside
+the package can make one any other way: Go's form of the private
+constructor. `core` is pure, holds no state and imports nothing of the shell.
+What protects it is CI: the Lean compiles, `#print axioms` on every theorem
+accepts only `propext`, `Classical.choice` and `Quot.sound`, and `core`
+agrees with every vector.
 
 Left free, to observe: children may share a contract, a node may grant its
 whole reach to one child, and a run that loops stops at the depth bound.
 
-The rule for building the shell: Go that decides something Lean decides is
-deleted, not kept beside it. Known so far:
-
-- `delegate`'s `actor` and `model` fields, and its "actor in reach" check
-  (`controller/apprentice/delegate.go`). The core picks the actor
-  (`alternates`); the model's `delegate` takes a goal and observations only.
-- The base-type branches of `refusedInput` and `refusedEdge`
-  (`controller/apprentice/main.go`): an input or return of a type the
-  procedure was not compiled for is `enter` or `next` on an unseen type. Go
-  keeps only the CEL evaluation, holds or breaks, and hands Lean the fact.
-
-## Known gaps
-
-What this invariant does not cover, written down so it is not mistaken for
-covered:
-
-- **Endowment has no case in Lean.** The root's spec is where its first
-  observations come from, and nothing in `observe` admits them: no interface
-  is the root's. Until one is added, the root's endowment is created by Go,
-  outside the boundary.
-- **A leaf that paraphrases its input breaks lineage.** `nodeMayReturn`
-  follows lineage, and a leaf that copies what it was passed into a new
-  effect creates an observation with no members. The copy is new; the rule
-  cannot see it.
-- **Contracts may be wide** (see "Leaf or node"): a leaf is as narrow as its
-  one contract.
-- **Records are rebuilt, not authenticated.** `rebuild` refuses a record no
-  `observe` would accept, not one the records never held (see "Records").
-- **52 is not built on macOS.** Only the kernel's mediation and Seatbelt
-  enforce who execs (see "Who executes").
-
 ## Plan
 
-Base types are contracts and binaries only: `ObservationType` stays
-(contract, output shape). Value is CEL's, configured per shape, on both
+Values never enter a type: `ObservationType` stays (contract, output shape),
+and base and refinement types are hashes of binaries, base types, shapes
+and guards. Value is CEL's, configured per shape, on both
 paths. For the first runs, guards use the default implementation and
 `remember` is off, so no procedure exists and every path falls back to the
 model; guards still run, and whether each would have held is recorded.
 
-1. **Finish this proposal.** Done (2026-11-03):
-   - The default guard, `defaultGuard`: the value as JSON, a CEL literal,
-     matched whole, for return and entry guards.
-   - Stamped observations: two sibling listings are two stamps.
-   - The creator rule, `creatorMayReturn`, beside `nodeMayReturn`: neither
-     covers the other. It checks by contract, which holds because Claude and
-     Codex alternate (`alternates`), hidden from the model.
-   - Records re-validated when rebuilt (`Record.rebuild`, `rebuild_record`).
-   - Known gaps, written down.
-2. **The Lean core as a package.** A Lake project pinned to Lean 4.35; its
-   files become the source of truth, and this proposal points to them.
-   Linked into the apprentice through cgo, not executed: under today's macOS
-   sandbox the apprentice may exec only the program being run. Exported
-   functions take plain values only. CI pins the source hash in the Go build
-   and runs `#print axioms` on every theorem, accepting only `propext`,
-   `Classical.choice` and `Quot.sound`.
-3. **The Go shell** (apprentice, `proceduretools`, `claude/resident`).
-   - The tools offered follow the kind: a node gets `delegate` and `exit`; a
-     leaf its one contract, `effect` and `exit`.
-   - `delegate` runs `alternates`, `passable`, `classify` and `offered`;
-     goals and contexts are created through `observe`; it takes
-     `observations: [names]`, with a name table per node (`obs-1`, …)
-     mapping names to stamps. It takes no actor.
-   - A leaf's result is created through `observe` (`effect`); a node's
-     return is checked by `nodeReturn`, and its members by `mayPass`.
-   - The Go that Lean replaces is deleted (see "The Go shell").
+1. **Finish this proposal.**
+   - The default CEL implementation: a string match on the value, for return
+     and entry guards.
+   - The refusal rules (no member twice, `mayPass`, `nodeMayReturn`) refuse
+     by refinement type, and run after refinement types are assigned: two
+     observations of one refinement type are the same, and a second is a
+     repeat. There is no stamp; uniqueness is the system's interpretation,
+     not an observation's identity. Until Lean takes refinement ids, it
+     compares `ObservationType`, which is coarser.
+   - Known gaps, written down: endowment has no case in Lean; an invoke
+     node that paraphrases its input breaks lineage; contracts may be wide; 52 is not
+     built on macOS.
+   - The README entry; commit.
+2. **The Lean spec and its vectors.** A Lake project pinned to Lean 4.35, in
+   `controller/apprentice/invariants`; its files are the source of truth, and
+   this proposal points to them.
+   Never linked or executed by the apprentice. CI compiles it and runs
+   `#print axioms` on every theorem, accepting only `propext`,
+   `Classical.choice` and `Quot.sound`. A Lean executable writes test
+   vectors as JSON: inputs and Lean's answers for every decision, exhaustive
+   where the domain is small, generated across it where it is not.
+3. **The Go core.** One pure package, `core`, a port of the Lean, decision
+   for decision. `Observation`'s fields unexported; `observe` its only maker.
+   Its tests replay every vector and fail on any disagreement, so a change
+   to either side alone fails CI. Each invariant is also a Go property test,
+   named for its Lean theorem.
+4. **The Go shell** (apprentice, `proceduretools`, `claude/resident`), as
+   [56](56-tree-machine-proposal.md) specifies it.
+   - The contracts offered follow the kind: `exit` and `return` for every
+     kind; `effect_observation` for an effect node; `invoke` for an invoke
+     node; `delegate` and `goal` for a delegate.
+   - `delegate` runs `passable`, `classify` and `offered`; its input is the
+     computation made through `observe`; the model passes observations by
+     integer references into one array.
+   - What comes back is created through `observe` with the sender's kind;
+     every return is checked by `mayReturn` and `nodeMayReturn`.
    - Guards are evaluated with `apprentice/refine` (default string match);
      holds or breaks is recorded; with `remember` off, always fall back.
    - Both novelty measures are recorded; the depth bound is kept.
-4. **The treemap harness.** Choose the slice (count candidate directories
-   first); the spec sections, written by the user; narrow tools (`list_dir`,
+5. **The treemap harness.** Choose the slice (count candidate directories
+   first); the spec sections, written by the user; narrow contracts (`list_dir`,
    `stat`) with tight shapes; a `find` manifest taken before the run for the
    coverage check; a renderer that draws the tree from `.skyra/` records.
-5. **First run.** Real Claude or Codex, the small slice, several runs. Read
+6. **First run.** Real Claude or Codex, the small slice, several runs. Read
    the trees.
 
-Stop for review after steps 1, 2 and 3.
+Stop for review after steps 1, 2, 3 and 4.
 
-Open: link Lean into the apprentice through cgo (recommended) or register it
-as its own target; and where the Lake project lives
-(`controller/apprentice/policy/` or a top-level `lean/`).
+Open: where `core` lives beside the Lake project in
+`controller/apprentice/invariants`.

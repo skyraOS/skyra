@@ -20,3 +20,24 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: ./scripts/check.sh
+  invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: controller/apprentice/invariants
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('controller/apprentice/invariants/lean-toolchain') }}
+      - name: Install elan
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - run: ./check-axioms.sh
+      - run: ./check-vectors.sh
+      - run: ./check-proposal.sh

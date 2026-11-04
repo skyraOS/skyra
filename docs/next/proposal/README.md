@@ -74,15 +74,28 @@ New implementation proposals:
   measures read from the records. Experiment (2026-11-03).
 - [55 — One tool trees: the invariant](55-one-tool-trees-invariant-proposal.md):
   54's functional core in Lean. A contract is a binary and its input shape;
-  an observation is stamped, typed by its contract and its own output shape,
-  and made only by `observe`, through the interface its creator's kind
-  grants: `effect` for leaves, `computation` for nodes, `exit` for both.
-  Records are re-validated when rebuilt. Given an agent's contract and its
-  reach, decide: refused, a leaf (at most one contract), or a node. A node
-  returns its children's observations or its exit, never its own creations
-  nor what it was passed; Claude and Codex alternate, hidden from the model.
-  Novelty by base type; guards in CEL decide continue or fall back. Draft,
-  step 1 done (2026-11-03).
+  an observation is typed by its contract and its own output shape. `observe`
+  is the one way to an observation: an effect has no members, a computation
+  has members, and only a delegate makes one. Given the apprentice, an
+  agent's contract and its reach, the apprentice's contracts not counted,
+  decide: refused (its own binary is in its reach), an effect node (no
+  contract), an invoke node (one), or a delegate (two or more); the kind
+  decides which of the apprentice's contracts are loaded. An agent passes only what
+  is in its scope, on invoke or return. A base type is a hash of the binary,
+  the base types passed and the shape back; a refinement type, of a
+  base type and its one guard. Novelty is apart from validity: an input is
+  unseen when this binary has not been handed these types, a return when the
+  system does not recognize its base type. Draft (2026-11-03).
+- [56 — The tree machine](56-tree-machine-proposal.md): 55's decisions
+  driven through a tree, in 52's shape: the kernel provisions the apprentice
+  and gets out of the way, and the apprentice runs the loop. A pure
+  `Step(Tree, Event) → (Tree, []Effect)` holds the whole tree, in the
+  kernel's cycle, `Read* Commit? Execute*`: the core hashes and verifies
+  everything it reads, guards are write-once records and the store their
+  fold, and an agent's turn or an invoke node's invoke is a node of an
+  `instruction/1`; one call per turn, carrying an array of instructions. An interim
+  shell on today's kernel answers the same effects until 52 exists, with
+  replay on every resume. Draft (2026-11-03).
 
 ## The design in one paragraph
 

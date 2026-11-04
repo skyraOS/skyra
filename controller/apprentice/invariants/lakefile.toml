@@ -1,0 +1,10 @@
+name = "invariants"
+version = "0.1.0"
+defaultTargets = ["Invariants"]
+
+[[lean_lib]]
+name = "Invariants"
+
+[[lean_exe]]
+name = "vectors"
+root = "Vectors"
