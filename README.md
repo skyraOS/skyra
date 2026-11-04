@@ -18,7 +18,7 @@ working on all three for nine months.
 
 What if software wasn't written by agents, but left behind by them?
 
-Just a guy trying to get determinism out of an AI runtime.
+**Skyra is a a hierarchy of judged work that can consolidate accepted behavior into procedures**
 
 **What's here:** a stateless runtime with a pure Go state machine, per-call
 macOS sandboxes, hash-chained records checked by replay, and browser, terminal
