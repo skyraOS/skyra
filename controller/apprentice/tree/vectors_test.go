@@ -386,7 +386,8 @@ func TestVectors(t *testing.T) {
 
 // The core touches no OS, tree or network: its imports are an allowlist.
 func TestCoreIsPure(t *testing.T) {
-	allowed := map[string]bool{"slices": true, "strings": true}
+	allowed := map[string]bool{"bytes": true, "crypto/sha256": true, "encoding/hex": true,
+		"encoding/json": true, "slices": true, "strings": true}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {

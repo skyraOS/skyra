@@ -9,6 +9,10 @@
 package tree
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"slices"
 	"strings"
 )
@@ -414,6 +418,53 @@ func Refinement(refine func(BaseID, Guard) RefinementID, s Store, b BaseID) (Ref
 		return "", false
 	}
 	return refine(b, g), true
+}
+
+// --- the hashes ---
+
+// The domain tags. Each kind of id hashes its own tag first, so a base type
+// and a refinement type never share an id, whatever their parts; the version
+// keeps a changed format from matching old records.
+const (
+	baseTag       = "skyra/base/v1"
+	refinementTag = "skyra/refinement/v1"
+)
+
+// canonical is the JSON of v as JSON.stringify writes it: no HTML escaping,
+// no trailing newline.
+func canonical(v any) []byte {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		panic(err) // strings, lists and maps of strings always encode
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n"))
+}
+
+func sum(v any) string {
+	h := sha256.Sum256(canonical(v))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+// BaseOf is a base type's id: the binary, the base types passed, in order,
+// and the shape back. No guard is in it.
+func BaseOf(b Binary, passed []BaseID, shape Schema) BaseID {
+	ps := make([]string, len(passed))
+	for i, p := range passed {
+		ps[i] = string(p)
+	}
+	return BaseID(sum([]any{baseTag, string(b), ps, string(shape)}))
+}
+
+// RefinementOf is a refinement type's id: a base type and its guard, the
+// default as "default", a written one as {"written": cel}.
+func RefinementOf(b BaseID, g Guard) RefinementID {
+	var guard any = "default"
+	if cel, ok := g.Written(); ok {
+		guard = map[string]string{"written": cel}
+	}
+	return RefinementID(sum([]any{refinementTag, string(b), guard}))
 }
 
 // --- control ---

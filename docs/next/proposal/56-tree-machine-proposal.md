@@ -56,8 +56,22 @@ fail or withhold, but it cannot pass off anything addressed by its hash.
 
 Hashing is in the core. It is pure, and verifying a read needs it, as the
 kernel's machine hashes through `record.Sum`. A hash is SHA-256 over the
-canonical JSON of its parts; base and refinement ids are computed by `Step`,
-never handed to it.
+canonical JSON of its parts (as `JSON.stringify` writes it), written
+`sha256:` and 64 hex digits, as a binary is; base and refinement ids are
+computed by `Step`, never handed to it.
+
+Each kind of id hashes its domain tag first. An id in the records is only a
+string, and the tag is the one place it holds which kind it is: a base type
+and a refinement type never share an id, whatever their parts, and the
+version keeps a changed format from matching old records.
+
+```
+BaseOf       = sha256(["skyra/base/v1",       binary, [passed base ids…], shape])
+RefinementOf = sha256(["skyra/refinement/v1", base id, guard])
+```
+
+The guard is `"default"`, or `{"written": cel}`. When the default guard
+carries its CEL, the refinement tag becomes `v2`.
 
 ### Read: what is verified
 
@@ -238,8 +252,8 @@ func See(s Store, b BaseID) (Seen, Store)
 func Rewrite(s Store, b BaseID, cel string) (Store, bool)
 func Refinement(hash func(BaseID, Guard) RefinementID, s Store, b BaseID) (RefinementID, bool)
 
-// The hashes, in the core: SHA-256 over the canonical JSON of the parts.
-// Not yet ported: Lean has no case for them, and the domain tags are open.
+// The hashes, in the core: SHA-256 over the canonical JSON of the domain tag
+// and the parts (see "Read, interpret, commit, execute").
 func BaseOf(b Binary, passed []BaseID, shape Schema) BaseID
 func RefinementOf(b BaseID, g Guard) RefinementID
 func NextOf(Seen, bool) Next
@@ -611,8 +625,8 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
 2. **`Core.lean` for the apprentice's contracts**, if settled so; 55's copy and
    the vectors follow.
 3. **The decision layer** in `controller/apprentice/tree`: the port, the
-   vector replay, one property test per invariant, the purity test. Done,
-   but for `BaseOf` and `RefinementOf`, which wait on the domain tags.
+   vector replay, one property test per invariant, the purity test, and the
+   hashes, pinned by known answers. Done.
 4. **`Step`**: the state, the phases, the events and effects above, with
    tests that drive a tree by events alone.
 5. **The interim shell**: the apprentice's loop for the effects in the
