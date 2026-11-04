@@ -36,20 +36,22 @@ it rests on when Lean does not. The sections below are the proofs.
    `Observation.effect_xor_computation`).
 6. The caller never says what it sends: `observe` decides by what it has, and
    admits by the kind of node sending it. An exit comes from every kind; a
-   goal from a delegate; what an effect node writes, through
+   goal, a description and a packaged reach from a delegate, each through its
+   own contract; what an effect node writes, through
    `effect_observation`, from an effect node; what came back through a
    contract outside the apprentice, from an invoke node.
 7. Only a delegate makes a computation, through `delegate`, no member twice
    (`observe_computation`); an effect or invoke node makes only effects
    (`observe_effect_or_invoke`). Nothing becomes an effect through `observe`,
-   `root`, `return`, `invoke` or `delegate` (`observe_not_through`). An exit
-   the system forces is a fault.
+   `root`, `return`, `invoke` or `delegate` (`observe_not_through`); a
+   description and a packaged reach come only from a delegate
+   (`observe_composed`). An exit the system forces is a fault.
 
 **Kind and authority**
 
 8. The apprentice is one binary and its contracts: `observe`, `root`, `exit`,
-   `return`, `effect_observation`, `invoke`, `delegate`, `goal`; each of that
-   binary, none twice (`Apprentice.contracts_mine`,
+   `return`, `effect_observation`, `invoke`, `delegate`, `goal`,
+   `create_description`, `package_reach`; each of that binary, none twice (`Apprentice.contracts_mine`,
    `Apprentice.contracts_nodup`).
 9. The apprentice's contracts never count, for the self check or the kind
    (`classify_apprentice_before`, `classify_apprentice_after`).
@@ -60,7 +62,8 @@ it rests on when Lean does not. The sections below are the proofs.
 12. The kind decides what is loaded: `exit` and `return` for every kind;
     `effect_observation` for an effect node; `invoke` for an invoke node;
     `delegate` and `goal` for a delegate. `observe` and `root` are never
-    loaded, and loading never changes the kind (`loaded_mine`,
+    loaded, nor `create_description` and `package_reach`, which `delegate`'s
+    CEL runs before the model's point; and loading never changes the kind (`loaded_mine`,
     `loaded_never_privileged`, `classify_loaded`).
 13. Only an invoke node invokes a contract outside the apprentice; a delegate
     only passes on (`offered_invoke`, `offered_delegate_invokes_nothing`,
@@ -244,7 +247,9 @@ is not settled: shapes the contract declares, or the input it is passed to.
 ```lean
 /-- The apprentice: one binary, and its contracts, each of that binary and
 none twice. Some are privileged (`observe`, `root`): never loaded into a
-reach. Its constructor is private: every one is made by `Apprentice.of`. -/
+reach. `description` and `reach` are run by `delegate`'s own CEL, before the
+model's point: never loaded either. Its constructor is private: every one is
+made by `Apprentice.of`. -/
 structure Apprentice where
   private mk ::
   binary            : Binary
@@ -256,21 +261,28 @@ structure Apprentice where
   invoke            : Contract
   delegate          : Contract
   goal              : Contract
-  wf : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal].all
-          (·.binary == binary) && decide
-          [observe, root, exit, ret, effectObservation, invoke, delegate, goal].Nodup) = true
+  description       : Contract  -- `create_description`
+  reach             : Contract  -- `package_reach`
+  wf : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal,
+          description, reach].all (·.binary == binary) && decide
+          [observe, root, exit, ret, effectObservation, invoke, delegate, goal,
+          description, reach].Nodup) = true
 
 def Apprentice.contracts (a : Apprentice) : List Contract :=
-  [a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal]
+  [a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal,
+   a.description, a.reach]
 
 /-- The one way to an apprentice. Refuses a contract of another binary, or
 one contract in two places. -/
-def Apprentice.of (binary : Binary) (observe root exit ret effectObservation invoke delegate goal : Contract) :
+def Apprentice.of (binary : Binary)
+    (observe root exit ret effectObservation invoke delegate goal description reach : Contract) :
     Option Apprentice :=
-  if h : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal].all
-            (·.binary == binary) && decide
-            [observe, root, exit, ret, effectObservation, invoke, delegate, goal].Nodup) = true
-  then some ⟨binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal, h⟩
+  if h : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal,
+            description, reach].all (·.binary == binary) && decide
+            [observe, root, exit, ret, effectObservation, invoke, delegate, goal,
+            description, reach].Nodup) = true
+  then some ⟨binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal,
+    description, reach, h⟩
   else none
 
 /-- A contract of the apprentice's binary. -/
@@ -342,10 +354,12 @@ end
 instance : DecidableEq Observation := Observation.decEq
 
 /-- What an effect may come through, by the kind of node that sends it: an
-exit, from every kind; a goal, from a delegate; what an effect node wrote;
-what came back through an invoke node's contract, outside the apprentice. -/
+exit, from every kind; a goal, a description and a packaged reach, from a
+delegate; what an effect node wrote; what came back through an invoke node's
+contract, outside the apprentice. -/
 def effectThrough (a : Apprentice) (k : Kind) (c : Contract) : Bool :=
   c == a.exit || (k == .delegate && c == a.goal) ||
+  (k == .delegate && c == a.description) || (k == .delegate && c == a.reach) ||
   (k == .effect && c == a.effectObservation) || (k == .invoke && !a.mine c)
 
 /-- What `observe` admits. No members: an effect, through what its kind may
@@ -414,7 +428,7 @@ theorem observe_not_through (h : observe a k t [] = some o)
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-  rcases ha with (((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  rcases ha with (((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
   all_goals first
     | (rw [e] at hm; simp at hm; done)
     | (rcases hc with hc | hc | hc | hc | hc <;> rw [hc] at e <;>
@@ -432,8 +446,9 @@ with no instruction before it, made by `rootObservation`, through `root`.
 An observation is an effect or a computation, by what it has:
 
 - **An effect** has no members. Every observation-producing syscall is one:
-  an exit, from every kind; a goal, from a delegate, through `goal`; what an
-  effect node wrote, through `effect_observation`; what came back through an
+  an exit, from every kind; from a delegate, a goal through `goal`, a
+  description through `create_description` and the reach it passes through
+  `package_reach`, each its own contract; what an effect node wrote, through `effect_observation`; what came back through an
   invoke node's contract, outside the apprentice; the root's endowment.
 - **A computation** has members, none twice, in order. Only a delegate makes
   one, through `delegate`: the description, the goal, the reach packaged, and
@@ -458,6 +473,28 @@ restating them.
 ## Inputs
 
 ```lean
+/-- A description and a packaged reach come only from a delegate: they are
+parts of what it composes. -/
+theorem observe_composed (h : observe a k t [] = some o)
+    (hc : t.contract ∈ [a.description, a.reach]) : k = .delegate := by
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, -⟩ := h
+  have hn := a.contracts_nodup
+  have hm : a.mine t.contract = true := a.contracts_mine (by
+    simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
+    rcases hc with h | h <;> simp [h])
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hn
+  simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
+    Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+  rcases ha with (((((e | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  · rcases hc with hc | hc <;> rw [hc] at e <;> simp_all
+  all_goals first
+    | exact hk
+    | (rw [e] at hm; simp at hm; done)
+    | (rcases hc with hc | hc <;> rw [hc] at e <;> simp_all; done)
+
 /-- The empty input: an object with no fields. The caller sends `{}`. -/
 def Schema.empty : Schema := ⟨"{\"type\":\"object\"}"⟩
 ```
@@ -1025,12 +1062,16 @@ theorem classify_loaded :
     classify a self (reach ++ loaded a k) = classify a self reach :=
   classify_apprentice_after fun _ h => loaded_mine h
 
-/-- `observe` and `root` are never loaded. -/
-theorem loaded_never_privileged : a.observe ∉ loaded a k ∧ a.root ∉ loaded a k := by
+/-- `observe` and `root` are never loaded, nor `description` and `reach`,
+which `delegate`'s CEL runs before the model's point. -/
+theorem loaded_never_privileged :
+    a.observe ∉ loaded a k ∧ a.root ∉ loaded a k ∧
+      a.description ∉ loaded a k ∧ a.reach ∉ loaded a k := by
   have hn := a.contracts_nodup
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hn
-  cases k <;> simp only [loaded, List.mem_cons, List.not_mem_nil, or_false, not_or] <;> simp_all
+  cases k <;> simp only [loaded, List.mem_cons, List.not_mem_nil, or_false, not_or] <;>
+    simp_all [Ne.symm]
 ```
 
 The core passes the apprentice, an agent's contract and its reach as values,

@@ -20,5 +20,9 @@
 {"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"delegate\",\"type\":\"object\"}"},"output":"{\"type\":\"string\"}"}},"out":null},
 {"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"delegate\",\"type\":\"object\"}"},"output":"{\"items\":{\"type\":\"number\"},\"type\":\"array\"}"}},"out":null},
 {"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"goal\",\"type\":\"object\"}"},"output":"{\"type\":\"string\"}"}},"out":null},
-{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"goal\",\"type\":\"object\"}"},"output":"{\"items\":{\"type\":\"number\"},\"type\":\"array\"}"}},"out":null}
+{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"goal\",\"type\":\"object\"}"},"output":"{\"items\":{\"type\":\"number\"},\"type\":\"array\"}"}},"out":null},
+{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"create_description\",\"type\":\"object\"}"},"output":"{\"type\":\"string\"}"}},"out":null},
+{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"create_description\",\"type\":\"object\"}"},"output":"{\"items\":{\"type\":\"number\"},\"type\":\"array\"}"}},"out":null},
+{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"package_reach\",\"type\":\"object\"}"},"output":"{\"type\":\"string\"}"}},"out":null},
+{"in":{"type":{"contract":{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"package_reach\",\"type\":\"object\"}"},"output":"{\"items\":{\"type\":\"number\"},\"type\":\"array\"}"}},"out":null}
 ]}

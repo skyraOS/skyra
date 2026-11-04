@@ -44,10 +44,10 @@ func TestApprenticeContracts(t *testing.T) {
 		}
 	}
 	c := func(title string) Contract { return contract(binApp, Schema(`{"title":"`+title+`"}`)) }
-	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), x, c("w"), c("i"), c("d"), c("g")); ok {
+	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), x, c("w"), c("i"), c("d"), c("g"), c("cd"), c("pr")); ok {
 		t.Error("Apprentice.of: a contract of another binary")
 	}
-	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), c("e"), c("w"), c("i"), c("d"), c("g")); ok {
+	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), c("e"), c("w"), c("i"), c("d"), c("g"), c("cd"), c("pr")); ok {
 		t.Error("Apprentice.of: one contract in two places")
 	}
 }
@@ -96,6 +96,10 @@ func TestObserve(t *testing.T) {
 					// observe_not_through
 					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.Invoke(), app.Delegate()}, c) {
 						t.Fatalf("observe_not_through: %v through %s", k, name(c))
+					}
+					// observe_composed
+					if len(ms) == 0 && (c == app.Description() || c == app.Reach()) && k != KindDelegate {
+						t.Fatalf("observe_composed: %v through %s", k, name(c))
 					}
 				}
 			}
@@ -319,7 +323,8 @@ func TestOffered(t *testing.T) {
 func TestLoadedNeverPrivileged(t *testing.T) {
 	for _, k := range kinds {
 		l := Loaded(app, k)
-		if slices.Contains(l, app.Observe()) || slices.Contains(l, app.Root()) {
+		if slices.Contains(l, app.Observe()) || slices.Contains(l, app.Root()) ||
+			slices.Contains(l, app.Description()) || slices.Contains(l, app.Reach()) {
 			t.Errorf("loaded_never_privileged: %v", k)
 		}
 		for _, c := range l {

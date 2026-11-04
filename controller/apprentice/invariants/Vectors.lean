@@ -66,7 +66,8 @@ def jApprentice (a : Apprentice) : Json :=
   Json.mkObj [("binary", jBinary a.binary), ("observe", jContract a.observe),
     ("root", jContract a.root), ("exit", jContract a.exit), ("return", jContract a.ret),
     ("effect_observation", jContract a.effectObservation), ("invoke", jContract a.invoke),
-    ("delegate", jContract a.delegate), ("goal", jContract a.goal)]
+    ("delegate", jContract a.delegate), ("goal", jContract a.goal),
+    ("create_description", jContract a.description), ("package_reach", jContract a.reach)]
 
 def jInputBase (i : InputBase) : Json :=
   Json.mkObj [("binary", jBinary i.binary), ("observations", jList jType i.observations)]
@@ -129,7 +130,8 @@ def appContract (title : String) : Option Contract :=
   identify bApp ⟨"{\"title\":\"" ++ title ++ "\",\"type\":\"object\"}"⟩
 
 def titles : List String :=
-  ["observe", "root", "exit", "return", "effect_observation", "invoke", "delegate", "goal"]
+  ["observe", "root", "exit", "return", "effect_observation", "invoke", "delegate", "goal",
+   "create_description", "package_reach"]
 
 structure World where
   app : Apprentice
@@ -155,9 +157,9 @@ structure World where
   k3 : Observation
 
 def world : Option World := do
-  let [observe', root, exit, ret, eo, invoke, delegate, goal] ← titles.mapM appContract
+  let [observe', root, exit, ret, eo, invoke, delegate, goal, desc, reach] ← titles.mapM appContract
     | none
-  let app ← Apprentice.of bApp observe' root exit ret eo invoke delegate goal
+  let app ← Apprentice.of bApp observe' root exit ret eo invoke delegate goal desc reach
   let c1 ← identify ⟨"cdhash:" ++ hex 'a' 40⟩ Schema.empty
   let c2 ← identify ⟨"cdhash:" ++ hex 'a' 40⟩ shapeIn
   let c3 ← identify ⟨"sha256:" ++ hex '1' 64⟩ Schema.empty
@@ -248,9 +250,9 @@ def files (w : World) : List (String × List Json) :=
       let cands : List (List Contract) :=
         [a.contracts, a.contracts.set 3 w.c1, a.contracts.set 7 a.exit]
       cands.map fun l => match l with
-        | [o, r, e, t, eo, i, d, g] =>
+        | [o, r, e, t, eo, i, d, g, ds, rc] =>
           case (Json.mkObj [("binary", jBinary bApp), ("contracts", jList jContract l)])
-            (jOpt jApprentice (Apprentice.of bApp o r e t eo i d g))
+            (jOpt jApprentice (Apprentice.of bApp o r e t eo i d g ds rc))
         | _ => .null),
     ("admits", kinds.flatMap fun k => ts.flatMap fun t => members.map fun ms =>
       case (Json.mkObj [("kind", jKind k), ("type", jType t),

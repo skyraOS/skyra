@@ -96,7 +96,8 @@ func TypeOf(c Contract, output Schema) (ObservationType, bool) {
 
 // The Apprentice is one binary and its contracts, each of that binary and
 // none twice. Observe and Root are privileged: never loaded into a reach.
-// Every one is made by ApprenticeOf.
+// Description and Reach are run by delegate's own CEL, before the model's
+// point: never loaded either. Every one is made by ApprenticeOf.
 type Apprentice struct {
 	binary            Binary
 	observe           Contract
@@ -107,12 +108,14 @@ type Apprentice struct {
 	invoke            Contract
 	delegate          Contract
 	goal              Contract
+	description       Contract // create_description
+	reach             Contract // package_reach
 }
 
 // ApprenticeOf is the one way to an apprentice. It refuses a contract of
 // another binary, or one contract in two places.
-func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal Contract) (Apprentice, bool) {
-	a := Apprentice{b, observe, root, exit, ret, effectObservation, invoke, delegate, goal}
+func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal, description, reach Contract) (Apprentice, bool) {
+	a := Apprentice{b, observe, root, exit, ret, effectObservation, invoke, delegate, goal, description, reach}
 	cs := a.Contracts()
 	for i, c := range cs {
 		if c.binary != b || slices.Contains(cs[:i], c) {
@@ -131,9 +134,12 @@ func (a Apprentice) EffectObservation() Contract { return a.effectObservation }
 func (a Apprentice) Invoke() Contract            { return a.invoke }
 func (a Apprentice) Delegate() Contract          { return a.delegate }
 func (a Apprentice) Goal() Contract              { return a.goal }
+func (a Apprentice) Description() Contract       { return a.description }
+func (a Apprentice) Reach() Contract             { return a.reach }
 
 func (a Apprentice) Contracts() []Contract {
-	return []Contract{a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal}
+	return []Contract{a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal,
+		a.description, a.reach}
 }
 
 // Mine: a contract of the apprentice's binary.
@@ -195,11 +201,11 @@ func nodup(xs []Observation) bool {
 }
 
 // effectThrough is what an effect may come through, by the kind of node that
-// sends it: an exit, from every kind; a goal, from a delegate; what an effect
-// node wrote; what came back through an invoke node's contract, outside the
-// apprentice.
+// sends it: an exit, from every kind; a goal, a description and a packaged
+// reach, from a delegate; what an effect node wrote; what came back through
+// an invoke node's contract, outside the apprentice.
 func effectThrough(a Apprentice, k Kind, c Contract) bool {
-	return c == a.exit || k == KindDelegate && c == a.goal ||
+	return c == a.exit || k == KindDelegate && (c == a.goal || c == a.description || c == a.reach) ||
 		k == KindEffect && c == a.effectObservation || k == KindInvoke && !a.Mine(c)
 }
 

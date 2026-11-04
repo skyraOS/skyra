@@ -226,7 +226,8 @@ type Contract struct{ binary Binary; shape Schema }
 type ObservationType struct{ contract Contract; output Schema }
 type Apprentice struct {
 	binary Binary
-	Observe, Root, Exit, Return, EffectObservation, Invoke, Delegate, Goal Contract
+	Observe, Root, Exit, Return, EffectObservation, Invoke, Delegate, Goal,
+	Description, Reach Contract // create_description, package_reach
 }
 type Observation struct {
 	typ     ObservationType
@@ -486,6 +487,8 @@ privileged: never shown to a model, never offered downstream.
 | invoke | invoke nodes | invokes the node's one contract |
 | delegate | delegate nodes | composes a child's input and delegates it |
 | goal | delegate nodes | `goal(str)`: a goal, returned as an observation that can be passed |
+| create_description | none: run by `delegate`'s CEL before the model's point | the description, `"Compose and Delegate the following goal: "`, a member of the `delegate` computation |
+| package_reach | none: run by `delegate`'s CEL before the model's point | the reach passed, packaged as an observation, a member of the `delegate` computation |
 
 ### Contracts are procedures
 
@@ -530,9 +533,28 @@ unique within the frame. It cannot be the observation's type: that is not
 known when the frame pops, only once the apprentice interprets what came
 back.
 
-Every `create_` function is a wrapper of this kind: it says the observation
-it wraps is allowed to be here, as `observe` admits it, and adds no content
-of its own.
+`create_return` is the return's shape, not an observation. An observation
+with members is a computation, which only a delegate makes; so the
+observations returned reach the parent as they are, and the wrapper is the
+shape their return comes back in. Every wrapper that passes shares that one
+fixed shape:
+
+```
+wrapper<T> = { <caller_type>: [T] }
+```
+
+`create_return` and the default CEL on an effect are both `wrapper<T>`.
+Because the shape is fixed, a return's base type is `BaseOf(the returner's
+binary, the base types it was passed, wrapper's shape)`: two returns differ
+by who returned and what they were given, never by what the array holds.
+What it holds is told apart by value, in the guard's CEL.
+
+Every `create_` function says the observation it wraps is allowed to be
+here, as `observe` admits it. Those that pass (`create_return`) add no
+content and make no observation. Those that create (`create_description`,
+`create_goal`, through `goal`, and `package_reach`) each make an observation
+through their own contract of the apprentice, so a description, a goal and
+a reach are never one base type.
 
 So the shape of a return comes from `create_return`, not from the model and
 not from the shell. It passes; it does not create: what the
@@ -696,9 +718,11 @@ Stop for review after each step.
 Steps 1 to 3 are done and pushed on `one-tool-trees`: 55's Lean is
 `Core.lean`, with its vectors and CI; the decision layer and the hashes are
 in `controller/apprentice/tree`, checked against every vector. Step 4,
-`Step`, waits on open items 6 to 13: two conflict with the invariants, and
-six are decisions this proposal has not made. Each has a recommendation;
-none is settled.
+`Step`, waits on open items 8 to 13, six decisions this proposal has not
+made; each has a recommendation, none is settled. Items 6 and 7 are
+settled: `create_description` and `package_reach` are contracts of the
+apprentice, in `Core.lean`; `create_return` is the fixed shape
+`wrapper<T>`, not an observation.
 
 ## Open
 
@@ -730,24 +754,14 @@ none is settled.
    its inputs, so it is a `Read` (`CELKey`), answered by the apprentice's
    loop through `apprentice/refine`, and retried freely. The core holds no
    CEL interpreter.
-6. **The description and the reach cannot be made.** `delegate` composes
-   `[description, goal, reach, …passed]`, each member an effect a delegate
-   node makes. `Core.lean` admits a delegate's effects only through `exit`
-   and `goal`, and `observe_not_through` refuses `delegate`, so nothing makes
-   the description or the packaged reach. (a) `create_description` and
-   `package_reach` become two more contracts of the apprentice, admitted for
-   a delegate node; (b) they are made through `goal`, as strings the CEL
-   writes; (c) they are not members: the description is fixed, and the reach
-   is already in the child's `Offer`. Recommended: (a), which keeps every
-   observation typed by its own contract; it changes `Core.lean`, the
-   vectors and 55's invariants 7 and 8.
-7. **`create_return` cannot be an observation.** An observation
-   `{ <caller_type>: [obs…] }` with members would be a computation made
-   through `return`, and only a delegate makes one. Recommended: it is the
-   return's shape, not an observation. The observations returned reach the
-   parent as they are, and the return's base type is `BaseOf(the child's
-   binary, the base types it was passed, create_return's shape)`. No Lean
-   change.
+6. **The description and the reach.** Settled: `create_description` and
+   `package_reach` are contracts of the apprentice, each admitted only for a
+   delegate node (`observe_composed`), never loaded; in `Core.lean`, the
+   vectors and the Go.
+7. **`create_return`.** Settled: it is the fixed shape `wrapper<T>` =
+   `{ <caller_type>: [T] }`, not an observation, shared by every wrapper that
+   passes. A return's base type is the returner's binary, the base types it
+   was passed, and that shape; what it holds is told apart by CEL.
 8. **The child's actor.** Recommended: one actor contract runs every child,
    supplied once by the kernel in `Started`, as the root's `self` is, and
    held as `Tree.Actor`. A child's `Self` is that contract, so `classify`

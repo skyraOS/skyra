@@ -39,7 +39,8 @@ func apprentice() Apprentice {
 	shape := func(title string) Schema { return Schema(`{"title":"` + title + `","type":"object"}`) }
 	c := func(title string) Contract { return contract(binApp, shape(title)) }
 	return must(ApprenticeOf(binApp, c("observe"), c("root"), c("exit"), c("return"),
-		c("effect_observation"), c("invoke"), c("delegate"), c("goal")))
+		c("effect_observation"), c("invoke"), c("delegate"), c("goal"),
+		c("create_description"), c("package_reach")))
 }
 
 func (a Apprentice) all() []Contract {
@@ -114,7 +115,8 @@ func name(c Contract) string {
 	}{{self, "self"}, {selfOther, "selfOther"}, {x, "x"}, {x2, "x2"}, {y, "y"}, {z, "z"},
 		{app.Observe(), "app.observe"}, {app.Root(), "app.root"}, {app.Exit(), "app.exit"},
 		{app.Return(), "app.return"}, {app.EffectObservation(), "app.effect_observation"},
-		{app.Invoke(), "app.invoke"}, {app.Delegate(), "app.delegate"}, {app.Goal(), "app.goal"}} {
+		{app.Invoke(), "app.invoke"}, {app.Delegate(), "app.delegate"}, {app.Goal(), "app.goal"},
+		{app.Description(), "app.create_description"}, {app.Reach(), "app.package_reach"}} {
 		if p.c == c {
 			return p.n
 		}
@@ -336,7 +338,7 @@ func TestEffectsByKind(t *testing.T) {
 	may := map[Kind][]Contract{
 		KindEffect:   {app.Exit(), app.EffectObservation()},
 		KindInvoke:   {app.Exit(), x},
-		KindDelegate: {app.Exit(), app.Goal()},
+		KindDelegate: {app.Exit(), app.Goal(), app.Description(), app.Reach()},
 	}
 	for _, k := range kinds {
 		for _, c := range append(app.all(), x) {

@@ -185,7 +185,8 @@ func eApprentice(a Apprentice) any {
 	return map[string]any{"binary": a.binary, "observe": eContract(a.observe), "root": eContract(a.root),
 		"exit": eContract(a.exit), "return": eContract(a.ret),
 		"effect_observation": eContract(a.effectObservation), "invoke": eContract(a.invoke),
-		"delegate": eContract(a.delegate), "goal": eContract(a.goal)}
+		"delegate": eContract(a.delegate), "goal": eContract(a.goal),
+		"create_description": eContract(a.description), "package_reach": eContract(a.reach)}
 }
 
 func eStore(s Store) any {
@@ -233,7 +234,7 @@ func vectorApprentice(t *testing.T) Apprentice {
 	t.Helper()
 	c := loadVectors(t, "apprenticeOf")[0]
 	cs := contractsOf(t, c.In["contracts"])
-	a, ok := ApprenticeOf(dec[Binary](t, c.In["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7])
+	a, ok := ApprenticeOf(dec[Binary](t, c.In["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9])
 	if !ok {
 		t.Fatal("the vectors' apprentice is refused")
 	}
@@ -269,7 +270,7 @@ var replays = map[string]replay{
 	},
 	"apprenticeOf": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		cs := contractsOf(t, in["contracts"])
-		a, ok := ApprenticeOf(dec[Binary](t, in["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7])
+		a, ok := ApprenticeOf(dec[Binary](t, in["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9])
 		return eOpt(a, ok, eApprentice)
 	},
 	"admits": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
