@@ -134,6 +134,11 @@ func TestBridgeCallDispatch(t *testing.T) {
 			Payload: json.RawMessage(`{"deliver":[]}`),
 			Value:   obs},
 	}
+	// Not granted: echo is in reach, but this thread was granted nothing.
+	if _, err := decide(c); err == nil || !strings.Contains(err.Error(), "unavailable tool") {
+		t.Fatalf("an ungranted tool was dispatched: %v", err)
+	}
+	c.Input.Tools = []string{"echo"}
 	out, err := decide(c)
 	if err != nil {
 		t.Fatal(err)

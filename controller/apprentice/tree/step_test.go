@@ -410,7 +410,7 @@ func TestStepFaults(t *testing.T) {
 			continue
 		}
 		if len(a.Names) != len(before.Names) || len(tr.Agents) != 1 || len(turns(es)) != 0 ||
-			len(dispatches(es)) != 0 || len(sh.history) != history || len(records(es, "value")) != 0 {
+			len(dispatches(es)) != 0 || len(sh.history) != history || len(records(es, "name")) != 0 {
 			t.Errorf("%s: the faulted call left something behind: %d names, %d agents", tc.name, len(a.Names), len(tr.Agents))
 		}
 	}

@@ -44,6 +44,7 @@ func TestClaudeDispatchesDelegateThroughApprentice(t *testing.T) {
 	delegate := &schema{Title: "delegate", Type: "object", Required: []string{"delegate"}, Fields: map[string]*schema{"delegate": {Type: "object", Required: []string{"goal"}, Fields: map[string]*schema{"goal": {Type: "string"}}}}}
 	c := continuation{Frame: "f1", Reach: reachOf(map[string]*schema{"apprentice": remember}, map[string][]*schema{"apprentice": {remember, delegate}})}
 	c.Input.Text = "goal"
+	c.Input.Tools = []string{"apprentice"}
 	c.Reach["apprentice"] = proceduretools.Entry{Contracts: []*schema{delegate}}
 	// Keeping delegate offers it, and procedure only because it stands for
 	// the same single contract here; remember is not kept.
@@ -72,6 +73,7 @@ func TestClaudeDispatchesDelegateThroughApprentice(t *testing.T) {
 
 func TestClaudeCanonicalWorkToolHasAValidTransportLabel(t *testing.T) {
 	c := continuation{Reach: reachOf(map[string]*schema{"repo.write": {Type: "object"}}, nil)}
+	c.Input.Tools = []string{"repo.write"}
 	ts := tools(c)
 	if len(ts) != 1 || ts[0].Name != "repo_write" || ts[0].Target != "repo.write" {
 		t.Fatalf("transport name changed ownership: %+v", ts)

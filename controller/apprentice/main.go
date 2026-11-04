@@ -30,6 +30,7 @@ import (
 	"skyra/apprentice/proc"
 	"skyra/apprentice/refine"
 	"skyra/apprentice/remember"
+	"skyra/apprentice/shell"
 	"skyra/apprentice/types"
 )
 
@@ -69,6 +70,24 @@ func main() {
 	}
 }
 
+// runTree is one resume of a tree (56, step 5): the interim shell runs its
+// Step from this frame's log.
+func runTree(store proc.Store, e envelope) ([]byte, error) {
+	reach := map[string][]*proc.Schema{}
+	for name, entry := range e.Reach {
+		reach[name] = entry.Contracts
+	}
+	var steps []shell.Step
+	for _, st := range e.Steps {
+		s := shell.Step{To: st.To, State: st.State, Value: st.Value}
+		if st.Fault != nil {
+			s.Fault = &shell.Fault{Kind: st.Fault.Kind, Cause: st.Fault.Cause}
+		}
+		steps = append(steps, s)
+	}
+	return shell.Resume(store.Dir, e.Frame, e.Input, reach, steps)
+}
+
 // remember is the registered contract, the one the kernel names no other.
 func rememberContract() *proc.Schema {
 	var d struct {
@@ -88,6 +107,10 @@ func run() ([]byte, error) {
 		return nil, errors.New("no state of its own (SKYRA_STATE is empty)")
 	}
 	c := e.Contract
+	var asks map[string]json.RawMessage
+	if json.Unmarshal(e.Input, &asks) == nil && asks["tree"] != nil {
+		return runTree(store, e)
+	}
 	if c == nil || proc.Same(c, rememberContract()) {
 		return runRemember(store, e)
 	}

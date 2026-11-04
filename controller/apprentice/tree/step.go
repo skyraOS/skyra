@@ -120,6 +120,7 @@ type Agent struct {
 	Waiting  []Pending     // what its last call started
 	Phase    Phase
 	Returned []Observation // when done: what it returned, or its exit
+	Gave     []int         // the names of what it returned
 	children int
 }
 
@@ -173,6 +174,7 @@ func (t Tree) clone() Tree {
 		b.Names = slices.Clone(a.Names)
 		b.Waiting = slices.Clone(a.Waiting)
 		b.Returned = slices.Clone(a.Returned)
+		b.Gave = slices.Clone(a.Gave)
 		c.Agents[id] = &b
 	}
 	if t.held != nil {
@@ -494,6 +496,23 @@ func (r *run) record(kind string, a AgentID, body map[string]any) {
 	r.write(RecordWrite{kind, a, body}, a)
 }
 
+// named records where a name's value comes from, for the shell, which keeps
+// every value: never the state (55, invariant 3). from is one of
+//
+//	{"from":"input"}                               the root's endowment: the tree's input
+//	{"from":"goal"|"input"|"exit"|"part", "text"}  text the model or delegate's CEL wrote
+//	{"from":"part", "contracts":[binary…]}         a packaged reach
+//	{"from":"compose", "names":[n…]}               a computation of the agent's own names
+//	{"from":"copy", "agent", "of"}                 another agent's name: passed down or returned up
+//	{"from":"result", "element"}                   what the call's element brought back
+func (r *run) named(a AgentID, n int, from map[string]any) {
+	body := map[string]any{"name": n}
+	for k, v := range from {
+		body[k] = v
+	}
+	r.record("name", a, body)
+}
+
 // live is an agent that may still take an event; anything else is recorded
 // and ignored.
 func (r *run) live(id AgentID) *Agent {
@@ -558,6 +577,7 @@ func (r *run) provision(e Started) {
 	a.Received = []Observation{o}
 	a.Scope = Receive(DirInvoke, nil, a.Received)
 	a.Names = []Named{{o, base}}
+	r.named(a.ID, 0, map[string]any{"from": "input"})
 	r.turn(a)
 }
 
@@ -816,17 +836,18 @@ func (r *run) interpret(a *Agent, call Call) string {
 			r.performEffect(a, i, in.Contract, n)
 		case Return:
 			var returned []Observation
+			var gave []int
 			for _, ref := range in.Members {
 				n, why := resolve(ref)
 				if why != "" {
 					return why
 				}
-				returned = append(returned, a.Names[n].Obs)
+				returned, gave = append(returned, a.Names[n].Obs), append(gave, n)
 			}
 			if !MayReturn(a.Created, returned) || !NodeMayReturn(a.Received, returned) {
 				return "a return of nothing, of what its model made, or of what it was passed"
 			}
-			r.finish(a, returned)
+			r.finish(a, returned, gave)
 			return ""
 		case Exit:
 			t, _ := TypeOf(r.t.App.exit, shapeText)
@@ -834,8 +855,10 @@ func (r *run) interpret(a *Agent, call Call) string {
 			if !ok {
 				return "observe refused the exit"
 			}
-			r.record("value", a.ID, map[string]any{"exit": in.Reason})
-			r.finish(a, []Observation{o})
+			base, _ := BaseOf(t, nil)
+			a.Names = append(a.Names, Named{o, base})
+			r.named(a.ID, len(a.Names)-1, map[string]any{"from": "exit", "text": in.Reason})
+			r.finish(a, []Observation{o}, []int{len(a.Names) - 1})
 			return ""
 		}
 	}
@@ -885,7 +908,11 @@ func (r *run) make(a *Agent, c Contract, text string, byModel bool) (int, string
 	a.Scope = append(a.Scope, o)
 	a.Names = append(a.Names, Named{o, base})
 	n := len(a.Names) - 1
-	r.record("value", a.ID, map[string]any{"name": n, "text": text})
+	from := "goal"
+	if c == r.t.App.createInput {
+		from = "input"
+	}
+	r.named(a.ID, n, map[string]any{"from": from, "text": text})
 	return n, ""
 }
 
@@ -923,12 +950,16 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 	// delegate's CEL, before the model's point: the parts for the child's kind.
 	var members []Named
 	for _, c := range Parts(app, k) {
-		shape, value := shapeText, any(actText)
+		shape, from := shapeText, map[string]any{"from": "part", "text": actText}
 		switch c {
 		case app.createDelegation:
-			value = delegationText
+			from["text"] = delegationText
 		case app.reach:
-			shape, value = shapeList, len(cs)
+			var bs []string
+			for _, p := range cs {
+				bs = append(bs, string(p.binary))
+			}
+			shape, from = shapeList, map[string]any{"from": "part", "contracts": bs}
 		}
 		t, _ := TypeOf(c, shape)
 		o, ok := Observe(app, KindDelegate, t, nil)
@@ -937,7 +968,10 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 		}
 		base, _ := BaseOf(t, nil)
 		members = append(members, Named{o, base})
-		r.record("value", id, map[string]any{"part": c.shape, "value": value})
+		r.named(id, len(members), from)
+	}
+	for i, n := range names {
+		r.named(id, len(members)+1+i, map[string]any{"from": "copy", "agent": string(a.ID), "of": n})
 	}
 	members = append(members, passed...)
 	var obs []Observation
@@ -957,6 +991,11 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 	child.Received = []Observation{comp}
 	child.Scope = Receive(DirInvoke, nil, append([]Observation{comp}, obs...))
 	child.Names = append([]Named{{comp, compBase}}, members...)
+	all := make([]int, len(members))
+	for i := range all {
+		all[i] = i + 1
+	}
+	r.named(id, 0, map[string]any{"from": "compose", "names": all})
 	r.turn(child)
 	return ""
 }
@@ -1006,7 +1045,7 @@ func (r *run) returned(e Returned) {
 	}
 	base, _ := CreateReturn(p.Input, e.Shape)
 	p.Done = true
-	r.arrive(a, base, []Observation{o})
+	r.arrive(a, base, []Observation{o}, []map[string]any{{"from": "result", "element": e.Element}})
 }
 
 func pendingAt(a *Agent, element int) *Pending {
@@ -1021,9 +1060,9 @@ func pendingAt(a *Agent, element int) *Pending {
 // --- up an edge ---
 
 // finish is an agent's return or exit: done, and passed up.
-func (r *run) finish(a *Agent, returned []Observation) {
+func (r *run) finish(a *Agent, returned []Observation, gave []int) {
 	a.Phase = PhaseDone
-	a.Returned = returned
+	a.Returned, a.Gave = returned, gave
 	r.record("return", a.ID, map[string]any{"members": len(returned)})
 	r.up(a)
 }
@@ -1052,19 +1091,24 @@ func (r *run) up(a *Agent) {
 	}
 	p.Scope = Receive(DirRet, p.Scope, a.Returned)
 	base, _ := CreateReturn(a.Input, wrapperShape(a.Kind))
-	r.arrive(p, base, a.Returned)
+	var from []map[string]any
+	for _, n := range a.Gave {
+		from = append(from, map[string]any{"from": "copy", "agent": string(a.ID), "of": n})
+	}
+	r.arrive(p, base, a.Returned, from)
 }
 
 // arrive names what came back under its return base type, then sees it. A
 // base type this run has not read is read first, from its guard records.
-func (r *run) arrive(a *Agent, base ReturnBase, obs []Observation) {
+func (r *run) arrive(a *Agent, base ReturnBase, obs []Observation, from []map[string]any) {
 	var names []int
-	for _, o := range obs {
+	for i, o := range obs {
 		if a.Phase == PhaseInvoking {
 			a.Scope = Receive(DirRet, a.Scope, []Observation{o})
 		}
 		a.Names = append(a.Names, Named{o, base})
 		names = append(names, len(a.Names)-1)
+		r.named(a.ID, len(a.Names)-1, from[i])
 	}
 	if slices.Contains(r.t.Store.Known(), base) {
 		r.ask(a, base, names)

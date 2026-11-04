@@ -86,6 +86,44 @@
           }
         }
       }
+    },
+    {
+      "title": "tree",
+      "type": "object",
+      "required": [
+        "tree"
+      ],
+      "fields": {
+        "tree": {
+          "type": "object",
+          "required": [
+            "actor",
+            "goal",
+            "kind",
+            "reach"
+          ],
+          "fields": {
+            "goal": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "actor": {
+              "type": "string"
+            },
+            "reach": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "depth": {
+              "type": "number"
+            }
+          }
+        }
+      }
     }
   ]
 }

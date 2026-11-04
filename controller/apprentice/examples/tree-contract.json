@@ -1,0 +1,79 @@
+{
+  "input": {
+    "title": "remember",
+    "type": "object",
+    "required": [
+      "remember"
+    ],
+    "fields": {
+      "remember": {
+        "type": "object",
+        "required": [
+          "contract",
+          "observation"
+        ],
+        "fields": {
+          "observation": {
+            "type": "string"
+          },
+          "contract": {
+            "type": "object",
+            "required": [
+              "schema",
+              "target"
+            ],
+            "fields": {
+              "target": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "any"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "contracts": [
+    {
+      "title": "tree",
+      "type": "object",
+      "required": [
+        "tree"
+      ],
+      "fields": {
+        "tree": {
+          "type": "object",
+          "required": [
+            "actor",
+            "goal",
+            "kind",
+            "reach"
+          ],
+          "fields": {
+            "goal": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "actor": {
+              "type": "string"
+            },
+            "reach": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "depth": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "continuation": true
+}

@@ -37,6 +37,9 @@ func (Provider) Configure(r *service.Run) error {
 	home, tmp := r.Paths.Home, r.Paths.Scratch
 	r.Env = []string{"PATH=" + filepath.Dir(r.Paths.Helper) + ":/usr/bin:/bin", "HOME=" + home, "TMPDIR=" + tmp, "CLAUDE_CODE_TMPDIR=" + tmp, "USER=" + user,
 		"HTTPS_PROXY=" + r.ProxyURL, "NO_PROXY=127.0.0.1,localhost", "DISABLE_AUTOUPDATER=1",
+		// The model is given only what a thread grants: no built-in subagent
+		// types, CLAUDE.md, auto memory or git instructions (56, step 5).
+		"CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1", "CLAUDE_CODE_DISABLE_CLAUDE_MDS=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1",
 		"SKYRA_CLAUDE_PROGRAM=" + r.CLI, "SKYRA_CLAUDE_BRIDGE_PORT=" + strconv.Itoa(r.Paths.BridgePort), "SKYRA_KEYCHAIN_SOCKET=" + r.Paths.Broker}
 	return nil
 }

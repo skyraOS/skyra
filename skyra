@@ -38,6 +38,8 @@ usage: skyra [command]
                 its log on stdout, SKYRA_WS_TOKEN generated unless supplied
   ask "TEXT"    one question to real Codex through the controller; prints the lineage,
                 the replay check and the answer
+  tree KIND "GOAL" [TARGET...]
+                one tree on real Claude: the apprentice runs it, Claude runs every turn
   desktop       choose a window, then chat with read-only vision (macOS)
   desktop --list  list windows for scripted selection
   desktop --app ID --pid PID --window-id ID chat
@@ -385,6 +387,32 @@ ask() {
   say "state: $run"
 }
 
+# tree KIND "GOAL" [TARGET...]: one tree (next/56) on real Claude. The
+# apprentice runs the tree; Claude runs every node's turn, granted only its
+# kind's instructions; the root holds the targets named (echo by default).
+tree() {
+  [ $# -ge 2 ] || die 'usage: skyra tree act|delegate "GOAL" [TARGET...]'
+  local kind=$1 goal=$2; shift 2
+  [ $# -gt 0 ] || set -- echo
+  say "building"
+  controller_build
+  local reg run scratch payload
+  scratch=$(write_space)
+  trap 'stop_ideas_host; stop_service_host' INT TERM EXIT
+  start_ideas_host
+  service_socket
+  reg=$(registry real "$STATE/park.sock" 1)
+  start_service_host "$reg"
+  mkdir -p "$STATE/runs"
+  run=$STATE/runs/tree-$(date +%Y%m%d-%H%M%S)-$$/.skyra
+  mkdir -p "$run"
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tree":{"goal":sys.argv[2],"kind":sys.argv[1],"actor":"claude","reach":sys.argv[3:]}}))' "$kind" "$goal" "$@")
+  "$BUILD/controller/skyra" boot -root "$run" -registry "$reg" -scratch "$scratch" -to apprentice -payload "$payload"
+  say "state: $run"
+  # What each node is, what Claude was sent, and what it loaded: one to one.
+  python3 "$ROOT/controller/apprentice/shell/check/received.py" "$run"
+}
+
 # chat [--fake]: the browser UI on the stateless controller. The webhost holds
 # every conversation waiting on you; each conversation is saved as its lineage
 # under ~/.skyra/conversations (or conversations-fake).
@@ -660,6 +688,7 @@ case ${1:-} in
   app)           app ;;
   replay)        [ $# -eq 2 ] || die "usage: skyra replay DIR"; controller_build; exec "$BUILD/controller/skyra" replay "$2" ;;
   ask)           shift; ask "$@" ;;
+  tree)          shift; tree "$@" ;;
   stop)          stop_host ;;
   demo)          exec "$ROOT/controller/run.sh" ;;
   test)          exec "$ROOT/scripts/check.sh" ;;

@@ -753,7 +753,7 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
    verifying the store and history, and the write-once commits; done.
 5. **The interim shell**: the apprentice's loop for the effects in the
    process; instructions to today's kernel for the rest; replay on every
-   resume.
+   resume. Done.
 6. **52's shell**, once `skyra-spawn` exists: `instruction/1`, `result/1` and
    `record/1` on fd 3; the tree held in memory; replay only for recovery.
 
@@ -768,8 +768,15 @@ to 13 are settled.
 
 Step 4, `Step`, is done: 4a, the tree, and 4b, the records, in `step.go`,
 with `step_test.go` driving trees by events alone through a fake shell that
-answers every read and commit from its own records. Step 5, the interim
-shell, is next.
+answers every read and commit from its own records.
+
+Step 5, the interim shell, is done: `controller/apprentice/shell`, the
+apprentice's `tree` contract. A tree runs through today's kernel end to end
+(`run.sh`, a delegate root and an act root, their model scripted by
+`targets/treemodel`), and on real Claude (`skyra tree act|delegate "GOAL"
+[TARGET...]`), each node's turn a Claude session that loads only its kind's
+instructions; the kernel's replay of each is byte-identical. Step 6, 52's
+shell, waits on `skyra-spawn`.
 
 ### Step 4a, as built
 
@@ -853,6 +860,105 @@ Open, from 4b:
 16. **Replay** (check 6): rebuilding a tree from recorded events. 4b reads
     the store and history; it does not read events back. That is the
     interim shell's (step 5).
+
+### Step 5, as built
+
+Made to get a tree running; each is to revisit after the experiment.
+
+- **The `tree` contract** of the apprentice: `{"tree": {"goal", "kind",
+  "actor", "reach", "depth"?}}`. The root's kind is given; `actor` is the
+  target that runs every turn, the root's included; `reach` the targets the
+  root holds, every contract of each. All must be in the frame's reach.
+- **One resume** replays the frame's log through `Step`, every event it was
+  ever handed, the answers to its reads and commits included, so the tree
+  is the same on every resume (check 6, open item 16). It then hands `Step`
+  what the kernel delivered for each instruction of the last round, answers
+  every read and commit from the apprentice's state, logging each, and
+  emits every action it decided as one round. The frame's log is written
+  before the emission.
+- **A turn** is an instruction to the actor, `{"text": <prompt>, "fresh":
+  true, "tools": [], "instructions": [...]}`: granted no target, and loaded
+  with its kind's instructions as the tools of its thread, what `loaded`
+  gives (55): `create_input`, `perform_effect`, `return` and `exit` for an
+  act node; `goal`, `delegate`, `return` and `exit` for a delegate node.
+  The kind is what the offer loads, never what it holds. Each one's input
+  is the instruction itself, `{<name>: v}`. The resident never dispatches
+  an instruction: it acknowledges each call with its position in the turn,
+  which a later call refers to as `{"earlier": k}`, and returns the calls,
+  in order, as `calls`. The tool called decides the instruction; `Step`
+  interprets the call as before, and faults what the node's offer does not
+  allow. An actor that writes its instructions as text instead (the
+  scripted model) is still read. The prompt shows the node's kind, its names by number with their
+  values and where each came from, the contracts it may invoke or pass, and
+  the instructions its kind may write. A turn that faults is `Stopped`.
+- **A dispatch** is an instruction to the contract's target, with the input
+  name's value as its payload; text that parses as JSON is sent as that
+  JSON, when the contract does not take a string. What comes back has the
+  shape `types.Shape` gives its value; a fault is `Returned` with its error.
+- **Values** never enter the tree (55, invariant 3). `Step` records where
+  each name's value comes from (a `name` record: the endowment, text a
+  model or delegate's CEL wrote, a packaged reach, a computation of the
+  agent's own names, a copy of another agent's name, or what an element
+  brought back), and the shell keeps the values by those records.
+- **Identity**: a target's binary is `sha256:` of `skyra/target/v1|<name>`,
+  since the envelope names targets, never hashes; its shape the contract's
+  canonical bytes. One binary under two names is two, so the self check is
+  only as strong as the names. The kernel should give each target's pinned
+  hash in the envelope.
+- **What a node is, what Claude is sent, and what it loads are one to
+  one**, tested at each edge: `TestATurnIsItsNode` (a turn's payload is its
+  node: its kind's instructions, its names with their values, what it
+  holds, no target), the resident's `TestInstructionsAreTheReply` (the
+  payload is the session's configuration), and, live, `skyra tree`, which
+  checks after every tree that each Claude session's `init` loaded exactly
+  its node's instructions, through the one bridge, with no skills
+  (`shell/check/received.py`). A tree turn's system prompt is the base
+  line alone. The provider also runs Claude with `--disable-slash-commands`,
+  and with `CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS`,
+  `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and
+  `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` set, so its `init` lists no skills
+  and no subagent types; the live check requires both empty. A request
+  captured at the wire confirmed the model is sent no tools but the
+  node's. Three things it is still sent that are not the node, with no
+  documented way off: two fixed system lines (a billing header, and "You
+  are a Claude agent, built on Anthropic's Claude Agent SDK."), the
+  account's email in a system reminder on the user turn, and an
+  environment block (working directory, platform, shell, OS, model and
+  date). `--bare` drops them only with an API key, never the keychain
+  login. Open item 17.
+- **The CEL guard**: only the default is ever written (open item 15); it
+  holds. A written guard never holds until CEL runs here.
+- **The state**, under the apprentice's `SKYRA_STATE/tree`: `history.json`,
+  `chains/`, `guards/` (write-once, `O_EXCL`), `frames/` and `records/`.
+  A resume holds the state exclusively (`flock`), so no two frames
+  interleave their reads and writes; a resume never waits on a model.
+  An input is appended to the history once: one another run appended since
+  this one read the history is `Identical`. A run's `do` is against the
+  history as it read it, at its start.
+- **What a harness gets is what it is granted**, and the grant is in the
+  thread. The Claude resident offers only the tools its input's `tools`
+  names, each by its target or its name and only where it is in reach; a
+  thread granted nothing is offered nothing, whatever its reach. (Its
+  native tools were already stripped: `--tools ""`, no MCP servers, no
+  hooks.) The bridge is built per session from that list, so the grant is
+  per thread. A turn is granted nothing: its instructions are its reply,
+  and every effect is a `perform_effect`, typed by the tree, so nothing a
+  model learns comes from nowhere. The old `delegate` passes the tools it
+  names into its child's thread; a delegate that names none now grants its
+  child none, where it used to inherit.
+
+Open, from 5:
+
+17. **What Claude is sent that is not the node**: the account email and the
+    environment block (see "Step 5, as built"). Rewriting the request was
+    tried and removed: a loopback proxy in `claude-start` that stripped the
+    environment block and the email, then the email alone. Four live trees
+    sent as Claude Code writes them had no refusals; three of four
+    rewritten ones were refused by the provider's usage-policy classifier
+    (category `cyber`), and Claude Code fell back to another model, whose
+    calls faulted two of them. A subscription request is not ours to
+    rewrite. The way off that remains is an API key with `--bare`, which
+    sends only what it is given. Open.
 
 ## Open
 

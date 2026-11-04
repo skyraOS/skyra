@@ -89,6 +89,9 @@ func runDelegate(store proc.Store, e envelope) ([]byte, error) {
 	// fresh: a one-shot session that loads and keeps nothing of the
 	// caller's, and is stopped before the child returns.
 	child := map[string]any{"text": ask.Delegate.Goal, "header": "delegate", "fresh": true}
+	if ask.Delegate.Tools != nil {
+		child["tools"] = *ask.Delegate.Tools // the child's grant, in its thread
+	}
 	if ask.Delegate.Model != "" {
 		child["model"] = ask.Delegate.Model
 	}

@@ -11,6 +11,7 @@ go build -o bin/codex ./codex/adapter
 go build -o bin/host ./hosts/actor
 go build -o bin/fake-codex ./codex/fake
 go build -o bin/read ./targets/read
+go build -o bin/treemodel ./targets/treemodel
 # The apprentice is its own module (next/32): the controller stays standard-library Go.
 (cd apprentice && go build -o ../bin/apprentice .)
 
@@ -82,6 +83,26 @@ echo
 echo "══ apprentice: a hand-installed procedure fans out through the kernel ══"
 ./bin/apprentice install "$root/apprentice" apprentice/examples/greet.json
 run_boot return -root "$root" -registry bin/registry.json -to apprentice -payload '{"names":["ada","bo"],"greeting":"hi"}'
+# One tool trees (next/56, step 5): the apprentice runs a tree's Step, one resume at a time, through
+# the kernel. A scripted model (targets/treemodel) runs every turn; a delegate root delegates to an
+# act child, which makes an input and invokes echo; what echo brought back is the tree's return.
+cat > bin/tree-registry.json <<JSON
+{
+  "echo":       {"path": "echo",       "contract": "../targets/echo/contract.json"},
+  "treemodel":  {"path": "treemodel",  "contract": "../targets/treemodel/contract.json"},
+  "apprentice": {"path": "apprentice", "contract": "../apprentice/examples/tree-contract.json", "state": true}
+}
+JSON
+for kind in delegate act; do
+  root=$(cd "$(mktemp -d)" && pwd -P)/.skyra
+  echo
+  echo "══ tree: a $kind root, its model scripted ══"
+  output=$(./bin/skyra boot -root "$root" -registry bin/tree-registry.json -to apprentice \
+    -payload "{\"tree\":{\"goal\":\"say hello\",\"kind\":\"$kind\",\"actor\":\"treemodel\",\"reach\":[\"echo\"]}}")
+  printf '%s\n' "$output" | tail -2
+  printf '%s\n' "$output" | grep -Eq '^replay: [0-9]+ records .*byte-identical$'
+  printf '%s\n' "$output" | grep -Fqx 'answer: {"returned":["hello"]}'
+done
 # The thesis demo (P9; next/32, H6, H8): a worker remembers the agent's trace, then calls the
 # procedure it became: no model step, no approval. From a Boundary without echo it faults at intake;
 # the same contract is not remembered twice; an actor cannot extend itself with what it holds.

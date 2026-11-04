@@ -36,9 +36,25 @@ type continuation struct {
 		Text, Header, Conversation, Session, Model string
 		Fresh                                      bool
 		Context                                    json.RawMessage
+		Tools                                      []string      // the grant: the only tools this thread is offered
+		Instructions                               []instruction // tools whose calls are this turn's reply, never dispatched
 	} `json:"input"`
 	Reach proceduretools.Reach `json:"reach"`
 	Steps []step               `json:"steps"`
+}
+
+// instruction is a tool the thread is granted whose calls are not
+// dispatched: each is acknowledged with its position, and the turn returns
+// them, in order, as its reply (56: delegate and act nodes write their
+// instructions this way).
+type instruction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Schema      json.RawMessage `json:"schema"`
+}
+
+func (c continuation) instruction(name string) bool {
+	return slices.ContainsFunc(c.Input.Instructions, func(i instruction) bool { return i.Name == name })
 }
 
 type step struct {
@@ -229,11 +245,21 @@ func decide(c continuation) (string, error) {
 		if !c.Input.Fresh {
 			saveSession(d.Session)
 		}
-		return emit(c.Frame, map[string]any{
+		out := map[string]any{
 			"text":        d.FinalText,
 			"session":     d.Session,
 			"activity_at": d.ActivityAt,
-		}), nil
+		}
+		if len(c.Input.Instructions) > 0 {
+			calls := []map[string]json.RawMessage{}
+			for _, call := range d.Calls {
+				if c.instruction(call.Name) {
+					calls = append(calls, map[string]json.RawMessage{"name": json.RawMessage(quoted(call.Name)), "args": call.Args})
+				}
+			}
+			out["calls"] = calls
+		}
+		return emit(c.Frame, out), nil
 	}
 
 	if d.Incarnation == "" {
@@ -246,8 +272,19 @@ func decide(c continuation) (string, error) {
 		return ioCall(d.Incarnation, []string{string(b)}, d.Partial), nil
 	}
 
-	// Dispatch pending bridge calls.
-	for i, call := range d.Calls {
+	// Dispatch pending bridge calls. An instruction is acknowledged, never
+	// dispatched, so only the others have results among the steps.
+	i, k := -1, 0
+	for _, call := range d.Calls {
+		if c.instruction(call.Name) {
+			if !d.Answered[call.ID] {
+				br, _ := json.Marshal(map[string]any{"_bridge": "result", "id": call.ID, "value": acknowledged(k, call.Name)})
+				return ioCall(d.Incarnation, []string{string(br)}, d.Partial), nil
+			}
+			k++
+			continue
+		}
+		i++
 		if d.Answered[call.ID] {
 			continue
 		}
@@ -348,6 +385,22 @@ func processLine(line string, d *derived) {
 	}
 }
 
+// acknowledged is what an instruction's call returns to the model: where
+// it is in this turn's call, so a later one refers to it.
+func acknowledged(k int, name string) json.RawMessage {
+	text := fmt.Sprintf("Recorded as instruction %d of this turn; a later instruction refers to it as {\"earlier\": %d}. It runs when your turn ends.", k, k)
+	if name == "return" || name == "exit" {
+		text = fmt.Sprintf("Recorded as instruction %d. End your turn now.", k)
+	}
+	b, _ := json.Marshal(text)
+	return b
+}
+
+func quoted(s string) []byte {
+	b, _ := json.Marshal(s)
+	return b
+}
+
 // toolText extracts the text result from a tool step's Value. If the value
 // is a bare string, it is used directly; otherwise it is the JSON encoding.
 func toolText(s step) json.RawMessage {
@@ -360,8 +413,18 @@ func toolText(s step) json.RawMessage {
 }
 
 // turnConfig builds the configuration the wrapper reads from stdin.
-// tools shares procedure discovery and contract dispatch with Codex.
+// tools is what this thread was granted, and nothing else: the input's
+// tools, each by its target or its name, and only where it is in reach. A
+// thread granted nothing is offered nothing. Discovery and dispatch are
+// shared with Codex.
 func tools(c continuation) []proceduretools.Tool {
+	return slices.DeleteFunc(reachable(c), func(t proceduretools.Tool) bool {
+		return !slices.Contains(c.Input.Tools, t.Target) && !slices.Contains(c.Input.Tools, t.Name)
+	})
+}
+
+// reachable is every tool the thread's reach could stand for.
+func reachable(c continuation) []proceduretools.Tool {
 	var ts []proceduretools.Tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
 		if c.Reach.First(name) != nil {
@@ -402,9 +465,18 @@ func turnConfig(c continuation) map[string]any {
 		b, _ := json.Marshal(proceduretools.JSONSchema(t.Schema))
 		ts = append(ts, bridge.Tool{Name: t.Name, Description: t.Description, InputSchema: b})
 	}
+	for _, in := range c.Input.Instructions {
+		ts = append(ts, bridge.Tool{Name: in.Name, Description: in.Description, InputSchema: in.Schema})
+	}
 	cfg := map[string]any{
 		"prompt": c.Input.Text, "frame": c.Frame, "tools": ts, "model": resolvedModel(c),
 		"system_prompt": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, proceduretools.HoldsAny(c.Reach, "repo.write")),
+	}
+	if len(c.Input.Instructions) > 0 {
+		// A tree's turn: the node is the whole of what the model is given.
+		// The base line stands in for the provider's own system prompt,
+		// and nothing about a workspace or tools it does not hold is added.
+		cfg["system_prompt"] = prompt.Base(c.Input.Header)
 	}
 	if !c.Input.Fresh && c.Input.Session != "" {
 		cfg["session"] = c.Input.Session
