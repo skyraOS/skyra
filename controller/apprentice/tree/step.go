@@ -26,6 +26,10 @@ import (
 // fan-out.
 const MaxFanOut = 32
 
+// MaxTurns is the most turns one agent may take, as the depth bound bounds
+// a tree's depth: past it the agent faults (56, open item 18).
+const MaxTurns = 8
+
 // The output shapes of what the apprentice's own contracts make: text, or a
 // list (the packaged reach and the delegate computation). baseOf keeps them
 // apart by contract, so they need not differ.
@@ -121,7 +125,19 @@ type Agent struct {
 	Phase    Phase
 	Returned []Observation // when done: what it returned, or its exit
 	Gave     []int         // the names of what it returned
+	Turns    int           // the turns it has taken
+	Why      string        // when faulted: why
+	Lost     []ChildFault  // its children that faulted: its state, never a name
 	children int
+}
+
+// A ChildFault is a child that faulted, and why. A parent's model is shown
+// it as the node's state (56, open item 20): it is not an observation,
+// nothing made it through a contract, so it is never named, passed or
+// returned.
+type ChildFault struct {
+	Child AgentID
+	Why   string
 }
 
 // A Named is an observation the model may refer to, and the return base
@@ -175,6 +191,7 @@ func (t Tree) clone() Tree {
 		b.Waiting = slices.Clone(a.Waiting)
 		b.Returned = slices.Clone(a.Returned)
 		b.Gave = slices.Clone(a.Gave)
+		b.Lost = slices.Clone(a.Lost)
 		c.Agents[id] = &b
 	}
 	if t.held != nil {
@@ -367,7 +384,8 @@ type Turn struct {
 	Binary    Binary
 	Authority string // the agent's grant: the shell's
 	Offer     Offer
-	Names     []int // in scope; the shell renders their values
+	Names     []int        // in scope; the shell renders their values
+	Faults    []ChildFault // its children that faulted, as its state
 }
 
 // InvokeContract is an act node's perform_effect; what comes back is
@@ -602,13 +620,18 @@ func seenWord(s Seen) string {
 }
 
 func (r *run) turn(a *Agent) {
+	if a.Turns >= MaxTurns {
+		r.fault(a, "the turn bound")
+		return
+	}
+	a.Turns++
 	a.Phase = PhaseThinking
 	a.Waiting = nil
 	names := make([]int, len(a.Names))
 	for i := range names {
 		names[i] = i
 	}
-	r.acts = append(r.acts, Turn{Agent: a.ID, Binary: a.Self.binary, Offer: a.Offer, Names: names})
+	r.acts = append(r.acts, Turn{Agent: a.ID, Binary: a.Self.binary, Offer: a.Offer, Names: names, Faults: slices.Clone(a.Lost)})
 }
 
 // --- faults ---
@@ -617,6 +640,7 @@ func (r *run) turn(a *Agent) {
 func (r *run) fault(a *Agent, why string) {
 	a.Phase = PhaseFaulted
 	a.Waiting = nil
+	a.Why = why
 	r.record("fault", a.ID, map[string]any{"why": why})
 	r.up(a)
 }
@@ -1086,6 +1110,7 @@ func (r *run) up(a *Agent) {
 	}
 	w.Done = true
 	if a.Phase == PhaseFaulted {
+		p.Lost = append(p.Lost, ChildFault{a.ID, a.Why})
 		r.ready(p)
 		return
 	}

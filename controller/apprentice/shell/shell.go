@@ -784,7 +784,7 @@ func instructions(act bool) []map[string]any {
 	} else {
 		out = append(out,
 			one("goal", "Write a goal for a child.", text),
-			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you wrote with goal, as {\"earlier\": k}, or a goal you were given. What it returns is a new name when you are asked again.",
+			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you wrote with goal, as {\"earlier\": k}, or a goal you were given. Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again. What it returns is a new name when you are asked again.",
 				obj(map[string]any{"observations": refs, "contracts": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0}}}, "observations", "contracts")))
 	}
 	return append(out,
@@ -819,6 +819,12 @@ func (s *shell) prompt(t tree.Turn) string {
 	if act {
 		held, verb = t.Offer.Invoke, "you may invoke"
 	}
+	if len(t.Faults) > 0 {
+		b.WriteString("\nChildren of yours that faulted, and gave you nothing:\n")
+		for _, f := range t.Faults {
+			fmt.Fprintf(&b, "  - node %s: %s\n", f.Child, f.Why)
+		}
+	}
 	fmt.Fprintf(&b, "\nThe contracts %s, by number:\n", verb)
 	for i, c := range held {
 		tg := s.targets[c]
@@ -839,7 +845,9 @@ func (s *shell) prompt(t tree.Turn) string {
 		b.WriteString("\nWhat you invoke comes back as a new name, then you are asked again. Return what came back.\n")
 	} else {
 		b.WriteString("\nWhat a child returns comes back as a new name, then you are asked again. Return what came back.\n")
+		b.WriteString("Only an act node invokes a contract: to have one invoked, delegate a goal with exactly that one contract.\n")
 	}
+	fmt.Fprintf(&b, "You have %d turns at most; this is turn %d.\n", tree.MaxTurns, s.tree.Agents[t.Agent].Turns)
 	return b.String()
 }
 

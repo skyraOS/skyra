@@ -104,6 +104,18 @@ New implementation proposals:
   shell on today's kernel answers the same effects until 52 exists, with
   replay on every resume. Draft (2026-11-03).
 
+  **For trees with one target, the machine is proved** (2026-11-04): steps
+  1 to 5 are built, and on real Claude (`skyra tree`) act and delegate
+  trees return what came back, every node's Claude session loads exactly
+  its node's instructions, checked live after every tree, and the kernel's
+  replay of every run is byte-identical. With 56's items 18 to 20 settled
+  (a bound on a node's turns, the kind rule in the delegate prompt, a
+  child's fault shown to its parent as state), trees with more than one
+  target run too: a delegate root holding `find` and `read` delegated
+  each, alone, to an act child and composed their returns. Remember is not
+  in the experiment yet: every return keeps its default guard (open items
+  14 and 15).
+
 ## The design in one paragraph
 
 Authority is derived from state plus proposal at every step. A Boundary is an

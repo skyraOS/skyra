@@ -30,7 +30,7 @@ func model(prompt string) string {
 			return `[{"return":{"members":[` + m[1] + `]}}]`
 		}
 	}
-	if strings.Contains(prompt, "an act node") {
+	if strings.Contains(prompt, "of a tree, an act node") {
 		return "Here:\n```json\n" + `[{"create_input":"{\"text\":\"hello\"}"},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]` + "\n```"
 	}
 	return `[{"goal":"say hello through echo"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
@@ -342,6 +342,14 @@ func TestATurnIsItsNode(t *testing.T) {
 			if !strings.Contains(p.Text, fmt.Sprintf("  %d: %s (%s)\n", n, v, s.values[node.ID][n].From)) {
 				t.Errorf("node %s: name %d (%s) not shown as it is", node.ID, n, v)
 			}
+		}
+		for _, f := range node.Lost {
+			if !strings.Contains(p.Text, fmt.Sprintf("  - node %s: %s\n", f.Child, f.Why)) {
+				t.Errorf("node %s: its child %s's fault is not shown", node.ID, f.Child)
+			}
+		}
+		if len(node.Lost) == 0 && strings.Contains(p.Text, "faulted, and gave you nothing") {
+			t.Errorf("node %s: faults shown that it does not have", node.ID)
 		}
 		for i, c := range held {
 			if !strings.Contains(p.Text, fmt.Sprintf("  %d: %s, input %s\n", i, s.targets[c].name, c.Shape())) {

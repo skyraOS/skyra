@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 	out := `[{"goal":"say hello through echo"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
-	if strings.Contains(in.Text, "an act node") {
+	if strings.Contains(in.Text, "of a tree, an act node") {
 		out = `[{"create_input":"{\"text\":\"hello\"}"},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]`
 	}
 	for _, m := range line.FindAllStringSubmatch(in.Text, -1) {

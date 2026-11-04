@@ -636,3 +636,44 @@ func TestStepReplays(t *testing.T) {
 		t.Fatal("the same events gave a different tree or different effects")
 	}
 }
+
+// An agent takes at most MaxTurns turns: past it, it faults, and its
+// parent goes on.
+func TestStepTurnBound(t *testing.T) {
+	sh := newShell(t)
+	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
+	for i := 1; i < MaxTurns; i++ {
+		tr, _ = sh.reply(tr, "0", `[{"goal":"g"}]`) // a goal alone: the model goes on
+		if a := agent(t, tr, "0"); a.Phase != PhaseThinking || a.Turns != i+1 {
+			t.Fatalf("turn %d: %v after %d turns", i, a.Phase, a.Turns)
+		}
+	}
+	tr, es := sh.reply(tr, "0", `[{"goal":"g"}]`)
+	if a := agent(t, tr, "0"); a.Phase != PhaseFaulted || a.Why != "the turn bound" || len(turns(es)) != 0 {
+		t.Fatalf("past the bound: %v %q", a.Phase, a.Why)
+	}
+}
+
+// A child's fault is its parent's state: shown on the parent's next turn,
+// and never a name.
+func TestStepChildFaultIsState(t *testing.T) {
+	sh := newShell(t)
+	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
+	tr, _ = sh.step(tr, aTree[0])
+	before := len(agent(t, tr, "0").Names)
+	tr, es := sh.step(tr, Stopped{Agent: "0.0", Reason: "crash"})
+	tn := turnFor(t, es, "0")
+	if len(tn.Faults) != 1 || tn.Faults[0].Child != "0.0" || tn.Faults[0].Why != "stopped: crash" {
+		t.Fatalf("the parent's turn: %+v", tn.Faults)
+	}
+	if len(agent(t, tr, "0").Names) != before || len(tn.Names) != before {
+		t.Fatal("a fault became a name")
+	}
+	// A child refused at provisioning is shown the same way.
+	sh = newShell(t)
+	tr, _ = sh.step(NewTree(app, 0), Started{Self: self, Reach: []Contract{x}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
+	_, es = sh.reply(tr, "0", `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
+	if f := turnFor(t, es, "0").Faults; len(f) != 1 || f[0].Why != "the depth bound" {
+		t.Fatalf("a refused child: %+v", f)
+	}
+}
