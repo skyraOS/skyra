@@ -1126,7 +1126,9 @@ one call, the act node may make the input and dispatch it:
 
 The dispatch crosses an edge, so `create_invoke` mints its input base type
 from the contract and the return base type of the observation
-dispatched: two dispatches of different inputs are two input base types. The
+dispatched. Values never enter a type (invariant 3): two inputs of
+different text through `create_input` are one input base type, and what
+tells them apart is CEL's, over the value. The
 type of what comes back is never declared: it is learned, on the way back,
 where `create_return` mints its return base type. The act node returns what
 came back; what it made through `create_input` it may dispatch but never

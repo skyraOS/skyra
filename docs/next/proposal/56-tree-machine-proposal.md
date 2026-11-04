@@ -746,7 +746,11 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
    vector replay, one property test per invariant, the purity test, and the
    hashes, pinned by known answers. Done.
 4. **`Step`**: the state, the phases, the events and effects above, with
-   tests that drive a tree by events alone.
+   tests that drive a tree by events alone. In two slices: **4a, the tree**
+   (provisioning, turns, the reply's interpretation, `observe`, the act
+   transformation, children and their returns, `perform_effect`, faults),
+   the store and history in memory; done. **4b, the records**: reading and
+   verifying the store and history, and the write-once commits.
 5. **The interim shell**: the apprentice's loop for the effects in the
    process; instructions to today's kernel for the rest; replay on every
    resume.
@@ -759,15 +763,59 @@ Stop for review after each step.
 
 Steps 1 to 3 are done and pushed on `one-tool-trees`: 55's Lean is
 `Core.lean`, with its vectors and CI; the decision layer and the hashes are
-in `controller/apprentice/tree`, checked against every vector. Step 4,
-`Step`, no longer waits on open items 8 to 13: all six are settled. It waits
-on nothing: every call to a contract of the apprentice is an edge, so every
-observation has a return base type (`baseOf`), and an input base type is
-minted from the contract, not its binary (item 9). Step 4 is next. Items 6 and 7 are
-settled, and since then the kinds: there is no effect node, a delegate
-passes at least one contract, the root's kind is given, and the act
-transformation describes an act child by `create_act`; an act node holds
-`perform_effect` and `create_input`, and dispatches only observations. All in `Core.lean`, the vectors and the Go.
+in `controller/apprentice/tree`, checked against every vector. Open items 1
+to 13 are settled.
+
+Step 4a, the tree, is done: `step.go`, with `step_test.go` driving trees by
+events alone. Step 4b, the records, is next.
+
+### Step 4a, as built
+
+What 4a decided, beyond the open items:
+
+- **The apprentice's output shapes.** `goal`, `create_input`,
+  `create_delegation`, `create_act` and `exit` make `{"type":"string"}`;
+  `package_reach` and the `delegate` computation `{"type":"array"}`. `baseOf`
+  keeps them apart by contract.
+- **`wrapper<T>`** is, per kind,
+  `{"properties":{"<kind>":{"type":"array"}},"required":["<kind>"],"type":"object"}`;
+  a child's return comes back under `CreateReturn(its input base type, that
+  shape)`.
+- **A child's input base type** is `CreateInvoke(the actor, [baseOf(the
+  delegate computation, the members' base types)])`; the members are the
+  description, the packaged reach for a delegate child, and the
+  observations passed, a goal among them. A `Delegate` that passes no goal
+  is a fault.
+- **A child's scope** is the computation and its members, named 0 (the
+  computation), then the members in order, so an act child can dispatch its
+  goal. What it was passed is the computation alone, so `nodeMayReturn`
+  keeps every member from being returned.
+- **A call is all or nothing.** A fault anywhere in a call undoes what the
+  call did; only the fault is recorded.
+- **A refused child is the child's fault, never its parent's**: nothing
+  passed, the actor in its own reach, or past the depth bound. Its parent
+  takes nothing from it and goes on.
+- **Effects come in order**: a `Commit` of records, an `Execute` of every
+  action the event decided, then at most one `Read`, last, since what
+  follows waits on its answer. While a read is in flight every other event
+  is recorded and ignored.
+- **Guards, with remember off.** An unseen return base type registers the
+  default guard and is recorded as a fallback; a seen one asks its guard
+  (`CELKey`, empty CEL for the default), and the answer is recorded. The
+  model always goes on.
+- **`Started`** carries the root's contract, reach and kind, the actor, and
+  the endowment's output shape; `Execute` carries `Acts []Action`.
+- **The wire format** adds `{"return":{"members":[…]}}` and
+  `{"exit":"…"}`. Unknown fields, a second key and a negative name are
+  faults.
+
+Open, from 4a:
+
+14. **The invoke guard.** `InvokeOf` takes a guard, but the store holds
+    guards by return base type only, and nothing holds one by input base
+    type. With remember off it is never consulted: `do`'s answer is
+    recorded, and the model always runs. Where an invoke guard lives is open
+    until remember is on.
 
 ## Open
 
