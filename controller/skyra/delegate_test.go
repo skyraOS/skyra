@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), ".skyra")
 			request, _ := json.Marshal(tc.request)
-			payload, _ := json.Marshal(map[string]any{"text": "delegate:" + string(request), "context": []map[string]string{{"role": "user", "text": "PARENT SECRET HISTORY"}}})
+			payload, _ := json.Marshal(map[string]any{"tools": []string{"delegate", "echo", "read"}, "text": "delegate:" + string(request), "context": []map[string]string{{"role": "user", "text": "PARENT SECRET HISTORY"}}})
 			runCtx, runCancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer runCancel()
 			cmd := exec.CommandContext(runCtx, filepath.Join(dir, "skyra"), "boot", "-root", root, "-registry", reg, "-to", tc.rootActor, "-payload", string(payload))
@@ -132,8 +133,30 @@ func TestDelegateThroughRealRuntime(t *testing.T) {
 					continue
 				}
 				children++
-				if len(input) > 4 || input["text"] == nil || string(input["fresh"]) != "true" {
-					t.Fatalf("child received extra context: %s", r.Payload)
+				// Grant metadata is allowed; parent history and provider
+				// session identifiers must never cross the child boundary.
+				for field := range input {
+					switch field {
+					case "text", "header", "fresh", "model", "tools":
+					default:
+						t.Fatalf("child received extra context (%s): %s", field, r.Payload)
+					}
+				}
+				if input["text"] == nil || string(input["fresh"]) != "true" || input["tools"] == nil {
+					t.Fatalf("child missing task, isolation or tool grant: %s", r.Payload)
+				}
+				var granted []string
+				if err := json.Unmarshal(input["tools"], &granted); err != nil {
+					t.Fatal(err)
+				}
+				expectedTools := []string{"delegate", "echo", "read"}
+				if requested, explicit := tc.request["tools"].([]string); explicit {
+					expectedTools = slices.Clone(requested)
+				}
+				slices.Sort(granted)
+				slices.Sort(expectedTools)
+				if !slices.Equal(granted, expectedTools) {
+					t.Fatalf("child grant %v, want %v", granted, expectedTools)
 				}
 				expectedModel := "fake-codex"
 				if tc.rootActor == "claude" {

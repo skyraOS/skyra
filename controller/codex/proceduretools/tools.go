@@ -182,6 +182,15 @@ func Payload(kind string, args json.RawMessage, calls []Call, reach Reach, calle
 		}
 		delete(a.Delegate, "model")
 		delete(a.Delegate, "contracts")
+		// An omitted grant inherits the caller's offered tools, never its
+		// ambient reach. Materialize it so every provider sees the same grant.
+		if _, explicit := a.Delegate["tools"]; !explicit {
+			inherited := make([]string, 0, len(caller.Tools))
+			for _, tool := range caller.Tools {
+				inherited = append(inherited, tool.Name)
+			}
+			a.Delegate["tools"], _ = json.Marshal(inherited)
+		}
 		var names *[]string
 		if json.Unmarshal(a.Delegate["tools"], &names) == nil && names != nil {
 			if kept, ok := Kept(caller.Tools, *names); ok {

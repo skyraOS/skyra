@@ -7,6 +7,7 @@ package tree
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -28,10 +29,38 @@ func newShell(t *testing.T) *shell {
 	return &shell{t: t, chains: map[ReturnBase][]json.RawMessage{}, guards: map[RefinementID][]byte{}, holds: true}
 }
 
+// digested plays the shell's digests where a test left them out: the
+// endowment, what came back by its agent and element, and each instruction
+// of a reply by its own text, so no two values are one by accident.
+func digested(e Event) Event {
+	switch x := e.(type) {
+	case Started:
+		if x.Seen == "" {
+			x.Seen = "endowment"
+		}
+		return x
+	case Returned:
+		if x.Seen == "" && x.Err == "" {
+			x.Seen = fmt.Sprintf("came back %s/%d", x.Agent, x.Element)
+		}
+		return x
+	case Replied:
+		var call []json.RawMessage
+		if x.Seen == nil && json.Unmarshal(x.Out, &call) == nil {
+			for _, ins := range call {
+				x.Seen = append(x.Seen, string(ins))
+			}
+		}
+		return x
+	}
+	return e
+}
+
 // step is one event, and every read and commit it leads to, answered. It
 // returns every effect Step asked for; the last is an Execute, or nothing.
 func (s *shell) step(tr Tree, e Event) (Tree, []Effect) {
 	s.t.Helper()
+	e = digested(e)
 	var all []Effect
 	for {
 		kept := tr.clone()
@@ -502,7 +531,7 @@ func TestStepAwaiting(t *testing.T) {
 		tr, _ = sh.reply(tr, c, `[{"perform_effect":{"contract":0,"input":2}}]`)
 	}
 	tr, _ = sh.step(tr, Returned{Agent: "0.0", Element: 0, Shape: shapeA})
-	tr, es = Step(tr, Returned{Agent: "0.1", Element: 0, Shape: shapeA})
+	tr, es = Step(tr, digested(Returned{Agent: "0.1", Element: 0, Shape: shapeA}))
 	if k := cels(es); len(k) != 1 || k[0].CEL != "" || !tr.Awaiting() {
 		t.Fatalf("a seen base type asks its default guard: %+v", es)
 	}
@@ -568,7 +597,7 @@ func TestStepVerifiesWhatItReads(t *testing.T) {
 	for _, e := range aTree[:2] {
 		tr, _ = sh.step(tr, e)
 	}
-	tr, _ = Step(tr, aTree[2])
+	tr, _ = Step(tr, digested(aTree[2]))
 	_, es := Step(tr, ReadResult{Found: [][]byte{mustJSON(sh.chains[base])}})
 	if k := cels(es); len(k) != 1 || k[0].CEL != "x" {
 		t.Errorf("a rewritten chain: %+v", es)
@@ -751,7 +780,7 @@ func TestStepGoalIsCut(t *testing.T) {
 	}
 	var cut bool
 	for _, r := range records(es, "name") {
-		cut = cut || r.Body["from"] == "goal" && r.Body["of"] == 0 && reflect.DeepEqual(r.Body["lines"], []int{2, 3})
+		cut = cut || r.Body["from"] == "goal" && r.Body["of"] == 0 && reflect.DeepEqual(r.Body["lines"], [][]int{{2, 3}})
 	}
 	if !cut {
 		t.Fatal("the cut was not recorded")
@@ -768,11 +797,65 @@ func TestStepGoalIsCut(t *testing.T) {
 		`[{"goal":{"of":0,"lines":[3,2]}}]`,
 		`[{"goal":{"of":0,"lines":[1]}}]`,
 		`[{"goal":{"of":9,"lines":[1,1]}}]`,
+		`[{"goal":{"of":0,"lines":[]}}]`,
+		`[{"goal":{"of":0,"lines":[[1,1],[0,2]]}}]`,
+		`[{"goal":{"of":0,"lines":[[1,1,2]]}}]`,
 	} {
 		sh := newShell(t)
 		tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
 		if tr, _ = sh.reply(tr, "0", bad); agent(t, tr, "0").Phase != PhaseFaulted {
 			t.Errorf("%s did not fault", bad)
+		}
+	}
+}
+
+// Two cuts of one text are two observations when their values differ: the
+// default refinement is a string match. The same cut twice is one, and is
+// passed once. A goal also cuts several runs, in order: the rules and a part
+// as one goal of one member.
+func TestStepGoalCutsRuns(t *testing.T) {
+	sh := newShell(t)
+	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
+	two, _ := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"goal":{"of":0,"lines":[4,5]}},{"delegate":{"observations":[{"earlier":0},{"earlier":1}],"contracts":[0,1]}}]`)
+	if agent(t, two, "0").Phase == PhaseFaulted {
+		t.Fatalf("two cuts of other values refused: %s", agent(t, two, "0").Why)
+	}
+	same, _ := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0},{"earlier":1}],"contracts":[0,1]}}]`)
+	if agent(t, same, "0").Phase != PhaseFaulted {
+		t.Fatal("the same cut twice passed as two observations")
+	}
+	// The shell must digest a cut: without it, the call faults.
+	if bare, _ := Step(tr, Replied{Agent: "0", Out: []byte(`[{"goal":{"of":0,"lines":[1,1]}}]`), Seen: []string{""}}); agent(t, bare, "0").Phase != PhaseFaulted {
+		t.Fatal("a cut without its digest was taken")
+	}
+	tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[[1,1],[4,5]]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0,1]}}]`)
+	if agent(t, tr, "0").Phase == PhaseFaulted || len(agent(t, tr, "0").Names[1].Obs.Members()) != 1 {
+		t.Fatalf("a goal of two runs: %+v", agent(t, tr, "0"))
+	}
+	var cut bool
+	for _, r := range records(es, "name") {
+		cut = cut || reflect.DeepEqual(r.Body["lines"], [][]int{{1, 1}, {4, 5}})
+	}
+	if !cut {
+		t.Fatal("the runs were not recorded")
+	}
+}
+
+// Two results of one contract and shape are one observation exactly when
+// their values are one string: the shell's digests decide.
+func TestStepResultsAreTheirValues(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		same bool
+	}{{"one listing", "another listing", false}, {"one listing", "one listing", true}} {
+		sh := newShell(t)
+		tr, _ := sh.start(KindAct, []Contract{x}, 3)
+		tr, _ = sh.reply(tr, "0", `[{"create_input":"a"},{"perform_effect":{"contract":0,"input":{"earlier":0}}},{"create_input":"b"},{"perform_effect":{"contract":0,"input":{"earlier":2}}}]`)
+		tr, _ = sh.step(tr, Returned{Agent: "0", Element: 1, Shape: shapeA, Seen: tc.a})
+		tr, _ = sh.step(tr, Returned{Agent: "0", Element: 3, Shape: shapeA, Seen: tc.b})
+		ns := agent(t, tr, "0").Names
+		if got := ns[len(ns)-1].Obs.Equal(ns[len(ns)-2].Obs); got != tc.same {
+			t.Errorf("%q and %q: one observation %v; want %v", tc.a, tc.b, got, tc.same)
 		}
 	}
 }

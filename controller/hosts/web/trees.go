@@ -27,6 +27,7 @@ import (
 var treeTargets = []string{"find", "read", "echo"}
 
 type treeRun struct {
+	Actor   string          `json:"actor"`
 	ID      string          `json:"id"`
 	Goal    string          `json:"goal"`
 	Kind    string          `json:"kind"`
@@ -63,6 +64,9 @@ func (t *trees) load() {
 		if err != nil || json.Unmarshal(b, &r) != nil {
 			continue
 		}
+		if r.Actor == "" {
+			r.Actor = "claude"
+		}
 		r.root = filepath.Join(filepath.Dir(d), ".skyra")
 		if r.Phase == "running" { // its host is gone
 			r.Phase, r.Error = "failed", "the webhost stopped while it ran"
@@ -92,10 +96,17 @@ func (t *trees) render(root string) json.RawMessage {
 }
 
 // start boots a tree; it returns the run's id, or why it was refused.
-func (h *webhost) startTree(goal, kind string, reach []string) (string, string) {
+func (h *webhost) startTree(goal, kind string, reach []string, actors ...string) (string, string) {
 	t := h.trees
 	if t == nil {
 		return "", "this webhost was started without trees"
+	}
+	actor := "claude"
+	if len(actors) > 0 && actors[0] != "" {
+		actor = actors[0]
+	}
+	if actor != "claude" && actor != "codex" {
+		return "", "the tree actor is claude or codex"
 	}
 	if strings.TrimSpace(goal) == "" {
 		return "", "a tree needs a spec"
@@ -122,7 +133,7 @@ func (h *webhost) startTree(goal, kind string, reach []string) (string, string) 
 		return "", err.Error()
 	}
 	id := "t-" + time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(nonce)
-	r := &treeRun{ID: id, Goal: goal, Kind: kind, Reach: reach, Phase: "running", Started: time.Now().UnixMilli(),
+	r := &treeRun{Actor: actor, ID: id, Goal: goal, Kind: kind, Reach: reach, Phase: "running", Started: time.Now().UnixMilli(),
 		root: filepath.Join(t.dir, id, ".skyra")}
 	if err := os.MkdirAll(r.root, 0o700); err != nil {
 		return "", err.Error()
@@ -137,7 +148,7 @@ func (h *webhost) startTree(goal, kind string, reach []string) (string, string) 
 
 func (h *webhost) runTree(r *treeRun) {
 	t := h.trees
-	payload, _ := json.Marshal(map[string]any{"tree": map[string]any{"goal": r.Goal, "kind": r.Kind, "actor": "claude", "reach": r.Reach}})
+	payload, _ := json.Marshal(map[string]any{"tree": map[string]any{"goal": r.Goal, "kind": r.Kind, "actor": r.Actor, "reach": r.Reach}})
 	cmd := exec.Command(h.skyra, "boot", "-root", r.root, "-registry", t.registry, "-scratch", h.scratchFor(filepath.Dir(r.root)), "-to", "apprentice", "-payload", string(payload))
 	var out bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&out, h.log)

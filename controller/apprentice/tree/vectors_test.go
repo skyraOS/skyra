@@ -64,8 +64,9 @@ type jType struct {
 }
 
 type jObs struct {
-	Type    jType  `json:"type"`
-	Members []jObs `json:"members"`
+	Type    jType        `json:"type"`
+	Refined RefinementID `json:"refined"`
+	Members []jObs       `json:"members"`
 }
 
 type jStore struct {
@@ -100,7 +101,7 @@ func (j jType) get(t *testing.T) ObservationType {
 // one Lean writes was made by observe.
 func (j jObs) get(t *testing.T) Observation {
 	t.Helper()
-	o := Observation{typ: j.Type.get(t)}
+	o := Observation{typ: j.Type.get(t), refined: j.Refined}
 	for _, m := range j.Members {
 		o.members = append(o.members, m.get(t))
 	}
@@ -192,7 +193,7 @@ func eType(o ObservationType) any {
 }
 
 func eObs(o Observation) any {
-	return map[string]any{"type": eType(o.typ), "members": eList(o.members, eObs)}
+	return map[string]any{"type": eType(o.typ), "refined": o.refined, "members": eList(o.members, eObs)}
 }
 
 func eList[T any](xs []T, f func(T) any) any {
@@ -309,11 +310,11 @@ var replays = map[string]replay{
 		return Admits(a, kindOf(t, in["kind"]), dec[jType](t, in["type"]).get(t), obsOf(t, in["members"]))
 	},
 	"observe": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
-		o, ok := Observe(a, kindOf(t, in["kind"]), dec[jType](t, in["type"]).get(t), obsOf(t, in["members"]))
+		o, ok := Observe(a, kindOf(t, in["kind"]), dec[jType](t, in["type"]).get(t), obsOf(t, in["members"]), dec[RefinementID](t, in["refined"]))
 		return eOpt(o, ok, eObs)
 	},
 	"rootObservation": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
-		o, ok := RootObservation(a, dec[jType](t, in["type"]).get(t))
+		o, ok := RootObservation(a, dec[jType](t, in["type"]).get(t), dec[RefinementID](t, in["refined"]))
 		return eOpt(o, ok, eObs)
 	},
 	"mayPass": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {

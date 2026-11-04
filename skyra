@@ -38,8 +38,8 @@ usage: skyra [command]
                 its log on stdout, SKYRA_WS_TOKEN generated unless supplied
   ask "TEXT"    one question to real Codex through the controller; prints the lineage,
                 the replay check and the answer
-  tree KIND "GOAL" [TARGET...]
-                one tree on real Claude: the apprentice runs it, Claude runs every turn
+  tree [--actor claude|codex] KIND "GOAL" [TARGET...]
+                one tree on Claude or Codex: the apprentice runs it
   treeview [RUN] replay a tree run and show it forming (the last run by default)
   desktop       choose a window, then chat with read-only vision (macOS)
   desktop --list  list windows for scripted selection
@@ -389,30 +389,38 @@ ask() {
   say "state: $run"
 }
 
-# tree KIND "GOAL" [TARGET...]: one tree (next/56) on real Claude. The
-# apprentice runs the tree; Claude runs every node's turn, granted only its
+# tree [--actor claude|codex] KIND "GOAL" [TARGET...]: one tree (next/56) on Claude or Codex. The
+# apprentice runs the tree; the selected provider runs every node's turn, granted only its
 # kind's instructions; the root holds the targets named (echo by default).
 tree() {
-  [ $# -ge 2 ] || die 'usage: skyra tree act|delegate "GOAL" [TARGET...]'
+  local actor=claude
+  if [ "${1:-}" = --actor ]; then
+    [ $# -ge 2 ] || die '--actor needs claude or codex'
+    actor=$2; shift 2
+  fi
+  case "$actor" in claude|codex) ;; *) die 'tree actor is claude or codex' ;; esac
+  [ $# -ge 2 ] || die 'usage: skyra tree [--actor claude|codex] act|delegate "GOAL" [TARGET...]'
   local kind=$1 goal=$2; shift 2
   [ $# -gt 0 ] || set -- echo
   say "building"
   controller_build
   local reg run scratch payload
+  run=$STATE/runs/tree-$(date +%Y%m%d-%H%M%S)-$$/.skyra
+  mkdir -p "$run"
+  # Outside this repository a tree writes only beside its own run, in out/.
   scratch=$(write_space)
+  [ -n "$scratch" ] || { scratch=${run%/.skyra}/out; mkdir -p "$scratch"; }
   trap 'stop_ideas_host; stop_service_host' INT TERM EXIT
   start_ideas_host
   service_socket
   reg=$(registry real "$STATE/park.sock" 1)
   start_service_host "$reg"
-  mkdir -p "$STATE/runs"
-  run=$STATE/runs/tree-$(date +%Y%m%d-%H%M%S)-$$/.skyra
-  mkdir -p "$run"
-  payload=$(python3 -c 'import json,sys; print(json.dumps({"tree":{"goal":sys.argv[2],"kind":sys.argv[1],"actor":"claude","reach":sys.argv[3:]}}))' "$kind" "$goal" "$@")
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tree":{"goal":sys.argv[2],"kind":sys.argv[1],"actor":sys.argv[3],"reach":sys.argv[4:]}}))' "$kind" "$goal" "$actor" "$@")
   "$BUILD/controller/skyra" boot -root "$run" -registry "$reg" -scratch "$scratch" -to apprentice -payload "$payload"
   say "state: $run"
-  # What each node is, what Claude was sent, and what it loaded: one to one.
-  python3 "$ROOT/controller/apprentice/shell/check/received.py" "$run"
+  [ -z "$(ls -A "${run%/.skyra}/out" 2>/dev/null)" ] || say "written: ${run%/.skyra}/out"
+  # Compare each node’s instructions with its recorded provider configuration.
+  python3 "$ROOT/controller/apprentice/shell/check/received.py" "$run" "$actor"
   "$BUILD/controller/treeview" -html "${run%/.skyra}/tree.html" "$run" >/dev/null && say "view: ${run%/.skyra}/tree.html"
 }
 

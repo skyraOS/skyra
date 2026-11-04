@@ -174,6 +174,7 @@ func (k Kind) String() string {
 // and RootObservation are the only ways to make one.
 type Observation struct {
 	typ     ObservationType
+	refined RefinementID // its refinement type: the system's interpretation of its value
 	members []Observation
 }
 
@@ -187,8 +188,12 @@ func (o Observation) IsComputation() bool { return len(o.members) != 0 }
 
 // Equal is structural, as Lean's decidable equality is.
 func (o Observation) Equal(p Observation) bool {
-	return o.typ == p.typ && slices.EqualFunc(o.members, p.members, Observation.Equal)
+	return o.typ == p.typ && o.refined == p.refined && slices.EqualFunc(o.members, p.members, Observation.Equal)
 }
+
+// Refined is its refinement type. Two observations of one refinement type
+// are the same (55, invariant 19).
+func (o Observation) Refined() RefinementID { return o.refined }
 
 func contains(xs []Observation, o Observation) bool {
 	return slices.ContainsFunc(xs, o.Equal)
@@ -233,20 +238,20 @@ func Admits(a Apprentice, k Kind, t ObservationType, ms []Observation) bool {
 // instruction. The caller never says what it sends: an effect or a
 // computation is decided by what it has, and admitted by the kind of node
 // that sent it.
-func Observe(a Apprentice, k Kind, t ObservationType, ms []Observation) (Observation, bool) {
+func Observe(a Apprentice, k Kind, t ObservationType, ms []Observation, refined RefinementID) (Observation, bool) {
 	if !Admits(a, k, t, ms) {
 		return Observation{}, false
 	}
-	return Observation{t, slices.Clone(ms)}, true
+	return Observation{t, refined, slices.Clone(ms)}, true
 }
 
 // RootObservation is the root's endowment: an effect through root, with no
 // instruction before it. Privileged: no node sends it.
-func RootObservation(a Apprentice, t ObservationType) (Observation, bool) {
+func RootObservation(a Apprentice, t ObservationType, refined RefinementID) (Observation, bool) {
 	if t.contract != a.root {
 		return Observation{}, false
 	}
-	return Observation{t, nil}, true
+	return Observation{t, refined, nil}, true
 }
 
 // --- scope ---
@@ -349,6 +354,7 @@ const (
 	inputTag      = "skyra/input/v2" // v2: the contract, not its binary
 	returnTag     = "skyra/return/v1"
 	refinementTag = "skyra/refinement/v1"
+	seenTag       = "skyra/seen/v1"
 )
 
 // canonical is the JSON of v as JSON.stringify writes it: no HTML escaping,
@@ -461,6 +467,14 @@ func RefinementOf(b ReturnBase, g Guard) RefinementID {
 		guard = map[string]string{"written": cel}
 	}
 	return RefinementID(sum([]any{refinementTag, b.id, guard}))
+}
+
+// DefaultRefinement is the default guard's refinement type of a value, a
+// string match: one return base type and one value, by its digest, one
+// refinement type; another value, another. The shell digests the value it
+// holds; the value never enters the type (defaultRefinement_iff).
+func DefaultRefinement(b ReturnBase, digest string) RefinementID {
+	return RefinementID(sum([]any{seenTag, b.id, digest}))
 }
 
 // A Store is two levels, kept apart. known is the base level: the return

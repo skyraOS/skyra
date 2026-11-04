@@ -997,7 +997,14 @@ Settled, from the first real trees:
 21. **Partitioning a spec.** Settled: a part of a spec is a slice of it,
     never retyped. A delegate never writes a goal: `goal {"of": n, "lines":
     [a, b]}` cuts lines a to b of name n, which is text, so its model chooses
-    only integers. A goal is a computation of one member, what it was cut
+    only integers. A goal may cut several runs, read in order, `[[1, 1],
+    [4, 5]]`, such as the rules and a part. Two cuts are two observations
+    when their text differs, and one when it is the same: sameness is the
+    refinement type (55, invariant 19), and the default refinement is a
+    string match. The shell digests each value it holds: the tree's input,
+    what came back, each cut and each filled input; Step digests the text
+    it already has, and a composition is its members'. So two listings that
+    differ are two observations, and two that are the same string are one. A goal is a computation of one member, what it was cut
     from (55, invariants 6 and 7, `observe_goal`), so every goal traces back
     to the tree's input, and a child cuts its own goal again for its
     children. Its base type is made from what it was cut from, never from its

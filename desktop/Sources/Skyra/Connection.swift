@@ -475,10 +475,10 @@ final class Session {
 
     /// Grow one tree of a spec. One target held is an act root; two or more, a delegate.
     @discardableResult
-    func startTree(_ spec: String, holding reach: [String]) -> Bool {
+    func startTree(_ spec: String, holding reach: [String], actor: String = "claude") -> Bool {
         let text = spec.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !reach.isEmpty else { return false }
-        return send(.startTree(requestId: requestID(), spec: text, kind: reach.count == 1 ? "act" : "delegate", reach: reach))
+        return send(.startTree(requestId: requestID(), spec: text, kind: reach.count == 1 ? "act" : "delegate", reach: reach, actor: actor))
     }
 
     @discardableResult

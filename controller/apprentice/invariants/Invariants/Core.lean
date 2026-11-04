@@ -145,14 +145,22 @@ inductive Kind
   | delegate  -- two or more: it delegates
   deriving DecidableEq
 
-/-- An observation: its type, and the observations it was made from. Its
-constructor is private: `observe` and `rootObservation` are the only ways to
-make one. -/
-inductive Observation
-  | private mk (type : ObservationType) (members : List Observation)
+/-- A refinement type, by its hash: a return base type and its guard's code. -/
+structure RefinementId where
+  val : String
+  deriving DecidableEq
 
-def Observation.type    : Observation → ObservationType  | .mk t _  => t
-def Observation.members : Observation → List Observation | .mk _ ms => ms
+/-- An observation: its type, its refinement type, and the observations it
+was made from. Two observations of one refinement type are the same
+(invariant 19): the refinement is the system's interpretation of the value,
+which never enters the type, and Lean takes it as given. Its constructor is
+private: `observe` and `rootObservation` are the only ways to make one. -/
+inductive Observation
+  | private mk (type : ObservationType) (refined : RefinementId) (members : List Observation)
+
+def Observation.type    : Observation → ObservationType  | .mk t _ _  => t
+def Observation.refined : Observation → RefinementId     | .mk _ r _  => r
+def Observation.members : Observation → List Observation | .mk _ _ ms => ms
 
 /-- An effect has no members; a computation has members. -/
 def Observation.isEffect (o : Observation) : Bool := o.members.isEmpty
@@ -170,11 +178,13 @@ theorem Observation.effect_xor_computation {o : Observation} : o.isEffect = !o.i
 
 mutual
 def Observation.decEq : (a b : Observation) → Decidable (a = b)
-  | .mk t₁ ms₁, .mk t₂ ms₂ =>
+  | .mk t₁ r₁ ms₁, .mk t₂ r₂ ms₂ =>
     if ht : t₁ = t₂ then
-      match Observation.decEqList ms₁ ms₂ with
-      | isTrue hm  => isTrue (by subst ht; subst hm; rfl)
-      | isFalse hm => isFalse (by intro h; cases h; exact hm rfl)
+      if hr : r₁ = r₂ then
+        match Observation.decEqList ms₁ ms₂ with
+        | isTrue hm  => isTrue (by subst ht; subst hr; subst hm; rfl)
+        | isFalse hm => isFalse (by intro h; cases h; exact hm rfl)
+      else isFalse (by intro h; cases h; exact hr rfl)
     else isFalse (by intro h; cases h; exact ht rfl)
 
 def Observation.decEqList : (a b : List Observation) → Decidable (a = b)
@@ -215,36 +225,54 @@ def admits (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observat
 
 /-- The one function that creates observations from an instruction. The
 caller never says what it sends: an effect or a computation is decided by
-what it has, and admitted by the kind of node that sent it. -/
-def observe (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observation) :
-    Option Observation :=
-  if admits a k t ms = true then some (.mk t ms) else none
+what it has, and admitted by the kind of node that sent it. Its refinement
+type is the system's (`defaultRefinement`, until a guard is written). -/
+def observe (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observation)
+    (ρ : RefinementId) : Option Observation :=
+  if admits a k t ms = true then some (.mk t ρ ms) else none
 
 /-- The root's endowment: an effect through `root`, with no instruction
 before it. Privileged: no node sends it. -/
-def rootObservation (a : Apprentice) (t : ObservationType) : Option Observation :=
-  if t.contract == a.root then some (.mk t []) else none
+def rootObservation (a : Apprentice) (t : ObservationType) (ρ : RefinementId) :
+    Option Observation :=
+  if t.contract == a.root then some (.mk t ρ []) else none
 
 theorem observe_eq_some :
-    observe a k t ms = some o ↔ admits a k t ms = true ∧ o.type = t ∧ o.members = ms := by
+    observe a k t ms ρ = some o ↔
+      admits a k t ms = true ∧ o.type = t ∧ o.members = ms ∧ o.refined = ρ := by
   unfold observe
   split
   · rename_i h
     constructor
-    · intro e; cases e; exact ⟨h, rfl, rfl⟩
-    · rintro ⟨-, ht, hm⟩
-      cases o; simp_all [Observation.type, Observation.members]
+    · intro e; cases e; exact ⟨h, rfl, rfl, rfl⟩
+    · rintro ⟨-, ht, hm, hr⟩
+      cases o; simp_all [Observation.type, Observation.members, Observation.refined]
   · rename_i h
     simp only [reduceCtorEq, false_iff]
     rintro ⟨ha, -⟩; exact h ha
 
+/-- Two observations of one type and members are one observation exactly
+when they are of one refinement type: sameness is the refinement's, never
+the value's. -/
+theorem observe_same (h₁ : observe a k t ms ρ₁ = some o₁) (h₂ : observe a k t ms ρ₂ = some o₂) :
+    o₁ = o₂ ↔ ρ₁ = ρ₂ := by
+  rw [observe_eq_some] at h₁ h₂
+  obtain ⟨-, t₁, m₁, r₁⟩ := h₁
+  obtain ⟨-, t₂, m₂, r₂⟩ := h₂
+  cases o₁; cases o₂
+  simp only [Observation.type, Observation.members, Observation.refined] at t₁ m₁ r₁ t₂ m₂ r₂
+  subst t₁ m₁ r₁ t₂ m₂ r₂
+  constructor
+  · intro e; cases e; rfl
+  · intro e; rw [e]
+
 /-- A computation comes three ways only: from a delegate, through
 `delegate` or `goal`, or from an act node, through `create_input`. -/
-theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputation = true) :
+theorem observe_computation (h : observe a k t ms ρ = some o) (hc : o.isComputation = true) :
     (k = .delegate ∧ t.contract = a.delegate) ∨ (k = .act ∧ t.contract = a.createInput) ∨
     (k = .delegate ∧ t.contract = a.goal) := by
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, hm⟩ := h
+  obtain ⟨ha, -, hm, -⟩ := h
   rw [Observation.computation_iff, hm] at hc
   simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, Bool.or_eq_true,
     beq_iff_eq] at ha
@@ -255,7 +283,7 @@ theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputatio
 
 /-- An act node makes a computation only as an input: everything else it
 makes is an effect. -/
-theorem observe_act (h : observe a .act t ms = some o) :
+theorem observe_act (h : observe a .act t ms ρ = some o) :
     o.isEffect = true ∨ t.contract = a.createInput := by
   rw [Observation.effect_xor_computation]
   cases hc : o.isComputation
@@ -268,14 +296,14 @@ theorem observe_act (h : observe a .act t ms = some o) :
 /-- A goal is cut, never written: a computation of exactly one member, what
 it was cut from, made by a delegate. Its value is lines of that member's,
 which the shell cuts; values never enter the type. -/
-theorem observe_goal (h : observe a k t ms = some o) (hc : t.contract = a.goal) :
+theorem observe_goal (h : observe a k t ms ρ = some o) (hc : t.contract = a.goal) :
     k = .delegate ∧ ms.length = 1 := by
   have hd := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by rw [hc]; simp [Apprentice.contracts])
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hd
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, -⟩ := h
+  obtain ⟨ha, -, -, -⟩ := h
   by_cases he : ms = []
   · subst he
     simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
@@ -293,13 +321,13 @@ theorem observe_goal (h : observe a k t ms = some o) (hc : t.contract = a.goal) 
 
 /-- An input's members are names it was filled from, none twice; it is
 still one input, sent by an act node. -/
-theorem observe_filled_input (h : observe a k t ms = some o) (hc : t.contract = a.createInput)
+theorem observe_filled_input (h : observe a k t ms ρ = some o) (hc : t.contract = a.createInput)
     (hm : ms ≠ []) : k = .act ∧ ms.Nodup := by
   have hd := a.contracts_nodup
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hd
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, -⟩ := h
+  obtain ⟨ha, -, -, -⟩ := h
   simp only [admits, List.isEmpty_iff, hm, ite_false, Bool.and_eq_true, Bool.or_eq_true,
     beq_iff_eq, decide_eq_true_eq] at ha
   rcases ha with ⟨(⟨-, e⟩ | ⟨hk, -⟩) | ⟨⟨-, e⟩, -⟩, hn⟩
@@ -311,10 +339,10 @@ theorem observe_filled_input (h : observe a k t ms = some o) (hc : t.contract = 
 `delegate` or `goal` as an effect: `observe` and `root` are privileged,
 `return` passes, `perform_effect` takes on the contract passed to it,
 `delegate` composes, and `goal` cuts. -/
-theorem observe_not_through (h : observe a k t [] = some o)
+theorem observe_not_through (h : observe a k t [] ρ = some o)
     (hc : t.contract ∈ [a.observe, a.root, a.ret, a.performEffect, a.delegate, a.goal]) : False := by
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, -⟩ := h
+  obtain ⟨ha, -, -, -⟩ := h
   have hn := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by
     simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
@@ -332,10 +360,10 @@ theorem observe_not_through (h : observe a k t [] = some o)
 
 /-- A description and a packaged reach come only from a delegate: they are
 parts of what it composes. -/
-theorem observe_composed (h : observe a k t [] = some o)
+theorem observe_composed (h : observe a k t [] ρ = some o)
     (hc : t.contract ∈ [a.createDelegation, a.createAct, a.reach]) : k = .delegate := by
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, -⟩ := h
+  obtain ⟨ha, -, -, -⟩ := h
   have hn := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by
     simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
@@ -353,10 +381,10 @@ theorem observe_composed (h : observe a k t [] = some o)
     | (rcases hc with hc | hc | hc <;> rw [hc] at e <;> simp_all; done)
 
 /-- An input comes only from an act node: what it makes to dispatch. -/
-theorem observe_input (h : observe a k t [] = some o) (hc : t.contract = a.createInput) :
+theorem observe_input (h : observe a k t [] ρ = some o) (hc : t.contract = a.createInput) :
     k = .act := by
   rw [observe_eq_some] at h
-  obtain ⟨ha, -, -⟩ := h
+  obtain ⟨ha, -, -, -⟩ := h
   have hn := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by rw [hc]; simp [Apprentice.contracts])
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
@@ -391,7 +419,7 @@ def receive : Dir → (receiver passed : List Observation) → List Observation
 
 /-- An observation and every observation it was made from. -/
 def lineage : Observation → List Observation
-  | .mk t ms => .mk t ms :: ms.attach.flatMap fun ⟨m, _⟩ => lineage m
+  | .mk t r ms => .mk t r ms :: ms.attach.flatMap fun ⟨m, _⟩ => lineage m
 
 /-- What a node's return may hold: nothing in the lineage of what it was
 passed. -/
@@ -430,11 +458,6 @@ structure ReturnBase where
   val : String
   deriving DecidableEq
 
-/-- A refinement type, by its hash: a return base type and its guard's code. -/
-structure RefinementId where
-  val : String
-  deriving DecidableEq
-
 /-- A guard over one return base type. `default` until the model writes one:
 the shell registers the default CEL for it. A guard for one return base type
 is not a guard for another. -/
@@ -449,13 +472,15 @@ structure Hashes where
   input  : Contract → List ReturnBase → String
   ret    : InputBase → Schema → String
   refine : (b : ReturnBase) → Guard b → RefinementId
+  seen   : ReturnBase → String → RefinementId
 
 /-- What is assumed of the hashes: no collisions. Every theorem that needs it
 takes it as a hypothesis. -/
 def Hashes.Sound (h : Hashes) : Prop :=
   (∀ {c₁ c₂ p₁ p₂}, h.input c₁ p₁ = h.input c₂ p₂ → c₁ = c₂ ∧ p₁ = p₂) ∧
   (∀ {i₁ i₂ o₁ o₂}, h.ret i₁ o₁ = h.ret i₂ o₂ → i₁ = i₂ ∧ o₁ = o₂) ∧
-  (∀ {b₁ b₂} {g₁ : Guard b₁} {g₂ : Guard b₂}, h.refine b₁ g₁ = h.refine b₂ g₂ → b₁ = b₂)
+  (∀ {b₁ b₂} {g₁ : Guard b₁} {g₂ : Guard b₂}, h.refine b₁ g₁ = h.refine b₂ g₂ → b₁ = b₂) ∧
+  (∀ {b₁ b₂ v₁ v₂}, h.seen b₁ v₁ = h.seen b₂ v₂ → b₁ = b₂ ∧ v₁ = v₂)
 
 /-- Down an edge (`create_invoke`): the one way to an input base type. From
 the contract, not its binary: two contracts of one binary, the apprentice's
@@ -634,7 +659,22 @@ theorem refinement_base {h : Hashes} (hs : h.Sound) (h₁ : refinement h s b₁ 
   simp only [refinement, Option.map_eq_some_iff] at h₁ h₂
   obtain ⟨x₁, -, rfl⟩ := h₁
   obtain ⟨x₂, -, e⟩ := h₂
-  exact (hs.2.2 e).symm
+  exact (hs.2.2.1 e).symm
+
+/-- The default guard's refinement type of a value: a string match. Until a
+guard is written, two values of one return base type are one refinement
+type exactly when they are the same string; the shell hashes the value it
+holds, and the value never enters the type. -/
+def defaultRefinement (h : Hashes) (b : ReturnBase) (value : String) : RefinementId :=
+  h.seen b value
+
+/-- The default refinement is a string match: one base type and one value,
+one refinement type; another value, another. -/
+theorem defaultRefinement_iff {h : Hashes} (hs : h.Sound) :
+    defaultRefinement h b₁ v₁ = defaultRefinement h b₂ v₂ ↔ b₁ = b₂ ∧ v₁ = v₂ := by
+  constructor
+  · exact hs.2.2.2
+  · rintro ⟨rfl, rfl⟩; rfl
 
 /-- The return guard: what the apprentice does after a return comes back. -/
 inductive ReturnResult

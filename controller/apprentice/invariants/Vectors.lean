@@ -47,7 +47,8 @@ def jType (t : ObservationType) : Json :=
   Json.mkObj [("contract", jContract t.contract), ("output", jSchema t.output)]
 
 partial def jObs (o : Observation) : Json :=
-  Json.mkObj [("type", jType o.type), ("members", .arr (o.members.map jObs).toArray)]
+  Json.mkObj [("type", jType o.type), ("refined", .str o.refined.val),
+    ("members", .arr (o.members.map jObs).toArray)]
 
 def jDir : Dir → Json
   | .invoke => .str "invoke"
@@ -137,6 +138,9 @@ structure World where
   c3 : Contract
   t1 : ObservationType
   t2 : ObservationType
+  /-- `e1` again: the same contract and shape, another value, so another
+  refinement type and another observation. -/
+  e3 : Observation
   /-- Effects: two that came back through an act node's `perform_effect`,
   an exit, an act description, and the root's endowment; and a goal, cut
   from the endowment, its one member. -/
@@ -166,16 +170,18 @@ def world : Option World := do
   let tw ← ObservationType.of app.createAct shapeStr
   let tr ← ObservationType.of app.root shapeStr
   let td ← ObservationType.of app.delegate shapeOut
-  let e1 ← observe app .act t1 []
-  let e2 ← observe app .act t2 []
-  let r0 ← rootObservation app tr
-  let g1 ← observe app .delegate tg [r0]
-  let x1 ← observe app .act tx []
-  let w1 ← observe app .delegate tw []
-  let k1 ← observe app .delegate td [g1, e1]
-  let k2 ← observe app .delegate td [g1, e2]
-  let k3 ← observe app .delegate td [k1, e2]
-  return { app, c1, c2, c3, t1, t2, e1, e2, g1, x1, w1, r0, k1, k2, k3 }
+  let ρ (v : String) : RefinementId := ⟨"seen(" ++ v ++ ")"⟩
+  let e1 ← observe app .act t1 [] (ρ "e1")
+  let e2 ← observe app .act t2 [] (ρ "e2")
+  let e3 ← observe app .act t1 [] (ρ "e3")
+  let r0 ← rootObservation app tr (ρ "r0")
+  let g1 ← observe app .delegate tg [r0] (ρ "g1")
+  let x1 ← observe app .act tx [] (ρ "x1")
+  let w1 ← observe app .delegate tw [] (ρ "w1")
+  let k1 ← observe app .delegate td [g1, e1] (ρ "k1")
+  let k2 ← observe app .delegate td [g1, e2] (ρ "k2")
+  let k3 ← observe app .delegate td [k1, e2] (ρ "k3")
+  return { app, c1, c2, c3, t1, t2, e1, e2, e3, g1, x1, w1, r0, k1, k2, k3 }
 
 /-- Every contract: the agents', then the apprentice's. -/
 def contracts (w : World) : List Contract := [w.c1, w.c2, w.c3] ++ w.app.contracts
@@ -192,6 +198,7 @@ def toy : Hashes where
   ret i o := "return(" ++ i.val ++ "," ++ o.val ++ ")"
   refine b g := ⟨"refine(" ++ b.val ++ "," ++
     (match g with | .default => "default" | .written cel => "written:" ++ cel) ++ ")"⟩
+  seen b v := ⟨"seen(" ++ b.val ++ "," ++ v ++ ")"⟩
 
 def bA : Binary := ⟨"cdhash:" ++ hex 'a' 40⟩
 def bB : Binary := ⟨"sha256:" ++ hex '1' 64⟩
@@ -254,7 +261,8 @@ def files (w : World) : List (String × List Json) :=
   let ts := types w
   let cs := contracts w
   let agents := [w.c1, w.c2, w.c3]
-  let members := upTo [w.e1, w.g1, w.k1] 2
+  let members := upTo [w.e1, w.e3, w.g1, w.k1] 2
+  let ρv : RefinementId := ⟨"seen(made)"⟩
   [ ("identify", binaries.flatMap fun b => schemas.map fun s =>
       case (Json.mkObj [("binary", jBinary b), ("shape", jSchema s)])
         (jOpt jContract (identify b s))),
@@ -278,13 +286,13 @@ def files (w : World) : List (String × List Json) :=
         (.bool (admits w.app k t ms))),
     ("observe", kinds.flatMap fun k => ts.flatMap fun t => members.map fun ms =>
       case (Json.mkObj [("kind", jKind k), ("type", jType t),
-          ("members", jList jObs ms)])
-        (jOpt jObs (observe w.app k t ms))),
+          ("members", jList jObs ms), ("refined", .str ρv.val)])
+        (jOpt jObs (observe w.app k t ms ρv))),
     ("rootObservation", ts.map fun t =>
-      case (Json.mkObj [("type", jType t)])
-        (jOpt jObs (rootObservation w.app t))),
+      case (Json.mkObj [("type", jType t), ("refined", .str ρv.val)])
+        (jOpt jObs (rootObservation w.app t ρv))),
     ("mayPass", (subsets [w.e1, w.e2, w.g1, w.k1]).flatMap fun sender =>
-      (upTo [w.e1, w.e2, w.g1, w.k1] 2).map fun passed =>
+      (upTo [w.e1, w.e2, w.e3, w.g1, w.k1] 2).map fun passed =>
         case (Json.mkObj [("sender", jList jObs sender), ("passed", jList jObs passed)])
           (.bool (mayPass sender passed))),
     ("receive", [Dir.invoke, .ret].flatMap fun d => (subsets [w.e1, w.g1]).flatMap fun r =>

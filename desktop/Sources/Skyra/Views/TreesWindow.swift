@@ -60,6 +60,7 @@ private struct TreeSpec: View {
     let session: Session
     let started: () -> Void
     @State private var spec = ""
+    @State private var actor = "claude"
     @State private var reach: Set<String> = ["find", "read"]
     @FocusState private var focused: Bool
 
@@ -96,6 +97,10 @@ private struct TreeSpec: View {
                 Spacer(minLength: 0)
             }.font(.system(size: 11))
             HStack {
+                Picker("Provider", selection: $actor) {
+                    Text("Claude").tag("claude")
+                    Text("Codex").tag("codex")
+                }.pickerStyle(.menu).fixedSize()
                 Text(held.isEmpty ? "hold at least one" : held.count == 1 ? "an act root" : "a delegate root")
                     .font(.system(size: 11)).foregroundStyle(Theme.faint.color)
                 Spacer()
@@ -114,7 +119,7 @@ private struct TreeSpec: View {
     }
 
     private func grow() {
-        guard canGrow, session.startTree(spec, holding: held) else { return }
+        guard canGrow, session.startTree(spec, holding: held, actor: actor) else { return }
         spec = ""
         started()
     }
@@ -135,7 +140,7 @@ private struct TreeRuns: View {
                     Button { select(t.id) } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
-                                Text(t.reach.joined(separator: " + "))
+                                Text("\((t.actor ?? "claude").capitalized) · \(t.reach.joined(separator: " + "))")
                                     .font(.system(size: 12, weight: .medium)).lineLimit(1)
                                 Spacer(minLength: 0)
                                 Text(t.phase.rawValue).font(.system(size: 10)).foregroundStyle(Self.color(t.phase))

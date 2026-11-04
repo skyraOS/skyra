@@ -223,6 +223,7 @@ type Started struct {
 	Kind      Kind
 	Actor     Contract
 	Endowment Schema
+	Seen      string // the endowment's digest, by the shell, which holds it
 }
 
 // ReadResult answers a Read: raw and unverified, per key, in order.
@@ -235,6 +236,9 @@ type Committed struct{ Outcomes []Outcome }
 type Replied struct {
 	Agent AgentID
 	Out   []byte
+	// Seen is, by instruction, the digest of the value a cut or a filled
+	// input makes, by the shell, which holds the values; "" for the rest.
+	Seen []string
 }
 
 // Returned: what a perform_effect brought back, with its shape.
@@ -243,6 +247,15 @@ type Returned struct {
 	Element int // which instruction of the call it answers, by position
 	Shape   Schema
 	Err     string
+	Seen    string // the digest of what came back, by the shell, which holds it
+}
+
+// Digest is a value's digest for the default refinement's string match: its
+// canonical JSON, hashed. Step digests only text it already has; the shell
+// digests every value it holds.
+func Digest(v any) string {
+	b, _ := json.Marshal(v)
+	return sum([]any{"skyra/value/v1", string(b)})
 }
 
 // Stopped: a node's crash, timeout or kill. Always a fault.
@@ -276,8 +289,8 @@ type Call []Instruction
 type Instruction interface{ instruction() }
 
 type Goal struct { // a delegate's goal: cut, never written; a computation of what it was cut from
-	Of       InScope // the name it is cut from, text
-	From, To int     // its lines, from 1, both included
+	Of    InScope
+	Lines [][2]int
 }
 type CreateInput struct { // an act node's input: text, an effect; or filled from names, a computation
 	Text   string
@@ -526,7 +539,7 @@ func (r *run) record(kind string, a AgentID, body map[string]any) {
 //
 //	{"from":"input"}                               the root's endowment: the tree's input
 //	{"from":"input"|"exit"|"part", "text"}         text the model or delegate's CEL wrote
-//	{"from":"goal", "of", "lines":[from, to]}      lines of name of, cut
+//	{"from":"goal", "of", "lines":[[from, to]…]}   runs of lines of name of, cut
 //	{"from":"part", "contracts":[binary…]}         a packaged reach
 //	{"from":"compose", "names":[n…]}               a computation of the agent's own names
 //	{"from":"copy", "agent", "of"}                 another agent's name: passed down or returned up
@@ -597,8 +610,8 @@ func (r *run) provision(e Started) {
 		r.fault(a, "the endowment's shape is not well formed")
 		return
 	}
-	o, _ := RootObservation(app, rt)
 	base, _ := BaseOf(rt, nil)
+	o, _ := RootObservation(app, rt, DefaultRefinement(base, e.Seen))
 	a.Input = r.invoke(a.ID, e.Self, []ReturnBase{base})
 	a.Received = []Observation{o}
 	a.Scope = Receive(DirInvoke, nil, a.Received)
@@ -667,7 +680,7 @@ func (r *run) replied(e Replied) {
 	call, why := parseCall(e.Out, a.Offer)
 	if why == "" {
 		before, writes, acts := r.t.clone(), len(r.writes), len(r.acts)
-		why = r.interpret(a, call)
+		why = r.interpret(a, call, e.Seen)
 		if why != "" { // all or nothing: undo what the call did, then fault
 			r.t, r.writes, r.owners, r.acts = before, r.writes[:writes], r.owners[:writes], r.acts[:acts]
 			r.read, r.key = nil, nil
@@ -709,6 +722,28 @@ func parseCall(out []byte, o Offer) (Call, string) {
 	return call, ""
 }
 
+// runs reads one or more inclusive line ranges, counted from 1.
+func runs(v json.RawMessage) ([][2]int, string) {
+	var one []int
+	var many [][]int
+	if json.Unmarshal(v, &one) == nil && len(one) == 2 {
+		many = [][]int{one}
+	} else if json.Unmarshal(v, &many) != nil {
+		return nil, "goal takes lines, [from, to] or [[from, to], ...]"
+	}
+	if len(many) == 0 {
+		return nil, "goal takes at least one run"
+	}
+	var out [][2]int
+	for _, r := range many {
+		if len(r) != 2 || r[0] < 1 || r[1] < r[0] {
+			return nil, "goal cuts lines from 1, from no later than to"
+		}
+		out = append(out, [2]int{r[0], r[1]})
+	}
+	return out, ""
+}
+
 func strict(v json.RawMessage, into any) bool {
 	d := json.NewDecoder(bytes.NewReader(v))
 	d.DisallowUnknownFields()
@@ -726,16 +761,14 @@ func parseInstruction(k string, v json.RawMessage, o Offer) (Instruction, string
 	switch k {
 	case "goal":
 		var b struct {
-			Of    *int  `json:"of"`
-			Lines []int `json:"lines"`
+			Of    *int            `json:"of"`
+			Lines json.RawMessage `json:"lines"`
 		}
-		if !strict(v, &b) || b.Of == nil || len(b.Lines) != 2 {
-			return nil, "goal takes of, a name, and lines, [from, to]"
+		if !strict(v, &b) || b.Of == nil || *b.Of < 0 || b.Lines == nil {
+			return nil, "goal takes of, a name, and lines, [from, to] or [[from, to], ...]"
 		}
-		if *b.Of < 0 || b.Lines[0] < 1 || b.Lines[1] < b.Lines[0] {
-			return nil, "goal cuts lines from 1, from no later than to"
-		}
-		return Goal{InScope(*b.Of), b.Lines[0], b.Lines[1]}, ""
+		ls, why := runs(b.Lines)
+		return Goal{InScope(*b.Of), ls}, why
 	case "create_input":
 		if s, why := text(); why == "" {
 			return CreateInput{Text: s}, ""
@@ -893,7 +926,14 @@ func parseRef(v json.RawMessage) (Ref, string) {
 
 // interpret runs a call, instruction by instruction, each checked on its
 // own. It returns why the call is a fault, or "".
-func (r *run) interpret(a *Agent, call Call) string {
+func (r *run) interpret(a *Agent, call Call, seen []string) string {
+	// What a cut or a filled input makes, only the shell can digest.
+	digest := func(i int) (string, string) {
+		if i >= len(seen) || seen[i] == "" {
+			return "", "a cut or a filled input the shell did not digest"
+		}
+		return seen[i], ""
+	}
 	if len(call) > 1 {
 		for _, ins := range call {
 			switch ins.(type) {
@@ -915,7 +955,11 @@ func (r *run) interpret(a *Agent, call Call) string {
 			if why != "" {
 				return why
 			}
-			n, why := r.cut(a, of, in.From, in.To)
+			d, why := digest(i)
+			if why != "" {
+				return why
+			}
+			n, why := r.cut(a, of, in.Lines, d)
 			if why != "" {
 				return why
 			}
@@ -940,7 +984,11 @@ func (r *run) interpret(a *Agent, call Call) string {
 				}
 				names = append(names, n)
 			}
-			n, why := r.fill(a, in.Filled, names)
+			d, why := digest(i)
+			if why != "" {
+				return why
+			}
+			n, why := r.fill(a, in.Filled, names, d)
 			if why != "" {
 				return why
 			}
@@ -986,11 +1034,11 @@ func (r *run) interpret(a *Agent, call Call) string {
 			return ""
 		case Exit:
 			t, _ := TypeOf(r.t.App.exit, shapeText)
-			o, ok := Observe(r.t.App, a.Kind, t, nil)
+			base, _ := BaseOf(t, nil)
+			o, ok := Observe(r.t.App, a.Kind, t, nil, DefaultRefinement(base, Digest(in.Reason)))
 			if !ok {
 				return "observe refused the exit"
 			}
-			base, _ := BaseOf(t, nil)
 			a.Names = append(a.Names, Named{o, base})
 			r.named(a.ID, len(a.Names)-1, map[string]any{"from": "exit", "text": in.Reason})
 			r.finish(a, []Observation{o}, []int{len(a.Names) - 1})
@@ -1032,11 +1080,11 @@ func resolveRef(a *Agent, made []int, i int, ref Ref) (int, string) {
 // the edge and back up (baseOf), named. byModel marks what the model made.
 func (r *run) make(a *Agent, c Contract, text string, byModel bool) (int, string) {
 	t, _ := TypeOf(c, shapeText)
-	o, ok := Observe(r.t.App, a.Kind, t, nil)
+	base, _ := BaseOf(t, nil)
+	o, ok := Observe(r.t.App, a.Kind, t, nil, DefaultRefinement(base, Digest(text)))
 	if !ok {
 		return 0, "observe refused"
 	}
-	base, _ := BaseOf(t, nil)
 	if byModel {
 		a.Created = append(a.Created, o)
 	}
@@ -1047,21 +1095,23 @@ func (r *run) make(a *Agent, c Contract, text string, byModel bool) (int, string
 	return n, ""
 }
 
-// cut is a goal: lines of a name in scope, a computation through goal of
-// that one name (observe_goal). The model chose only the lines; the shell
-// cuts the value, and checked the cut before the reply reached Step.
-func (r *run) cut(a *Agent, of, from, to int) (int, string) {
+// cut records the spec fragment selected from an existing observation.
+func (r *run) cut(a *Agent, of int, lines [][2]int, seen string) (int, string) {
 	t, _ := TypeOf(r.t.App.goal, shapeText)
-	o, ok := Observe(r.t.App, a.Kind, t, []Observation{a.Names[of].Obs})
+	base, _ := BaseOf(t, []ReturnBase{a.Names[of].Base})
+	o, ok := Observe(r.t.App, a.Kind, t, []Observation{a.Names[of].Obs}, DefaultRefinement(base, seen))
 	if !ok {
 		return 0, "observe refused the goal"
 	}
-	base, _ := BaseOf(t, []ReturnBase{a.Names[of].Base})
 	a.Created = append(a.Created, o)
 	a.Scope = append(a.Scope, o)
 	a.Names = append(a.Names, Named{o, base})
 	n := len(a.Names) - 1
-	r.named(a.ID, n, map[string]any{"from": "goal", "of": of, "lines": []int{from, to}})
+	var ls [][]int
+	for _, l := range lines {
+		ls = append(ls, []int{l[0], l[1]})
+	}
+	r.named(a.ID, n, map[string]any{"from": "goal", "of": of, "lines": ls})
 	return n, ""
 }
 
@@ -1069,18 +1119,18 @@ func (r *run) cut(a *Agent, of, from, to int) (int, string) {
 // create_input, its members the names' observations (observe_filled_input).
 // Its type is made from theirs; their values never enter it, and the shell
 // fills them in.
-func (r *run) fill(a *Agent, filled json.RawMessage, names []int) (int, string) {
+func (r *run) fill(a *Agent, filled json.RawMessage, names []int, seen string) (int, string) {
 	t, _ := TypeOf(r.t.App.createInput, shapeText)
 	var ms []Observation
 	var bases []ReturnBase
 	for _, n := range names {
 		ms, bases = append(ms, a.Names[n].Obs), append(bases, a.Names[n].Base)
 	}
-	o, ok := Observe(r.t.App, a.Kind, t, ms)
+	base, _ := BaseOf(t, bases)
+	o, ok := Observe(r.t.App, a.Kind, t, ms, DefaultRefinement(base, seen))
 	if !ok {
 		return 0, "observe refused the input"
 	}
-	base, _ := BaseOf(t, bases)
 	a.Created = append(a.Created, o)
 	a.Scope = append(a.Scope, o)
 	a.Names = append(a.Names, Named{o, base})
@@ -1135,11 +1185,15 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 			shape, from = shapeList, map[string]any{"from": "part", "contracts": bs}
 		}
 		t, _ := TypeOf(c, shape)
-		o, ok := Observe(app, KindDelegate, t, nil)
+		base, _ := BaseOf(t, nil)
+		value := from["text"]
+		if value == nil {
+			value = from["contracts"]
+		}
+		o, ok := Observe(app, KindDelegate, t, nil, DefaultRefinement(base, Digest(value)))
 		if !ok {
 			return "observe refused a part"
 		}
-		base, _ := BaseOf(t, nil)
 		members = append(members, Named{o, base})
 		r.named(id, len(members), from)
 	}
@@ -1154,11 +1208,11 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 		bases = append(bases, m.Base)
 	}
 	ct, _ := TypeOf(app.delegate, shapeList)
-	comp, ok := Observe(app, KindDelegate, ct, obs)
+	compBase, _ := BaseOf(ct, bases)
+	comp, ok := Observe(app, KindDelegate, ct, obs, DefaultRefinement(compBase, refinedOf(obs)))
 	if !ok {
 		return "delegate passes one observation twice"
 	}
-	compBase, _ := BaseOf(ct, bases)
 	child.Input = r.invoke(id, r.t.Actor, []ReturnBase{compBase})
 	child.Offer = Offered(app, k, cs)
 	child.Received = []Observation{comp}
@@ -1211,14 +1265,28 @@ func (r *run) returned(e Returned) {
 		r.fault(a, "the shape that came back is not well formed")
 		return
 	}
-	o, ok := Observe(r.t.App, KindAct, t, nil)
+	if e.Seen == "" {
+		r.fault(a, "what came back, without its digest")
+		return
+	}
+	base, _ := CreateReturn(p.Input, e.Shape)
+	o, ok := Observe(r.t.App, KindAct, t, nil, DefaultRefinement(base, e.Seen))
 	if !ok {
 		r.fault(a, "observe refused what came back")
 		return
 	}
-	base, _ := CreateReturn(p.Input, e.Shape)
 	p.Done = true
 	r.arrive(a, base, []Observation{o}, []map[string]any{{"from": "result", "element": e.Element}})
+}
+
+// refinedOf is a composition's value for its refinement: its members'
+// refinement types, in order. A composition's value is its members'.
+func refinedOf(ms []Observation) string {
+	ids := make([]string, len(ms))
+	for i, m := range ms {
+		ids[i] = string(m.refined)
+	}
+	return Digest(ids)
 }
 
 func pendingAt(a *Agent, element int) *Pending {

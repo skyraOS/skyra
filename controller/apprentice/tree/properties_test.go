@@ -60,12 +60,12 @@ func observations(t *testing.T) []Observation {
 	out := slices.Clone(effects)
 	td := typeOf(app.Delegate(), shapeA)
 	for _, ms := range observationLists(effects, 2) {
-		if o, ok := Observe(app, KindDelegate, td, ms); ok {
+		if o, ok := Observe(app, KindDelegate, td, ms, rho); ok {
 			out = append(out, o)
 		}
 	}
 	k := out[len(out)-1]
-	out = append(out, must(Observe(app, KindDelegate, td, []Observation{k, w.other})))
+	out = append(out, must(Observe(app, KindDelegate, td, []Observation{k, w.other}, rho)))
 	return out
 }
 
@@ -77,7 +77,7 @@ func TestObserve(t *testing.T) {
 			for _, s := range []Schema{shapeA, shapeS} {
 				ty := typeOf(c, s)
 				for _, ms := range members {
-					o, ok := Observe(app, k, ty, ms)
+					o, ok := Observe(app, k, ty, ms, rho)
 					// observe_eq_some
 					if ok != Admits(app, k, ty, ms) || ok && (o.Type() != ty || !slices.EqualFunc(o.Members(), ms, Observation.Equal)) {
 						t.Fatalf("observe_eq_some: %v through %s, %d members", k, name(c), len(ms))
@@ -97,7 +97,6 @@ func TestObserve(t *testing.T) {
 					if c == app.Goal() && (k != KindDelegate || len(ms) != 1) {
 						t.Fatalf("observe_goal: %v, %d members", k, len(ms))
 					}
-					// observe_not_through
 					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.PerformEffect(), app.Delegate(), app.Goal()}, c) {
 						t.Fatalf("observe_not_through: %v through %s", k, name(c))
 					}
@@ -114,17 +113,17 @@ func TestObserve(t *testing.T) {
 		}
 	}
 	// No member twice, in a computation of either kind.
-	if _, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), []Observation{w.goal, w.goal}); ok {
+	if _, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), []Observation{w.goal, w.goal}, rho); ok {
 		t.Error("admits: a member twice")
 	}
-	if _, ok := Observe(app, KindAct, typeOf(app.CreateInput(), shapeS), []Observation{w.goal, w.goal}); ok {
+	if _, ok := Observe(app, KindAct, typeOf(app.CreateInput(), shapeS), []Observation{w.goal, w.goal}, rho); ok {
 		t.Error("admits: an input filled from a name twice")
 	}
 }
 
 func TestRootObservation(t *testing.T) {
 	for _, c := range append(app.Contracts(), x) {
-		o, ok := RootObservation(app, typeOf(c, shapeS))
+		o, ok := RootObservation(app, typeOf(c, shapeS), rho)
 		if ok != (c == app.Root()) || ok && !o.IsEffect() {
 			t.Errorf("rootObservation through %s = %v", name(c), ok)
 		}
@@ -410,6 +409,23 @@ func TestDoUnseenIff(t *testing.T) {
 			if (Do(history, i) == SeenUnseen) != !slices.Contains(history, i) {
 				t.Fatalf("do_unseen_iff")
 			}
+		}
+	}
+}
+
+// observe_same: of one type and members, two observations are one exactly
+// when they are of one refinement type.
+func TestObserveSame(t *testing.T) {
+	ty := typeOf(x, shapeS)
+	for _, k := range kinds {
+		a, okA := Observe(app, k, ty, nil, "one")
+		b, okB := Observe(app, k, ty, nil, "one")
+		c, okC := Observe(app, k, ty, nil, "two")
+		if okA != okB || okA != okC {
+			t.Fatalf("%v: admitted by refinement", k)
+		}
+		if okA && (!a.Equal(b) || a.Equal(c) || nodup([]Observation{a, b}) || !nodup([]Observation{a, c})) {
+			t.Errorf("%v: observe_same", k)
 		}
 	}
 }

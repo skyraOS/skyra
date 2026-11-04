@@ -47,6 +47,31 @@ record tree in `.skyra/`.
 | **Ingress by parking** (next/16) | An async surface's invocation is parked with its host, which holds a reference to the work (its stamp) and its descriptors, never its authority. `skyra resume` derives the instance from the tree, refuses work that is not parked or was already resumed, and the successor checks the event like any output | `machine.parked`, `runtime/park/`, `skyra resume` |
 | **Conversations** | The user side is a continuation whose steps are the transcript, and Codex's parent. A fault in a Codex turn is shown and the conversation goes on. Each conversation is its lineage: saved, listed with its history, replayable | `targets/user/`, `hosts/web/` |
 
+## Trees on Claude or Codex
+
+```sh
+skyra tree --actor codex act "Call echo with text hello, then return its result." echo
+skyra tree --actor claude delegate "YOUR SPEC" find read
+```
+
+Claude remains the default when `--actor` is omitted. The desktop tree composer
+also offers a Claude/Codex selector; the web protocol accepts `actor` on
+`start-tree` and stores it with the run.
+
+Both providers use the same apprentice tree. A delegate cuts spec lines and
+passes existing observations and contracts to children; it cannot freely
+create a child's goal. An act node creates tool inputs and performs effects.
+Each model turn starts fresh and receives only its kind's instruction tools.
+The adapter acknowledges instruction calls with their positions, returns them
+in order when the turn ends, and leaves validation and execution to the tree.
+The CLI checks the recorded grant against the provider configuration. Claude
+also reports its loaded MCP tools; Codex is checked at `thread/start`.
+
+For the ordinary `delegate` helper, an omitted `tools` list inherits the
+calling model's offered tools, including when switching providers. An explicit
+empty list grants none; a subset keeps only those tools and their contracts.
+The adapter supplies this grant rather than inferring it from ambient reach.
+
 ## Packages
 
 Six groups, by what a package is. Imports only run downward: `core/` imports

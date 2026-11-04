@@ -395,7 +395,10 @@ func replayed(t *testing.T, dir, frame string) *shell {
 // the end of the text faults the root, by the shell, before Step.
 func TestAGoalIsCutFromTheSpec(t *testing.T) {
 	spec := "Build the thing.\nFirst, say hello.\nThen say goodbye."
-	run := func(cut string) (json.RawMessage, []string) {
+	one := func(cut string) string {
+		return `[{"goal":{"of":0,"lines":` + cut + `}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
+	}
+	run := func(root string) (json.RawMessage, []string) {
 		var prompts []string
 		answer := func(to string, payload json.RawMessage) Step {
 			if to == "echo" {
@@ -407,7 +410,7 @@ func TestAGoalIsCutFromTheSpec(t *testing.T) {
 			var p struct{ Text string }
 			json.Unmarshal(payload, &p)
 			prompts = append(prompts, p.Text)
-			out := `[{"goal":{"of":0,"lines":` + cut + `}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
+			out := root
 			switch {
 			case strings.Contains(p.Text, "(what came back)"), strings.Contains(p.Text, " returned)"):
 				var m []string
@@ -426,7 +429,12 @@ func TestAGoalIsCutFromTheSpec(t *testing.T) {
 		got, _ := kernel(t, t.TempDir(), "frame-1", Ask{Goal: spec, Kind: "delegate", Actor: "model", Reach: []string{"echo"}}, answer)
 		return got, prompts
 	}
-	got, prompts := run("[2,3]")
+	// Two cuts, the rules and a part, passed together: two observations.
+	if got, prompts := run(`[{"goal":{"of":0,"lines":[1,1]}},{"goal":{"of":0,"lines":[3,3]}},{"delegate":{"observations":[{"earlier":0},{"earlier":1}],"contracts":[0]}}]`); string(got) != `{"returned":[{"text":"hello"}]}` ||
+		!strings.Contains(prompts[1], `"Build the thing."`) || !strings.Contains(prompts[1], `"Then say goodbye."`) {
+		t.Fatalf("two cuts passed together: %s\n%s", got, prompts[1])
+	}
+	got, prompts := run(one("[2,3]"))
 	if string(got) != `{"returned":[{"text":"hello"}]}` {
 		t.Fatalf("the tree returned %s", got)
 	}
@@ -434,7 +442,14 @@ func TestAGoalIsCutFromTheSpec(t *testing.T) {
 	if !strings.Contains(prompts[len(prompts)-1], "a goal you cut: lines 2 to 3 of name 0") || !strings.Contains(child, "(your goal):") || !strings.Contains(child, "      1| First, say hello.\n      2| Then say goodbye.\n") || strings.Contains(child, "Build the thing.") {
 		t.Fatalf("the child's prompt:\n%s", child)
 	}
-	if got, _ := run("[2,9]"); !strings.Contains(string(got), "a goal cut lines 2 to 9 of name 0, which has 3") {
+	// The rules and a part, one goal of two runs.
+	if _, prompts := run(one("[[1,1],[3,3]]")); !strings.Contains(prompts[1], "      1| Build the thing.\n      2| Then say goodbye.\n") {
+		t.Fatalf("a goal of two runs, the child's prompt:\n%s", prompts[1])
+	}
+	if got, _ := run(one("[[1,1],[2,9]]")); !strings.Contains(string(got), "a goal cut lines 2 to 9 of name 0, which has 3") {
+		t.Fatalf("a run past the end: %s", got)
+	}
+	if got, _ := run(one("[2,9]")); !strings.Contains(string(got), "a goal cut lines 2 to 9 of name 0, which has 3") {
 		t.Fatalf("a cut past the end: %s", got)
 	}
 }

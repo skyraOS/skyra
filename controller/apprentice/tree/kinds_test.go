@@ -317,11 +317,15 @@ func TestLoadingDoesNotChangeTheKind(t *testing.T) {
 func typeOf(c Contract, s Schema) ObservationType { return must(TypeOf(c, s)) }
 
 // An effect made through each contract its kind may produce through.
+// rho is one refinement type for the observations of these tests: each is of
+// its own type already.
+const rho RefinementID = "test"
+
 func effectOf(t *testing.T, k Kind, c Contract) Observation {
 	t.Helper()
-	o, ok := Observe(app, k, typeOf(c, shapeS), nil)
+	o, ok := Observe(app, k, typeOf(c, shapeS), nil, rho)
 	if !ok {
-		t.Fatalf("Observe(%v, %s, no members) refused", k, name(c))
+		t.Fatalf("Observe(%v, %s, no members, rho) refused", k, name(c))
 	}
 	return o
 }
@@ -329,11 +333,11 @@ func effectOf(t *testing.T, k Kind, c Contract) Observation {
 // goalOf is a goal a delegate cut from the root's endowment, its one member.
 func goalOf(t *testing.T) Observation {
 	t.Helper()
-	r, ok := RootObservation(app, typeOf(app.Root(), shapeS))
+	r, ok := RootObservation(app, typeOf(app.Root(), shapeS), rho)
 	if !ok {
 		t.Fatal("RootObservation refused")
 	}
-	o, ok := Observe(app, KindDelegate, typeOf(app.Goal(), shapeS), []Observation{r})
+	o, ok := Observe(app, KindDelegate, typeOf(app.Goal(), shapeS), []Observation{r}, rho)
 	if !ok {
 		t.Fatal("a goal cut from the endowment refused")
 	}
@@ -356,7 +360,7 @@ func TestEffectIffNoMembers(t *testing.T) {
 		}
 	}
 	for _, ms := range [][]Observation{{goal}, {came}, {goal, came}, {wrote, exit}} {
-		o, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), ms)
+		o, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), ms, rho)
 		if !ok {
 			t.Fatalf("a delegate's computation of %d members refused", len(ms))
 		}
@@ -371,9 +375,9 @@ func TestEffectIffNoMembers(t *testing.T) {
 func TestOnlyDelegateMakesComputation(t *testing.T) {
 	came := effectOf(t, KindAct, x)
 	for _, k := range kinds {
-		_, ok := Observe(app, k, typeOf(app.Delegate(), shapeA), []Observation{came})
+		_, ok := Observe(app, k, typeOf(app.Delegate(), shapeA), []Observation{came}, rho)
 		if ok != (k == KindDelegate) {
-			t.Errorf("Observe(%v, with members) = %v; want %v", k, ok, k == KindDelegate)
+			t.Errorf("Observe(%v, with members, rho) = %v; want %v", k, ok, k == KindDelegate)
 		}
 	}
 }
@@ -391,9 +395,9 @@ func TestEffectsByKind(t *testing.T) {
 	}
 	for _, k := range kinds {
 		for _, c := range append(app.all(), x) {
-			_, ok := Observe(app, k, typeOf(c, shapeS), nil)
+			_, ok := Observe(app, k, typeOf(c, shapeS), nil, rho)
 			if want := slices.Contains(may[k], c); ok != want {
-				t.Errorf("Observe(%v, through %s, no members) = %v; want %v", k, name(c), ok, want)
+				t.Errorf("Observe(%v, through %s, no members, rho) = %v; want %v", k, name(c), ok, want)
 			}
 		}
 	}

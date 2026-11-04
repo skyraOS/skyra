@@ -185,6 +185,7 @@ type entry struct {
 	Err      string          `json:"err,omitempty"`
 	Value    json.RawMessage `json:"value,omitempty"`
 	Found    [][]byte        `json:"found,omitempty"`
+	Seen     []string        `json:"seen,omitempty"` // the digests the shell gave the event
 	Outcomes []tree.Outcome  `json:"outcomes,omitempty"`
 }
 
@@ -300,7 +301,7 @@ func (s *shell) setup(a Ask) error {
 }
 
 func (s *shell) started(a Ask) (tree.Event, error) {
-	return tree.Started{Self: s.self, Reach: s.rootReach, Kind: s.kind, Actor: s.self, Endowment: tree.Schema(`{"type":"string"}`)}, nil
+	return tree.Started{Self: s.self, Reach: s.rootReach, Kind: s.kind, Actor: s.self, Endowment: tree.Schema(`{"type":"string"}`), Seen: tree.Digest(s.goal)}, nil
 }
 
 // back is the event for what came back for one emitted instruction.
@@ -317,7 +318,7 @@ func (s *shell) back(p pending, st Step) (tree.Event, entry) {
 		if why := s.badCut(p.Agent, out); why != "" {
 			return tree.Stopped{Agent: p.Agent, Reason: why}, entry{}
 		}
-		return tree.Replied{Agent: p.Agent, Out: out}, entry{}
+		return tree.Replied{Agent: p.Agent, Out: out, Seen: s.digests(p.Agent, out)}, entry{}
 	}
 	if st.State != "return" {
 		return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema("-"), Err: why}, entry{}
@@ -326,7 +327,47 @@ func (s *shell) back(p pending, st Step) (tree.Event, entry) {
 	if err != nil {
 		return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema("-"), Err: err.Error()}, entry{}
 	}
-	return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema(types.Shape(v))}, entry{Value: st.Value}
+	return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema(types.Shape(v)), Seen: digestJSON(st.Value)}, entry{Value: st.Value}
+}
+
+// digestJSON is a JSON value's digest: decoded, numbers as written, and
+// encoded again, so its digest is its string, not its spacing.
+func digestJSON(raw []byte) string {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	var x any
+	_ = d.Decode(&x)
+	return tree.Digest(x)
+}
+
+// digests are a reply's, by instruction: the digest of the value each
+// filled input makes, which only the shell can make, from the values it
+// holds; "" for the rest. Step faults a filled input without one.
+func (s *shell) digests(agent tree.AgentID, out []byte) []string {
+	var call []map[string]json.RawMessage
+	if json.Unmarshal(out, &call) != nil {
+		return nil
+	}
+	seen := make([]string, len(call))
+	for i, ins := range call {
+		if raw := ins["goal"]; raw != nil {
+			var g struct {
+				Of    *int            `json:"of"`
+				Lines json.RawMessage `json:"lines"`
+			}
+			if json.Unmarshal(raw, &g) == nil && g.Of != nil {
+				v, ok := s.values[agent][*g.Of]
+				text, isText := v.V.(string)
+				if runs := runsOf(g.Lines); ok && isText && runs != nil {
+					seen[i] = tree.Digest(cut(text, runs))
+				}
+			}
+		}
+		if raw := ins["create_input"]; raw != nil && len(bytes.TrimSpace(raw)) > 0 && bytes.TrimSpace(raw)[0] != '"' {
+			seen[i] = tree.Digest(s.filled(agent, string(raw)))
+		}
+	}
+	return seen
 }
 
 // badCut is why a goal in a reply cuts what it cannot: Step never sees a
@@ -339,10 +380,14 @@ func (s *shell) badCut(agent tree.AgentID, out []byte) string {
 	}
 	for _, ins := range call {
 		var g struct {
-			Of    *int  `json:"of"`
-			Lines []int `json:"lines"`
+			Of    *int            `json:"of"`
+			Lines json.RawMessage `json:"lines"`
 		}
-		if ins["goal"] == nil || json.Unmarshal(ins["goal"], &g) != nil || g.Of == nil || len(g.Lines) != 2 {
+		if ins["goal"] == nil || json.Unmarshal(ins["goal"], &g) != nil || g.Of == nil {
+			continue
+		}
+		runs := runsOf(g.Lines)
+		if runs == nil {
 			continue
 		}
 		v, ok := s.values[agent][*g.Of]
@@ -353,9 +398,12 @@ func (s *shell) badCut(agent tree.AgentID, out []byte) string {
 		if !ok {
 			return fmt.Sprintf("a goal is cut from text; name %d is not text", *g.Of)
 		}
-		if n := len(lines(text)); g.Lines[1] > n {
-			return fmt.Sprintf("a goal cut lines %d to %d of name %d, which has %d", g.Lines[0], g.Lines[1], *g.Of, n)
+		for _, r := range runs {
+			if n := len(lines(text)); r[1] > n {
+				return fmt.Sprintf("a goal cut lines %d to %d of name %d, which has %d", r[0], r[1], *g.Of, n)
+			}
 		}
+
 	}
 	return ""
 }
@@ -365,13 +413,39 @@ func lines(text string) []string {
 	return strings.Split(strings.TrimRight(text, "\n"), "\n")
 }
 
-// cut is lines from to to of a text, from 1, both included.
-func cut(text string, from, to int) string {
-	ls := lines(text)
-	if from < 1 || to > len(ls) || from > to {
-		return ""
+func runsOf(v json.RawMessage) [][]int {
+	var one []int
+	if json.Unmarshal(v, &one) == nil && len(one) == 2 {
+		return [][]int{one}
 	}
-	return strings.Join(ls[from-1:to], "\n")
+	var many [][]int
+	if json.Unmarshal(v, &many) != nil {
+		return nil
+	}
+	for _, r := range many {
+		if len(r) != 2 {
+			return nil
+		}
+	}
+	return many
+}
+func cut(text string, runs [][]int) string {
+	ls := lines(text)
+	var out []string
+	for _, r := range runs {
+		if r[0] < 1 || r[1] > len(ls) || r[0] > r[1] {
+			return ""
+		}
+		out = append(out, ls[r[0]-1:r[1]]...)
+	}
+	return strings.Join(out, "\n")
+}
+func runsText(runs [][]int) string {
+	var ps []string
+	for _, r := range runs {
+		ps = append(ps, fmt.Sprintf("%d to %d", r[0], r[1]))
+	}
+	return "lines " + strings.Join(ps, " and ")
 }
 
 // reply is the call in what a model's actor returned: the instructions it
@@ -452,11 +526,14 @@ func (s *shell) drive(e tree.Event, l entry) ([]tree.Action, error) {
 func (s *shell) encode(e tree.Event, l entry) entry {
 	switch e := e.(type) {
 	case tree.Started:
-		l.Type = "started"
+		l.Type, l.Seen = "started", []string{e.Seen}
 	case tree.Replied:
-		l.Type, l.Agent, l.Out = "replied", e.Agent, string(e.Out)
+		l.Type, l.Agent, l.Out, l.Seen = "replied", e.Agent, string(e.Out), e.Seen
 	case tree.Returned:
 		l.Type, l.Agent, l.Element, l.Shape, l.Err = "returned", e.Agent, e.Element, string(e.Shape), e.Err
+		if e.Seen != "" {
+			l.Seen = []string{e.Seen}
+		}
 	case tree.Stopped:
 		l.Type, l.Agent, l.Err = "stopped", e.Agent, e.Reason
 	case tree.ReadResult:
@@ -470,14 +547,23 @@ func (s *shell) encode(e tree.Event, l entry) entry {
 func (s *shell) decode(l entry) (tree.Event, error) {
 	switch l.Type {
 	case "started":
-		return s.started(Ask{})
+		e, err := s.started(Ask{})
+		if st, ok := e.(tree.Started); ok && len(l.Seen) == 1 {
+			st.Seen = l.Seen[0]
+			e = st
+		}
+		return e, err
 	case "replied":
-		return tree.Replied{Agent: l.Agent, Out: []byte(l.Out)}, nil
+		return tree.Replied{Agent: l.Agent, Out: []byte(l.Out), Seen: l.Seen}, nil
 	case "returned":
 		if l.Value != nil {
 			s.results[fmt.Sprintf("%s/%d", l.Agent, l.Element)] = l.Value
 		}
-		return tree.Returned{Agent: l.Agent, Element: l.Element, Shape: tree.Schema(l.Shape), Err: l.Err}, nil
+		r := tree.Returned{Agent: l.Agent, Element: l.Element, Shape: tree.Schema(l.Shape), Err: l.Err}
+		if len(l.Seen) == 1 {
+			r.Seen = l.Seen[0]
+		}
+		return r, nil
 	case "stopped":
 		return tree.Stopped{Agent: l.Agent, Reason: l.Err}, nil
 	case "read":
@@ -746,9 +832,9 @@ func (s *shell) name(r tree.RecordWrite) {
 			v = value{s.goal, "what you were asked to do; a child's goal is lines you cut from it"}
 		}
 	case "goal":
-		ls := r.Body["lines"].([]int)
+		ls := r.Body["lines"].([][]int)
 		text, _ := s.values[r.Agent][r.Body["of"].(int)].V.(string)
-		v = value{cut(text, ls[0], ls[1]), fmt.Sprintf("a goal you cut: lines %d to %d of name %d", ls[0], ls[1], r.Body["of"].(int))}
+		v = value{cut(text, ls), fmt.Sprintf("a goal you cut: %s of name %d", runsText(ls), r.Body["of"].(int))}
 	case "exit":
 		v = value{r.Body["text"], "an exit"}
 	case "part":
@@ -880,9 +966,8 @@ func instructions(act bool) []map[string]any {
 				obj(map[string]any{"contract": map[string]any{"type": "integer", "minimum": 0}, "input": ref}, "contract", "input")))
 	} else {
 		out = append(out,
-			one("goal", "Cut a goal for a child: lines from to to, counted from 1, of a name that is text. You never write a goal; you cut it from what you were asked to do.",
-				obj(map[string]any{"of": map[string]any{"type": "integer", "minimum": 0, "description": "a name that is text, by its number"},
-					"lines": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2, "description": "[from, to]"}}, "of", "lines")),
+			one("goal", "Cut a goal for a child from an existing text observation. Select one inclusive line range [from, to] or several [[from, to], ...]. You never write a goal.",
+				obj(map[string]any{"of": map[string]any{"type": "integer", "minimum": 0}, "lines": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"anyOf": []any{map[string]any{"type": "integer", "minimum": 1}, map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2}}}}}, "of", "lines")),
 			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you cut with goal, as {\"earlier\": k}, or a goal you were given. Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again. What it returns is a new name when you are asked again.",
 				obj(map[string]any{"observations": refs, "contracts": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0}}}, "observations", "contracts")))
 	}
@@ -945,15 +1030,17 @@ func (s *shell) prompt(t tree.Turn) string {
 		b.WriteString(`  {"create_input": {...}}  make an object input, in which {"name": n} is name n's value, filled in for you` + "\n")
 		b.WriteString(`  {"perform_effect": {"contract": <number>, "input": <reference>}}  invoke a contract with an input you made` + "\n")
 	} else {
-		b.WriteString(`  {"goal": {"of": <name>, "lines": [<from>, <to>]}}  cut a goal for a child: those lines of a text name; text of one line is line 1` + "\n")
-		b.WriteString(`  {"delegate": {"observations": [<reference>...], "contracts": [<number>...]}}  start a child with a goal and at least one contract` + "\n")
+		b.WriteString(`  {"goal": {"of": <name>, "lines": [<from>, <to>]}}  cut a goal from an existing text observation` + "\n")
+		b.WriteString(`  {"goal": {"of": <name>, "lines": [[<from>, <to>], ...]}}  cut several runs into one goal` + "\n")
+		b.WriteString(`  {"delegate": {"observations": [<reference>...], "contracts": [<number>...]}}  start a child with a cut goal, existing observations and at least one contract` + "\n")
 	}
 	b.WriteString(`  {"return": {"members": [<reference>...]}}  return, alone: never what you were passed or what you wrote yourself` + "\n")
 	b.WriteString(`  {"exit": "<reason>"}  give up, alone` + "\n")
 	if act {
 		b.WriteString("\nWhat you invoke comes back as a new name, then you are asked again. Return what came back.\n")
 	} else {
-		b.WriteString("\nWhat a child returns comes back as a new name, then you are asked again. Return what came back.\n")
+		b.WriteString("\nCut and pass: select spec lines from existing text observations for a child’s goal, and pass existing observations for its context. You cannot freely create content for a child.\n")
+		b.WriteString("What a child returns comes back as a new name, then you are asked again. Return what came back.\n")
 		b.WriteString("Only an act node invokes a contract: to have one invoked, delegate a goal with exactly that one contract.\n")
 	}
 	fmt.Fprintf(&b, "You have %d turns at most; this is turn %d.\n", tree.MaxTurns, s.tree.Agents[t.Agent].Turns)

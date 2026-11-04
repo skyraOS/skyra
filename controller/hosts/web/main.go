@@ -473,6 +473,7 @@ type inbound struct {
 	Procedure     string   `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
 	Model         string   `json:"model,omitempty"`     // open-conversation: the model the root runs on; its default when empty
 	Images        []pasted `json:"images,omitempty"`    // submit: images pasted with the text
+	Actor         string   `json:"actor,omitempty"`     // start-tree provider
 	Kind          string   `json:"kind,omitempty"`      // start-tree: the root's kind
 	Reach         []string `json:"reach,omitempty"`     // start-tree: the targets the root holds
 }
@@ -488,7 +489,7 @@ func (h *webhost) handle(raw []byte) {
 	// A tree is not a conversation: it is seeded once, as the operator, and
 	// nothing waits on the human.
 	if m.Type == "start-tree" {
-		if _, why := h.startTree(m.Text, m.Kind, m.Reach); why != "" {
+		if _, why := h.startTree(m.Text, m.Kind, m.Reach, m.Actor); why != "" {
 			reject("tree", why)
 			return
 		}

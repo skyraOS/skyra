@@ -33,12 +33,34 @@ type continuation struct {
 	Input     struct {
 		Text, Header, Conversation, Thread, Incarnation, Model string
 		Fresh                                                  bool
+		Tools                                                  []string
+		Instructions                                           []instruction
 		Context                                                json.RawMessage
 		ActivityAt                                             int64 `json:"activity_at"`
 	} `json:"input"`
 	Reach proceduretools.Reach `json:"reach"`
 	Steps []step               `json:"steps"`
 }
+
+// Instruction tools are collected as the turn's reply, never dispatched.
+type instruction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Schema      json.RawMessage `json:"schema"`
+}
+
+func (c continuation) instruction(name string) bool {
+	return slices.ContainsFunc(c.Input.Instructions, func(i instruction) bool { return i.Name == name })
+}
+func acknowledged(k int, name string) json.RawMessage {
+	text := fmt.Sprintf("Recorded as instruction %d of this turn; a later instruction refers to it as {\"earlier\": %d}. It runs when your turn ends.", k, k)
+	if name == "return" || name == "exit" {
+		text = fmt.Sprintf("Recorded as instruction %d. End your turn now.", k)
+	}
+	b, _ := json.Marshal(text)
+	return b
+}
+
 type observation struct {
 	Lines                   []string `json:"lines"`
 	Partial, Delivery, Read string
@@ -100,7 +122,8 @@ func (t tool) shared() proceduretools.Tool {
 // whose contract it fits); and one tool per procedure that exists when the
 // thread starts, labelled by its contract's title, never a hash. Codex's
 // tools are fixed at thread/start, so a procedure remembered in this thread
-// is called through procedure.
+// is called through procedure. An explicit tools grant filters this catalog;
+// instruction turns default to no ordinary tools.
 func tools(c continuation) []tool {
 	var ts []tool
 	for _, name := range slices.Sorted(maps.Keys(modelTools)) {
@@ -128,6 +151,11 @@ func tools(c continuation) []tool {
 		if actors := proceduretools.Delegable(c.Reach); ts[i].name == "delegate" && len(actors) > 0 {
 			ts[i].description += " Available actors: " + strings.Join(actors, ", ") + "."
 		}
+	}
+	if c.Input.Tools != nil || len(c.Input.Instructions) > 0 {
+		ts = slices.DeleteFunc(ts, func(t tool) bool {
+			return !slices.Contains(c.Input.Tools, t.target) && !slices.Contains(c.Input.Tools, t.name)
+		})
 	}
 	return ts
 }
@@ -192,7 +220,7 @@ func quiet(o observation) bool {
 
 func offered(c continuation, name string) bool {
 	_, ok := lookup(c, name)
-	return ok
+	return ok || c.instruction(name)
 }
 
 // toolEmission is the instruction a tool call becomes. results are this
@@ -246,6 +274,21 @@ func id(raw json.RawMessage) string {
 func decide(c continuation) (string, error) {
 	if c.Frame == "" {
 		return "", errors.New("no frame")
+	}
+	if len(c.Input.Instructions) > 0 {
+		if !c.Input.Fresh || c.Input.Thread != "" || c.Input.Incarnation != "" {
+			return "", errors.New("instruction turns require a fresh session")
+		}
+		names := map[string]bool{}
+		for _, in := range c.Input.Instructions {
+			if in.Name == "" || names[in.Name] {
+				return "", errors.New("instruction names must be nonempty and unique")
+			}
+			if _, ok := lookup(c, in.Name); ok {
+				return "", errors.New("instruction name conflicts with a granted tool")
+			}
+			names[in.Name] = true
+		}
 	}
 	if len(c.Steps) > 2000 {
 		return "", errors.New("turn exceeded operation limit")
@@ -481,7 +524,13 @@ func decide(c continuation) (string, error) {
 		for _, t := range tools(c) {
 			defs = append(defs, map[string]any{"name": t.name, "description": t.description, "inputSchema": jsonSchema(t.schema)})
 		}
+		for _, in := range c.Input.Instructions {
+			defs = append(defs, map[string]any{"name": in.Name, "description": in.Description, "inputSchema": in.Schema})
+		}
 		params := map[string]any{"approvalPolicy": "never", "sandbox": "read-only", "dynamicTools": defs, "baseInstructions": prompt.Environment(c.Input.Header, c.Workspace, c.Scratch, proceduretools.HoldsAny(c.Reach, "repo.write"))}
+		if len(c.Input.Instructions) > 0 {
+			params["baseInstructions"] = "You are inside Skyra, a cognitive architecture."
+		}
 		if c.Input.Model != "" {
 			params["model"] = c.Input.Model
 		}
@@ -535,7 +584,19 @@ func decide(c continuation) (string, error) {
 		}
 		return finish(c, d)
 	}
-	for i, call := range d.Pending {
+	resultIndex, instructionIndex := 0, 0
+	for _, call := range d.Pending {
+		if c.instruction(call.Params.Tool) {
+			k := instructionIndex
+			instructionIndex++
+			if d.Answered[id(call.ID)] {
+				continue
+			}
+			line, _ := json.Marshal(toolResult(call.ID, step{State: "return", Value: acknowledged(k, call.Params.Tool)}))
+			return ioCall(d.Incarnation, []string{string(line)}, d.Partial), nil
+		}
+		i := resultIndex
+		resultIndex++
 		if d.Answered[id(call.ID)] {
 			continue
 		}
@@ -572,11 +633,20 @@ func finish(c continuation, d derived) (string, error) {
 		}
 		return emit(c.Frame, result), nil
 	}
-	if d.Terminal != "completed" || d.Final == "" {
+	if d.Terminal != "completed" || d.Final == "" && len(c.Input.Instructions) == 0 {
 		if d.TerminalError != "" {
 			return "", fmt.Errorf("turn ended %s: %s", d.Terminal, d.TerminalError)
 		}
 		return "", fmt.Errorf("turn ended %s without an answer", d.Terminal)
+	}
+	if len(c.Input.Instructions) > 0 {
+		calls := []map[string]any{}
+		for _, call := range d.Pending {
+			if c.instruction(call.Params.Tool) {
+				calls = append(calls, map[string]any{"name": call.Params.Tool, "args": call.Params.Arguments})
+			}
+		}
+		return emit(c.Frame, map[string]any{"text": d.Final, "calls": calls}), nil
 	}
 	if c.Input.Fresh {
 		return emit(c.Frame, map[string]string{"text": d.Final}), nil

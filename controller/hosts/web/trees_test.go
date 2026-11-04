@@ -30,6 +30,9 @@ func TestStartTreeRefuses(t *testing.T) {
 			t.Errorf("%+v was started", c)
 		}
 	}
+	if _, why := h.startTree("spec", "act", []string{"echo"}, "other"); why == "" {
+		t.Fatal("unknown provider accepted")
+	}
 	if len(h.trees.runs) != 0 {
 		t.Fatal("a refused tree was kept")
 	}
@@ -39,10 +42,10 @@ func TestPastTreesLoad(t *testing.T) {
 	dir := t.TempDir()
 	run := filepath.Join(dir, "t-1")
 	os.MkdirAll(filepath.Join(run, ".skyra"), 0o700)
-	os.WriteFile(filepath.Join(run, "tree.json"), []byte(`{"id":"t-1","goal":"g","kind":"act","reach":["echo"],"phase":"running","started":1}`), 0o600)
+	os.WriteFile(filepath.Join(run, "tree.json"), []byte(`{"id":"t-1","actor":"codex","goal":"g","kind":"act","reach":["echo"],"phase":"running","started":1}`), 0o600)
 	tr := newTrees(dir, "/nonexistent", "/nonexistent")
 	r := tr.runs["t-1"]
-	if r == nil || r.Phase != "failed" || r.View != nil {
+	if r == nil || r.Actor != "codex" || r.Phase != "failed" || r.View != nil {
 		t.Fatalf("%+v", r)
 	}
 }

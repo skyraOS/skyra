@@ -7,7 +7,7 @@ import Testing
 
 private let trees = """
 {"type":"trees","targets":["find","read","echo"],"trees":[
- {"id":"t-2","goal":"spec","kind":"delegate","reach":["find","read"],"phase":"running","started":2,
+ {"id":"t-2","actor":"codex","goal":"spec","kind":"delegate","reach":["find","read"],"phase":"running","started":2,
   "view":[{"frame":"f","goal":"spec","kind":"delegate","reach":["find","read"],"frames":[
    {"event":"started","nodes":[{"id":"0","kind":"delegate","phase":"thinking","depth":0,"turns":1,"holds":["find","read"],"names":1,"returned":0}]},
    {"event":"replied","agent":"0","detail":"delegate {}","nodes":[
@@ -24,6 +24,7 @@ private let trees = """
         return
     }
     #expect(targets == ["find", "read", "echo"])
+    #expect(runs[0].actor == "codex" && runs[1].actor == nil)
     #expect(runs.map(\.phase) == [.running, .failed])
     #expect(runs[0].frames.count == 2 && runs[1].frames.isEmpty)
     let last = runs[0].frames[1]
@@ -32,8 +33,9 @@ private let trees = """
 }
 
 @Test func startTreeEncodesWhatTheWebhostReads() throws {
-    let data = try JSONEncoder().encode(ClientMessage.startTree(requestId: "r", spec: "s", kind: "delegate", reach: ["find", "read"]))
+    let data = try JSONEncoder().encode(ClientMessage.startTree(requestId: "r", spec: "s", kind: "delegate", reach: ["find", "read"], actor: "codex"))
     let obj = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(obj["actor"] as? String == "codex")
     #expect(obj["type"] as? String == "start-tree" && obj["text"] as? String == "s")
     #expect(obj["kind"] as? String == "delegate" && obj["reach"] as? [String] == ["find", "read"])
 }
