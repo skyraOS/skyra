@@ -86,6 +86,7 @@ type webhost struct {
 	wmu          sync.Mutex
 	bmu          sync.Mutex      // serialize snapshot revisions and stream baselines
 	stream       *snapshotStream // wmu; nil for legacy full-snapshot clients
+	trees        *trees          // nil without -tree-registry
 }
 
 func main() {
@@ -96,6 +97,8 @@ func main() {
 	registry := flag.String("registry", "", "the operator's registry, for new conversations")
 	dir := flag.String("conversations", "", "directory holding one .skyra per conversation")
 	scratch := flag.String("scratch", "", "shared write space for new runs; default is conversation-local scratch")
+	treeRegistry := flag.String("tree-registry", "", "the operator's registry at the operator's depth, for trees (56)")
+	treeView := flag.String("treeview", "", "the treeview binary, to show a tree forming")
 	flag.Parse()
 	if *parkSock == "" || *skyra == "" || *registry == "" || *dir == "" {
 		flag.Usage()
@@ -122,6 +125,10 @@ func main() {
 	h.loadPast()
 	go h.loadAllFull()
 	go h.watch()
+	if *treeRegistry != "" && *treeView != "" {
+		h.trees = newTrees(filepath.Join(*dir, "trees"), *treeView, *treeRegistry)
+		go h.trees.watch(h.sendTrees)
+	}
 
 	os.Remove(*parkSock)
 	pl, err := net.Listen("unix", *parkSock)
@@ -424,6 +431,7 @@ func (h *webhost) serveBrowser(conn net.Conn) {
 	h.stream = nil
 	h.wmu.Unlock()
 	h.broadcast()
+	h.sendTrees()
 	for {
 		op, payload, err := readFrame(r)
 		if err != nil || op == 0x8 {
@@ -465,6 +473,8 @@ type inbound struct {
 	Procedure     string   `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
 	Model         string   `json:"model,omitempty"`     // open-conversation: the model the root runs on; its default when empty
 	Images        []pasted `json:"images,omitempty"`    // submit: images pasted with the text
+	Kind          string   `json:"kind,omitempty"`      // start-tree: the root's kind
+	Reach         []string `json:"reach,omitempty"`     // start-tree: the targets the root holds
 }
 
 func (h *webhost) handle(raw []byte) {
@@ -474,6 +484,17 @@ func (h *webhost) handle(raw []byte) {
 	}
 	reject := func(code, msg string) {
 		h.send(map[string]string{"type": "rejected", "requestId": m.RequestID, "code": code, "message": msg})
+	}
+	// A tree is not a conversation: it is seeded once, as the operator, and
+	// nothing waits on the human.
+	if m.Type == "start-tree" {
+		if _, why := h.startTree(m.Text, m.Kind, m.Reach); why != "" {
+			reject("tree", why)
+			return
+		}
+		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
+		h.sendTrees()
+		return
 	}
 	h.mu.Lock()
 	if m.Type != "open-conversation" && m.UIIncarnation != h.incarnation {

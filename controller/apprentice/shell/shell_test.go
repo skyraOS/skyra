@@ -33,7 +33,7 @@ func model(prompt string) string {
 	if strings.Contains(prompt, "of a tree, an act node") {
 		return "Here:\n```json\n" + `[{"create_input":"{\"text\":\"hello\"}"},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]` + "\n```"
 	}
-	return `[{"goal":"say hello through echo"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
+	return `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
 }
 
 // kernel plays the kernel: it resumes the frame until it returns, running
@@ -388,4 +388,53 @@ func replayed(t *testing.T, dir, frame string) *shell {
 		s.names(es)
 	}
 	return s
+}
+
+// A goal is cut, never written: the root cuts lines of its spec, and its
+// child is shown exactly those lines as what it is asked to do. A cut past
+// the end of the text faults the root, by the shell, before Step.
+func TestAGoalIsCutFromTheSpec(t *testing.T) {
+	spec := "Build the thing.\nFirst, say hello.\nThen say goodbye."
+	run := func(cut string) (json.RawMessage, []string) {
+		var prompts []string
+		answer := func(to string, payload json.RawMessage) Step {
+			if to == "echo" {
+				var p struct{ Text string }
+				json.Unmarshal(payload, &p)
+				v, _ := json.Marshal(map[string]string{"text": p.Text})
+				return Step{To: to, State: "return", Value: v}
+			}
+			var p struct{ Text string }
+			json.Unmarshal(payload, &p)
+			prompts = append(prompts, p.Text)
+			out := `[{"goal":{"of":0,"lines":` + cut + `}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`
+			switch {
+			case strings.Contains(p.Text, "(what came back)"), strings.Contains(p.Text, " returned)"):
+				var m []string
+				for _, l := range line.FindAllStringSubmatch(p.Text, -1) {
+					if l[2] == "what came back" || strings.HasSuffix(l[2], " returned") {
+						m = l
+					}
+				}
+				out = `[{"return":{"members":[` + m[1] + `]}}]`
+			case strings.Contains(p.Text, "of a tree, an act node"):
+				out = `[{"create_input":"{\"text\":\"hello\"}"},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]`
+			}
+			v, _ := json.Marshal(map[string]string{"text": out})
+			return Step{To: to, State: "return", Value: v}
+		}
+		got, _ := kernel(t, t.TempDir(), "frame-1", Ask{Goal: spec, Kind: "delegate", Actor: "model", Reach: []string{"echo"}}, answer)
+		return got, prompts
+	}
+	got, prompts := run("[2,3]")
+	if string(got) != `{"returned":[{"text":"hello"}]}` {
+		t.Fatalf("the tree returned %s", got)
+	}
+	child := prompts[1]
+	if !strings.Contains(prompts[len(prompts)-1], "a goal you cut: lines 2 to 3 of name 0") || !strings.Contains(child, "(your goal):") || !strings.Contains(child, "      1| First, say hello.\n      2| Then say goodbye.\n") || strings.Contains(child, "Build the thing.") {
+		t.Fatalf("the child's prompt:\n%s", child)
+	}
+	if got, _ := run("[2,9]"); !strings.Contains(string(got), "a goal cut lines 2 to 9 of name 0, which has 3") {
+		t.Fatalf("a cut past the end: %s", got)
+	}
 }

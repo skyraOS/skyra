@@ -21,6 +21,12 @@ struct SkyraApp: App {
                 Button("Restart Backend") { delegate.backend.restart() }.keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
+        Window("Trees", id: "trees") {
+            TreesWindow(session: delegate.session).preferredColorScheme(.dark)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1180, height: 760)
+        .keyboardShortcut("t", modifiers: [.command, .shift])
     }
 }
 @MainActor

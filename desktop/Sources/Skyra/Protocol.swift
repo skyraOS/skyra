@@ -106,15 +106,55 @@ struct BoundaryView: Decodable, Equatable, Sendable {
     let grants: Int
 }
 
+/// A tree started from a spec (56), and its log replayed through Step: the
+/// tree after each event, as the machine itself made it. The webhost sends
+/// every tree, newest first.
+struct TreeRun: Decodable, Equatable, Sendable, Identifiable {
+    struct Node: Decodable, Equatable, Sendable, Identifiable {
+        let id: String
+        let parent: String?
+        let kind: String // act | delegate
+        let phase: String // thinking | invoking | delegating | done | faulted
+        let depth: Int
+        let turns: Int
+        let holds: [String]?
+        let names: Int
+        let returned: Int
+        let why: String?
+        let lost: [String]?
+    }
+    struct Frame: Decodable, Equatable, Sendable {
+        let event: String // started | replied | returned | stopped
+        let agent: String?
+        let detail: String?
+        let nodes: [Node]
+    }
+    struct Replay: Decodable, Equatable, Sendable { let frames: [Frame] }
+
+    enum Phase: String, Decodable { case running, done, failed }
+    let id: String
+    let goal: String
+    let kind: String
+    let reach: [String]
+    let phase: Phase
+    let answer: String?
+    let error: String?
+    let started: Int
+    let view: [Replay]?
+
+    var frames: [Frame] { view?.first?.frames ?? [] }
+}
+
 enum ServerMessage: Decodable, Equatable, Sendable {
     case snapshot(incarnation: String, revision: Int, conversations: [Conversation], destinations: [Destination])
     case delta(incarnation: String, revision: Int, baseRevision: Int, conversations: [Conversation], order: [String], destinations: [Destination])
     case accepted(requestId: String)
     case rejected(requestId: String, code: String, message: String)
+    case trees(targets: [String], trees: [TreeRun])
     case unknown(String)
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, revision, baseRevision, order, conversations, destinations, requestId, code, message
+        case type, uiIncarnation, revision, baseRevision, order, conversations, destinations, requestId, code, message, targets, trees
     }
 
     init(from decoder: Decoder) throws {
@@ -139,6 +179,9 @@ enum ServerMessage: Decodable, Equatable, Sendable {
             self = .rejected(requestId: try c.decode(String.self, forKey: .requestId),
                              code: try c.decode(String.self, forKey: .code),
                              message: try c.decode(String.self, forKey: .message))
+        case "trees":
+            self = .trees(targets: try c.decode([String].self, forKey: .targets),
+                          trees: try c.decode([TreeRun].self, forKey: .trees))
         default:
             self = .unknown(type)
         }
@@ -180,9 +223,10 @@ enum ClientMessage: Encodable {
     case close(incarnation: String, conversation: String, requestId: String)
     case open(requestId: String, procedure: String?, model: String? = nil) // nil procedure: the webhost's first root; nil model: its default
     case delete(incarnation: String, conversation: String, requestId: String)
+    case startTree(requestId: String, spec: String, kind: String, reach: [String]) // 56: one tree of a spec
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, conversation, requestId, text, procedure, model, images
+        case type, uiIncarnation, conversation, requestId, text, procedure, model, images, kind, reach
     }
 
     /// A pasted image as the webhost takes it: its name and its bytes.
@@ -215,6 +259,12 @@ enum ClientMessage: Encodable {
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
+        case let .startTree(id, spec, kind, reach):
+            try c.encode("start-tree", forKey: .type)
+            try c.encode(id, forKey: .requestId)
+            try c.encode(spec, forKey: .text)
+            try c.encode(kind, forKey: .kind)
+            try c.encode(reach, forKey: .reach)
         }
     }
 }

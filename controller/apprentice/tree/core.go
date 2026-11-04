@@ -204,24 +204,29 @@ func nodup(xs []Observation) bool {
 }
 
 // effectThrough is what an effect may come through, by the kind of node that
-// sends it: an exit, from every kind; a goal, a description and a packaged
-// reach, from a delegate; an input, from an act node, to dispatch; what came
-// back through an act node's perform_effect, typed by the contract it was
-// passed, outside the apprentice.
+// sends it: an exit, from every kind; a description and a packaged reach,
+// from a delegate; an input, from an act node, to dispatch; what came back
+// through an act node's perform_effect, typed by the contract it was passed,
+// outside the apprentice. A goal is never an effect: it is cut from what a
+// delegate has.
 func effectThrough(a Apprentice, k Kind, c Contract) bool {
 	return c == a.exit ||
-		k == KindDelegate && (c == a.goal || c == a.createDelegation || c == a.createAct || c == a.reach) ||
+		k == KindDelegate && (c == a.createDelegation || c == a.createAct || c == a.reach) ||
 		k == KindAct && (c == a.createInput || !a.Mine(c))
 }
 
 // Admits is what Observe admits. No members: an effect, through what its
-// kind may make one through. Members: a computation, only from a delegate,
-// through delegate, none twice.
+// kind may make one through. Members: a computation, none twice, from a
+// delegate through delegate; from a delegate through goal, a part cut from
+// the one observation that is its member; or from an act node through
+// create_input: an input filled from names in its scope, which are its
+// members.
 func Admits(a Apprentice, k Kind, t ObservationType, ms []Observation) bool {
 	if len(ms) == 0 {
 		return effectThrough(a, k, t.contract)
 	}
-	return k == KindDelegate && t.contract == a.delegate && nodup(ms)
+	return (k == KindDelegate && t.contract == a.delegate || k == KindAct && t.contract == a.createInput ||
+		k == KindDelegate && t.contract == a.goal && len(ms) == 1) && nodup(ms)
 }
 
 // Observe is the one function that creates observations from an

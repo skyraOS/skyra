@@ -683,7 +683,10 @@ one contract (`perform_effect`, with `create_input`), a delegate delegates
 kinds of observation keep their names: an effect has no members, a
 computation has members, and a computation is what a delegate returns.
 
-Only a delegate node makes a computation; an act node makes only effects.
+A delegate node makes a computation through `delegate`, and through `goal`,
+which cuts a goal from lines of a text it has; it never writes one. An act
+node makes one only as an input filled from names (`create_input`), and
+otherwise only effects.
 The apprentice's contracts for the kind are then loaded into its reach:
 `exit` and `return` for every kind; `create_input` and `perform_effect` for
 an act node; `delegate` and `goal` for a delegate node.
@@ -713,8 +716,8 @@ level, and every test is named for what it proves:
   count, for the count or for the self check: adding any of them to a reach
   leaves the result unchanged, refused included. Loading the kind's contracts does not change the kind.
   An observation is an effect iff it has no members, a computation iff it
-  has members. `observe` makes a computation only for a delegate node,
-  and only effects for an act node.
+  has members. `observe` makes a computation for a delegate node through
+  `delegate` or `goal`, and for an act node only through `create_input`.
 - **Vectors, exhaustive.** Every reach of length 0 to 4 over a set that
   holds distinct contracts, two shapes of one binary, the agent's own
   binary, and each of the apprentice's contracts, with repeats; and every
@@ -990,6 +993,20 @@ Settled, from the first real trees:
     through a contract. Settled: shown as state. An agent keeps its
     children's faults (`Lost`), each child and why; every turn carries them
     (`Turn.Faults`), and the prompt lists them apart from its names.
+
+21. **Partitioning a spec.** Settled: a part of a spec is a slice of it,
+    never retyped. A delegate never writes a goal: `goal {"of": n, "lines":
+    [a, b]}` cuts lines a to b of name n, which is text, so its model chooses
+    only integers. A goal is a computation of one member, what it was cut
+    from (55, invariants 6 and 7, `observe_goal`), so every goal traces back
+    to the tree's input, and a child cuts its own goal again for its
+    children. Its base type is made from what it was cut from, never from its
+    lines; the shell cuts the value, and faults a cut of something that is
+    not text, or past its end, before the reply reaches Step. Text of many
+    lines is shown to a model by numbered line, so it can cut it. In the same
+    way, an act node's input may be filled from names (`create_input`
+    `{"name": n}`), a computation of them, so what it already has is never
+    retyped. `exit` stays text: the node's own reason, only ever returned.
 
 ## Open
 

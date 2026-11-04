@@ -89,12 +89,16 @@ func TestObserve(t *testing.T) {
 					if o.IsEffect() == o.IsComputation() {
 						t.Fatalf("Observation.effect_xor_computation")
 					}
-					// observe_computation, observe_act
-					if o.IsComputation() && (k != KindDelegate || c != app.Delegate()) {
+					// observe_computation, observe_act, observe_filled_input
+					if o.IsComputation() && !(k == KindDelegate && (c == app.Delegate() || c == app.Goal()) || k == KindAct && c == app.CreateInput()) {
 						t.Fatalf("observe_computation: %v through %s", k, name(c))
 					}
+					// observe_goal
+					if c == app.Goal() && (k != KindDelegate || len(ms) != 1) {
+						t.Fatalf("observe_goal: %v, %d members", k, len(ms))
+					}
 					// observe_not_through
-					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.PerformEffect(), app.Delegate()}, c) {
+					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.PerformEffect(), app.Delegate(), app.Goal()}, c) {
 						t.Fatalf("observe_not_through: %v through %s", k, name(c))
 					}
 					// observe_input
@@ -109,9 +113,12 @@ func TestObserve(t *testing.T) {
 			}
 		}
 	}
-	// No member twice.
+	// No member twice, in a computation of either kind.
 	if _, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), []Observation{w.goal, w.goal}); ok {
 		t.Error("admits: a member twice")
+	}
+	if _, ok := Observe(app, KindAct, typeOf(app.CreateInput(), shapeS), []Observation{w.goal, w.goal}); ok {
+		t.Error("admits: an input filled from a name twice")
 	}
 }
 

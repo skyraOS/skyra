@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>tree</title>
+<style>
+body{font:14px ui-monospace,Menlo,monospace;margin:24px;color:#1d1d1f;background:#fafafa}
+h1{font-size:15px;font-weight:600;margin:0 0 4px}
+#bar{display:flex;gap:10px;align-items:center;margin:14px 0}
+#step{flex:1}
+#event{background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:14px;white-space:pre-wrap;word-break:break-word;min-height:2.5em}
+ul{list-style:none;padding-left:26px;margin:0;border-left:1px dashed #bbb}
+#tree>ul{border:0;padding:0}
+li{margin:6px 0}
+.n{display:inline-block;border:1px solid #ccc;border-radius:6px;padding:5px 9px;background:#fff}
+.n b{font-weight:600}
+.thinking{border-color:#3b82f6;background:#eff6ff}
+.invoking{border-color:#a855f7;background:#faf5ff}
+.delegating{border-color:#f59e0b;background:#fffbeb}
+.done{border-color:#22c55e;background:#f0fdf4}
+.faulted{border-color:#ef4444;background:#fef2f2}
+.cur{outline:3px solid #111;outline-offset:2px}
+.new{animation:pop .5s}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+.m{color:#666;font-size:12px}
+.lost{color:#b91c1c;font-size:12px}
+#key span{margin-right:10px}
+</style></head><body>
+<h1 id="goal"></h1><div class="m" id="root"></div>
+<div id="bar"><button id="prev">◀</button><button id="play">play</button><button id="next">▶</button>
+<input type="range" id="step" min="0" value="0"><span id="pos"></span></div>
+<div id="key" class="m"><span class="n thinking">thinking</span><span class="n invoking">invoking</span><span class="n delegating">delegating</span><span class="n done">done</span><span class="n faulted">faulted</span></div>
+<p></p><div id="event"></div><div id="tree"></div>
+<script>
+const runs=/*RUNS*/[];
+const r=runs[0], F=r.frames;
+const $=id=>document.getElementById(id);
+$('goal').textContent=r.goal; $('root').textContent=r.kind+' root, holding '+(r.reach||[]).join(', ');
+$('step').max=F.length-1;
+let i=0, seen=new Set(), timer=null;
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function draw(){
+  const f=F[i];
+  $('pos').textContent=(i+1)+' / '+F.length;
+  $('event').innerHTML='<b>'+esc(f.event)+(f.agent?' '+esc(f.agent):'')+'</b>'+(f.detail?'\n'+esc(f.detail):'');
+  const kids={}; for(const n of f.nodes){(kids[n.parent||'']=kids[n.parent||'']||[]).push(n)}
+  const prev=new Set(i>0?F[i-1].nodes.map(n=>n.id):[]);
+  const node=n=>'<li><span class="n '+n.phase+(n.id===f.agent?' cur':'')+(prev.has(n.id)?'':' new')+'"><b>'+esc(n.id)+'</b> '+n.kind+' · '+n.phase+
+    '<div class="m">holds '+esc((n.holds||[]).join(' + ')||'nothing')+' · turn '+n.turns+' · '+n.names+' names'+(n.returned?' · returned '+n.returned:'')+'</div>'+
+    (n.why?'<div class="lost">'+esc(n.why)+'</div>':'')+
+    (n.lost||[]).map(l=>'<div class="lost">lost '+esc(l)+'</div>').join('')+'</span>'+
+    (kids[n.id]?'<ul>'+kids[n.id].map(node).join('')+'</ul>':'')+'</li>';
+  $('tree').innerHTML='<ul>'+(kids['']||[]).map(node).join('')+'</ul>';
+  $('step').value=i;
+}
+function go(j){i=Math.max(0,Math.min(F.length-1,j));draw()}
+$('prev').onclick=()=>go(i-1); $('next').onclick=()=>go(i+1); $('step').oninput=e=>go(+e.target.value);
+$('play').onclick=()=>{if(timer){clearInterval(timer);timer=null;$('play').textContent='play';return}
+  if(i===F.length-1)go(0); $('play').textContent='pause';
+  timer=setInterval(()=>{if(i>=F.length-1){clearInterval(timer);timer=null;$('play').textContent='play';return}go(i+1)},900)};
+document.onkeydown=e=>{if(e.key==='ArrowRight')go(i+1);if(e.key==='ArrowLeft')go(i-1)};
+draw();
+</script></body></html>

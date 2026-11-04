@@ -12,6 +12,8 @@ final class Session {
     private(set) var incarnation = ""
     private(set) var conversations: [Conversation] = []
     private(set) var destinations: [Destination] = [] // the roots a human may select (proposal 38)
+    private(set) var trees: [TreeRun] = [] // trees started from a spec (56), newest first
+    private(set) var treeTargets: [String] = [] // what a tree's root may hold; empty when the backend has no trees
     /// The conversation on screen; nil for a fresh session.
     var selected: String?
     var draft = ""
@@ -281,6 +283,9 @@ final class Session {
                 opening = false
             }
         case let .accepted(id): acknowledge(id)
+        case let .trees(targets, runs):
+            treeTargets = targets
+            trees = runs
         case .unknown: break
         }
     }
@@ -466,6 +471,14 @@ final class Session {
               }) else { return }
         if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
         awaitingTranscript = nil
+    }
+
+    /// Grow one tree of a spec. One target held is an act root; two or more, a delegate.
+    @discardableResult
+    func startTree(_ spec: String, holding reach: [String]) -> Bool {
+        let text = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !reach.isEmpty else { return false }
+        return send(.startTree(requestId: requestID(), spec: text, kind: reach.count == 1 ? "act" : "delegate", reach: reach))
     }
 
     @discardableResult

@@ -326,14 +326,31 @@ func effectOf(t *testing.T, k Kind, c Contract) Observation {
 	return o
 }
 
+// goalOf is a goal a delegate cut from the root's endowment, its one member.
+func goalOf(t *testing.T) Observation {
+	t.Helper()
+	r, ok := RootObservation(app, typeOf(app.Root(), shapeS))
+	if !ok {
+		t.Fatal("RootObservation refused")
+	}
+	o, ok := Observe(app, KindDelegate, typeOf(app.Goal(), shapeS), []Observation{r})
+	if !ok {
+		t.Fatal("a goal cut from the endowment refused")
+	}
+	return o
+}
+
 // An observation is an effect iff it has no members, a computation iff it
 // has members; never both, never neither.
 func TestEffectIffNoMembers(t *testing.T) {
-	goal := effectOf(t, KindDelegate, app.Goal())
+	goal := goalOf(t)
 	exit := effectOf(t, KindAct, app.Exit())
 	wrote := effectOf(t, KindDelegate, app.CreateAct())
 	came := effectOf(t, KindAct, x)
-	for _, o := range []Observation{goal, exit, wrote, came} {
+	if len(goal.Members()) != 1 || !goal.IsComputation() {
+		t.Error("a goal is not a computation of one member")
+	}
+	for _, o := range []Observation{exit, wrote, came} {
 		if len(o.Members()) != 0 || !o.IsEffect() || o.IsComputation() {
 			t.Errorf("an observation with %d members: effect %v, computation %v", len(o.Members()), o.IsEffect(), o.IsComputation())
 		}
@@ -361,8 +378,8 @@ func TestOnlyDelegateMakesComputation(t *testing.T) {
 	}
 }
 
-// Which effects each kind may make: exit, every kind; goal, the two
-// descriptions and the packaged reach, a delegate only; an input, and through
+// Which effects each kind may make: exit, every kind; the two descriptions
+// and the packaged reach, a delegate only; a goal, never (it is cut); an input, and through
 // a contract outside the apprentice, an act node only. Through observe or root, none;
 // through return, delegate or perform_effect, none: return passes, delegate
 // composes, and what perform_effect brings back is typed by the contract
@@ -370,7 +387,7 @@ func TestOnlyDelegateMakesComputation(t *testing.T) {
 func TestEffectsByKind(t *testing.T) {
 	may := map[Kind][]Contract{
 		KindAct:      {app.Exit(), app.CreateInput(), x},
-		KindDelegate: {app.Exit(), app.Goal(), app.CreateDelegation(), app.CreateAct(), app.Reach()},
+		KindDelegate: {app.Exit(), app.CreateDelegation(), app.CreateAct(), app.Reach()},
 	}
 	for _, k := range kinds {
 		for _, c := range append(app.all(), x) {
@@ -410,7 +427,7 @@ func equal(a, b Observation) bool {
 // The observations of the return cases, each of its own type, so none is
 // equal to another by accident.
 type returnWorld struct {
-	goal  Observation // a delegate's model made it, through goal
+	goal  Observation // a delegate cut it, through goal, from the endowment
 	wrote Observation // a delegate's model made it, through create_act
 	came  Observation // came back through an act node's perform_effect
 	child Observation // a child's, passed back up
@@ -420,7 +437,7 @@ type returnWorld struct {
 func newReturnWorld(t *testing.T) returnWorld {
 	t.Helper()
 	return returnWorld{
-		goal:  effectOf(t, KindDelegate, app.Goal()),
+		goal:  goalOf(t),
 		wrote: effectOf(t, KindDelegate, app.CreateAct()),
 		came:  effectOf(t, KindAct, x),
 		child: effectOf(t, KindAct, y),

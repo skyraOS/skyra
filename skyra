@@ -40,6 +40,7 @@ usage: skyra [command]
                 the replay check and the answer
   tree KIND "GOAL" [TARGET...]
                 one tree on real Claude: the apprentice runs it, Claude runs every turn
+  treeview [RUN] replay a tree run and show it forming (the last run by default)
   desktop       choose a window, then chat with read-only vision (macOS)
   desktop --list  list windows for scripted selection
   desktop --app ID --pid PID --window-id ID chat
@@ -95,6 +96,7 @@ controller_build() {
   fi
   # The apprentice is its own module (next/32).
   (cd "$ROOT/controller/apprentice" && go build -o "$BUILD/controller/apprentice" .)
+  (cd "$ROOT/controller/apprentice" && go build -o "$BUILD/controller/treeview" ./treeview)
   go build -o "$BUILD/tui" ./tui
 }
 
@@ -411,6 +413,17 @@ tree() {
   say "state: $run"
   # What each node is, what Claude was sent, and what it loaded: one to one.
   python3 "$ROOT/controller/apprentice/shell/check/received.py" "$run"
+  "$BUILD/controller/treeview" -html "${run%/.skyra}/tree.html" "$run" >/dev/null && say "view: ${run%/.skyra}/tree.html"
+}
+
+# treeview [RUN]: replay a tree's log through Step and show it forming; the
+# last tree run by default. The page is tree.html beside the run.
+treeview() {
+  controller_build
+  local run=${1:-$(ls -dt "$STATE"/runs/tree-*/.skyra 2>/dev/null | head -1)}
+  [ -n "$run" ] || die "no tree run under $STATE/runs"
+  "$BUILD/controller/treeview" "$run"
+  "$BUILD/controller/treeview" -html "${run%/.skyra}/tree.html" "$run" >/dev/null && say "view: ${run%/.skyra}/tree.html"
 }
 
 # chat [--fake]: the browser UI on the stateless controller. The webhost holds
@@ -448,8 +461,13 @@ chat() {
   service_socket
   reg=$(registry "$mode" "$park" 2)
   start_service_host "$reg"
+  # Trees (56) boot as the operator, so they run on the operator's registry.
+  local tree_flags=()
+  if [ "$mode" = real ] && [ -x "$BUILD/controller/treeview" ]; then
+    tree_flags=(-tree-registry "$(registry real "$park" 1 tree)" -treeview "$BUILD/controller/treeview")
+  fi
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
-    -registry "$reg" -conversations "$convs" -scratch "$scratch" &
+    -registry "$reg" -conversations "$convs" -scratch "$scratch" ${tree_flags[@]+"${tree_flags[@]}"} &
   web_pid=$!
   (cd "$ROOT/frontend" && NEXT_PUBLIC_WS_URL="ws://$addr/ws" exec npm run dev -- -H localhost -p "$UI_PORT") &
   ui_pid=$!
@@ -564,8 +582,13 @@ serve() {
   service_socket
   reg=$(registry "$mode" "$park" 2 app)
   start_service_host "$reg"
+  # Trees (56) boot as the operator, so they run on the operator's registry.
+  local tree_flags=()
+  if [ "$mode" = real ] && [ -x "$BUILD/controller/treeview" ]; then
+    tree_flags=(-tree-registry "$(registry real "$park" 1 app-tree)" -treeview "$BUILD/controller/treeview")
+  fi
   "$BUILD/controller/webhost" -ws "$addr" -park "$park" -skyra "$BUILD/controller/skyra" \
-    -registry "$reg" -conversations "$convs" -scratch "$scratch" &
+    -registry "$reg" -conversations "$convs" -scratch "$scratch" ${tree_flags[@]+"${tree_flags[@]}"} &
   web_pid=$!
   # A prior host's parking socket can remain while history loads. Wait for
   # this launch's TCP listener too, before telling the desktop it is ready.
@@ -689,6 +712,7 @@ case ${1:-} in
   replay)        [ $# -eq 2 ] || die "usage: skyra replay DIR"; controller_build; exec "$BUILD/controller/skyra" replay "$2" ;;
   ask)           shift; ask "$@" ;;
   tree)          shift; tree "$@" ;;
+  treeview)      shift; treeview "$@" ;;
   stop)          stop_host ;;
   demo)          exec "$ROOT/controller/run.sh" ;;
   test)          exec "$ROOT/scripts/check.sh" ;;

@@ -13,6 +13,7 @@ import type {
   ConversationView,
   Destination,
   RequestRecord,
+  TreeRun,
 } from "./protocol/types";
 import type { ServerMessageParsed } from "./protocol/schemas";
 import type { ConnectionStatus, WSClient, WSEvent } from "./ws-client";
@@ -27,8 +28,14 @@ interface StoreState {
   /** The roots the human may select (proposal 38). */
   destinations: Destination[];
 
+  /** Trees started from a spec (56), newest first, and what they may hold. */
+  trees: TreeRun[];
+  treeTargets: string[];
+
   // ----- View state (frontend-only) -----------------------------------------
   selectedConversation: string | null;
+  view: "chat" | "trees";
+  selectedTree: string | null;
 
   // ----- Connection state ---------------------------------------------------
   status: ConnectionStatus;
@@ -42,6 +49,8 @@ interface StoreState {
   recordEvent: (e: WSEvent) => void;
   setStatus: (s: ConnectionStatus) => void;
   selectConversation: (id: string | null) => void;
+  setView: (v: "chat" | "trees") => void;
+  selectTree: (id: string | null) => void;
   dismissError: () => void;
 }
 
@@ -62,6 +71,10 @@ export const useAppStore = create<StoreState>((set) => ({
   requests: {},
 
   selectedConversation: null,
+  trees: [],
+  treeTargets: [],
+  view: "chat",
+  selectedTree: null,
 
   status: "idle",
   lastError: null,
@@ -133,6 +146,15 @@ export const useAppStore = create<StoreState>((set) => ({
           };
         }
 
+        case "trees": {
+          const trees = msg.trees as TreeRun[];
+          const selectedTree =
+            state.selectedTree && trees.some((t) => t.id === state.selectedTree)
+              ? state.selectedTree
+              : trees[0]?.id ?? null;
+          return { trees, treeTargets: msg.targets, selectedTree };
+        }
+
         default:
           return {};
       }
@@ -144,6 +166,10 @@ export const useAppStore = create<StoreState>((set) => ({
   setStatus: (s) => set({ status: s }),
 
   selectConversation: (id) => set({ selectedConversation: id }),
+
+  setView: (view) => set({ view }),
+
+  selectTree: (selectedTree) => set({ selectedTree }),
 
   dismissError: () => set({ lastError: null }),
 }));

@@ -24,3 +24,23 @@ button:disabled { opacity: .4; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } .breathe { opacity: .6; } }
 @media (prefers-contrast: more) { .panel, .reading-matte { background: #080a0e; } }
 @media (max-width: 640px) { .history-toolbar span { width: 100%; margin: 0; } .history-dialog { padding: 16px; } }
+
+/* Trees (56): a node of a tree as it forms. */
+.tree-node {
+  border: 1px solid;
+  border-radius: 8px;
+  background: rgba(15, 20, 29, 0.92);
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.tree-node-fresh {
+  animation: tree-node-in 0.45s ease-out;
+}
+@keyframes tree-node-in {
+  from { transform: scale(0.6); opacity: 0; }
+}
+.react-flow.dark {
+  --xy-background-color: transparent;
+}

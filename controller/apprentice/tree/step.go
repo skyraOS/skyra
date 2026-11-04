@@ -275,9 +275,16 @@ type Call []Instruction
 
 type Instruction interface{ instruction() }
 
-type Goal struct{ Text string }        // a delegate's goal, an effect
-type CreateInput struct{ Text string } // an act node's input, an effect
-type Delegate struct {                 // creates nothing: passes what is referred to
+type Goal struct { // a delegate's goal: cut, never written; a computation of what it was cut from
+	Of       InScope // the name it is cut from, text
+	From, To int     // its lines, from 1, both included
+}
+type CreateInput struct { // an act node's input: text, an effect; or filled from names, a computation
+	Text   string
+	Filled json.RawMessage // a JSON value in which {"name": n} stands for name n's value; nil for text
+	Names  []Ref           // the names it is filled from, in the order they appear
+}
+type Delegate struct { // creates nothing: passes what is referred to
 	Observations []Ref
 	Contracts    []Contract
 }
@@ -518,7 +525,8 @@ func (r *run) record(kind string, a AgentID, body map[string]any) {
 // every value: never the state (55, invariant 3). from is one of
 //
 //	{"from":"input"}                               the root's endowment: the tree's input
-//	{"from":"goal"|"input"|"exit"|"part", "text"}  text the model or delegate's CEL wrote
+//	{"from":"input"|"exit"|"part", "text"}         text the model or delegate's CEL wrote
+//	{"from":"goal", "of", "lines":[from, to]}      lines of name of, cut
 //	{"from":"part", "contracts":[binary…]}         a packaged reach
 //	{"from":"compose", "names":[n…]}               a computation of the agent's own names
 //	{"from":"copy", "agent", "of"}                 another agent's name: passed down or returned up
@@ -717,11 +725,31 @@ func parseInstruction(k string, v json.RawMessage, o Offer) (Instruction, string
 	}
 	switch k {
 	case "goal":
-		s, why := text()
-		return Goal{s}, why
+		var b struct {
+			Of    *int  `json:"of"`
+			Lines []int `json:"lines"`
+		}
+		if !strict(v, &b) || b.Of == nil || len(b.Lines) != 2 {
+			return nil, "goal takes of, a name, and lines, [from, to]"
+		}
+		if *b.Of < 0 || b.Lines[0] < 1 || b.Lines[1] < b.Lines[0] {
+			return nil, "goal cuts lines from 1, from no later than to"
+		}
+		return Goal{InScope(*b.Of), b.Lines[0], b.Lines[1]}, ""
 	case "create_input":
-		s, why := text()
-		return CreateInput{s}, why
+		if s, why := text(); why == "" {
+			return CreateInput{Text: s}, ""
+		}
+		names, why := fills(v)
+		if why != "" {
+			return nil, why
+		}
+		if len(names) == 0 { // JSON that names nothing: the input as text, an effect
+			var b bytes.Buffer
+			_ = json.Compact(&b, v)
+			return CreateInput{Text: b.String()}, ""
+		}
+		return CreateInput{Filled: v, Names: names}, ""
 	case "exit":
 		s, why := text()
 		return Exit{s}, why
@@ -769,6 +797,69 @@ func parseInstruction(k string, v json.RawMessage, o Offer) (Instruction, string
 		return PerformEffect{o.Invoke[*b.Contract], ref}, why
 	}
 	return nil, "no instruction " + k
+}
+
+// fills reads an input written as JSON: an object or array in which an
+// object of the one key "name" stands for that name's value. A name may
+// appear more than once; it is one member. JSON that names nothing is the
+// input as text.
+func fills(v json.RawMessage) ([]Ref, string) {
+	var x any
+	d := json.NewDecoder(bytes.NewReader(v))
+	d.UseNumber()
+	if d.Decode(&x) != nil {
+		return nil, "create_input takes text, or JSON filled from names"
+	}
+	switch x.(type) {
+	case map[string]any, []any:
+	default:
+		return nil, "create_input takes text, or JSON filled from names"
+	}
+	var refs []Ref
+	seen := map[int]bool{}
+	var walk func(any) string
+	walk = func(x any) string {
+		switch x := x.(type) {
+		case map[string]any:
+			if raw, ok := x["name"]; ok && len(x) == 1 {
+				num, isNum := raw.(json.Number)
+				n, err := num.Int64()
+				if !isNum || err != nil || n < 0 {
+					return "{\"name\": n} takes a name's number"
+				}
+				if !seen[int(n)] {
+					seen[int(n)] = true
+					refs = append(refs, InScope(n))
+				}
+				return ""
+			}
+			for _, k := range sortedKeys(x) {
+				if why := walk(x[k]); why != "" {
+					return why
+				}
+			}
+		case []any:
+			for _, e := range x {
+				if why := walk(e); why != "" {
+					return why
+				}
+			}
+		}
+		return ""
+	}
+	if why := walk(x); why != "" {
+		return nil, why
+	}
+	return refs, ""
+}
+
+func sortedKeys(m map[string]any) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	slices.Sort(ks)
+	return ks
 }
 
 func parseRefs(vs []json.RawMessage) ([]Ref, string) {
@@ -820,7 +911,11 @@ func (r *run) interpret(a *Agent, call Call) string {
 			if a.Kind != KindDelegate {
 				return "goal is a delegate's"
 			}
-			n, why := r.make(a, r.t.App.goal, in.Text, true)
+			of, why := resolve(in.Of)
+			if why != "" {
+				return why
+			}
+			n, why := r.cut(a, of, in.From, in.To)
 			if why != "" {
 				return why
 			}
@@ -829,7 +924,23 @@ func (r *run) interpret(a *Agent, call Call) string {
 			if a.Kind != KindAct {
 				return "create_input is an act node's"
 			}
-			n, why := r.make(a, r.t.App.createInput, in.Text, true)
+			if in.Filled == nil {
+				n, why := r.make(a, r.t.App.createInput, in.Text, true)
+				if why != "" {
+					return why
+				}
+				made[i] = n
+				break
+			}
+			var names []int
+			for _, ref := range in.Names {
+				n, why := resolve(ref)
+				if why != "" {
+					return why
+				}
+				names = append(names, n)
+			}
+			n, why := r.fill(a, in.Filled, names)
 			if why != "" {
 				return why
 			}
@@ -932,11 +1043,49 @@ func (r *run) make(a *Agent, c Contract, text string, byModel bool) (int, string
 	a.Scope = append(a.Scope, o)
 	a.Names = append(a.Names, Named{o, base})
 	n := len(a.Names) - 1
-	from := "goal"
-	if c == r.t.App.createInput {
-		from = "input"
+	r.named(a.ID, n, map[string]any{"from": "input", "text": text})
+	return n, ""
+}
+
+// cut is a goal: lines of a name in scope, a computation through goal of
+// that one name (observe_goal). The model chose only the lines; the shell
+// cuts the value, and checked the cut before the reply reached Step.
+func (r *run) cut(a *Agent, of, from, to int) (int, string) {
+	t, _ := TypeOf(r.t.App.goal, shapeText)
+	o, ok := Observe(r.t.App, a.Kind, t, []Observation{a.Names[of].Obs})
+	if !ok {
+		return 0, "observe refused the goal"
 	}
-	r.named(a.ID, n, map[string]any{"from": from, "text": text})
+	base, _ := BaseOf(t, []ReturnBase{a.Names[of].Base})
+	a.Created = append(a.Created, o)
+	a.Scope = append(a.Scope, o)
+	a.Names = append(a.Names, Named{o, base})
+	n := len(a.Names) - 1
+	r.named(a.ID, n, map[string]any{"from": "goal", "of": of, "lines": []int{from, to}})
+	return n, ""
+}
+
+// fill is an input filled from names in scope: a computation through
+// create_input, its members the names' observations (observe_filled_input).
+// Its type is made from theirs; their values never enter it, and the shell
+// fills them in.
+func (r *run) fill(a *Agent, filled json.RawMessage, names []int) (int, string) {
+	t, _ := TypeOf(r.t.App.createInput, shapeText)
+	var ms []Observation
+	var bases []ReturnBase
+	for _, n := range names {
+		ms, bases = append(ms, a.Names[n].Obs), append(bases, a.Names[n].Base)
+	}
+	o, ok := Observe(r.t.App, a.Kind, t, ms)
+	if !ok {
+		return 0, "observe refused the input"
+	}
+	base, _ := BaseOf(t, bases)
+	a.Created = append(a.Created, o)
+	a.Scope = append(a.Scope, o)
+	a.Names = append(a.Names, Named{o, base})
+	n := len(a.Names) - 1
+	r.named(a.ID, n, map[string]any{"from": "input", "filled": string(filled), "names": names})
 	return n, ""
 }
 

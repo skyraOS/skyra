@@ -36,15 +36,22 @@ it rests on when Lean does not. The sections below are the proofs.
    `Observation.effect_xor_computation`).
 6. The caller never says what it sends: `observe` decides by what it has, and
    admits by the kind of node sending it. An exit comes from every kind; a
-   goal, a description and a packaged reach from a delegate, each through its
-   own contract; an input, through `create_input`, and what came back
+   description and a packaged reach from a delegate, each through its own
+   contract; a goal is never written: a delegate cuts it, through `goal`,
+   from lines of a text in its scope; an input, through `create_input`, and what came back
    through its `perform_effect`, typed by the contract passed to it, from an
    act node. Nothing comes from nowhere: what an act node dispatches is an
-   observation in its scope, never a raw string.
-7. Only a delegate makes a computation, through `delegate`, no member twice
-   (`observe_computation`); an act node makes only effects (`observe_act`).
+   observation in its scope, never a raw string, and what an input holds
+   that the node already has, it refers to by name, never retypes.
+7. A computation comes three ways, no member twice (`observe_computation`):
+   from a delegate, through `delegate`; from a delegate, through `goal`, a
+   goal of one member, what it was cut from (`observe_goal`), so every goal
+   traces back to the tree's input; or from an act node, through
+   `create_input`, an input filled from names in its scope, which are its
+   members (`observe_filled_input`). Everything else an act node makes is an
+   effect (`observe_act`).
    Nothing becomes an effect through `observe`, `root`, `return`,
-   `perform_effect` or `delegate` (`observe_not_through`); a description and
+   `perform_effect`, `delegate` or `goal` (`observe_not_through`); a description and
    a packaged reach come only from a delegate (`observe_composed`), an input
    only from an act node (`observe_input`). An exit the system forces is a
    fault.
@@ -380,22 +387,25 @@ end
 instance : DecidableEq Observation := Observation.decEq
 
 /-- What an effect may come through, by the kind of node that sends it: an
-exit, from every kind; a goal, a description and a packaged reach, from a
-delegate; an input, from an act node, to dispatch; what came back through an
-act node's `perform_effect`, typed by the contract it was passed, outside the
-apprentice. -/
+exit, from every kind; a description and a packaged reach, from a delegate;
+an input, from an act node, to dispatch; what came back through an act
+node's `perform_effect`, typed by the contract it was passed, outside the
+apprentice. A goal is never an effect: it is cut from what a delegate has. -/
 def effectThrough (a : Apprentice) (k : Kind) (c : Contract) : Bool :=
-  c == a.exit || (k == .delegate && c == a.goal) ||
+  c == a.exit ||
   (k == .delegate && c == a.createDelegation) || (k == .delegate && c == a.createAct) ||
   (k == .delegate && c == a.reach) || (k == .act && c == a.createInput) ||
   (k == .act && !a.mine c)
 
 /-- What `observe` admits. No members: an effect, through what its kind may
-make one through. Members: a computation, only from a delegate, through
-`delegate`, none twice. -/
+make one through. Members: a computation, none twice, from a delegate
+through `delegate`; from a delegate through `goal`, a part cut from the one
+observation it is its member; or from an act node through `create_input`:
+an input filled from names in its scope, which are its members. -/
 def admits (a : Apprentice) (k : Kind) (t : ObservationType) (ms : List Observation) : Bool :=
   if ms.isEmpty then effectThrough a k t.contract
-  else k == .delegate && t.contract == a.delegate && decide ms.Nodup
+  else (k == .delegate && t.contract == a.delegate || k == .act && t.contract == a.createInput ||
+    k == .delegate && t.contract == a.goal && ms.length == 1) && decide ms.Nodup
 
 /-- The one function that creates observations from an instruction. The
 caller never says what it sends: an effect or a computation is decided by
@@ -422,43 +432,96 @@ theorem observe_eq_some :
     simp only [reduceCtorEq, false_iff]
     rintro ⟨ha, -⟩; exact h ha
 
-/-- Only a delegate makes a computation, and only through `delegate`. -/
+/-- A computation comes three ways only: from a delegate, through
+`delegate` or `goal`, or from an act node, through `create_input`. -/
 theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputation = true) :
-    k = .delegate ∧ t.contract = a.delegate := by
+    (k = .delegate ∧ t.contract = a.delegate) ∨ (k = .act ∧ t.contract = a.createInput) ∨
+    (k = .delegate ∧ t.contract = a.goal) := by
   rw [observe_eq_some] at h
   obtain ⟨ha, -, hm⟩ := h
   rw [Observation.computation_iff, hm] at hc
-  simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, beq_iff_eq] at ha
-  exact ⟨ha.1.1, ha.1.2⟩
+  simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, Bool.or_eq_true,
+    beq_iff_eq] at ha
+  rcases ha.1 with (h₁ | h₂) | ⟨h₃, -⟩
+  · exact Or.inl h₁
+  · exact Or.inr (Or.inl h₂)
+  · exact Or.inr (Or.inr h₃)
 
-/-- An act node makes only effects. -/
-theorem observe_act (h : observe a .act t ms = some o) : o.isEffect = true := by
+/-- An act node makes a computation only as an input: everything else it
+makes is an effect. -/
+theorem observe_act (h : observe a .act t ms = some o) :
+    o.isEffect = true ∨ t.contract = a.createInput := by
   rw [Observation.effect_xor_computation]
   cases hc : o.isComputation
-  · rfl
-  · exact absurd (observe_computation h hc).1 (by decide)
+  · exact Or.inl rfl
+  · rcases observe_computation h hc with ⟨hk, -⟩ | ⟨-, ht⟩ | ⟨hk, -⟩
+    · exact absurd hk (by decide)
+    · exact Or.inr ht
+    · exact absurd hk (by decide)
 
-/-- Nothing is made through `observe`, `root`, `return`, `perform_effect` or
-`delegate` as an effect: `observe` and `root` are privileged, `return`
-passes, `perform_effect` takes on the contract passed to it, and `delegate`
-composes. -/
+/-- A goal is cut, never written: a computation of exactly one member, what
+it was cut from, made by a delegate. Its value is lines of that member's,
+which the shell cuts; values never enter the type. -/
+theorem observe_goal (h : observe a k t ms = some o) (hc : t.contract = a.goal) :
+    k = .delegate ∧ ms.length = 1 := by
+  have hd := a.contracts_nodup
+  have hm : a.mine t.contract = true := a.contracts_mine (by rw [hc]; simp [Apprentice.contracts])
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hd
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, -⟩ := h
+  by_cases he : ms = []
+  · subst he
+    simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
+      Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
+    rcases ha with (((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+    all_goals first
+      | (rw [e] at hm; simp at hm; done)
+      | (rw [hc] at e; simp_all; done)
+  · simp only [admits, List.isEmpty_iff, he, ite_false, Bool.and_eq_true, Bool.or_eq_true,
+      beq_iff_eq, decide_eq_true_eq] at ha
+    rcases ha with ⟨(⟨-, e⟩ | ⟨-, e⟩) | ⟨⟨hk, -⟩, hl⟩, -⟩
+    · rw [hc] at e; simp_all
+    · rw [hc] at e; simp_all
+    · exact ⟨hk, by simpa using hl⟩
+
+/-- An input's members are names it was filled from, none twice; it is
+still one input, sent by an act node. -/
+theorem observe_filled_input (h : observe a k t ms = some o) (hc : t.contract = a.createInput)
+    (hm : ms ≠ []) : k = .act ∧ ms.Nodup := by
+  have hd := a.contracts_nodup
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hd
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, -⟩ := h
+  simp only [admits, List.isEmpty_iff, hm, ite_false, Bool.and_eq_true, Bool.or_eq_true,
+    beq_iff_eq, decide_eq_true_eq] at ha
+  rcases ha with ⟨(⟨-, e⟩ | ⟨hk, -⟩) | ⟨⟨-, e⟩, -⟩, hn⟩
+  · rw [hc] at e; simp_all
+  · exact ⟨hk, hn⟩
+  · rw [hc] at e; simp_all
+
+/-- Nothing is made through `observe`, `root`, `return`, `perform_effect`,
+`delegate` or `goal` as an effect: `observe` and `root` are privileged,
+`return` passes, `perform_effect` takes on the contract passed to it,
+`delegate` composes, and `goal` cuts. -/
 theorem observe_not_through (h : observe a k t [] = some o)
-    (hc : t.contract ∈ [a.observe, a.root, a.ret, a.performEffect, a.delegate]) : False := by
+    (hc : t.contract ∈ [a.observe, a.root, a.ret, a.performEffect, a.delegate, a.goal]) : False := by
   rw [observe_eq_some] at h
   obtain ⟨ha, -, -⟩ := h
   have hn := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by
     simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
-    rcases hc with h | h | h | h | h <;> simp [h])
+    rcases hc with h | h | h | h | h | h <;> simp [h])
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hn
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-  rcases ha with ((((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  rcases ha with (((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
   all_goals first
     | (rw [e] at hm; simp at hm; done)
-    | (rcases hc with hc | hc | hc | hc | hc <;> rw [hc] at e <;>
+    | (rcases hc with hc | hc | hc | hc | hc | hc <;> rw [hc] at e <;>
         first | (rw [e] at hn; simp at hn; done) | (simp_all; done))
 ```
 
@@ -518,7 +581,7 @@ theorem observe_composed (h : observe a k t [] = some o)
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-  rcases ha with ((((((e | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  rcases ha with (((((e | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨-, e⟩) | ⟨-, e⟩)
   · rcases hc with hc | hc | hc <;> rw [hc] at e <;> simp_all
   all_goals first
     | exact hk
@@ -536,7 +599,7 @@ theorem observe_input (h : observe a k t [] = some o) (hc : t.contract = a.creat
     or_false, not_or] at hn
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
-  rcases ha with ((((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨hk, -⟩) | ⟨hk, -⟩)
+  rcases ha with (((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨hk, -⟩) | ⟨hk, -⟩)
   all_goals first
     | exact hk
     | (rw [hc] at e; simp_all; done)
@@ -633,14 +696,15 @@ input base type is minted when the kernel invokes it.
 
 The input base type is minted from the contract, not its binary. Every
 contract of the apprentice is the apprentice's binary, so by binary a goal
-and an input, both made from a string with nothing passed, would be one
-base type; by contract they are two. The same holds outside the apprentice:
+and an input, both made from the same names, would be one base type; by
+contract they are two. The same holds outside the apprentice:
 two shapes of one binary are two contracts, and two input base types.
 
 Calling a contract of the apprentice crosses an edge like any other, so
-nothing comes from nowhere: `goal("…")` is an invoke of `goal`, and the goal
-it makes has the return base type `baseOf` mints, down to `goal` and back up
-with the goal's output shape. Descriptions, inputs and the packaged reach
+nothing comes from nowhere: `goal(of, lines)` is an invoke of `goal`, passed
+what it cuts, and the goal it makes has the return base type `baseOf` mints,
+down to `goal` and back up with the goal's output shape. The lines it cuts
+are not in its type, as no value is. Descriptions, inputs and the packaged reach
 are minted the same way.
 
 ```lean
@@ -763,8 +827,8 @@ gives many observations. Down an edge (`do`), an input base type is unseen
 when this binary has not been handed this sequence of return base types
 before. Up an edge (`see`, below), a return base type is unseen when the
 system does not recognize its hash.
-The goal is typed like any observation; its base type never varies, so it
-does not change an input's novelty.
+The goal is typed like any observation; its base type is made from what it
+was cut from, never from its lines, so it does not change an input's novelty.
 
 Novelty is apart from validity: validity refuses, novelty measures. The
 runtime supplies the history; Lean answers.
@@ -958,8 +1022,8 @@ and neither is the path.
 
 They differ only if what `B` is handed differs: another observation in its
 input, one of another base type, or the same ones in another order
-(`[a, b]` is not `[b, a]`). The goal does not count: its base type never
-varies.
+(`[a, b]` is not `[b, a]`). The goal does not count: its base type is made
+from what it was cut from, never from its lines.
 
 ## Guards
 

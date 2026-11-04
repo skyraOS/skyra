@@ -109,6 +109,7 @@ func Resume(dir, frame string, input json.RawMessage, reach map[string][]*proc.S
 
 	var acts []tree.Action
 	if len(s.state.Log) == 0 {
+		s.keep(in.Tree)
 		started, err := s.started(in.Tree)
 		if err != nil {
 			return addressed(frame, map[string]any{"refused": err.Error()}), nil
@@ -191,6 +192,10 @@ type state struct {
 	Log      []entry   `json:"log"`
 	Round    []pending `json:"round"`
 	Consumed int       `json:"consumed"`
+	// What it was asked and the reach it was set up with, so the view can
+	// replay it alone.
+	Ask   *Ask                      `json:"ask,omitempty"`
+	Reach map[string][]*proc.Schema `json:"reach,omitempty"`
 }
 
 type shell struct {
@@ -308,7 +313,11 @@ func (s *shell) back(p pending, st Step) (tree.Event, entry) {
 		if st.State != "return" {
 			return tree.Stopped{Agent: p.Agent, Reason: why}, entry{}
 		}
-		return tree.Replied{Agent: p.Agent, Out: reply(st.Value)}, entry{}
+		out := reply(st.Value)
+		if why := s.badCut(p.Agent, out); why != "" {
+			return tree.Stopped{Agent: p.Agent, Reason: why}, entry{}
+		}
+		return tree.Replied{Agent: p.Agent, Out: out}, entry{}
 	}
 	if st.State != "return" {
 		return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema("-"), Err: why}, entry{}
@@ -318,6 +327,51 @@ func (s *shell) back(p pending, st Step) (tree.Event, entry) {
 		return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema("-"), Err: err.Error()}, entry{}
 	}
 	return tree.Returned{Agent: p.Agent, Element: p.Element, Shape: tree.Schema(types.Shape(v))}, entry{Value: st.Value}
+}
+
+// badCut is why a goal in a reply cuts what it cannot: Step never sees a
+// value, so the shell checks each cut against the text it cuts, before the
+// reply reaches Step. A name the agent has no value for is left to Step.
+func (s *shell) badCut(agent tree.AgentID, out []byte) string {
+	var call []map[string]json.RawMessage
+	if json.Unmarshal(out, &call) != nil {
+		return ""
+	}
+	for _, ins := range call {
+		var g struct {
+			Of    *int  `json:"of"`
+			Lines []int `json:"lines"`
+		}
+		if ins["goal"] == nil || json.Unmarshal(ins["goal"], &g) != nil || g.Of == nil || len(g.Lines) != 2 {
+			continue
+		}
+		v, ok := s.values[agent][*g.Of]
+		if !ok {
+			continue
+		}
+		text, ok := v.V.(string)
+		if !ok {
+			return fmt.Sprintf("a goal is cut from text; name %d is not text", *g.Of)
+		}
+		if n := len(lines(text)); g.Lines[1] > n {
+			return fmt.Sprintf("a goal cut lines %d to %d of name %d, which has %d", g.Lines[0], g.Lines[1], *g.Of, n)
+		}
+	}
+	return ""
+}
+
+// lines is a text's lines, a trailing newline ending the last.
+func lines(text string) []string {
+	return strings.Split(strings.TrimRight(text, "\n"), "\n")
+}
+
+// cut is lines from to to of a text, from 1, both included.
+func cut(text string, from, to int) string {
+	ls := lines(text)
+	if from < 1 || to > len(ls) || from > to {
+		return ""
+	}
+	return strings.Join(ls[from-1:to], "\n")
 }
 
 // reply is the call in what a model's actor returned: the instructions it
@@ -686,11 +740,15 @@ func (s *shell) name(r tree.RecordWrite) {
 	case "input":
 		if t, ok := r.Body["text"].(string); ok {
 			v = value{t, "an input you made"}
+		} else if f, ok := r.Body["filled"].(string); ok {
+			v = value{s.filled(r.Agent, f), "an input you made, filled from names"}
 		} else {
-			v = value{s.goal, "what you were asked to do; not a goal: a child's goal is one you write"}
+			v = value{s.goal, "what you were asked to do; a child's goal is lines you cut from it"}
 		}
 	case "goal":
-		v = value{r.Body["text"], "a goal you wrote"}
+		ls := r.Body["lines"].([]int)
+		text, _ := s.values[r.Agent][r.Body["of"].(int)].V.(string)
+		v = value{cut(text, ls[0], ls[1]), fmt.Sprintf("a goal you cut: lines %d to %d of name %d", ls[0], ls[1], r.Body["of"].(int))}
 	case "exit":
 		v = value{r.Body["text"], "an exit"}
 	case "part":
@@ -715,8 +773,8 @@ func (s *shell) name(r tree.RecordWrite) {
 		switch {
 		case strings.HasPrefix(string(from), string(r.Agent)+"."):
 			v.From = "what node " + string(from) + " returned"
-		case v.From == "a goal you wrote":
-			v.From = "your goal, a goal you may pass on"
+		case strings.HasPrefix(v.From, "a goal you cut"):
+			v.From = "your goal"
 		default:
 			v.From = "passed to you"
 		}
@@ -727,6 +785,41 @@ func (s *shell) name(r tree.RecordWrite) {
 		v = value{x, "what came back"}
 	}
 	s.values[r.Agent][n] = v
+}
+
+// filled is an input's value: its JSON, with every {"name": n} replaced
+// by name n's value. Step checked every name is in scope.
+func (s *shell) filled(agent tree.AgentID, f string) any {
+	var x any
+	d := json.NewDecoder(strings.NewReader(f))
+	d.UseNumber()
+	_ = d.Decode(&x)
+	var fill func(any) any
+	fill = func(x any) any {
+		switch x := x.(type) {
+		case map[string]any:
+			if raw, ok := x["name"]; ok && len(x) == 1 {
+				if num, ok := raw.(json.Number); ok {
+					if n, err := num.Int64(); err == nil {
+						return s.values[agent][int(n)].V
+					}
+				}
+			}
+			out := make(map[string]any, len(x))
+			for k, v := range x {
+				out[k] = fill(v)
+			}
+			return out
+		case []any:
+			out := make([]any, len(x))
+			for i, v := range x {
+				out[i] = fill(v)
+			}
+			return out
+		}
+		return x
+	}
+	return fill(x)
 }
 
 // --- out ---
@@ -768,6 +861,10 @@ func instructions(act bool) []map[string]any {
 	}}
 	refs := map[string]any{"type": "array", "items": ref}
 	text := map[string]any{"type": "string"}
+	input := map[string]any{"anyOf": []any{
+		map[string]any{"type": "string", "description": "the input as text; for a contract that takes an object, its JSON"},
+		map[string]any{"type": "object", "description": "the input as JSON, in which {\"name\": n} stands for name n's value"},
+	}}
 	one := func(name, description string, v any) map[string]any {
 		return map[string]any{"name": name, "description": description,
 			"schema": map[string]any{"type": "object", "properties": map[string]any{name: v}, "required": []string{name}, "additionalProperties": false}}
@@ -778,13 +875,15 @@ func instructions(act bool) []map[string]any {
 	var out []map[string]any
 	if act {
 		out = append(out,
-			one("create_input", "Make an input: text. For a contract that takes an object, write its JSON as the text.", text),
+			one("create_input", "Make an input: text, or for a contract that takes an object, its JSON. Where the input holds something you already have, write {\"name\": n} and name n's value is filled in: you never copy what you were given.", input),
 			one("perform_effect", "Invoke a contract you hold, by its number, with an input you made. What comes back is a new name when you are asked again.",
 				obj(map[string]any{"contract": map[string]any{"type": "integer", "minimum": 0}, "input": ref}, "contract", "input")))
 	} else {
 		out = append(out,
-			one("goal", "Write a goal for a child.", text),
-			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you wrote with goal, as {\"earlier\": k}, or a goal you were given. Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again. What it returns is a new name when you are asked again.",
+			one("goal", "Cut a goal for a child: lines from to to, counted from 1, of a name that is text. You never write a goal; you cut it from what you were asked to do.",
+				obj(map[string]any{"of": map[string]any{"type": "integer", "minimum": 0, "description": "a name that is text, by its number"},
+					"lines": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2, "description": "[from, to]"}}, "of", "lines")),
+			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you cut with goal, as {\"earlier\": k}, or a goal you were given. Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again. What it returns is a new name when you are asked again.",
 				obj(map[string]any{"observations": refs, "contracts": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0}}}, "observations", "contracts")))
 	}
 	return append(out,
@@ -811,6 +910,15 @@ func (s *shell) prompt(t tree.Turn) string {
 	b.WriteString("Your names, which you refer to by number:\n")
 	for _, n := range t.Names {
 		v := s.values[t.Agent][n]
+		// Text of many lines is shown by line, numbered, so a model can refer
+		// to its lines.
+		if str, ok := v.V.(string); ok && len(lines(str)) > 1 {
+			fmt.Fprintf(&b, "  %d: text of lines (%s):\n", n, v.From)
+			for i, l := range lines(str) {
+				fmt.Fprintf(&b, "      %d| %s\n", i+1, l)
+			}
+			continue
+		}
 		j, _ := json.Marshal(v.V)
 		fmt.Fprintf(&b, "  %d: %s (%s)\n", n, j, v.From)
 	}
@@ -834,9 +942,10 @@ func (s *shell) prompt(t tree.Turn) string {
 	b.WriteString("Instructions:\n")
 	if act {
 		b.WriteString(`  {"create_input": "<text>"}  make an input; for an object input, write the JSON as the text` + "\n")
+		b.WriteString(`  {"create_input": {...}}  make an object input, in which {"name": n} is name n's value, filled in for you` + "\n")
 		b.WriteString(`  {"perform_effect": {"contract": <number>, "input": <reference>}}  invoke a contract with an input you made` + "\n")
 	} else {
-		b.WriteString(`  {"goal": "<text>"}  write a goal for a child` + "\n")
+		b.WriteString(`  {"goal": {"of": <name>, "lines": [<from>, <to>]}}  cut a goal for a child: those lines of a text name; text of one line is line 1` + "\n")
 		b.WriteString(`  {"delegate": {"observations": [<reference>...], "contracts": [<number>...]}}  start a child with a goal and at least one contract` + "\n")
 	}
 	b.WriteString(`  {"return": {"members": [<reference>...]}}  return, alone: never what you were passed or what you wrote yourself` + "\n")

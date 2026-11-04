@@ -25,6 +25,8 @@ export function Header() {
   const status = useAppStore((s) => s.status);
   const client = useAppStore((s) => s.client);
   const uiIncarnation = useAppStore((s) => s.uiIncarnation);
+  const view = useAppStore((s) => s.view);
+  const setView = useAppStore((s) => s.setView);
   const phase = convo?.phase;
   const connected = status === "open";
   const canClose = connected && !!convo && (phase === "ready" || phase === "failed");
@@ -41,8 +43,13 @@ export function Header() {
   return (
     <header className="flex h-[38px] shrink-0 items-center gap-3 px-4 text-xs">
       <span className="w-[90px]" aria-label="Skyra" />
+      <nav className="flex gap-3" aria-label="View">
+        {(["chat", "trees"] as const).map((v) => (
+          <button key={v} onClick={() => setView(v)} className={view === v ? "text-ink" : "text-ink-faint hover:text-ink-dim"}>{v}</button>
+        ))}
+      </nav>
       <span className="flex-1" />
-      {phase && <span className="text-ink-faint">{phase}</span>}
+      {phase && view === "chat" && <span className="text-ink-faint">{phase}</span>}
       <span className="flex items-center gap-1.5 text-ink-dim">
         <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
         {label}

@@ -210,7 +210,7 @@ func agent(t *testing.T, tr Tree, id AgentID) Agent {
 
 // The tree of TestStepRunsATree, by its events after Started.
 var aTree = []Event{
-	Replied{Agent: "0", Out: []byte(`[{"goal":"summarize the logs"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)},
+	Replied{Agent: "0", Out: []byte(`[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)},
 	Replied{Agent: "0.0", Out: []byte(`[{"perform_effect":{"contract":0,"input":2}}]`)},
 	Returned{Agent: "0.0", Element: 0, Shape: shapeA},
 	Replied{Agent: "0.0", Out: []byte(`[{"return":{"members":[3]}}]`)},
@@ -341,7 +341,7 @@ func TestStepRemembersAcrossRuns(t *testing.T) {
 func TestStepDelegateChild(t *testing.T) {
 	sh := newShell(t)
 	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
-	tr, _ = sh.reply(tr, "0", `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0,1]}}]`)
+	tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0,1]}}]`)
 	c := agent(t, tr, "0.0")
 	if c.Kind != KindDelegate || !reflect.DeepEqual(c.Offer.PassOnly, []Contract{x, y}) || len(c.Offer.Invoke) != 0 {
 		t.Fatalf("the child: %v %+v", c.Kind, c.Offer)
@@ -357,7 +357,7 @@ func TestStepDelegateChild(t *testing.T) {
 func TestStepReturnRules(t *testing.T) {
 	sh := newShell(t)
 	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
-	tr2, _ := sh.reply(tr, "0", `[{"goal":"g"}]`)
+	tr2, _ := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`)
 	turned := agent(t, tr2, "0")
 	if turned.Phase != PhaseThinking || len(turned.Names) != 2 {
 		t.Fatalf("a call of a goal alone goes back to the model: %+v", turned)
@@ -373,7 +373,7 @@ func TestStepReturnRules(t *testing.T) {
 // Every call that is not one the Offer allows is a fault, never an exit
 // status, and a faulted call leaves nothing behind.
 func TestStepFaults(t *testing.T) {
-	many := "[" + strings.Repeat(`{"goal":"g"},`, MaxFanOut) + `{"goal":"g"}]`
+	many := "[" + strings.Repeat(`{"goal":{"of":0,"lines":[1,1]}},`, MaxFanOut) + `{"goal":{"of":0,"lines":[1,1]}}]`
 	for _, tc := range []struct {
 		name string
 		kind Kind
@@ -383,21 +383,21 @@ func TestStepFaults(t *testing.T) {
 		{"an empty call", KindDelegate, `[]`},
 		{"more than 32", KindDelegate, many},
 		{"an unknown instruction", KindDelegate, `[{"bogus":1}]`},
-		{"two keys", KindDelegate, `[{"goal":"a","exit":"b"}]`},
+		{"two keys", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]},"exit":"b"}]`},
 		{"an unknown field", KindDelegate, `[{"return":{"members":[0],"extra":1}}]`},
-		{"goal from an act node", KindAct, `[{"goal":"g"}]`},
+		{"goal from an act node", KindAct, `[{"goal":{"of":0,"lines":[1,1]}}]`},
 		{"create_input from a delegate", KindDelegate, `[{"create_input":"i"}]`},
 		{"perform_effect from a delegate", KindDelegate, `[{"perform_effect":{"contract":0,"input":0}}]`},
 		{"delegate from an act node", KindAct, `[{"delegate":{"observations":[0],"contracts":[0]}}]`},
-		{"return not alone", KindDelegate, `[{"goal":"g"},{"return":{"members":[0]}}]`},
-		{"exit not alone", KindDelegate, `[{"goal":"g"},{"exit":"x"}]`},
-		{"a later reference", KindDelegate, `[{"delegate":{"observations":[{"earlier":1}],"contracts":[0]}},{"goal":"g"}]`},
+		{"return not alone", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]}},{"return":{"members":[0]}}]`},
+		{"exit not alone", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]}},{"exit":"x"}]`},
+		{"a later reference", KindDelegate, `[{"delegate":{"observations":[{"earlier":1}],"contracts":[0]}},{"goal":{"of":0,"lines":[1,1]}}]`},
 		{"an earlier reference to nothing made", KindAct, `[{"perform_effect":{"contract":0,"input":0}},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]`},
-		{"a name not in scope", KindDelegate, `[{"goal":"g"},{"delegate":{"observations":[99],"contracts":[0]}}]`},
-		{"a contract not held", KindDelegate, `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":[7]}}]`},
+		{"a name not in scope", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[99],"contracts":[0]}}]`},
+		{"a contract not held", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[7]}}]`},
 		{"a contract it may not invoke", KindAct, `[{"perform_effect":{"contract":3,"input":0}}]`},
 		{"a delegate with no goal", KindDelegate, `[{"delegate":{"observations":[0],"contracts":[0]}}]`},
-		{"one observation twice", KindDelegate, `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0},{"earlier":0}],"contracts":[0]}}]`},
+		{"one observation twice", KindDelegate, `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0},{"earlier":0}],"contracts":[0]}}]`},
 		{"an empty return", KindDelegate, `[{"return":{"members":[]}}]`},
 	} {
 		sh := newShell(t)
@@ -431,7 +431,7 @@ func TestStepChildRefused(t *testing.T) {
 	} {
 		sh := newShell(t)
 		tr, _ := sh.step(NewTree(app, tc.depth), Started{Self: self, Reach: []Contract{x, y, z}, Kind: KindDelegate, Actor: tc.actor, Endowment: shapeS})
-		tr, es := sh.reply(tr, "0", `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":`+tc.pass+`}}]`)
+		tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":`+tc.pass+`}}]`)
 		if agent(t, tr, "0.0").Phase != PhaseFaulted {
 			t.Errorf("%s: the child is not refused", tc.name)
 		}
@@ -494,7 +494,7 @@ func TestStepCreateInput(t *testing.T) {
 func TestStepAwaiting(t *testing.T) {
 	sh := newShell(t)
 	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
-	tr, es := sh.reply(tr, "0", `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
+	tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
 	if inv := records(es, "invoke"); len(inv) != 2 || inv[0].Body["do"] != "unseen" || inv[1].Body["do"] != "seen" {
 		t.Fatalf("two children of one input: %+v", inv)
 	}
@@ -643,12 +643,12 @@ func TestStepTurnBound(t *testing.T) {
 	sh := newShell(t)
 	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
 	for i := 1; i < MaxTurns; i++ {
-		tr, _ = sh.reply(tr, "0", `[{"goal":"g"}]`) // a goal alone: the model goes on
+		tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`) // a goal alone: the model goes on
 		if a := agent(t, tr, "0"); a.Phase != PhaseThinking || a.Turns != i+1 {
 			t.Fatalf("turn %d: %v after %d turns", i, a.Phase, a.Turns)
 		}
 	}
-	tr, es := sh.reply(tr, "0", `[{"goal":"g"}]`)
+	tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`)
 	if a := agent(t, tr, "0"); a.Phase != PhaseFaulted || a.Why != "the turn bound" || len(turns(es)) != 0 {
 		t.Fatalf("past the bound: %v %q", a.Phase, a.Why)
 	}
@@ -672,8 +672,107 @@ func TestStepChildFaultIsState(t *testing.T) {
 	// A child refused at provisioning is shown the same way.
 	sh = newShell(t)
 	tr, _ = sh.step(NewTree(app, 0), Started{Self: self, Reach: []Contract{x}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
-	_, es = sh.reply(tr, "0", `[{"goal":"g"},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
+	_, es = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
 	if f := turnFor(t, es, "0").Faults; len(f) != 1 || f[0].Why != "the depth bound" {
 		t.Fatalf("a refused child: %+v", f)
+	}
+}
+
+// An input filled from names is a computation through create_input: its
+// members are the names it was filled from, its base type differs from a
+// text input's, and the record says where each value comes from. A name
+// out of scope, or one that is not a number, faults the call; JSON that names
+// nothing is the input as text.
+func TestStepFilledInput(t *testing.T) {
+	sh := newShell(t)
+	tr, _ := sh.start(KindAct, []Contract{x}, 3)
+	tr, es := sh.reply(tr, "0", `[{"create_input":{"text":{"name":0},"lines":[1,2]}},{"perform_effect":{"contract":0,"input":{"earlier":0}}},{"create_input":"a"},{"perform_effect":{"contract":0,"input":{"earlier":2}}}]`)
+	a := agent(t, tr, "0")
+	filled, text := a.Names[1], a.Names[2]
+	if !filled.Obs.IsComputation() || len(filled.Obs.Members()) != 1 || !filled.Obs.Members()[0].Equal(a.Names[0].Obs) {
+		t.Fatalf("the filled input: %+v", filled.Obs)
+	}
+	if !text.Obs.IsEffect() || filled.Base == text.Base {
+		t.Fatal("a filled input and a text input share a base type")
+	}
+	var rec map[string]any
+	for _, r := range records(es, "name") {
+		if r.Body["name"] == 1 {
+			rec = r.Body
+		}
+	}
+	if rec["from"] != "input" || rec["filled"] != `{"text":{"name":0},"lines":[1,2]}` || !reflect.DeepEqual(rec["names"], []int{0}) {
+		t.Fatalf("the record: %+v", rec)
+	}
+	if len(dispatches(es)) != 2 {
+		t.Fatal("the filled input was not dispatched")
+	}
+	// JSON that names nothing is the input as text: an effect.
+	sh2 := newShell(t)
+	tr2, _ := sh2.start(KindAct, []Contract{x}, 3)
+	tr2, es2 := sh2.reply(tr2, "0", `[{"create_input":{"path": "a", "n": 1}},{"perform_effect":{"contract":0,"input":{"earlier":0}}}]`)
+	if in := agent(t, tr2, "0").Names[1]; !in.Obs.IsEffect() || in.Base != text.Base || len(dispatches(es2)) != 1 {
+		t.Fatal("JSON naming nothing is not the input as text")
+	}
+	for _, r := range records(es2, "name") {
+		if r.Body["name"] == 1 && r.Body["text"] != `{"path":"a","n":1}` {
+			t.Fatalf("its text: %+v", r.Body)
+		}
+	}
+	// What the model made is never returned, filled or not.
+	if MayReturn(a.Created, []Observation{filled.Obs}) {
+		t.Fatal("a filled input may be returned")
+	}
+
+	for _, bad := range []string{
+		`[{"create_input":{"text":{"name":9}}}]`,      // not in scope
+		`[{"create_input":{"text":{"name":"zero"}}}]`, // not a number
+		`[{"create_input":7}]`,                        // neither text nor JSON to fill
+	} {
+		sh := newShell(t)
+		tr, _ := sh.start(KindAct, []Contract{x}, 3)
+		if tr, _ = sh.reply(tr, "0", bad); agent(t, tr, "0").Phase != PhaseFaulted {
+			t.Errorf("%s did not fault", bad)
+		}
+	}
+}
+
+// A goal is cut, never written: lines of a name in scope, a computation of
+// that one name; and a child cuts its own goal again, so every goal traces to
+// the endowment. Text, a bad range, or a name out of scope faults the call.
+func TestStepGoalIsCut(t *testing.T) {
+	sh := newShell(t)
+	tr, _ := sh.start(KindDelegate, []Contract{x, y, z}, 3)
+	tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[2,3]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0,1]}}]`)
+	root := agent(t, tr, "0")
+	g := root.Names[1].Obs
+	if !g.IsComputation() || len(g.Members()) != 1 || !g.Members()[0].Equal(root.Names[0].Obs) {
+		t.Fatalf("the goal is not a computation of the endowment: %+v", g)
+	}
+	var cut bool
+	for _, r := range records(es, "name") {
+		cut = cut || r.Body["from"] == "goal" && r.Body["of"] == 0 && reflect.DeepEqual(r.Body["lines"], []int{2, 3})
+	}
+	if !cut {
+		t.Fatal("the cut was not recorded")
+	}
+	// The child holds the goal, and cuts it again.
+	tr, _ = sh.reply(tr, "0.0", `[{"goal":{"of":3,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
+	c := agent(t, tr, "0.0")
+	if c.Phase == PhaseFaulted || len(c.Names[4].Obs.Members()) != 1 || !c.Names[4].Obs.Members()[0].Equal(c.Names[3].Obs) {
+		t.Fatalf("the child did not cut its goal: %+v", c)
+	}
+	for _, bad := range []string{
+		`[{"goal":"written"}]`,
+		`[{"goal":{"of":0,"lines":[0,1]}}]`,
+		`[{"goal":{"of":0,"lines":[3,2]}}]`,
+		`[{"goal":{"of":0,"lines":[1]}}]`,
+		`[{"goal":{"of":9,"lines":[1,1]}}]`,
+	} {
+		sh := newShell(t)
+		tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
+		if tr, _ = sh.reply(tr, "0", bad); agent(t, tr, "0").Phase != PhaseFaulted {
+			t.Errorf("%s did not fault", bad)
+		}
 	}
 }

@@ -141,7 +141,59 @@ export interface RejectedMessage {
   message: string;
 }
 
-export type ServerMessage = SnapshotMessage | AcceptedMessage | RejectedMessage;
+/** A tree's node, as Step holds it after one event (56). */
+export interface TreeNode {
+  id: string;
+  parent?: string;
+  kind: "act" | "delegate" | string;
+  phase: "thinking" | "invoking" | "delegating" | "done" | "faulted" | string;
+  depth: number;
+  turns: number;
+  holds: string[] | null;
+  names: number;
+  returned: number;
+  why?: string;
+  lost?: string[];
+}
+
+/** The tree after one event: started, replied, returned or stopped. */
+export interface TreeFrame {
+  event: string;
+  agent?: string;
+  detail?: string;
+  nodes: TreeNode[];
+}
+
+/** One tree's log, replayed through Step. */
+export interface TreeReplay {
+  frame: string;
+  goal: string;
+  kind: string;
+  reach: string[];
+  frames: TreeFrame[];
+}
+
+/** A tree the human started from a spec. */
+export interface TreeRun {
+  id: string;
+  goal: string;
+  kind: string;
+  reach: string[];
+  phase: "running" | "done" | "failed";
+  answer?: string;
+  error?: string;
+  started: number;
+  view?: TreeReplay[] | null;
+}
+
+/** Every tree, newest first, and the targets a tree may hold. */
+export interface TreesMessage {
+  type: "trees";
+  targets: string[];
+  trees: TreeRun[];
+}
+
+export type ServerMessage = SnapshotMessage | AcceptedMessage | RejectedMessage | TreesMessage;
 
 // ---------------------------------------------------------------------------
 // Browser → user
@@ -177,4 +229,14 @@ export interface DeleteConversationMessage {
   requestId: string;
 }
 
-export type ClientMessage = SubmitMessage | CloseInteractionMessage | OpenConversationMessage | DeleteConversationMessage;
+/** Start one tree of a spec, on the apprentice, as the operator (56). */
+export interface StartTreeMessage {
+  type: "start-tree";
+  requestId: string;
+  /** The spec: the root's goal. */
+  text: string;
+  kind: "act" | "delegate";
+  reach: string[];
+}
+
+export type ClientMessage = SubmitMessage | CloseInteractionMessage | OpenConversationMessage | DeleteConversationMessage | StartTreeMessage;

@@ -75,6 +75,45 @@ export const DestinationSchema = z.object({
   outline: z.object({ nodes: z.array(OutlineNodeSchema) }),
 });
 
+const TreeNodeSchema = z.object({
+  id: z.string(),
+  parent: z.string().optional(),
+  kind: z.string(),
+  phase: z.string(),
+  depth: z.number(),
+  turns: z.number(),
+  holds: z.array(z.string()).nullable(),
+  names: z.number(),
+  returned: z.number(),
+  why: z.string().optional(),
+  lost: z.array(z.string()).optional(),
+});
+
+const TreeReplaySchema = z.object({
+  frame: z.string(),
+  goal: z.string(),
+  kind: z.string(),
+  reach: z.array(z.string()),
+  frames: z.array(z.object({
+    event: z.string(),
+    agent: z.string().optional(),
+    detail: z.string().optional(),
+    nodes: z.array(TreeNodeSchema),
+  })),
+});
+
+export const TreeRunSchema = z.object({
+  id: z.string(),
+  goal: z.string(),
+  kind: z.string(),
+  reach: z.array(z.string()),
+  phase: z.enum(["running", "done", "failed"]),
+  answer: z.string().optional(),
+  error: z.string().optional(),
+  started: z.number(),
+  view: z.array(TreeReplaySchema).nullable().optional(),
+});
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("snapshot"),
@@ -93,6 +132,11 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     requestId: z.string(),
     code: z.string(),
     message: z.string(),
+  }),
+  z.object({
+    type: z.literal("trees"),
+    targets: z.array(z.string()),
+    trees: z.array(TreeRunSchema),
   }),
 ]);
 

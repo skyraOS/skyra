@@ -246,10 +246,15 @@ struct Header: View {
     let session: Session
     @Binding var historyPresented: Bool
     @State private var showPenpot = false
+    @Environment(\.openWindow) private var openWindow
     var body: some View {
         HStack(spacing: 12) {
             Spacer().frame(width: 140)
             Button("History") { historyPresented = true }.keyboardShortcut("h", modifiers: [.command, .shift])
+            if !session.treeTargets.isEmpty {
+                Button("Trees") { openWindow(id: "trees") }
+                    .help("Give a spec to a tree and watch it form, in its own window (⇧⌘T)")
+            }
             Button { session.newSession() } label: { Image(systemName: "square.and.pencil") }
                 .help("New conversation").accessibilityLabel("New conversation")
             Menu("Context") {

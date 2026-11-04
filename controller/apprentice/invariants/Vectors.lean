@@ -138,7 +138,8 @@ structure World where
   t1 : ObservationType
   t2 : ObservationType
   /-- Effects: two that came back through an act node's `perform_effect`,
-  a goal, an exit, an act description, and the root's endowment. -/
+  an exit, an act description, and the root's endowment; and a goal, cut
+  from the endowment, its one member. -/
   e1 : Observation
   e2 : Observation
   g1 : Observation
@@ -167,10 +168,10 @@ def world : Option World := do
   let td ← ObservationType.of app.delegate shapeOut
   let e1 ← observe app .act t1 []
   let e2 ← observe app .act t2 []
-  let g1 ← observe app .delegate tg []
+  let r0 ← rootObservation app tr
+  let g1 ← observe app .delegate tg [r0]
   let x1 ← observe app .act tx []
   let w1 ← observe app .delegate tw []
-  let r0 ← rootObservation app tr
   let k1 ← observe app .delegate td [g1, e1]
   let k2 ← observe app .delegate td [g1, e2]
   let k3 ← observe app .delegate td [k1, e2]

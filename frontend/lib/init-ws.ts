@@ -18,6 +18,8 @@ export function getWS(): WSClient {
   const store = useAppStore.getState();
   const fragment = new URLSearchParams(window.location.hash.slice(1));
   const supplied = fragment.get("skyra-token");
+  if (fragment.get("view") === "trees") store.setView("trees");
+  if (fragment.get("tree")) store.selectTree(fragment.get("tree"));
   if (supplied) {
     sessionStorage.setItem("skyra-token", supplied);
     fragment.delete("skyra-token");
