@@ -120,6 +120,12 @@ Method and caveats: [`docs/STARTUP-PER-TURN.md`](docs/STARTUP-PER-TURN.md).
 | The tree machine: a pure `Step` over the whole tree ([56](docs/next/proposal/56-tree-machine-proposal.md))                                                          | decision layer **built**; `Step` and its shells next                        |
 | Invariant 3 fully: records still store derived fields, checked by replay                                                                                            | known gap                                                                   |
 
+## Whats proved
+
+Trees with one target runs with claude
+
+Trees of hieght > 1 are one or two changes away.
+
 ## Where we're going
 
 The kernel gets out of the loop. It provisions the apprentice once, under the
