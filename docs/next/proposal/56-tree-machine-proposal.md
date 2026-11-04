@@ -404,7 +404,7 @@ type Key interface{ key() }
 type ObjectKey struct{ Kind, Hash string } // a guard, a base type, an event: by hash
 type ChainKey struct{ Base BaseID }        // the guard records of a base type
 type HistoryKey struct{}                   // the input records
-type CELKey struct {                       // a guard's CEL over named values: see "Open"
+type CELKey struct {                       // a guard's CEL over named values, answered by apprentice/refine
 	Base   BaseID
 	CEL    string
 	Inputs []string
@@ -691,7 +691,7 @@ Stop for review after each step.
    instructions, for delegate and invoke nodes, with positional references;
    every node it starts is in one `instruction/1`, which is within 52's one
    instruction in flight.
-5. **Where CEL runs.** A guard's CEL is a pure function of its inputs, so it
-   is a `Read` (`CELKey`), answered by the apprentice's loop through
-   `apprentice/refine`, and retried freely. Or it runs in the core, with
-   `refine` on the purity allowlist.
+5. **Where CEL runs.** Settled, for now: a guard's CEL is a pure function of
+   its inputs, so it is a `Read` (`CELKey`), answered by the apprentice's
+   loop through `apprentice/refine`, and retried freely. The core holds no
+   CEL interpreter.
