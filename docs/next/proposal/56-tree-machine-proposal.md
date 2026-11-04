@@ -750,7 +750,7 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
    (provisioning, turns, the reply's interpretation, `observe`, the act
    transformation, children and their returns, `perform_effect`, faults),
    the store and history in memory; done. **4b, the records**: reading and
-   verifying the store and history, and the write-once commits.
+   verifying the store and history, and the write-once commits; done.
 5. **The interim shell**: the apprentice's loop for the effects in the
    process; instructions to today's kernel for the rest; replay on every
    resume.
@@ -766,8 +766,10 @@ Steps 1 to 3 are done and pushed on `one-tool-trees`: 55's Lean is
 in `controller/apprentice/tree`, checked against every vector. Open items 1
 to 13 are settled.
 
-Step 4a, the tree, is done: `step.go`, with `step_test.go` driving trees by
-events alone. Step 4b, the records, is next.
+Step 4, `Step`, is done: 4a, the tree, and 4b, the records, in `step.go`,
+with `step_test.go` driving trees by events alone through a fake shell that
+answers every read and commit from its own records. Step 5, the interim
+shell, is next.
 
 ### Step 4a, as built
 
@@ -795,10 +797,7 @@ What 4a decided, beyond the open items:
 - **A refused child is the child's fault, never its parent's**: nothing
   passed, the actor in its own reach, or past the depth bound. Its parent
   takes nothing from it and goes on.
-- **Effects come in order**: a `Commit` of records, an `Execute` of every
-  action the event decided, then at most one `Read`, last, since what
-  follows waits on its answer. While a read is in flight every other event
-  is recorded and ignored.
+- **Effects come in order**; see 4b, which replaced 4a's order.
 - **Guards, with remember off.** An unseen return base type registers the
   default guard and is recorded as a fallback; a seen one asks its guard
   (`CELKey`, empty CEL for the default), and the answer is recorded. The
@@ -809,6 +808,33 @@ What 4a decided, beyond the open items:
   `{"exit":"…"}`. Unknown fields, a second key and a negative name are
   faults.
 
+### Step 4b, as built
+
+- **One effect per `Step`**, the kernel's cycle, `Read* Commit? Execute*`:
+  a `Read`, answered by `ReadResult`; a `Commit`, answered by `Committed`;
+  or an `Execute` of every action the cycle decided. What a cycle decides
+  before a read is held in the tree until it completes, so nothing leaves
+  the process before its records are durable. (4a returned a commit, its
+  actions and a read together; that broke the rule.)
+- **Awaiting.** While a read or commit is in flight, only its answer is
+  taken; any other event returns the tree unchanged and asks for nothing.
+  The shell holds every other event back until the answer (`Awaiting`).
+- **The history** is read once, before the root is provisioned
+  (`HistoryKey`): a JSON array of input base ids, each `sha256:` and 64 hex
+  digits (check 5). Every unseen input is appended (`HistoryWrite`).
+- **A guard chain** is read the first time a run meets a return base type
+  (`ChainKey`): a JSON array of guard objects, oldest first. Each object is
+  `{"base", "guard", "replaces"}`, canonical: its base type the one asked
+  for, the first the default replacing nothing, each after it written and
+  replacing the refinement id before it (checks 1, 3, 4 and 14). The store
+  folds it: the slot is the last guard. A corrupt chain faults the agent
+  that read it.
+- **The default on unseen** is written as the first guard, write-once under
+  its refinement id (`GuardWrite`); a sibling's same default is
+  `Identical`. A `Conflict` is corruption and faults whose write it was.
+  Nothing is `Lost` yet: no instruction rewrites a guard, so no two writes
+  race.
+
 Open, from 4a:
 
 14. **The invoke guard.** `InvokeOf` takes a guard, but the store holds
@@ -816,6 +842,17 @@ Open, from 4a:
     type. With remember off it is never consulted: `do`'s answer is
     recorded, and the model always runs. Where an invoke guard lives is open
     until remember is on.
+
+Open, from 4b:
+
+15. **Rewriting a guard.** No instruction writes one: a model whose return
+    fell back has no way to write the guard that replaces the default.
+    `Rewrite`, the replaces chain and the `Lost` race (check 15) are
+    verified on read but never written. Which contract a model writes a
+    guard through is open.
+16. **Replay** (check 6): rebuilding a tree from recorded events. 4b reads
+    the store and history; it does not read events back. That is the
+    interim shell's (step 5).
 
 ## Open
 

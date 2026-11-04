@@ -11,10 +11,16 @@ import (
 // tree it is handed is never changed. Every decision it makes is one of
 // core.go's, which is Core.lean's.
 //
-// This is step 4a: the tree. The store and the history are held in memory;
-// reading and verifying them, and the write-once commits, are step 4b. With
-// remember off, a guard's answer is recorded and the agent always goes back
-// to its model.
+// Each Step returns at most one effect, the kernel's cycle, Read* Commit?
+// Execute*: a Read, answered by a ReadResult; a Commit, answered by
+// Committed; or an Execute, whose results are the next events. What an event
+// decides before a read, it holds in the tree until the cycle completes, so
+// nothing leaves the process before its records are durable. While a read or
+// a commit is in flight (Awaiting), the shell holds every other event back.
+//
+// The store and the history are folds of write-once records, read raw and
+// verified here. With remember off, a guard's answer is recorded and the
+// agent always goes back to its model.
 
 // MaxFanOut is the most instructions one call may carry, as the kernel's
 // fan-out.
@@ -52,13 +58,36 @@ type Tree struct {
 	Agents  map[AgentID]*Agent
 	Depth   int // the bound
 
-	reading *reading // a CEL read in flight: the next event must answer it
+	held *held // a cycle in flight: what it decided, and what it waits on
 }
 
-type reading struct {
-	agent AgentID
-	base  ReturnBase
+// held is a cycle in flight: the writes and actions decided so far, and a
+// read (cont) or a commit (committing) whose answer is the next event.
+type held struct {
+	writes     []Write
+	owners     []AgentID // whose decision each write is
+	acts       []Action
+	read       *cont
+	committing bool
 }
+
+// cont is what a read's answer goes on to do.
+type cont struct {
+	kind    contKind
+	agent   AgentID
+	base    ReturnBase
+	names   []int   // what came back, by name: a guard's inputs
+	started Started // the root, while the history is read
+}
+
+type contKind uint8
+
+const (
+	_           contKind = iota
+	contHistory          // the input records, before the root is provisioned
+	contChain            // a return base type's guard records
+	contCEL              // a guard's answer
+)
 
 // An AgentID is the agent's path: "0", "0.1", "0.1.0".
 type AgentID string
@@ -146,12 +175,22 @@ func (t Tree) clone() Tree {
 		b.Returned = slices.Clone(a.Returned)
 		c.Agents[id] = &b
 	}
-	if t.reading != nil {
-		r := *t.reading
-		c.reading = &r
+	if t.held != nil {
+		h := *t.held
+		h.writes, h.owners, h.acts = slices.Clone(h.writes), slices.Clone(h.owners), slices.Clone(h.acts)
+		if h.read != nil {
+			k := *h.read
+			k.names = slices.Clone(k.names)
+			h.read = &k
+		}
+		c.held = &h
 	}
 	return c
 }
+
+// Awaiting: a read or a commit is in flight, and only its answer may be the
+// next event. The shell holds every other event back until it is answered.
+func (t Tree) Awaiting() bool { return t.held != nil }
 
 // --- events ---
 
@@ -247,8 +286,7 @@ func (Earlier) ref() {}
 
 // --- effects ---
 
-// Effects come in order: a Commit, then an Execute, then at most one Read,
-// last, as what follows it waits on its answer.
+// Step returns at most one Effect: a Read, a Commit or an Execute.
 type Effect interface{ effect() }
 
 type Read struct{ Keys []Key }
@@ -272,6 +310,17 @@ type CELKey struct {
 
 func (CELKey) key() {}
 
+// HistoryKey asks for the input records: a JSON array of input base ids, or
+// nothing.
+type HistoryKey struct{}
+
+// ChainKey asks for a return base type's guard records: a JSON array of
+// guard objects, oldest first, or nothing.
+type ChainKey struct{ Base ReturnBase }
+
+func (HistoryKey) key() {}
+func (ChainKey) key()   {}
+
 type Write interface{ write() }
 
 // RecordWrite is record/1: decisions, values, faults. Values never enter the
@@ -283,6 +332,30 @@ type RecordWrite struct {
 }
 
 func (RecordWrite) write() {}
+
+// GuardWrite is a guard, write-once under its refinement id: its base type,
+// its code and the refinement id it replaces (none for the default). A retry,
+// or a sibling's same default, finds it Identical.
+type GuardWrite struct {
+	ID    RefinementID
+	Base  ReturnBase
+	Bytes []byte
+}
+
+// HistoryWrite appends an input record: the input base id, as JSON.
+type HistoryWrite struct{ Bytes []byte }
+
+func (GuardWrite) write()   {}
+func (HistoryWrite) write() {}
+
+// guardBytes is a guard object's canonical encoding.
+func guardBytes(b ReturnBase, g Guard, replaces RefinementID) []byte {
+	var guard any = "default"
+	if cel, ok := g.Written(); ok {
+		guard = map[string]string{"written": cel}
+	}
+	return canonical(map[string]any{"base": b.id, "guard": guard, "replaces": string(replaces)})
+}
 
 type Action interface{ action() }
 
@@ -313,55 +386,112 @@ func (InvokeContract) action() {}
 type run struct {
 	t      Tree
 	writes []Write
+	owners []AgentID
 	acts   []Action
-	read   *Read
+	read   *cont
+	key    Key // the read's key, once decided
 }
 
 func Step(t Tree, e Event) (Tree, []Effect) {
 	r := &run{t: t.clone()}
-	if r.t.reading != nil {
-		if rr, ok := e.(ReadResult); ok {
-			r.answered(rr)
-		} else {
-			r.record("ignored", "", map[string]any{"why": "a read is in flight"})
+	h := r.t.held
+	r.t.held = nil
+	switch {
+	case h != nil && h.read != nil:
+		rr, ok := e.(ReadResult)
+		if !ok {
+			return t, nil // the shell holds it back: see Awaiting
 		}
-		return r.t, r.effects()
-	}
-	switch e := e.(type) {
-	case Started:
-		r.started(e)
-	case Replied:
-		r.replied(e)
-	case Returned:
-		r.returned(e)
-	case Stopped:
-		if a := r.live(e.Agent); a != nil {
-			r.fault(a, "stopped: "+e.Reason)
+		r.writes, r.owners, r.acts = h.writes, h.owners, h.acts
+		r.answer(*h.read, rr)
+	case h != nil && h.committing:
+		c, ok := e.(Committed)
+		if !ok {
+			return t, nil
 		}
-	case Committed:
-		// Step 4a: records are not write-once yet; nothing waits on them.
-	case ReadResult:
-		r.record("ignored", "", map[string]any{"why": "no read is in flight"})
+		r.acts = h.acts
+		r.committed(h, c)
+	default:
+		switch e := e.(type) {
+		case Started:
+			r.started(e)
+		case Replied:
+			r.replied(e)
+		case Returned:
+			r.returned(e)
+		case Stopped:
+			if a := r.live(e.Agent); a != nil {
+				r.fault(a, "stopped: "+e.Reason)
+			}
+		case ReadResult, Committed:
+			r.record("ignored", "", map[string]any{"why": "nothing was asked"})
+		}
 	}
-	return r.t, r.effects()
+	return r.next()
 }
 
-func (r *run) effects() []Effect {
-	var out []Effect
-	if len(r.writes) > 0 {
-		out = append(out, Commit{r.writes})
-	}
-	if len(r.acts) > 0 {
-		out = append(out, Execute{r.acts})
-	}
+// next is the cycle's next effect: the read it waits on, else the commit
+// of what it decided, else the actions, once their records are durable.
+func (r *run) next() (Tree, []Effect) {
 	if r.read != nil {
-		out = append(out, *r.read)
+		r.t.held = &held{writes: r.writes, owners: r.owners, acts: r.acts, read: r.read}
+		return r.t, []Effect{Read{[]Key{r.key}}}
 	}
-	return out
+	if len(r.writes) > 0 {
+		r.t.held = &held{writes: r.writes, owners: r.owners, acts: r.acts, committing: true}
+		return r.t, []Effect{Commit{r.writes}}
+	}
+	var acts []Action
+	for _, a := range r.acts { // an agent faulted since is not run
+		if ag := r.t.Agents[actAgent(a)]; ag != nil && ag.Phase != PhaseFaulted && ag.Phase != PhaseDone {
+			acts = append(acts, a)
+		}
+	}
+	if len(acts) > 0 {
+		return r.t, []Effect{Execute{acts}}
+	}
+	return r.t, nil
+}
+
+func actAgent(a Action) AgentID {
+	switch a := a.(type) {
+	case Turn:
+		return a.Agent
+	case InvokeContract:
+		return a.Agent
+	}
+	return ""
+}
+
+// committed takes a commit's outcomes: Created and Identical are what
+// write-once allows; Conflict is corruption, and faults whose write it was.
+// Nothing is Lost: no write races yet.
+func (r *run) committed(h *held, c Committed) {
+	if len(c.Outcomes) != len(h.writes) {
+		for _, id := range h.owners {
+			if a := r.t.Agents[id]; a != nil && a.Phase != PhaseFaulted {
+				r.fault(a, "a commit answered for other writes")
+			}
+		}
+		return
+	}
+	for i, o := range c.Outcomes {
+		if o == OutcomeCreated || o == OutcomeIdentical {
+			continue
+		}
+		if a := r.t.Agents[h.owners[i]]; a != nil && a.Phase != PhaseFaulted {
+			r.fault(a, "a write conflicted: corruption")
+		}
+	}
+}
+
+func (r *run) write(w Write, owner AgentID) {
+	r.writes = append(r.writes, w)
+	r.owners = append(r.owners, owner)
 }
 
 func (r *run) record(kind string, a AgentID, body map[string]any) {
-	r.writes = append(r.writes, RecordWrite{kind, a, body})
+	r.write(RecordWrite{kind, a, body}, a)
 }
 
 // live is an agent that may still take an event; anything else is recorded
@@ -377,11 +507,35 @@ func (r *run) live(id AgentID) *Agent {
 
 // --- provisioning ---
 
+// started reads the history first: do needs it from the first invoke.
 func (r *run) started(e Started) {
 	if len(r.t.Agents) > 0 {
 		r.record("ignored", rootID, map[string]any{"why": "already started"})
 		return
 	}
+	r.read, r.key = &cont{kind: contHistory, started: e}, HistoryKey{}
+}
+
+// history is check 5: every input record is an input base id, well formed.
+func history(found []byte) ([]InputBase, bool) {
+	if found == nil {
+		return nil, true
+	}
+	var ids []string
+	if json.Unmarshal(found, &ids) != nil {
+		return nil, false
+	}
+	var out []InputBase
+	for _, id := range ids {
+		if len(id) != len("sha256:")+64 || id[:7] != "sha256:" || !hexDigits(id[7:], 64) {
+			return nil, false
+		}
+		out = append(out, InputBase{id})
+	}
+	return out, true
+}
+
+func (r *run) provision(e Started) {
 	app := r.t.App
 	r.t.Actor = e.Actor
 	a := &Agent{ID: rootID, Self: e.Self}
@@ -414,6 +568,7 @@ func (r *run) invoke(id AgentID, c Contract, passed []ReturnBase) InputBase {
 	seen := Do(r.t.History, i)
 	if seen == SeenUnseen {
 		r.t.History = append(r.t.History, i)
+		r.write(HistoryWrite{canonical(i.id)}, id)
 	}
 	r.record("invoke", id, map[string]any{"input": i.id, "do": seenWord(seen)})
 	return i
@@ -462,7 +617,8 @@ func (r *run) replied(e Replied) {
 		before, writes, acts := r.t.clone(), len(r.writes), len(r.acts)
 		why = r.interpret(a, call)
 		if why != "" { // all or nothing: undo what the call did, then fault
-			r.t, r.writes, r.acts = before, r.writes[:writes], r.acts[:acts]
+			r.t, r.writes, r.owners, r.acts = before, r.writes[:writes], r.owners[:writes], r.acts[:acts]
+			r.read, r.key = nil, nil
 			a = r.t.Agents[e.Agent]
 		}
 	}
@@ -899,8 +1055,8 @@ func (r *run) up(a *Agent) {
 	r.arrive(p, base, a.Returned)
 }
 
-// arrive names what came back under its return base type, then sees it:
-// unseen registers the default guard; seen asks for the guard's answer.
+// arrive names what came back under its return base type, then sees it. A
+// base type this run has not read is read first, from its guard records.
 func (r *run) arrive(a *Agent, base ReturnBase, obs []Observation) {
 	var names []int
 	for _, o := range obs {
@@ -910,36 +1066,123 @@ func (r *run) arrive(a *Agent, base ReturnBase, obs []Observation) {
 		a.Names = append(a.Names, Named{o, base})
 		names = append(names, len(a.Names)-1)
 	}
-	seen, store := See(r.t.Store, base)
-	r.t.Store = store
-	if seen == SeenUnseen {
-		r.record("guard", a.ID, map[string]any{"base": base.id, "see": "unseen", "ret": "fallback"})
-		r.ready(a)
+	if slices.Contains(r.t.Store.Known(), base) {
+		r.ask(a, base, names)
 		return
 	}
-	g, _ := store.Guard(base)
-	cel, _ := g.Written()
-	r.read = &Read{[]Key{CELKey{Base: base, CEL: cel, Inputs: names}}}
-	r.t.reading = &reading{a.ID, base}
+	r.read, r.key = &cont{kind: contChain, agent: a.ID, base: base, names: names}, ChainKey{base}
 }
 
-// answered takes a guard's answer: trusted, recorded, never consulted with
-// remember off.
-func (r *run) answered(rr ReadResult) {
-	rd := *r.t.reading
-	r.t.reading = nil
-	a := r.t.Agents[rd.agent]
-	var holds bool
-	if len(rr.Found) != 1 || json.Unmarshal(rr.Found[0], &holds) != nil {
-		r.fault(a, "a guard's answer is not true or false")
+// ask is a seen base type's guard, asked over what came back.
+func (r *run) ask(a *Agent, base ReturnBase, names []int) {
+	g, _ := r.t.Store.Guard(base)
+	cel, _ := g.Written()
+	r.read = &cont{kind: contCEL, agent: a.ID, base: base, names: names}
+	r.key = CELKey{Base: base, CEL: cel, Inputs: names}
+}
+
+// answer takes a read's answer and goes on.
+func (r *run) answer(c cont, rr ReadResult) {
+	if len(rr.Found) != 1 {
+		if a := r.t.Agents[c.agent]; a != nil {
+			r.fault(a, "a read answered for other keys")
+		} else {
+			r.t.Agents[rootID] = &Agent{ID: rootID, Self: c.started.Self}
+			r.fault(r.t.Agents[rootID], "a read answered for other keys")
+		}
 		return
 	}
-	ret := "fallback"
-	if ReturnOf(SeenSeen, holds) == ReturnContinue {
-		ret = "continue"
+	found := rr.Found[0]
+	switch c.kind {
+	case contHistory:
+		h, ok := history(found)
+		if !ok {
+			r.t.Agents[rootID] = &Agent{ID: rootID, Self: c.started.Self}
+			r.fault(r.t.Agents[rootID], "a corrupt input record")
+			return
+		}
+		r.t.History = h
+		r.provision(c.started)
+	case contChain:
+		a := r.t.Agents[c.agent]
+		store, ok := fold(r.t.Store, c.base, found)
+		if !ok {
+			r.fault(a, "a corrupt guard chain")
+			return
+		}
+		r.t.Store = store
+		if slices.Contains(store.Known(), c.base) {
+			r.ask(a, c.base, c.names)
+			return
+		}
+		// Unseen: the default is the base type's first guard (check 14).
+		_, r.t.Store = See(r.t.Store, c.base)
+		g := DefaultGuard()
+		r.write(GuardWrite{RefinementOf(c.base, g), c.base, guardBytes(c.base, g, "")}, a.ID)
+		r.record("guard", a.ID, map[string]any{"base": c.base.id, "see": "unseen", "ret": "fallback"})
+		r.ready(a)
+	case contCEL:
+		a := r.t.Agents[c.agent]
+		var holds bool
+		if !strict(found, &holds) {
+			r.fault(a, "a guard's answer is not true or false")
+			return
+		}
+		ret := "fallback"
+		if ReturnOf(SeenSeen, holds) == ReturnContinue {
+			ret = "continue"
+		}
+		r.record("guard", a.ID, map[string]any{"base": c.base.id, "see": "seen", "holds": holds, "ret": ret})
+		r.ready(a)
 	}
-	r.record("guard", a.ID, map[string]any{"base": rd.base.id, "see": "seen", "holds": holds, "ret": ret})
-	r.ready(a)
+}
+
+// fold is checks 1, 3, 4 and 14 over a return base type's guard records:
+// each its canonical encoding and for the base type it is read under; the
+// first the default, replacing nothing; each after it written, replacing the
+// one before. The store's slot is the last.
+func fold(s Store, b ReturnBase, found []byte) (Store, bool) {
+	if found == nil {
+		return s, true
+	}
+	var chain []json.RawMessage
+	if json.Unmarshal(found, &chain) != nil || len(chain) == 0 {
+		return s, false
+	}
+	var prev RefinementID
+	for i, raw := range chain {
+		var rec struct {
+			Base     string          `json:"base"`
+			Guard    json.RawMessage `json:"guard"`
+			Replaces string          `json:"replaces"`
+		}
+		if !strict(raw, &rec) || rec.Base != b.id || RefinementID(rec.Replaces) != prev {
+			return s, false
+		}
+		var g Guard
+		var def string
+		var written struct {
+			Written *string `json:"written"`
+		}
+		switch {
+		case strict(rec.Guard, &def) && def == "default" && i == 0:
+			g = DefaultGuard()
+		case strict(rec.Guard, &written) && written.Written != nil && i > 0:
+			g = WrittenGuard(*written.Written)
+		default:
+			return s, false
+		}
+		if !bytes.Equal(guardBytes(b, g, prev), raw) {
+			return s, false
+		}
+		if i == 0 {
+			_, s = See(s, b)
+		} else {
+			s, _ = Rewrite(s, b, *written.Written)
+		}
+		prev = RefinementOf(b, g)
+	}
+	return s, true
 }
 
 // ready: once everything its call started is back, the model goes on.
