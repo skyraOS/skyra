@@ -11,19 +11,20 @@ import (
 
 var (
 	hb      = Binary("sha256:" + strings.Repeat("1", 64))
+	hc      = contract(hb, Schema(`{"type":"object"}`))
 	hpassed = []ReturnBase{{"sha256:" + strings.Repeat("2", 64)}}
 )
 
 func TestHashesKnownAnswers(t *testing.T) {
-	in := must(CreateInvoke(hb, hpassed))
+	in := CreateInvoke(hc, hpassed)
 	ret := must(CreateReturn(in, shapeS))
 	for _, tc := range []struct{ name, got, want string }{
-		{"input", in.id, "sha256:1cf89a85d7d5563b2afc55257ee86c7ba0433ad322c7b50e7ac433a8b9fbf704"},
-		{"input, nothing passed", must(CreateInvoke(hb, nil)).id, "sha256:9c48a2bc40e7f22e73734b5fe8aee1f70c6f01a672b61a4a5a54d67f494bf1db"},
-		{"return", ret.id, "sha256:38d3293cf25a18a2da0b13f8b9c9b98a96df3689e3f14d8a406dfe8ec4559453"},
-		{"refinement, default", string(RefinementOf(ret, DefaultGuard())), "sha256:5a462ec1478a3c3157c5a88546e02d592d562ccf0fc1c0ead40cf5e52c0d1b74"},
+		{"input", in.id, "sha256:eeed6b565a9469dc163b3757e1f49b23f795b1db9aed94b5609f92696f56ee3a"},
+		{"input, nothing passed", CreateInvoke(hc, nil).id, "sha256:900dc53cbdfa9e7bf549dd8e1c0c56ef4c83543017c7e1b68bdf69869d23d11a"},
+		{"return", ret.id, "sha256:283d0f465c4bf6e0017b53a7f678da10ee450cfd9c561770a6fd9d1b0e0bf3ad"},
+		{"refinement, default", string(RefinementOf(ret, DefaultGuard())), "sha256:3f707334c26b9649a258f0017772d9a3661e11c0463fd54a83e7a1a32119be15"},
 		// <, > and & are written as they are, as JSON.stringify writes them.
-		{"refinement, written", string(RefinementOf(ret, WrittenGuard("a < b && x"))), "sha256:6f3395965ed805f02b01a99f2a083cd7edf3dddda49be232246b91cd39c3bacd"},
+		{"refinement, written", string(RefinementOf(ret, WrittenGuard("a < b && x"))), "sha256:99f1853cb7d1c1b4220225864806be5f439df490327b0e034ee5b0fed78909df"},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s: %s; want %s", tc.name, tc.got, tc.want)
@@ -35,21 +36,22 @@ var hashForm = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 func TestHashesTellPartsApart(t *testing.T) {
 	two := []ReturnBase{{"sha256:" + strings.Repeat("2", 64)}, {"sha256:" + strings.Repeat("3", 64)}}
-	in := func(b Binary, p []ReturnBase) InputBase { return must(CreateInvoke(b, p)) }
+	in := func(c Contract, p []ReturnBase) InputBase { return CreateInvoke(c, p) }
 	ret := func(i InputBase, s Schema) ReturnBase { return must(CreateReturn(i, s)) }
-	r := ret(in(hb, hpassed), shapeS)
+	r := ret(in(hc, hpassed), shapeS)
 	ids := map[string]string{
-		"input":                      in(hb, hpassed).id,
-		"input, another binary":      in(binX, hpassed).id,
-		"input, nothing passed":      in(hb, nil).id,
-		"input, two passed":          in(hb, two).id,
-		"input, two passed, swapped": in(hb, []ReturnBase{two[1], two[0]}).id,
+		"input":                      in(hc, hpassed).id,
+		"input, another binary":      in(x, hpassed).id,
+		"input, another shape":       in(contract(hb, shapeB), hpassed).id,
+		"input, nothing passed":      in(hc, nil).id,
+		"input, two passed":          in(hc, two).id,
+		"input, two passed, swapped": in(hc, []ReturnBase{two[1], two[0]}).id,
 		"return":                     r.id,
-		"return, another input":      ret(in(binX, hpassed), shapeS).id,
-		"return, another shape":      ret(in(hb, hpassed), shapeA).id,
+		"return, another input":      ret(in(x, hpassed), shapeS).id,
+		"return, another shape":      ret(in(hc, hpassed), shapeA).id,
 		"default guard":              string(RefinementOf(r, DefaultGuard())),
 		"written guard":              string(RefinementOf(r, WrittenGuard("x"))),
-		"another return":             string(RefinementOf(ret(in(hb, nil), shapeS), DefaultGuard())),
+		"another return":             string(RefinementOf(ret(in(hc, nil), shapeS), DefaultGuard())),
 		// A written guard whose code is "default" is not the default guard.
 		"written \"default\"": string(RefinementOf(r, WrittenGuard("default"))),
 	}
@@ -63,18 +65,15 @@ func TestHashesTellPartsApart(t *testing.T) {
 		}
 		seen[id] = name
 	}
-	if in(hb, hpassed) != in(hb, hpassed) || r != ret(in(hb, hpassed), shapeS) {
+	if in(hc, hpassed) != in(hc, hpassed) || r != ret(in(hc, hpassed), shapeS) {
 		t.Error("the hashes are not deterministic")
 	}
 }
 
-// The edges refuse what is not well formed: a binary without a known scheme
-// and digest, a shape that is empty.
+// Up an edge refuses a shape that is empty. Down one never refuses: a
+// contract is well formed by construction.
 func TestEdgesRefuse(t *testing.T) {
-	if _, ok := CreateInvoke("md5:abc", nil); ok {
-		t.Error("createInvoke: a binary without a known scheme")
-	}
-	if _, ok := CreateReturn(must(CreateInvoke(hb, nil)), ""); ok {
+	if _, ok := CreateReturn(CreateInvoke(hc, nil), ""); ok {
 		t.Error("createReturn: an empty shape")
 	}
 }

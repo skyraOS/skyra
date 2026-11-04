@@ -39,8 +39,8 @@ func apprentice() Apprentice {
 	shape := func(title string) Schema { return Schema(`{"title":"` + title + `","type":"object"}`) }
 	c := func(title string) Contract { return contract(binApp, shape(title)) }
 	return must(ApprenticeOf(binApp, c("observe"), c("root"), c("exit"), c("return"),
-		c("effect_observation"), c("invoke"), c("delegate"), c("goal"),
-		c("create_description"), c("package_reach")))
+		c("perform_effect"), c("create_input"), c("delegate"), c("goal"),
+		c("create_delegation"), c("create_act"), c("package_reach")))
 }
 
 func (a Apprentice) all() []Contract {
@@ -60,14 +60,14 @@ var (
 	pool   = append(append([]Contract{self, selfOther}, others...), app.all()...)
 )
 
-var kinds = []Kind{KindEffect, KindAct, KindDelegate}
+var kinds = []Kind{KindAct, KindDelegate}
 
 // --- the spec, written out apart from the code ---
 
 // spec is what the classification must be, computed here without the code:
-// the apprentice's contracts never count; refused if the agent's own binary
-// is among the rest, at every count; otherwise by how many distinct contracts
-// remain.
+// the apprentice's contracts never count; refused if the child's own binary
+// is among the rest, at every count; refused if none remain, as a delegate
+// passes at least one; otherwise by how many distinct contracts remain.
 func spec(self Contract, reach []Contract) (Kind, bool) {
 	var counted []Contract
 	for _, c := range reach {
@@ -83,7 +83,7 @@ func spec(self Contract, reach []Contract) (Kind, bool) {
 	}
 	switch len(counted) {
 	case 0:
-		return KindEffect, true
+		return 0, false
 	case 1:
 		return KindAct, true
 	default:
@@ -114,9 +114,11 @@ func name(c Contract) string {
 		n string
 	}{{self, "self"}, {selfOther, "selfOther"}, {x, "x"}, {x2, "x2"}, {y, "y"}, {z, "z"},
 		{app.Observe(), "app.observe"}, {app.Root(), "app.root"}, {app.Exit(), "app.exit"},
-		{app.Return(), "app.return"}, {app.EffectObservation(), "app.effect_observation"},
-		{app.Invoke(), "app.invoke"}, {app.Delegate(), "app.delegate"}, {app.Goal(), "app.goal"},
-		{app.Description(), "app.create_description"}, {app.Reach(), "app.package_reach"}} {
+		{app.Return(), "app.return"}, {app.PerformEffect(), "app.perform_effect"},
+		{app.CreateInput(), "app.create_input"},
+		{app.Delegate(), "app.delegate"}, {app.Goal(), "app.goal"},
+		{app.CreateDelegation(), "app.create_delegation"}, {app.CreateAct(), "app.create_act"},
+		{app.Reach(), "app.package_reach"}} {
 		if p.c == c {
 			return p.n
 		}
@@ -134,14 +136,13 @@ func names(cs []Contract) string {
 
 // --- what a node is ---
 
-// classify_effect_iff, classify_invoke_iff, classify_delegate_iff: the kind is
-// the count of distinct contracts in reach.
+// classify_act_iff, classify_delegate_iff: the kind is the count of distinct
+// contracts in reach.
 func TestKindByCount(t *testing.T) {
 	for _, tc := range []struct {
 		reach []Contract
 		want  Kind
 	}{
-		{nil, KindEffect},
 		{[]Contract{x}, KindAct},
 		{[]Contract{x, y}, KindDelegate},
 		{[]Contract{x, y, z}, KindDelegate},
@@ -210,15 +211,47 @@ func TestApprenticeContractsNeverCount(t *testing.T) {
 	}
 }
 
-// Only apprentice contracts in reach: the agent is an effect node.
-func TestOnlyApprenticeContractsIsEffect(t *testing.T) {
-	if k, ok := Classify(app, self, app.all()); !ok || k != KindEffect {
-		t.Errorf("Classify(all of the apprentice's) = %v, %v; want effect", k, ok)
+// classify_passes_one: a delegate passes at least one contract. A child with
+// nothing in reach, or only the apprentice's, is refused.
+func TestDelegatePassesOne(t *testing.T) {
+	for _, reach := range [][]Contract{nil, app.all()} {
+		if k, ok := Classify(app, self, reach); ok {
+			t.Errorf("Classify(%s) = %v; want refused", names(reach), k)
+		}
+	}
+}
+
+// The root's kind is given, never counted: any reach, nothing in it
+// included, gives the kind it was started with, unless its own binary is in
+// it.
+func TestRootKindGiven(t *testing.T) {
+	for _, reach := range reaches(append([]Contract{self, selfOther}, others...), 3) {
+		_, selfOK := Classify(app, self, append(slices.Clone(reach), x))
+		for _, k := range kinds {
+			got, ok := RootKind(app, self, reach, k)
+			if ok != selfOK || ok && got != k {
+				t.Fatalf("RootKind(%s, %v) = %v, %v; want %v, %v", names(reach), k, got, ok, k, selfOK)
+			}
+		}
+	}
+}
+
+// parts_apart: an act child is described by create_act and handed no reach;
+// a delegate child is described by create_delegation and handed its reach.
+func TestParts(t *testing.T) {
+	want := map[Kind][]Contract{
+		KindAct:      {app.CreateAct()},
+		KindDelegate: {app.CreateDelegation(), app.Reach()},
+	}
+	for _, k := range kinds {
+		if got := Parts(app, k); !slices.Equal(got, want[k]) {
+			t.Errorf("Parts(%v) = %s; want %s", k, names(got), names(want[k]))
+		}
 	}
 }
 
 // Totality: every reach of length 0 to 4 over the whole pool classifies as
-// exactly what the spec says, one of refused, effect, invoke or delegate.
+// exactly what the spec says, one of refused, act or delegate.
 func TestTotality(t *testing.T) {
 	n := 0
 	for _, reach := range reaches(pool, 4) {
@@ -228,7 +261,7 @@ func TestTotality(t *testing.T) {
 			t.Fatalf("Classify(%s) = %v, %v; want %v, %v", names(reach), k, ok, wk, wok)
 		}
 		if ok && !slices.Contains(kinds, k) {
-			t.Fatalf("Classify(%s) = %v: not one of the three kinds", names(reach), k)
+			t.Fatalf("Classify(%s) = %v: not one of the two kinds", names(reach), k)
 		}
 		n++
 	}
@@ -238,12 +271,11 @@ func TestTotality(t *testing.T) {
 // --- what the kind loads ---
 
 // The apprentice's contracts for the kind: exit and return for every kind;
-// effect_observation for an effect node; invoke for an invoke node; delegate
-// and goal for a delegate; observe and root never.
+// create_input and perform_effect for an act node; delegate and goal for a
+// delegate; observe and root never.
 func TestLoadedByKind(t *testing.T) {
 	want := map[Kind][]Contract{
-		KindEffect:   {app.Exit(), app.Return(), app.EffectObservation()},
-		KindAct:      {app.Exit(), app.Return(), app.Invoke()},
+		KindAct:      {app.Exit(), app.Return(), app.CreateInput(), app.PerformEffect()},
 		KindDelegate: {app.Exit(), app.Return(), app.Delegate(), app.Goal()},
 	}
 	for _, k := range kinds {
@@ -299,7 +331,7 @@ func effectOf(t *testing.T, k Kind, c Contract) Observation {
 func TestEffectIffNoMembers(t *testing.T) {
 	goal := effectOf(t, KindDelegate, app.Goal())
 	exit := effectOf(t, KindAct, app.Exit())
-	wrote := effectOf(t, KindEffect, app.EffectObservation())
+	wrote := effectOf(t, KindDelegate, app.CreateAct())
 	came := effectOf(t, KindAct, x)
 	for _, o := range []Observation{goal, exit, wrote, came} {
 		if len(o.Members()) != 0 || !o.IsEffect() || o.IsComputation() {
@@ -317,8 +349,8 @@ func TestEffectIffNoMembers(t *testing.T) {
 	}
 }
 
-// Only a delegate makes a computation: with members, an effect or invoke
-// node is refused.
+// Only a delegate makes a computation: with members, an act node is
+// refused.
 func TestOnlyDelegateMakesComputation(t *testing.T) {
 	came := effectOf(t, KindAct, x)
 	for _, k := range kinds {
@@ -329,16 +361,16 @@ func TestOnlyDelegateMakesComputation(t *testing.T) {
 	}
 }
 
-// Which effects each kind may make: exit, every kind; goal, a delegate only;
-// effect_observation, an effect node only; through a contract outside the
-// apprentice, an invoke node only. Through observe or root, none; through
-// return, delegate or invoke, none: return passes, delegate composes, and
-// what invoke brings back is typed by the contract invoked.
+// Which effects each kind may make: exit, every kind; goal, the two
+// descriptions and the packaged reach, a delegate only; an input, and through
+// a contract outside the apprentice, an act node only. Through observe or root, none;
+// through return, delegate or perform_effect, none: return passes, delegate
+// composes, and what perform_effect brings back is typed by the contract
+// passed to it.
 func TestEffectsByKind(t *testing.T) {
 	may := map[Kind][]Contract{
-		KindEffect:   {app.Exit(), app.EffectObservation()},
-		KindAct:      {app.Exit(), x},
-		KindDelegate: {app.Exit(), app.Goal(), app.Description(), app.Reach()},
+		KindAct:      {app.Exit(), app.CreateInput(), x},
+		KindDelegate: {app.Exit(), app.Goal(), app.CreateDelegation(), app.CreateAct(), app.Reach()},
 	}
 	for _, k := range kinds {
 		for _, c := range append(app.all(), x) {
@@ -353,14 +385,10 @@ func TestEffectsByKind(t *testing.T) {
 // --- what a return may hold ---
 
 // mayReturnSpec is the rule, written out apart from the code: a return holds
-// something; an invoke or delegate node's return holds nothing its model
-// created directly; an effect node may return what it wrote.
-func mayReturnSpec(k Kind, created, returned []Observation) bool {
+// something, and nothing its model created directly.
+func mayReturnSpec(created, returned []Observation) bool {
 	if len(returned) == 0 {
 		return false
-	}
-	if k == KindEffect {
-		return true
 	}
 	for _, r := range returned {
 		for _, c := range created {
@@ -383,8 +411,8 @@ func equal(a, b Observation) bool {
 // equal to another by accident.
 type returnWorld struct {
 	goal  Observation // a delegate's model made it, through goal
-	wrote Observation // an effect node's model wrote it, through effect_observation
-	came  Observation // came back through an invoke node's contract
+	wrote Observation // a delegate's model made it, through create_act
+	came  Observation // came back through an act node's perform_effect
 	child Observation // a child's, passed back up
 	other Observation // another child's
 }
@@ -393,60 +421,53 @@ func newReturnWorld(t *testing.T) returnWorld {
 	t.Helper()
 	return returnWorld{
 		goal:  effectOf(t, KindDelegate, app.Goal()),
-		wrote: effectOf(t, KindEffect, app.EffectObservation()),
+		wrote: effectOf(t, KindDelegate, app.CreateAct()),
 		came:  effectOf(t, KindAct, x),
 		child: effectOf(t, KindAct, y),
 		other: effectOf(t, KindAct, z),
 	}
 }
 
-// An invoke or delegate node's return holds no observation its model created
-// directly: one that does is refused. An effect node may return what it
-// wrote. An empty return is no return.
+// A return holds no observation its model created directly: one that does is
+// refused. An empty return is no return.
 func TestMayReturn(t *testing.T) {
 	w := newReturnWorld(t)
 	for _, tc := range []struct {
 		name     string
-		kind     Kind
 		created  []Observation
 		returned []Observation
 		want     bool
 	}{
-		{"invoke returns what came back", KindAct, nil, []Observation{w.came}, true},
-		{"invoke returns what it was passed", KindAct, nil, []Observation{w.child}, true},
-		{"delegate returns a child's", KindDelegate, []Observation{w.goal}, []Observation{w.child}, true},
-		{"delegate returns two children's", KindDelegate, []Observation{w.goal}, []Observation{w.child, w.other}, true},
-		{"delegate returns its own goal", KindDelegate, []Observation{w.goal}, []Observation{w.goal}, false},
-		{"delegate hides its goal among children's", KindDelegate, []Observation{w.goal}, []Observation{w.child, w.goal, w.other}, false},
-		{"invoke returns what its model created", KindAct, []Observation{w.wrote}, []Observation{w.wrote}, false},
-		{"invoke hides what its model created", KindAct, []Observation{w.wrote}, []Observation{w.came, w.wrote}, false},
-		{"effect returns what it wrote", KindEffect, []Observation{w.wrote}, []Observation{w.wrote}, true},
-		{"effect returns what it wrote and was passed", KindEffect, []Observation{w.wrote}, []Observation{w.child, w.wrote}, true},
-		{"effect returns nothing", KindEffect, []Observation{w.wrote}, nil, false},
-		{"invoke returns nothing", KindAct, nil, nil, false},
-		{"delegate returns nothing", KindDelegate, []Observation{w.goal}, nil, false},
+		{"act returns what came back", nil, []Observation{w.came}, true},
+		{"act returns what it was passed", nil, []Observation{w.child}, true},
+		{"delegate returns a child's", []Observation{w.goal}, []Observation{w.child}, true},
+		{"delegate returns two children's", []Observation{w.goal}, []Observation{w.child, w.other}, true},
+		{"delegate returns its own goal", []Observation{w.goal}, []Observation{w.goal}, false},
+		{"delegate hides its goal among children's", []Observation{w.goal}, []Observation{w.child, w.goal, w.other}, false},
+		{"returns what its model created", []Observation{w.wrote}, []Observation{w.wrote}, false},
+		{"hides what its model created", []Observation{w.wrote}, []Observation{w.came, w.wrote}, false},
+		{"act returns nothing", nil, nil, false},
+		{"delegate returns nothing", []Observation{w.goal}, nil, false},
 	} {
-		if got := MayReturn(tc.kind, tc.created, tc.returned); got != tc.want {
+		if got := MayReturn(tc.created, tc.returned); got != tc.want {
 			t.Errorf("%s: MayReturn = %v; want %v", tc.name, got, tc.want)
 		}
 	}
 }
 
-// Every kind, every created set and every return over the world, up to three
+// Every created set and every return over the world, up to three
 // observations each: the code agrees with the rule.
 func TestMayReturnExhaustive(t *testing.T) {
 	w := newReturnWorld(t)
 	obs := []Observation{w.goal, w.wrote, w.came, w.child, w.other}
 	lists := observationLists(obs, 3)
 	n := 0
-	for _, k := range kinds {
-		for _, created := range lists {
-			for _, returned := range lists {
-				if got, want := MayReturn(k, created, returned), mayReturnSpec(k, created, returned); got != want {
-					t.Fatalf("MayReturn(%v, %d created, %d returned) = %v; want %v", k, len(created), len(returned), got, want)
-				}
-				n++
+	for _, created := range lists {
+		for _, returned := range lists {
+			if got, want := MayReturn(created, returned), mayReturnSpec(created, returned); got != want {
+				t.Fatalf("MayReturn(%d created, %d returned) = %v; want %v", len(created), len(returned), got, want)
 			}
+			n++
 		}
 	}
 	t.Logf("%d cases", n)
@@ -500,10 +521,10 @@ func FuzzClassify(f *testing.F) {
 
 // The return rule on inputs no one enumerated.
 func FuzzMayReturn(f *testing.F) {
-	f.Add(uint8(0), []byte{}, []byte{})
-	f.Add(uint8(2), []byte{0}, []byte{3, 0})
-	f.Add(uint8(1), []byte{1}, []byte{2})
-	f.Fuzz(func(t *testing.T, kind uint8, createdIdx, returnedIdx []byte) {
+	f.Add([]byte{}, []byte{})
+	f.Add([]byte{0}, []byte{3, 0})
+	f.Add([]byte{1}, []byte{2})
+	f.Fuzz(func(t *testing.T, createdIdx, returnedIdx []byte) {
 		w := newReturnWorld(t)
 		obs := []Observation{w.goal, w.wrote, w.came, w.child, w.other}
 		pick := func(idx []byte) []Observation {
@@ -513,10 +534,9 @@ func FuzzMayReturn(f *testing.F) {
 			}
 			return out
 		}
-		k := kinds[int(kind)%len(kinds)]
 		created, returned := pick(createdIdx), pick(returnedIdx)
-		if got, want := MayReturn(k, created, returned), mayReturnSpec(k, created, returned); got != want {
-			t.Fatalf("MayReturn(%v, %d created, %d returned) = %v; want %v", k, len(created), len(returned), got, want)
+		if got, want := MayReturn(created, returned), mayReturnSpec(created, returned); got != want {
+			t.Fatalf("MayReturn(%d created, %d returned) = %v; want %v", len(created), len(returned), got, want)
 		}
 	})
 }

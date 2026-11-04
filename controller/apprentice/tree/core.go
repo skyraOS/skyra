@@ -96,26 +96,28 @@ func TypeOf(c Contract, output Schema) (ObservationType, bool) {
 
 // The Apprentice is one binary and its contracts, each of that binary and
 // none twice. Observe and Root are privileged: never loaded into a reach.
-// Description and Reach are run by delegate's own CEL, before the model's
-// point: never loaded either. Every one is made by ApprenticeOf.
+// CreateDelegation, CreateAct and Reach are run by delegate's own CEL,
+// before the model's point: never loaded either. Every one is made by
+// ApprenticeOf.
 type Apprentice struct {
-	binary            Binary
-	observe           Contract
-	root              Contract
-	exit              Contract
-	ret               Contract
-	effectObservation Contract
-	invoke            Contract
-	delegate          Contract
-	goal              Contract
-	description       Contract // create_description
-	reach             Contract // package_reach
+	binary           Binary
+	observe          Contract
+	root             Contract
+	exit             Contract
+	ret              Contract
+	performEffect    Contract // perform_effect
+	createInput      Contract // create_input
+	delegate         Contract
+	goal             Contract
+	createDelegation Contract // create_delegation
+	createAct        Contract // create_act
+	reach            Contract // package_reach
 }
 
 // ApprenticeOf is the one way to an apprentice. It refuses a contract of
 // another binary, or one contract in two places.
-func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal, description, reach Contract) (Apprentice, bool) {
-	a := Apprentice{b, observe, root, exit, ret, effectObservation, invoke, delegate, goal, description, reach}
+func ApprenticeOf(b Binary, observe, root, exit, ret, performEffect, createInput, delegate, goal, createDelegation, createAct, reach Contract) (Apprentice, bool) {
+	a := Apprentice{b, observe, root, exit, ret, performEffect, createInput, delegate, goal, createDelegation, createAct, reach}
 	cs := a.Contracts()
 	for i, c := range cs {
 		if c.binary != b || slices.Contains(cs[:i], c) {
@@ -125,40 +127,41 @@ func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke,
 	return a, true
 }
 
-func (a Apprentice) Binary() Binary              { return a.binary }
-func (a Apprentice) Observe() Contract           { return a.observe }
-func (a Apprentice) Root() Contract              { return a.root }
-func (a Apprentice) Exit() Contract              { return a.exit }
-func (a Apprentice) Return() Contract            { return a.ret }
-func (a Apprentice) EffectObservation() Contract { return a.effectObservation }
-func (a Apprentice) Invoke() Contract            { return a.invoke }
-func (a Apprentice) Delegate() Contract          { return a.delegate }
-func (a Apprentice) Goal() Contract              { return a.goal }
-func (a Apprentice) Description() Contract       { return a.description }
-func (a Apprentice) Reach() Contract             { return a.reach }
+func (a Apprentice) Binary() Binary             { return a.binary }
+func (a Apprentice) Observe() Contract          { return a.observe }
+func (a Apprentice) Root() Contract             { return a.root }
+func (a Apprentice) Exit() Contract             { return a.exit }
+func (a Apprentice) Return() Contract           { return a.ret }
+func (a Apprentice) PerformEffect() Contract    { return a.performEffect }
+func (a Apprentice) CreateInput() Contract      { return a.createInput }
+func (a Apprentice) Delegate() Contract         { return a.delegate }
+func (a Apprentice) Goal() Contract             { return a.goal }
+func (a Apprentice) CreateDelegation() Contract { return a.createDelegation }
+func (a Apprentice) CreateAct() Contract        { return a.createAct }
+func (a Apprentice) Reach() Contract            { return a.reach }
 
 func (a Apprentice) Contracts() []Contract {
-	return []Contract{a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal,
-		a.description, a.reach}
+	return []Contract{a.observe, a.root, a.exit, a.ret, a.performEffect, a.createInput, a.delegate, a.goal,
+		a.createDelegation, a.createAct, a.reach}
 }
 
 // Mine: a contract of the apprentice's binary.
 func (a Apprentice) Mine(c Contract) bool { return c.binary == a.binary }
 
-// A Kind is what a node is, decided from its reach.
+// A Kind is what a node is. A child's is decided from the contracts its
+// delegate passed; the root's is given. There is no effect node: an effect
+// is the observation, and perform_effect the generic that makes one, taking
+// on the contract passed to it.
 type Kind uint8
 
 const (
 	_            Kind = iota
-	KindEffect        // no contract in reach: it writes
-	KindAct           // one: it acts, invoking it
+	KindAct           // one contract: it performs effects through it
 	KindDelegate      // two or more: it delegates
 )
 
 func (k Kind) String() string {
 	switch k {
-	case KindEffect:
-		return "effect"
 	case KindAct:
 		return "act"
 	case KindDelegate:
@@ -202,11 +205,13 @@ func nodup(xs []Observation) bool {
 
 // effectThrough is what an effect may come through, by the kind of node that
 // sends it: an exit, from every kind; a goal, a description and a packaged
-// reach, from a delegate; what an effect node wrote; what came back through
-// an act node's contract, outside the apprentice.
+// reach, from a delegate; an input, from an act node, to dispatch; what came
+// back through an act node's perform_effect, typed by the contract it was
+// passed, outside the apprentice.
 func effectThrough(a Apprentice, k Kind, c Contract) bool {
-	return c == a.exit || k == KindDelegate && (c == a.goal || c == a.description || c == a.reach) ||
-		k == KindEffect && c == a.effectObservation || k == KindAct && !a.Mine(c)
+	return c == a.exit ||
+		k == KindDelegate && (c == a.goal || c == a.createDelegation || c == a.createAct || c == a.reach) ||
+		k == KindAct && (c == a.createInput || !a.Mine(c))
 }
 
 // Admits is what Observe admits. No members: an effect, through what its
@@ -295,16 +300,12 @@ func NodeMayReturn(received, returned []Observation) bool {
 	return true
 }
 
-// MayReturn is what return may pass: something; and for an act or
-// delegate node, nothing its model created directly. An effect node may
-// return what it wrote. created is the frame's own: what its model made,
-// never a field on an observation.
-func MayReturn(k Kind, created, returned []Observation) bool {
+// MayReturn is what return may pass: something, and nothing its model
+// created directly. created is the frame's own: what its model made, never a
+// field on an observation.
+func MayReturn(created, returned []Observation) bool {
 	if len(returned) == 0 {
 		return false
-	}
-	if k == KindEffect {
-		return true
 	}
 	for _, r := range returned {
 		if contains(created, r) {
@@ -316,7 +317,7 @@ func MayReturn(k Kind, created, returned []Observation) bool {
 
 // --- the two edges ---
 
-// An InputBase is an input base type, by its hash: the binary invoked, and
+// An InputBase is an input base type, by its hash: the contract invoked, and
 // the return base types of what it was passed, in order. Every one is made
 // by CreateInvoke.
 type InputBase struct{ id string }
@@ -332,7 +333,7 @@ func (r ReturnBase) String() string { return r.id }
 
 // hashes is how the core hashes; the vector tests pass Lean's toy ones.
 type hashes struct {
-	input func(Binary, []ReturnBase) string
+	input func(Contract, []ReturnBase) string
 	ret   func(InputBase, Schema) string
 }
 
@@ -340,7 +341,7 @@ type hashes struct {
 // of id share one, whatever their parts; the version keeps a changed format
 // from matching old records.
 const (
-	inputTag      = "skyra/input/v1"
+	inputTag      = "skyra/input/v2" // v2: the contract, not its binary
 	returnTag     = "skyra/return/v1"
 	refinementTag = "skyra/refinement/v1"
 )
@@ -363,12 +364,12 @@ func sum(v any) string {
 }
 
 var sha = hashes{
-	input: func(b Binary, passed []ReturnBase) string {
+	input: func(c Contract, passed []ReturnBase) string {
 		ps := make([]string, len(passed))
 		for i, p := range passed {
 			ps[i] = p.id
 		}
-		return sum([]any{inputTag, string(b), ps})
+		return sum([]any{inputTag, string(c.binary), string(c.shape), ps})
 	},
 	ret: func(i InputBase, shape Schema) string {
 		return sum([]any{returnTag, i.id, string(shape)})
@@ -376,16 +377,15 @@ var sha = hashes{
 }
 
 // CreateInvoke is down an edge (create_invoke): the one way to an input base
-// type. It refuses a binary without a known scheme and digest.
-func CreateInvoke(b Binary, passed []ReturnBase) (InputBase, bool) {
-	return createInvoke(sha, b, passed)
+// type. From the contract, not its binary: two contracts of one binary, the
+// apprentice's included, are two input base types. A contract is well formed
+// by construction, so it never refuses.
+func CreateInvoke(c Contract, passed []ReturnBase) InputBase {
+	return createInvoke(sha, c, passed)
 }
 
-func createInvoke(h hashes, b Binary, passed []ReturnBase) (InputBase, bool) {
-	if !b.WellFormed() {
-		return InputBase{}, false
-	}
-	return InputBase{h.input(b, passed)}, true
+func createInvoke(h hashes, c Contract, passed []ReturnBase) InputBase {
+	return InputBase{h.input(c, passed)}
 }
 
 // CreateReturn is up an edge (create_return): the one way to a return base
@@ -400,6 +400,18 @@ func createReturn(h hashes, i InputBase, shape Schema) (ReturnBase, bool) {
 		return ReturnBase{}, false
 	}
 	return ReturnBase{h.ret(i, shape)}, true
+}
+
+// BaseOf: nothing comes from nowhere. What a call to a contract made, the
+// apprentice's included (a goal, an input, a description, a packaged reach),
+// has a return base type, minted the one way: down the edge to the contract
+// of its type, and back up with its type's output shape.
+func BaseOf(t ObservationType, passed []ReturnBase) (ReturnBase, bool) {
+	return baseOf(sha, t, passed)
+}
+
+func baseOf(h hashes, t ObservationType, passed []ReturnBase) (ReturnBase, bool) {
+	return createReturn(h, createInvoke(h, t.contract, passed), t.output)
 }
 
 type Seen uint8
@@ -556,7 +568,9 @@ func counted(a Apprentice, reach []Contract) []Contract {
 	return out
 }
 
-func kind(cs []Contract) Kind {
+// kind is the kind from the contracts counted: none for none, as a delegate
+// passes at least one contract.
+func kind(cs []Contract) (Kind, bool) {
 	var distinct []Contract
 	for _, c := range cs {
 		if !slices.Contains(distinct, c) {
@@ -565,34 +579,62 @@ func kind(cs []Contract) Kind {
 	}
 	switch len(distinct) {
 	case 0:
-		return KindEffect
+		return 0, false
 	case 1:
-		return KindAct
+		return KindAct, true
 	}
-	return KindDelegate
+	return KindDelegate, true
 }
 
-// Classify is what the core runs, in the observe phase. The apprentice's
-// contracts count for neither the self check nor the kind. It refuses an
-// agent whose own binary is in the rest of its reach, at every count.
-func Classify(a Apprentice, self Contract, reach []Contract) (Kind, bool) {
-	rest := counted(a, reach)
-	for _, c := range rest {
+func reachesSelf(a Apprentice, self Contract, reach []Contract) bool {
+	for _, c := range counted(a, reach) {
 		if c.binary == self.binary {
-			return 0, false
+			return true
 		}
 	}
-	return kind(rest), true
+	return false
+}
+
+// Classify is what the core runs, in the observe phase, for a child. The
+// apprentice's contracts count for neither the self check nor the kind. It
+// refuses a child whose own binary is in the rest of its reach, at every
+// count, and a delegate that passed nothing.
+func Classify(a Apprentice, self Contract, reach []Contract) (Kind, bool) {
+	if reachesSelf(a, self, reach) {
+		return 0, false
+	}
+	return kind(counted(a, reach))
+}
+
+// RootKind: the root is not classified by its reach, as no delegate chose
+// it. Its kind is given, by whoever started it; only the self check applies.
+func RootKind(a Apprentice, self Contract, reach []Contract, k Kind) (Kind, bool) {
+	if reachesSelf(a, self, reach) {
+		return 0, false
+	}
+	return k, true
+}
+
+// Parts is the act transformation: what delegate's CEL makes before the
+// model's point, from the child's kind. A delegate child is described by
+// create_delegation and handed the reach packaged; an act child by
+// create_act, its one contract in its offer, with nothing to pass on.
+func Parts(a Apprentice, k Kind) []Contract {
+	switch k {
+	case KindAct:
+		return []Contract{a.createAct}
+	case KindDelegate:
+		return []Contract{a.createDelegation, a.reach}
+	}
+	return nil
 }
 
 // Loaded is the apprentice's contracts for a kind, loaded into its reach
 // after the kind is known.
 func Loaded(a Apprentice, k Kind) []Contract {
 	switch k {
-	case KindEffect:
-		return []Contract{a.exit, a.ret, a.effectObservation}
 	case KindAct:
-		return []Contract{a.exit, a.ret, a.invoke}
+		return []Contract{a.exit, a.ret, a.createInput, a.performEffect}
 	case KindDelegate:
 		return []Contract{a.exit, a.ret, a.delegate, a.goal}
 	}
@@ -625,5 +667,5 @@ func Offered(a Apprentice, k Kind, passed []Contract) Offer {
 	case KindDelegate:
 		return Offer{nil, slices.Clone(passed), Loaded(a, k)}
 	}
-	return Offer{nil, nil, Loaded(a, k)}
+	return Offer{}
 }

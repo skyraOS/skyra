@@ -44,10 +44,10 @@ func TestApprenticeContracts(t *testing.T) {
 		}
 	}
 	c := func(title string) Contract { return contract(binApp, Schema(`{"title":"`+title+`"}`)) }
-	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), x, c("w"), c("i"), c("d"), c("g"), c("cd"), c("pr")); ok {
+	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), x, c("w"), c("i"), c("d"), c("g"), c("cd"), c("ca"), c("pr")); ok {
 		t.Error("Apprentice.of: a contract of another binary")
 	}
-	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), c("e"), c("w"), c("i"), c("d"), c("g"), c("cd"), c("pr")); ok {
+	if _, ok := ApprenticeOf(binApp, c("o"), c("r"), c("e"), c("e"), c("w"), c("i"), c("d"), c("g"), c("cd"), c("ca"), c("pr")); ok {
 		t.Error("Apprentice.of: one contract in two places")
 	}
 }
@@ -89,16 +89,20 @@ func TestObserve(t *testing.T) {
 					if o.IsEffect() == o.IsComputation() {
 						t.Fatalf("Observation.effect_xor_computation")
 					}
-					// observe_computation, observe_effect_or_invoke
+					// observe_computation, observe_act
 					if o.IsComputation() && (k != KindDelegate || c != app.Delegate()) {
 						t.Fatalf("observe_computation: %v through %s", k, name(c))
 					}
 					// observe_not_through
-					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.Invoke(), app.Delegate()}, c) {
+					if len(ms) == 0 && slices.Contains([]Contract{app.Observe(), app.Root(), app.Return(), app.PerformEffect(), app.Delegate()}, c) {
 						t.Fatalf("observe_not_through: %v through %s", k, name(c))
 					}
+					// observe_input
+					if len(ms) == 0 && c == app.CreateInput() && k != KindAct {
+						t.Fatalf("observe_input: %v through %s", k, name(c))
+					}
 					// observe_composed
-					if len(ms) == 0 && (c == app.Description() || c == app.Reach()) && k != KindDelegate {
+					if len(ms) == 0 && (c == app.CreateDelegation() || c == app.CreateAct() || c == app.Reach()) && k != KindDelegate {
 						t.Fatalf("observe_composed: %v through %s", k, name(c))
 					}
 				}
@@ -324,7 +328,8 @@ func TestLoadedNeverPrivileged(t *testing.T) {
 	for _, k := range kinds {
 		l := Loaded(app, k)
 		if slices.Contains(l, app.Observe()) || slices.Contains(l, app.Root()) ||
-			slices.Contains(l, app.Description()) || slices.Contains(l, app.Reach()) {
+			slices.Contains(l, app.CreateDelegation()) || slices.Contains(l, app.CreateAct()) ||
+			slices.Contains(l, app.Reach()) {
 			t.Errorf("loaded_never_privileged: %v", k)
 		}
 		for _, c := range l {
@@ -338,23 +343,24 @@ func TestLoadedNeverPrivileged(t *testing.T) {
 // --- the two edges ---
 
 // input_eq_iff, return_eq_iff, base_eq_iff: an edge's base type is one
-// exactly when its parts are, over every binary, passed list and shape here.
+// exactly when its parts are, over every contract, passed list and shape
+// here. Two shapes of one binary are two contracts, so two input base types.
 func TestEdgesEqIff(t *testing.T) {
 	type in struct {
-		b Binary
+		c Contract
 		p []ReturnBase
 	}
 	var ins []in
-	for _, b := range []Binary{hb, binX} {
+	for _, c := range []Contract{contract(hb, shapeA), contract(hb, shapeB), x} {
 		for _, p := range [][]ReturnBase{nil, domain[:1], domain[:2], {domain[1], domain[0]}} {
-			ins = append(ins, in{b, p})
+			ins = append(ins, in{c, p})
 		}
 	}
 	shapes := []Schema{shapeA, shapeS}
 	for _, x := range ins {
 		for _, y := range ins {
-			ix, iy := must(CreateInvoke(x.b, x.p)), must(CreateInvoke(y.b, y.p))
-			same := x.b == y.b && slices.Equal(x.p, y.p)
+			ix, iy := CreateInvoke(x.c, x.p), CreateInvoke(y.c, y.p)
+			same := x.c == y.c && slices.Equal(x.p, y.p)
 			if (ix == iy) != same {
 				t.Fatalf("input_eq_iff: %v %v", x, y)
 			}
@@ -369,8 +375,29 @@ func TestEdgesEqIff(t *testing.T) {
 	}
 }
 
+// baseOf_isSome, baseOf_apart: everything a contract made has a return base
+// type, and what two contracts made, the apprentice's among them, never share
+// one: a goal and an input are two base types, and so are x and x2.
+func TestBaseOfApart(t *testing.T) {
+	cs := append([]Contract{x, x2, y}, app.all()...)
+	for _, c1 := range cs {
+		for _, c2 := range cs {
+			for _, p := range [][]ReturnBase{nil, domain[:1]} {
+				r1, ok1 := BaseOf(typeOf(c1, shapeS), p)
+				r2, ok2 := BaseOf(typeOf(c2, shapeS), nil)
+				if !ok1 || !ok2 {
+					t.Fatalf("baseOf_isSome: %s, %s", name(c1), name(c2))
+				}
+				if c1 != c2 && r1 == r2 {
+					t.Fatalf("baseOf_apart: %s and %s share %s", name(c1), name(c2), r1)
+				}
+			}
+		}
+	}
+}
+
 func TestDoUnseenIff(t *testing.T) {
-	is := []InputBase{must(CreateInvoke(hb, nil)), must(CreateInvoke(binX, nil)), must(CreateInvoke(hb, domain[:1]))}
+	is := []InputBase{CreateInvoke(x, nil), CreateInvoke(y, nil), CreateInvoke(x2, nil), CreateInvoke(x, domain[:1])}
 	for _, history := range [][]InputBase{nil, is[:1], is[1:], is} {
 		for _, i := range is {
 			if (Do(history, i) == SeenUnseen) != !slices.Contains(history, i) {

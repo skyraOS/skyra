@@ -54,7 +54,6 @@ def jDir : Dir → Json
   | .ret => .str "ret"
 
 def jKind : Kind → Json
-  | .effect => .str "effect"
   | .act => .str "act"
   | .delegate => .str "delegate"
 
@@ -65,9 +64,10 @@ def jOffer (o : Offer) : Json :=
 def jApprentice (a : Apprentice) : Json :=
   Json.mkObj [("binary", jBinary a.binary), ("observe", jContract a.observe),
     ("root", jContract a.root), ("exit", jContract a.exit), ("return", jContract a.ret),
-    ("effect_observation", jContract a.effectObservation), ("invoke", jContract a.invoke),
+    ("perform_effect", jContract a.performEffect), ("create_input", jContract a.createInput),
     ("delegate", jContract a.delegate), ("goal", jContract a.goal),
-    ("create_description", jContract a.description), ("package_reach", jContract a.reach)]
+    ("create_delegation", jContract a.createDelegation), ("create_act", jContract a.createAct),
+    ("package_reach", jContract a.reach)]
 
 def jInputBase (i : InputBase) : Json := .str i.val
 
@@ -116,7 +116,7 @@ def schemas : List Schema := [⟨""⟩, Schema.empty, shapeIn, shapeStr, shapeOu
 
 def outputs : List Schema := [shapeStr, shapeOut]
 
-def kinds : List Kind := [.effect, .act, .delegate]
+def kinds : List Kind := [.act, .delegate]
 
 def bApp : Binary := ⟨"cdhash:" ++ hex 'f' 40⟩
 
@@ -125,8 +125,8 @@ def appContract (title : String) : Option Contract :=
   identify bApp ⟨"{\"title\":\"" ++ title ++ "\",\"type\":\"object\"}"⟩
 
 def titles : List String :=
-  ["observe", "root", "exit", "return", "effect_observation", "invoke", "delegate", "goal",
-   "create_description", "package_reach"]
+  ["observe", "root", "exit", "return", "perform_effect", "create_input", "delegate", "goal",
+   "create_delegation", "create_act", "package_reach"]
 
 structure World where
   app : Apprentice
@@ -137,8 +137,8 @@ structure World where
   c3 : Contract
   t1 : ObservationType
   t2 : ObservationType
-  /-- Effects: two that came back through an invoke node's contract, a
-  goal, an exit, what an effect node wrote, and the root's endowment. -/
+  /-- Effects: two that came back through an act node's `perform_effect`,
+  a goal, an exit, an act description, and the root's endowment. -/
   e1 : Observation
   e2 : Observation
   g1 : Observation
@@ -152,9 +152,9 @@ structure World where
   k3 : Observation
 
 def world : Option World := do
-  let [observe', root, exit, ret, eo, invoke, delegate, goal, desc, reach] ← titles.mapM appContract
+  let [observe', root, exit, ret, pe, ci, delegate, goal, cd, ca, reach] ← titles.mapM appContract
     | none
-  let app ← Apprentice.of bApp observe' root exit ret eo invoke delegate goal desc reach
+  let app ← Apprentice.of bApp observe' root exit ret pe ci delegate goal cd ca reach
   let c1 ← identify ⟨"cdhash:" ++ hex 'a' 40⟩ Schema.empty
   let c2 ← identify ⟨"cdhash:" ++ hex 'a' 40⟩ shapeIn
   let c3 ← identify ⟨"sha256:" ++ hex '1' 64⟩ Schema.empty
@@ -162,14 +162,14 @@ def world : Option World := do
   let t2 ← ObservationType.of c3 shapeOut
   let tg ← ObservationType.of app.goal shapeStr
   let tx ← ObservationType.of app.exit shapeStr
-  let tw ← ObservationType.of app.effectObservation shapeStr
+  let tw ← ObservationType.of app.createAct shapeStr
   let tr ← ObservationType.of app.root shapeStr
   let td ← ObservationType.of app.delegate shapeOut
   let e1 ← observe app .act t1 []
   let e2 ← observe app .act t2 []
   let g1 ← observe app .delegate tg []
   let x1 ← observe app .act tx []
-  let w1 ← observe app .effect tw []
+  let w1 ← observe app .delegate tw []
   let r0 ← rootObservation app tr
   let k1 ← observe app .delegate td [g1, e1]
   let k2 ← observe app .delegate td [g1, e2]
@@ -187,7 +187,7 @@ def types (w : World) : List ObservationType :=
 /-- The hashes the vectors use. Lean never computes a real hash; the Go test
 passes the same functions. -/
 def toy : Hashes where
-  input b ps := "input(" ++ b.val ++ "," ++ toString (ps.map (·.val)) ++ ")"
+  input c ps := "input(" ++ c.binary.val ++ "|" ++ c.shape.val ++ "," ++ toString (ps.map (·.val)) ++ ")"
   ret i o := "return(" ++ i.val ++ "," ++ o.val ++ ")"
   refine b g := ⟨"refine(" ++ b.val ++ "," ++
     (match g with | .default => "default" | .written cel => "written:" ++ cel) ++ ")"⟩
@@ -195,8 +195,16 @@ def toy : Hashes where
 def bA : Binary := ⟨"cdhash:" ++ hex 'a' 40⟩
 def bB : Binary := ⟨"sha256:" ++ hex '1' 64⟩
 
-/-- Two inputs with nothing passed, one per binary. -/
-def inputs : List InputBase := [bA, bB].filterMap (createInvoke toy · [])
+/-- The contracts the edges are crossed to: two shapes of one binary, and
+another binary. -/
+def edgeContracts : List Contract :=
+  [(bA, Schema.empty), (bA, shapeIn), (bB, Schema.empty)].filterMap fun (b, s) => identify b s
+
+/-- Two inputs with nothing passed, to two binaries. -/
+def inputs : List InputBase :=
+  match edgeContracts with
+  | [cA, _, cB] => [cA, cB].map (createInvoke toy · [])
+  | _ => []
 
 /-- Three return base types: two shapes back from one input, one from the
 other. -/
@@ -259,9 +267,9 @@ def files (w : World) : List (String × List Json) :=
       let cands : List (List Contract) :=
         [a.contracts, a.contracts.set 3 w.c1, a.contracts.set 7 a.exit]
       cands.map fun l => match l with
-        | [o, r, e, t, eo, i, d, g, ds, rc] =>
+        | [o, r, e, t, pe, ci, d, g, cd, ca, rc] =>
           case (Json.mkObj [("binary", jBinary bApp), ("contracts", jList jContract l)])
-            (jOpt jApprentice (Apprentice.of bApp o r e t eo i d g ds rc))
+            (jOpt jApprentice (Apprentice.of bApp o r e t pe ci d g cd ca rc))
         | _ => .null),
     ("admits", kinds.flatMap fun k => ts.flatMap fun t => members.map fun ms =>
       case (Json.mkObj [("kind", jKind k), ("type", jType t),
@@ -288,16 +296,22 @@ def files (w : World) : List (String × List Json) :=
       (upTo [w.e1, w.e2, w.x1, w.k1, w.k3] 2).map fun returned =>
         case (Json.mkObj [("received", jList jObs received), ("returned", jList jObs returned)])
           (.bool (nodeMayReturn received returned))),
-    ("mayReturn", kinds.flatMap fun k => (upTo [w.g1, w.w1, w.e1] 2).flatMap fun created =>
+    ("mayReturn", (upTo [w.g1, w.w1, w.e1] 2).flatMap fun created =>
       (upTo [w.g1, w.w1, w.e1, w.e2, w.k1] 2).map fun returned =>
-        case (Json.mkObj [("kind", jKind k), ("created", jList jObs created),
-            ("returned", jList jObs returned)])
-          (.bool (mayReturn k created returned))),
+        case (Json.mkObj [("created", jList jObs created), ("returned", jList jObs returned)])
+          (.bool (mayReturn created returned))),
     ("classify", agents.flatMap fun self =>
       (upTo (agents ++ [w.app.exit, w.app.goal, w.app.observe]) 3).map fun reach =>
         case (Json.mkObj [("self", jContract self),
             ("reach", jList jContract reach)])
           (jOpt jKind (classify w.app self reach))),
+    ("rootKind", agents.flatMap fun self => kinds.flatMap fun k =>
+      (upTo (agents ++ [w.app.exit]) 2).map fun reach =>
+        case (Json.mkObj [("self", jContract self), ("reach", jList jContract reach),
+            ("kind", jKind k)])
+          (jOpt jKind (rootKind w.app self reach k))),
+    ("parts", kinds.map fun k =>
+      case (Json.mkObj [("kind", jKind k)]) (jList jContract (parts w.app k))),
     ("loaded", kinds.map fun k =>
       case (Json.mkObj [("kind", jKind k)])
         (jList jContract (loaded w.app k))),
@@ -308,21 +322,27 @@ def files (w : World) : List (String × List Json) :=
       case (Json.mkObj [("kind", jKind k),
           ("passed", jList jContract passed)])
         (jOffer (offered w.app k passed))),
-    ("createInvoke", binaries.flatMap fun b => (upTo domain 2).map fun ps =>
-      case (Json.mkObj [("binary", jBinary b), ("passed", jList jBase ps)])
-        (jOpt jInputBase (createInvoke toy b ps))),
-    ("createReturn", (inputs ++ (domain.take 2).filterMap (createInvoke toy bA [·])).flatMap
+    ("createInvoke", edgeContracts.flatMap fun c => (upTo domain 2).map fun ps =>
+      case (Json.mkObj [("contract", jContract c), ("passed", jList jBase ps)])
+        (jInputBase (createInvoke toy c ps))),
+    ("createReturn", (inputs ++ match edgeContracts with
+        | cA :: _ => (domain.take 2).map (createInvoke toy cA [·])
+        | [] => []).flatMap
       fun i => schemas.map fun o =>
         case (Json.mkObj [("input", jInputBase i), ("shape", jSchema o)])
           (jOpt jBase (createReturn toy i o))),
     ("do",
-      let ibs : List InputBase := match domain with
-        | [d0, d1, _] => [(bA, []), (bA, [d0]), (bA, [d0, d1]), (bA, [d1, d0]), (bB, [d0])].filterMap
-            fun (b, ps) => createInvoke toy b ps
-        | _ => []
+      let ibs : List InputBase := match domain, edgeContracts with
+        | [d0, d1, _], [cA, cA', cB] =>
+            [(cA, []), (cA, [d0]), (cA, [d0, d1]), (cA, [d1, d0]), (cA', []), (cB, [d0])].map
+              fun (c, ps) => createInvoke toy c ps
+        | _, _ => []
       (subsets ibs).flatMap fun history => ibs.map fun i =>
         case (Json.mkObj [("history", jList jInputBase history), ("input", jInputBase i)])
           (jSeen («do» history i))),
+    ("baseOf", ts.flatMap fun t => (upTo domain 1).map fun ps =>
+      case (Json.mkObj [("type", jType t), ("passed", jList jBase ps)])
+        (jOpt jBase (baseOf toy t ps))),
     ("see", stores.flatMap fun s => domain.map fun b =>
       let (n, s') := see s b
       case (Json.mkObj [("store", jStore domain s), ("base", jBase b)])

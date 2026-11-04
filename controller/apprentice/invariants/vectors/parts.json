@@ -1,0 +1,4 @@
+{"function":"parts","cases":[
+{"in":{"kind":"act"},"out":[{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"create_act\",\"type\":\"object\"}"}]},
+{"in":{"kind":"delegate"},"out":[{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"create_delegation\",\"type\":\"object\"}"},{"binary":"cdhash:ffffffffffffffffffffffffffffffffffffffff","shape":"{\"title\":\"package_reach\",\"type\":\"object\"}"}]}
+]}

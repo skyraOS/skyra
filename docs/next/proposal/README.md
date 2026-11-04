@@ -76,13 +76,19 @@ New implementation proposals:
   54's functional core in Lean. A contract is a binary and its input shape;
   an observation is typed by its contract and its own output shape. `observe`
   is the one way to an observation: an effect has no members, a computation
-  has members, and only a delegate makes one. Given the apprentice, an
-  agent's contract and its reach, the apprentice's contracts not counted,
-  decide: refused (its own binary is in its reach), an effect node (no
-  contract), an act node (one), or a delegate (two or more); the kind
-  decides which of the apprentice's contracts are loaded. An agent passes only what
+  has members, and only a delegate makes one. Two kinds of node: given the
+  apprentice, a child's contract and what its delegate passed, the
+  apprentice's contracts not counted, decide: refused (its own binary is in
+  its reach, or nothing was passed), an act node (one contract), or a
+  delegate (two or more); the root's kind is given. An act node acts
+  through `perform_effect(<contract>, <observation>)`, a generic that takes
+  on the contract passed to it; nothing comes from nowhere, so what it
+  dispatches is an observation in scope, passed or made through
+  `create_input`. The kind decides which of the apprentice's
+  contracts are loaded, and how a delegate describes the child: an act
+  child by `create_act`, a delegate child by `create_delegation`. An agent passes only what
   is in its scope, on invoke or return. Two edges mint the two base types:
-  `create_invoke` an input base type, a hash of the binary and the return
+  `create_invoke` an input base type, a hash of the contract and the return
   base types passed; `create_return` a return base type, a hash of the input
   base type it answers and the shape back. A refinement type is a return
   base type and its one guard. Novelty is apart from validity, one per edge:
@@ -93,7 +99,7 @@ New implementation proposals:
   `Step(Tree, Event) → (Tree, []Effect)` holds the whole tree, in the
   kernel's cycle, `Read* Commit? Execute*`: the core hashes and verifies
   everything it reads, guards are write-once records and the store their
-  fold, and an agent's turn or an act node's invoke is a node of an
+  fold, and an agent's turn or an act node's `perform_effect` is a node of an
   `instruction/1`; one call per turn, carrying an array of instructions. An interim
   shell on today's kernel answers the same effects until 52 exists, with
   replay on every resume. Draft (2026-11-03).

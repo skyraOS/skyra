@@ -127,7 +127,7 @@ func obsOf(t *testing.T, raw json.RawMessage) []Observation {
 
 func kindOf(t *testing.T, raw json.RawMessage) Kind {
 	t.Helper()
-	for _, k := range []Kind{KindEffect, KindAct, KindDelegate} {
+	for _, k := range []Kind{KindAct, KindDelegate} {
 		if k.String() == dec[string](t, raw) {
 			return k
 		}
@@ -160,12 +160,12 @@ func storeOf(t *testing.T, raw json.RawMessage) Store {
 // Lean's toy hashes, written out the same way: Lean's toString of a list is
 // "[a, b]".
 var toyHashes = hashes{
-	input: func(b Binary, passed []ReturnBase) string {
+	input: func(c Contract, passed []ReturnBase) string {
 		ps := make([]string, len(passed))
 		for i, p := range passed {
 			ps[i] = p.id
 		}
-		return "input(" + string(b) + ",[" + strings.Join(ps, ", ") + "])"
+		return "input(" + string(c.binary) + "|" + string(c.shape) + ",[" + strings.Join(ps, ", ") + "])"
 	},
 	ret: func(i InputBase, o Schema) string { return "return(" + i.id + "," + string(o) + ")" },
 }
@@ -178,8 +178,9 @@ var (
 // domain is Lean's: three return base types, two shapes back from one input
 // and one from another, made the same way.
 var domain = func() []ReturnBase {
-	iA := must(createInvoke(toyHashes, Binary("cdhash:"+strings.Repeat("a", 40)), nil))
-	iB := must(createInvoke(toyHashes, Binary("sha256:"+strings.Repeat("1", 64)), nil))
+	empty := Schema(`{"type":"object"}`)
+	iA := createInvoke(toyHashes, contract(Binary("cdhash:"+strings.Repeat("a", 40)), empty), nil)
+	iB := createInvoke(toyHashes, contract(Binary("sha256:"+strings.Repeat("1", 64)), empty), nil)
 	return []ReturnBase{must(createReturn(toyHashes, iA, shapeOut)),
 		must(createReturn(toyHashes, iA, shapeIn)), must(createReturn(toyHashes, iB, shapeOut))}
 }()
@@ -212,9 +213,10 @@ func eOpt[T any](v T, ok bool, f func(T) any) any {
 func eApprentice(a Apprentice) any {
 	return map[string]any{"binary": a.binary, "observe": eContract(a.observe), "root": eContract(a.root),
 		"exit": eContract(a.exit), "return": eContract(a.ret),
-		"effect_observation": eContract(a.effectObservation), "invoke": eContract(a.invoke),
+		"perform_effect": eContract(a.performEffect), "create_input": eContract(a.createInput),
 		"delegate": eContract(a.delegate), "goal": eContract(a.goal),
-		"create_description": eContract(a.description), "package_reach": eContract(a.reach)}
+		"create_delegation": eContract(a.createDelegation), "create_act": eContract(a.createAct),
+		"package_reach": eContract(a.reach)}
 }
 
 func eStore(s Store) any {
@@ -260,7 +262,7 @@ func vectorApprentice(t *testing.T) Apprentice {
 	t.Helper()
 	c := loadVectors(t, "apprenticeOf")[0]
 	cs := contractsOf(t, c.In["contracts"])
-	a, ok := ApprenticeOf(dec[Binary](t, c.In["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9])
+	a, ok := ApprenticeOf(dec[Binary](t, c.In["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9], cs[10])
 	if !ok {
 		t.Fatal("the vectors' apprentice is refused")
 	}
@@ -300,7 +302,7 @@ var replays = map[string]replay{
 	},
 	"apprenticeOf": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		cs := contractsOf(t, in["contracts"])
-		a, ok := ApprenticeOf(dec[Binary](t, in["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9])
+		a, ok := ApprenticeOf(dec[Binary](t, in["binary"]), cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], cs[7], cs[8], cs[9], cs[10])
 		return eOpt(a, ok, eApprentice)
 	},
 	"admits": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
@@ -327,11 +329,18 @@ var replays = map[string]replay{
 		return NodeMayReturn(obsOf(t, in["received"]), obsOf(t, in["returned"]))
 	},
 	"mayReturn": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		return MayReturn(kindOf(t, in["kind"]), obsOf(t, in["created"]), obsOf(t, in["returned"]))
+		return MayReturn(obsOf(t, in["created"]), obsOf(t, in["returned"]))
 	},
 	"classify": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
 		k, ok := Classify(a, dec[jContract](t, in["self"]).get(t), contractsOf(t, in["reach"]))
 		return eOpt(k, ok, func(k Kind) any { return k.String() })
+	},
+	"rootKind": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
+		k, ok := RootKind(a, dec[jContract](t, in["self"]).get(t), contractsOf(t, in["reach"]), kindOf(t, in["kind"]))
+		return eOpt(k, ok, func(k Kind) any { return k.String() })
+	},
+	"parts": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
+		return eList(Parts(a, kindOf(t, in["kind"])), eContract)
 	},
 	"loaded": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
 		return eList(Loaded(a, kindOf(t, in["kind"])), eContract)
@@ -345,8 +354,7 @@ var replays = map[string]replay{
 			"apprentice": eList(o.Apprentice, eContract)}
 	},
 	"createInvoke": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		i, ok := createInvoke(toyHashes, dec[Binary](t, in["binary"]), returnsOf(t, in["passed"]))
-		return eOpt(i, ok, func(i InputBase) any { return i.id })
+		return createInvoke(toyHashes, dec[jContract](t, in["contract"]).get(t), returnsOf(t, in["passed"])).id
 	},
 	"createReturn": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		r, ok := createReturn(toyHashes, InputBase{dec[string](t, in["input"])}, dec[Schema](t, in["shape"]))
@@ -362,6 +370,10 @@ var replays = map[string]replay{
 	"rewrite": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		s, ok := Rewrite(storeOf(t, in["store"]), ReturnBase{dec[string](t, in["base"])}, dec[string](t, in["cel"]))
 		return eOpt(s, ok, eStore)
+	},
+	"baseOf": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		r, ok := baseOf(toyHashes, dec[jType](t, in["type"]).get(t), returnsOf(t, in["passed"]))
+		return eOpt(r, ok, func(r ReturnBase) any { return r.id })
 	},
 	"refinement": func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		r, ok := Refinement(toy, storeOf(t, in["store"]), ReturnBase{dec[string](t, in["base"])})

@@ -82,9 +82,9 @@ theorem observation_identity (a b : ObservationType) :
 
 /-- The apprentice: one binary, and its contracts, each of that binary and
 none twice. Some are privileged (`observe`, `root`): never loaded into a
-reach. `description` and `reach` are run by `delegate`'s own CEL, before the
-model's point: never loaded either. Its constructor is private: every one is
-made by `Apprentice.of`. -/
+reach. `createDelegation`, `createAct` and `reach` are run by `delegate`'s
+own CEL, before the model's point: never loaded either. Its constructor is
+private: every one is made by `Apprentice.of`. -/
 structure Apprentice where
   private mk ::
   binary            : Binary
@@ -92,32 +92,34 @@ structure Apprentice where
   root              : Contract
   exit              : Contract
   ret               : Contract  -- `return`
-  effectObservation : Contract
-  invoke            : Contract
+  performEffect     : Contract  -- `perform_effect`
+  createInput       : Contract  -- `create_input`
   delegate          : Contract
   goal              : Contract
-  description       : Contract  -- `create_description`
+  createDelegation  : Contract  -- `create_delegation`
+  createAct         : Contract  -- `create_act`
   reach             : Contract  -- `package_reach`
-  wf : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal,
-          description, reach].all (·.binary == binary) && decide
-          [observe, root, exit, ret, effectObservation, invoke, delegate, goal,
-          description, reach].Nodup) = true
+  wf : ([observe, root, exit, ret, performEffect, createInput, delegate, goal,
+          createDelegation, createAct, reach].all (·.binary == binary) && decide
+          [observe, root, exit, ret, performEffect, createInput, delegate, goal,
+          createDelegation, createAct, reach].Nodup) = true
 
 def Apprentice.contracts (a : Apprentice) : List Contract :=
-  [a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal,
-   a.description, a.reach]
+  [a.observe, a.root, a.exit, a.ret, a.performEffect, a.createInput, a.delegate, a.goal,
+   a.createDelegation, a.createAct, a.reach]
 
 /-- The one way to an apprentice. Refuses a contract of another binary, or
 one contract in two places. -/
 def Apprentice.of (binary : Binary)
-    (observe root exit ret effectObservation invoke delegate goal description reach : Contract) :
+    (observe root exit ret performEffect createInput delegate goal createDelegation createAct reach :
+      Contract) :
     Option Apprentice :=
-  if h : ([observe, root, exit, ret, effectObservation, invoke, delegate, goal,
-            description, reach].all (·.binary == binary) && decide
-            [observe, root, exit, ret, effectObservation, invoke, delegate, goal,
-            description, reach].Nodup) = true
-  then some ⟨binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal,
-    description, reach, h⟩
+  if h : ([observe, root, exit, ret, performEffect, createInput, delegate, goal,
+            createDelegation, createAct, reach].all (·.binary == binary) && decide
+            [observe, root, exit, ret, performEffect, createInput, delegate, goal,
+            createDelegation, createAct, reach].Nodup) = true
+  then some ⟨binary, observe, root, exit, ret, performEffect, createInput, delegate, goal,
+    createDelegation, createAct, reach, h⟩
   else none
 
 /-- A contract of the apprentice's binary. -/
@@ -134,10 +136,12 @@ theorem Apprentice.contracts_nodup (a : Apprentice) : a.contracts.Nodup := by
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hw
   exact hw.2
 
-/-- What a node is: decided from its reach (see "Effect, act or delegate"). -/
+/-- What a node is (see "Act or delegate"). A child's kind is decided from
+the contracts its delegate passed; the root's is given. There is no effect
+node: an effect is the observation, and `perform_effect` the generic that
+makes one, taking on the contract passed to it. -/
 inductive Kind
-  | effect    -- no contract in reach: it writes
-  | act       -- one: it acts, invoking it
+  | act       -- one contract: it performs effects through it
   | delegate  -- two or more: it delegates
   deriving DecidableEq
 
@@ -190,12 +194,14 @@ instance : DecidableEq Observation := Observation.decEq
 
 /-- What an effect may come through, by the kind of node that sends it: an
 exit, from every kind; a goal, a description and a packaged reach, from a
-delegate; what an effect node wrote; what came back through an act node's
-contract, outside the apprentice. -/
+delegate; an input, from an act node, to dispatch; what came back through an
+act node's `perform_effect`, typed by the contract it was passed, outside the
+apprentice. -/
 def effectThrough (a : Apprentice) (k : Kind) (c : Contract) : Bool :=
   c == a.exit || (k == .delegate && c == a.goal) ||
-  (k == .delegate && c == a.description) || (k == .delegate && c == a.reach) ||
-  (k == .effect && c == a.effectObservation) || (k == .act && !a.mine c)
+  (k == .delegate && c == a.createDelegation) || (k == .delegate && c == a.createAct) ||
+  (k == .delegate && c == a.reach) || (k == .act && c == a.createInput) ||
+  (k == .act && !a.mine c)
 
 /-- What `observe` admits. No members: an effect, through what its kind may
 make one through. Members: a computation, only from a delegate, through
@@ -238,20 +244,19 @@ theorem observe_computation (h : observe a k t ms = some o) (hc : o.isComputatio
   simp only [admits, List.isEmpty_iff, hc, ite_false, Bool.and_eq_true, beq_iff_eq] at ha
   exact ⟨ha.1.1, ha.1.2⟩
 
-/-- An effect node and an act node make only effects. -/
-theorem observe_effect_or_invoke (h : observe a k t ms = some o) (hk : k ≠ .delegate) :
-    o.isEffect = true := by
+/-- An act node makes only effects. -/
+theorem observe_act (h : observe a .act t ms = some o) : o.isEffect = true := by
   rw [Observation.effect_xor_computation]
   cases hc : o.isComputation
   · rfl
-  · exact absurd (observe_computation h hc).1 hk
+  · exact absurd (observe_computation h hc).1 (by decide)
 
-/-- Nothing is made through `observe`, `root`, `return`, `invoke` or
+/-- Nothing is made through `observe`, `root`, `return`, `perform_effect` or
 `delegate` as an effect: `observe` and `root` are privileged, `return`
-passes, `invoke` brings back what its contract's type says, and `delegate`
+passes, `perform_effect` takes on the contract passed to it, and `delegate`
 composes. -/
 theorem observe_not_through (h : observe a k t [] = some o)
-    (hc : t.contract ∈ [a.observe, a.root, a.ret, a.invoke, a.delegate]) : False := by
+    (hc : t.contract ∈ [a.observe, a.root, a.ret, a.performEffect, a.delegate]) : False := by
   rw [observe_eq_some] at h
   obtain ⟨ha, -, -⟩ := h
   have hn := a.contracts_nodup
@@ -263,7 +268,7 @@ theorem observe_not_through (h : observe a k t [] = some o)
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-  rcases ha with (((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  rcases ha with ((((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩)
   all_goals first
     | (rw [e] at hm; simp at hm; done)
     | (rcases hc with hc | hc | hc | hc | hc <;> rw [hc] at e <;>
@@ -272,24 +277,40 @@ theorem observe_not_through (h : observe a k t [] = some o)
 /-- A description and a packaged reach come only from a delegate: they are
 parts of what it composes. -/
 theorem observe_composed (h : observe a k t [] = some o)
-    (hc : t.contract ∈ [a.description, a.reach]) : k = .delegate := by
+    (hc : t.contract ∈ [a.createDelegation, a.createAct, a.reach]) : k = .delegate := by
   rw [observe_eq_some] at h
   obtain ⟨ha, -, -⟩ := h
   have hn := a.contracts_nodup
   have hm : a.mine t.contract = true := a.contracts_mine (by
     simp only [Apprentice.contracts, List.mem_cons, List.not_mem_nil, or_false] at hc ⊢
-    rcases hc with h | h <;> simp [h])
+    rcases hc with h | h | h <;> simp [h])
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hn
   simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
     Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-  rcases ha with (((((e | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨-, e⟩) | ⟨-, e⟩)
-  · rcases hc with hc | hc <;> rw [hc] at e <;> simp_all
+  rcases ha with ((((((e | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨hk, -⟩) | ⟨-, e⟩) | ⟨-, e⟩)
+  · rcases hc with hc | hc | hc <;> rw [hc] at e <;> simp_all
   all_goals first
     | exact hk
     | (rw [e] at hm; simp at hm; done)
-    | (rcases hc with hc | hc <;> rw [hc] at e <;> simp_all; done)
+    | (rcases hc with hc | hc | hc <;> rw [hc] at e <;> simp_all; done)
+
+/-- An input comes only from an act node: what it makes to dispatch. -/
+theorem observe_input (h : observe a k t [] = some o) (hc : t.contract = a.createInput) :
+    k = .act := by
+  rw [observe_eq_some] at h
+  obtain ⟨ha, -, -⟩ := h
+  have hn := a.contracts_nodup
+  have hm : a.mine t.contract = true := a.contracts_mine (by rw [hc]; simp [Apprentice.contracts])
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hn
+  simp only [admits, List.isEmpty_nil, ite_true, effectThrough, Bool.or_eq_true,
+    Bool.and_eq_true, beq_iff_eq, Bool.not_eq_true'] at ha
+  rcases ha with ((((((e | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨-, e⟩) | ⟨hk, -⟩) | ⟨hk, -⟩)
+  all_goals first
+    | exact hk
+    | (rw [hc] at e; simp_all; done)
 
 /-- The empty input: an object with no fields. The caller sends `{}`. -/
 def Schema.empty : Schema := ⟨"{\"type\":\"object\"}"⟩
@@ -326,20 +347,18 @@ theorem nodeMayReturn_iff :
       ∀ o ∈ returned, ∀ x ∈ lineage o, ∀ r ∈ received, x ∉ lineage r := by
   simp [nodeMayReturn, List.all_eq_true]
 
-/-- What `return` may pass: something; and for an act or delegate node,
-nothing its model created directly. An effect node may return what it wrote.
-`created` is the frame's own: what its model made, never a field on an
-observation. -/
-def mayReturn (k : Kind) (created returned : List Observation) : Bool :=
-  !returned.isEmpty && (k == .effect || returned.all fun r => !decide (r ∈ created))
+/-- What `return` may pass: something, and nothing its model created
+directly. `created` is the frame's own: what its model made, never a field
+on an observation. -/
+def mayReturn (created returned : List Observation) : Bool :=
+  !returned.isEmpty && returned.all fun r => !decide (r ∈ created)
 
 theorem mayReturn_iff :
-    mayReturn k created returned = true ↔
-      returned ≠ [] ∧ (k = .effect ∨ ∀ r ∈ returned, r ∉ created) := by
+    mayReturn created returned = true ↔ returned ≠ [] ∧ ∀ r ∈ returned, r ∉ created := by
   simp [mayReturn, List.all_eq_true]
 
-/-- An input base type, by its hash: the binary invoked, and the return base
-types of what it was passed, in order. Its constructor is private: every one
+/-- An input base type, by its hash: the contract invoked, and the return
+base types of what it was passed, in order. Its constructor is private: every one
 is made by `createInvoke`. -/
 structure InputBase where
   private mk ::
@@ -371,33 +390,33 @@ inductive Guard (b : ReturnBase)
 /-- How the runtime hashes. Lean never computes a hash: Go does, and Lean
 takes the hashes as values. -/
 structure Hashes where
-  input  : Binary → List ReturnBase → String
+  input  : Contract → List ReturnBase → String
   ret    : InputBase → Schema → String
   refine : (b : ReturnBase) → Guard b → RefinementId
 
 /-- What is assumed of the hashes: no collisions. Every theorem that needs it
 takes it as a hypothesis. -/
 def Hashes.Sound (h : Hashes) : Prop :=
-  (∀ {b₁ b₂ p₁ p₂}, h.input b₁ p₁ = h.input b₂ p₂ → b₁ = b₂ ∧ p₁ = p₂) ∧
+  (∀ {c₁ c₂ p₁ p₂}, h.input c₁ p₁ = h.input c₂ p₂ → c₁ = c₂ ∧ p₁ = p₂) ∧
   (∀ {i₁ i₂ o₁ o₂}, h.ret i₁ o₁ = h.ret i₂ o₂ → i₁ = i₂ ∧ o₁ = o₂) ∧
   (∀ {b₁ b₂} {g₁ : Guard b₁} {g₂ : Guard b₂}, h.refine b₁ g₁ = h.refine b₂ g₂ → b₁ = b₂)
 
-/-- Down an edge (`create_invoke`): the one way to an input base type.
-Refuses a binary without a known scheme and digest. -/
-def createInvoke (h : Hashes) (b : Binary) (passed : List ReturnBase) : Option InputBase :=
-  if b.wellFormed then some ⟨h.input b passed⟩ else none
+/-- Down an edge (`create_invoke`): the one way to an input base type. From
+the contract, not its binary: two contracts of one binary, the apprentice's
+included, are two input base types. A contract is well formed by
+construction, so it never refuses. -/
+def createInvoke (h : Hashes) (c : Contract) (passed : List ReturnBase) : InputBase :=
+  ⟨h.input c passed⟩
 
 /-- Up an edge (`create_return`): the one way to a return base type. It takes
 the input base type it answers. Refuses a shape that is not well formed. -/
 def createReturn (h : Hashes) (i : InputBase) (shape : Schema) : Option ReturnBase :=
   if shape.wellFormed then some ⟨h.ret i shape⟩ else none
 
-/-- Same binary, same return base types passed: one input base type; and
+/-- Same contract, same return base types passed: one input base type; and
 only then. -/
-theorem input_eq_iff {h : Hashes} (hs : h.Sound) (h₁ : createInvoke h b₁ p₁ = some x₁)
-    (h₂ : createInvoke h b₂ p₂ = some x₂) : x₁ = x₂ ↔ b₁ = b₂ ∧ p₁ = p₂ := by
-  unfold createInvoke at h₁ h₂
-  split at h₁ <;> split at h₂ <;> cases h₁ <;> cases h₂
+theorem input_eq_iff {h : Hashes} (hs : h.Sound) :
+    createInvoke h c₁ p₁ = createInvoke h c₂ p₂ ↔ c₁ = c₂ ∧ p₁ = p₂ := by
   constructor
   · intro e; exact hs.1 (congrArg InputBase.val e)
   · rintro ⟨rfl, rfl⟩; rfl
@@ -412,13 +431,31 @@ theorem return_eq_iff {h : Hashes} (hs : h.Sound) (h₁ : createReturn h i₁ o�
   · intro e; exact hs.2.1 (congrArg ReturnBase.val e)
   · rintro ⟨rfl, rfl⟩; rfl
 
-/-- Same binary, same return base types passed, same shape back: one return
-base type, whichever node it came from; and only then. -/
+/-- Same contract, same return base types passed, same shape back: one
+return base type, whichever node it came from; and only then. -/
 theorem base_eq_iff {h : Hashes} (hs : h.Sound)
-    (hi₁ : createInvoke h b₁ p₁ = some i₁) (hi₂ : createInvoke h b₂ p₂ = some i₂)
-    (hr₁ : createReturn h i₁ o₁ = some r₁) (hr₂ : createReturn h i₂ o₂ = some r₂) :
-    r₁ = r₂ ↔ b₁ = b₂ ∧ p₁ = p₂ ∧ o₁ = o₂ := by
-  rw [return_eq_iff hs hr₁ hr₂, input_eq_iff hs hi₁ hi₂, and_assoc]
+    (hr₁ : createReturn h (createInvoke h c₁ p₁) o₁ = some r₁)
+    (hr₂ : createReturn h (createInvoke h c₂ p₂) o₂ = some r₂) :
+    r₁ = r₂ ↔ c₁ = c₂ ∧ p₁ = p₂ ∧ o₁ = o₂ := by
+  rw [return_eq_iff hs hr₁ hr₂, input_eq_iff hs, and_assoc]
+
+/-- Nothing comes from nowhere: what a call to a contract made, the
+apprentice's included (a goal, an input, a description, a packaged reach),
+has a return base type, minted the one way: down the edge to the contract
+of its type, and back up with its type's output shape. -/
+def baseOf (h : Hashes) (t : ObservationType) (passed : List ReturnBase) : Option ReturnBase :=
+  createReturn h (createInvoke h t.contract passed) t.output
+
+/-- An observation type's output shape is well formed, so it always has one. -/
+theorem baseOf_isSome : (baseOf h t p).isSome := by
+  unfold baseOf createReturn; rw [t.wf]; rfl
+
+/-- Made through two contracts, two return base types: a goal and an input
+are never one, nor `x` and `x2`. -/
+theorem baseOf_apart {h : Hashes} (hs : h.Sound) (hc : t₁.contract ≠ t₂.contract)
+    (h₁ : baseOf h t₁ p₁ = some r₁) (h₂ : baseOf h t₂ p₂ = some r₂) : r₁ ≠ r₂ := by
+  intro e
+  exact hc ((base_eq_iff hs h₁ h₂).mp e).1
 
 inductive Seen
   | seen
@@ -571,37 +608,51 @@ def invoke : Seen → (guardHolds : Bool) → InvokeResult
 theorem invoke_procedure_iff : invoke n g = .procedure ↔ n = .seen ∧ g = true := by
   cases n <;> cases g <;> simp [invoke]
 
-/-- The kind, from the contracts counted. -/
-def kind (counted : List Contract) : Kind :=
+/-- The kind, from the contracts counted: none for none, as a delegate
+passes at least one contract. -/
+def kind (counted : List Contract) : Option Kind :=
   match counted.eraseDups.length with
-  | 0 => .effect
-  | 1 => .act
-  | _ => .delegate
+  | 0 => none
+  | 1 => some .act
+  | _ => some .delegate
 
 /-- The contracts that count: the reach, the apprentice's taken out. -/
 def counted (a : Apprentice) (reach : List Contract) : List Contract :=
   reach.filter (!a.mine ·)
 
-/-- What the core runs, in the `observe` phase: the apprentice, the agent's
-contract and the contracts in its reach, as values. The apprentice's
-contracts count for neither the self check nor the kind. `none` refuses an
-agent whose own binary is in the rest of its reach, at every count. -/
+/-- What the core runs, in the `observe` phase, for a child: the apprentice,
+the child's contract and the contracts its delegate passed, as values. The
+apprentice's contracts count for neither the self check nor the kind.
+`none` refuses a child whose own binary is in the rest of its reach, at
+every count, and a delegate that passed nothing. -/
 def classify (a : Apprentice) (self : Contract) (reach : List Contract) : Option Kind :=
-  if self.binary ∈ (counted a reach).map (·.binary) then none else some (kind (counted a reach))
+  if self.binary ∈ (counted a reach).map (·.binary) then none else kind (counted a reach)
 
 theorem classify_none_iff :
-    classify a self reach = none ↔ self.binary ∈ (counted a reach).map (·.binary) := by
-  unfold classify; split <;> simp_all
-
-theorem classify_effect_iff :
-    classify a self reach = some .effect ↔
-      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 0 := by
-  unfold classify kind; split <;> (try split) <;> simp_all
+    classify a self reach = none ↔
+      self.binary ∈ (counted a reach).map (·.binary) ∨ (counted a reach).eraseDups.length = 0 := by
+  unfold classify kind
+  by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
+  · simp [hb]
+  · simp only [hb, ite_false, false_or]
+    generalize (counted a reach).eraseDups.length = n
+    match n with
+    | 0 => simp
+    | 1 => simp
+    | n + 2 => simp
 
 theorem classify_act_iff :
     classify a self reach = some .act ↔
       self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
-  unfold classify kind; split <;> (try split) <;> simp_all
+  unfold classify kind
+  by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
+  · simp [hb]
+  · simp only [hb, ite_false, not_false_eq_true, true_and]
+    generalize (counted a reach).eraseDups.length = n
+    match n with
+    | 0 => simp
+    | 1 => simp
+    | n + 2 => simp
 
 theorem classify_delegate_iff :
     classify a self reach = some .delegate ↔
@@ -609,12 +660,19 @@ theorem classify_delegate_iff :
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
-  · simp only [hb, ite_false, Option.some.injEq, not_false_eq_true, true_and]
+  · simp only [hb, ite_false, not_false_eq_true, true_and]
     generalize (counted a reach).eraseDups.length = n
     match n with
     | 0 => simp
     | 1 => simp
     | n + 2 => simp
+
+/-- A delegate passes at least one contract: a child with nothing counted
+in its reach is refused. -/
+theorem classify_passes_one (h : classify a self reach = some k) : counted a reach ≠ [] := by
+  intro hc
+  have : classify a self reach = none := classify_none_iff.mpr (Or.inr (by rw [hc]; rfl))
+  rw [this] at h; cases h
 
 /-- The apprentice's contracts never count: adding any of them, before or
 after, leaves the result unchanged, refused included. -/
@@ -630,13 +688,43 @@ theorem classify_apprentice_before (h : ∀ c ∈ extra, a.mine c = true) :
     simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
   unfold classify counted; rw [List.filter_append, this, List.nil_append]
 
+/-- The root is not classified by its reach: no delegate chose it. Its kind
+is given, by whoever started it; only the self check applies. -/
+def rootKind (a : Apprentice) (self : Contract) (reach : List Contract) (k : Kind) :
+    Option Kind :=
+  if self.binary ∈ (counted a reach).map (·.binary) then none else some k
+
+theorem rootKind_none_iff :
+    rootKind a self reach k = none ↔ self.binary ∈ (counted a reach).map (·.binary) := by
+  unfold rootKind; split <;> simp_all
+
+theorem rootKind_given (h : rootKind a self reach k = some k') : k' = k := by
+  unfold rootKind at h; split at h <;> cases h; rfl
+
+/-- The act transformation: what `delegate`'s CEL makes before the model's
+point, from the child's kind. A delegate child is described by
+`create_delegation` and handed the reach packaged; an act child by
+`create_act`, its one contract in its offer, with nothing to pass on. -/
+def parts (a : Apprentice) : Kind → List Contract
+  | .act      => [a.createAct]
+  | .delegate => [a.createDelegation, a.reach]
+
+/-- An act child is never described as a delegate, nor handed a reach to
+pass on; a delegate child is never described as an act. -/
+theorem parts_apart :
+    a.createDelegation ∉ parts a .act ∧ a.reach ∉ parts a .act ∧
+      a.createAct ∉ parts a .delegate := by
+  have hn := a.contracts_nodup
+  simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
+    or_false, not_or] at hn
+  simp only [parts, List.mem_cons, List.not_mem_nil, or_false, not_or]
+  simp_all [Ne.symm]
+
 /-- The apprentice's contracts for a kind, loaded into its reach after the
-kind is known: `exit` and `return` for every kind; `effect_observation` for
-an effect node; `invoke` for an act node; `delegate` and `goal` for a
-delegate. -/
+kind is known: `exit` and `return` for every kind; `create_input` and
+`perform_effect` for an act node; `delegate` and `goal` for a delegate. -/
 def loaded (a : Apprentice) : Kind → List Contract
-  | .effect   => [a.exit, a.ret, a.effectObservation]
-  | .act      => [a.exit, a.ret, a.invoke]
+  | .act      => [a.exit, a.ret, a.createInput, a.performEffect]
   | .delegate => [a.exit, a.ret, a.delegate, a.goal]
 
 theorem loaded_mine (h : c ∈ loaded a k) : a.mine c = true := by
@@ -649,11 +737,12 @@ theorem classify_loaded :
     classify a self (reach ++ loaded a k) = classify a self reach :=
   classify_apprentice_after fun _ h => loaded_mine h
 
-/-- `observe` and `root` are never loaded, nor `description` and `reach`,
-which `delegate`'s CEL runs before the model's point. -/
+/-- `observe` and `root` are never loaded, nor `create_delegation`,
+`create_act` and `package_reach`, which `delegate`'s CEL runs before the
+model's point. -/
 theorem loaded_never_privileged :
-    a.observe ∉ loaded a k ∧ a.root ∉ loaded a k ∧
-      a.description ∉ loaded a k ∧ a.reach ∉ loaded a k := by
+    a.observe ∉ loaded a k ∧ a.root ∉ loaded a k ∧ a.createDelegation ∉ loaded a k ∧
+      a.createAct ∉ loaded a k ∧ a.reach ∉ loaded a k := by
   have hn := a.contracts_nodup
   simp only [Apprentice.contracts, List.nodup_cons, List.mem_cons, List.not_mem_nil,
     or_false, not_or] at hn
@@ -676,7 +765,6 @@ structure Offer where
   apprentice : List Contract
 
 def offered (a : Apprentice) : Kind → (passed : List Contract) → Offer
-  | .effect,   _      => ⟨[], [], loaded a .effect⟩
   | .act,      passed => ⟨passed, [], loaded a .act⟩
   | .delegate, passed => ⟨[], passed, loaded a .delegate⟩
 
@@ -685,7 +773,6 @@ theorem offered_invoke (h : (offered a k p).invoke ≠ []) : k = .act := by
   cases k <;> simp_all [offered]
 
 theorem offered_delegate_invokes_nothing : (offered a .delegate p).invoke = [] := rfl
-theorem offered_effect_invokes_nothing : (offered a .effect p).invoke = [] := rfl
 
 theorem offered_apprentice : (offered a k p).apprentice = loaded a k := by
   cases k <;> rfl
