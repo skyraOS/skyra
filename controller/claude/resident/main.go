@@ -89,6 +89,8 @@ type derived struct {
 	FinalText   string
 	Done        bool
 	Failed      string
+	Refused     string   // a message the provider's classifier refused
+	Models      []string // every model a message of the turn came from
 	Partial     string
 	Calls       []bridgeCall
 	Results     []step
@@ -238,6 +240,17 @@ func decide(c continuation) (string, error) {
 		}
 	}
 
+	// A turn runs on the model it asked for, or not at all: a refusal, or a
+	// message from another model (the provider's fallback), is a fault,
+	// never a reply.
+	if d.Refused != "" {
+		return "", errors.New("refused: " + d.Refused)
+	}
+	for _, m := range d.Models {
+		if m != resolvedModel(c) {
+			return "", fmt.Errorf("the turn ran on %s, not %s", m, resolvedModel(c))
+		}
+	}
 	if d.Failed != "" {
 		return "", errors.New(d.Failed)
 	}
@@ -340,6 +353,35 @@ func processLine(line string, d *derived) {
 	}
 	if json.Unmarshal([]byte(line), &errMsg) == nil && errMsg.Error != "" {
 		d.Failed = errMsg.Error
+		return
+	}
+	// Which model answered, and whether it was refused.
+	var se struct {
+		Type  string `json:"type"`
+		Event struct {
+			Type    string `json:"type"`
+			Message struct {
+				Model string `json:"model"`
+			} `json:"message"`
+			Delta struct {
+				StopReason  string `json:"stop_reason"`
+				StopDetails *struct {
+					Category    string `json:"category"`
+					Explanation string `json:"explanation"`
+				} `json:"stop_details"`
+			} `json:"delta"`
+		} `json:"event"`
+	}
+	if json.Unmarshal([]byte(line), &se) == nil && se.Type == "stream_event" {
+		if m := se.Event.Message.Model; se.Event.Type == "message_start" && m != "" && !slices.Contains(d.Models, m) {
+			d.Models = append(d.Models, m)
+		}
+		if se.Event.Type == "message_delta" && se.Event.Delta.StopReason == "refusal" {
+			d.Refused = "the provider refused the request"
+			if sd := se.Event.Delta.StopDetails; sd != nil {
+				d.Refused = sd.Category + ": " + sd.Explanation
+			}
+		}
 		return
 	}
 	// Stream events from claude. Parse for session, result, and final text.

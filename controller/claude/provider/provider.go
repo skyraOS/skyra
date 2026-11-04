@@ -19,7 +19,7 @@ import (
 const DefaultModel = "claude-opus-5-5"
 
 func Arguments(session, prompt, systemPrompt string) []string {
-	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", DefaultModel, "--tools", "", "--disable-slash-commands", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "user", "--settings", `{"disableAllHooks":true}`}
+	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", DefaultModel, "--tools", "", "--disable-slash-commands", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "user", "--settings", `{"disableAllHooks":true,"switchModelsOnFlag":false}`}
 	if systemPrompt != "" {
 		args = append(args, "--system-prompt", systemPrompt)
 	}

@@ -92,3 +92,41 @@ func mustDecide(t *testing.T, c continuation) string {
 	}
 	return out
 }
+
+// A turn runs on the model it asked for, or not at all: a refusal, or a
+// message from a fallback model, faults the turn instead of replying.
+func TestARefusalOrAFallbackIsAFault(t *testing.T) {
+	start := func(model string) string {
+		return `{"type":"stream_event","event":{"type":"message_start","message":{"model":"` + model + `"}}}`
+	}
+	refused := `{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber","explanation":"blocked"}}}}`
+	done := `{"type":"result","subtype":"success","session_id":"s","result":"done"}`
+	for _, tc := range []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"refused", []string{start("claude-opus-5-5"), refused, done}, "refused: cyber: blocked"},
+		{"fell back", []string{start("claude-opus-5-5"), start("claude-opus-4-8"), done}, "ran on claude-opus-4-8"},
+	} {
+		c := continuation{Frame: "f1"}
+		c.Input.Text, c.Input.Fresh = "node 0", true
+		c.Steps = []step{
+			{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
+			{To: "claude.exchange", State: "return", Payload: deliver(`{"prompt":"node 0"}`), Value: lines(tc.lines...)},
+		}
+		if _, err := decide(c); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+	// The model it asked for is a reply.
+	c := continuation{Frame: "f1"}
+	c.Input.Text, c.Input.Fresh = "node 0", true
+	c.Steps = []step{
+		{To: "claude.open", State: "return", Value: json.RawMessage(`{"incarnation":"inc"}`)},
+		{To: "claude.exchange", State: "return", Payload: deliver(`{"prompt":"node 0"}`), Value: lines(start("claude-opus-5-5"), done)},
+	}
+	if to, _ := parse(t, mustDecide(t, c)); to != "f1" {
+		t.Fatalf("a turn on its own model did not reply: %s", to)
+	}
+}

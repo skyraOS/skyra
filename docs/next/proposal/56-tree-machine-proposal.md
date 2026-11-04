@@ -778,6 +778,16 @@ apprentice's `tree` contract. A tree runs through today's kernel end to end
 instructions; the kernel's replay of each is byte-identical. Step 6, 52's
 shell, waits on `skyra-spawn`.
 
+**Parked here** (2026-11-04), on open items 18 to 20. Since step 5's
+commit, and not yet committed: Claude runs with `switchModelsOnFlag`
+false, so a request its classifier flags ends as an error instead of
+re-running on another model; and the resident faults a turn that was
+refused, or that any message of came from a model other than the one it
+asked for. A node runs on the model it was given, or not at all. Unit
+tested; a live act tree that read `README.md` through `read` ran clean
+with both. The first real delegate tree, holding `find` and `read`, ran
+away: see 18 to 20.
+
 ### Step 4a, as built
 
 What 4a decided, beyond the open items:
@@ -959,6 +969,27 @@ Open, from 5:
     calls faulted two of them. A subscription request is not ours to
     rewrite. The way off that remains is an API key with `--bare`, which
     sends only what it is given. Open.
+
+Open, from the first real trees:
+
+18. **A node's turns are unbounded.** A delegate tree holding `find` and
+    `read` never reached an act node: every delegate passed both
+    contracts, so every child was a delegate. Children faulted at the
+    depth bound; their parents, seeing nothing come back, delegated
+    again, one ten times, one over twenty, until Claude sessions stopped
+    opening. Recommended: a bound on a node's turns, as on depth and fan
+    out (8), past which the node faults.
+19. **The delegate prompt does not say the kind rule.** Passing exactly
+    one contract makes an act child, which may invoke it; two or more
+    make a delegate child, which may only delegate (`Classify`). The rule
+    is the node's own, so its model may be told it. Recommended: say it
+    in the prompt and in `delegate`'s description.
+20. **Does a parent see its child's fault?** Today a faulted child gives
+    its parent nothing, and the parent's model is asked again with no
+    sign of why. Either it stays unseen, and 18 ends the loop; or the
+    fault is shown as the node's state, never as a name, so it is never
+    passed or returned. A fault is not an observation: nothing made it
+    through a contract. Open: the user's.
 
 ## Open
 
