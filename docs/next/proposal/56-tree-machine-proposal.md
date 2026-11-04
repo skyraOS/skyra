@@ -691,6 +691,15 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
 
 Stop for review after each step.
 
+## Where we are
+
+Steps 1 to 3 are done and pushed on `one-tool-trees`: 55's Lean is
+`Core.lean`, with its vectors and CI; the decision layer and the hashes are
+in `controller/apprentice/tree`, checked against every vector. Step 4,
+`Step`, waits on open items 6 to 13: two conflict with the invariants, and
+six are decisions this proposal has not made. Each has a recommendation;
+none is settled.
+
 ## Open
 
 1. **The apprentice's contracts.** Settled: `goal` is given to delegate
@@ -721,3 +730,46 @@ Stop for review after each step.
    its inputs, so it is a `Read` (`CELKey`), answered by the apprentice's
    loop through `apprentice/refine`, and retried freely. The core holds no
    CEL interpreter.
+6. **The description and the reach cannot be made.** `delegate` composes
+   `[description, goal, reach, …passed]`, each member an effect a delegate
+   node makes. `Core.lean` admits a delegate's effects only through `exit`
+   and `goal`, and `observe_not_through` refuses `delegate`, so nothing makes
+   the description or the packaged reach. (a) `create_description` and
+   `package_reach` become two more contracts of the apprentice, admitted for
+   a delegate node; (b) they are made through `goal`, as strings the CEL
+   writes; (c) they are not members: the description is fixed, and the reach
+   is already in the child's `Offer`. Recommended: (a), which keeps every
+   observation typed by its own contract; it changes `Core.lean`, the
+   vectors and 55's invariants 7 and 8.
+7. **`create_return` cannot be an observation.** An observation
+   `{ <caller_type>: [obs…] }` with members would be a computation made
+   through `return`, and only a delegate makes one. Recommended: it is the
+   return's shape, not an observation. The observations returned reach the
+   parent as they are, and the return's base type is `BaseOf(the child's
+   binary, the base types it was passed, create_return's shape)`. No Lean
+   change.
+8. **The child's actor.** Recommended: one actor contract runs every child,
+   supplied once by the kernel in `Started`, as the root's `self` is, and
+   held as `Tree.Actor`. A child's `Self` is that contract, so `classify`
+   refuses an actor whose own binary is in the child's reach.
+9. **What an invoke receives.** `Invoke` has no input. Recommended: it
+   carries `Observations []Ref`, passed as the contract's input; their base
+   types are the ones passed in `BaseOf`.
+10. **The root's endowment.** Recommended: `Started` carries the
+    endowment's output shape; the root's observation is
+    `rootObservation(TypeOf(app.root, shape))`, its value kept by the shell
+    like every other.
+11. **What a positional reference may name.** Recommended: only an
+    instruction whose result exists while the call is interpreted, which is
+    only a `Goal` today. An invoke's result comes back later, so the same call
+    cannot refer to it.
+12. **A reply's wire format.** Recommended: a JSON array, one object per
+    instruction, observations by integer and contracts by their index in the
+    agent's `Offer`:
+    `[{"goal":"…"}, {"delegate":{"observations":[0,{"earlier":0}],"contracts":[1,2]}}]`.
+13. **Fan-out in effects.** Recommended: `Execute` carries `[]Action`, so a
+    call's invokes, or its children's first turns, go out in one
+    `instruction/1`.
+
+Settled unless objected to: guard and record objects are canonical JSON,
+the hashes' encoding.
