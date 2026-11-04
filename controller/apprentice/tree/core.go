@@ -1,0 +1,538 @@
+// Package tree is the functional core of one tool trees: 55's decisions,
+// ported one to one from controller/apprentice/invariants/Invariants/Core.lean
+// and checked against every vector the Lean writes (56, "Decisions").
+//
+// Fields are unexported, so Identify, TypeOf, ApprenticeOf, Observe and
+// RootObservation are the only constructors: Go's form of the private
+// constructor. A Store changes only through See and Rewrite. The package is
+// pure: it touches no OS, tree or network (TestCoreIsPure).
+package tree
+
+import (
+	"slices"
+	"strings"
+)
+
+// --- identity ---
+
+// A Binary is a binary by its hash, with its scheme: `cdhash:` and 40 hex
+// digits on macOS, `sha256:` and 64 on Linux.
+type Binary string
+
+// A Schema is a shape by its canonical JSON, as contract.Normal writes it.
+type Schema string
+
+func hexDigits(s string, n int) bool {
+	if len(s) != n {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// WellFormed: a known scheme and its digest.
+func (b Binary) WellFormed() bool {
+	s := string(b)
+	if rest, ok := strings.CutPrefix(s, "cdhash:"); ok {
+		return hexDigits(rest, 40)
+	}
+	if rest, ok := strings.CutPrefix(s, "sha256:"); ok {
+		return hexDigits(rest, 64)
+	}
+	return false
+}
+
+// WellFormed is the one check on a shape, wherever one is taken. Non-empty
+// for now; checking that it is canonical goes here.
+func (s Schema) WellFormed() bool { return s != "" }
+
+// A Contract is a binary and the shape of its input. Every one is made by
+// Identify.
+type Contract struct {
+	binary Binary
+	shape  Schema
+}
+
+func (c Contract) Binary() Binary { return c.binary }
+func (c Contract) Shape() Schema  { return c.shape }
+
+// Identify is the one way to a contract. It refuses a binary without a known
+// scheme and digest, or an empty shape.
+func Identify(b Binary, s Schema) (Contract, bool) {
+	if !b.WellFormed() || !s.WellFormed() {
+		return Contract{}, false
+	}
+	return Contract{b, s}, true
+}
+
+// An ObservationType is the contract an observation came back through, and
+// its own output shape. Every one is made by TypeOf.
+type ObservationType struct {
+	contract Contract
+	output   Schema
+}
+
+func (t ObservationType) Contract() Contract { return t.contract }
+func (t ObservationType) Output() Schema     { return t.output }
+
+// TypeOf is the one way to an observation type. It refuses an output shape
+// that is not well formed.
+func TypeOf(c Contract, output Schema) (ObservationType, bool) {
+	if !output.WellFormed() {
+		return ObservationType{}, false
+	}
+	return ObservationType{c, output}, true
+}
+
+// --- observe ---
+
+// The Apprentice is one binary and its contracts, each of that binary and
+// none twice. Observe and Root are privileged: never loaded into a reach.
+// Every one is made by ApprenticeOf.
+type Apprentice struct {
+	binary            Binary
+	observe           Contract
+	root              Contract
+	exit              Contract
+	ret               Contract
+	effectObservation Contract
+	invoke            Contract
+	delegate          Contract
+	goal              Contract
+}
+
+// ApprenticeOf is the one way to an apprentice. It refuses a contract of
+// another binary, or one contract in two places.
+func ApprenticeOf(b Binary, observe, root, exit, ret, effectObservation, invoke, delegate, goal Contract) (Apprentice, bool) {
+	a := Apprentice{b, observe, root, exit, ret, effectObservation, invoke, delegate, goal}
+	cs := a.Contracts()
+	for i, c := range cs {
+		if c.binary != b || slices.Contains(cs[:i], c) {
+			return Apprentice{}, false
+		}
+	}
+	return a, true
+}
+
+func (a Apprentice) Binary() Binary              { return a.binary }
+func (a Apprentice) Observe() Contract           { return a.observe }
+func (a Apprentice) Root() Contract              { return a.root }
+func (a Apprentice) Exit() Contract              { return a.exit }
+func (a Apprentice) Return() Contract            { return a.ret }
+func (a Apprentice) EffectObservation() Contract { return a.effectObservation }
+func (a Apprentice) Invoke() Contract            { return a.invoke }
+func (a Apprentice) Delegate() Contract          { return a.delegate }
+func (a Apprentice) Goal() Contract              { return a.goal }
+
+func (a Apprentice) Contracts() []Contract {
+	return []Contract{a.observe, a.root, a.exit, a.ret, a.effectObservation, a.invoke, a.delegate, a.goal}
+}
+
+// Mine: a contract of the apprentice's binary.
+func (a Apprentice) Mine(c Contract) bool { return c.binary == a.binary }
+
+// A Kind is what a node is, decided from its reach.
+type Kind uint8
+
+const (
+	_            Kind = iota
+	KindEffect        // no contract in reach: it writes
+	KindInvoke        // one: it invokes it
+	KindDelegate      // two or more: it delegates
+)
+
+func (k Kind) String() string {
+	switch k {
+	case KindEffect:
+		return "effect"
+	case KindInvoke:
+		return "invoke"
+	case KindDelegate:
+		return "delegate"
+	}
+	return "kind?"
+}
+
+// An Observation is its type and the observations it was made from. Observe
+// and RootObservation are the only ways to make one.
+type Observation struct {
+	typ     ObservationType
+	members []Observation
+}
+
+func (o Observation) Type() ObservationType { return o.typ }
+
+func (o Observation) Members() []Observation { return slices.Clone(o.members) }
+
+// An effect has no members; a computation has members.
+func (o Observation) IsEffect() bool      { return len(o.members) == 0 }
+func (o Observation) IsComputation() bool { return len(o.members) != 0 }
+
+// Equal is structural, as Lean's decidable equality is.
+func (o Observation) Equal(p Observation) bool {
+	return o.typ == p.typ && slices.EqualFunc(o.members, p.members, Observation.Equal)
+}
+
+func contains(xs []Observation, o Observation) bool {
+	return slices.ContainsFunc(xs, o.Equal)
+}
+
+func nodup(xs []Observation) bool {
+	for i, x := range xs {
+		if contains(xs[:i], x) {
+			return false
+		}
+	}
+	return true
+}
+
+// effectThrough is what an effect may come through, by the kind of node that
+// sends it: an exit, from every kind; a goal, from a delegate; what an effect
+// node wrote; what came back through an invoke node's contract, outside the
+// apprentice.
+func effectThrough(a Apprentice, k Kind, c Contract) bool {
+	return c == a.exit || k == KindDelegate && c == a.goal ||
+		k == KindEffect && c == a.effectObservation || k == KindInvoke && !a.Mine(c)
+}
+
+// Admits is what Observe admits. No members: an effect, through what its
+// kind may make one through. Members: a computation, only from a delegate,
+// through delegate, none twice.
+func Admits(a Apprentice, k Kind, t ObservationType, ms []Observation) bool {
+	if len(ms) == 0 {
+		return effectThrough(a, k, t.contract)
+	}
+	return k == KindDelegate && t.contract == a.delegate && nodup(ms)
+}
+
+// Observe is the one function that creates observations from an
+// instruction. The caller never says what it sends: an effect or a
+// computation is decided by what it has, and admitted by the kind of node
+// that sent it.
+func Observe(a Apprentice, k Kind, t ObservationType, ms []Observation) (Observation, bool) {
+	if !Admits(a, k, t, ms) {
+		return Observation{}, false
+	}
+	return Observation{t, slices.Clone(ms)}, true
+}
+
+// RootObservation is the root's endowment: an effect through root, with no
+// instruction before it. Privileged: no node sends it.
+func RootObservation(a Apprentice, t ObservationType) (Observation, bool) {
+	if t.contract != a.root {
+		return Observation{}, false
+	}
+	return Observation{t, nil}, true
+}
+
+// --- scope ---
+
+// A Dir is which way an observation is going.
+type Dir uint8
+
+const (
+	_ Dir = iota
+	DirInvoke
+	DirRet
+)
+
+// MayPass: everything passed is in the sender's scope.
+func MayPass(sender, passed []Observation) bool {
+	for _, p := range passed {
+		if !contains(sender, p) {
+			return false
+		}
+	}
+	return true
+}
+
+// Receive is the receiver's scope after the edge. A child starts with only
+// what it is passed; a parent keeps its scope and adds what is returned.
+func Receive(d Dir, receiver, passed []Observation) []Observation {
+	if d == DirInvoke {
+		return slices.Clone(passed)
+	}
+	return append(slices.Clone(receiver), passed...)
+}
+
+// Lineage is an observation and every observation it was made from.
+func Lineage(o Observation) []Observation {
+	out := []Observation{o}
+	for _, m := range o.members {
+		out = append(out, Lineage(m)...)
+	}
+	return out
+}
+
+// NodeMayReturn: a node's return holds nothing in the lineage of what it was
+// passed.
+func NodeMayReturn(received, returned []Observation) bool {
+	var seen []Observation
+	for _, r := range received {
+		seen = append(seen, Lineage(r)...)
+	}
+	for _, o := range returned {
+		for _, x := range Lineage(o) {
+			if contains(seen, x) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// MayReturn is what return may pass: something; and for an invoke or
+// delegate node, nothing its model created directly. An effect node may
+// return what it wrote. created is the frame's own: what its model made,
+// never a field on an observation.
+func MayReturn(k Kind, created, returned []Observation) bool {
+	if len(returned) == 0 {
+		return false
+	}
+	if k == KindEffect {
+		return true
+	}
+	for _, r := range returned {
+		if contains(created, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// --- novelty ---
+
+// An InputBase is an input at base type: the binary that received it, and
+// the types of the observations passed, in order.
+type InputBase struct {
+	Binary       Binary
+	Observations []ObservationType
+}
+
+type InputBaseNovelty uint8
+
+const (
+	_ InputBaseNovelty = iota
+	InputSeen
+	InputUnseen
+)
+
+func InputNovelty(history []InputBase, i InputBase) InputBaseNovelty {
+	for _, h := range history {
+		if h.Binary == i.Binary && slices.Equal(h.Observations, i.Observations) {
+			return InputSeen
+		}
+	}
+	return InputUnseen
+}
+
+// --- base types and refinement types ---
+
+// A BaseID is a base type, by its hash: the binary, the base types it was
+// passed, in order, and the shape of what came back. No guard is in it.
+type BaseID string
+
+// A RefinementID is a refinement type, by its hash: a base type and its
+// guard's code.
+type RefinementID string
+
+// A Guard is the default until the model writes one.
+type Guard struct {
+	written bool
+	cel     string
+}
+
+func DefaultGuard() Guard           { return Guard{} }
+func WrittenGuard(cel string) Guard { return Guard{true, cel} }
+
+func (g Guard) Written() (string, bool) { return g.cel, g.written }
+
+// A Store is two levels, kept apart. known is the base level: the base types
+// the system recognizes, newest first. A hash not in it is unseen; it has no
+// slot. guards is the refinement level: one slot per known base type.
+type Store struct {
+	known  []BaseID
+	guards map[BaseID]Guard
+}
+
+func EmptyStore() Store { return Store{} }
+
+func (s Store) Known() []BaseID { return slices.Clone(s.known) }
+
+// Guard is a base type's slot: none for one the system does not recognize.
+func (s Store) Guard(b BaseID) (Guard, bool) {
+	g, ok := s.guards[b]
+	return g, ok
+}
+
+func (s Store) set(b BaseID, g Guard) Store {
+	guards := make(map[BaseID]Guard, len(s.guards)+1)
+	for k, v := range s.guards {
+		guards[k] = v
+	}
+	guards[b] = g
+	return Store{s.known, guards}
+}
+
+type Seen uint8
+
+const (
+	_ Seen = iota
+	SeenSeen
+	SeenUnseen
+)
+
+// See: a return of base type b came back. On unseen, b becomes known, and
+// its slot is made with its one guard, the default.
+func See(s Store, b BaseID) (Seen, Store) {
+	if slices.Contains(s.known, b) {
+		return SeenSeen, s
+	}
+	t := s.set(b, DefaultGuard())
+	t.known = append([]BaseID{b}, s.known...)
+	return SeenUnseen, t
+}
+
+// Rewrite: a guard broke, the model ran, and wrote another. It overwrites
+// the one slot. An unknown base type has no slot to overwrite.
+func Rewrite(s Store, b BaseID, cel string) (Store, bool) {
+	if !slices.Contains(s.known, b) {
+		return Store{}, false
+	}
+	return s.set(b, WrittenGuard(cel)), true
+}
+
+// Refinement is a base type's refinement type: its base and its one guard,
+// hashed by refine.
+func Refinement(refine func(BaseID, Guard) RefinementID, s Store, b BaseID) (RefinementID, bool) {
+	g, ok := s.guards[b]
+	if !ok {
+		return "", false
+	}
+	return refine(b, g), true
+}
+
+// --- control ---
+
+// Next is what the apprentice does after an observation comes back.
+type Next uint8
+
+const (
+	_            Next = iota
+	NextContinue      // take the next instruction; no model
+	NextFallback      // an assumption broke; the model runs
+)
+
+// NextOf: an unseen shape broke an assumption; a seen one continues only
+// while its guard holds.
+func NextOf(n Seen, guardHolds bool) Next {
+	if n == SeenSeen && guardHolds {
+		return NextContinue
+	}
+	return NextFallback
+}
+
+// Enter is what the core does when a child is invoked.
+type Enter uint8
+
+const (
+	_              Enter = iota
+	EnterProcedure       // the entry guard holds: the remembered procedure runs; no model
+	EnterModel           // an assumption broke; the model runs
+)
+
+func EnterOf(n InputBaseNovelty, guardHolds bool) Enter {
+	if n == InputSeen && guardHolds {
+		return EnterProcedure
+	}
+	return EnterModel
+}
+
+// --- what a node is ---
+
+// counted is the reach, the apprentice's taken out.
+func counted(a Apprentice, reach []Contract) []Contract {
+	var out []Contract
+	for _, c := range reach {
+		if !a.Mine(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func kind(cs []Contract) Kind {
+	var distinct []Contract
+	for _, c := range cs {
+		if !slices.Contains(distinct, c) {
+			distinct = append(distinct, c)
+		}
+	}
+	switch len(distinct) {
+	case 0:
+		return KindEffect
+	case 1:
+		return KindInvoke
+	}
+	return KindDelegate
+}
+
+// Classify is what the core runs, in the observe phase. The apprentice's
+// contracts count for neither the self check nor the kind. It refuses an
+// agent whose own binary is in the rest of its reach, at every count.
+func Classify(a Apprentice, self Contract, reach []Contract) (Kind, bool) {
+	rest := counted(a, reach)
+	for _, c := range rest {
+		if c.binary == self.binary {
+			return 0, false
+		}
+	}
+	return kind(rest), true
+}
+
+// Loaded is the apprentice's contracts for a kind, loaded into its reach
+// after the kind is known.
+func Loaded(a Apprentice, k Kind) []Contract {
+	switch k {
+	case KindEffect:
+		return []Contract{a.exit, a.ret, a.effectObservation}
+	case KindInvoke:
+		return []Contract{a.exit, a.ret, a.invoke}
+	case KindDelegate:
+		return []Contract{a.exit, a.ret, a.delegate, a.goal}
+	}
+	return nil
+}
+
+// --- pass time and provision time ---
+
+// Passable: every contract passed is held by the parent.
+func Passable(held, passed []Contract) bool {
+	for _, p := range passed {
+		if !slices.Contains(held, p) {
+			return false
+		}
+	}
+	return true
+}
+
+// An Offer is what an agent is provisioned with, from its kind: the
+// contracts it may invoke, those it may only pass on, and the apprentice's
+// contracts loaded for its kind.
+type Offer struct {
+	Invoke, PassOnly, Apprentice []Contract
+}
+
+func Offered(a Apprentice, k Kind, passed []Contract) Offer {
+	switch k {
+	case KindInvoke:
+		return Offer{slices.Clone(passed), nil, Loaded(a, k)}
+	case KindDelegate:
+		return Offer{nil, slices.Clone(passed), Loaded(a, k)}
+	}
+	return Offer{nil, nil, Loaded(a, k)}
+}

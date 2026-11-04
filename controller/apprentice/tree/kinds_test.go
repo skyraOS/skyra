@@ -1,20 +1,6 @@
-//go:build invariants
-
 // The tests for what a node is and what an observation is (56, "What a node
-// is"; "Tested ferociously"). They are written before the code: run them with
-// -tags invariants. The tag comes off when the decision layer is ported.
-//
-// The API they assume, from 56:
-//
-//	Identify(Binary, Schema) (Contract, bool)
-//	TypeOf(Contract, Schema) (ObservationType, bool)
-//	Apprentice{Observe, Root, Exit, Return, EffectObservation, Invoke, Delegate, Goal Contract}
-//	Classify(app Apprentice, self Contract, reach []Contract) (Kind, bool)
-//	Loaded(app Apprentice, k Kind) []Contract
-//	Observe(app Apprentice, sender Kind, t ObservationType, members []Observation) (Observation, bool)
-//	Observation.Members() []Observation, IsEffect() bool, IsComputation() bool
-//	MayReturn(k Kind, created, returned []Observation) bool
-//	KindEffect, KindInvoke, KindDelegate
+// is"; "Tested ferociously"), each written out apart from the code and
+// checked against it: by count, exhaustively, and fuzzed.
 package tree
 
 import (
@@ -51,20 +37,13 @@ func contract(b Binary, s Schema) Contract { return must(Identify(b, s)) }
 
 func apprentice() Apprentice {
 	shape := func(title string) Schema { return Schema(`{"title":"` + title + `","type":"object"}`) }
-	return Apprentice{
-		Observe:           contract(binApp, shape("observe")),
-		Root:              contract(binApp, shape("root")),
-		Exit:              contract(binApp, shape("exit")),
-		Return:            contract(binApp, shape("return")),
-		EffectObservation: contract(binApp, shape("effect_observation")),
-		Invoke:            contract(binApp, shape("invoke")),
-		Delegate:          contract(binApp, shape("delegate")),
-		Goal:              contract(binApp, shape("goal")),
-	}
+	c := func(title string) Contract { return contract(binApp, shape(title)) }
+	return must(ApprenticeOf(binApp, c("observe"), c("root"), c("exit"), c("return"),
+		c("effect_observation"), c("invoke"), c("delegate"), c("goal")))
 }
 
 func (a Apprentice) all() []Contract {
-	return []Contract{a.Observe, a.Root, a.Exit, a.Return, a.EffectObservation, a.Invoke, a.Delegate, a.Goal}
+	return a.Contracts()
 }
 
 var (
@@ -133,9 +112,9 @@ func name(c Contract) string {
 		c Contract
 		n string
 	}{{self, "self"}, {selfOther, "selfOther"}, {x, "x"}, {x2, "x2"}, {y, "y"}, {z, "z"},
-		{app.Observe, "app.observe"}, {app.Root, "app.root"}, {app.Exit, "app.exit"},
-		{app.Return, "app.return"}, {app.EffectObservation, "app.effect_observation"},
-		{app.Invoke, "app.invoke"}, {app.Delegate, "app.delegate"}, {app.Goal, "app.goal"}} {
+		{app.Observe(), "app.observe"}, {app.Root(), "app.root"}, {app.Exit(), "app.exit"},
+		{app.Return(), "app.return"}, {app.EffectObservation(), "app.effect_observation"},
+		{app.Invoke(), "app.invoke"}, {app.Delegate(), "app.delegate"}, {app.Goal(), "app.goal"}} {
 		if p.c == c {
 			return p.n
 		}
@@ -261,9 +240,9 @@ func TestTotality(t *testing.T) {
 // and goal for a delegate; observe and root never.
 func TestLoadedByKind(t *testing.T) {
 	want := map[Kind][]Contract{
-		KindEffect:   {app.Exit, app.Return, app.EffectObservation},
-		KindInvoke:   {app.Exit, app.Return, app.Invoke},
-		KindDelegate: {app.Exit, app.Return, app.Delegate, app.Goal},
+		KindEffect:   {app.Exit(), app.Return(), app.EffectObservation()},
+		KindInvoke:   {app.Exit(), app.Return(), app.Invoke()},
+		KindDelegate: {app.Exit(), app.Return(), app.Delegate(), app.Goal()},
 	}
 	for _, k := range kinds {
 		got := Loaded(app, k)
@@ -277,7 +256,7 @@ func TestLoadedByKind(t *testing.T) {
 				t.Errorf("Loaded(%v) holds %s, which is not the apprentice's", k, name(c))
 			}
 		}
-		for _, never := range []Contract{app.Observe, app.Root} {
+		for _, never := range []Contract{app.Observe(), app.Root()} {
 			if slices.Contains(got, never) {
 				t.Errorf("Loaded(%v) holds %s, which is privileged", k, name(never))
 			}
@@ -316,9 +295,9 @@ func effectOf(t *testing.T, k Kind, c Contract) Observation {
 // An observation is an effect iff it has no members, a computation iff it
 // has members; never both, never neither.
 func TestEffectIffNoMembers(t *testing.T) {
-	goal := effectOf(t, KindDelegate, app.Goal)
-	exit := effectOf(t, KindInvoke, app.Exit)
-	wrote := effectOf(t, KindEffect, app.EffectObservation)
+	goal := effectOf(t, KindDelegate, app.Goal())
+	exit := effectOf(t, KindInvoke, app.Exit())
+	wrote := effectOf(t, KindEffect, app.EffectObservation())
 	came := effectOf(t, KindInvoke, x)
 	for _, o := range []Observation{goal, exit, wrote, came} {
 		if len(o.Members()) != 0 || !o.IsEffect() || o.IsComputation() {
@@ -326,7 +305,7 @@ func TestEffectIffNoMembers(t *testing.T) {
 		}
 	}
 	for _, ms := range [][]Observation{{goal}, {came}, {goal, came}, {wrote, exit}} {
-		o, ok := Observe(app, KindDelegate, typeOf(app.Delegate, shapeA), ms)
+		o, ok := Observe(app, KindDelegate, typeOf(app.Delegate(), shapeA), ms)
 		if !ok {
 			t.Fatalf("a delegate's computation of %d members refused", len(ms))
 		}
@@ -341,7 +320,7 @@ func TestEffectIffNoMembers(t *testing.T) {
 func TestOnlyDelegateMakesComputation(t *testing.T) {
 	came := effectOf(t, KindInvoke, x)
 	for _, k := range kinds {
-		_, ok := Observe(app, k, typeOf(app.Delegate, shapeA), []Observation{came})
+		_, ok := Observe(app, k, typeOf(app.Delegate(), shapeA), []Observation{came})
 		if ok != (k == KindDelegate) {
 			t.Errorf("Observe(%v, with members) = %v; want %v", k, ok, k == KindDelegate)
 		}
@@ -355,9 +334,9 @@ func TestOnlyDelegateMakesComputation(t *testing.T) {
 // what invoke brings back is typed by the contract invoked.
 func TestEffectsByKind(t *testing.T) {
 	may := map[Kind][]Contract{
-		KindEffect:   {app.Exit, app.EffectObservation},
-		KindInvoke:   {app.Exit, x},
-		KindDelegate: {app.Exit, app.Goal},
+		KindEffect:   {app.Exit(), app.EffectObservation()},
+		KindInvoke:   {app.Exit(), x},
+		KindDelegate: {app.Exit(), app.Goal()},
 	}
 	for _, k := range kinds {
 		for _, c := range append(app.all(), x) {
@@ -411,8 +390,8 @@ type returnWorld struct {
 func newReturnWorld(t *testing.T) returnWorld {
 	t.Helper()
 	return returnWorld{
-		goal:  effectOf(t, KindDelegate, app.Goal),
-		wrote: effectOf(t, KindEffect, app.EffectObservation),
+		goal:  effectOf(t, KindDelegate, app.Goal()),
+		wrote: effectOf(t, KindEffect, app.EffectObservation()),
 		came:  effectOf(t, KindInvoke, x),
 		child: effectOf(t, KindInvoke, y),
 		other: effectOf(t, KindInvoke, z),

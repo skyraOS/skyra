@@ -211,7 +211,7 @@ type InputBase struct {
 }
 type BaseID string
 type RefinementID string
-type Guard struct{ written bool; cel string }                 // Default() or Written(cel)
+type Guard struct{ written bool; cel string }                 // DefaultGuard() or WrittenGuard(cel)
 type Store struct{ known []BaseID; guards map[BaseID]Guard }  // EmptyStore, See, Rewrite
 type Seen uint8
 type Next uint8
@@ -239,6 +239,7 @@ func Rewrite(s Store, b BaseID, cel string) (Store, bool)
 func Refinement(hash func(BaseID, Guard) RefinementID, s Store, b BaseID) (RefinementID, bool)
 
 // The hashes, in the core: SHA-256 over the canonical JSON of the parts.
+// Not yet ported: Lean has no case for them, and the domain tags are open.
 func BaseOf(b Binary, passed []BaseID, shape Schema) BaseID
 func RefinementOf(b BaseID, g Guard) RefinementID
 func NextOf(Seen, bool) Next
@@ -610,7 +611,8 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
 2. **`Core.lean` for the apprentice's contracts**, if settled so; 55's copy and
    the vectors follow.
 3. **The decision layer** in `controller/apprentice/tree`: the port, the
-   vector replay, one property test per invariant, the purity test.
+   vector replay, one property test per invariant, the purity test. Done,
+   but for `BaseOf` and `RefinementOf`, which wait on the domain tags.
 4. **`Step`**: the state, the phases, the events and effects above, with
    tests that drive a tree by events alone.
 5. **The interim shell**: the apprentice's loop for the effects in the
