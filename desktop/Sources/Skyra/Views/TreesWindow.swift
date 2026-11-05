@@ -97,10 +97,31 @@ private struct TreeSpec: View {
                 Spacer(minLength: 0)
             }.font(.system(size: 11))
             HStack {
-                Picker("Provider", selection: $actor) {
-                    Text("Claude").tag("claude")
-                    Text("Codex").tag("codex")
-                }.pickerStyle(.menu).fixedSize()
+                Menu {
+                    ForEach(["claude", "codex"], id: \.self) { provider in
+                        Button { actor = provider } label: {
+                            if actor == provider {
+                                Label(provider.capitalized, systemImage: "checkmark")
+                            } else {
+                                Text(provider.capitalized)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(actor.capitalized)
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Theme.dim.color)
+                    }
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.ink.color)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Capsule().fill(Theme.accent.color(0.08)))
+                    .overlay(Capsule().strokeBorder(Theme.accent.color(0.2)))
+                    .contentShape(Capsule())
+                }
+                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+                .help("Choose the tree's provider")
+                .accessibilityLabel("Provider: \(actor.capitalized)")
                 Text(held.isEmpty ? "hold at least one" : held.count == 1 ? "an act root" : "a delegate root")
                     .font(.system(size: 11)).foregroundStyle(Theme.faint.color)
                 Spacer()
@@ -183,6 +204,7 @@ private struct TreeRunView: View {
     @State private var at: Int
     @State private var live = true
     @State private var playing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var frames: [TreeRun.Frame] { run.frames }
 
@@ -225,13 +247,17 @@ private struct TreeRunView: View {
             }
             .padding(12).frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading).panel(radius: 10, tintOpacity: 0.7)
 
+            if let activities = f?.activities, !activities.isEmpty {
+                TreeActivityDetails(activities: activities).id(at)
+            }
+
             // The counts never wrap; the legend gives way when the sheet is narrow.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 14) { counts(nodes); Spacer(minLength: 14); legend }
                 HStack(spacing: 14) { counts(nodes); Spacer(minLength: 0) }
             }.font(.system(size: 11)).foregroundStyle(Theme.dim.color).lineLimit(1)
 
-            TreeGraph(nodes: nodes, current: f?.agent)
+            TreeGraph(nodes: nodes, current: f?.agent, activities: f?.activities ?? [], event: at, breathing: run.phase == .running && live && !playing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .panel(radius: 14, tintOpacity: 0.5)
 
@@ -247,9 +273,9 @@ private struct TreeRunView: View {
         .task(id: playing) {
             guard playing else { return }
             while playing, !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(700))
+                try? await Task.sleep(for: .milliseconds(1100))
                 guard playing else { return }
-                if at >= frames.count - 1 { playing = false } else { withAnimation(.easeOut(duration: 0.35)) { at += 1 } }
+                if at >= frames.count - 1 { playing = false } else { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.35)) { at += 1 } }
             }
         }
     }
@@ -273,7 +299,7 @@ private struct TreeRunView: View {
     private func step(_ i: Int) {
         live = false
         playing = false
-        withAnimation(.easeOut(duration: 0.35)) { at = min(max(0, i), max(0, frames.count - 1)) }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.35)) { at = min(max(0, i), max(0, frames.count - 1)) }
     }
 
     private func replay() {
@@ -290,43 +316,84 @@ private struct TreeRunView: View {
 struct TreeGraph: View {
     let nodes: [TreeRun.Node]
     let current: String?
+    var activities: [TreeRun.Activity] = []
+    var event: Int = 0
+    var breathing = false
+    var animate = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var flight: CGFloat = 1
+    @State private var arrival: CGFloat = 1
+
+    private var motionReduced: Bool { reduceMotion || !animate }
 
     static let size = CGSize(width: 196, height: 86)
     static let gap = CGSize(width: 22, height: 64)
 
     var body: some View {
         GeometryReader { geo in
-            let (at, extent) = Self.layout(nodes)
-            let scale = min(1, (geo.size.width - 40) / max(1, extent.width), (geo.size.height - 40) / max(1, extent.height))
-            let origin = CGPoint(x: (geo.size.width - extent.width * scale) / 2, y: (geo.size.height - extent.height * scale) / 2)
-            let place = { (p: CGPoint) in CGPoint(x: origin.x + p.x * scale, y: origin.y + p.y * scale) }
+            let (at, scale) = Self.viewport(nodes, in: geo.size)
             ZStack(alignment: .topLeading) {
-                Canvas { ctx, _ in
-                    for n in nodes {
-                        guard let p = n.parent, let a = at[p], let b = at[n.id] else { continue }
-                        let from = place(CGPoint(x: a.x + Self.size.width / 2, y: a.y + Self.size.height))
-                        let to = place(CGPoint(x: b.x + Self.size.width / 2, y: b.y))
-                        var path = Path()
-                        path.move(to: from)
-                        let mid = (from.y + to.y) / 2
-                        path.addCurve(to: to, control1: CGPoint(x: from.x, y: mid), control2: CGPoint(x: to.x, y: mid))
-                        let working = n.phase != "done" && n.phase != "faulted"
-                        ctx.stroke(path, with: .color(Theme.boundaryEdge.color(working ? 0.8 : 0.4)), lineWidth: 1)
+                ForEach(nodes) { n in
+                    if let parent = n.parent, let a = at[parent], let b = at[n.id] {
+                        TreeBranch(from: CGPoint(x: a.x + Self.size.width * scale / 2, y: a.y + Self.size.height * scale),
+                                   to: CGPoint(x: b.x + Self.size.width * scale / 2, y: b.y),
+                                   working: n.phase != "done" && n.phase != "faulted", animate: !motionReduced)
+                    }
+                }
+                ForEach(Array(activities.flatMap(\.transfers).prefix(16).enumerated()), id: \.offset) { index, activity in
+                    if let source = at[activity.from], let target = at[activity.to] {
+                        let downward = source.y < target.y
+                        let from = CGPoint(x: source.x + Self.size.width * scale / 2, y: source.y + (downward ? Self.size.height * scale : 0))
+                        let to = CGPoint(x: target.x + Self.size.width * scale / 2, y: target.y + (downward ? 0 : Self.size.height * scale))
+                        let edge = TreeEdge(from: from, to: to)
+                        edge.trim(from: motionReduced ? 0 : max(0, flight - 0.22), to: motionReduced ? 1 : flight)
+                            .stroke(activity.light.color(motionReduced ? 0.6 : 0.95), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .shadow(color: activity.light.color(0.6), radius: 5)
+                            .opacity(motionReduced ? 1 : 1 - flight)
+                        if activity.kind != "join" {
+                        Text(activity.caption).font(.system(size: 9, weight: .medium))
+                            .lineLimit(1).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Theme.sky.color(0.96)))
+                            .foregroundStyle(activity.light.color)
+                            .position(edge.point(0.35 + CGFloat(index % 3) * 0.15))
+                            .allowsHitTesting(false)
+                        }
                     }
                 }
                 ForEach(nodes) { n in
                     if let p = at[n.id] {
-                        TreeNodeCard(node: n, current: n.id == current)
+                        TreeNodeCard(node: n, current: n.id == current, activity: activities.last { $0.to == n.id || $0.from == n.id }, pulse: flight, arrival: arrival, waiting: breathing && !motionReduced && n.isWaiting)
                             .frame(width: Self.size.width, height: Self.size.height)
                             .scaleEffect(scale, anchor: .topLeading)
-                            .offset(x: place(p).x, y: place(p).y)
-                            .transition(.scale(scale: 0.6, anchor: .top).combined(with: .opacity))
+                            .offset(x: p.x, y: p.y)
+                            .transition(.asymmetric(insertion: .offset(y: -24).combined(with: .scale(scale: 0.75, anchor: .top)).combined(with: .opacity), removal: .opacity))
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.35), value: nodes)
+            .animation(motionReduced ? nil : .spring(response: 0.55, dampingFraction: 0.88), value: nodes)
         }
         .clipped()
+        .transaction { if motionReduced { $0.animation = nil } }
+        .task(id: event) {
+            guard !motionReduced else { flight = 1; arrival = 1; return }
+            var transaction = Transaction(); transaction.disablesAnimations = true
+            withTransaction(transaction) { flight = 0; arrival = 0 }
+            try? await Task.sleep(for: .milliseconds(30))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.85)) { flight = 1 }
+            try? await Task.sleep(for: .milliseconds(520))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.48)) { arrival = 1 }
+        }
+    }
+
+    /// Cards, branches and transfers all share this projection. Recompute it
+    /// for the available space instead of storing pixel locations in state.
+    static func viewport(_ nodes: [TreeRun.Node], in size: CGSize) -> ([String: CGPoint], CGFloat) {
+        let (points, extent) = layout(nodes)
+        let scale = max(0, min(1, (size.width - 40) / max(1, extent.width), (size.height - 40) / max(1, extent.height)))
+        let origin = CGPoint(x: (size.width - extent.width * scale) / 2, y: (size.height - extent.height * scale) / 2)
+        return (points.mapValues { CGPoint(x: origin.x + $0.x * scale, y: origin.y + $0.y * scale) }, scale)
     }
 
     static func layout(_ nodes: [TreeRun.Node]) -> ([String: CGPoint], CGSize) {
@@ -359,11 +426,20 @@ struct TreeGraph: View {
 private struct TreeNodeCard: View {
     let node: TreeRun.Node
     let current: Bool
+    var activity: TreeRun.Activity? = nil
+    var pulse: CGFloat = 1
+    var arrival: CGFloat = 1
+    var waiting = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let light = TreesWindow.color(node.phase)
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                if let activity {
+                    Image(systemName: activity.symbol).foregroundStyle(activity.light.color)
+                        .help(activity.caption)
+                }
                 Text(node.id).font(.system(size: 12, weight: .semibold, design: .monospaced))
                 Spacer(minLength: 0)
                 Text("\(node.kind) · \(node.phase)").font(.system(size: 10)).foregroundStyle(light.color)
@@ -381,6 +457,15 @@ private struct TreeNodeCard: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.userBG.color(0.92)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(light.color(current ? 0.95 : 0.45), lineWidth: current ? 1.5 : 1))
         .shadow(color: light.color(current ? 0.45 : 0), radius: 14)
+        .overlay {
+            if waiting, !reduceMotion { TreeWaitingLight(light: light) }
+            if let activity, !reduceMotion, activity.kind == "join" || activity.kind == "complete" {
+                TreeArrivalBloom(complete: activity.kind == "complete", progress: arrival)
+            } else if let activity, !reduceMotion {
+                RoundedRectangle(cornerRadius: 10).stroke(activity.light.color(0.65 * (1 - pulse)), lineWidth: 2)
+                    .scaleEffect(1 + pulse * 0.12).allowsHitTesting(false)
+            }
+        }
         .accessibilityElement(children: .combine)
     }
 }

@@ -52,6 +52,18 @@ Focus is enabled, or Reduce Motion is enabled. The procedure overview shows
 actors and tool counts; each procedure's inspector opens a scrollable list
 of actors and their tools.
 
+The Trees window shows accepted work as motion: new branches grow from their
+parents, spec cuts glow amber, passed observations travel downward, and results
+travel upward in green. Tool calls and faults pulse at their node. Click an
+activity chip to read a bounded payload preview and the source/destination name
+references. The timeline can replay those same events. Cards, curves and transfer
+labels share one layout projection as the window resizes. Live nodes waiting
+on tools or children breathe softly; paused history and inactive windows stop
+that motion. A parent resuming after all siblings return successfully draws their
+results together, and a successful root return blooms once. Faults and exits
+do not trigger a success bloom. Reduce Motion keeps static cues and readable
+activity details.
+
 The live tests drive the app's own session against a running backend:
 
 ```sh

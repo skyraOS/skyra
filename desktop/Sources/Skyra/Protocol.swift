@@ -123,11 +123,21 @@ struct TreeRun: Decodable, Equatable, Sendable, Identifiable {
         let why: String?
         let lost: [String]?
     }
+    struct Activity: Decodable, Equatable, Sendable {
+        let kind: String // cut | pass | return | tool | received | fault
+        let from: String
+        let to: String
+        let label: String
+        let preview: String?
+        let count: Int
+        var sources: [String]? = nil
+    }
     struct Frame: Decodable, Equatable, Sendable {
         let event: String // started | replied | returned | stopped
         let agent: String?
         let detail: String?
         let nodes: [Node]
+        let activities: [Activity]?
     }
     struct Replay: Decodable, Equatable, Sendable { let frames: [Frame] }
 
