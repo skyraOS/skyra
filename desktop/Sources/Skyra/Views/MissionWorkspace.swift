@@ -72,7 +72,7 @@ struct MissionSidebar: View {
                                     Text(mission.status).font(.system(size:10))
                                     Spacer(minLength:0)
                                 }.foregroundStyle(Theme.dim.color)
-                                Text("Chat  ·  \(mission.specLabel)  ·  Tree").font(.system(size:9)).foregroundStyle(Theme.dim.color(0.75))
+                                Text("Plan  ·  \(mission.specLabel)  ·  \(launchCount(session.launches(for:mission.id).count))").font(.system(size:9)).foregroundStyle(Theme.dim.color(0.75))
                             }
                             .frame(maxWidth:.infinity,alignment:.leading).padding(12)
                             .background(Theme.accent.color(session.selected == mission.id ? 0.12 : 0.025),in:RoundedRectangle(cornerRadius:10))
@@ -99,10 +99,12 @@ struct MissionSidebar: View {
     }
 }
 
+func launchCount(_ n:Int) -> String { n == 1 ? "1 launch" : "\(n) launches" }
+
 enum MissionStatus {
     static func color(_ mission:Mission) -> RGB {
         switch mission.status {
-        case "Running", "In conversation": Theme.accent
+        case "Launched", "Planning", "In conversation": Theme.accent
         case "Completed": Theme.operatorGreen
         case "Needs attention": Theme.amber
         default: Theme.dim
@@ -122,13 +124,13 @@ struct MissionWorkbench: View {
                     VStack(alignment:.leading,spacing:6) {
                         Text(session.currentMission?.title ?? "New mission")
                             .font(.system(size:19,weight:.medium)).lineLimit(2).textSelection(.enabled)
-                        Text(session.currentMission.map { "\($0.status) · \($0.specLabel)" } ?? "Conversation. Spec. Tree.")
+                        Text(session.currentMission.map { "\($0.status) · \($0.specLabel)" } ?? "Plan. Spec. Launch.")
                             .font(.system(size:11)).foregroundStyle(Theme.dim.color)
                     }
                     Spacer(minLength:12)
-                    Button { run() } label: { Label("Run",systemImage:"play.fill").font(.system(size:12,weight:.medium)).padding(.horizontal,12).padding(.vertical,7) }
-                        .buttonStyle(.plain).background(Theme.accent.color(canRun ? 0.18 : 0.04),in:Capsule())
-                        .disabled(!canRun).help("Execute this mission's saved spec revision")
+                    Button { launch() } label: { Label("Launch",systemImage:"paperplane.fill").font(.system(size:12,weight:.medium)).padding(.horizontal,12).padding(.vertical,7) }
+                        .buttonStyle(.plain).background(Theme.accent.color(canLaunch ? 0.18 : 0.04),in:Capsule())
+                        .disabled(!canLaunch).help("Pass the spec revision shown in Spec, with the tools it proposes, to a new Launch")
                 }
                 HStack(spacing:6) {
                     ForEach(MissionPane.allCases) { item in
@@ -140,39 +142,43 @@ struct MissionWorkbench: View {
                         }.accessibilityAddTraits(pane == item ? .isSelected : [])
                     }
                     Spacer()
-                    if let mission = session.currentMission, mission.tree?.phase == .running {
+                    if let mission = session.currentMission, mission.tree?.phase == .running || mission.work?.planning == true {
                         ProgressView().controlSize(.mini)
                     }
                 }.buttonStyle(.plain)
             }.padding(20)
             Divider().opacity(0.15)
             switch pane {
-            case .chat:
+            case .plan:
                 if session.current == nil || session.current?.entries.isEmpty == true { MissionWelcome(session:session) }
                 else { ConversationView(session:session).frame(maxHeight:.infinity) }
                 Composer(backend:backend,session:session,missionMode:true)
             case .spec:
                 if let id = session.selected {
                     ScrollView {
-                        ConversationSpec(session:session,conversationID:id,embedded:true).id(id)
+                        SpecPane(session:session,conversationID:id).id(id)
                     }.frame(maxHeight:.infinity)
                 } else { MissionStartPrompt(session:session,prompt:"Create a mission to start its spec.") }
-            case .tree:
-                MissionTreeSummary(session:session)
+            case .launches:
+                MissionLaunches(session:session)
             }
         }
         .foregroundStyle(Theme.ink.color)
-        .panel(radius:16,tintOpacity:pane == .tree ? 0.68 : 0.9)
+        .panel(radius:16,tintOpacity:pane == .launches ? 0.68 : 0.9)
+        .onChange(of:session.paneRequest) { _,request in
+            if let request { pane = request; session.paneRequest = nil }
+        }
     }
 
-    private var canRun: Bool {
-        guard let mission = session.currentMission, let work = mission.work else { return false }
-        return session.connected && !session.workPending && mission.tree?.phase != .running &&
-            !work.spec.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && !session.toolsForMission(mission.id).isEmpty && !session.hasUnsavedSpec(for:mission.id)
+    /// Launch runs the revision the Spec pane shows: the latest unless a
+    /// reply's revision was chosen.
+    private var canLaunch: Bool {
+        guard let id = session.selected else { return false }
+        return session.canLaunch(revision:session.shownRevision(for:id),conversationID:id)
     }
-    private func run() {
+    private func launch() {
         guard let id = session.selected else { return }
-        if session.runSpec(holding:session.toolsForMission(id),conversationID:id) { pane = .tree }
+        if session.launchSpec(conversationID:id) { pane = .launches }
     }
 }
 
@@ -184,7 +190,7 @@ private struct MissionWelcome: View {
             Image(systemName:"sparkle").font(.system(size:24,weight:.ultraLight)).foregroundStyle(Theme.accent.color)
             Text(session.current == nil ? "What should we work on?" : "Give this mission a direction.")
                 .font(.system(size:26,weight:.light))
-            Text("Start with a conversation. Shape a spec, then run it.\nYour mission's tree will grow in the sky.")
+            Text("Tell Plan what this mission should do. Each message is a Plan turn: Plan looks around,\nanswers, and keeps the spec, which Spec shows as it stands after each reply.\nLaunch passes a revision and its tools to a tree that grows in the sky.")
                 .font(.system(size:13)).lineSpacing(6).foregroundStyle(Theme.dim.color)
             HStack(spacing:18) {
                 ForEach(MissionPane.allCases) { item in Label(item.rawValue,systemImage:item.symbol).font(.system(size:11)).foregroundStyle(Theme.dim.color) }
@@ -205,30 +211,47 @@ private struct MissionStartPrompt: View {
     }
 }
 
-private struct MissionTreeSummary: View {
+/// A mission's Launches: the latest in detail, then every earlier one, each
+/// pinned to the spec revision it passed.
+private struct MissionLaunches: View {
     let session: Session
     @Environment(\.openWindow) private var openWindow
     var body: some View {
-        VStack(alignment:.leading,spacing:16) {
-            if let mission = session.currentMission {
-                Label(mission.status,systemImage:mission.tree?.phase == .running ? "waveform.path" : "point.3.connected.trianglepath.dotted")
-                    .font(.system(size:15,weight:.medium)).foregroundStyle(MissionStatus.color(mission).color)
-                if let tree = mission.tree {
-                    Text("Spec r\(tree.specRevision ?? 0) · \(tree.frames.last?.nodes.count ?? 0) agents")
-                        .font(.system(size:12)).foregroundStyle(Theme.dim.color)
-                    if let activities = tree.frames.last?.activities, !activities.isEmpty { TreeActivityDetails(activities:activities) }
-                    if let result = tree.answer ?? tree.error, !result.isEmpty {
-                        ScrollView { Text(result).font(.system(size:13)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading) }.frame(maxHeight:200)
+        ScrollView {
+            VStack(alignment:.leading,spacing:16) {
+                if let mission = session.currentMission {
+                    let launches = session.launches(for:mission.id)
+                    Label(mission.status,systemImage:mission.tree?.phase == .running ? "waveform.path" : "point.3.connected.trianglepath.dotted")
+                        .font(.system(size:15,weight:.medium)).foregroundStyle(MissionStatus.color(mission).color)
+                    if let tree = mission.tree {
+                        Text("Spec r\(tree.specRevision ?? 0) · \(tree.reach.joined(separator:", ")) · \(tree.frames.last?.nodes.count ?? 0) agents")
+                            .font(.system(size:12)).foregroundStyle(Theme.dim.color)
+                        if let activities = tree.frames.last?.activities, !activities.isEmpty { TreeActivityDetails(activities:activities) }
+                        if let result = tree.answer ?? tree.error, !result.isEmpty {
+                            ScrollView { Text(result).font(.system(size:13)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading) }.frame(maxHeight:200)
+                        }
+                        Button("Inspect launch",systemImage:"arrow.up.right.square") { openWindow(id:"trees") }
+                            .font(.system(size:12)).buttonStyle(.plain)
+                    } else {
+                        Text("Launch a saved spec to grow this mission's tree. The sky stays connected to this mission as you work.")
+                            .font(.system(size:13)).lineSpacing(5).foregroundStyle(Theme.dim.color)
                     }
-                    Button("Inspect execution",systemImage:"arrow.up.right.square") { openWindow(id:"trees") }
-                        .font(.system(size:12)).buttonStyle(.plain)
-                } else {
-                    Text("Run a saved spec to grow this mission's tree. The sky stays connected to this mission as you work.")
-                        .font(.system(size:13)).lineSpacing(5).foregroundStyle(Theme.dim.color)
-                }
-            } else { Text("Select a mission to see its tree.").foregroundStyle(Theme.dim.color) }
-            if !session.notice.isEmpty { Text(session.notice).font(.caption).foregroundStyle(Theme.dim.color) }
-        }.padding(22).frame(maxWidth:.infinity,alignment:.leading)
+                    if launches.count > 1 {
+                        Text("EARLIER LAUNCHES").font(.system(size:10,weight:.semibold)).tracking(2).foregroundStyle(Theme.dim.color).padding(.top,6)
+                        ForEach(launches.dropFirst()) { run in
+                            HStack(spacing:8) {
+                                Circle().fill((run.phase == .done ? Theme.operatorGreen : run.phase == .failed ? Theme.amber : Theme.accent).color).frame(width:4,height:4)
+                                Text("Spec r\(run.specRevision ?? 0)").font(.system(size:12,weight:.medium))
+                                Text(run.reach.joined(separator:", ")).font(.system(size:11)).foregroundStyle(Theme.dim.color)
+                                Spacer()
+                                Text(run.phase.rawValue).font(.system(size:11)).foregroundStyle(Theme.dim.color)
+                            }
+                        }
+                    }
+                } else { Text("Select a mission to see its launches.").foregroundStyle(Theme.dim.color) }
+                if !session.notice.isEmpty { Text(session.notice).font(.caption).foregroundStyle(Theme.dim.color) }
+            }.padding(22).frame(maxWidth:.infinity,alignment:.leading)
+        }.frame(maxHeight:.infinity)
     }
 }
 
@@ -256,7 +279,7 @@ private struct MissionSettings: View {
             Button("Penpot design tools…") { showPenpot = true }
                 .disabled(session.current?.phase == .pending)
                 .sheet(isPresented:$showPenpot) { PenpotSheet(backend:backend) }
-            Text("Chat shapes the work. Run executes a saved spec.").font(.caption).foregroundStyle(Theme.dim.color)
+            Text("Every message is a Plan turn: Plan answers and keeps the spec. Launch passes a revision, with the tools it proposes.").font(.caption).foregroundStyle(Theme.dim.color)
         }
     }
 }

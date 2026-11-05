@@ -13,8 +13,43 @@ name or model-authored schema cannot substitute for a held capability.
 The public schemas are in `contracts/`:
 
 - `plan.json`: a request observation and explicit context observations.
-- `spec.json`: version, goal, input observation references and proposed capability
-  references. This is the Plan result's value schema, not another executable.
+- `spec.json`: version 3, goal, segments, coverage, input observation
+  references, proposed capability references and the profile. This is the
+  Plan result's value schema, not another executable.
+
+Every Spec states its `profile`, required: the constants Launch's tree runs
+under, which its root sets for every agent in it. `act` is the most contracts
+one node holds and still invokes itself, past which it delegates; `turns`,
+`depth`, `fanout` (at most 32, the kernel's) and `budget` bound each agent's
+turns, the tree's depth, the instructions in one call and the turns of the
+whole tree. `DecodeSpec` refuses a Spec
+without one or with one that cannot run a tree, and `Resolve` takes Launch's
+root kind from the act bound (`Profile.KindOf`) and passes the profile into
+the tree's input. A changed profile is a changed task (`SameTask`).
+`DefaultProfile`, `{act 1, turns 8, depth 3, fanout 32, budget 64}`, is the one-contract
+tree; the proposer must state a profile too, and a human save keeps the last
+revision's unless it sets one.
+
+A Spec's goal is made of segments, each with its source: `cited`, a quote
+of at least `MinQuote` (3) words from an observation, by its reference;
+`plan`, words Plan added; or `human`, words the human wrote. `coverage` counts
+the goal's words by source. Both are derived: `DecodeSpec` refuses a Spec
+whose goal or coverage is not what its segments assemble, and `Resolve` (so
+`AuthorSpec`, `StartLaunch` and `ValidateHandoff`) refuses a cited segment the
+named held observation does not contain, verbatim but for whitespace.
+`Propose` builds segments from the proposer's `goal`: `{"quote", "of"}` or
+`{"text"}`. A shorter quote counts as Plan's, so scattered words cannot pad
+coverage, and the line-number gutter a passed observation is shown with is
+removed from quotes. Plan can always add words; each one lowers its coverage.
+
+Revisions build on the last Spec. `Revise` turns the human's edited text into
+segments by a word diff against the previous Spec: kept words keep their
+segment's source, inserted or changed words are `human`, and a cited run the
+edit broke or cut below `MinQuote` becomes `human`; inputs carry over. So an
+edit never relabels Plan's words as the human's. A Spec may itself be quoted
+(Plan refining one): `CheckCites` accepts a quote of a Spec only within one of
+its `human` or `cited` segments, never its `plan` ones, so Plan must add its
+own earlier words again as its own.
 - `launch.json`: the exact approved Spec observation.
 
 Transported observations carry their reference, producer binary/input contract,

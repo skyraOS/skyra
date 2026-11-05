@@ -153,7 +153,7 @@ func mustJSON(v any) []byte {
 // the reach and kind given; self is also the actor that runs every child.
 func (s *shell) start(k Kind, reach []Contract, depth int) (Tree, []Effect) {
 	s.t.Helper()
-	return s.step(NewTree(app, depth), Started{Self: self, Reach: reach, Kind: k, Actor: self, Endowment: shapeS})
+	return s.step(NewTree(app, deep(depth)), Started{Self: self, Reach: reach, Kind: k, Actor: self, Endowment: shapeS})
 }
 
 func (s *shell) reply(tr Tree, id AgentID, out string) (Tree, []Effect) {
@@ -459,7 +459,7 @@ func TestStepChildRefused(t *testing.T) {
 		{"past the depth bound", self, 0, `[0]`},
 	} {
 		sh := newShell(t)
-		tr, _ := sh.step(NewTree(app, tc.depth), Started{Self: self, Reach: []Contract{x, y, z}, Kind: KindDelegate, Actor: tc.actor, Endowment: shapeS})
+		tr, _ := sh.step(NewTree(app, deep(tc.depth)), Started{Self: self, Reach: []Contract{x, y, z}, Kind: KindDelegate, Actor: tc.actor, Endowment: shapeS})
 		tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":`+tc.pass+`}}]`)
 		if agent(t, tr, "0.0").Phase != PhaseFaulted {
 			t.Errorf("%s: the child is not refused", tc.name)
@@ -482,7 +482,7 @@ func TestStepRootKind(t *testing.T) {
 	if tr, _ := sh.start(KindDelegate, []Contract{x, selfOther}, 3); agent(t, tr, "0").Phase != PhaseFaulted {
 		t.Error("a root reaching its own binary")
 	}
-	if tr, _ := sh.step(NewTree(app, 3), Started{Self: self, Kind: 0, Actor: self, Endowment: shapeS}); agent(t, tr, "0").Phase != PhaseFaulted {
+	if tr, _ := sh.step(NewTree(app, deep(3)), Started{Self: self, Kind: 0, Actor: self, Endowment: shapeS}); agent(t, tr, "0").Phase != PhaseFaulted {
 		t.Error("a root with no kind")
 	}
 }
@@ -666,12 +666,12 @@ func TestStepReplays(t *testing.T) {
 	}
 }
 
-// An agent takes at most MaxTurns turns: past it, it faults, and its
+// An agent takes at most DefaultProfile.Turns turns: past it, it faults, and its
 // parent goes on.
 func TestStepTurnBound(t *testing.T) {
 	sh := newShell(t)
 	tr, _ := sh.start(KindDelegate, []Contract{x, y}, 3)
-	for i := 1; i < MaxTurns; i++ {
+	for i := 1; i < DefaultProfile.Turns; i++ {
 		tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`) // a goal alone: the model goes on
 		if a := agent(t, tr, "0"); a.Phase != PhaseThinking || a.Turns != i+1 {
 			t.Fatalf("turn %d: %v after %d turns", i, a.Phase, a.Turns)
@@ -700,7 +700,7 @@ func TestStepChildFaultIsState(t *testing.T) {
 	}
 	// A child refused at provisioning is shown the same way.
 	sh = newShell(t)
-	tr, _ = sh.step(NewTree(app, 0), Started{Self: self, Reach: []Contract{x}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
+	tr, _ = sh.step(NewTree(app, deep(0)), Started{Self: self, Reach: []Contract{x}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
 	_, es = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
 	if f := turnFor(t, es, "0").Faults; len(f) != 1 || f[0].Why != "the depth bound" {
 		t.Fatalf("a refused child: %+v", f)
@@ -857,5 +857,96 @@ func TestStepResultsAreTheirValues(t *testing.T) {
 		if got := ns[len(ns)-1].Obs.Equal(ns[len(ns)-2].Obs); got != tc.same {
 			t.Errorf("%q and %q: one observation %v; want %v", tc.a, tc.b, got, tc.same)
 		}
+	}
+}
+
+// deep is the default profile at a depth bound.
+func deep(depth int) Profile {
+	p := DefaultProfile
+	p.Depth = depth
+	return p
+}
+
+// The root's profile is the tree's constants: every agent runs under them.
+// Under an act bound of 2, a child passed two contracts acts, and invokes
+// either; under 1 it delegates.
+func TestStepProfileActBound(t *testing.T) {
+	for _, tc := range []struct {
+		act  int
+		want Kind
+	}{{1, KindDelegate}, {2, KindAct}, {3, KindAct}} {
+		sh := newShell(t)
+		p := DefaultProfile
+		p.Act = tc.act
+		tr, _ := sh.step(NewTree(app, p), Started{Self: self, Reach: []Contract{x, y, z}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
+		tr, es := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0,1]}}]`)
+		child := agent(t, tr, "0.0")
+		if child.Kind != tc.want {
+			t.Fatalf("act %d: a child holding two is %v, want %v", tc.act, child.Kind, tc.want)
+		}
+		if tc.want != KindAct {
+			continue
+		}
+		if tn := turnFor(t, es, "0.0"); len(tn.Offer.Invoke) != 2 {
+			t.Fatalf("act %d: the child may invoke %d contracts, want 2", tc.act, len(tn.Offer.Invoke))
+		}
+		_, es = sh.reply(tr, "0.0", `[{"create_input":"go"},{"perform_effect":{"contract":1,"input":{"earlier":0}}}]`)
+		if d := dispatches(es); len(d) != 1 || d[0].Contract != y {
+			t.Fatalf("act %d: the child did not invoke the contract it chose: %+v", tc.act, d)
+		}
+	}
+}
+
+// The turn and fan-out bounds are the profile's.
+func TestStepProfileBounds(t *testing.T) {
+	sh := newShell(t)
+	p := DefaultProfile
+	p.Turns, p.FanOut = 2, 2
+	tr, _ := sh.step(NewTree(app, p), Started{Self: self, Reach: []Contract{x, y}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
+	tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`)
+	if a := agent(t, tr, "0"); a.Phase != PhaseThinking || a.Turns != 2 {
+		t.Fatalf("turn 2 under a bound of 2: %v after %d", a.Phase, a.Turns)
+	}
+	wide, _ := sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"goal":{"of":0,"lines":[1,1]}},{"goal":{"of":0,"lines":[1,1]}}]`)
+	if a := agent(t, wide, "0"); a.Phase != PhaseFaulted || a.Why != "a call of more than 2 instructions" {
+		t.Fatalf("three instructions under a fan-out of 2: %v %q", a.Phase, a.Why)
+	}
+	tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}}]`)
+	if a := agent(t, tr, "0"); a.Phase != PhaseFaulted || a.Why != "the turn bound" {
+		t.Fatalf("past a turn bound of 2: %v %q", a.Phase, a.Why)
+	}
+}
+
+// A profile that cannot run a tree faults its root before anything runs.
+func TestStepProfileRefused(t *testing.T) {
+	for _, p := range []Profile{
+		{Act: 0, Turns: 8, Depth: 3, FanOut: 32, Budget: 64},
+		{Act: 1, Turns: 0, Depth: 3, FanOut: 32, Budget: 64},
+		{Act: 1, Turns: 8, Depth: -1, FanOut: 32, Budget: 64},
+		{Act: 1, Turns: 8, Depth: 3, FanOut: MaxFanOut + 1, Budget: 64},
+		{Act: 1, Turns: 8, Depth: 3, FanOut: 32, Budget: 0},
+	} {
+		sh := newShell(t)
+		tr, es := sh.step(NewTree(app, p), Started{Self: self, Reach: []Contract{x}, Kind: KindAct, Actor: self, Endowment: shapeS})
+		if a := agent(t, tr, "0"); a.Phase != PhaseFaulted || p.Check() == "" || len(turns(es)) != 0 {
+			t.Fatalf("%+v ran: %v", p, a.Phase)
+		}
+	}
+}
+
+// The budget bounds the whole tree's turns: a child that would take the
+// tree past it faults, and so does its parent when its turn comes.
+func TestStepProfileBudget(t *testing.T) {
+	sh := newShell(t)
+	p := DefaultProfile
+	p.Budget = 2
+	tr, _ := sh.step(NewTree(app, p), Started{Self: self, Reach: []Contract{x, y}, Kind: KindDelegate, Actor: self, Endowment: shapeS})
+	tr, _ = sh.reply(tr, "0", `[{"goal":{"of":0,"lines":[1,1]}},{"delegate":{"observations":[{"earlier":0}],"contracts":[0]}}]`)
+	if a := agent(t, tr, "0.0"); a.Phase != PhaseThinking || tr.TurnsTaken() != 2 {
+		t.Fatalf("the child's turn is the budget's second: %v, %d taken", a.Phase, tr.TurnsTaken())
+	}
+	tr, _ = sh.reply(tr, "0.0", `[{"exit":"done"}]`)
+	if a := agent(t, tr, "0"); a.Phase != PhaseFaulted || a.Why != "the tree's budget" {
+		t.Fatalf("past the budget, the root: %v %q", a.Phase, a.Why)
 	}
 }

@@ -148,7 +148,7 @@ func TestKindByCount(t *testing.T) {
 		{[]Contract{x, y, z}, KindDelegate},
 		{[]Contract{x, x2, y, z}, KindDelegate},
 	} {
-		got, ok := Classify(app, self, tc.reach)
+		got, ok := Classify(app, 1, self, tc.reach)
 		if !ok || got != tc.want {
 			t.Errorf("Classify(%s) = %v, %v; want %v", names(tc.reach), got, ok, tc.want)
 		}
@@ -165,7 +165,7 @@ func TestDuplicatesCountOnce(t *testing.T) {
 		{[]Contract{x, x, x, x}, KindAct},
 		{[]Contract{x, y, x, y}, KindDelegate},
 	} {
-		if got, ok := Classify(app, self, tc.reach); !ok || got != tc.want {
+		if got, ok := Classify(app, 1, self, tc.reach); !ok || got != tc.want {
 			t.Errorf("Classify(%s) = %v, %v; want %v", names(tc.reach), got, ok, tc.want)
 		}
 	}
@@ -173,7 +173,7 @@ func TestDuplicatesCountOnce(t *testing.T) {
 
 // The count compares contracts: two shapes of one binary are two contracts.
 func TestTwoShapesOfOneBinaryAreTwo(t *testing.T) {
-	if got, ok := Classify(app, self, []Contract{x, x2}); !ok || got != KindDelegate {
+	if got, ok := Classify(app, 1, self, []Contract{x, x2}); !ok || got != KindDelegate {
 		t.Errorf("Classify([x, x2]) = %v, %v; want delegate", got, ok)
 	}
 }
@@ -185,7 +185,7 @@ func TestRefusedFirstAtEveryCount(t *testing.T) {
 	for _, own := range []Contract{self, selfOther} {
 		for n := 0; n <= len(others); n++ {
 			reach := append([]Contract{own}, others[:n]...)
-			if k, ok := Classify(app, self, reach); ok {
+			if k, ok := Classify(app, 1, self, reach); ok {
 				t.Errorf("Classify(%s) = %v; want refused (own binary, %d others)", names(reach), k, n)
 			}
 		}
@@ -198,10 +198,10 @@ func TestRefusedFirstAtEveryCount(t *testing.T) {
 func TestApprenticeContractsNeverCount(t *testing.T) {
 	subsets := reaches(app.all(), 2)
 	for _, reach := range reaches([]Contract{self, selfOther, x, x2, y}, 3) {
-		wantK, wantOK := Classify(app, self, reach)
+		wantK, wantOK := Classify(app, 1, self, reach)
 		for _, add := range subsets {
 			for _, r := range [][]Contract{append(slices.Clone(reach), add...), append(slices.Clone(add), reach...)} {
-				k, ok := Classify(app, self, r)
+				k, ok := Classify(app, 1, self, r)
 				if k != wantK || ok != wantOK {
 					t.Fatalf("Classify(%s) = %v, %v; without the apprentice's %s it is %v, %v",
 						names(r), k, ok, names(add), wantK, wantOK)
@@ -215,7 +215,7 @@ func TestApprenticeContractsNeverCount(t *testing.T) {
 // nothing in reach, or only the apprentice's, is refused.
 func TestDelegatePassesOne(t *testing.T) {
 	for _, reach := range [][]Contract{nil, app.all()} {
-		if k, ok := Classify(app, self, reach); ok {
+		if k, ok := Classify(app, 1, self, reach); ok {
 			t.Errorf("Classify(%s) = %v; want refused", names(reach), k)
 		}
 	}
@@ -226,7 +226,7 @@ func TestDelegatePassesOne(t *testing.T) {
 // it.
 func TestRootKindGiven(t *testing.T) {
 	for _, reach := range reaches(append([]Contract{self, selfOther}, others...), 3) {
-		_, selfOK := Classify(app, self, append(slices.Clone(reach), x))
+		_, selfOK := Classify(app, 1, self, append(slices.Clone(reach), x))
 		for _, k := range kinds {
 			got, ok := RootKind(app, self, reach, k)
 			if ok != selfOK || ok && got != k {
@@ -255,7 +255,7 @@ func TestParts(t *testing.T) {
 func TestTotality(t *testing.T) {
 	n := 0
 	for _, reach := range reaches(pool, 4) {
-		k, ok := Classify(app, self, reach)
+		k, ok := Classify(app, 1, self, reach)
 		wk, wok := spec(self, reach)
 		if ok != wok || (ok && k != wk) {
 			t.Fatalf("Classify(%s) = %v, %v; want %v, %v", names(reach), k, ok, wk, wok)
@@ -301,12 +301,12 @@ func TestLoadedByKind(t *testing.T) {
 // Loading the kind's contracts does not change the kind.
 func TestLoadingDoesNotChangeTheKind(t *testing.T) {
 	for _, reach := range reaches(others, 3) {
-		k, ok := Classify(app, self, reach)
+		k, ok := Classify(app, 1, self, reach)
 		if !ok {
 			continue
 		}
 		loaded := append(slices.Clone(reach), Loaded(app, k)...)
-		if k2, ok2 := Classify(app, self, loaded); !ok2 || k2 != k {
+		if k2, ok2 := Classify(app, 1, self, loaded); !ok2 || k2 != k {
 			t.Fatalf("Classify(%s) = %v; with its loaded contracts %s it is %v, %v", names(reach), k, names(loaded), k2, ok2)
 		}
 	}
@@ -528,13 +528,13 @@ func FuzzClassify(f *testing.F) {
 			return out
 		}
 		reach := pick(reachIdx, pool)
-		k, ok := Classify(app, self, reach)
+		k, ok := Classify(app, 1, self, reach)
 		wk, wok := spec(self, reach)
 		if ok != wok || (ok && k != wk) {
 			t.Fatalf("Classify(%s) = %v, %v; want %v, %v", names(reach), k, ok, wk, wok)
 		}
 		withApp := append(slices.Clone(reach), pick(addIdx, app.all())...)
-		if k2, ok2 := Classify(app, self, withApp); k2 != k || ok2 != ok {
+		if k2, ok2 := Classify(app, 1, self, withApp); k2 != k || ok2 != ok {
 			t.Fatalf("Classify(%s) = %v, %v; without the apprentice's it is %v, %v", names(withApp), k2, ok2, k, ok)
 		}
 	})

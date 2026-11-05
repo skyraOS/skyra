@@ -13,7 +13,14 @@ struct ConversationView: View {
                             LazyVStack(spacing: 12) {
                                 ForEach(c.entries.indices, id: \.self) { index in
                                     let e = c.entries[index]
-                                    if let call = e.call { Ledger(call: call) } else { Message(entry: e) }
+                                    if let call = e.call { Ledger(call: call) }
+                                    else {
+                                        Message(entry: e) { n in
+                                            // A reply's revision: the Spec as it stood after that turn.
+                                            session.showRevision(n, for: c.id)
+                                            session.paneRequest = .spec
+                                        }
+                                    }
                                 }
                                 if c.phase == .pending { Working().frame(maxWidth: .infinity, alignment: .leading) }
                                 Color.clear.frame(height: 1).id("end").background {
@@ -85,14 +92,26 @@ struct ReadingColumn: PreferenceKey {
 }
 struct Message: View {
     let entry: Entry
+    var onRevision: ((Int) -> Void)? = nil
     var body: some View {
         HStack {
             if entry.isUser { Spacer(minLength: 60) }
-            Text(Self.rendered(entry.text)).font(.system(size: 15)).lineSpacing(4)
-                .foregroundStyle(!entry.isUser && entry.text.hasPrefix("⚠") ? Theme.red.color : Theme.ink.color)
-                .tint(Theme.accent.color).textSelection(.enabled)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .fadedBubble(tint: entry.isUser ? Theme.userBG : Theme.sky, strength: entry.isUser ? 0.85 : 0.35)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(Self.rendered(entry.text)).font(.system(size: 15)).lineSpacing(4)
+                    .foregroundStyle(!entry.isUser && entry.text.hasPrefix("⚠") ? Theme.red.color : Theme.ink.color)
+                    .tint(Theme.accent.color).textSelection(.enabled)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .fadedBubble(tint: entry.isUser ? Theme.userBG : Theme.sky, strength: entry.isUser ? 0.85 : 0.35)
+                if let n = entry.revision, n > 0, let onRevision {
+                    Button { onRevision(n) } label: {
+                        Label("Spec r\(n)", systemImage: "doc.text").font(.system(size: 11, weight: .medium))
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(Theme.accent.color(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Theme.accent.color).padding(.leading, 10)
+                    .help("Show the spec as this reply left it")
+                }
+            }
             if !entry.isUser { Spacer(minLength: 24) }
         }
     }

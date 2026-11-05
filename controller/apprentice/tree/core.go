@@ -156,8 +156,8 @@ type Kind uint8
 
 const (
 	_            Kind = iota
-	KindAct           // one contract: it performs effects through it
-	KindDelegate      // two or more: it delegates
+	KindAct           // at most the act bound: it performs effects through them
+	KindDelegate      // more than the act bound: it delegates
 )
 
 func (k Kind) String() string {
@@ -587,19 +587,20 @@ func counted(a Apprentice, reach []Contract) []Contract {
 	return out
 }
 
-// kind is the kind from the contracts counted: none for none, as a delegate
-// passes at least one contract.
-func kind(cs []Contract) (Kind, bool) {
+// kind is the kind from the contracts counted, under the tree's act bound:
+// none for none, as a delegate passes at least one contract; act while there
+// are at most act; delegate past it.
+func kind(act int, cs []Contract) (Kind, bool) {
 	var distinct []Contract
 	for _, c := range cs {
 		if !slices.Contains(distinct, c) {
 			distinct = append(distinct, c)
 		}
 	}
-	switch len(distinct) {
-	case 0:
+	switch n := len(distinct); {
+	case n == 0:
 		return 0, false
-	case 1:
+	case n <= act:
 		return KindAct, true
 	}
 	return KindDelegate, true
@@ -614,15 +615,16 @@ func reachesSelf(a Apprentice, self Contract, reach []Contract) bool {
 	return false
 }
 
-// Classify is what the core runs, in the observe phase, for a child. The
+// Classify is what the core runs, in the observe phase, for a child, under
+// the tree's act bound. The
 // apprentice's contracts count for neither the self check nor the kind. It
 // refuses a child whose own binary is in the rest of its reach, at every
 // count, and a delegate that passed nothing.
-func Classify(a Apprentice, self Contract, reach []Contract) (Kind, bool) {
+func Classify(a Apprentice, act int, self Contract, reach []Contract) (Kind, bool) {
 	if reachesSelf(a, self, reach) {
 		return 0, false
 	}
-	return kind(counted(a, reach))
+	return kind(act, counted(a, reach))
 }
 
 // RootKind: the root is not classified by its reach, as no delegate chose

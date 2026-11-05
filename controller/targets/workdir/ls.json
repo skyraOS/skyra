@@ -1,0 +1,30 @@
+{
+  "input": {
+    "title": "ls",
+    "type": "object",
+    "fields": {
+      "ls": {
+        "type": "object",
+        "fields": {
+          "dir": {
+            "type": "object",
+            "fields": {
+              "dir": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dir"
+            ]
+          }
+        },
+        "required": [
+          "dir"
+        ]
+      }
+    },
+    "required": [
+      "ls"
+    ]
+  }
+}

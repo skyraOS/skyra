@@ -309,11 +309,11 @@ def files (w : World) : List (String × List Json) :=
       (upTo [w.g1, w.w1, w.e1, w.e2, w.k1] 2).map fun returned =>
         case (Json.mkObj [("created", jList jObs created), ("returned", jList jObs returned)])
           (.bool (mayReturn created returned))),
-    ("classify", agents.flatMap fun self =>
+    ("classify", agents.flatMap fun self => ([1, 2, 3] : List Nat).flatMap fun act =>
       (upTo (agents ++ [w.app.exit, w.app.goal, w.app.observe]) 3).map fun reach =>
-        case (Json.mkObj [("self", jContract self),
+        case (Json.mkObj [("self", jContract self), ("act", Lean.Json.num (Lean.JsonNumber.fromNat act)),
             ("reach", jList jContract reach)])
-          (jOpt jKind (classify w.app self reach))),
+          (jOpt jKind (classify act w.app self reach))),
     ("rootKind", agents.flatMap fun self => kinds.flatMap fun k =>
       (upTo (agents ++ [w.app.exit]) 2).map fun reach =>
         case (Json.mkObj [("self", jContract self), ("reach", jList jContract reach),

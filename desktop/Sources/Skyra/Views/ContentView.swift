@@ -7,7 +7,7 @@ struct ContentView: View {
     @State private var sky = SkyModel()
     @State private var archivePresented = false
     @State private var sidebarVisible = true
-    @State private var pane = MissionPane.chat
+    @State private var pane = MissionPane.plan
     @State private var active = true
     @State private var visible = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -30,7 +30,7 @@ struct ContentView: View {
                             }
                             MissionWorkbench(backend:backend,session:session,pane:$pane)
                                 .frame(width:MissionLayout.panelWidth(in:geometry.size,sidebar:sidebarVisible))
-                                .frame(maxHeight:pane == .tree ? nil : .infinity,alignment:.top)
+                                .frame(maxHeight:pane == .launches ? nil : .infinity,alignment:.top)
                                 .background {
                                     GeometryReader { panel in
                                         Color.clear.preference(key:MissionPanelFrame.self,value:panel.frame(in:.named("sky")))

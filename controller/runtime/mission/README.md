@@ -1,8 +1,8 @@
 # Trusted Mission bridge
 
 This package connects `core/mission` to the durable human-root journal and the
-existing kernel/worker runtime. The desktop's current chat/run handlers are not
-yet routed through this API.
+existing kernel/worker runtime. The webhost (`hosts/web/mission.go`) routes
+every Mission's save, Plan and Launch through it.
 
 The embedding host performs these operations:
 
@@ -13,8 +13,28 @@ The embedding host performs these operations:
    `Open` pins these endpoints and the offered catalogue in a Mission journal.
 3. Author the human request with `Root.Author`. `StartPlan` commits its invocation
    and passes only explicit request/context observations and capabilities.
-4. Run the Plan adapter. `ReceivePlan` requires the host's trusted receipt reader
-   and exactly one valid Spec. Plan may cite only inputs it received; proposed
+4. `ExecutePlan(ctx, kernel, actor, plan)` runs the committed Plan once
+   through the kernel. `Open` takes a planner catalogue of exactly two
+   ordinary contracts, which join the root's ceiling, and Plan's grant
+   (`PlanGrant`) must be both: `view-plan-contracts`, which returns the contracts
+   the human holds for Launch (their refs, tools, inputs and scopes), and
+   `propose-spec`, whose input names tools from that returned observation and
+   resolves them to refs, and states the profile Launch's tree runs under
+   (kept from the current spec unless the human asks otherwise). Plan's own
+   tree runs under `PlanProfile`, `{act 5, turns 24, depth 1, fanout 8,
+   budget 60}`: its five navigation contracts fit one act node, an explorer
+   that looks around in its own turns, and the root goes no deeper than its
+   children. A Plan turn that runs out says so as Plan's reply. A planner may also hold `Navigation`: `plan.pwd`,
+   `plan.cd`, `plan.ls`, `plan.find` and `plan.read` (`targets/workdir`), read-only in the
+   workspace, where a location is an observation: pwd and cd return
+   `{"dir": …}`, and cd, ls, find and read take one as their `dir`. Plan is a
+   delegate: each child holds one of these, passed what earlier ones
+   returned, and its goal has one line per contract for the root to cut. The host writes the view into the
+   viewer's own state before the tree boots, and the claim binds it. Its
+   receipt is checked by replay. `ReceivePlan` requires the host's trusted
+   receipt reader and exactly one valid Spec. Plan may cite, and quote in its goal's
+   segments, only inputs it received, and each quote must be in the observation
+   it names (see `core/mission`: coverage is part of the Spec); proposed
    capabilities must exist in the offered catalogue. There is no generic
    JSON-to-trusted-receipt API. An explicit human edit uses `AuthorSpec` and
    retains a human source.
@@ -50,7 +70,7 @@ retry or recovery of an unknown execution outcome. It guarantees at most one
 dispatch attempt, not exactly-once external effects. A separate explicit human
 invocation may create a new Launch.
 
-The Plan execution adapter and desktop wiring remain integration work. The
-bridge tests exercise Plan receipts with a trusted test reader; the macOS kernel
-integration test executes a human-authored Spec through a real kernel, worker,
-deterministic actor and echo tool without a provider or network dependency.
+The bridge tests exercise Plan receipts with a trusted test reader. The macOS
+kernel integration tests, here (`skyra/mission_test.go`) and in the webhost,
+run Plan and then Launch through a real kernel, worker, `propose-spec`,
+deterministic actors and the echo tool, without a provider or network.

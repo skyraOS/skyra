@@ -252,7 +252,7 @@ func mustText(s string) []byte {
 // What each kind is granted is what it loads, and nothing else.
 func TestEachKindIsGrantedItsInstructions(t *testing.T) {
 	names := func(act bool) (out []string) {
-		for _, in := range instructions(act) {
+		for _, in := range instructions(act, 1) {
 			out = append(out, in["name"].(string))
 		}
 		return
@@ -319,7 +319,7 @@ func TestATurnIsItsNode(t *testing.T) {
 		}
 		act := node.Kind == tree.KindAct
 		var want, got []string
-		for _, in := range instructions(act) {
+		for _, in := range instructions(act, 1) {
 			want = append(want, in["name"].(string))
 		}
 		for _, in := range p.Instructions {
@@ -377,7 +377,7 @@ func replayed(t *testing.T, dir, frame string) *shell {
 	if err := s.setup(in.Tree); err != nil {
 		t.Fatal(err)
 	}
-	s.tree = tree.NewTree(s.app, s.depth)
+	s.tree = tree.NewTree(s.app, s.profile)
 	for _, l := range s.state.Log {
 		e, err := s.decode(l)
 		if err != nil {
@@ -451,5 +451,44 @@ func TestAGoalIsCutFromTheSpec(t *testing.T) {
 	}
 	if got, _ := run(one("[2,9]")); !strings.Contains(string(got), "a goal cut lines 2 to 9 of name 0, which has 3") {
 		t.Fatalf("a cut past the end: %s", got)
+	}
+}
+
+// The profile is set in the tree's input, at its root: its model is told the
+// turn bound and, as a delegate, the act bound its children's kinds follow
+// from. With none, the default profile; a profile that cannot run a tree is
+// refused.
+func TestTheRootSetsTheProfile(t *testing.T) {
+	for _, tc := range []struct {
+		profile *tree.Profile
+		turns   string
+		passing string
+	}{
+		{nil, "You have 8 turns at most", "Pass exactly one contract"},
+		{&tree.Profile{Act: 3, Turns: 5, Depth: 2, FanOut: 4, Budget: 20}, "The whole tree has 19 turns left", "Pass at most 3 contracts"},
+	} {
+		var text, described string
+		spy := func(to string, payload json.RawMessage) Step {
+			var p struct {
+				Text         string
+				Instructions []struct{ Name, Description string }
+			}
+			json.Unmarshal(payload, &p)
+			text = p.Text
+			for _, in := range p.Instructions {
+				if in.Name == "delegate" {
+					described = in.Description
+				}
+			}
+			return Step{To: to, State: "return", Value: json.RawMessage(`{"text":"[{\"exit\":\"looked\"}]"}`)}
+		}
+		kernel(t, t.TempDir(), "f", Ask{Goal: "g", Kind: "delegate", Actor: "model", Reach: []string{"echo"}, Profile: tc.profile}, spy)
+		if !strings.Contains(text, tc.turns) || !strings.Contains(text, tc.passing) || !strings.Contains(described, tc.passing) {
+			t.Fatalf("profile %+v: the model was told %q / %q", tc.profile, text, described)
+		}
+	}
+	s := &shell{reach: reach}
+	if err := s.setup(Ask{Goal: "g", Kind: "act", Actor: "model", Reach: []string{}, Profile: &tree.Profile{Act: 0, Turns: 8, Depth: 3, FanOut: 32, Budget: 64}}); err == nil || !strings.Contains(err.Error(), "act bound") {
+		t.Fatalf("a profile with an act bound of 0: %v", err)
 	}
 }

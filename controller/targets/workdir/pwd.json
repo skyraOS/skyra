@@ -1,0 +1,14 @@
+{
+  "input": {
+    "title": "pwd",
+    "type": "object",
+    "fields": {
+      "pwd": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "pwd"
+    ]
+  }
+}

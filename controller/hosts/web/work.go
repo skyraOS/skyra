@@ -1,19 +1,43 @@
 package main
 
-// Conversation work is operator-authored metadata, separate from the user
-// continuation and the tree machine. Only an explicit run-spec dispatches a
-// saved spec; neither chat messages nor edits become tree input implicitly.
+// Conversation work is the Mission's metadata, separate from the user
+// continuation and the tree machine: its spec revisions, each one a Spec
+// observation held at the Mission's human root (mission.go). Only an explicit
+// launch-spec passes one to a tree; neither chat messages nor edits become
+// tree input implicitly.
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	typed "skyra/controller/core/mission"
 )
 
 type specRevision struct {
-	Revision int    `json:"revision"`
-	Text     string `json:"text"`
+	Revision int      `json:"revision"`
+	Text     string   `json:"text"`
+	Tools    []string `json:"tools,omitempty"`  // the capabilities it proposes, by tool
+	Inputs   []string `json:"inputs,omitempty"` // the observations it cites, at the root
+	Source   string   `json:"source,omitempty"` // "human" or "plan"; empty before Missions
+	// Observation is the Spec held at the human root, at Epoch's pins.
+	Observation string `json:"observation,omitempty"`
+	Epoch       string `json:"epoch,omitempty"`
+	// Segments and Coverage are where the Spec's words came from, as the
+	// Spec itself records them; empty before cite coverage.
+	Segments []segmentView   `json:"segments,omitempty"`
+	Coverage *typed.Coverage `json:"coverage,omitempty"`
+	// Profile is the constants its Launch's tree runs under, as the Spec
+	// states them; empty before Specs did.
+	Profile *typed.Profile `json:"profile,omitempty"`
+}
+
+// segmentView is a Spec segment as the desktop shows it: From names what a
+// cited segment quotes, "request" or "conversation".
+type segmentView struct {
+	Text   string `json:"text"`
+	Source string `json:"source"`
+	Of     string `json:"of,omitempty"`
+	From   string `json:"from,omitempty"`
 }
 
 type conversationWork struct {
@@ -24,6 +48,20 @@ type conversationWork struct {
 	Spec         string         `json:"spec"`
 	Revisions    []specRevision `json:"revisions"`
 	LastRunID    string         `json:"lastRunId,omitempty"`
+	Planning     bool           `json:"planning,omitempty"`
+	PlanError    string         `json:"planError,omitempty"`
+	// Plan marks a conversation that is Plan's (planturn.go): its turns are
+	// its transcript, and there is no chat run.
+	Plan  bool       `json:"plan,omitempty"`
+	Turns []planTurn `json:"turns,omitempty"`
+}
+
+// latest is the current revision, or nil before the first.
+func (w *conversationWork) latest() *specRevision {
+	if w.Revision == 0 {
+		return nil
+	}
+	return &w.Revisions[w.Revision-1]
 }
 
 func newWork(id string) *conversationWork {
@@ -97,104 +135,39 @@ func saveWork(home string, w *conversationWork) error {
 	return atomicWorkFile(filepath.Join(home, "work.json"), b)
 }
 
-// Called under h.mu, and releases it on every path. The ordinary request
-// ledger provides reconnect deduplication for edits and run admission alike.
-func (h *webhost) handleWork(m inbound, reject func(string, string)) {
-	refuse := func(code, why string) { h.mu.Unlock(); reject(code, why) }
-	c := h.convos[m.Conversation]
-	if c == nil {
-		refuse("conversation", "no such conversation")
-		return
-	}
-	if c.work == nil {
-		refuse("storage", "conversation work metadata could not be loaded")
-		return
-	}
-	if m.SpecRevision != c.work.Revision {
-		refuse("spec-conflict", "the spec changed; reload it before saving or running")
-		return
-	}
-	if m.Type == "run-spec" {
-		if h.trees == nil {
-			refuse("tree", "this host has no tree executor")
-			return
-		}
-		if strings.TrimSpace(c.work.Spec) == "" {
-			refuse("spec", "save a spec before running it")
-			return
-		}
-		h.trees.mu.Lock()
-		busy := false
-		for _, r := range h.trees.runs {
-			if r.TreeID == c.work.TreeID && r.Phase == "running" {
-				busy = true
-				break
-			}
-		}
-		h.trees.mu.Unlock()
-		if busy {
-			refuse("busy", "this conversation's tree is already running")
-			return
-		}
-	}
-	if len(m.Text) > 256*1024 {
-		refuse("spec", "the spec exceeds 256 KiB")
-		return
-	}
-	if err := h.admit(m, c.id); err != nil {
-		refuse("storage", err.Error())
-		return
-	}
-	fail := func(code, why string) { h.finishRequest(m.RequestID, "failed", code, why); refuse(code, why) }
-	next := *c.work
-	var run *treeRun
-	if m.Type == "save-spec" {
-		if m.Text != next.Spec {
-			next.Revision++
-			next.Spec = m.Text
-			next.Revisions = append(append([]specRevision{}, next.Revisions...), specRevision{next.Revision, m.Text})
-		}
-	} else {
-		actor := c.model
-		if actor == "" {
-			actor = "codex"
-		}
-		kind := "delegate"
-		if len(m.Reach) == 1 {
-			kind = "act"
-		}
-		var why string
-		run, why = h.prepareTree(next.Spec, kind, m.Reach, &next, actor)
-		if why != "" {
-			fail("tree", why)
-			return
-		}
-		next.LastRunID = run.ID
-	}
-	if err := saveWork(h.homeOf(c), &next); err != nil {
-		if run != nil {
-			h.trees.mu.Lock()
-			run.Phase, run.Error = "failed", "spec linkage could not be saved; execution did not start"
-			_ = h.trees.save(run)
-			h.trees.mu.Unlock()
-		}
-		fail("storage", fmt.Sprintf("save conversation work: %v", err))
-		return
-	}
-	c.work = &next
-	h.finishRequest(m.RequestID, "returned", "", "")
-	h.mu.Unlock()
-	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
-	h.broadcast()
-	if run != nil {
-		h.sendTrees()
-		go h.runTree(run)
-	}
-}
+// maxShownRevisions bounds the revisions a snapshot carries; older ones
+// stay on disk.
+const maxShownRevisions = 50
 
-// Revision history stays on disk; snapshots carry only the current spec.
+// projection is the work a snapshot carries: the current spec, and the
+// latest revisions, so a turn's reply can show the Spec as it stood then.
 func (w *conversationWork) projection() map[string]any {
-	return map[string]any{"conversation": w.Conversation, "treeId": w.TreeID, "specId": w.SpecID, "revision": w.Revision, "spec": w.Spec, "lastRunId": w.LastRunID}
+	p := map[string]any{"conversation": w.Conversation, "treeId": w.TreeID, "specId": w.SpecID, "revision": w.Revision, "spec": w.Spec, "lastRunId": w.LastRunID, "planning": w.Planning, "planError": w.PlanError}
+	if r := w.latest(); r != nil {
+		p["tools"], p["source"], p["inputs"], p["launchable"] = r.Tools, r.Source, len(r.Inputs), r.Observation != ""
+		if r.Coverage != nil {
+			p["segments"], p["coverage"] = r.Segments, r.Coverage
+		}
+		if r.Profile != nil {
+			p["profile"] = r.Profile
+		}
+	}
+	if w.Plan {
+		p["plan"] = true
+		shown := []map[string]any{}
+		for _, r := range w.Revisions[max(0, len(w.Revisions)-maxShownRevisions):] {
+			v := map[string]any{"revision": r.Revision, "text": r.Text, "tools": r.Tools, "source": r.Source, "inputs": len(r.Inputs), "launchable": r.Observation != ""}
+			if r.Coverage != nil {
+				v["segments"], v["coverage"] = r.Segments, r.Coverage
+			}
+			if r.Profile != nil {
+				v["profile"] = r.Profile
+			}
+			shown = append(shown, v)
+		}
+		p["revisions"] = shown
+	}
+	return p
 }
 
 // Caller holds h.mu. A spec and its last result are conversation context,

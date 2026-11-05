@@ -19,10 +19,10 @@ reason is shown. The backend's output goes to `~/.skyra/app-webhost.log`.
 Quitting the app stops the webhost; the Codex actor host keeps running
 (`skyra stop`).
 
-The interface is organized around **Missions**. Each Mission owns a Chat,
-a versioned Spec, and a Tree. The left sidebar selects Missions across all
-conversation procedures. The workspace has **Chat / Spec / Tree** tabs and an
-explicit **Run** button. The selected Mission's accepted execution appears in
+The interface is organized around **Missions**. Each Mission owns a Plan
+conversation, a versioned Spec, and its Launches. The left sidebar selects Missions across all
+conversation procedures. The workspace has **Plan / Spec / Launches** tabs and an
+explicit **Launch** button. The selected Mission's accepted execution appears in
 the sky; procedure constellations and their navigation have been removed.
 
 On the first Mission launch for a workspace, existing conversations are
@@ -30,16 +30,25 @@ archived in desktop navigation. Open **Archive** and **Restore** to bring one
 back. Their runtime records, specs, and tree runs stay intact. New Missions
 remain in the active list across launches; archiving never cancels work.
 
-Use **New mission** to create an empty Mission before chatting or writing its
-spec. In **Spec**, write a definition or choose **Use latest reply**, select
-the available tools, and **Save spec**. **Run** executes that saved revision
-and opens Tree. Chat continues independently. Spec drafts survive tab and
+Use **New mission** to create an empty Mission. Its conversation, in
+**Plan**, is with Plan itself: each message is a Plan turn, which can take a
+while. Plan looks around the workspace, answers, and keeps the spec; a reply
+that changed the spec shows **Spec rN**, which opens the spec as that reply
+left it. **Spec** shows a revision, the latest by default, each part coloured
+by where it came from (quoted from you, written by you, or Plan's own words),
+with its cite coverage, tools and tree profile; step through revisions with
+the arrows. The profile is the constants Launch's tree runs under: tools per
+node (past it, a node delegates), turns per node, depth, instructions per
+call, and a budget of turns for the whole tree.
+**Edit** changes the latest revision: what you keep keeps its source, what you
+write is yours, and the steppers set its profile. **Launch** passes the revision shown, with its tools, and opens
+Launches. Spec drafts survive tab and
 Mission changes during the session. Procedure, model, and workspace settings
 are available from the toolbar's settings button.
 
 | Key | Action |
 |---|---|
-| Return | Send to Chat; the first message creates a Mission if needed |
+| Return | Send to the Plan conversation; the first message creates a Mission if needed |
 | Shift+Return | New line |
 | ⌘N | Create a Mission |
 | ⌘D | Close the selected Mission's chat |
@@ -53,7 +62,7 @@ glow, a tree anchor before execution, and accepted star nodes and activity
 lights during execution. Text panels quiet the sky underneath them. Window
 occlusion, app inactivity, Archive, and Reduce Motion pause ambient animation.
 The Trees inspector retains detailed replay. Tree execution needs a real
-backend with its tree registry; fake mode supports Chat and saved Specs.
+backend with its tree registry; fake mode supports the Plan conversation only.
 Lifecycle and protocol: [conversation work](../docs/design/conversation-work.md).
 
 The Trees window shows accepted work as motion: new branches grow from their

@@ -69,7 +69,7 @@ func bridgeFixture(t *testing.T) (*Bridge, *Catalogue) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Open(t.TempDir(), "mission", "operator", catalogue, plan, launch)
+	b, err := Open(t.TempDir(), "mission", "operator", catalogue, nil, plan, launch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestTypedPlanHumanLaunchPreservesSpecInputsAndRestrictsRegistry(t *testing.
 	if err != nil || contract.Fits(typed.PlanSchema(), value) != nil {
 		t.Fatal("Plan invocation does not fit its contract")
 	}
-	spec := typed.Spec{Version: 1, Goal: "Use the supplied evidence", Inputs: evidence.Observations, Capabilities: c.CapabilityRefs()}
+	spec := typed.HumanSpec("Use the supplied evidence", evidence.Observations, c.CapabilityRefs(), typed.DefaultProfile)
 	raw, _ := json.Marshal(spec)
 	reader := func(call root.Invocation, receipt string) ([]json.RawMessage, error) {
 		if call.ID != plan.Invocation.ID || receipt != "verified-plan-return" {
@@ -153,7 +153,7 @@ func TestTypedPlanHumanLaunchPreservesSpecInputsAndRestrictsRegistry(t *testing.
 func TestOnlySelectedContractIsPublished(t *testing.T) {
 	b, c := bridgeFixture(t)
 	refs := c.CapabilityRefs()[:1]
-	proposed, err := b.AuthorSpec("spec", typed.Spec{Version: 1, Goal: "work", Inputs: []root.ID{}, Capabilities: refs})
+	proposed, err := b.AuthorSpec("spec", typed.HumanSpec("work", []root.ID{}, refs, typed.DefaultProfile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,10 +188,40 @@ func TestPlanCannotCiteUnpassedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := typed.Spec{Version: 1, Goal: "work", Inputs: private.Observations, Capabilities: c.CapabilityRefs()[:1]}
+	spec := typed.HumanSpec("work", private.Observations, c.CapabilityRefs()[:1], typed.DefaultProfile)
 	raw, _ := json.Marshal(spec)
 	_, err = b.ReceivePlan(plan.Invocation.ID, "receipt", func(root.Invocation, string) ([]json.RawMessage, error) { return []json.RawMessage{raw}, nil })
 	if err == nil {
 		t.Fatal("Plan cited private root scope")
+	}
+}
+
+// Plan's quotes hold only against what it was passed: quoting the root's
+// private scope, or words the request never said, is refused.
+func TestPlanQuotesOnlyWhatItWasPassed(t *testing.T) {
+	b, c := bridgeFixture(t)
+	request, _ := b.Root.Author("request", json.RawMessage(`"please echo the request back"`))
+	private, _ := b.Root.Author("private", json.RawMessage(`"the private notes say this"`))
+	plan, _, err := b.StartPlan("plan", request.Observations[0], nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoting := func(text string, of root.ID) json.RawMessage {
+		segments := []typed.Segment{{Text: text, Source: typed.Cited, Of: of}}
+		goal, coverage := typed.Assemble(segments)
+		raw, _ := json.Marshal(typed.Spec{Version: typed.SpecVersion, Goal: goal, Segments: segments, Coverage: coverage, Inputs: []root.ID{}, Capabilities: c.CapabilityRefs()[:1], Profile: typed.DefaultProfile})
+		return raw
+	}
+	for name, raw := range map[string]json.RawMessage{
+		"private scope":    quoting("the private notes", private.Observations[0]),
+		"words never said": quoting("echo the request twice", request.Observations[0]),
+	} {
+		if _, err = b.ReceivePlan(plan.Invocation.ID, "receipt", func(root.Invocation, string) ([]json.RawMessage, error) { return []json.RawMessage{raw}, nil }); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	raw := quoting("echo the request back", request.Observations[0])
+	if _, err = b.ReceivePlan(plan.Invocation.ID, "receipt", func(root.Invocation, string) ([]json.RawMessage, error) { return []json.RawMessage{raw}, nil }); err != nil {
+		t.Fatal(err)
 	}
 }

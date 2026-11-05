@@ -48,11 +48,11 @@ records with file and directory synchronization before acknowledging commits.
 A process-shared lock serializes adapters. Put it in runtime-owned storage
 that worker sandboxes cannot read or write.
 
-This is the root protocol and adapter foundation. It does not yet replace the
-webhost's editable spec storage, generate Think specs, or reroute the existing
-Mission Run button through the human root. Those integrations must use this
-adapter and the existing worker dispatcher rather than giving a worker root
-instructions or importing I/O into its pure core.
+The webhost holds one root per Mission, through `runtime/mission`: a saved
+spec is a human-authored Spec, Plan's spec is a verified child return, and
+Launch passes one held Spec. Those integrations use this adapter and the
+existing worker dispatcher; no worker is given root instructions, and the
+pure core imports no I/O.
 
 ## Proof and checks
 

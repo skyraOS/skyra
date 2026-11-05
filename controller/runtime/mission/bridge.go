@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"skyra/controller/core/contract"
 	root "skyra/controller/core/humanroot"
@@ -35,14 +36,17 @@ func NewEndpoint(binary string, plan bool) (Endpoint, error) {
 }
 
 type Bridge struct {
-	Catalogue *Catalogue
+	Catalogue *Catalogue // what a Launch may be granted
+	Planner   *Catalogue // what Plan is granted: the viewer and the proposer; nil when the Mission never plans
 	Root      *journal.Journal
 	Plan      Endpoint
 	Launch    Endpoint
 	dir       string
 }
 
-func Open(dir, mission, human string, catalogue *Catalogue, plan, launch Endpoint) (*Bridge, error) {
+// Open pins a Mission's root. Its ceiling is the Launch catalogue and, when
+// it plans, the planner's contracts, so the root records them as Plan's grant.
+func Open(dir, mission, human string, catalogue, planner *Catalogue, plan, launch Endpoint) (*Bridge, error) {
 	if catalogue == nil {
 		return nil, fmt.Errorf("Mission needs an operator catalogue")
 	}
@@ -57,11 +61,23 @@ func Open(dir, mission, human string, catalogue *Catalogue, plan, launch Endpoin
 	if err != nil || expectedLaunch != launch {
 		return nil, fmt.Errorf("Launch endpoint does not match its ordinary contract")
 	}
-	j, err := journal.Open(dir, root.Config{Mission: mission, Human: human, Entrypoints: []root.Capability{plan.Ref, launch.Ref}, Ceiling: catalogue.CapabilityRefs()})
+	ceiling := catalogue.CapabilityRefs()
+	if planner != nil {
+		if err := plannerHolds(planner); err != nil {
+			return nil, err
+		}
+		for _, ref := range planner.CapabilityRefs() {
+			if slices.Contains(ceiling, ref) {
+				return nil, fmt.Errorf("a planning contract is also a Launch capability")
+			}
+			ceiling = append(ceiling, ref)
+		}
+	}
+	j, err := journal.Open(dir, root.Config{Mission: mission, Human: human, Entrypoints: []root.Capability{plan.Ref, launch.Ref}, Ceiling: ceiling})
 	if err != nil {
 		return nil, err
 	}
-	return &Bridge{Catalogue: catalogue, Root: j, Plan: plan, Launch: launch, dir: dir}, nil
+	return &Bridge{Catalogue: catalogue, Planner: planner, Root: j, Plan: plan, Launch: launch, dir: dir}, nil
 }
 
 // StartPlan records the human's invocation, passing only explicit observations.
@@ -98,6 +114,11 @@ func (b *Bridge) ReceivePlan(call root.ID, receipt string, read journal.ReturnRe
 	if read == nil {
 		return root.Effect{}, fmt.Errorf("Plan return requires a runtime receipt reader")
 	}
+	// Read before Receive, which holds the root while it asks its reader.
+	state, err := b.Root.State()
+	if err != nil {
+		return root.Effect{}, err
+	}
 	return b.Root.Receive(call, receipt, func(inv root.Invocation, receipt string) ([]json.RawMessage, error) {
 		if inv.Target != b.Plan.Ref {
 			return nil, fmt.Errorf("receipt does not belong to Plan")
@@ -115,6 +136,15 @@ func (b *Bridge) ReceivePlan(call root.ID, receipt string, read journal.ReturnRe
 		}
 		if !root.MayPass(inv.Inputs, spec.Inputs) {
 			return nil, fmt.Errorf("Plan cited an observation it was not passed")
+		}
+		// Plan may quote only what it was passed, and only what it says.
+		if err = spec.CheckCites(func(id root.ID) (root.Observation, bool) {
+			if !slices.Contains(inv.Inputs, id) {
+				return root.Observation{}, false
+			}
+			return state.Lookup(id)
+		}); err != nil {
+			return nil, err
 		}
 		for _, ref := range spec.Capabilities {
 			if _, ok := b.Catalogue.Typed.Lookup(ref); !ok {

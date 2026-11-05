@@ -12,8 +12,25 @@
               "type": "string"
             }
           },
+          "catalogue": {
+            "type": "any"
+          },
           "goal": {
-            "type": "string"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "fields": {
+                "of": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "inputs": {
             "type": "array",
@@ -21,15 +38,43 @@
               "type": "string"
             }
           },
-          "version": {
-            "type": "number"
+          "note": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "object",
+            "fields": {
+              "act": {
+                "type": "number"
+              },
+              "budget": {
+                "type": "number"
+              },
+              "depth": {
+                "type": "number"
+              },
+              "fanout": {
+                "type": "number"
+              },
+              "turns": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "act",
+              "turns",
+              "depth",
+              "fanout",
+              "budget"
+            ]
           }
         },
         "required": [
-          "version",
           "goal",
           "inputs",
-          "capabilities"
+          "catalogue",
+          "capabilities",
+          "profile"
         ]
       }
     },

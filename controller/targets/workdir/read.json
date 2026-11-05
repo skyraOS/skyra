@@ -1,0 +1,40 @@
+{
+  "input": {
+    "title": "read",
+    "type": "object",
+    "fields": {
+      "read": {
+        "type": "object",
+        "fields": {
+          "dir": {
+            "type": "object",
+            "fields": {
+              "dir": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dir"
+            ]
+          },
+          "max_lines": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dir",
+          "path"
+        ]
+      }
+    },
+    "required": [
+      "read"
+    ]
+  }
+}

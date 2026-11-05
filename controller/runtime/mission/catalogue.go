@@ -134,11 +134,11 @@ func (c *Catalogue) Prepare(dir, actor string, resolved typed.Resolved) (string,
 	for _, d := range resolved.Contracts {
 		count[d.Contract] = true
 	}
-	kind := "act"
-	if len(count) > 1 {
-		kind = "delegate"
+	profile := resolved.Profile
+	if profile == (typed.Profile{}) {
+		profile = typed.DefaultProfile
 	}
-	if kind != resolved.Kind {
+	if kind := profile.KindOf(len(count)); kind != resolved.Kind {
 		return "", nil, fmt.Errorf("worker kind differs from the selected contract types")
 	}
 	if len(selected) == 0 {
@@ -269,7 +269,7 @@ func (c *Catalogue) Prepare(dir, actor string, resolved typed.Resolved) (string,
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	payload, _ := json.Marshal(map[string]any{"tree": map[string]any{"goal": resolved.Spec.Goal, "kind": resolved.Kind, "actor": actor, "reach": names}})
+	payload, _ := json.Marshal(map[string]any{"tree": map[string]any{"goal": resolved.Spec.Goal, "kind": resolved.Kind, "actor": actor, "reach": names, "profile": profile}})
 	return path, payload, nil
 }
 

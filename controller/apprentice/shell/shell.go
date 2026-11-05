@@ -58,7 +58,10 @@ type Ask struct {
 	Kind    string   `json:"kind"`  // "act" or "delegate": the root's kind is given
 	Actor   string   `json:"actor"` // the target that runs every turn
 	Reach   []string `json:"reach"` // the targets the root holds
-	Depth   int      `json:"depth"`
+	Depth   int      `json:"depth"` // the depth bound, when no profile is given
+	// Profile is the constants the tree runs under, set here, at its root,
+	// for every agent in it; tree.DefaultProfile when none is given.
+	Profile *tree.Profile `json:"profile,omitempty"`
 }
 
 // Contract is the tree contract.
@@ -66,7 +69,7 @@ func Contract() *proc.Schema {
 	str := &proc.Schema{Type: "string"}
 	return &proc.Schema{Title: "tree", Type: "object", Required: []string{"tree"}, Fields: map[string]*proc.Schema{
 		"tree": {Type: "object", Required: []string{"actor", "goal", "kind", "reach"}, Fields: map[string]*proc.Schema{
-			"goal": str, "kind": str, "actor": str, "reach": {Type: "array", Items: str}, "depth": {Type: "number"}, "imports": {Type: "array", Items: &proc.Schema{Type: "object", Required: []string{"ref", "binary", "contract", "value", "source"}, Fields: map[string]*proc.Schema{"ref": str, "binary": str, "contract": str, "value": {Type: "any"}, "source": {Type: "any"}}}},
+			"goal": str, "kind": str, "actor": str, "reach": {Type: "array", Items: str}, "depth": {Type: "number"}, "profile": {Type: "object", Required: []string{"act", "turns", "depth", "fanout", "budget"}, Fields: map[string]*proc.Schema{"act": {Type: "number"}, "turns": {Type: "number"}, "depth": {Type: "number"}, "fanout": {Type: "number"}, "budget": {Type: "number"}}}, "imports": {Type: "array", Items: &proc.Schema{Type: "object", Required: []string{"ref", "binary", "contract", "value", "source"}, Fields: map[string]*proc.Schema{"ref": str, "binary": str, "contract": str, "value": {Type: "any"}, "source": {Type: "any"}}}},
 		}},
 	}}
 }
@@ -113,7 +116,7 @@ func ResumePinned(dir, frame string, input json.RawMessage, reach map[string][]*
 		return addressed(frame, map[string]any{"refused": err.Error()}), nil
 	}
 	// Replay: the same events give the same tree (check 6).
-	s.tree = tree.NewTree(s.app, s.depth)
+	s.tree = tree.NewTree(s.app, s.profile)
 	for _, l := range s.state.Log {
 		e, err := s.decode(l)
 		if err != nil {
@@ -228,7 +231,7 @@ type shell struct {
 	state      state
 
 	app       tree.Apprentice
-	depth     int
+	profile   tree.Profile
 	kind      tree.Kind
 	self      tree.Contract
 	rootReach []tree.Contract
@@ -300,8 +303,14 @@ func (s *shell) setup(a Ask) error {
 		return err
 	}
 	s.app, s.goal, s.imports = app, goal, a.Imports
-	if s.depth = a.Depth; s.depth <= 0 {
-		s.depth = 3
+	s.profile = tree.DefaultProfile
+	if a.Profile != nil {
+		s.profile = *a.Profile
+	} else if a.Depth > 0 {
+		s.profile.Depth = a.Depth
+	}
+	if why := s.profile.Check(); why != "" {
+		return errors.New(why)
 	}
 	switch a.Kind {
 	case "act":
@@ -989,7 +998,7 @@ func (s *shell) out(a tree.Action) (string, any, pending, error) {
 		actor := s.names_[a.Binary]
 		// A turn is granted nothing: its instructions are its reply, and
 		// every effect is a perform_effect, typed by the tree.
-		return actor, map[string]any{"text": s.prompt(a), "fresh": true, "tools": []string{}, "instructions": instructions(s.act(a))},
+		return actor, map[string]any{"text": s.prompt(a), "fresh": true, "tools": []string{}, "instructions": instructions(s.act(a), s.profile.Act)},
 			pending{Agent: a.Agent, Turn: true}, nil
 	case tree.InvokeContract:
 		t, ok := s.targets[a.Contract]
@@ -1011,7 +1020,7 @@ func (s *shell) out(a tree.Action) (string, any, pending, error) {
 
 // instructions are what a node's kind loads (55, loaded): the tools its
 // model's thread is granted. Each one's input is the instruction itself.
-func instructions(act bool) []map[string]any {
+func instructions(act bool, bound int) []map[string]any {
 	ref := map[string]any{"anyOf": []any{
 		map[string]any{"type": "integer", "minimum": 0, "description": "a name, by its number"},
 		map[string]any{"type": "object", "properties": map[string]any{"earlier": map[string]any{"type": "integer", "minimum": 0}}, "required": []string{"earlier"},
@@ -1040,7 +1049,7 @@ func instructions(act bool) []map[string]any {
 		out = append(out,
 			one("goal", "Cut a goal for a child from an existing text observation. Select one inclusive line range [from, to] or several [[from, to], ...]. You never write a goal.",
 				obj(map[string]any{"of": map[string]any{"type": "integer", "minimum": 0}, "lines": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"anyOf": []any{map[string]any{"type": "integer", "minimum": 1}, map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2}}}}}, "of", "lines")),
-			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you cut with goal, as {\"earlier\": k}, or a goal you were given. Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again. What it returns is a new name when you are asked again.",
+			one("delegate", "Start a child with observations and at least one contract you hold, by number. A goal must be among the observations: one you cut with goal, as {\"earlier\": k}, or a goal you were given. "+passing(bound)+" What it returns is a new name when you are asked again.",
 				obj(map[string]any{"observations": refs, "contracts": map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0}}}, "observations", "contracts")))
 	}
 	return append(out,
@@ -1113,9 +1122,10 @@ func (s *shell) prompt(t tree.Turn) string {
 	} else {
 		b.WriteString("\nCut and pass: select spec lines from existing text observations for a child’s goal, and pass existing observations for its context. You cannot freely create content for a child.\n")
 		b.WriteString("What a child returns comes back as a new name, then you are asked again. Return what came back.\n")
-		b.WriteString("Only an act node invokes a contract: to have one invoked, delegate a goal with exactly that one contract.\n")
+		b.WriteString("Only an act node invokes a contract. " + passing(s.profile.Act) + "\n")
 	}
-	fmt.Fprintf(&b, "You have %d turns at most; this is turn %d.\n", tree.MaxTurns, s.tree.Agents[t.Agent].Turns)
+	fmt.Fprintf(&b, "You have %d turns at most; this is turn %d.\n", s.profile.Turns, s.tree.Agents[t.Agent].Turns)
+	fmt.Fprintf(&b, "The whole tree has %d turns left, for every node together; return what you have before they run out.\n", s.profile.Budget-s.tree.TurnsTaken())
 	return b.String()
 }
 
@@ -1135,4 +1145,13 @@ func (s *shell) answer() any {
 func addressed(frame string, payload any) []byte {
 	b, _ := json.Marshal(map[string]any{"to": frame, "payload": payload})
 	return b
+}
+
+// passing is what a delegate is told its children's kinds follow from: how
+// many contracts it passes, against the tree's act bound.
+func passing(bound int) string {
+	if bound == 1 {
+		return "Pass exactly one contract and the child is an act node, which invokes it; pass two or more and the child is a delegate node, which can only delegate again."
+	}
+	return fmt.Sprintf("Pass at most %d contracts and the child is an act node, which invokes them; pass more and the child is a delegate node, which can only delegate again.", bound)
 }

@@ -49,9 +49,9 @@ func (b *Bridge) ExecuteLaunch(ctx context.Context, kernel, actor string, launch
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return root.Effect{}, err
 	}
-	claim, err := os.OpenFile(filepath.Join(dir, "execution.claim"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	claim, err := claimExecution(dir)
 	if err != nil {
-		return root.Effect{}, fmt.Errorf("Launch is already claimed or cannot be claimed: %w", err)
+		return root.Effect{}, err
 	}
 	reg, payload, err := b.PrepareLaunch(filepath.Join(dir, "prepared"), actor, launch)
 	if err != nil {
@@ -59,23 +59,7 @@ func (b *Bridge) ExecuteLaunch(ctx context.Context, kernel, actor string, launch
 		return root.Effect{}, err
 	}
 	binding, _ := json.Marshal(map[string]any{"call": call, "spec": launch.Dispatch.Passed[0].ID(), "payload": json.RawMessage(payload)})
-	if _, err = claim.Write(binding); err == nil {
-		err = claim.Sync()
-	}
-	closeErr := claim.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return root.Effect{}, err
-	}
-	folder, err := os.Open(dir)
-	if err != nil {
-		return root.Effect{}, err
-	}
-	err = folder.Sync()
-	folder.Close()
-	if err != nil {
+	if err = seal(claim, dir, binding); err != nil {
 		return root.Effect{}, err
 	}
 	runRoot := filepath.Join(dir, ".skyra")
@@ -89,23 +73,9 @@ func (b *Bridge) ExecuteLaunch(ctx context.Context, kernel, actor string, launch
 		if inv.ID != call || inv.Target != b.Launch.Ref || receipt != head {
 			return nil, fmt.Errorf("Launch receipt belongs to another invocation")
 		}
-		if _, err := replay.Replay(runRoot, receipt); err != nil {
-			return nil, err
-		}
-		// The saved claim binds this runtime receipt to the exact root handoff.
-		stored, err := os.ReadFile(filepath.Join(dir, "execution.claim"))
-		if err != nil || !bytes.Equal(stored, binding) {
-			return nil, fmt.Errorf("Launch execution binding changed")
-		}
-		final, err := tree.Load(runRoot, receipt)
+		final, err := settled(runRoot, receipt, dir, binding)
 		if err != nil {
 			return nil, err
-		}
-		if final.State == record.Resolve && len(final.Deps) == 1 {
-			final, err = tree.Load(runRoot, final.Deps[0])
-			if err != nil {
-				return nil, err
-			}
 		}
 		switch final.State {
 		case record.Return:
@@ -124,4 +94,57 @@ func (b *Bridge) ExecuteLaunch(ctx context.Context, kernel, actor string, launch
 		return received, fmt.Errorf("Launch returned a recorded fault: %w", runErr)
 	}
 	return received, nil
+}
+
+// claimExecution creates a call's claim, exclusively: a second attempt at the
+// same call fails here, before any effect.
+func claimExecution(dir string) (*os.File, error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	claim, err := os.OpenFile(filepath.Join(dir, "execution.claim"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("already claimed or cannot be claimed: %w", err)
+	}
+	return claim, nil
+}
+
+// seal writes the claim's binding durably, before the kernel runs.
+func seal(claim *os.File, dir string, binding []byte) error {
+	_, err := claim.Write(binding)
+	if err == nil {
+		err = claim.Sync()
+	}
+	if closeErr := claim.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	folder, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer folder.Close()
+	return folder.Sync()
+}
+
+// settled replays a run to its receipt and is the record that settles its
+// root invocation, after checking the saved claim still binds this call.
+func settled(runRoot, receipt, dir string, binding []byte) (record.Record, error) {
+	if _, err := replay.Replay(runRoot, receipt); err != nil {
+		return record.Record{}, err
+	}
+	stored, err := os.ReadFile(filepath.Join(dir, "execution.claim"))
+	if err != nil || !bytes.Equal(stored, binding) {
+		return record.Record{}, fmt.Errorf("execution binding changed")
+	}
+	final, err := tree.Load(runRoot, receipt)
+	if err != nil {
+		return final, err
+	}
+	if final.State == record.Resolve && len(final.Deps) == 1 {
+		return tree.Load(runRoot, final.Deps[0])
+	}
+	return final, nil
 }

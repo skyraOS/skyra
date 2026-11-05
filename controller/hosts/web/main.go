@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	typed "skyra/controller/core/mission"
 	"skyra/controller/core/record"
 	"skyra/controller/runtime/boot"
 	"skyra/controller/runtime/park"
@@ -50,7 +51,8 @@ type entry struct {
 	Text      string  `json:"text"`
 	TS        int64   `json:"ts"`
 	RequestID *string `json:"requestId"`
-	Call      *call   `json:"call,omitempty"` // role "call": a tool call in the agent's turn
+	Call      *call   `json:"call,omitempty"`     // role "call": a tool call in the agent's turn
+	Revision  int     `json:"revision,omitempty"` // a Plan reply: the spec revision its turn made
 }
 
 type conversation struct {
@@ -88,6 +90,7 @@ type webhost struct {
 	bmu          sync.Mutex      // serialize snapshot revisions and stream baselines
 	stream       *snapshotStream // wmu; nil for legacy full-snapshot clients
 	trees        *trees          // nil without -tree-registry
+	missions     missions        // each conversation's human root, over trees
 }
 
 func main() {
@@ -189,14 +192,32 @@ func (h *webhost) loadConversation(home, under string) {
 	if h.deleted(id) {
 		return
 	}
+	started := time.Time{}
+	if info, err := os.Stat(home); err == nil {
+		started = info.ModTime()
+	}
+	// A Plan conversation's transcript is its turns; it has no chat run.
+	if w := loadWork(home, id); w != nil && w.Plan {
+		c := &conversation{id: id, phase: "ready", home: home, procedure: under, lineage: newLineage(filepath.Join(home, ".skyra")), started: started, work: w, entries: w.entries(), loaded: true}
+		if w.Planning {
+			// The host stopped mid-turn: the turn's outcome is unknown.
+			next := *w
+			next.Planning, next.PlanError = false, "the host stopped while Plan was answering"
+			if n := len(next.Turns); n > 0 && !next.Turns[n-1].Done {
+				next.Turns = append([]planTurn{}, next.Turns...)
+				next.Turns[n-1].Error, next.Turns[n-1].Done = next.PlanError, true
+			}
+			if saveWork(home, &next) == nil {
+				c.work, c.entries = &next, next.entries()
+			}
+		}
+		h.convos[id] = c
+		return
+	}
 	roots := conversationRuns(home)
 	root := roots[len(roots)-1]
 	if _, err := os.Stat(filepath.Join(root, "records")); err != nil {
 		return
-	}
-	started := time.Time{}
-	if info, err := os.Stat(home); err == nil {
-		started = info.ModTime()
 	}
 	c := &conversation{id: id, phase: "closed", home: home, procedure: under, lineage: newLineage(root), started: started}
 	if b, err := os.ReadFile(filepath.Join(home, ".title")); err == nil && len(b) > 0 {
@@ -479,6 +500,9 @@ type inbound struct {
 	Actor         string   `json:"actor,omitempty"` // start-tree provider
 	Kind          string   `json:"kind,omitempty"`  // start-tree: the root's kind
 	Reach         []string `json:"reach,omitempty"` // start-tree: the targets the root holds
+	// Profile, on save-spec, is the constants the Spec's Launch runs under;
+	// omitted, the latest revision's, or the default.
+	Profile *typed.Profile `json:"profile,omitempty"`
 }
 
 func (h *webhost) handle(raw []byte) {
@@ -528,8 +552,8 @@ func (h *webhost) handle(raw []byte) {
 	}
 
 	switch m.Type {
-	case "save-spec", "run-spec":
-		h.handleWork(m, reject) // releases mu before broadcasting
+	case "save-spec", "launch-spec":
+		h.handleMission(m, reject) // releases mu before broadcasting
 		return
 	case "delete-conversation":
 		if !admit(m.Conversation) {
@@ -566,19 +590,57 @@ func (h *webhost) handle(raw []byte) {
 		home := h.homeFor(d.Title, id)
 		proc = d.Title
 		work := newWork(id)
+		work.Plan = h.plans(proc)
 		if err := saveWork(home, work); err != nil {
 			h.finishRequest(m.RequestID, "failed", "storage", err.Error())
 			h.mu.Unlock()
 			reject("storage", err.Error())
 			return
 		}
-		h.convos[id] = &conversation{work: work, id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, model: model, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
+		c := &conversation{work: work, id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, model: model, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
+		h.convos[id] = c
+		if work.Plan {
+			// Plan's conversation has no chat run: it waits for a message.
+			c.phase, c.pending, c.entries = "ready", "", []entry{}
+			h.finishRequest(m.RequestID, "returned", "", "")
+		}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
-		go h.seed(id, proc, model, home)
+		if !work.Plan {
+			go h.seed(id, proc, model, home)
+		}
 	case "submit", "close-interaction":
 		conv := h.convos[m.Conversation]
+		// A Mission from before Plan was its conversation becomes Plan's on
+		// its next message, its chat kept as the earlier turns.
+		if m.Type == "submit" && conv != nil && conv.work != nil && !conv.work.Plan && h.plans(conv.procedure) && conv.pending == "" && conv.phase != "pending" {
+			if !conv.loaded {
+				id := m.Conversation
+				h.mu.Unlock()
+				h.loadConversationFull(id)
+				h.mu.Lock()
+				if conv = h.convos[id]; conv == nil || conv.work == nil {
+					h.mu.Unlock()
+					reject("conversation", "no such conversation")
+					return
+				}
+			}
+			if err := h.becomePlan(conv); err != nil {
+				h.mu.Unlock()
+				reject("storage", err.Error())
+				return
+			}
+		}
+		if conv != nil && conv.work != nil && conv.work.Plan {
+			if m.Type == "close-interaction" {
+				h.mu.Unlock()
+				reject("plan", "a Plan conversation has no run to close")
+				return
+			}
+			h.planMessage(conv, m, admit, reject)
+			return
+		}
 		if m.Type == "submit" && conv != nil && conv.parked == nil && conv.pending == "" && (conv.phase == "closed" || conv.phase == "failed") {
 			if !conv.loaded {
 				id := m.Conversation

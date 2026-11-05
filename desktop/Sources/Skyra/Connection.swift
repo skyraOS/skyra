@@ -82,9 +82,12 @@ final class Session {
     private var specDrafts: [String: (text:String,revision:Int)] = [:]
     func specDraft(for id:String) -> (text:String,revision:Int)? { specDrafts[id] }
     func keepSpecDraft(_ text:String,revision:Int,for id:String) { specDrafts[id] = (text,revision) }
+    /// A spec is unsaved when its text or its tools differ from what the root holds.
     func hasUnsavedSpec(for id:String) -> Bool {
-        guard let draft = specDrafts[id], let work = conversations.first(where: { $0.id == id })?.work else { return false }
-        return draft.text != work.spec
+        guard let work = conversations.first(where: { $0.id == id })?.work else { return false }
+        if let draft = specDrafts[id], draft.text != work.spec { return true }
+        if let saved = work.tools, let chosen = missionToolSelections[id] { return chosen != saved.sorted() }
+        return false
     }
 
     private var missionToolSelections: [String: [String]] = [:]
@@ -114,13 +117,25 @@ final class Session {
 
     func toolsForMission(_ id: String) -> [String] {
         let defaults = treeTargets.filter { $0 != "echo" }
-        let wanted = missionToolSelections[id] ?? conversations.first(where: { $0.id == id }).flatMap { tree(for:$0)?.reach } ?? defaults
+        let conversation = conversations.first(where: { $0.id == id })
+        let wanted = missionToolSelections[id] ?? conversation?.work?.tools ?? conversation.flatMap { tree(for:$0)?.reach } ?? defaults
         return wanted.filter { treeTargets.contains($0) }.sorted()
     }
 
     func setMissionTools(_ tools: [String], for id: String) {
         missionToolSelections[id] = tools.filter { treeTargets.contains($0) }.sorted()
         if !storageKey.isEmpty { UserDefaults.standard.set(missionToolSelections,forKey:"missionTools:\(storageKey)") }
+    }
+
+    /// Forget a local tool choice, so the saved spec's tools show again.
+    func resetMissionTools(for id: String) {
+        missionToolSelections[id] = nil
+        if !storageKey.isEmpty { UserDefaults.standard.set(missionToolSelections,forKey:"missionTools:\(storageKey)") }
+    }
+
+    /// Every Launch of a mission, newest first.
+    func launches(for id: String) -> [TreeRun] {
+        trees.filter { $0.conversation == id }.sorted { $0.started > $1.started }
     }
 
     func createMission() {
@@ -567,20 +582,43 @@ final class Session {
     }
 
     @discardableResult
-    func saveSpec(_ text: String, revision: Int, conversationID: String? = nil) -> Bool {
+    func saveSpec(_ text: String, tools: [String], revision: Int, profile: SpecProfile? = nil, conversationID: String? = nil) -> Bool {
         guard let targetID = conversationID ?? selected, let current = conversations.first(where: { $0.id == targetID }), current.work != nil, !workPending else { return false }
         let id = requestID()
-        guard send(.saveSpec(incarnation: incarnation, conversation: current.id, requestId: id, revision: revision, text: text)) else { return false }
+        guard send(.saveSpec(incarnation: incarnation, conversation: current.id, requestId: id, revision: revision, text: text, tools: tools.sorted(), profile: profile)) else { return false }
         workRequest = id
         return true
     }
 
+    /// The spec revision the Spec pane shows for a conversation: one a turn
+    /// pointed at, or the latest when none was chosen.
+    private var shownRevisions: [String: Int] = [:]
+    func shownRevision(for id: String) -> Int {
+        guard let work = conversations.first(where: { $0.id == id })?.work else { return 0 }
+        if let n = shownRevisions[id], n >= 1, n <= work.revision { return n }
+        return work.revision
+    }
+    func showRevision(_ n: Int?, for id: String) { shownRevisions[id] = n }
+    /// A pane a view asked the workbench to show, such as Spec from a reply.
+    var paneRequest: MissionPane? = nil
+
+    /// Whether a revision can be launched: the root holds it, and nothing
+    /// unsaved or running is in the way.
+    func canLaunch(revision n: Int, conversationID id: String) -> Bool {
+        guard let current = conversations.first(where: { $0.id == id }), let work = current.work, n >= 1 else { return false }
+        let launchable = work.revision(n)?.launchable ?? (n == work.revision && work.launchable == true)
+        return connected && launchable && !workPending && !hasUnsavedSpec(for: id) && tree(for: current)?.phase != .running
+    }
+
+    /// Pass a revision, as the root holds it, to a Launch: the one the Spec
+    /// pane shows unless another is named.
     @discardableResult
-    func runSpec(holding reach: [String], conversationID: String? = nil) -> Bool {
-        guard let targetID = conversationID ?? selected, let current = conversations.first(where: { $0.id == targetID }), let work = current.work, !work.spec.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !reach.isEmpty, !workPending, tree(for: current)?.phase != .running else { return false }
+    func launchSpec(conversationID: String? = nil, revision: Int? = nil) -> Bool {
+        guard let targetID = conversationID ?? selected else { return false }
+        let n = revision ?? shownRevision(for: targetID)
+        guard canLaunch(revision: n, conversationID: targetID) else { return false }
         let id = requestID()
-        guard send(.runSpec(incarnation: incarnation, conversation: current.id, requestId: id, revision: work.revision, reach: reach)) else { return false }
+        guard send(.launchSpec(incarnation: incarnation, conversation: targetID, requestId: id, revision: n)) else { return false }
         workRequest = id
         return true
     }

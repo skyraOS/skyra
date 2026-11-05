@@ -10,6 +10,7 @@ struct Entry: Decodable, Equatable, Sendable {
     let ts: Int
     let requestId: String?
     let call: Call? // on a "call" entry
+    var revision: Int? = nil // a Plan reply: the spec revision its turn made
     var isUser: Bool { role == "user" }
 }
 
@@ -37,6 +38,84 @@ struct ConversationWork: Decodable, Equatable, Sendable {
     let revision: Int
     let spec: String
     let lastRunId: String?
+    // The Mission's root (absent from a webhost that predates Missions): the
+    // latest revision's proposed tools, who wrote it, how many observations it
+    // cites, and whether the human root holds it, so it may be launched.
+    var tools: [String]? = nil
+    var source: String? = nil // "human" | "plan"
+    var inputs: Int? = nil
+    var launchable: Bool? = nil
+    var planning: Bool? = nil
+    var planError: String? = nil
+    // Where the latest revision's words came from, as its Spec records them:
+    // quoted from the request or conversation, written by Plan, or by you.
+    var segments: [SpecSegment]? = nil
+    var coverage: SpecCoverage? = nil
+    var profile: SpecProfile? = nil
+    // A Plan conversation: every message is a Plan turn, and these are its
+    // latest revisions, so the Spec can be shown as it stood at any turn.
+    var plan: Bool? = nil
+    var revisions: [SpecRevision]? = nil
+
+    /// The revision numbered n, if the snapshot carries it.
+    func revision(_ n: Int) -> SpecRevision? { revisions?.first { $0.revision == n } }
+}
+
+/// One spec revision as it stood: the task, its sources and the tools it
+/// proposes. Revisions never change once made.
+struct SpecRevision: Decodable, Equatable, Sendable {
+    let revision: Int
+    let text: String
+    var tools: [String]? = nil
+    var source: String? = nil
+    var inputs: Int? = nil
+    var launchable: Bool? = nil
+    var segments: [SpecSegment]? = nil
+    var coverage: SpecCoverage? = nil
+    var profile: SpecProfile? = nil
+}
+
+/// The constants a Spec's Launch tree runs under, set at its root for every
+/// agent in it: how many tools one node may hold and invoke before it must
+/// delegate, its turns, how deep the tree may grow, and the instructions in
+/// one call (at most 32, the kernel's), and the turns the whole tree may take.
+struct SpecProfile: Codable, Equatable, Hashable, Sendable {
+    var act: Int
+    var turns: Int
+    var depth: Int
+    var fanout: Int
+    var budget: Int
+
+    /// The one-tool tree: a node holding more than one tool delegates.
+    static let standard = SpecProfile(act: 1, turns: 8, depth: 3, fanout: 32, budget: 64)
+
+    var summary: String {
+        "\(act == 1 ? "1 tool" : "Up to \(act) tools") per node · \(turns) turns · depth \(depth) · \(fanout) per call · \(budget) turns in all"
+    }
+}
+
+struct SpecSegment: Decodable, Equatable, Sendable {
+    let text: String
+    let source: String // "cited" | "plan" | "human"
+    var from: String? = nil // "request" | "conversation", for a cited segment
+}
+
+/// A Spec's words by source. Cite coverage is the share quoted from what the
+/// human said; the human's own words never lower it, Plan's do.
+struct SpecCoverage: Decodable, Equatable, Sendable {
+    let words: Int
+    let cited: Int
+    let plan: Int
+    let human: Int
+
+    func share(_ n: Int) -> Int { words == 0 ? 0 : Int((Double(n) * 100 / Double(words)).rounded()) }
+    var summary: String {
+        var parts: [String] = []
+        if cited > 0 { parts.append("\(share(cited))% quoted from you") }
+        if human > 0 { parts.append("\(share(human))% written by you") }
+        if plan > 0 { parts.append("\(share(plan))% Plan's own words") }
+        return parts.isEmpty ? "No words" : parts.joined(separator: " · ")
+    }
 }
 
 struct Conversation: Decodable, Equatable, Sendable, Identifiable {
@@ -157,6 +236,7 @@ struct TreeRun: Decodable, Equatable, Sendable, Identifiable {
     var treeId: String? = nil
     var specId: String? = nil
     var specRevision: Int? = nil
+    var spec: String? = nil // the Spec observation a Launch passed; absent for a standalone tree
     let goal: String
     let actor: String?
     let kind: String
@@ -252,11 +332,14 @@ enum ClientMessage: Encodable {
     case delete(incarnation: String, conversation: String, requestId: String)
     case startTree(requestId: String, spec: String, kind: String, reach: [String], actor: String = "claude") // 56: one tree of a spec
 
-    case saveSpec(incarnation: String, conversation: String, requestId: String, revision: Int, text: String)
-    case runSpec(incarnation: String, conversation: String, requestId: String, revision: Int, reach: [String])
+    // A Mission's spec: saved by the human with the tools it proposes, or
+    // launched exactly as the root holds it. Plan writes one from each
+    // message in the conversation (a submit).
+    case saveSpec(incarnation: String, conversation: String, requestId: String, revision: Int, text: String, tools: [String], profile: SpecProfile? = nil)
+    case launchSpec(incarnation: String, conversation: String, requestId: String, revision: Int)
 
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, conversation, requestId, text, procedure, model, images, kind, reach, actor, specRevision
+        case type, uiIncarnation, conversation, requestId, text, procedure, model, images, kind, reach, actor, specRevision, profile
     }
 
     /// A pasted image as the webhost takes it: its name and its bytes.
@@ -289,20 +372,21 @@ enum ClientMessage: Encodable {
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
-        case let .saveSpec(inc, conv, id, revision, text):
+        case let .saveSpec(inc, conv, id, revision, text, tools, profile):
             try c.encode("save-spec", forKey: .type)
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
             try c.encode(revision, forKey: .specRevision)
             try c.encode(text, forKey: .text)
-        case let .runSpec(inc, conv, id, revision, reach):
-            try c.encode("run-spec", forKey: .type)
+            try c.encode(tools, forKey: .reach)
+            try c.encodeIfPresent(profile, forKey: .profile)
+        case let .launchSpec(inc, conv, id, revision):
+            try c.encode("launch-spec", forKey: .type)
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
             try c.encode(revision, forKey: .specRevision)
-            try c.encode(reach, forKey: .reach)
         case let .startTree(id, spec, kind, reach, actor):
             try c.encode("start-tree", forKey: .type)
             try c.encode(id, forKey: .requestId)

@@ -67,6 +67,23 @@ in order when the turn ends, and leaves validation and execution to the tree.
 The CLI checks the recorded grant against the provider configuration. Claude
 also reports its loaded MCP tools; Codex is checked at `thread/start`.
 
+A tree runs under a **profile**, the constants its root sets in the tree's
+input (`"profile": {"act", "turns", "depth", "fanout", "budget"}`) for every agent in
+it, recorded with what the tree was asked so a replay runs under them too.
+`act` is the most contracts one node holds and still invokes itself: a node
+holding at least one and at most `act` is an act node, choosing among them by
+number; holding more, it delegates. `turns` bounds each agent's turns,
+`depth` how deep a child may be, `fanout` the instructions in one call (at
+most 32, the kernel's), and `budget` the turns of the whole tree, every
+agent's together: the bound on what one tree can cost, which each model is
+told the remainder of. With no profile the tree is the one-contract tree,
+`{act 1, turns 8, depth 3, fanout 32, budget 64}`, which is what Launch passes today; a
+profile that cannot run (an act bound below 1, no turns) faults the root. The
+Lean model proves the kind rule for every act bound (`classify_act_iff`,
+`classify_delegate_iff`, and `classify_act_mono`: raising the bound never
+takes a node out of acting), and the vectors check the Go against it at
+bounds 1 to 3.
+
 For the ordinary `delegate` helper, an omitted `tools` list inherits the
 calling model's offered tools, including when switching providers. An explicit
 empty list grants none; a subset keeps only those tools and their contracts.
@@ -97,8 +114,8 @@ OS, the tree or the network.
 
 | Package | Owns |
 |---|---|
-| [`humanroot`](runtime/humanroot/) | Trusted journal adapter for the human-root protocol: durable records, replay, separate human/runtime ingress and verified child-return readers; not yet routed through the Mission UI |
-| [`mission`](runtime/mission/) | Pinned catalogue, Plan receipt validation and explicit once-only Launch through a restricted existing kernel/worker tree; desktop integration remains |
+| [`humanroot`](runtime/humanroot/) | Trusted journal adapter for the human-root protocol: durable records, replay, separate human/runtime ingress and verified child-return readers; one per Mission, held by the webhost |
+| [`mission`](runtime/mission/) | Pinned catalogue, once-only Plan (a delegate tree granted workspace `pwd`/`cd`/`ls`/`find`/`read`, `view-plan-contracts` and `propose-spec`) and Launch through a restricted existing kernel/worker tree, receipts checked by replay; the webhost's Mission operations |
 | [`instance`](runtime/instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions |
 | [`tree`](runtime/tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` |
 | [`replay`](runtime/replay/) | Re-derives a lineage from genesis with the machine, every sibling a resolve names included; walks a trace for the `trace` syscall. Reads the tree, writes nothing |

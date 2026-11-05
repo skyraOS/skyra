@@ -1,5 +1,7 @@
-// propose-spec is an ordinary leaf contract. Its output is a proposal, never
-// a capability grant. The trusted Mission bridge validates it independently.
+// propose-spec is an ordinary leaf contract. Its input names the tools a Spec
+// proposes from the contracts view_plan_contracts returned; its output is that Spec,
+// with their references. A proposal is never a capability grant: the trusted
+// Mission bridge validates it independently.
 package main
 
 import (
@@ -8,30 +10,17 @@ import (
 	"io"
 	"os"
 
-	"skyra/controller/core/contract"
 	"skyra/controller/core/mission"
 )
 
 func propose(raw []byte) (json.RawMessage, error) {
-	value, err := contract.Decode(raw)
-	if err != nil {
-		return nil, err
-	}
-	if err = contract.Fits(mission.ProposeSchema(), value); err != nil {
-		return nil, err
-	}
-	var input struct {
-		Spec json.RawMessage `json:"propose_spec"`
-	}
-	if err = json.Unmarshal(raw, &input); err != nil {
-		return nil, err
-	}
-	spec, err := mission.DecodeSpec(input.Spec)
+	spec, err := mission.Propose(raw)
 	if err != nil {
 		return nil, err
 	}
 	return json.Marshal(spec)
 }
+
 func main() {
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 1024*1024+1))
 	if err == nil && len(raw) > 1024*1024 {

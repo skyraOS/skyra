@@ -23,12 +23,40 @@ import (
 // agent always goes back to its model.
 
 // MaxFanOut is the most instructions one call may carry, as the kernel's
-// fan-out.
+// fan-out: no profile may allow more.
 const MaxFanOut = 32
 
-// MaxTurns is the most turns one agent may take, as the depth bound bounds
-// a tree's depth: past it the agent faults (56, open item 18).
-const MaxTurns = 8
+// A Profile is the constants a tree runs under, set by its root when it is
+// started and the same for every agent in it: they are part of what started
+// the tree, so a replay runs under them too.
+type Profile struct {
+	Act    int `json:"act"`    // the most contracts one node holds and still invokes itself; past it, it delegates
+	Turns  int `json:"turns"`  // the most turns one agent may take: past it the agent faults (56, open item 18)
+	Depth  int `json:"depth"`  // the deepest a child may be: the root is at 0
+	FanOut int `json:"fanout"` // the most instructions one call may carry, at most MaxFanOut
+	Budget int `json:"budget"` // the most turns the whole tree may take, every agent's together
+}
+
+// DefaultProfile is the one-contract tree: an act node holds exactly one
+// contract.
+var DefaultProfile = Profile{Act: 1, Turns: 8, Depth: 3, FanOut: MaxFanOut, Budget: 64}
+
+// Check is why a profile cannot run a tree, or "".
+func (p Profile) Check() string {
+	switch {
+	case p.Act < 1:
+		return "a profile's act bound is at least 1: a node acts through something"
+	case p.Turns < 1:
+		return "a profile allows at least one turn"
+	case p.Depth < 0:
+		return "a profile's depth is not negative"
+	case p.FanOut < 1 || p.FanOut > MaxFanOut:
+		return "a profile's fan-out is between 1 and " + itoa(MaxFanOut)
+	case p.Budget < 1:
+		return "a profile's budget allows at least one turn"
+	}
+	return ""
+}
 
 // The output shapes of what the apprentice's own contracts make: text, or a
 // list (the packaged reach and the delegate computation). baseOf keeps them
@@ -60,7 +88,7 @@ type Tree struct {
 	Store   Store       // base types known, one guard each
 	History []InputBase // inputs seen
 	Agents  map[AgentID]*Agent
-	Depth   int // the bound
+	Profile Profile // the constants it runs under
 
 	held *held // a cycle in flight: what it decided, and what it waits on
 }
@@ -157,9 +185,19 @@ type Pending struct {
 	Done     bool
 }
 
-// NewTree is the tree before Started: the apprentice and the depth bound.
-func NewTree(a Apprentice, depth int) Tree {
-	return Tree{App: a, Store: EmptyStore(), Agents: map[AgentID]*Agent{}, Depth: depth}
+// NewTree is the tree before Started: the apprentice and the profile it
+// runs under.
+func NewTree(a Apprentice, p Profile) Tree {
+	return Tree{App: a, Store: EmptyStore(), Agents: map[AgentID]*Agent{}, Profile: p}
+}
+
+// TurnsTaken is every agent's turns together: what the budget bounds.
+func (t Tree) TurnsTaken() int {
+	n := 0
+	for _, a := range t.Agents {
+		n += a.Turns
+	}
+	return n
 }
 
 // Root is the root agent, once Started.
@@ -598,6 +636,10 @@ func (r *run) provision(e Started) {
 	r.t.Actor = e.Actor
 	a := &Agent{ID: rootID, Self: e.Self}
 	r.t.Agents[rootID] = a
+	if why := r.t.Profile.Check(); why != "" {
+		r.fault(a, why)
+		return
+	}
 	k, ok := RootKind(app, e.Self, e.Reach, e.Kind)
 	if !ok || (k != KindAct && k != KindDelegate) {
 		r.fault(a, "the root reaches its own binary, or has no kind")
@@ -641,8 +683,12 @@ func seenWord(s Seen) string {
 }
 
 func (r *run) turn(a *Agent) {
-	if a.Turns >= MaxTurns {
+	if a.Turns >= r.t.Profile.Turns {
 		r.fault(a, "the turn bound")
+		return
+	}
+	if r.t.TurnsTaken() >= r.t.Profile.Budget {
+		r.fault(a, "the tree's budget")
 		return
 	}
 	a.Turns++
@@ -677,7 +723,7 @@ func (r *run) replied(e Replied) {
 		r.fault(a, "a reply while not thinking")
 		return
 	}
-	call, why := parseCall(e.Out, a.Offer)
+	call, why := parseCall(e.Out, a.Offer, r.t.Profile.FanOut)
 	if why == "" {
 		before, writes, acts := r.t.clone(), len(r.writes), len(r.acts)
 		why = r.interpret(a, call, e.Seen)
@@ -695,7 +741,7 @@ func (r *run) replied(e Replied) {
 // parseCall reads a reply's wire format: a JSON array, one object per
 // instruction, observations by integer or {"earlier": n}, contracts by their
 // index in the Offer (pass-only for delegate, invoke for perform_effect).
-func parseCall(out []byte, o Offer) (Call, string) {
+func parseCall(out []byte, o Offer, fanOut int) (Call, string) {
 	var raw []map[string]json.RawMessage
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, "the reply is not an array of instructions"
@@ -703,8 +749,8 @@ func parseCall(out []byte, o Offer) (Call, string) {
 	if len(raw) == 0 {
 		return nil, "an empty call"
 	}
-	if len(raw) > MaxFanOut {
-		return nil, "a call of more than 32 instructions"
+	if len(raw) > fanOut {
+		return nil, "a call of more than " + itoa(fanOut) + " instructions"
 	}
 	var call Call
 	for _, m := range raw {
@@ -1160,11 +1206,11 @@ func (r *run) delegate(a *Agent, element int, names []int, cs []Contract) string
 	child := &Agent{ID: id, Parent: a.ID, Self: r.t.Actor, Depth: a.Depth + 1}
 	r.t.Agents[id] = child
 	a.Waiting = append(a.Waiting, Pending{Element: element, Child: id})
-	if child.Depth > r.t.Depth {
+	if child.Depth > r.t.Profile.Depth {
 		r.fault(child, "the depth bound")
 		return ""
 	}
-	k, ok := Classify(app, r.t.Actor, cs)
+	k, ok := Classify(app, r.t.Profile.Act, r.t.Actor, cs)
 	if !ok {
 		r.fault(child, "refused: the actor in its own reach, or nothing passed")
 		return ""

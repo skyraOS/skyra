@@ -1,0 +1,48 @@
+{
+  "input": {
+    "title": "find",
+    "type": "object",
+    "fields": {
+      "find": {
+        "type": "object",
+        "fields": {
+          "dir": {
+            "type": "object",
+            "fields": {
+              "dir": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dir"
+            ]
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "number"
+          },
+          "maxdepth": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dir"
+        ]
+      }
+    },
+    "required": [
+      "find"
+    ]
+  }
+}

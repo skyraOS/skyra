@@ -88,7 +88,7 @@ private func missionSnapshot(_ ids:[String],revision:Int = 1) throws -> Data {
             MissionToolbar(backend:backend,session:session,sidebarVisible:.constant(true),archivePresented:.constant(false))
             HStack(alignment:.top,spacing:18) {
                 MissionSidebar(session:session,archivePresented:.constant(false)).frame(width:212)
-                MissionWorkbench(backend:backend,session:session,pane:.constant(.chat)).frame(width:680)
+                MissionWorkbench(backend:backend,session:session,pane:.constant(.plan)).frame(width:680)
                 Spacer(minLength:0)
             }.padding(20)
         }
@@ -110,6 +110,28 @@ private func missionSnapshot(_ ids:[String],revision:Int = 1) throws -> Data {
     let tree = TreeRun(id:"run",specRevision:1,goal:"original",actor:"codex",kind:"act",reach:["read"],phase:.done,answer:"done",error:nil,started:1,view:nil)
     #expect(Mission(conversation:conversation,tree:tree).status == "Completed")
     conversation.work = ConversationWork(conversation:conversation.id,treeId:"tree-mission",specId:"spec-mission",revision:2,spec:"revised",lastRunId:"run")
-    #expect(Mission(conversation:conversation,tree:tree).status == "Ready to run")
+    #expect(Mission(conversation:conversation,tree:tree).status == "Shaping the spec") // the root does not hold it
+    conversation.work?.launchable = true
+    #expect(Mission(conversation:conversation,tree:tree).status == "Ready to launch")
     #expect(Mission(conversation:conversation,tree:tree).specLabel == "Spec r2")
+    conversation.work?.planning = true
+    #expect(Mission(conversation:conversation,tree:nil).status == "Planning")
+}
+
+@MainActor @Test func changingToolsIsAnUnsavedSpecAndLaunchesStayWithTheirMission() throws {
+    let session = Session()
+    let rows = ["a","b"].map { id -> [String: Any] in
+        ["conversation":id,"phase":"ready","entries":[],"work":["conversation":id,"treeId":"tree-\(id)","specId":"spec-\(id)","revision":1,"spec":"saved","lastRunId":"","tools":["read"],"source":"plan","launchable":true]]
+    }
+    session.receive(try JSONSerialization.data(withJSONObject: ["type":"snapshot","uiIncarnation":"i","revision":1,"conversations":rows,"destinations":[]]))
+    session.receive(Data(#"{"type":"trees","targets":["find","read","echo"],"trees":[{"id":"t1","conversation":"a","goal":"g","kind":"act","reach":["read"],"phase":"done","started":1},{"id":"t2","conversation":"a","goal":"g","kind":"act","reach":["read"],"phase":"running","started":2},{"id":"t3","conversation":"b","goal":"g","kind":"act","reach":["read"],"phase":"done","started":3}]}"#.utf8))
+    #expect(session.toolsForMission("a") == ["read"]) // the saved spec's tools, not a default
+    #expect(!session.hasUnsavedSpec(for:"a"))
+    session.setMissionTools(["read","find"],for:"a")
+    #expect(session.hasUnsavedSpec(for:"a"))
+    #expect(!session.launchSpec(conversationID:"a")) // an unsaved grant never launches
+    session.resetMissionTools(for:"a")
+    #expect(!session.hasUnsavedSpec(for:"a"))
+    #expect(session.launches(for:"a").map(\.id) == ["t2","t1"])
+    #expect(session.conversations.first { $0.id == "a" }?.work?.source == "plan")
 }

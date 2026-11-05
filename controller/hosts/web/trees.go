@@ -41,6 +41,11 @@ type treeRun struct {
 	Error        string          `json:"error,omitempty"`
 	Started      int64           `json:"started"`
 	View         json.RawMessage `json:"view,omitempty"` // treeview's frames; null until the first resume
+	// A Launch's run lives in its Mission, under the call that dispatched it,
+	// passing the Spec observation the human held.
+	Root string `json:"root,omitempty"`
+	Spec string `json:"spec,omitempty"`
+	Call string `json:"call,omitempty"`
 
 	root string
 }
@@ -51,12 +56,34 @@ type trees struct {
 	dir      string // where every tree's run lives
 	view     string // the treeview binary
 	registry string // the operator's registry, at the operator's depth
+	// targets are the treeTargets this registry holds as programs. A Launch's
+	// tools are pinned by binary, so one a host serves (find, in the app,
+	// is the repository host's) is not offered.
+	targets []string
 }
 
 func newTrees(dir, view, registry string) *trees {
-	t := &trees{runs: map[string]*treeRun{}, dir: dir, view: view, registry: registry}
+	t := &trees{runs: map[string]*treeRun{}, dir: dir, view: view, registry: registry, targets: programs(registry, treeTargets)}
 	t.load()
 	return t
+}
+
+// programs is which of targets the registry holds as executables.
+func programs(registry string, targets []string) []string {
+	var entries map[string]struct {
+		Path string `json:"path"`
+	}
+	raw, err := os.ReadFile(registry)
+	if err != nil || json.Unmarshal(raw, &entries) != nil {
+		return slices.Clone(targets)
+	}
+	out := []string{}
+	for _, t := range targets {
+		if entries[t].Path != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // load lists past trees from their run directories.
@@ -72,6 +99,9 @@ func (t *trees) load() {
 			r.Actor = "claude"
 		}
 		r.root = filepath.Join(filepath.Dir(d), ".skyra")
+		if r.Root != "" {
+			r.root = r.Root
+		}
 		if r.Phase == "running" { // its host is gone
 			r.Phase, r.Error = "failed", "the webhost stopped while it ran"
 		}
@@ -84,7 +114,7 @@ func (t *trees) save(r *treeRun) error {
 	c := *r
 	c.View = nil
 	b, _ := json.Marshal(c)
-	return atomicWorkFile(filepath.Join(filepath.Dir(r.root), "tree.json"), b)
+	return atomicWorkFile(filepath.Join(t.dir, r.ID, "tree.json"), b)
 }
 
 // render is treeview's view of a run, or nil before it has one.
@@ -101,7 +131,7 @@ func (t *trees) render(root string) json.RawMessage {
 
 // start boots a tree; it returns the run's id, or why it was refused.
 func (h *webhost) startTree(goal, kind string, reach []string, actors ...string) (string, string) {
-	r, why := h.prepareTree(goal, kind, reach, nil, actors...)
+	r, why := h.prepareTree(goal, kind, reach, actors...)
 	if why != "" {
 		return "", why
 	}
@@ -109,7 +139,7 @@ func (h *webhost) startTree(goal, kind string, reach []string, actors ...string)
 	return r.ID, ""
 }
 
-func (h *webhost) prepareTree(goal, kind string, reach []string, work *conversationWork, actors ...string) (*treeRun, string) {
+func (h *webhost) prepareTree(goal, kind string, reach []string, actors ...string) (*treeRun, string) {
 	t := h.trees
 	if t == nil {
 		return nil, "this webhost was started without trees"
@@ -137,22 +167,18 @@ func (h *webhost) prepareTree(goal, kind string, reach []string, work *conversat
 		return nil, "a delegate root holds two or more targets"
 	}
 	for _, r := range reach {
-		if !slices.Contains(treeTargets, r) {
+		if !slices.Contains(t.targets, r) {
 			return nil, r + " is not a target a tree may hold here"
 		}
 	}
-	nonce := make([]byte, 8)
-	if _, err := rand.Read(nonce); err != nil {
+	id, err := runID()
+	if err != nil {
 		return nil, err.Error()
 	}
-	id := "t-" + time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(nonce)
 	r := &treeRun{Actor: actor, ID: id, Goal: goal, Kind: kind, Reach: reach, Phase: "running", Started: time.Now().UnixMilli(),
 		root: filepath.Join(t.dir, id, ".skyra")}
 	if err := os.MkdirAll(r.root, 0o700); err != nil {
 		return nil, err.Error()
-	}
-	if work != nil {
-		r.Conversation, r.TreeID, r.SpecID, r.SpecRevision = work.Conversation, work.TreeID, work.SpecID, work.Revision
 	}
 	t.mu.Lock()
 	t.runs[id] = r
@@ -163,6 +189,14 @@ func (h *webhost) prepareTree(goal, kind string, reach []string, work *conversat
 	}
 	t.mu.Unlock()
 	return r, ""
+}
+
+func runID() (string, error) {
+	nonce := make([]byte, 8)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	return "t-" + time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(nonce), nil
 }
 
 func (h *webhost) runTree(r *treeRun) {
@@ -240,6 +274,6 @@ func (h *webhost) sendTrees() {
 	}
 	t.mu.Unlock()
 	sort.Slice(list, func(i, j int) bool { return list[i].Started > list[j].Started })
-	b, _ := json.Marshal(map[string]any{"type": "trees", "targets": treeTargets, "trees": list})
+	b, _ := json.Marshal(map[string]any{"type": "trees", "targets": t.targets, "trees": list})
 	h.sendRaw(b)
 }

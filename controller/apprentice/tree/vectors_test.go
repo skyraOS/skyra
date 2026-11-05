@@ -333,7 +333,11 @@ var replays = map[string]replay{
 		return MayReturn(obsOf(t, in["created"]), obsOf(t, in["returned"]))
 	},
 	"classify": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {
-		k, ok := Classify(a, dec[jContract](t, in["self"]).get(t), contractsOf(t, in["reach"]))
+		var act int
+		if err := json.Unmarshal(in["act"], &act); err != nil {
+			t.Fatalf("act: %v", err)
+		}
+		k, ok := Classify(a, act, dec[jContract](t, in["self"]).get(t), contractsOf(t, in["reach"]))
 		return eOpt(k, ok, func(k Kind) any { return k.String() })
 	},
 	"rootKind": func(t *testing.T, a Apprentice, in map[string]json.RawMessage) any {

@@ -85,7 +85,7 @@ controller_build() {
   mkdir -p "$BUILD/controller"
   cd "$ROOT"
   local t
-  local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write roots:targets/roots agent:targets/agent user:targets/user models:targets/models
+  local builds="skyra:skyra echo:targets/echo read:targets/read find:targets/find write:targets/write propose-spec:targets/propose-spec view-plan-contracts:targets/view-plan-contracts workdir:targets/workdir roots:targets/roots agent:targets/agent user:targets/user models:targets/models
     codexresident:codex/resident service-io:service/io service-host:service/host webhost:hosts/web fake-codex:codex/fake
     clauderesident:claude/resident claude-start:claude/start claude-keychain:claude/keychain
     desktop-observe:cua/adapter cua-bridge:cua/bridge ideas-host:hosts/ideas design-tools:design repo-host:hosts/repo blender-tools:blender"
@@ -164,6 +164,15 @@ registry={
  'models':{'path':str(build/'models'),'contract':str(root/'controller/targets/models/contract.json'),
            'authority':{'read':[{'path':str(home/'.codex'),'scope':'subpath'},{'path':str(home/'.claude'/'cache'/'model-catalog'),'scope':'subpath'}]}},
  'write':{'path':str(build/'write'),'contract':str(root/'controller/targets/write/contract.json')},
+ # The two contracts a Mission's Plan tree is granted: the viewer returns the
+ # contracts the human holds for Launch, which the host leaves in its state;
+ # the proposer turns a spec naming tools from that view into a typed Spec.
+ 'view-plan-contracts':{'path':str(build/'view-plan-contracts'),'contract':str(root/'controller/targets/view-plan-contracts/contract.json'),'state':True},
+ 'propose-spec':{'path':str(build/'propose-spec'),'contract':str(root/'controller/targets/propose-spec/contract.json')},
+ # Plan's way around the workspace, before it proposes: pwd and cd return a
+ # directory observation, which cd, ls, find and read take. Read-only, like read.
+ **{'plan.'+op:{'path':str(build/'workdir'),'contract':str(root/'controller/targets/workdir'/(op+'.json')),
+                'authority':{'read':[{'path':str(workspace),'scope':'subpath'}],'workspace':str(workspace)}} for op in ('pwd','cd','ls','find','read')},
  'codex':{'uses':['codex.open','codex.exchange','codex.inspect','codex.stop'],'path':str(build/'codexresident'),'contract':str(root/'controller/codex/resident/contract.json')},
  'codex.open':io('open-contract.json'),
  'codex.exchange':io('contract.json'),

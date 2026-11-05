@@ -28,7 +28,7 @@ func TestImportsEnterTheEndowmentAndPinnedContractsSurviveShellReplay(t *testing
 	if err := s.setup(*s.state.Ask); err != nil {
 		t.Fatal(err)
 	}
-	s.tree = tree.NewTree(s.app, s.depth)
+	s.tree = tree.NewTree(s.app, s.profile)
 	for _, log := range s.state.Log {
 		event, err := s.decode(log)
 		if err != nil {

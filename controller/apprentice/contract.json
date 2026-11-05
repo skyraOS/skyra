@@ -121,6 +121,33 @@
             "depth": {
               "type": "number"
             },
+            "profile": {
+              "type": "object",
+              "required": [
+                "act",
+                "turns",
+                "depth",
+                "fanout",
+                "budget"
+              ],
+              "fields": {
+                "act": {
+                  "type": "number"
+                },
+                "turns": {
+                  "type": "number"
+                },
+                "depth": {
+                  "type": "number"
+                },
+                "fanout": {
+                  "type": "number"
+                },
+                "budget": {
+                  "type": "number"
+                }
+              }
+            },
             "imports": {
               "type": "array",
               "items": {

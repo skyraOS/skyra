@@ -1,0 +1,14 @@
+{
+  "input": {
+    "title": "view_plan_contracts",
+    "type": "object",
+    "fields": {
+      "view_plan_contracts": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "view_plan_contracts"
+    ]
+  }
+}

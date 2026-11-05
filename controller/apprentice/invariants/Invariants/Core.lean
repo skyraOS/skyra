@@ -704,82 +704,97 @@ def invoke : Seen → (guardHolds : Bool) → InvokeResult
 theorem invoke_procedure_iff : invoke n g = .procedure ↔ n = .seen ∧ g = true := by
   cases n <;> cases g <;> simp [invoke]
 
-/-- The kind, from the contracts counted: none for none, as a delegate
-passes at least one contract. -/
-def kind (counted : List Contract) : Option Kind :=
-  match counted.eraseDups.length with
-  | 0 => none
-  | 1 => some .act
-  | _ => some .delegate
+/-- The kind, from the contracts counted, under the tree's act bound `act`:
+the most contracts one node may hold and still invoke itself, which the root
+sets for the whole tree. None for none, as a delegate passes at least one
+contract; act while there are at most `act`; delegate past it. At `act = 1`
+an act node holds exactly one contract. -/
+def kind (act : Nat) (counted : List Contract) : Option Kind :=
+  if counted.eraseDups.length = 0 then none
+  else if counted.eraseDups.length ≤ act then some .act else some .delegate
 
 /-- The contracts that count: the reach, the apprentice's taken out. -/
 def counted (a : Apprentice) (reach : List Contract) : List Contract :=
   reach.filter (!a.mine ·)
 
-/-- What the core runs, in the `observe` phase, for a child: the apprentice,
-the child's contract and the contracts its delegate passed, as values. The
-apprentice's contracts count for neither the self check nor the kind.
-`none` refuses a child whose own binary is in the rest of its reach, at
-every count, and a delegate that passed nothing. -/
-def classify (a : Apprentice) (self : Contract) (reach : List Contract) : Option Kind :=
-  if self.binary ∈ (counted a reach).map (·.binary) then none else kind (counted a reach)
+/-- What the core runs, in the `observe` phase, for a child: the tree's act
+bound, the apprentice, the child's contract and the contracts its delegate
+passed, as values. The apprentice's contracts count for neither the self
+check nor the kind. `none` refuses a child whose own binary is in the rest of
+its reach, at every count, and a delegate that passed nothing. -/
+def classify (act : Nat) (a : Apprentice) (self : Contract) (reach : List Contract) :
+    Option Kind :=
+  if self.binary ∈ (counted a reach).map (·.binary) then none else kind act (counted a reach)
 
 theorem classify_none_iff :
-    classify a self reach = none ↔
+    classify act a self reach = none ↔
       self.binary ∈ (counted a reach).map (·.binary) ∨ (counted a reach).eraseDups.length = 0 := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, false_or]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1]
 
+/-- A node acts when it holds at least one contract and at most `act`. -/
 theorem classify_act_iff :
-    classify a self reach = some .act ↔
-      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
+    classify act a self reach = some .act ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧
+        1 ≤ (counted a reach).eraseDups.length ∧ (counted a reach).eraseDups.length ≤ act := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, not_false_eq_true, true_and]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1] <;> omega
 
+/-- A node delegates when it holds more than `act`. -/
 theorem classify_delegate_iff :
-    classify a self reach = some .delegate ↔
-      self.binary ∉ (counted a reach).map (·.binary) ∧ 2 ≤ (counted a reach).eraseDups.length := by
+    classify act a self reach = some .delegate ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧
+        1 ≤ (counted a reach).eraseDups.length ∧ act < (counted a reach).eraseDups.length := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, not_false_eq_true, true_and]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1] <;> omega
+
+/-- At `act = 1`, the one-contract tree: an act node holds exactly one
+contract, and a delegate two or more. -/
+theorem classify_one_act_iff :
+    classify 1 a self reach = some .act ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
+  rw [classify_act_iff]; constructor
+  · rintro ⟨hb, h1, h2⟩; exact ⟨hb, by omega⟩
+  · rintro ⟨hb, h⟩; exact ⟨hb, by omega, by omega⟩
+
+/-- Raising the bound never takes a node out of acting, nor refuses one that
+was not refused: the bound only moves the line between act and delegate. -/
+theorem classify_act_mono (hk : act ≤ act') (h : classify act a self reach = some .act) :
+    classify act' a self reach = some .act := by
+  rw [classify_act_iff] at h ⊢; exact ⟨h.1, h.2.1, Nat.le_trans h.2.2 hk⟩
+
+theorem classify_none_indep : classify act a self reach = none ↔ classify act' a self reach = none := by
+  rw [classify_none_iff, classify_none_iff]
 
 /-- A delegate passes at least one contract: a child with nothing counted
 in its reach is refused. -/
-theorem classify_passes_one (h : classify a self reach = some k) : counted a reach ≠ [] := by
+theorem classify_passes_one (h : classify act a self reach = some k) : counted a reach ≠ [] := by
   intro hc
-  have : classify a self reach = none := classify_none_iff.mpr (Or.inr (by rw [hc]; rfl))
+  have : classify act a self reach = none := classify_none_iff.mpr (Or.inr (by rw [hc]; rfl))
   rw [this] at h; cases h
 
 /-- The apprentice's contracts never count: adding any of them, before or
 after, leaves the result unchanged, refused included. -/
 theorem classify_apprentice_after (h : ∀ c ∈ extra, a.mine c = true) :
-    classify a self (reach ++ extra) = classify a self reach := by
+    classify act a self (reach ++ extra) = classify act a self reach := by
   have : extra.filter (!a.mine ·) = [] := by
     simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
   unfold classify counted; rw [List.filter_append, this, List.append_nil]
 
 theorem classify_apprentice_before (h : ∀ c ∈ extra, a.mine c = true) :
-    classify a self (extra ++ reach) = classify a self reach := by
+    classify act a self (extra ++ reach) = classify act a self reach := by
   have : extra.filter (!a.mine ·) = [] := by
     simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
   unfold classify counted; rw [List.filter_append, this, List.nil_append]
@@ -830,7 +845,7 @@ theorem loaded_mine (h : c ∈ loaded a k) : a.mine c = true := by
 
 /-- Loading never changes the kind. -/
 theorem classify_loaded :
-    classify a self (reach ++ loaded a k) = classify a self reach :=
+    classify act a self (reach ++ loaded a k) = classify act a self reach :=
   classify_apprentice_after fun _ h => loaded_mine h
 
 /-- `observe` and `root` are never loaded, nor `create_delegation`,

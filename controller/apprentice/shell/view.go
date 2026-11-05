@@ -81,7 +81,7 @@ func View(dir string) ([]Run, error) {
 			return nil, err
 		}
 		r := Run{Frame: s.frame, Goal: s.goal, Kind: s.state.Ask.Kind, Reach: s.state.Ask.Reach}
-		s.tree = tree.NewTree(s.app, s.depth)
+		s.tree = tree.NewTree(s.app, s.profile)
 		var last Frame
 		var before tree.Tree
 		for _, l := range s.state.Log {
