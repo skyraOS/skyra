@@ -22,6 +22,8 @@ final class Session {
     private(set) var attachments: [Attachment] = []
     private var sentAttachments: [UUID] = []
     private(set) var notice = ""
+    private(set) var workRequest: String?
+    var workPending: Bool { workRequest != nil }
     /// A conversation is being opened for the text in pendingText.
     private(set) var opening = false
 
@@ -275,6 +277,7 @@ final class Session {
         case let .snapshot(inc, rev, convs, roots):
             applySnapshot(inc, rev, convs, roots, decoded.requests)
         case let .rejected(id, code, message):
+            if workRequest == id { workRequest = nil }
             if unacknowledged?.id == id { unacknowledged = nil }
             notice = "\(code): \(message)"
             if opening {
@@ -293,6 +296,17 @@ final class Session {
     private func applySnapshot(_ inc: String, _ rev: Int, _ convs: [Conversation], _ roots: [Destination],
                                _ ledger: [DecodedServerMessage.Request]?) {
         if inc == incarnation && rev < revision { return }
+        if let id = workRequest, let ledger {
+            if let request = ledger.first(where: { $0.requestId == id }) {
+                if request.status != "accepted" {
+                    workRequest = nil
+                    if let message = request.message, !message.isEmpty { notice = message }
+                }
+            } else {
+                workRequest = nil
+                notice = "Spec request was not acknowledged; inspect the saved revision before retrying"
+            }
+        }
         if let pending = unacknowledged, let ledger {
             if let record = ledger.first(where: { $0.requestId == pending.id }) {
                 if record.code == "delivery-unknown" {
@@ -471,6 +485,35 @@ final class Session {
               }) else { return }
         if draft.trimmingCharacters(in: .whitespacesAndNewlines) == pending.text { draft = "" }
         awaitingTranscript = nil
+    }
+
+    /// Resolve by durable identity, never by list order or matching text.
+    var currentTree: TreeRun? {
+        current.flatMap { tree(for: $0) }
+    }
+
+    func tree(for conversation: Conversation) -> TreeRun? {
+        guard let work = conversation.work, work.conversation == conversation.id else { return nil }
+        return trees.first { $0.id == work.lastRunId && $0.treeId == work.treeId && $0.specId == work.specId && $0.conversation == conversation.id }
+    }
+
+    @discardableResult
+    func saveSpec(_ text: String, revision: Int, conversationID: String? = nil) -> Bool {
+        guard let targetID = conversationID ?? selected, let current = conversations.first(where: { $0.id == targetID }), current.work != nil, !workPending else { return false }
+        let id = requestID()
+        guard send(.saveSpec(incarnation: incarnation, conversation: current.id, requestId: id, revision: revision, text: text)) else { return false }
+        workRequest = id
+        return true
+    }
+
+    @discardableResult
+    func runSpec(holding reach: [String], conversationID: String? = nil) -> Bool {
+        guard let targetID = conversationID ?? selected, let current = conversations.first(where: { $0.id == targetID }), let work = current.work, !work.spec.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !reach.isEmpty, !workPending, tree(for: current)?.phase != .running else { return false }
+        let id = requestID()
+        guard send(.runSpec(incarnation: incarnation, conversation: current.id, requestId: id, revision: work.revision, reach: reach)) else { return false }
+        workRequest = id
+        return true
     }
 
     /// Grow one tree of a spec. One target held is an act root; two or more, a delegate.

@@ -54,6 +54,7 @@ type entry struct {
 }
 
 type conversation struct {
+	work             *conversationWork
 	id               string
 	started          time.Time
 	phase            string // ready | pending | failed | closed
@@ -201,6 +202,7 @@ func (h *webhost) loadConversation(home, under string) {
 	if b, err := os.ReadFile(filepath.Join(home, ".title")); err == nil && len(b) > 0 {
 		c.entries = []entry{{Role: "user", Text: string(b)}}
 	}
+	c.work = loadWork(home, id)
 	h.convos[c.id] = c
 }
 
@@ -473,9 +475,10 @@ type inbound struct {
 	Procedure     string   `json:"procedure,omitempty"` // open-conversation: the root selected; the first when empty
 	Model         string   `json:"model,omitempty"`     // open-conversation: the model the root runs on; its default when empty
 	Images        []pasted `json:"images,omitempty"`    // submit: images pasted with the text
-	Actor         string   `json:"actor,omitempty"`     // start-tree provider
-	Kind          string   `json:"kind,omitempty"`      // start-tree: the root's kind
-	Reach         []string `json:"reach,omitempty"`     // start-tree: the targets the root holds
+	SpecRevision  int      `json:"specRevision,omitempty"`
+	Actor         string   `json:"actor,omitempty"` // start-tree provider
+	Kind          string   `json:"kind,omitempty"`  // start-tree: the root's kind
+	Reach         []string `json:"reach,omitempty"` // start-tree: the targets the root holds
 }
 
 func (h *webhost) handle(raw []byte) {
@@ -525,6 +528,9 @@ func (h *webhost) handle(raw []byte) {
 	}
 
 	switch m.Type {
+	case "save-spec", "run-spec":
+		h.handleWork(m, reject) // releases mu before broadcasting
+		return
 	case "delete-conversation":
 		if !admit(m.Conversation) {
 			return
@@ -559,7 +565,14 @@ func (h *webhost) handle(raw []byte) {
 		}
 		home := h.homeFor(d.Title, id)
 		proc = d.Title
-		h.convos[id] = &conversation{id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, model: model, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
+		work := newWork(id)
+		if err := saveWork(home, work); err != nil {
+			h.finishRequest(m.RequestID, "failed", "storage", err.Error())
+			h.mu.Unlock()
+			reject("storage", err.Error())
+			return
+		}
+		h.convos[id] = &conversation{work: work, id: id, started: time.Now(), phase: "pending", pending: m.RequestID, procedure: proc, model: model, home: home, lineage: newLineage(filepath.Join(home, ".skyra")), loaded: true}
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 		h.broadcast()
@@ -612,6 +625,7 @@ func (h *webhost) handle(raw []byte) {
 			conv.phase = "pending"
 		}
 		f := *conv.parked
+		linkedSpec := h.specContext(conv)
 		conv.parked = nil
 		h.mu.Unlock()
 		h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
@@ -620,8 +634,8 @@ func (h *webhost) handle(raw []byte) {
 		// slot: whatever the human typed is only text, and pasted images are
 		// only their paths and hashes beside it.
 		var payload any = text
-		if len(images) > 0 {
-			payload = map[string]any{"text": text, "images": images}
+		if len(images) > 0 || linkedSpec != nil {
+			payload = map[string]any{"text": text, "images": images, "spec": linkedSpec}
 		}
 		event, _ := json.Marshal(map[string]any{"to": f.Stamp, "payload": payload}) // a parked invoke's frame is its own stamp
 		if err := park.Resume(h.skyra, f, event, h.log); err != nil {
@@ -673,6 +687,20 @@ func (h *webhost) deleteConversation(id string) error {
 	}
 	if c.phase == "pending" {
 		return fmt.Errorf("wait for the agent to finish before deleting this chat")
+	}
+	if h.trees != nil && c.work != nil {
+		h.trees.mu.Lock()
+		busy := false
+		for _, run := range h.trees.runs {
+			if run.TreeID == c.work.TreeID && run.Phase == "running" {
+				busy = true
+				break
+			}
+		}
+		h.trees.mu.Unlock()
+		if busy {
+			return fmt.Errorf("wait for the tree to finish before deleting this chat")
+		}
 	}
 	markers := filepath.Join(h.dir, ".deleted")
 	if err := os.MkdirAll(markers, 0o700); err != nil {
@@ -778,6 +806,9 @@ func (h *webhost) broadcast() {
 	for _, c := range list {
 		entries := withCalls(append([]entry(nil), c.entries...), c.calls())
 		view := map[string]any{"conversation": c.id, "phase": c.phase, "entries": entries, "boundaries": c.lineage.boundariesNow(), "pendingRequestId": pendingID(c.pending), "procedure": c.procedure}
+		if c.work != nil {
+			view["work"] = c.work.projection()
+		}
 		if c.model != "" {
 			view["model"] = c.model
 		}
@@ -989,10 +1020,14 @@ func (h *webhost) continueConversation(c *conversation, m inbound, admit func(st
 	c.entries = append(c.entries, entry{Role: "user", Text: withImages(m.Text, images), TS: int64(len(c.entries)), RequestID: &id})
 	c.phase, c.pending, c.recoveryRequired = "pending", m.RequestID, false
 	c.startLineage(root)
+	linkedSpec := h.specContext(c)
 	h.mu.Unlock()
 	h.send(map[string]string{"type": "accepted", "requestId": m.RequestID})
 	h.broadcast()
 	seeded := map[string]any{"conversation": c.id, "procedure": c.procedure, "transcript": said, "text": m.Text}
+	if linkedSpec != nil {
+		seeded["spec"] = linkedSpec
+	}
 	if c.model != "" {
 		seeded["model"] = c.model
 	}

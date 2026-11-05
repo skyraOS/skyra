@@ -10,6 +10,8 @@ struct Composer: View {
     let session: Session
     @FocusState private var focused: Bool
     @State private var pasteMonitor: Any?
+    @State private var specPresented = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var session = session
@@ -54,6 +56,8 @@ struct Composer: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend)
+                .accessibilityLabel("Chat")
+                .help("Chat with the conversation")
             }
             .padding(.leading, 16)
             .padding(.trailing, 10)
@@ -69,6 +73,15 @@ struct Composer: View {
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {
+                if session.current?.work != nil {
+                    Button("Spec", systemImage: "doc.text") { specPresented = true }
+                        .buttonStyle(.plain)
+                    if let run = session.currentTree {
+                        Text(run.phase.rawValue).foregroundStyle(run.phase == .failed ? Theme.red.color : Theme.dim.color)
+                        Button("Inspect tree") { openWindow(id: "trees") }.buttonStyle(.plain)
+                    }
+                    Text("·")
+                }
                 if let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
                     Text(proc).foregroundStyle(Theme.dim.color)
                     if proc == "think" {
@@ -115,6 +128,9 @@ struct Composer: View {
                 session.attach(images)
                 return nil
             }
+        }
+        .sheet(isPresented: $specPresented) {
+            if let id = session.selected { ConversationSpec(session: session, conversationID: id).id(id) }
         }
         .onDisappear {
             if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }

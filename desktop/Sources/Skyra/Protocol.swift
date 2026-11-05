@@ -30,6 +30,15 @@ struct Call: Decodable, Equatable, Sendable {
     var refused: Bool { state == "fault" && (fault == "boundary" || fault == "contract") }
 }
 
+struct ConversationWork: Decodable, Equatable, Sendable {
+    let conversation: String
+    let treeId: String
+    let specId: String
+    let revision: Int
+    let spec: String
+    let lastRunId: String?
+}
+
 struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     enum Phase: String, Decodable { case ready, pending, failed, closed }
     let conversation: String
@@ -38,6 +47,7 @@ struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     let boundaries: [BoundaryView]? // absent from a webhost that predates them
     let procedure: String? // the root it runs, fixed at creation; absent or "" from before procedures
     var model: String? = nil // the model its root runs on, fixed at creation; absent for the root's default
+    var work: ConversationWork? = nil
     var id: String { conversation }
 }
 
@@ -143,6 +153,10 @@ struct TreeRun: Decodable, Equatable, Sendable, Identifiable {
 
     enum Phase: String, Decodable { case running, done, failed }
     let id: String
+    var conversation: String? = nil
+    var treeId: String? = nil
+    var specId: String? = nil
+    var specRevision: Int? = nil
     let goal: String
     let actor: String?
     let kind: String
@@ -204,6 +218,8 @@ struct DecodedServerMessage: Decodable, Sendable {
     struct Request: Decodable, Sendable {
         let requestId: String
         let code: String?
+        let status: String?
+        let message: String?
     }
     let message: ServerMessage
     let requests: [Request]?
@@ -236,8 +252,11 @@ enum ClientMessage: Encodable {
     case delete(incarnation: String, conversation: String, requestId: String)
     case startTree(requestId: String, spec: String, kind: String, reach: [String], actor: String = "claude") // 56: one tree of a spec
 
+    case saveSpec(incarnation: String, conversation: String, requestId: String, revision: Int, text: String)
+    case runSpec(incarnation: String, conversation: String, requestId: String, revision: Int, reach: [String])
+
     private enum Keys: String, CodingKey {
-        case type, uiIncarnation, conversation, requestId, text, procedure, model, images, kind, reach, actor
+        case type, uiIncarnation, conversation, requestId, text, procedure, model, images, kind, reach, actor, specRevision
     }
 
     /// A pasted image as the webhost takes it: its name and its bytes.
@@ -270,6 +289,20 @@ enum ClientMessage: Encodable {
             try c.encode(inc, forKey: .uiIncarnation)
             try c.encode(conv, forKey: .conversation)
             try c.encode(id, forKey: .requestId)
+        case let .saveSpec(inc, conv, id, revision, text):
+            try c.encode("save-spec", forKey: .type)
+            try c.encode(inc, forKey: .uiIncarnation)
+            try c.encode(conv, forKey: .conversation)
+            try c.encode(id, forKey: .requestId)
+            try c.encode(revision, forKey: .specRevision)
+            try c.encode(text, forKey: .text)
+        case let .runSpec(inc, conv, id, revision, reach):
+            try c.encode("run-spec", forKey: .type)
+            try c.encode(inc, forKey: .uiIncarnation)
+            try c.encode(conv, forKey: .conversation)
+            try c.encode(id, forKey: .requestId)
+            try c.encode(revision, forKey: .specRevision)
+            try c.encode(reach, forKey: .reach)
         case let .startTree(id, spec, kind, reach, actor):
             try c.encode("start-tree", forKey: .type)
             try c.encode(id, forKey: .requestId)

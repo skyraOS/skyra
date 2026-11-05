@@ -52,8 +52,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 640, minHeight: 420)
         .onChange(of: session.current == nil, initial: true) { _, empty in sky.titleOpenTarget = empty ? 1 : 0 }
-        .onChange(of: session.selected, initial: true) { _, _ in followCalls() }
+        .onChange(of: session.selected, initial: true) { _, _ in followCalls(); followTree() }
         .onChange(of: session.current?.entries) { _, _ in followCalls() }
+        .onChange(of: session.currentTree, initial: true) { _, _ in followTree() }
+        .onChange(of: session.current?.work, initial: true) { _, _ in followTree() }
+        .onChange(of: reduceMotion, initial: true) { _, reduced in sky.reduceTreeMotion = reduced }
         .onChange(of: session.visibleDestinations, initial: true) { _, d in sky.roots = d }
         .onChange(of: session.root?.title, initial: true) { _, t in sky.selectedRoot = t }
         .onChange(of: session.model, initial: true) { _, m in sky.modelTarget = m == "claude" ? 1 : 0 }
@@ -118,6 +121,12 @@ struct ContentView: View {
     private var logFrame: CGRect? {
         get { LogFrame.decode(storedLogFrame) }
         nonmutating set { storedLogFrame = LogFrame.encode(newValue) }
+    }
+
+    private func followTree() {
+        let frame = sky.frame(at: Date())
+        sky.tree.followContext(session.current.map { TreeSky.Context($0) }, frame: frame)
+        sky.tree.follow(session.currentTree, frame: frame)
     }
 
     private func followCalls() {

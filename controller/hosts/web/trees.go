@@ -27,16 +27,20 @@ import (
 var treeTargets = []string{"find", "read", "echo"}
 
 type treeRun struct {
-	Actor   string          `json:"actor"`
-	ID      string          `json:"id"`
-	Goal    string          `json:"goal"`
-	Kind    string          `json:"kind"`
-	Reach   []string        `json:"reach"`
-	Phase   string          `json:"phase"` // running | done | failed
-	Answer  string          `json:"answer,omitempty"`
-	Error   string          `json:"error,omitempty"`
-	Started int64           `json:"started"`
-	View    json.RawMessage `json:"view,omitempty"` // treeview's frames; null until the first resume
+	Conversation string          `json:"conversation,omitempty"`
+	TreeID       string          `json:"treeId,omitempty"`
+	SpecID       string          `json:"specId,omitempty"`
+	SpecRevision int             `json:"specRevision,omitempty"`
+	Actor        string          `json:"actor"`
+	ID           string          `json:"id"`
+	Goal         string          `json:"goal"`
+	Kind         string          `json:"kind"`
+	Reach        []string        `json:"reach"`
+	Phase        string          `json:"phase"` // running | done | failed
+	Answer       string          `json:"answer,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	Started      int64           `json:"started"`
+	View         json.RawMessage `json:"view,omitempty"` // treeview's frames; null until the first resume
 
 	root string
 }
@@ -76,11 +80,11 @@ func (t *trees) load() {
 	}
 }
 
-func (t *trees) save(r *treeRun) {
+func (t *trees) save(r *treeRun) error {
 	c := *r
 	c.View = nil
 	b, _ := json.Marshal(c)
-	_ = os.WriteFile(filepath.Join(filepath.Dir(r.root), "tree.json"), b, 0o600)
+	return atomicWorkFile(filepath.Join(filepath.Dir(r.root), "tree.json"), b)
 }
 
 // render is treeview's view of a run, or nil before it has one.
@@ -97,53 +101,68 @@ func (t *trees) render(root string) json.RawMessage {
 
 // start boots a tree; it returns the run's id, or why it was refused.
 func (h *webhost) startTree(goal, kind string, reach []string, actors ...string) (string, string) {
+	r, why := h.prepareTree(goal, kind, reach, nil, actors...)
+	if why != "" {
+		return "", why
+	}
+	go h.runTree(r)
+	return r.ID, ""
+}
+
+func (h *webhost) prepareTree(goal, kind string, reach []string, work *conversationWork, actors ...string) (*treeRun, string) {
 	t := h.trees
 	if t == nil {
-		return "", "this webhost was started without trees"
+		return nil, "this webhost was started without trees"
 	}
 	actor := "claude"
 	if len(actors) > 0 && actors[0] != "" {
 		actor = actors[0]
 	}
 	if actor != "claude" && actor != "codex" {
-		return "", "the tree actor is claude or codex"
+		return nil, "the tree actor is claude or codex"
 	}
 	if strings.TrimSpace(goal) == "" {
-		return "", "a tree needs a spec"
+		return nil, "a tree needs a spec"
 	}
 	if kind != "act" && kind != "delegate" {
-		return "", "the root is act or delegate"
+		return nil, "the root is act or delegate"
 	}
 	if len(reach) == 0 {
-		return "", "the root holds at least one target"
+		return nil, "the root holds at least one target"
 	}
 	if kind == "act" && len(reach) != 1 {
-		return "", "an act root holds exactly one target"
+		return nil, "an act root holds exactly one target"
 	}
 	if kind == "delegate" && len(reach) < 2 {
-		return "", "a delegate root holds two or more targets"
+		return nil, "a delegate root holds two or more targets"
 	}
 	for _, r := range reach {
 		if !slices.Contains(treeTargets, r) {
-			return "", r + " is not a target a tree may hold here"
+			return nil, r + " is not a target a tree may hold here"
 		}
 	}
 	nonce := make([]byte, 8)
 	if _, err := rand.Read(nonce); err != nil {
-		return "", err.Error()
+		return nil, err.Error()
 	}
 	id := "t-" + time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(nonce)
 	r := &treeRun{Actor: actor, ID: id, Goal: goal, Kind: kind, Reach: reach, Phase: "running", Started: time.Now().UnixMilli(),
 		root: filepath.Join(t.dir, id, ".skyra")}
 	if err := os.MkdirAll(r.root, 0o700); err != nil {
-		return "", err.Error()
+		return nil, err.Error()
+	}
+	if work != nil {
+		r.Conversation, r.TreeID, r.SpecID, r.SpecRevision = work.Conversation, work.TreeID, work.SpecID, work.Revision
 	}
 	t.mu.Lock()
 	t.runs[id] = r
-	t.save(r)
+	if err := t.save(r); err != nil {
+		delete(t.runs, id)
+		t.mu.Unlock()
+		return nil, err.Error()
+	}
 	t.mu.Unlock()
-	go h.runTree(r)
-	return id, ""
+	return r, ""
 }
 
 func (h *webhost) runTree(r *treeRun) {

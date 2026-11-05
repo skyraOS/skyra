@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Metal
 import Testing
@@ -101,4 +102,31 @@ private func pixel(_ p: [UInt8], _ x: Int, _ y: Int, width: Int) -> (r: Int, g: 
     // The core, at 72% across and halfway down, is lit.
     let core = pixel(px, 576, 250, width: 800)
     #expect(core.g > Int(Theme.sky.g) + 40)
+}
+
+@Test func treeConstellationRendersThroughTheMetalSky() throws {
+    guard let renderer = SkyRenderer() else { return }
+    let raw = #"{"id":"preview","conversation":"c-preview","treeId":"tree-c-preview","goal":"spec","kind":"delegate","reach":["read","find"],"phase":"running","started":1,"view":[{"frames":[{"event":"replied","nodes":[{"id":"0","kind":"delegate","phase":"delegating","depth":0,"turns":1,"names":1,"returned":0},{"id":"0.0","parent":"0","kind":"act","phase":"invoking","depth":1,"turns":1,"names":1,"returned":0},{"id":"0.1","parent":"0","kind":"act","phase":"done","depth":1,"turns":1,"names":1,"returned":1}]}]}]}"#
+    let tree = try JSONDecoder().decode(TreeRun.self, from: Data(raw.utf8))
+    let model = SkyModel()
+    model.tree.follow(tree, frame: 0)
+    renderer.scene = { g, size, frame in SkyScene(model:model).draw(&g,size,frame) }
+    for size in [(640,420), (1100,720)] {
+        let pixels = try #require(render(renderer,width:size.0,height:size.1,scale:1,frame:20))
+        #expect(!pixels.isEmpty)
+        let root = try #require(TreeSky.positions(tree.frames[0].nodes,in:CGSize(width:size.0,height:size.1),identity:tree.treeId!)["0"])
+        let p = pixel(pixels,Int(root.x),Int(root.y),width:size.0)
+        #expect(p.r > 20 || p.g > 20 || p.b > 20)
+        if size.0 == 1100, let path = ProcessInfo.processInfo.environment["SKYRA_TREE_PREVIEW"] {
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:size.0,pixelsHigh:size.1,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:size.0*4,bitsPerPixel:32)!
+            for y in 0..<size.1 { for x in 0..<size.0 {
+                let i = (y*size.0+x)*4
+                bitmap.bitmapData![i] = pixels[i+2]
+                bitmap.bitmapData![i+1] = pixels[i+1]
+                bitmap.bitmapData![i+2] = pixels[i]
+                bitmap.bitmapData![i+3] = pixels[i+3]
+            } }
+            try bitmap.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:path))
+        }
+    }
 }

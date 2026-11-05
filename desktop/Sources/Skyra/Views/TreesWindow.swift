@@ -8,7 +8,7 @@ struct TreesWindow: View {
     let session: Session
     @State private var selected: String?
 
-    private var run: TreeRun? { session.trees.first { $0.id == selected } ?? session.trees.first }
+    private var run: TreeRun? { session.trees.first { $0.id == selected } ?? session.currentTree ?? session.trees.first }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -39,6 +39,7 @@ struct TreesWindow: View {
                 RadialGradient(colors: [Theme.accent.color(0.07), .clear], center: .topTrailing, startRadius: 0, endRadius: 700)
             }.allowsHitTesting(false)
         }
+        .onChange(of: session.selected) { _, _ in selected = nil }
     }
 
     /// A phase's light, from the theme.

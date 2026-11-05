@@ -8,6 +8,8 @@ final class SkyModel {
     var pointer: CGPoint? // in the sky's points; nil when outside
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
     let calls = CallLights()
+    let tree = TreeSky()
+    var reduceTreeMotion = false
     var column: ClosedRange<Double>? // the reading column, in the sky's points: how wide the docked log is
     var logRect: CGRect? // the conversation log, in the sky's points: a Boundary under it is not traced
     var origin = CGPoint.zero // the canvas's origin in the sky's points: the canvas runs under the title bar
@@ -166,7 +168,7 @@ struct SkyScene {
 
         light(&g, size, f, cam)
         // While a call's light is out, meteors and glints wait.
-        let busy = model.calls.busy(f)
+        let busy = model.calls.busy(f) || model.tree.working
         let field = 1.0
         filaments(&g, cam, field)
 
@@ -194,6 +196,7 @@ struct SkyScene {
         g.blend = .over
 
         roots(&g, size, f)
+        model.tree.draw(&g, size: size, frame: f, pointer: model.local, log: model.logRect, reduced: model.reduceTreeMotion)
 
         // The TUI leaves out the core and satellites on a small terminal.
         let full = w >= 560 && h >= 288

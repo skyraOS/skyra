@@ -70,6 +70,7 @@ func main() {
 			// and the message that continues it. A conversation is the user's
 			// and the agent's, not the kernel's: the new run is told the old
 			// one as text.
+			Spec       json.RawMessage               `json:"spec"`
 			Transcript []entry                       `json:"transcript"`
 			Text       string                        `json:"text"`
 			Images     []struct{ Path, Name string } `json:"images"`
@@ -89,6 +90,7 @@ func main() {
 	}
 
 	transcript := append([]entry{}, c.Input.Transcript...)
+	linkedSpec := c.Input.Spec
 	said := ""
 	var images []string // the paths of the images pasted with what was said
 	continuing := c.Input.Text != "" || len(c.Input.Images) > 0
@@ -117,11 +119,13 @@ func main() {
 				// A message with pasted images: its text, and each image's
 				// path in scratch and hash, as the web host kept it.
 				var m struct {
+					Spec   json.RawMessage               `json:"spec"`
 					Text   string                        `json:"text"`
 					Images []struct{ Path, Name string } `json:"images"`
 				}
 				_ = json.Unmarshal(s.Value, &m)
 				text, pasted = m.Text, m.Images
+				linkedSpec = m.Spec
 			}
 			said, images = text, nil
 			shown := text
@@ -146,7 +150,7 @@ func main() {
 		if images == nil {
 			images = []string{}
 		}
-		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": transcript[:len(transcript)-1], "images": images}})
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": workContext(transcript[:len(transcript)-1], linkedSpec), "images": images}})
 	case last >= 0 && c.Steps[last].To == "browser" && c.Steps[last].Fault != nil:
 		f := c.Steps[last].Fault
 		emit(c.Frame, fmt.Sprintf("ended: the browser faulted (%s): %s", f.Kind, f.Cause))
@@ -157,7 +161,7 @@ func main() {
 		if images == nil {
 			images = []string{}
 		}
-		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": context, "images": images}})
+		emit(p.Actor, map[string]any{c.Input.Procedure: map[string]any{"text": said, "model": model, "context": workContext(context, linkedSpec), "images": images}})
 	default:
 		emit("browser", map[string]any{"conversation": c.Input.Conversation, "transcript": transcript})
 	}
@@ -222,4 +226,13 @@ func answer(v json.RawMessage) string {
 func emit(to string, payload any) {
 	b, _ := json.Marshal(map[string]any{"to": to, "payload": payload})
 	fmt.Println(string(b))
+}
+
+// Preserve the ordinary transcript shape for conversations without a spec.
+// A saved spec is a separate observation, not an extra human message.
+func workContext(transcript []entry, spec json.RawMessage) any {
+	if len(spec) == 0 || string(spec) == "null" {
+		return transcript
+	}
+	return map[string]any{"conversation": transcript, "spec": spec}
 }

@@ -52,6 +52,16 @@ Focus is enabled, or Reduce Motion is enabled. The procedure overview shows
 actors and tool counts; each procedure's inspector opens a scrollable list
 of actors and their tools.
 
+Each conversation now has a linked spec and a persistent tree identity.
+Click **Spec** below the composer, write the work definition (or choose **Use
+latest reply**), then **Save spec** and **Run saved spec**. Chat continues
+through the conversation contract; only Run invokes the tree contract with
+the saved revision. Spec edits can continue while a prior revision executes.
+Selecting a conversation selects its corresponding tree constellation in the
+sky. **Inspect tree** opens its detailed execution view. Tree execution needs
+a real backend configured with the tree registry; fake mode still supports
+chat and saved specs. Lifecycle and protocol: [conversation work](../docs/design/conversation-work.md).
+
 The Trees window shows accepted work as motion: new branches grow from their
 parents, spec cuts glow amber, passed observations travel downward, and results
 travel upward in green. Tool calls and faults pulse at their node. Click an
