@@ -30,8 +30,8 @@ and tree work to finish. Finished tree run records remain in the tree archive.
 
 Conversation snapshots carry the current spec and latest execution reference;
 revision history stays on disk. Chat receives the saved spec and last execution
-result as separate context observations on its next turn. In the desktop app,
-**Spec** opens an editor. **Use latest reply** copies a chat reply into that
+result as separate context observations on its next turn. In the desktop app, each bundle is presented as a **Mission**. Its workspace
+has Chat, Spec, and Tree tabs. **Spec** opens an editor. **Use latest reply** copies a chat reply into that
 editor; **Save spec** publishes it, and **Run saved spec** starts execution.
 
 Selecting a conversation resolves its exact execution reference, rather than
@@ -43,3 +43,11 @@ node and tree identities and stay fixed as siblings arrive. Switching trees
 crossfades their constellations without replaying historical activity. Light
 is subdued under the transcript; Reduce Motion draws a static state. The Trees
 window retains detailed inspection and replay, including standalone runs.
+
+The Mission redesign archives previous conversations on the first desktop
+launch for each workspace. The archive is persistent desktop navigation state,
+keyed by workspace; it does not delete or move runtime files and does not
+cancel active work. Restore brings the same conversation/spec/tree identities
+back to the active Mission list. New Missions are not archived on later
+snapshots or reconnects. Procedure constellations are no longer mounted in the
+main window; procedure and model selection live in Mission settings.

@@ -5,14 +5,15 @@ import SwiftUI
 struct ConversationSpec: View {
     let session: Session
     let conversationID: String
+    var embedded = false
     @State private var text = ""
     @State private var revision = 0
     @State private var initialized = false
     @State private var confirmingDiscard = false
-    @State private var held: Set<String> = []
     @Environment(\.dismiss) private var dismiss
 
     private var conversation: Conversation? { session.conversations.first { $0.id == conversationID } }
+    private var held: Set<String> { Set(session.toolsForMission(conversationID)) }
     private var work: ConversationWork? { conversation?.work }
     private var dirty: Bool { text != work?.spec }
     private var conflict: Bool { work?.revision != revision }
@@ -24,15 +25,15 @@ struct ConversationSpec: View {
                 Text("Spec").font(.title2)
                 if let work { Text("Revision \(work.revision)").foregroundStyle(.secondary) }
                 Spacer()
-                Button("Done") { if dirty { confirmingDiscard = true } else { dismiss() } }
+                if !embedded { Button("Done") { if dirty { confirmingDiscard = true } else { dismiss() } } }
             }
-            Text("Discuss the work in Chat. Save the spec here, then Run that revision.")
+            Text("Define what this mission should accomplish. Run executes a saved revision.")
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $text).font(.system(.body, design: .monospaced))
                 .scrollContentBackground(.hidden).padding(8)
                 .background(Theme.sky.color, in: RoundedRectangle(cornerRadius: 8))
                 .frame(minHeight: 240)
-                .accessibilityLabel("Conversation spec")
+                .accessibilityLabel("Mission spec")
             HStack {
                 Button("Use latest reply") {
                     if let reply = conversation?.entries.last(where: { $0.role == "agent" }) { text = reply.text }
@@ -48,7 +49,11 @@ struct ConversationSpec: View {
             HStack(spacing: 12) {
                 Text("Tools").foregroundStyle(.secondary)
                 ForEach(session.treeTargets, id: \.self) { target in
-                    Toggle(target, isOn: Binding(get: { held.contains(target) }, set: { if $0 { held.insert(target) } else { held.remove(target) } }))
+                    Toggle(target, isOn: Binding(get: { held.contains(target) }, set: { value in
+                        var next = held
+                        if value { next.insert(target) } else { next.remove(target) }
+                        session.setMissionTools(next.sorted(),for:conversationID)
+                    }))
                         .toggleStyle(.checkbox)
                 }
                 Spacer()
@@ -69,17 +74,23 @@ struct ConversationSpec: View {
             if !session.notice.isEmpty { Text(session.notice).font(.caption).foregroundStyle(.secondary) }
             if session.treeTargets.isEmpty { Text("Tree execution is unavailable on this backend.").font(.caption).foregroundStyle(.secondary) }
         }
-        .padding(24).frame(minWidth: 580, idealWidth: 680, minHeight: 490)
-        .onAppear { if !initialized { reload(); held = Set(session.treeTargets.filter { $0 != "echo" }); initialized = true } }
+        .padding(24).frame(minWidth: embedded ? 0 : 580, idealWidth: 680, minHeight: embedded ? 0 : 490)
+        .onAppear { if !initialized {
+            if let draft = session.specDraft(for:conversationID) { text = draft.text; revision = draft.revision } else { reload() }
+            initialized = true
+        } }
         .interactiveDismissDisabled(dirty)
         .confirmationDialog("Discard unsaved spec changes?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive) { dismiss() }
         }
+        .onChange(of:text) { _,value in if embedded { session.keepSpecDraft(value,revision:revision,for:conversationID) } }
+        .onDisappear { if embedded { session.keepSpecDraft(text,revision:revision,for:conversationID) } }
         .onChange(of: work?.revision) { _, _ in
             // An acknowledged save retains the editor; remote edits require reload.
-            if work?.spec == text { revision = work?.revision ?? 0 }
+            if work?.spec == text { revision = work?.revision ?? 0; session.keepSpecDraft(text,revision:revision,for:conversationID) }
         }
     }
 
     private func reload() { text = work?.spec ?? ""; revision = work?.revision ?? 0 }
+
 }

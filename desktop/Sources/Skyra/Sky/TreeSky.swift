@@ -117,7 +117,7 @@ final class TreeSky {
         }
         g.blend = .over
         let label = CGPoint(x:min(size.width-90,max(90,p.x)),y:p.y+18)
-        g.text(.init(text:"Conversation tree",style:.label),at:label,.top,Theme.ink,alpha*0.75)
+        g.text(.init(text:"Mission tree",style:.label),at:label,.top,Theme.ink,alpha*0.75)
         let status: String
         if linked, let run {
             status = "Spec r\(run.specRevision ?? context.revision) · \(run.phase.rawValue)"

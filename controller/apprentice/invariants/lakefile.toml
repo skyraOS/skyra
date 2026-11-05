@@ -8,3 +8,7 @@ name = "Invariants"
 [[lean_exe]]
 name = "vectors"
 root = "Vectors"
+
+[[lean_exe]]
+name = "rootvectors"
+root = "HumanRootVectors"

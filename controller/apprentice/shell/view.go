@@ -76,6 +76,7 @@ func View(dir string) ([]Run, error) {
 			return nil, fmt.Errorf("%s: the frame does not keep what it was asked (it predates the view)", f)
 		}
 		s.reach = s.state.Reach
+		s.pins = s.state.Binaries
 		if err := s.setup(*s.state.Ask); err != nil {
 			return nil, err
 		}
@@ -301,6 +302,7 @@ func order(a, b string) int {
 // and the reach it was set up with.
 func (s *shell) keep(a Ask) {
 	s.state.Ask = &a
+	s.state.Binaries = s.pins
 	s.state.Reach = map[string][]*proc.Schema{a.Actor: s.reach[a.Actor]}
 	for _, t := range a.Reach {
 		s.state.Reach[t] = s.reach[t]

@@ -1,0 +1,32 @@
+{
+  "input": {
+    "title": "mission-spec/v1",
+    "type": "object",
+    "fields": {
+      "capabilities": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "goal": {
+        "type": "string"
+      },
+      "inputs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "version",
+      "goal",
+      "inputs",
+      "capabilities"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "input": {
+    "title": "propose_spec",
+    "type": "object",
+    "fields": {
+      "propose_spec": {
+        "type": "object",
+        "fields": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goal": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "version",
+          "goal",
+          "inputs",
+          "capabilities"
+        ]
+      }
+    },
+    "required": [
+      "propose_spec"
+    ]
+  }
+}

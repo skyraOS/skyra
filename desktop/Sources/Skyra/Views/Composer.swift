@@ -8,6 +8,7 @@ import SwiftUI
 struct Composer: View {
     let backend: Backend
     let session: Session
+    var missionMode = false
     @FocusState private var focused: Bool
     @State private var pasteMonitor: Any?
     @State private var specPresented = false
@@ -73,7 +74,7 @@ struct Composer: View {
             .animation(.easeInOut(duration: 0.6), value: ready)
 
             HStack(spacing: 6) {
-                if session.current?.work != nil {
+                if !missionMode, session.current?.work != nil {
                     Button("Spec", systemImage: "doc.text") { specPresented = true }
                         .buttonStyle(.plain)
                     if let run = session.currentTree {
@@ -82,7 +83,7 @@ struct Composer: View {
                     }
                     Text("·")
                 }
-                if let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
+                if !missionMode, let proc = session.current?.procedure.flatMap({ $0.isEmpty ? nil : $0 }) ?? session.root?.title {
                     Text(proc).foregroundStyle(Theme.dim.color)
                     if proc == "think" {
                         Text(session.model).foregroundStyle(Theme.faint.color)
@@ -104,7 +105,7 @@ struct Composer: View {
             .padding(.horizontal, 6)
         }
         .frame(maxWidth: ContentView.readingWidth)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, missionMode ? 16 : 24)
         .padding(.top, 12)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity)
@@ -153,8 +154,8 @@ struct Composer: View {
         switch session.current?.phase {
         case .ready: "Reply"
         case .pending: "The agent is working…"
-        case .closed, .failed: "Continue this conversation"
-        default: "Message \(session.root?.title ?? "the agent") to begin"
+        case .closed, .failed: "Continue shaping this mission"
+        default: "Describe your mission…"
         }
     }
 

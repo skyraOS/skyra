@@ -1,0 +1,46 @@
+{
+  "input": {
+    "title": "launch",
+    "type": "object",
+    "fields": {
+      "launch": {
+        "type": "object",
+        "fields": {
+          "spec": {
+            "type": "object",
+            "fields": {
+              "binary": {
+                "type": "string"
+              },
+              "contract": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "source": {
+                "type": "any"
+              },
+              "value": {
+                "type": "any"
+              }
+            },
+            "required": [
+              "ref",
+              "binary",
+              "contract",
+              "value",
+              "source"
+            ]
+          }
+        },
+        "required": [
+          "spec"
+        ]
+      }
+    },
+    "required": [
+      "launch"
+    ]
+  }
+}

@@ -19,48 +19,42 @@ reason is shown. The backend's output goes to `~/.skyra/app-webhost.log`.
 Quitting the app stops the webhost; the Codex actor host keeps running
 (`skyra stop`).
 
+The interface is organized around **Missions**. Each Mission owns a Chat,
+a versioned Spec, and a Tree. The left sidebar selects Missions across all
+conversation procedures. The workspace has **Chat / Spec / Tree** tabs and an
+explicit **Run** button. The selected Mission's accepted execution appears in
+the sky; procedure constellations and their navigation have been removed.
+
+On the first Mission launch for a workspace, existing conversations are
+archived in desktop navigation. Open **Archive** and **Restore** to bring one
+back. Their runtime records, specs, and tree runs stay intact. New Missions
+remain in the active list across launches; archiving never cancels work.
+
+Use **New mission** to create an empty Mission before chatting or writing its
+spec. In **Spec**, write a definition or choose **Use latest reply**, select
+the available tools, and **Save spec**. **Run** executes that saved revision
+and opens Tree. Chat continues independently. Spec drafts survive tab and
+Mission changes during the session. Procedure, model, and workspace settings
+are available from the toolbar's settings button.
+
 | Key | Action |
 |---|---|
-| Return | Send; the first message opens a conversation |
+| Return | Send to Chat; the first message creates a Mission if needed |
 | Shift+Return | New line |
-| ⌘N | New conversation |
-| ⌘D | Close the conversation on screen |
-| ⇧⌘⌫ | Delete the conversation on screen (also: the trash on a hovered row, or right-click) |
-| ⌘O | Change the workspace (restarts the backend); also the folder in the header, which lists the folders granted before |
+| ⌘N | Create a Mission |
+| ⌘D | Close the selected Mission's chat |
+| ⇧⌘⌫ | Archive the selected Mission |
+| ⌘O | Change the workspace |
 | ⇧⌘R | Restart the backend |
-| Conversation drag bar and edges | Drag the bar to move; drag an edge or the visible corner to resize. Text remains selectable and scrollable. Placement is kept between launches |
-| Expand / Reading width | Fill the window width for long content, or return to the readable column |
-| Focus / Exit focus | Fill the space between header and composer and pause the sky |
-| Context menu in header | Select procedures, switch Think models, and navigate the conversation working set, including in Focus |
+| ⇧⌘T | Open the detailed Trees inspector |
 
-The sky is the TUI's (`tui/wallpaper.go`, `tui/satellites.go`), drawn with
-Metal at 15 frames a second: the same
-stars in the same places (the tests pin the hash), and satellites that leave
-their orbit for the pointer. Under them, a nebula of slow lights and
-filaments drifting through a field the pointer stirs ([next/31](../docs/next/31-the-sky-dreams.md)).
-Each frame is painted into a draw list (`Sky/SkyPaint.swift`) and drawn in a
-few instanced passes (`Sky/SkyRenderer.swift`); the tests draw frames
-offscreen and read them back. Over it, the conversation
-on screen's Boundaries, as the webhost reads them from its lineage: each a faint
-region as wide as what it reaches, each surface in reach one star (its name
-shows under the pointer), shared stars where Boundaries overlap, and a call's
-light flying to the star it invokes. Under the pointer, away from the
-conversation, a Boundary draws its constellation: its lines traced one at a
-time, its stars lit and named. The backdrop warps a little around the
-pointer, nearer stars more. It pauses when the window is hidden, the app is inactive, history is open,
-Focus is enabled, or Reduce Motion is enabled. The procedure overview shows
-actors and tool counts; each procedure's inspector opens a scrollable list
-of actors and their tools.
-
-Each conversation now has a linked spec and a persistent tree identity.
-Click **Spec** below the composer, write the work definition (or choose **Use
-latest reply**), then **Save spec** and **Run saved spec**. Chat continues
-through the conversation contract; only Run invokes the tree contract with
-the saved revision. Spec edits can continue while a prior revision executes.
-Selecting a conversation selects its corresponding tree constellation in the
-sky. **Inspect tree** opens its detailed execution view. Tree execution needs
-a real backend configured with the tree registry; fake mode still supports
-chat and saved specs. Lifecycle and protocol: [conversation work](../docs/design/conversation-work.md).
+The sky uses Metal at 15 frames per second, with a per-Mission background
+glow, a tree anchor before execution, and accepted star nodes and activity
+lights during execution. Text panels quiet the sky underneath them. Window
+occlusion, app inactivity, Archive, and Reduce Motion pause ambient animation.
+The Trees inspector retains detailed replay. Tree execution needs a real
+backend with its tree registry; fake mode supports Chat and saved Specs.
+Lifecycle and protocol: [conversation work](../docs/design/conversation-work.md).
 
 The Trees window shows accepted work as motion: new branches grow from their
 parents, spec cuts glow amber, passed observations travel downward, and results

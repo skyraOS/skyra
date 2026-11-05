@@ -34,6 +34,7 @@ func Resolved(predecessor string, obs []byte) (record.Record, error) {
 // authority); which of them a model is offered is the adapter's choice, not
 // the runtime's.
 type Entry struct {
+	Binary    string             `json:"binary,omitempty"`
 	Contracts []*contract.Schema `json:"contracts"`
 }
 
@@ -42,7 +43,11 @@ type Entry struct {
 func reach(h boundary.Boundary) map[string]Entry {
 	out := map[string]Entry{}
 	for name, s := range h.Reach {
-		out[name] = Entry{Contracts: append([]*contract.Schema{}, s.All()...)}
+		binary := s.SHA256
+		if binary == "" {
+			binary = boundary.Program(s)
+		}
+		out[name] = Entry{Binary: "sha256:" + binary, Contracts: append([]*contract.Schema{}, s.All()...)}
 	}
 	return out
 }

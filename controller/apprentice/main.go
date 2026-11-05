@@ -41,6 +41,7 @@ var declared []byte
 // entry is one actor in reach: the contracts it may be invoked through, the
 // registered one first when it is kept.
 type entry struct {
+	Binary    string         `json:"binary"`
 	Contracts []*proc.Schema `json:"contracts"`
 }
 
@@ -85,7 +86,13 @@ func runTree(store proc.Store, e envelope) ([]byte, error) {
 		}
 		steps = append(steps, s)
 	}
-	return shell.Resume(store.Dir, e.Frame, e.Input, reach, steps)
+	pins := map[string]string{}
+	for name, entry := range e.Reach {
+		if entry.Binary != "" {
+			pins[name] = entry.Binary
+		}
+	}
+	return shell.ResumePinned(store.Dir, e.Frame, e.Input, reach, pins, steps)
 }
 
 // remember is the registered contract, the one the kernel names no other.

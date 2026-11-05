@@ -77,11 +77,68 @@ final class Session {
     private var composers: [String: (String, [Attachment])] = [:]
     private var navigationKey = ""
     private var storageKey = ""
+    private(set) var archivedMissionIDs: Set<String> = []
+    private var migrateMissionArchive = false
+    private var specDrafts: [String: (text:String,revision:Int)] = [:]
+    func specDraft(for id:String) -> (text:String,revision:Int)? { specDrafts[id] }
+    func keepSpecDraft(_ text:String,revision:Int,for id:String) { specDrafts[id] = (text,revision) }
+    func hasUnsavedSpec(for id:String) -> Bool {
+        guard let draft = specDrafts[id], let work = conversations.first(where: { $0.id == id })?.work else { return false }
+        return draft.text != work.spec
+    }
+
+    private var missionToolSelections: [String: [String]] = [:]
+
+    var missions: [Mission] { conversations.filter { !archivedMissionIDs.contains($0.id) }.map { Mission(conversation:$0,tree:tree(for:$0)) } }
+    var archivedMissions: [Mission] { conversations.filter { archivedMissionIDs.contains($0.id) }.map { Mission(conversation:$0,tree:tree(for:$0)) } }
+    var currentMission: Mission? { current.map { Mission(conversation:$0,tree:tree(for:$0)) } }
+
+    private func persistMissionArchive() {
+        guard !storageKey.isEmpty else { return }
+        UserDefaults.standard.set(archivedMissionIDs.sorted(),forKey:"missionArchive:v1:\(storageKey)")
+    }
+
+    func archiveMission(_ id: String) {
+        guard canNavigate, conversations.contains(where: { $0.id == id }) else { return }
+        archivedMissionIDs.insert(id)
+        if selected == id { navigate(nil) }
+        persistMissionArchive()
+    }
+
+    func restoreMission(_ id: String) {
+        guard canNavigate, conversations.contains(where: { $0.id == id }) else { return }
+        archivedMissionIDs.remove(id)
+        persistMissionArchive()
+        selectConversation(id)
+    }
+
+    func toolsForMission(_ id: String) -> [String] {
+        let defaults = treeTargets.filter { $0 != "echo" }
+        let wanted = missionToolSelections[id] ?? conversations.first(where: { $0.id == id }).flatMap { tree(for:$0)?.reach } ?? defaults
+        return wanted.filter { treeTargets.contains($0) }.sorted()
+    }
+
+    func setMissionTools(_ tools: [String], for id: String) {
+        missionToolSelections[id] = tools.filter { treeTargets.contains($0) }.sorted()
+        if !storageKey.isEmpty { UserDefaults.standard.set(missionToolSelections,forKey:"missionTools:\(storageKey)") }
+    }
+
+    func createMission() {
+        guard canNavigate, connected else { return }
+        navigate(nil)
+        open(with:"")
+    }
+
 
     /// Working sets are local navigation state, never execution or cancellation.
     func configureWorkspace(_ path: String) {
         guard storageKey != path else { return }
         storageKey = path
+        specDrafts = [:]
+        let archiveKey = "missionArchive:v1:\(path)"
+        archivedMissionIDs = Set(UserDefaults.standard.stringArray(forKey:archiveKey) ?? [])
+        migrateMissionArchive = UserDefaults.standard.object(forKey:archiveKey) == nil
+        missionToolSelections = UserDefaults.standard.dictionary(forKey:"missionTools:\(path)") as? [String:[String]] ?? [:]
         openConversations = Self.migrated(UserDefaults.standard.dictionary(forKey: "conversationStars:\(path)") as? [String: [String]] ?? [:])
         lastSelected = Self.migrated(UserDefaults.standard.dictionary(forKey: "conversationSelection:\(path)") as? [String: String] ?? [:])
         composers = [:]
@@ -140,7 +197,7 @@ final class Session {
     func toggleModel() {
         guard canNavigate else { return }
         model = model == "codex" ? "claude" : "codex"
-        navigate(lastSelected[scope].flatMap { id in rootConversations.contains { $0.conversation == id } ? id : nil })
+        navigate(lastSelected[scope].flatMap { id in !archivedMissionIDs.contains(id) && rootConversations.contains { $0.conversation == id } ? id : nil })
     }
 
     func selectConversation(_ id: String) {
@@ -174,7 +231,7 @@ final class Session {
         guard canNavigate else { return }
         if selectedRoot == title, let c = current, belongs(c) { return }
         selectedRoot = title
-        navigate(lastSelected[scope].flatMap { id in rootConversations.contains { $0.conversation == id } ? id : nil })
+        navigate(lastSelected[scope].flatMap { id in !archivedMissionIDs.contains(id) && rootConversations.contains { $0.conversation == id } ? id : nil })
     }
 
     /// The conversations that run the selected root, newest first. A webhost
@@ -327,6 +384,18 @@ final class Session {
         }
         if !incarnation.isEmpty && inc != incarnation { awaitingTranscript = nil }
         (incarnation, revision, conversations, destinations) = (inc, rev, convs, roots)
+        if migrateMissionArchive {
+            // First Mission launch starts clean. This is navigation metadata;
+            // no runtime records are moved, deleted, resumed, or cancelled.
+            archivedMissionIDs.formUnion(convs.map(\.id))
+            migrateMissionArchive = false
+            persistMissionArchive()
+            openConversations = [:]
+            lastSelected = [:]
+            selected = nil
+            navigationKey = ""
+            persistNavigation()
+        }
         finishVisibleSubmission()
         if selectedRoot == nil || !roots.contains(where: { $0.title == selectedRoot }) {
             selectedRoot = roots.first?.title
@@ -353,7 +422,7 @@ final class Session {
         }
         if selected != nil && current == nil { navigate(nil) }
         if navigationKey.isEmpty {
-            if let id = lastSelected[scope], rootConversations.contains(where: { $0.conversation == id }) {
+            if let id = lastSelected[scope], !archivedMissionIDs.contains(id), rootConversations.contains(where: { $0.conversation == id }) {
                 navigate(id)
             } else {
                 navigationKey = selected ?? "new:\(scope)"

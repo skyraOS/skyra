@@ -13,8 +13,8 @@
 //	frames/<frame>.json a frame's log, its round, and what it has consumed
 //	records/<frame>     record/1, one JSON object per line
 //
-// Identity, for now: a target's binary is sha256 of its name, since the
-// envelope names targets, never hashes. One binary under two names is two.
+// Production identity comes from the kernel's pinned continuation envelope.
+// Older transcripts and deterministic fixtures retain their historical name identity.
 package shell
 
 import (
@@ -39,13 +39,26 @@ import (
 // Name is the apprentice's own name in the trees it runs.
 const Name = "apprentice"
 
+// An Import is an observation the trusted root adapter passes into a tree:
+// its reference, its producer's identity and contract, its value and its
+// source. It enters as text of the root's endowment, never as a separate
+// observation; the endowment's refinement binds every reference and source.
+type Import struct {
+	Ref      string          `json:"ref"`
+	Binary   string          `json:"binary"`
+	Contract string          `json:"contract"`
+	Value    json.RawMessage `json:"value"`
+	Source   json.RawMessage `json:"source"`
+}
+
 // Ask is the tree contract's input.
 type Ask struct {
-	Goal  string   `json:"goal"`
-	Kind  string   `json:"kind"`  // "act" or "delegate": the root's kind is given
-	Actor string   `json:"actor"` // the target that runs every turn
-	Reach []string `json:"reach"` // the targets the root holds
-	Depth int      `json:"depth"`
+	Imports []Import `json:"imports,omitempty"`
+	Goal    string   `json:"goal"`
+	Kind    string   `json:"kind"`  // "act" or "delegate": the root's kind is given
+	Actor   string   `json:"actor"` // the target that runs every turn
+	Reach   []string `json:"reach"` // the targets the root holds
+	Depth   int      `json:"depth"`
 }
 
 // Contract is the tree contract.
@@ -53,7 +66,7 @@ func Contract() *proc.Schema {
 	str := &proc.Schema{Type: "string"}
 	return &proc.Schema{Title: "tree", Type: "object", Required: []string{"tree"}, Fields: map[string]*proc.Schema{
 		"tree": {Type: "object", Required: []string{"actor", "goal", "kind", "reach"}, Fields: map[string]*proc.Schema{
-			"goal": str, "kind": str, "actor": str, "reach": {Type: "array", Items: str}, "depth": {Type: "number"},
+			"goal": str, "kind": str, "actor": str, "reach": {Type: "array", Items: str}, "depth": {Type: "number"}, "imports": {Type: "array", Items: &proc.Schema{Type: "object", Required: []string{"ref", "binary", "contract", "value", "source"}, Fields: map[string]*proc.Schema{"ref": str, "binary": str, "contract": str, "value": {Type: "any"}, "source": {Type: "any"}}}},
 		}},
 	}}
 }
@@ -74,13 +87,17 @@ type Fault struct {
 
 // Resume is one resume of a tree frame: what to print.
 func Resume(dir, frame string, input json.RawMessage, reach map[string][]*proc.Schema, steps []Step) ([]byte, error) {
+	return ResumePinned(dir, frame, input, reach, nil, steps)
+}
+
+func ResumePinned(dir, frame string, input json.RawMessage, reach map[string][]*proc.Schema, pins map[string]string, steps []Step) ([]byte, error) {
 	var in struct {
 		Tree Ask `json:"tree"`
 	}
 	if err := json.Unmarshal(input, &in); err != nil {
 		return nil, err
 	}
-	s := &shell{dir: filepath.Join(dir, "tree"), frame: name(frame), reach: reach}
+	s := &shell{dir: filepath.Join(dir, "tree"), frame: name(frame), reach: reach, pins: pins}
 	unlock, err := s.lock()
 	if err != nil {
 		return nil, err
@@ -88,6 +105,9 @@ func Resume(dir, frame string, input json.RawMessage, reach map[string][]*proc.S
 	defer unlock()
 	if err := s.load(); err != nil {
 		return nil, err
+	}
+	if s.state.Ask != nil {
+		s.pins = s.state.Binaries
 	}
 	if err := s.setup(in.Tree); err != nil {
 		return addressed(frame, map[string]any{"refused": err.Error()}), nil
@@ -195,13 +215,16 @@ type state struct {
 	Consumed int       `json:"consumed"`
 	// What it was asked and the reach it was set up with, so the view can
 	// replay it alone.
-	Ask   *Ask                      `json:"ask,omitempty"`
-	Reach map[string][]*proc.Schema `json:"reach,omitempty"`
+	Ask      *Ask                      `json:"ask,omitempty"`
+	Reach    map[string][]*proc.Schema `json:"reach,omitempty"`
+	Binaries map[string]string         `json:"binaries,omitempty"`
 }
 
 type shell struct {
 	dir, frame string
 	reach      map[string][]*proc.Schema
+	pins       map[string]string
+	imports    []Import
 	state      state
 
 	app       tree.Apprentice
@@ -240,8 +263,15 @@ func binaryOf(target string) tree.Binary {
 	return tree.Binary("sha256:" + name("skyra/target/v1|"+target))
 }
 
+func (s *shell) binaryOf(target string) tree.Binary {
+	if binary := s.pins[target]; binary != "" {
+		return tree.Binary(binary)
+	}
+	return binaryOf(target)
+}
+
 func (s *shell) contract(t string, c *proc.Schema) (tree.Contract, error) {
-	k, ok := tree.Identify(binaryOf(t), tree.Schema(c.Canonical()))
+	k, ok := tree.Identify(s.binaryOf(t), tree.Schema(c.Canonical()))
 	if !ok {
 		return k, fmt.Errorf("%s: not a contract", t)
 	}
@@ -255,7 +285,7 @@ func (s *shell) contract(t string, c *proc.Schema) (tree.Contract, error) {
 func (s *shell) setup(a Ask) error {
 	s.targets, s.names_, s.values = map[tree.Contract]target{}, map[tree.Binary]string{}, map[tree.AgentID]map[int]value{}
 	s.results = map[string]json.RawMessage{}
-	bin := binaryOf(Name)
+	bin := s.binaryOf(Name)
 	var cs []tree.Contract
 	for _, t := range []string{"observe", "root", "exit", "return", "perform_effect", "create_input", "delegate", "goal", "create_delegation", "create_act", "package_reach"} {
 		c, _ := tree.Identify(bin, tree.Schema(`{"title":"`+t+`","type":"object"}`))
@@ -265,7 +295,11 @@ func (s *shell) setup(a Ask) error {
 	if !ok {
 		return errors.New("the apprentice's contracts")
 	}
-	s.app, s.goal = app, a.Goal
+	goal, err := endowment(a.Goal, a.Imports)
+	if err != nil {
+		return err
+	}
+	s.app, s.goal, s.imports = app, goal, a.Imports
 	if s.depth = a.Depth; s.depth <= 0 {
 		s.depth = 3
 	}
@@ -281,7 +315,6 @@ func (s *shell) setup(a Ask) error {
 	if len(actor) == 0 {
 		return fmt.Errorf("the actor %q is not in reach", a.Actor)
 	}
-	var err error
 	if s.self, err = s.contract(a.Actor, actor[0]); err != nil {
 		return err
 	}
@@ -301,7 +334,46 @@ func (s *shell) setup(a Ask) error {
 }
 
 func (s *shell) started(a Ask) (tree.Event, error) {
-	return tree.Started{Self: s.self, Reach: s.rootReach, Kind: s.kind, Actor: s.self, Endowment: tree.Schema(`{"type":"string"}`), Seen: tree.Digest(s.goal)}, nil
+	seen := tree.Digest(s.goal)
+	if len(s.imports) > 0 {
+		seen = tree.Digest(map[string]any{"goal": s.goal, "imports": s.imports})
+	}
+	return tree.Started{Self: s.self, Reach: s.rootReach, Kind: s.kind, Actor: s.self, Endowment: tree.Schema(`{"type":"string"}`), Seen: seen}, nil
+}
+
+// endowment is the root's input text: the goal, then each import's value
+// under a line naming its reference and source, so a delegate cuts from them
+// as from any spec. Imports are checked here; one that is not well formed
+// refuses the tree.
+func endowment(goal string, imports []Import) (string, error) {
+	if len(imports) == 0 {
+		return goal, nil
+	}
+	var b strings.Builder
+	b.WriteString(goal)
+	refs := map[string]bool{}
+	for _, in := range imports {
+		if in.Ref == "" || refs[in.Ref] || !json.Valid(in.Source) || !json.Valid(in.Value) {
+			return "", errors.New("invalid imported observation reference, source or value")
+		}
+		refs[in.Ref] = true
+		var schema proc.Schema
+		if err := json.Unmarshal([]byte(in.Contract), &schema); err != nil || string(schema.Canonical()) != in.Contract {
+			return "", errors.New("imported observation has no canonical source contract")
+		}
+		if _, ok := tree.Identify(tree.Binary(in.Binary), tree.Schema(in.Contract)); !ok {
+			return "", errors.New("invalid imported observation producer")
+		}
+		var source, value bytes.Buffer
+		json.Compact(&source, in.Source)
+		var text string
+		if json.Unmarshal(in.Value, &text) != nil {
+			json.Indent(&value, in.Value, "", "  ")
+			text = value.String()
+		}
+		fmt.Fprintf(&b, "\n\nPassed observation %s from %s:\n%s", in.Ref, source.String(), text)
+	}
+	return b.String(), nil
 }
 
 // back is the event for what came back for one emitted instruction.

@@ -86,6 +86,8 @@ OS, the tree or the network.
 
 | Package | Owns |
 |---|---|
+| [`humanroot`](core/humanroot/) | The pure human-root protocol above worker trees: repeated authoring, scoped observation handoff, bounded grants and commit-before-dispatch |
+| [`mission`](core/mission/) | Typed Plan/Spec/Launch contracts, held capability catalogue and exact human-approved handoff validation |
 | [`contract`](core/contract/) | JSON-types schemas, strict decoding, the fit rule, canonical payloads |
 | [`boundary`](core/boundary/) | Authority: `Surface` (identity and contracts), `Boundary` (reach by contract, grants; the frame a return discharges and the continuation waiting on it), `Grant` (what a handle stands for), `Render` (the Seatbelt profile) |
 | [`record`](core/record/) | The record, its states and fault kinds, canonical `Encode`, `Stamp` |
@@ -95,6 +97,8 @@ OS, the tree or the network.
 
 | Package | Owns |
 |---|---|
+| [`humanroot`](runtime/humanroot/) | Trusted journal adapter for the human-root protocol: durable records, replay, separate human/runtime ingress and verified child-return readers; not yet routed through the Mission UI |
+| [`mission`](runtime/mission/) | Pinned catalogue, Plan receipt validation and explicit once-only Launch through a restricted existing kernel/worker tree; desktop integration remains |
 | [`instance`](runtime/instance/) | The shell: `Drive` performs effects and turns outcomes into events. Makes no decisions |
 | [`tree`](runtime/tree/) | `.skyra/` on disk: records, inputs, frames, slots, write-once results and claims. The only package that touches `.skyra/` |
 | [`replay`](runtime/replay/) | Re-derives a lineage from genesis with the machine, every sibling a resolve names included; walks a trace for the `trace` syscall. Reads the tree, writes nothing |

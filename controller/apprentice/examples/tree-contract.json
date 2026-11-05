@@ -69,6 +69,36 @@
             },
             "depth": {
               "type": "number"
+            },
+            "imports": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "binary",
+                  "contract",
+                  "value",
+                  "source"
+                ],
+                "fields": {
+                  "ref": {
+                    "type": "string"
+                  },
+                  "binary": {
+                    "type": "string"
+                  },
+                  "contract": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "any"
+                  },
+                  "source": {
+                    "type": "any"
+                  }
+                }
+              }
             }
           }
         }

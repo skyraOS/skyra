@@ -6,6 +6,7 @@ import SwiftUI
 /// redraws the sky, and a redraw reads and advances it.
 final class SkyModel {
     var pointer: CGPoint? // in the sky's points; nil when outside
+    var showsTitle = true
     var titleOpenTarget = 1.0 // 1 on an empty session, 0 in a conversation
     let calls = CallLights()
     let tree = TreeSky()
@@ -251,6 +252,7 @@ struct SkyScene {
         }
 
         // The title: near-sky tones, lit when a satellite or meteor passes.
+        guard model.showsTitle else { return }
         let t = SkyView.titleOrigin
         var lit = 0.0
         for head in heads {

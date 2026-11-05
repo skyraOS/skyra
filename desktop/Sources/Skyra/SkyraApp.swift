@@ -9,12 +9,12 @@ struct SkyraApp: App {
             ContentView(backend: delegate.backend, session: delegate.session).preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Conversation") { delegate.session.newSession() }.keyboardShortcut("n")
-                Button("Close Conversation") { delegate.session.closeCurrent() }.keyboardShortcut("d")
-                Button("Delete Conversation…") { delegate.session.askDelete(delegate.session.selected) }
+                Button("New Mission") { delegate.session.createMission() }.keyboardShortcut("n")
+                Button("Close Chat") { delegate.session.closeCurrent() }.keyboardShortcut("d")
+                Button("Archive Mission") { if let id = delegate.session.selected { delegate.session.archiveMission(id) } }
                     .keyboardShortcut(.delete, modifiers: [.command, .shift])
                 Divider()
                 Button("Change Workspace…") { delegate.backend.showGrant = true }.keyboardShortcut("o")

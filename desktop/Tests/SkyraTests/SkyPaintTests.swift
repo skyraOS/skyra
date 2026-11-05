@@ -47,7 +47,7 @@ import Testing
 }
 
 /// Draws one frame offscreen and returns its pixels, BGRA, row by row.
-private func render(_ renderer: SkyRenderer, width: Int, height: Int, scale: Double = 2, frame: Double = 0) -> [UInt8]? {
+func render(_ renderer: SkyRenderer, width: Int, height: Int, scale: Double = 2, frame: Double = 0) -> [UInt8]? {
     let w = Int(Double(width) * scale), h = Int(Double(height) * scale)
     let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: SkyRenderer.pixelFormat, width: w, height: h, mipmapped: false)
     d.usage = [.renderTarget, .shaderRead]
