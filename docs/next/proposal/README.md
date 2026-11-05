@@ -15,6 +15,12 @@ once, with an id the per-document proposals refer to.
 
 New implementation proposals:
 
+- [57 — Act creation and returns](57-act-creation-and-returns-proposal.md):
+  optional `create` alongside `input` in `perform_effect`; separate
+  `act_return_delegate` and `act_return_root`, with creation allowed only
+  on the root return boundary. Preserves observation passing and specifies
+  destination checks, replay requirements, and latency measurements.
+  Proposed (2026-11-05).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
