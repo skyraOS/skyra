@@ -21,15 +21,16 @@ The embedding host performs these operations:
    `propose-spec`, whose input names tools from that returned observation and
    resolves them to refs, and states the profile Launch's tree runs under
    (kept from the current spec unless the human asks otherwise). Plan's own
-   tree runs under `PlanProfile`, `{act 5, turns 24, depth 1, fanout 8,
-   budget 60}`: its five navigation contracts fit one act node, an explorer
-   that looks around in its own turns, and the root goes no deeper than its
-   children. A Plan turn that runs out says so as Plan's reply. A planner may also hold `Navigation`: `plan.pwd`,
+   tree runs under `PlanProfile`, `{act 20, turns 24, depth 1, fanout 8,
+   budget 60}`: its act bound is above every contract it holds, so Plan is
+   one act node that looks around, views and proposes in its own turns,
+   choosing each contract by number, and never delegates; its root's kind
+   comes from the profile. A Plan turn that runs out says so as Plan's reply. A planner may also hold `Navigation`: `plan.pwd`,
    `plan.cd`, `plan.ls`, `plan.find` and `plan.read` (`targets/workdir`), read-only in the
    workspace, where a location is an observation: pwd and cd return
-   `{"dir": …}`, and cd, ls, find and read take one as their `dir`. Plan is a
-   delegate: each child holds one of these, passed what earlier ones
-   returned, and its goal has one line per contract for the root to cut. The host writes the view into the
+   `{"dir": …}`, and cd, ls, find and read take one as their `dir`. Plan holds
+   them all in one act node, passing what earlier ones returned to later
+   ones, and its goal has one line per step. The host writes the view into the
    viewer's own state before the tree boots, and the claim binds it. Its
    receipt is checked by replay. `ReceivePlan` requires the host's trusted
    receipt reader and exactly one valid Spec. Plan may cite, and quote in its goal's

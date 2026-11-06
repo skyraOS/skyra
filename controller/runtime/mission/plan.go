@@ -16,12 +16,13 @@ import (
 	"skyra/controller/runtime/boot"
 )
 
-// Plan holds ordinary leaf contracts, which make it a delegate: Viewer
-// returns the contracts the Mission's human holds for Launch, and Proposer
-// turns a spec naming tools from that view into a typed Spec.
+// Plan holds ordinary leaf contracts: Viewer returns the contracts the
+// Mission's human holds for Launch, and Proposer turns a spec naming tools
+// from that view into a typed Spec.
 const (
 	Viewer   = "view-plan-contracts"
 	Proposer = "propose-spec"
+	Replier  = "plan.reply"
 )
 
 // Navigation is how Plan may look around the workspace before it proposes:
@@ -31,20 +32,21 @@ var Navigation = []string{"plan.pwd", "plan.cd", "plan.ls", "plan.find", "plan.r
 // steps are what Plan's goal asks of each contract it holds, one line each,
 // so its delegate root can cut one for the child it passes that contract.
 var steps = map[string]string{
+	Replier:     "Reply conversationally: pass your reply as the text field to plan.reply, then return its result. This does not create or change a spec.",
 	"plan.pwd":  "Find where you are in the workspace: the directory every other step starts from.",
 	"plan.cd":   "Move into a directory inside one you have found.",
 	"plan.ls":   "List a directory you have found.",
 	"plan.find": "Search under a directory you have found, by name or by text; matches are relative to the workspace, so read follows one from where you started.",
 	"plan.read": "Read a file in a directory you have found.",
 	Viewer:      "View the capabilities you may attach to this plan: those this mission's human holds, each with its tool, its input and the scope it reaches.",
-	Proposer:    "Propose the spec from the viewed capabilities, passing them as its catalogue. Its goal is the complete task for Launch, which sees only that goal, the inputs it cites and the tools it proposes. Build the goal from segments: quote the request and conversation verbatim, by their ids below, wherever they say what to do, and add your own text only where they do not; every word you add lowers the spec's cite coverage. If the current spec is passed, keep what you want of it by quoting it by its id: only the words a human wrote or cited in it count as quoted, so add again as your own text any you wrote. Its note is your reply to the human's message: answer them, say what you changed, and ask what you need to know. If they have not yet said what Launch should do, propose an empty goal and no tools, and ask. Its inputs are the ids, below, of the passed observations Launch needs. Its capabilities are the tools, by target, from the viewed capabilities that Launch needs. Its profile is the constants Launch's tree runs under, all four required: act, the most tools one node may hold and invoke itself before it must delegate; turns, the most turns each node takes; depth, how deep a child may be; fanout, the most instructions in one call, at most 32; budget, the most turns the whole tree takes, every node's together. Keep the current spec's profile unless the human asks to change it; with no current spec, use act 1, turns 8, depth 3, fanout 32, budget 64.",
+	Proposer:    "Propose the spec from the viewed capabilities, passing them as its catalogue. Its goal is the complete task for Launch, which sees only that goal, the inputs it cites and the tools it proposes. Build the goal from segments: quote the request and conversation verbatim, by their ids below, wherever they say what to do, and add your own text only where they do not; every word you add lowers the spec's cite coverage. If the current spec is passed, keep what you want of it by quoting it by its id: only the words a human wrote or cited in it count as quoted, so add again as your own text any you wrote. Use this contract only when the human requests a new task or a change to the current spec. Its note explains the change and asks any remaining questions. For conversation or clarification without a spec change, return a text reply instead. Its inputs are the ids, below, of the passed observations Launch needs. Its capabilities are the tools, by target, from the viewed capabilities that Launch needs. Its profile is the constants Launch's tree runs under, all four required: act, the most tools one node may hold and invoke itself before it must delegate; turns, the most turns each node takes; depth, how deep a child may be; fanout, the most instructions in one call, at most 32; budget, the most turns the whole tree takes, every node's together. Keep the current spec's profile unless the human asks to change it; with no current spec, use act 1, turns 8, depth 3, fanout 32, budget 64.",
 }
 
-// PlanProfile is the constants Plan's own tree runs under. Its five
-// navigation contracts fit one act node, an explorer that looks around in its
-// own turns; viewing and proposing fit another; the root, holding all seven,
-// delegates to them and goes no deeper. The budget bounds a whole answer.
-var PlanProfile = typed.Profile{Act: 5, Turns: 24, Depth: 1, FanOut: 8, Budget: 60}
+// PlanProfile is the constants Plan's own tree runs under. Its act bound is
+// above every contract Plan holds, so Plan is one act node: it looks around,
+// views and proposes in its own turns, choosing each contract by number, and
+// never delegates. The budget bounds a whole answer.
+var PlanProfile = typed.Profile{Act: 20, Turns: 24, Depth: 1, FanOut: 8, Budget: 60}
 
 // ViewFile is where, in the viewer's own state, the host leaves the view.
 const ViewFile = "contracts.json"
@@ -92,7 +94,7 @@ func (b *Bridge) LaunchRoot(call root.ID) string {
 }
 
 // ExecutePlan runs a committed Plan dispatch from StartPlan through the
-// existing kernel, once: a delegate tree holding exactly the contracts the
+// existing kernel, once: a tree, its root's kind by PlanProfile, holding exactly the contracts the
 // root granted Plan, passed the request and context observations, asked to
 // view the human's contracts and propose one Spec from them. Its return
 // enters the human's scope only through ReceivePlan.
@@ -129,7 +131,7 @@ func (b *Bridge) ExecutePlan(ctx context.Context, kernel, actor string, plan roo
 		return root.Effect{}, err
 	}
 	goal := b.planGoal(plan.Passed)
-	reg, payload, err := b.Planner.Prepare(filepath.Join(dir, "prepared"), actor, typed.Resolved{Spec: typed.Spec{Version: 1, Goal: goal}, Contracts: b.Planner.Typed.Entries(), Kind: "delegate", Profile: PlanProfile})
+	reg, payload, err := b.Planner.Prepare(filepath.Join(dir, "prepared"), actor, typed.Resolved{Spec: typed.Spec{Version: 1, Goal: goal}, Contracts: b.Planner.Typed.Entries(), Kind: PlanProfile.KindOf(len(b.Planner.Typed.Entries())), Profile: PlanProfile})
 	if err != nil {
 		claim.Close()
 		return root.Effect{}, err
@@ -179,27 +181,27 @@ func (b *Bridge) ExecutePlan(ctx context.Context, kernel, actor string, plan roo
 			return nil, err
 		}
 		if final.State != record.Return {
-			return nil, fmt.Errorf("Plan did not return a Spec: %s", final.Payload)
+			return nil, fmt.Errorf("Plan did not return an answer: %s", final.Payload)
 		}
 		var answer struct {
 			Returned []json.RawMessage `json:"returned"`
 		}
 		if err := json.Unmarshal(final.Payload, &answer); err != nil || len(answer.Returned) != 1 {
-			return nil, fmt.Errorf("Plan must return exactly what %s gave back: %s", Proposer, final.Payload)
+			return nil, fmt.Errorf("Plan must return exactly one text reply or Spec: %s", final.Payload)
 		}
 		return answer.Returned, nil
 	})
 }
 
-// planGoal is what the Plan tree is asked, by line, so its delegate root can
-// cut each step for a child: looking around the workspace if it may, viewing
-// the human's contracts, then proposing the spec from that view. The request
+// planGoal is what the Plan tree is asked, one line per step: looking around
+// the workspace if it may, viewing the human's contracts, then proposing the
+// spec from that view. The request
 // and context follow as passed observations.
 func (b *Bridge) planGoal(passed []root.Observation) string {
 	var g strings.Builder
-	g.WriteString("You are Plan, shaping this mission's spec with the human. Their message is the request passed below: answer it, and return the spec as it now stands.\n")
+	g.WriteString("You are Plan, shaping this mission's spec with the human. Their message is the request passed below: answer it. For greetings, questions, or clarification that do not change the task, pass your reply as the text field to plan.reply and return its result; do not view capabilities or propose a spec just to reply. Propose and return a spec only when the request calls for creating or changing the task. The following contracts are available when needed, not a checklist to execute.\n")
 	held := b.Planner.targets()
-	for _, t := range append(slices.Clone(Navigation), Viewer, Proposer) {
+	for _, t := range append(slices.Clone(Navigation), Replier, Viewer, Proposer) {
 		if slices.Contains(held, t) {
 			g.WriteString(steps[t] + "\n")
 		}

@@ -95,6 +95,13 @@ func TestPlanThenLaunchThroughTheWebhost(t *testing.T) {
 		t.Fatalf("Plan did not keep the human's profile: %+v", replanned.Profile)
 	}
 
+	// A conversational reply preserves the existing revision.
+	workMessage(h, inbound{Type: "submit", RequestID: "greeting", Text: "Hello conversational test"})
+	waitPlan(t, h)
+	if c.work.PlanError != "" || c.work.latest().Observation != replanned.Observation || c.work.Revision != 3 || c.entries[len(c.entries)-1].Text != "Hello!" {
+		t.Fatalf("conversation changed the spec or failed: %+v", c.work)
+	}
+
 	// Launch runs the revision the human is looking at, not only the latest.
 	workMessage(h, inbound{Type: "launch-spec", RequestID: "launch", SpecRevision: 3})
 	if c.work.LastRunID == "" {

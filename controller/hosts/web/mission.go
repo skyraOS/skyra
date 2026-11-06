@@ -64,7 +64,7 @@ func (h *webhost) missionSetup() (*missionSetup, error) {
 	if err != nil {
 		return nil, err
 	}
-	planner, err := mission.Load(h.trees.registry, append([]string{mission.Viewer, mission.Proposer}, mission.Navigation...))
+	planner, err := mission.Load(h.trees.registry, append([]string{mission.Viewer, mission.Proposer, mission.Replier}, mission.Navigation...))
 	if err != nil {
 		return nil, err
 	}
@@ -368,9 +368,13 @@ func (h *webhost) runPlan(requestID, text string, s *missionSetup, b *mission.Br
 	}
 	state, err := b.Root.State()
 	if err != nil || len(returned.Observations) != 1 {
-		return typed.Spec{}, "", nil, fmt.Errorf("Plan returned no spec: %v", err)
+		return typed.Spec{}, "", nil, fmt.Errorf("Plan returned no answer: %v", err)
 	}
 	observation, _ := state.Lookup(returned.Observations[0])
+	var reply string
+	if json.Unmarshal(observation.Value(), &reply) == nil {
+		return typed.Spec{Note: reply}, observation.ID(), from, nil
+	}
 	spec, err := typed.DecodeSpec(observation.Value())
 	if err != nil {
 		return typed.Spec{}, "", nil, err

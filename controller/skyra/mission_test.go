@@ -193,12 +193,22 @@ func TestTypedMissionPlanAndLaunchThroughRealKernel(t *testing.T) {
 			t.Fatalf("Plan did not look around its workspace: missing %s", seen)
 		}
 	}
-	// Plan's own tree ran under Plan's profile.
+	// Plan's own tree ran under Plan's profile: one act node, holding every
+	// contract Plan was granted, which never delegated.
 	var planAsked struct {
-		Ask struct{ Profile typed.Profile }
+		Ask struct {
+			Kind    string
+			Profile typed.Profile
+		}
+		Log []struct{ Agent string }
 	}
-	if json.Unmarshal(log, &planAsked) != nil || planAsked.Ask.Profile != mission.PlanProfile {
-		t.Fatalf("Plan's tree did not run under its profile: %+v", planAsked.Ask.Profile)
+	if json.Unmarshal(log, &planAsked) != nil || planAsked.Ask.Profile != mission.PlanProfile || planAsked.Ask.Kind != "act" {
+		t.Fatalf("Plan's tree did not run as one act node under its profile: %+v", planAsked.Ask)
+	}
+	for _, e := range planAsked.Log {
+		if e.Agent != "" && e.Agent != "0" {
+			t.Fatalf("Plan delegated, to %s", e.Agent)
+		}
 	}
 	if call, _ := state.Invocation(planned.Invocation.ID); !slices.Equal(call.Grant, bridge.PlanGrant()) {
 		t.Fatalf("the root did not record the planner's contracts as Plan's grant: %+v", call)

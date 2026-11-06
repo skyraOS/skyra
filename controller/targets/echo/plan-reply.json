@@ -1,0 +1,14 @@
+{
+  "input": {
+    "title": "plan.reply",
+    "type": "object",
+    "required": [
+      "text"
+    ],
+    "fields": {
+      "text": {
+        "type": "string"
+      }
+    }
+  }
+}

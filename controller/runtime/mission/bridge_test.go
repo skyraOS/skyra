@@ -225,3 +225,32 @@ func TestPlanQuotesOnlyWhatItWasPassed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPlanConversationalReplyCannotLaunch(t *testing.T) {
+	b, _ := bridgeFixture(t)
+	request, err := b.Root.Author("request", json.RawMessage(`"hi"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, _, err := b.StartPlan("plan", request.Observations[0], nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := b.ReceivePlan(plan.Invocation.ID, "reply-receipt", func(root.Invocation, string) ([]json.RawMessage, error) {
+		return []json.RawMessage{json.RawMessage(`"Hello!"`)}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := b.Root.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation, ok := state.Lookup(result.Observations[0])
+	if !ok || string(observation.Value()) != `"Hello!"` {
+		t.Fatal("reply was not preserved")
+	}
+	if _, err := typed.DecodeSpec(observation.Value()); err == nil {
+		t.Fatal("reply became a launchable spec")
+	}
+}

@@ -28,6 +28,7 @@ func missionRegistry(t *testing.T, dir string, bins map[string]string) string {
 		t.Fatal(err)
 	}
 	reg := map[string]registry.Entry{
+		"plan.reply":          {Path: bins["echo"], Contract: absolute("../../targets/echo/plan-reply.json")},
 		"echo":                {Path: bins["echo"], Contract: absolute("../../targets/echo/contract.json")},
 		"find":                {Path: bins["find"], Contract: absolute("../../targets/find/contract.json")},
 		"read":                {Path: bins["read"], Contract: absolute("../../targets/read/contract.json")},

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"skyra/controller/core/contract"
 	root "skyra/controller/core/humanroot"
@@ -108,7 +109,7 @@ func (b *Bridge) StartPlan(requestID string, request root.ID, context []root.ID,
 	return effect, payload, nil
 }
 
-// ReceivePlan accepts a runtime-verifiable Plan return and validates the Spec
+// ReceivePlan accepts a runtime-verifiable text reply or validates a Spec
 // before it enters the human's scope. Plan can cite only inputs it received.
 func (b *Bridge) ReceivePlan(call root.ID, receipt string, read journal.ReturnReader) (root.Effect, error) {
 	if read == nil {
@@ -128,7 +129,14 @@ func (b *Bridge) ReceivePlan(call root.ID, receipt string, read journal.ReturnRe
 			return nil, err
 		}
 		if len(values) != 1 {
-			return nil, fmt.Errorf("Plan must return exactly one typed Spec observation")
+			return nil, fmt.Errorf("Plan must return exactly one text reply or typed Spec observation")
+		}
+		var reply string
+		if json.Unmarshal(values[0], &reply) == nil {
+			if strings.TrimSpace(reply) == "" || len(reply) > 16*1024 {
+				return nil, fmt.Errorf("Plan reply must be nonempty and at most 16 KiB")
+			}
+			return values, nil
 		}
 		spec, err := typed.DecodeSpec(values[0])
 		if err != nil {

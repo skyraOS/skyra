@@ -34,7 +34,7 @@ The webhost exposes three conversation-scoped, request-ledger operations:
   (`pwd`, `cd`, `ls`, `find`, `read`, which pass a directory observation
   between them), a contract that returns the contracts the human holds for
   Launch, and `propose-spec`, which takes that returned observation and the
-  tools it names from it. Plan is a delegate tree. It returns the Spec as it
+  tools it names from it. Plan is one act node, under its own profile, that uses these itself and never delegates. It returns the Spec as it
   now stands with a `note`, its reply, which the conversation shows; a Spec
   that asks something new of Launch (goal, sources, inputs or tools) becomes
   the turn's revision, and the reply names it. Plan may cite only what it was

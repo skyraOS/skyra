@@ -168,6 +168,7 @@ registry={
  # contracts the human holds for Launch, which the host leaves in its state;
  # the proposer turns a spec naming tools from that view into a typed Spec.
  'view-plan-contracts':{'path':str(build/'view-plan-contracts'),'contract':str(root/'controller/targets/view-plan-contracts/contract.json'),'state':True},
+ 'plan.reply':{'path':str(build/'echo'),'contract':str(root/'controller/targets/echo/plan-reply.json')},
  'propose-spec':{'path':str(build/'propose-spec'),'contract':str(root/'controller/targets/propose-spec/contract.json')},
  # Plan's way around the workspace, before it proposes: pwd and cd return a
  # directory observation, which cd, ls, find and read take. Read-only, like read.
