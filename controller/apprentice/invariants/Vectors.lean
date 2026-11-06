@@ -252,6 +252,424 @@ def stores : List Store := Id.run do
     frontier := next
   return out
 
+/-! ## Proposal 58: refinements
+
+The atoms compare one field, `arrived.size`, with a constant, or test it
+for evenness; the values are that field's. Conditions are written as CEL, the way the Go receives them.
+Overlap is decided exactly for comparisons by testing every half-point
+around each constant (so `x > 7 && x < 8` overlaps, as it does over
+numbers), and left undecided whenever `even` appears. -/
+
+inductive Atom where
+  | gt (k : Int) | lt (k : Int) | eq (k : Int) | even
+  deriving Repr, DecidableEq
+
+def Atom.sat : Atom → Int → Bool
+  | .gt k, x => x > k
+  | .lt k, x => x < k
+  | .eq k, x => x == k
+  | .even, x => x % 2 == 0
+
+/-- The atom on doubled values: `p` stands for `p / 2`. -/
+def Atom.half : Atom → Int → Bool
+  | .gt k, p => p > 2 * k
+  | .lt k, p => p < 2 * k
+  | .eq k, p => p == 2 * k
+  | .even, _ => false
+
+/-- Written as a stored guard reads it: the arrival's `size` field, which
+the model wrote as `$1.size`. -/
+def Atom.cel : Atom → String
+  | .gt k => s!"arrived.size > {k}"
+  | .lt k => s!"arrived.size < {k}"
+  | .eq k => s!"arrived.size == {k}"
+  | .even => "int(arrived.size) % 2 == 0"
+
+def Atom.const : Atom → List Int
+  | .gt k | .lt k | .eq k => [k]
+  | .even => []
+
+def condCel : Refine.Cond Atom → String
+  | .atom a => a.cel
+  | .tt => "true"
+  | .and p q => "(" ++ condCel p ++ ") && (" ++ condCel q ++ ")"
+  | .not p => "!(" ++ condCel p ++ ")"
+
+def condAtoms : Refine.Cond Atom → List Atom
+  | .atom a => [a]
+  | .tt => []
+  | .and p q => condAtoms p ++ condAtoms q
+  | .not p => condAtoms p
+
+def overlaps (p q : Refine.Cond Atom) : Option Bool :=
+  let atoms := condAtoms p ++ condAtoms q
+  if atoms.contains .even then none
+  else
+    let ks := atoms.flatMap Atom.const
+    let points := if ks.isEmpty then [0] else ks.flatMap fun k => [2 * k - 1, 2 * k, 2 * k + 1]
+    some (points.any fun x => p.eval Atom.half x && q.eval Atom.half x)
+
+abbrev RBranch := Refine.Branch Atom String
+abbrev RRef := Refine.Refinement Atom String
+
+def jNat (n : Nat) : Json := Lean.Json.num (Lean.JsonNumber.fromNat n)
+
+def jBranch (b : RBranch) : Json :=
+  Json.mkObj [("id", jNat b.id), ("rank", jNat b.rank), ("cond", .str (condCel b.cond)),
+    ("instr", .str b.instr)]
+
+def jRef (r : RRef) : Json :=
+  Json.mkObj [("next", jNat r.next), ("branches", jList jBranch r.branches)]
+
+def jRecord (x : Refine.Record) : Json :=
+  Json.mkObj [("older", jNat x.older), ("retired", jNat x.retired), ("remainder", jNat x.remainder)]
+
+def jPossible (x : Nat × Nat) : Json := .arr #[jNat x.1, jNat x.2]
+
+def jOutcome : Refine.Outcome String → Json
+  | .null => .null
+  | .select i => Json.mkObj [("select", .str i)]
+  | .conflict => .str "conflict"
+
+def jAfter : Refine.After String → Json
+  | .startleAgain => .str "startle"
+  | .trust i l => Json.mkObj [("trust", .str i), ("learned", .bool l)]
+
+/-- The guard as the model writes it: `c₀ ? "i₀" : c₁ ? "i₁" : null`. -/
+def guardCel : List (Refine.Cond Atom × String) → String
+  | [] => "null"
+  | (c, i) :: rest => condCel c ++ " ? \"" ++ i ++ "\" : " ++ guardCel rest
+
+def links : List (Refine.Cond Atom × String) :=
+  let conds : List (Refine.Cond Atom) :=
+    [.atom (.gt 2), .atom (.gt 5), .atom (.gt 8), .atom (.lt 5), .atom (.eq 5), .atom .even, .tt]
+  conds.flatMap fun c => ["A", "B"].map (c, ·)
+
+def chains1 : List (List (Refine.Cond Atom × String)) := links.map ([·])
+
+def chains2 : List (List (Refine.Cond Atom × String)) :=
+  (links.flatMap fun a => links.map fun b => [a, b]).take 40
+
+def commitR (r : RRef) (chain : List (Refine.Cond Atom × String)) : RRef :=
+  (Refine.commit overlaps r chain).1
+
+/-- The empty refinement and every one a single one-link guard makes. -/
+def refs1 : List RRef := Refine.Refinement.empty :: chains1.map (commitR .empty)
+
+/-- Every refinement two one-link guards make, one after the other. -/
+def refs2 : List RRef := chains1.flatMap fun a => chains1.map fun b => commitR (commitR .empty a) b
+
+/-- Refinements with possibly overlapping branches, as commit leaves them
+when overlap is undecided: conflicts for `resolve` to find. -/
+def refsPossible : List RRef :=
+  chains1.flatMap fun a => chains1.filterMap fun b =>
+    let r := commitR (commitR .empty a) b
+    if (Refine.commit overlaps (commitR .empty a) b).2.2.isEmpty then none else some r
+
+def values : List Int := [0, 2, 3, 5, 6, 8, 9]
+
+def jInt (x : Int) : Json := Lean.Json.num (Lean.JsonNumber.fromInt x)
+
+def refineFiles : List (String × List Json) :=
+  let case (i o : Json) : Json := Json.mkObj [("in", i), ("out", o)]
+  [ ("refineOverlaps", links.flatMap fun (p, _) => links.filterMap fun (q, i) =>
+      if i = "A" then some (case (Json.mkObj [("p", .str (condCel p)), ("q", .str (condCel q))])
+        (jOpt Json.bool (overlaps p q))) else none),
+    ("refineCommit", refs1.flatMap fun r => (chains1 ++ chains2).map fun chain =>
+      let (r', recs, poss) := Refine.commit overlaps r chain
+      case (Json.mkObj [("refinement", jRef r), ("guard", .str (guardCel chain))])
+        (Json.mkObj [("refinement", jRef r'), ("records", jList jRecord recs),
+          ("possible", jList jPossible poss)])),
+    ("refineDistinguish", refs2.flatMap fun r => values.map fun v =>
+      case (Json.mkObj [("refinement", jRef r), ("x", jInt v)])
+        (jOutcome (Refine.distinguish Atom.sat r.branches v))),
+    ("refineResolve", refsPossible.flatMap fun r => values.map fun v =>
+      let (o, r', recs) := Refine.resolve Atom.sat r.branches.length r v
+      case (Json.mkObj [("refinement", jRef r), ("x", jInt v)])
+        (Json.mkObj [("outcome", jOutcome o), ("refinement", jRef r'), ("records", jList jRecord recs)])),
+    ("refineAfterStartle", (chains1 ++ chains2.take 10).flatMap fun chain =>
+      refs1.flatMap fun r => [3, 6, 9].map fun v =>
+        case (Json.mkObj [("guard", .str (guardCel chain)), ("committed", jRef r), ("x", jInt v)])
+          (jAfter (Refine.afterStartle Atom.sat chain r.branches v))) ]
+
+/-! ## Proposal 58: shapes
+
+Each case is bytes and the contract's declared output; Lean gives what
+arrives and its shape's canonical encoding. JSON cases are rendered from
+values, duplicate keys included, so the Go decodes the same bytes. -/
+
+mutual
+def svText : Shape.Value → String
+  | .null => "null"
+  | .bool b => if b then "true" else "false"
+  | .num lit => lit
+  | .str s => "\"" ++ Shape.escape s ++ "\""
+  | .arr xs => "[" ++ svTexts xs ++ "]"
+  | .obj kvs => "{" ++ svMembers kvs ++ "}"
+  | .bytes _ => ""
+def svTexts : List Shape.Value → String
+  | [] => ""
+  | [x] => svText x
+  | x :: xs => svText x ++ "," ++ svTexts xs
+def svMembers : List (String × Shape.Value) → String
+  | [] => ""
+  | [(k, v)] => "\"" ++ Shape.escape k ++ "\":" ++ svText v
+  | (k, v) :: kvs => "\"" ++ Shape.escape k ++ "\":" ++ svText v ++ "," ++ svMembers kvs
+end
+
+mutual
+def svJson : Shape.Value → Json
+  | .null => .null
+  | .bool b => .bool b
+  | .num lit => match lit.toNat? with
+    | some n => Lean.Json.num (Lean.JsonNumber.fromNat n)
+    | none => .str lit
+  | .str s => .str s
+  | .arr xs => .arr (svJsons xs).toArray
+  | .obj kvs => Json.mkObj (svJsonMembers kvs)
+  | .bytes b => .arr (b.toList.map fun x => Lean.Json.num (Lean.JsonNumber.fromNat x.toNat)).toArray
+def svJsons : List Shape.Value → List Json
+  | [] => []
+  | x :: xs => svJson x :: svJsons xs
+def svJsonMembers : List (String × Shape.Value) → List (String × Json)
+  | [] => []
+  | (k, v) :: kvs => (k, svJson v) :: svJsonMembers kvs
+end
+
+def svKeys : List String := ["a", "b", "é", "k\"1", "c\n"]
+def svLeaves : List Shape.Value := [.null, .bool true, .num "1", .str "a", .str "x\"\\"]
+
+def svValues : List Shape.Value :=
+  let one := svKeys.flatMap fun k => svLeaves.map fun v => Shape.Value.obj [(k, v)]
+  let two := (svKeys.take 3).flatMap fun k₁ => (svLeaves.take 3).flatMap fun v₁ =>
+    (svKeys.take 3).flatMap fun k₂ => (svLeaves.take 3).map fun v₂ => Shape.Value.obj [(k₁, v₁), (k₂, v₂)]
+  let arrs := [Shape.Value.arr []] ++ svLeaves.map (fun v => .arr [v]) ++
+    svLeaves.flatMap (fun a => svLeaves.map fun b => .arr [a, b]) ++
+    [.arr [.num "1", .num "1", .num "1"], .arr [.arr [.num "1"], .arr []], .arr [.arr [], .arr [.num "1"]]]
+  let nested := (one.take 10 ++ arrs.take 8).map (fun v => Shape.Value.obj [("a", v)]) ++
+    (one.take 10).map (fun v => Shape.Value.arr [v, v]) ++
+    [.obj [("a", .obj [("b", .num "1"), ("b", .num "2")])], .arr [.obj [("a", .num "1"), ("a", .null)]],
+     .arr [.obj [("a", .num "1")], .obj [("b", .num "1")]], .arr [.obj [("b", .num "1")], .obj [("a", .num "1")]]]
+  svLeaves ++ one ++ two ++ arrs ++ nested
+
+def svTextBytes : List String := ["5", "true", "{\"a\":1}", "hello\n", "", "[1,2]", "é"]
+
+def jBytes (b : ByteArray) : Json :=
+  .arr (b.toList.map fun x => Lean.Json.num (Lean.JsonNumber.fromNat x.toNat)).toArray
+
+mutual
+/-- The first repeated key in the rendered text, in reading order, and the
+offset just past it: what a streaming decoder reports. -/
+def dupIn : Shape.Value → Nat → Option (Nat × String)
+  | .arr xs, pos => dupInElems xs (pos + 1)
+  | .obj kvs, pos => dupInMembers kvs [] (pos + 1)
+  | _, _ => none
+def dupInElems : List Shape.Value → Nat → Option (Nat × String)
+  | [], _ => none
+  | x :: xs, pos => match dupIn x pos with
+    | some r => some r
+    | none => dupInElems xs (pos + (svText x).utf8ByteSize + 1)
+def dupInMembers : List (String × Shape.Value) → List String → Nat → Option (Nat × String)
+  | [], _, _ => none
+  | (k, v) :: kvs, seen, pos =>
+    let keyEnd := pos + ("\"" ++ Shape.escape k ++ "\"").utf8ByteSize
+    if k ∈ seen then some (keyEnd, k)
+    else match dupIn v (keyEnd + 1) with
+      | some r => some r
+      | none => dupInMembers kvs (k :: seen) (keyEnd + 1 + (svText v).utf8ByteSize + 1)
+end
+
+/-- What the shell's decoder gives for a rendered value. -/
+def svDecoded (v : Shape.Value) : Except (Nat × Shape.Failure) Shape.Value :=
+  match dupIn v 0 with
+  | some (off, k) => .error (off, .duplicate k)
+  | none => .ok v
+
+/-- Bytes that do not decode as declared. Syntax errors carry the decoder's
+offset: the bytes it had read when it found the error. -/
+def svBad : List (Shape.Output × List UInt8 × Except (Nat × Shape.Failure) Shape.Value) :=
+  [(.text, [111, 107, 255, 110, 111], .error (0, .syntax)), (.text, [0xc3], .error (0, .syntax)),
+   (.text, [0xe9, 0x41], .error (0, .syntax)), (.text, [0x61, 0xed, 0xa0, 0x80], .error (0, .syntax)),
+   (.text, [0xf4, 0x90, 0x80, 0x80], .error (0, .syntax)), (.text, [0xc0, 0x80], .error (0, .syntax)),
+   (.json, "{\"a\":".toUTF8.toList, .error (5, .syntax)),
+   (.json, "{\"a\":1} x".toUTF8.toList, .error (9, .syntax)),
+   (.json, "nul".toUTF8.toList, .error (3, .syntax)),
+   (.json, [], .error (0, .syntax)),
+   (.json, "{\"a\":1,}".toUTF8.toList, .error (8, .syntax)),
+   (.json, [34, 255, 34], .error (0, .syntax))]
+
+def shapeFiles : List (String × List Json) :=
+  let case (o : Shape.Output) (raw : ByteArray) (d : Except (Nat × Shape.Failure) Shape.Value) : Json :=
+    let v := Shape.arrive o raw d
+    Json.mkObj [("in", Json.mkObj [("output", .str (if o = .json then "json" else "text")),
+        ("bytes", jBytes raw)]),
+      ("out", Json.mkObj [("value", svJson v),
+        ("shape", jOpt (fun s => .str (Shape.Shape.enc s)) (Shape.shapeOf v))])]
+  [ ("shapeArrive",
+      svValues.map (fun v => case .json (svText v).toUTF8 (svDecoded v)) ++
+      (svTextBytes ++ (svValues.take 12).map svText ++ ["é ok", String.singleton (Char.ofNat 0x10FFFF)]).map
+        (fun b => case .text b.toUTF8 (.error (0, .syntax))) ++
+      svBad.map fun (o, b, d) => case o ⟨b.toArray⟩ d) ]
+
+/-! ## Proposal 58: the walk
+
+Each case is a frame's starting scope and a sequence of events, invokes and
+returns, applied in turn; a fault leaves the frame as it was. Hashes are
+stand-ins, `in(contract;bases)` and `ret(input;shape)`, which the Go replay
+supplies too. For each arrival, a template naming every `$n` of the next
+scope is stored under the arrival's table and bound back. -/
+
+def wHashes : Walk.Hashes :=
+  { input := fun c bs => "in(" ++ c ++ ";" ++ ",".intercalate bs ++ ")"
+    ret := fun i s => "ret(" ++ i ++ ";" ++ s ++ ")" }
+
+def wPos : Walk.Position → String
+  | .arrived => "arrived"
+  | .passed k => "passed" ++ toString k
+
+def wRef : Walk.Position → String
+  | .arrived => "@arrived"
+  | .passed k => "@passed[" ++ toString k ++ "]"
+
+def wTok : Walk.Tok → String
+  | .lit s => s
+  | .ref n => "$" ++ toString n
+
+def wStored : Walk.Stored → String
+  | .lit s => s
+  | .pos p => wRef p
+
+def wObs (o : Walk.Obs) : Json := Json.mkObj [("value", svJson o.value), ("base", .str o.base)]
+
+def wFrame (f : Walk.Frame) : Json :=
+  Json.mkObj [("scope", .arr (f.scope.map wObs).toArray),
+    ("pending", match f.pending with
+      | none => .null
+      | some p => Json.mkObj [("input", .str p.input),
+          ("output", .str (if p.output = .json then "json" else "text")),
+          ("args", .arr (p.args.map fun n => Lean.toJson n).toArray),
+          ("passed", .arr (p.passed.map wObs).toArray)])]
+
+/-- The table as each `$n`'s first entry. -/
+def wTable (t : List (Nat × Walk.Position)) : Json :=
+  Json.mkObj ((t.map (·.1)).eraseDups.filterMap fun n =>
+    (Walk.find n t).map fun p => (toString n, Json.str (wPos p)))
+
+def wEnv (env : List (Walk.Position × Shape.Value)) : Json :=
+  Json.mkObj (env.map fun (p, v) => (wPos p, svJson v))
+
+/-- `run $1 $2 … $n`, every number of the scope, and `$9` past its end. -/
+def wTemplate (len : Nat) (past : Bool) : List Walk.Tok :=
+  [.lit "run"] ++ ((List.range len).map (· + 1) ++ (if past then [9] else [])).flatMap
+    fun n => [.lit " ", .ref n]
+
+def wEvent : Walk.Event → Json
+  | .invoke c o args => Json.mkObj [("invoke", Json.mkObj [("contract", .str c),
+      ("output", .str (if o = .json then "json" else "text")),
+      ("args", .arr (args.map fun n => Lean.toJson n).toArray)])]
+  | .ret raw _ x err => Json.mkObj [("return", jBytes raw), ("exit", jNat x), ("stderr", jBytes err)]
+
+def wFault : Walk.Fault → Json
+  | .busy => Json.mkObj [("fault", "busy")]
+  | .idle => Json.mkObj [("fault", "idle")]
+  | .unbound n => Json.mkObj [("fault", "unbound"), ("n", (n : Json))]
+
+def wArrival (a : Walk.Arrival) : Json :=
+  let tmpl (past : Bool) := wTemplate a.next.scope.length past
+  let stored (past : Bool) : Json := match Walk.store a.table (tmpl past) with
+    | .error n => Json.mkObj [("unstorable", (n : Json))]
+    | .ok ys => Json.mkObj [("stored", .str (String.join (ys.map wStored))),
+        ("bound", match Walk.bind a.table ys with
+          | some xs => .str (String.join (xs.map wTok))
+          | none => .null)]
+  Json.mkObj [("dir", .str (if a.dir = .forward then "forward" else "back")),
+    ("base", .str a.base), ("env", wEnv a.env), ("table", wTable a.table),
+    ("next", wFrame a.next),
+    ("template", .str (String.join ((tmpl false).map wTok))), ("learn", stored false),
+    ("templatePast", .str (String.join ((tmpl true).map wTok))), ("learnPast", stored true)]
+
+def wRun (f : Walk.Frame) : List Walk.Event → List Json
+  | [] => []
+  | e :: es => match Walk.sense wHashes f e with
+    | .error x => wFault x :: wRun f es
+    | .ok a => wArrival a :: wRun a.next es
+
+def wRetV (v : Shape.Value) : Walk.Event := .ret (svText v).toUTF8 (svDecoded v) 0 ByteArray.empty
+def wRetText (s : String) : Walk.Event := .ret s.toUTF8 (.error (0, .syntax)) 0 ByteArray.empty
+/-- A process that exited non-zero. -/
+def wFail (out : String) (x : Nat) (err : String) : Walk.Event :=
+  .ret out.toUTF8 (.error (0, .syntax)) x err.toUTF8
+
+def wStart : Walk.Frame :=
+  { scope := [⟨.str "list the logs", "goal"⟩,
+      ⟨.obj [("dir", .str "/var/log"), ("size", .num "5")], "ret(in(find;goal);{\"dir\":string,\"size\":number})"⟩],
+    pending := none }
+
+def wScenarios : List (Walk.Frame × List Walk.Event) :=
+  let v := Shape.Value.obj [("n", .num "3"), ("files", .arr [.str "a", .str "b"])]
+  [ (wStart, [.invoke "ls" .text [2], wRetText "a.log\nb.log"]),
+    (wStart, [.invoke "wc" .json [2, 1, 2], wRetV v, .invoke "cat" .text [3, 1], wRetText "ok"]),
+    (wStart, [.invoke "ls" .text [3], .invoke "ls" .text [0], .ret "x".toUTF8 (.error (0, .syntax)) 0 ByteArray.empty]),
+    (wStart, [.invoke "ls" .text [1], .invoke "rm" .text [1], wRetText "done"]),
+    (wStart, [.invoke "jq" .json [], .ret "{\"a\":".toUTF8 (.error (5, .syntax)) 0 ByteArray.empty, .invoke "fix" .text [3]]),
+    (wStart, [.invoke "cat" .text [2], .ret ⟨#[111, 107, 255]⟩ (.error (0, .syntax)) 0 ByteArray.empty]),
+    (wStart, [.invoke "jq" .json [1], wRetV (.obj [("a", .num "1"), ("a", .num "2")])]),
+    (wStart, [.invoke "echo" .text [1], wRetText "5", .invoke "echo" .json [3], wRetV (.num "5"),
+      .invoke "add" .json [3, 4, 3], wRetV (.num "10")]),
+    ({ scope := [], pending := none }, [.invoke "date" .text [], wRetText "today"]),
+    (wStart, [.invoke "rm" .text [1], wFail "" 1 "rm: list the logs: No such file",
+      .invoke "touch" .text [1], wRetText ""]),
+    (wStart, [.invoke "jq" .json [2], wFail "{\"partial\":" 2 "", .invoke "jq" .json [2], wFail "" 2 "x"]) ]
+
+def walkFiles : List (String × List Json) :=
+  [ ("walk", wScenarios.map fun (f, es) =>
+      Json.mkObj [("in", Json.mkObj [("frame", wFrame f), ("events", .arr (es.map wEvent).toArray)]),
+        ("out", .arr (wRun f es).toArray)]) ]
+
+/-! ## Proposal 58: dispatch
+
+Each case is a refinement, an arrival's `size`, and what the model writes
+each time it is asked: guards as the model writes them (`$1` is what
+arrived), or text that is not a guard. Lean gives the transition's states,
+the refinement after it, what `trust` runs, whether it is learned, and how
+many times the model was asked; then the same arrival again, with nothing
+more written. -/
+
+def dState : Refine.State → String
+  | .reject => "reject" | .hesitate => "hesitate" | .startle => "startle"
+  | .reconcile => "reconcile" | .trust => "trust"
+
+def dWrote : Dispatch.Wrote Atom String → Json
+  | .guard c => .str ((guardCel c).replace "arrived" "$1")
+  | .unlearned c => .str ((guardCel c).replace "arrived" "$1")
+  | .refused => .str "not a guard ("
+
+def dOut (o : Dispatch.Out Atom String) : Json :=
+  Json.mkObj [("states", .arr (o.states.map (Json.str ∘ dState)).toArray),
+    ("refinement", jRef o.refinement),
+    ("instr", match o.instr with | some i => .str i | none => .null),
+    ("learned", .bool o.learned), ("asks", jNat o.asks), ("ended", .bool o.ended)]
+
+def dWrites : List (List (Dispatch.Wrote Atom String)) :=
+  [ [.guard [(.atom (.gt 2), "C")]],
+    [.guard [(.atom (.lt 5), "D"), (.tt, "E")]],
+    [.refused, .guard [(.atom .even, "C")]],
+    [.guard [(.atom (.gt 100), "C")], .guard [(.tt, "F")]],
+    [.refused, .refused],
+    [.refused, .refused, .refused, .guard [(.tt, "F")]],
+    [] ]
+
+/-- The refinement bound: the most asks in one transition. -/
+def dBound : Nat := 3
+
+def dispatchFiles : List (String × List Json) :=
+  [ ("dispatch", (refs1 ++ refsPossible).flatMap fun r => values.flatMap fun x => dWrites.map fun ws =>
+      let o := Dispatch.decide Atom.sat overlaps x dBound r ws
+      let again := Dispatch.decide Atom.sat overlaps x dBound o.refinement []
+      Json.mkObj [("in", Json.mkObj [("refinement", jRef r), ("x", jInt x), ("refinementBound", jNat dBound),
+          ("writes", .arr (ws.map dWrote).toArray)]),
+        ("out", Json.mkObj [("first", dOut o), ("again", dOut again)])]) ]
+
 end Vectors
 
 /-! ## The files -/
@@ -366,7 +784,7 @@ def files (w : World) : List (String × List Json) :=
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)]) (jReturnResult (ret n g))),
     ("invoke", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)])
-        (jInvokeResult (invoke n g))) ]
+        (jInvokeResult (invoke n g))) ] ++ refineFiles ++ shapeFiles ++ walkFiles ++ dispatchFiles
 
 /-- One case per line, so a change shows as a line in a diff. -/
 def render (name : String) (cases : List Json) : String :=

@@ -4,12 +4,36 @@ Date: 2026-11-03
 
 Status: **draft.** The functional core of [54](54-one-tool-per-model-experiment-proposal.md):
 specified and proven in Lean, run as a Go package that agrees with it on
-every vector Lean writes. Typechecks in core Lean 4.35.
+every vector Lean writes. Typechecks in core Lean 4.35. Its type and
+transition machine is superseded in part by
+[58](58-type-and-transition-machine-proposal.md); see “Superseded by 58”.
 
 The Lean is [`controller/apprentice/invariants/Invariants/Core.lean`](../../../controller/apprentice/invariants/Invariants/Core.lean),
 the source of truth. The blocks below are a copy of it, in order;
 `check-proposal.sh` there fails if they differ. A change goes to `Core.lean`
 first.
+
+## Superseded by 58
+
+[58](58-type-and-transition-machine-proposal.md) proposes a different type
+and transition machine. Until it is built, this proposal and `Core.lean`
+remain the truth of what runs; the Lean blocks below are unchanged, and
+change in `Core.lean` first when 58's Lean is written. Where they differ:
+
+| Here | In 58 |
+|---|---|
+| Invariant 19: until a guard is written, the refinement type is the default string match | The default survives as the **default branch**, stored only when the model gives no assumption. A new base's refinement is **empty**: its first arrival is `null` and the model is called |
+| Invariant 20: a return base type is the contract, the bases passed and the shape back | Kept. 58 fixes the shape: keys, recursively, with each leaf's JSON kind; key order, array order and array length excluded; one number kind. The **core** infers it from the bytes |
+| Invariant 22: a refinement type is a return base type and its guard, hashed | A refinement is **one per base, always the current version**: the base's set of **branches** (conditions with the instructions they select), each with a local id. A version's id hashes its base and its branches |
+| Invariant 23: every known base type has exactly one guard slot | Every installed base has exactly **one current refinement version**; earlier versions are **stale**, kept in lineage, never evaluated |
+| Invariant 25: on first sight, the slot is made with the default guard | `hesitate` installs the base with an empty refinement |
+| Invariant 26: a rewrite overwrites the one slot | Nothing is overwritten. `startle` and `reconcile` publish a new current version; the previous goes stale. A conflict retires the older branch by local id and keeps its remainder |
+| Invariant 29: two paths, a return guard (continue or fall back) and an invoke guard (procedure or model) | One path: `distinguish` evaluates the current refinement and selects a branch; `trust` runs it; `null` calls the model (`startle`); a conflict reconciles. Guards return instruction templates or `null`, not Booleans, and are stored under the base of the value that arrived; there is no separate invoke guard |
+| Guards: each (input, output shape) has one guard, overwritten when a value changes | A base holds many branches, never overwritten. The model is never shown existing branches; the system checks and reconciles |
+| The Go shell computes canonical shapes and evaluates guards | The core infers shapes and evaluates CEL in-process; the shell provisions, commits and runs what `trust` selects |
+| Invariant 32: guards decide and never execute | Kept: `distinguish` selects and runs nothing; `trust`'s instruction runs through the shell |
+
+Invariants 1 to 18, 21, 24, 27, 28, 30 and 31 are unchanged by 58.
 
 ## The invariants
 
@@ -69,8 +93,12 @@ it rests on when Lean does not. The sections below are the proofs.
 10. No agent reaches its own binary, at every count, the root included
     (`classify_none_iff`, `rootKind_none_iff`).
 11. Two kinds, act and delegate; there is no effect node. A child's kind is
-    counted from what its delegate passed: one contract an act node, two or
-    more a delegate (`classify_act_iff`, `classify_delegate_iff`). A
+    counted from what its delegate passed, under the tree's act bound
+    `act`, which the root sets: one to `act` contracts an act node, more a
+    delegate (`classify_act_iff`, `classify_delegate_iff`). At `act = 1`,
+    one contract is an act node and two or more a delegate
+    (`classify_one_act_iff`); raising the bound only moves that line
+    (`classify_act_mono`). A
     delegate passes at least one contract: none is refused
     (`classify_passes_one`). Decided in the `observe` phase. The root's kind
     is not counted: no delegate chose its reach. It is given, by whoever
@@ -1256,82 +1284,97 @@ delegate chose its reach. It is given, by whoever started it, with `self` and
 the reach; only the self check applies.
 
 ```lean
-/-- The kind, from the contracts counted: none for none, as a delegate
-passes at least one contract. -/
-def kind (counted : List Contract) : Option Kind :=
-  match counted.eraseDups.length with
-  | 0 => none
-  | 1 => some .act
-  | _ => some .delegate
+/-- The kind, from the contracts counted, under the tree's act bound `act`:
+the most contracts one node may hold and still invoke itself, which the root
+sets for the whole tree. None for none, as a delegate passes at least one
+contract; act while there are at most `act`; delegate past it. At `act = 1`
+an act node holds exactly one contract. -/
+def kind (act : Nat) (counted : List Contract) : Option Kind :=
+  if counted.eraseDups.length = 0 then none
+  else if counted.eraseDups.length ≤ act then some .act else some .delegate
 
 /-- The contracts that count: the reach, the apprentice's taken out. -/
 def counted (a : Apprentice) (reach : List Contract) : List Contract :=
   reach.filter (!a.mine ·)
 
-/-- What the core runs, in the `observe` phase, for a child: the apprentice,
-the child's contract and the contracts its delegate passed, as values. The
-apprentice's contracts count for neither the self check nor the kind.
-`none` refuses a child whose own binary is in the rest of its reach, at
-every count, and a delegate that passed nothing. -/
-def classify (a : Apprentice) (self : Contract) (reach : List Contract) : Option Kind :=
-  if self.binary ∈ (counted a reach).map (·.binary) then none else kind (counted a reach)
+/-- What the core runs, in the `observe` phase, for a child: the tree's act
+bound, the apprentice, the child's contract and the contracts its delegate
+passed, as values. The apprentice's contracts count for neither the self
+check nor the kind. `none` refuses a child whose own binary is in the rest of
+its reach, at every count, and a delegate that passed nothing. -/
+def classify (act : Nat) (a : Apprentice) (self : Contract) (reach : List Contract) :
+    Option Kind :=
+  if self.binary ∈ (counted a reach).map (·.binary) then none else kind act (counted a reach)
 
 theorem classify_none_iff :
-    classify a self reach = none ↔
+    classify act a self reach = none ↔
       self.binary ∈ (counted a reach).map (·.binary) ∨ (counted a reach).eraseDups.length = 0 := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, false_or]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1]
 
+/-- A node acts when it holds at least one contract and at most `act`. -/
 theorem classify_act_iff :
-    classify a self reach = some .act ↔
-      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
+    classify act a self reach = some .act ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧
+        1 ≤ (counted a reach).eraseDups.length ∧ (counted a reach).eraseDups.length ≤ act := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, not_false_eq_true, true_and]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1] <;> omega
 
+/-- A node delegates when it holds more than `act`. -/
 theorem classify_delegate_iff :
-    classify a self reach = some .delegate ↔
-      self.binary ∉ (counted a reach).map (·.binary) ∧ 2 ≤ (counted a reach).eraseDups.length := by
+    classify act a self reach = some .delegate ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧
+        1 ≤ (counted a reach).eraseDups.length ∧ act < (counted a reach).eraseDups.length := by
   unfold classify kind
   by_cases hb : self.binary ∈ (counted a reach).map (·.binary)
   · simp [hb]
   · simp only [hb, ite_false, not_false_eq_true, true_and]
     generalize (counted a reach).eraseDups.length = n
-    match n with
-    | 0 => simp
-    | 1 => simp
-    | n + 2 => simp
+    by_cases h0 : n = 0 <;> by_cases h1 : n ≤ act <;> simp [h0, h1] <;> omega
+
+/-- At `act = 1`, the one-contract tree: an act node holds exactly one
+contract, and a delegate two or more. -/
+theorem classify_one_act_iff :
+    classify 1 a self reach = some .act ↔
+      self.binary ∉ (counted a reach).map (·.binary) ∧ (counted a reach).eraseDups.length = 1 := by
+  rw [classify_act_iff]; constructor
+  · rintro ⟨hb, h1, h2⟩; exact ⟨hb, by omega⟩
+  · rintro ⟨hb, h⟩; exact ⟨hb, by omega, by omega⟩
+
+/-- Raising the bound never takes a node out of acting, nor refuses one that
+was not refused: the bound only moves the line between act and delegate. -/
+theorem classify_act_mono (hk : act ≤ act') (h : classify act a self reach = some .act) :
+    classify act' a self reach = some .act := by
+  rw [classify_act_iff] at h ⊢; exact ⟨h.1, h.2.1, Nat.le_trans h.2.2 hk⟩
+
+theorem classify_none_indep : classify act a self reach = none ↔ classify act' a self reach = none := by
+  rw [classify_none_iff, classify_none_iff]
 
 /-- A delegate passes at least one contract: a child with nothing counted
 in its reach is refused. -/
-theorem classify_passes_one (h : classify a self reach = some k) : counted a reach ≠ [] := by
+theorem classify_passes_one (h : classify act a self reach = some k) : counted a reach ≠ [] := by
   intro hc
-  have : classify a self reach = none := classify_none_iff.mpr (Or.inr (by rw [hc]; rfl))
+  have : classify act a self reach = none := classify_none_iff.mpr (Or.inr (by rw [hc]; rfl))
   rw [this] at h; cases h
 
 /-- The apprentice's contracts never count: adding any of them, before or
 after, leaves the result unchanged, refused included. -/
 theorem classify_apprentice_after (h : ∀ c ∈ extra, a.mine c = true) :
-    classify a self (reach ++ extra) = classify a self reach := by
+    classify act a self (reach ++ extra) = classify act a self reach := by
   have : extra.filter (!a.mine ·) = [] := by
     simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
   unfold classify counted; rw [List.filter_append, this, List.append_nil]
 
 theorem classify_apprentice_before (h : ∀ c ∈ extra, a.mine c = true) :
-    classify a self (extra ++ reach) = classify a self reach := by
+    classify act a self (extra ++ reach) = classify act a self reach := by
   have : extra.filter (!a.mine ·) = [] := by
     simp only [List.filter_eq_nil_iff, Bool.not_eq_true']; intro c hc; simp [h c hc]
   unfold classify counted; rw [List.filter_append, this, List.nil_append]
@@ -1382,7 +1425,7 @@ theorem loaded_mine (h : c ∈ loaded a k) : a.mine c = true := by
 
 /-- Loading never changes the kind. -/
 theorem classify_loaded :
-    classify a self (reach ++ loaded a k) = classify a self reach :=
+    classify act a self (reach ++ loaded a k) = classify act a self reach :=
   classify_apprentice_after fun _ h => loaded_mine h
 
 /-- `observe` and `root` are never loaded, nor `create_delegation`,
@@ -1398,17 +1441,20 @@ theorem loaded_never_privileged :
     simp_all [Ne.symm]
 ```
 
-The core passes the apprentice, a child's contract and the contracts its
-delegate passed as values, and Lean decides, in the `observe` phase: refused,
+The core passes the tree's act bound, the apprentice, a child's contract and
+the contracts its delegate passed as values, and Lean decides, in the `observe` phase: refused,
 an act node, or a delegate. The apprentice's contracts are taken out first;
 they count for neither the self check nor the kind. Then no contract of the
 child's own binary may be in what is left, at every count, and duplicates
 count once:
 
 - **None: refused.** A delegate passes at least one contract.
-- **One: an act node.** It dispatches observations to that contract, with
-  `perform_effect`, and makes them with `create_input`.
-- **Two or more: a delegate.** It passes them on, through `delegate`.
+- **One to `act`: an act node.** It dispatches observations to those
+  contracts, with `perform_effect`, and makes them with `create_input`.
+- **More than `act`: a delegate.** It passes them on, through `delegate`.
+
+At `act = 1`, the one-contract tree, that is one contract an act node and
+two or more a delegate.
 
 The kind also decides how the delegate describes the child, the act
 transformation (`parts`). The parent's model only ever calls `delegate`; it

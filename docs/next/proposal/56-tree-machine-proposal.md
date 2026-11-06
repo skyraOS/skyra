@@ -8,7 +8,29 @@ imperative shell, the kernel's own pattern. 55 decides what is allowed; 56
 decides what happens next. The shape is proposal 52's: the kernel provisions
 the apprentice and gets out of the way, and the apprentice runs the loop. Nothing here adds an invariant or
 changes one: every decision `Step` makes is one of 55's, as
-`controller/apprentice/invariants/Invariants/Core.lean` states it.
+`controller/apprentice/invariants/Invariants/Core.lean` states it. Its type and transition decisions are superseded in
+part by [58](58-type-and-transition-machine-proposal.md); see “Superseded
+by 58”.
+
+## Superseded by 58
+
+[58](58-type-and-transition-machine-proposal.md) changes the machine `Step`
+drives. Until it is built, this proposal describes what runs. Where they
+differ:
+
+| Here | In 58 |
+|---|---|
+| `RefinementOf = sha256(["skyra/refinement/v1", return base id, guard])` | A refinement version's id hashes its base and its canonical set of branches, local ids included |
+| A guard's CEL answer (`CELKey`) is read from the shell and trusted | The core evaluates CEL in-process over supplied values; no guard answer is read from the shell |
+| Check 4: the store is a fold of guard records, one current guard per known base | One current refinement version per base; others stale |
+| Commits 13 to 16: guard objects, the default on unseen, a rewrite chain, `history` appends | `hesitate` installs a base with an empty refinement; `startle` and `reconcile` publish versions; everything mutable is under one root, committed by one swap of `HEAD` |
+| `Returned` carries the shape the shell computed | The core infers the shape from the bytes |
+| Phases: invoke guard → `InvokeOf` (procedure or model); return guard → `ReturnOf` (continue or fall back) | `sense` → `recognize` → `distinguish` → `trust`, `startle` or `reconcile` |
+| `Store{known, guards}`, `See`, `Rewrite`, `ReturnResult`, `InvokeResult` | Bases each with versioned refinements of branches; no `Rewrite` |
+| The interim shell rebuilds the tree by replay on every resume; 52's shell is long-lived and holds the tree in memory | Core and handlers are stateless: each step starts cold from the root it is provisioned from, named in its record, and replay re-derives from the records. No shell holds execution state in memory |
+
+The cycle of read, interpret, commit and execute, one machine for the whole
+tree, and agents as instruction nodes are unchanged.
 
 ## The cycle
 

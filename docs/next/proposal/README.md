@@ -21,6 +21,16 @@ New implementation proposals:
   on the root return boundary. Preserves observation passing and specifies
   destination checks, replay requirements, and latency measurements.
   Proposed (2026-11-05).
+- [58 — The type and transition machine](58-type-and-transition-machine-proposal.md):
+  split from 57. `sense` admits an instruction against the emitter's scope
+  table; a base type is the binary and the shape (keys, recursively) of the
+  request or response; one current refinement per base holds branches,
+  CEL assumptions the model writes; `distinguish` selects, `trust` runs,
+  `null` calls the model through `startle`, and a conflict is reconciled
+  with the older branch keeping the overlap. Every transition counts
+  against a transition bound, and every ask within one against a
+  refinement bound. Stateless steps over one root on disk.
+  Proposed (2026-11-06).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
