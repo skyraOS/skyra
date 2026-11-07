@@ -42,6 +42,15 @@ New implementation proposals:
   inhibition constant. No winner startles. Commit stops narrowing, so no
   dissenting vote is deleted; `distinguish` is the tally at inhibition 0.
   Proposed (2026-11-07).
+- [60 — Effect classes](60-effect-classes-proposal.md): answers 59's
+  open questions 2 and 3. Every contract carries an effect class set at
+  registration (`none`, `read`, `write`, `external`, `irreversible`;
+  unknown is `irreversible`). The class of the instruction about to run
+  caps `ι`, raises the floor, and sets a quorum of independent voters,
+  counted by `(model, focus)` source, so resampling cannot make a habit
+  and a lone first commit cannot run a destructive tool. Voters whose
+  lineage the tool's integrity allowlist (53) refuses abstain.
+  Proposed (2026-11-07).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
