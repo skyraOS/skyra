@@ -8,7 +8,7 @@ imperative shell, the kernel's own pattern. 55 decides what is allowed; 56
 decides what happens next. The shape is proposal 52's: the kernel provisions
 the apprentice and gets out of the way, and the apprentice runs the loop. Nothing here adds an invariant or
 changes one: every decision `Step` makes is one of 55's, as
-`controller/apprentice/invariants/Invariants/Core.lean` states it. Its type and transition decisions are superseded in
+`controller/typesys-prototype/invariants/Invariants/Core.lean` states it. Its type and transition decisions are superseded in
 part by [58](58-type-and-transition-machine-proposal.md); see “Superseded
 by 58”.
 
@@ -767,7 +767,7 @@ with the apprentice's contracts; `mayReturn` in place of `nodeReturn`.
 1. **Settle the open questions** below; write the answers here. Done.
 2. **`Core.lean` for the apprentice's contracts**; 55's copy and the vectors
    follow. Done.
-3. **The decision layer** in `controller/apprentice/tree`: the port, the
+3. **The decision layer** in `controller/typesys-prototype/tree`: the port, the
    vector replay, one property test per invariant, the purity test, and the
    hashes, pinned by known answers. Done.
 4. **`Step`**: the state, the phases, the events and effects above, with
@@ -788,7 +788,7 @@ Stop for review after each step.
 
 Steps 1 to 3 are done and pushed on `one-tool-trees`: 55's Lean is
 `Core.lean`, with its vectors and CI; the decision layer and the hashes are
-in `controller/apprentice/tree`, checked against every vector. Open items 1
+in `controller/typesys-prototype/tree`, checked against every vector. Open items 1
 to 13 are settled.
 
 Step 4, `Step`, is done: 4a, the tree, and 4b, the records, in `step.go`,

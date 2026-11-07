@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"skyra/apprentice/proc"
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 func TestImportsEnterTheEndowmentAndPinnedContractsSurviveShellReplay(t *testing.T) {

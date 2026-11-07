@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 func ask(scope ...tree.Obs) tree.AskModel {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // ShowLimit is how many bytes of each value an ask shows; past it the value

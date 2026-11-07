@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // ClaudeModel is the model the machine startles: the local Claude Code CLI

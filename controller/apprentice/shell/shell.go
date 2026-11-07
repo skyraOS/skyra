@@ -32,7 +32,7 @@ import (
 	"syscall"
 
 	"skyra/apprentice/proc"
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 	"skyra/apprentice/types"
 )
 

@@ -8,7 +8,7 @@ every vector Lean writes. Typechecks in core Lean 4.35. Its type and
 transition machine is superseded in part by
 [58](58-type-and-transition-machine-proposal.md); see “Superseded by 58”.
 
-The Lean is [`controller/apprentice/invariants/Invariants/Core.lean`](../../../controller/apprentice/invariants/Invariants/Core.lean),
+The Lean is [`controller/typesys-prototype/invariants/Invariants/Core.lean`](../../../controller/typesys-prototype/invariants/Invariants/Core.lean),
 the source of truth. The blocks below are a copy of it, in order;
 `check-proposal.sh` there fails if they differ. A change goes to `Core.lean`
 first.
@@ -1621,7 +1621,7 @@ model; guards still run, and whether each would have held is recorded.
      built on macOS.
    - The README entry; commit.
 2. **The Lean spec and its vectors.** A Lake project pinned to Lean 4.35, in
-   `controller/apprentice/invariants`; its files are the source of truth, and
+   `controller/typesys-prototype/invariants`; its files are the source of truth, and
    this proposal points to them.
    Never linked or executed by the apprentice. CI compiles it and runs
    `#print axioms` on every theorem, accepting only `propext`,
@@ -1656,4 +1656,4 @@ model; guards still run, and whether each would have held is recorded.
 Stop for review after steps 1, 2, 3 and 4.
 
 Open: where `core` lives beside the Lake project in
-`controller/apprentice/invariants`.
+`controller/typesys-prototype/invariants`.

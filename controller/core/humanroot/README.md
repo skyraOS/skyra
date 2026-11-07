@@ -56,7 +56,7 @@ pure core imports no I/O.
 
 ## Proof and checks
 
-`controller/apprentice/invariants/Invariants/HumanRoot.lean` models authoring,
+`controller/typesys-prototype/invariants/Invariants/HumanRoot.lean` models authoring,
 scoped passing, preserved origins and bounded grants. Its ingress-authentication
 and runtime-receipt checks are explicit trusted-adapter assumptions; it does
 not purport to prove the OS, JSON parser, filesystem durability, or full Go

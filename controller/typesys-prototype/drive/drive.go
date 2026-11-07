@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // A Model writes a guard when the machine startles, reading the frame's $n.

@@ -1,5 +1,5 @@
 // Package tree is the functional core of one tool trees: 55's decisions,
-// ported one to one from controller/apprentice/invariants/Invariants/Core.lean
+// ported one to one from controller/typesys-prototype/invariants/Invariants/Core.lean
 // and checked against every vector the Lean writes (56, "Decisions").
 //
 // Fields are unexported, so Identify, TypeOf, ApprenticeOf, Observe and

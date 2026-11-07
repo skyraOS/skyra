@@ -2,7 +2,10 @@ module skyra/apprentice
 
 go 1.25.0
 
-require cel.dev/cel-go v0.32.0
+require (
+	cel.dev/cel-go v0.32.0
+	skyra/typesys-prototype v0.0.0
+)
 
 require (
 	cel.dev/expr v0.25.1 // indirect
@@ -17,3 +20,5 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
+
+replace skyra/typesys-prototype => ../typesys-prototype

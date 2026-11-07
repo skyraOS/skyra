@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"skyra/apprentice/proc"
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // A Run is one tree as it formed: its log replayed through Step, and the

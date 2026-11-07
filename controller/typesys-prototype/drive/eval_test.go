@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // An evalTask is a task run twice against the claude CLI and real

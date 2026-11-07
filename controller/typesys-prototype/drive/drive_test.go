@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/apprentice/tree"
+	"skyra/typesys-prototype/tree"
 )
 
 // A scripted model granted echo: at the goal it echoes it; at echo's return it returns
