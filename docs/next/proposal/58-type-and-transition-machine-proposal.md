@@ -1620,6 +1620,19 @@ the second), refuse a delegation that does not narrow, refuse a guard that
 runs a non-tool, and deliver a child's exhausted refinement bound to its
 parent as an observation.
 
+**Implemented: a real model, in the shell.** `drive.ClaudeModel` answers
+`AskModel` with Claude. An ask is rendered (`drive.Render`) with each `$n`'s
+shape and value, tools by binary, which `$n` are in the base, the depth, and
+why the last guard was refused. A value is shown up to `ShowLimit` bytes
+(2048, a variable) and marked where it is truncated; within the same ask
+the model may call `expand` to read more from an offset, at most
+`ExpandLimit` times (16, a variable). Expanding is part of one ask, so it
+never counts against the refinement bound, and the machine never sees it:
+what a value shows the model is presentation, not the core's. The ask ends
+when the model calls `guard`; a reply with no call is taken as the guard,
+and the machine refuses it if it is not one. Tests use a scripted Messages
+API; a live run against Claude and real `ls` runs when `SKYRA_LIVE` is set.
+
 Update the invariant specification in `controller/apprentice/invariants/`
 first (the Lean definitions below), then the core's dispatch, `sense`,
 shape inference and CEL evaluation, the shell's handlers, and the store.
