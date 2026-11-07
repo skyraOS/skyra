@@ -446,7 +446,8 @@ func TestCoreIsPure(t *testing.T) {
 		// CEL is decision machinery, and runs in the core (58): it evaluates
 		// over what it is handed, with no I/O.
 		"cel.dev/cel-go/cel": true, "cel.dev/cel-go/common/ast": true,
-		"cel.dev/cel-go/common/operators": true, "cel.dev/cel-go/common/types": true}
+		"cel.dev/cel-go/common/operators": true, "cel.dev/cel-go/common/types": true,
+		"cel.dev/cel-go/ext": true}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {

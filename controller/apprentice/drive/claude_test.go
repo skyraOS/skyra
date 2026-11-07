@@ -21,15 +21,15 @@ func ask(scope ...tree.Obs) tree.AskModel {
 func TestRenderTruncatesAndExpands(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 8
-	a := ask(tree.Obs{Value: "ls", Tool: "ls"}, tree.Obs{Value: "abcdefghijklmnopqrst"})
+	a := ask(tree.Obs{Value: "abcdefghijklmnopqrst", Goal: true}, tree.Obs{Value: "ls", Tool: "ls"})
 	r := Render(a)
-	if !strings.Contains(r, "$1 tool ls") || !strings.Contains(r, "abcdefgh\n…[truncated: 8 of 20 bytes shown; expand $2 from 8]") ||
-		strings.Contains(r, "abcdefghi") || !strings.Contains(r, "In the base: $2") {
+	if !strings.HasPrefix(r, "Goal:\n$1 (string): abcdefgh\n…[truncated: 8 of 20 bytes shown; expand $1 from 8]\n\nTools:\n$2: ls\n\nContext:\nnone\n") ||
+		strings.Contains(r, "abcdefghi") {
 		t.Fatalf("%s", r)
 	}
 	var got string
 	for off := 8; ; off += 8 {
-		part, err := Expand(a, 2, off)
+		part, err := Expand(a, 1, off)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,7 +52,7 @@ func TestTruncateAtRunes(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 3
 	a := ask(tree.Obs{Value: "aéé"}) // 1 + 2 + 2 bytes
-	if r := Render(a); !strings.Contains(r, "aé\n…[truncated: 3 of 5") {
+	if r := Render(a); !strings.Contains(r, "$1 (string): aé\n…[truncated: 3 of 5") {
 		t.Fatalf("%s", r)
 	}
 	if part, _ := Expand(a, 1, 4); !strings.HasPrefix(part, "é\n") {
@@ -95,9 +95,9 @@ func prompt(args []string) string { return args[len(args)-1] }
 func TestClaudeExpandsThenGuards(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 4
-	c := &cli{replies: []string{`{"expand": {"n": 2, "from": 4}}`, "```json\n{\"guard\": \"true ? \\\"return $2\\\" : null\"}\n```"}}
+	c := &cli{replies: []string{`{"expand": {"n": 3, "from": 4}}`, "```json\n{\"cel\": \"true ? \\\"return $2\\\" : null\"}\n```"}}
 	m := &ClaudeModel{Model: "claude-opus-5-5", Run: c.run}
-	g, err := m.Guard(ask(tree.Obs{Value: "ls", Tool: "ls"}, tree.Obs{Value: "a.log b.log"}))
+	g, err := m.Guard(ask(tree.Obs{Value: "x", Goal: true}, tree.Obs{Value: "ls", Tool: "ls"}, tree.Obs{Value: "a.log b.log"}))
 	if err != nil || g != `true ? "return $2" : null` {
 		t.Fatalf("%q %v", g, err)
 	}
@@ -114,7 +114,7 @@ func TestClaudeExpandsThenGuards(t *testing.T) {
 func TestClaudeExpandLimit(t *testing.T) {
 	defer func(n int) { ExpandLimit = n }(ExpandLimit)
 	ExpandLimit = 1
-	c := &cli{replies: []string{`{"expand":{"n":1,"from":0}}`, `{"expand":{"n":1,"from":0}}`, `{"guard":"null"}`}}
+	c := &cli{replies: []string{`{"expand":{"n":1,"from":0}}`, `{"expand":{"n":1,"from":0}}`, `{"cel":"null"}`}}
 	if _, err := (&ClaudeModel{Run: c.run}).Guard(ask(tree.Obs{Value: "x"})); err != nil {
 		t.Fatal(err)
 	}
@@ -185,4 +185,23 @@ func (c *counting) Guard(a tree.AskModel) (string, error) {
 	return g, err
 }
 
-func (c *counting) t(a tree.AskModel, g string) { fmt.Printf("--- ask at depth %d\n%s\n=> %s\n", a.Depth, Render(a), g) }
+func (c *counting) t(a tree.AskModel, g string) {
+	fmt.Printf("--- ask at depth %d\n%s\n=> %s\n", a.Depth, Render(a), g)
+}
+
+// Each kind's prompt shows only what it may write, and neither says how
+// many tools make a kind.
+func TestSystemByKind(t *testing.T) {
+	act, del := System(tree.KindActs), System(tree.KindDelegates)
+	if strings.Contains(act, "delegate") || !strings.Contains(act, "run the tool $2") {
+		t.Error("the act prompt offers delegation, or not running")
+	}
+	if !strings.Contains(del, "delegate(goal($1)") || strings.Contains(del, "run the tool") {
+		t.Error("the delegate prompt offers running, or not delegation")
+	}
+	for _, p := range []string{act, del} {
+		if strings.Contains(p, "act bound") || strings.Contains(p, "at most") {
+			t.Error("a prompt speaks of the act bound")
+		}
+	}
+}

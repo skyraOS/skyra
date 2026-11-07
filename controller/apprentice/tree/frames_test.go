@@ -17,7 +17,7 @@ func init() {
 		var raw struct {
 			Return   *rawArg
 			Run      *int
-			Delegate *string
+			Delegate *rawArg
 			Args     []rawArg
 		}
 		if err := json.Unmarshal(in["instr"], &raw); err != nil {
@@ -44,20 +44,30 @@ func init() {
 		case raw.Run != nil:
 			instr = Instr{Kind: InstrRun, N: *raw.Run, Args: args}
 		default:
-			instr = Instr{Kind: InstrDelegate, Task: *raw.Delegate, Args: args}
+			instr = Instr{Kind: InstrDelegate, Goal: argOf(*raw.Delegate), Args: args}
 		}
-		c, err := ClassifyInstr(standIn.Cut, scope, instr)
+		c, err := ClassifyInstr(dec[int](t, in["act"]), standIn, scope, instr)
 		switch e := err.(type) {
 		case nil:
 		case Unbound:
 			return map[string]any{"reject": map[string]any{"unbound": e.N}}
 		case NotTool:
 			return map[string]any{"reject": map[string]any{"notTool": e.N}}
+		case GoalTool:
+			return map[string]any{"reject": map[string]any{"goalTool": e.N}}
 		case CutFails:
 			return map[string]any{"reject": map[string]any{"cut": e.N}}
 		case Narrows:
 			return map[string]any{"reject": map[string]any{"narrows": []any{e.Passed, e.Held}}}
 		default:
+			switch err {
+			case NoTools:
+				return map[string]any{"reject": "noTools"}
+			case ActDelegates:
+				return map[string]any{"reject": "actDelegates"}
+			case DelegateRuns:
+				return map[string]any{"reject": "delegateRuns"}
+			}
 			t.Fatal(err)
 		}
 		switch c.Kind {
@@ -75,6 +85,6 @@ func init() {
 		for _, b := range Tools(a.Next.Scope) {
 			tools = append(tools, b)
 		}
-		return map[string]any{"child": c.Task, "passed": wObs(c.Passed), "table": table, "tools": tools}
+		return map[string]any{"child": wObs(c.Passed), "table": table, "tools": tools}
 	}
 }

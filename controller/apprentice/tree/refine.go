@@ -20,6 +20,7 @@ import (
 	"cel.dev/cel-go/common/ast"
 	"cel.dev/cel-go/common/operators"
 	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/ext"
 )
 
 // --- branches and versions ---
@@ -322,6 +323,11 @@ var parseEnv = func() *cel.Env {
 	return e
 }()
 
+// guardLibs are the libraries a guard may call beyond CEL's standard ones:
+// the strings extension (split, trim, lowerAscii, indexOf, substring, …),
+// which models reach for when reading text.
+var guardLibs = []cel.EnvOption{ext.Strings()}
+
 // --- evaluation ---
 
 // holds evaluates one condition over the values. An evaluation error is an
@@ -353,7 +359,7 @@ func compileCond(cond string) (cel.Program, error) {
 	if iss != nil && iss.Err() != nil {
 		return nil, iss.Err()
 	}
-	var opts []cel.EnvOption
+	opts := slices.Clone(guardLibs)
 	for _, name := range idents(parsed.NativeRep().Expr()) {
 		if isPosition(name) {
 			opts = append(opts, cel.Variable(name, cel.DynType))

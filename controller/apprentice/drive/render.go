@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -82,34 +81,50 @@ func chunk(s string, off, limit int) (string, bool) {
 	return s[off:end], end < len(s)
 }
 
-// Render is the ask as the model reads it: where it stands, why the last
-// guard was refused, and each $n in scope, its shape and, up to ShowLimit
-// bytes, its value. Which $n are in the base is said, since a guard reading
-// one outside it runs once and is not learned.
+// Render is the ask as the model reads it: the parameters grouped by
+// role, the goal, the tools, then the context, each with its type and its
+// value up to ShowLimit bytes, and why its last CEL was refused, if it was.
+// A scope is in roles' order, so each group's $n run on from the last.
 func Render(a tree.AskModel) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Base: %s\nDepth: %d\n", a.Base, a.Depth)
+	groups := []struct {
+		title string
+		role  tree.Role
+	}{{"Goal", tree.RoleGoal}, {"Tools", tree.RoleTool}, {"Context", tree.RoleContext}}
+	for g, group := range groups {
+		if g > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(group.title + ":\n")
+		any := false
+		for i, o := range a.Scope {
+			if o.Role() != group.role {
+				continue
+			}
+			any = true
+			n := i + 1
+			if o.Role() == tree.RoleTool {
+				fmt.Fprintf(&b, "$%d: %s\n", n, o.Tool)
+				continue
+			}
+			text := Text(o.Value)
+			shown, more := chunk(text, 0, ShowLimit)
+			head := fmt.Sprintf("$%d (%s):", n, tree.ShapeOf(o.Value).Enc())
+			if strings.Contains(shown, "\n") {
+				fmt.Fprintf(&b, "%s\n%s\n", head, strings.TrimSuffix(shown, "\n"))
+			} else {
+				fmt.Fprintf(&b, "%s %s\n", head, shown)
+			}
+			if more {
+				fmt.Fprintf(&b, "…[truncated: %d of %d bytes shown; expand $%d from %d]\n", len(shown), len(text), n, len(shown))
+			}
+		}
+		if !any {
+			b.WriteString("none\n")
+		}
+	}
 	if a.Reason != "" {
-		fmt.Fprintf(&b, "Your last guard was refused: %s\n", a.Reason)
-	}
-	var in []string
-	for n := range a.Arrival.Table {
-		in = append(in, fmt.Sprintf("$%d", n))
-	}
-	slices.Sort(in)
-	fmt.Fprintf(&b, "In the base: %s\n\nScope:\n", strings.Join(in, " "))
-	for i, o := range a.Scope {
-		n := i + 1
-		if o.Tool != "" {
-			fmt.Fprintf(&b, "$%d tool %s\n", n, o.Tool)
-			continue
-		}
-		text := Text(o.Value)
-		shown, more := chunk(text, 0, ShowLimit)
-		fmt.Fprintf(&b, "$%d %s\n%s\n", n, tree.ShapeOf(o.Value).Enc(), shown)
-		if more {
-			fmt.Fprintf(&b, "…[truncated: %d of %d bytes shown; expand $%d from %d]\n", len(shown), len(text), n, len(shown))
-		}
+		fmt.Fprintf(&b, "\nYour last CEL was refused: %s\n", a.Reason)
 	}
 	return b.String()
 }

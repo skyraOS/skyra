@@ -17,11 +17,13 @@ import (
 
 // An Obs is an observation in a frame's scope: its value, the hash of the
 // base it arrived at, and, for a tool, its binary. Tools are granted at the
-// root; nothing that arrives is a tool.
+// root; nothing that arrives is a tool. A goal is what a frame is to do:
+// its $1. What arrives is context.
 type Obs struct {
 	Value any
 	Base  string
 	Tool  string
+	Goal  bool
 }
 
 // An Awaiting is the invoke a frame waits on: its input base, how its

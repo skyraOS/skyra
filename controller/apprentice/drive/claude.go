@@ -35,38 +35,61 @@ func NewClaudeModel() *ClaudeModel {
 	return &ClaudeModel{Program: "claude", Model: "claude-opus-5-5", Effort: "high"}
 }
 
-const claudeSystem = `You write guards for a tree that learns. Each time it reaches a place it has not learned, it asks you what to do there. What you write is stored and reused: the next time anything arrives at the same base with values your guard selects, it runs with no model call.
+// The system prompts, one per kind: each shows only what its kind may
+// write. Neither says how many tools make a kind: the act bound is the
+// owner's.
+const systemHead = `Write one CEL expression. It decides what runs next.
 
-Observations are named $1, $2, ... in the frame's scope. A tool observation names a binary the frame may run. Values are truncated where marked.
+You are given parameters $1, $2, ..., grouped by role, each with its type and value:
+  Goal      $1: what you are to do
+  Tools     programs
+  Context   what you were passed, and what has arrived since
 
-A guard is CEL that returns an instruction or null:
-  size($2) > 0 ? "$1 $2" : null
-  $3.exit != 0 ? "return $3" : $3.contains("b.log") ? "summarize $1 $3" : null
-Conditions read observations by $n and their fields by key ($3.size, $3["content-type"]). Only $n listed in the base are learned; a guard reading another runs once and is not stored.
+The expression returns an instruction, as a string, or null:
+  size($4) > 0 ? "return $4" : null
+It always ends in null. For several cases chain them: c1 ? "a" : c2 ? "b" : null. For one that always applies: true ? "a" : null.
+It may use CEL's standard functions and the strings extension, called as methods: $1.trim(), $1.split("\n"), $1.lowerAscii(), $1.indexOf("x"), $1.substring(0, 3), $1.replace("a", "b"). A program's output usually ends in a newline: trim it before an exact match.
 
-An instruction is read by its first field:
-  return $n            returns $n to the frame's caller
-  $t args...           $t is a tool: runs its binary with the args, each $n replaced by its value
-  task $a $b ...       delegates to a child frame named task, passing only $n; the child must be passed fewer tools than this frame holds
+`
 
-Anywhere an instruction takes $n it may take a cut of it instead:
-  $2[3:7]              lines 3 to 7 of $2's text, counted from 1
-  $2[1,4:5]            several runs of lines, joined
-  $2.dir               the field dir of $2, a JSON object ($2.dir.path goes deeper)
-Never copy text out of an observation into a guard or an instruction: what you write is reused on new values, so a copied value is only right for this one. Say where it comes from with a cut, and condition on shapes and fields rather than exact values.
+const actInstructions = `Instructions:
+  $2 $1 ...                    run the tool $2, with the other parameters as its arguments
+  return $4                    finish, with $4 as the answer
+`
 
-Your guard must select something for what has arrived.
+const delegateInstructions = `Instructions:
+  delegate(goal($1), $2, $4)   delegate: goal(...) is the goal you delegate, taken from a parameter or part of one;
+                               the rest is what you pass: at least one tool, and fewer tools than you have
+  return $4                    finish, with $4 as the answer
+You do not run tools yourself: you delegate.
+`
 
-Reply with exactly one JSON object and nothing else:
-  {"expand": {"n": 3, "from": 2048}}   to read more of a truncated value from a byte offset
-  {"guard": "<your guard>"}            to answer`
+const systemTail = `
+Use part of a parameter instead of copying its text:
+  $2[2]              line 2 of $2
+  $2[3:7]            lines 3 to 7
+  $2.dir             the field dir of a JSON value ($2.dir.path goes deeper)
+Your expression is reused when new values arrive, so never write a value's text into it.
+
+Reply with JSON and nothing else:
+  {"cel": "<expression>"}
+  {"expand": {"n": 3, "from": 2048}}   to see more of a value cut off at "…[truncated"
+`
+
+// System is the system prompt for a frame of this kind.
+func System(k tree.FrameKind) string {
+	if k == tree.KindDelegates {
+		return systemHead + delegateInstructions + systemTail
+	}
+	return systemHead + actInstructions + systemTail
+}
 
 // arguments are the provider's: print mode, the user's login and settings,
 // and nothing of Claude Code's own.
-func (m *ClaudeModel) arguments(session, prompt string) []string {
+func (m *ClaudeModel) arguments(system, session, prompt string) []string {
 	args := []string{"-p", "--output-format", "json", "--model", m.Model, "--tools", "", "--disable-slash-commands",
 		"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "user",
-		"--settings", `{"disableAllHooks":true,"switchModelsOnFlag":false}`, "--system-prompt", claudeSystem}
+		"--settings", `{"disableAllHooks":true,"switchModelsOnFlag":false}`, "--system-prompt", system}
 	if m.Effort != "" {
 		args = append(args, "--effort", m.Effort)
 	}
@@ -108,15 +131,17 @@ func (m *ClaudeModel) run(args, env []string) ([]byte, error) {
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%s: %v: %s", program, err, strings.TrimSpace(errOut.String()))
+		// The CLI reports most failures as its JSON result on stdout, with a
+		// failing exit: keep both.
+		return nil, fmt.Errorf("%s: %v: %s %s", program, err, strings.TrimSpace(errOut.String()), strings.TrimSpace(out.String()))
 	}
 	return out.Bytes(), nil
 }
 
-// A reply is one expand or the guard.
+// A reply is one expand or the guard, written as CEL.
 type reply struct {
 	Expand *struct{ N, From int }
-	Guard  *string
+	Guard  *string `json:"cel"`
 }
 
 // parseReply reads the JSON object in the model's text, allowing a fence
@@ -142,7 +167,7 @@ func (m *ClaudeModel) Guard(a tree.AskModel) (string, error) {
 	}
 	session, prompt := "", Render(a)
 	for expands := 0; ; {
-		out, err := m.run(m.arguments(session, prompt), env)
+		out, err := m.run(m.arguments(System(a.Kind), session, prompt), env)
 		if err != nil {
 			return "", err
 		}
@@ -164,7 +189,7 @@ func (m *ClaudeModel) Guard(a tree.AskModel) (string, error) {
 		}
 		switch {
 		case expands >= ExpandLimit:
-			prompt = fmt.Sprintf("Expanded %d times in this ask, the most allowed: reply with your guard.", expands)
+			prompt = fmt.Sprintf("Expanded %d times, the most allowed: reply with your CEL.", expands)
 		default:
 			if prompt, err = Expand(a, r.Expand.N, r.Expand.From); err != nil {
 				prompt = "Not expanded: " + err.Error()

@@ -68,6 +68,7 @@ func scopeOf(t *testing.T, raw json.RawMessage) []Obs {
 		Value json.RawMessage
 		Base  string
 		Tool  *string
+		Goal  bool
 		Bytes bool
 	}
 	if err := json.Unmarshal(raw, &os); err != nil {
@@ -86,7 +87,7 @@ func scopeOf(t *testing.T, raw json.RawMessage) []Obs {
 		} else if v, err = DecodeJSON(o.Value); err != nil {
 			t.Fatal(err)
 		}
-		ob := Obs{Value: v, Base: o.Base}
+		ob := Obs{Value: v, Base: o.Base, Goal: o.Goal}
 		if o.Tool != nil {
 			ob.Tool = *o.Tool
 		}
@@ -131,7 +132,7 @@ func wObs(os []Obs) []any {
 		if o.Tool != "" {
 			tool = o.Tool
 		}
-		out = append(out, map[string]any{"value": numbered(o.Value), "base": o.Base, "tool": tool})
+		out = append(out, map[string]any{"value": numbered(o.Value), "base": o.Base, "tool": tool, "goal": o.Goal})
 	}
 	return out
 }

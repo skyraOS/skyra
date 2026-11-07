@@ -20,11 +20,12 @@ open Shape
 
 /-- An observation in a frame's scope: its value, the hash of the base it
 arrived at, and, for a tool, its binary. Tools are granted at the root;
-nothing that arrives is a tool. -/
+nothing that arrives is a tool. A goal is what a frame is to do: its `$1`. -/
 structure Obs where
   value : Value
   base : String
   tool : Option String := none
+  goal : Bool := false
 
 /-- A position of a base: what arrived there, or the k-th observation passed
 to the invoke a return answers (or, at an input base, the invoke itself). -/
@@ -283,6 +284,16 @@ theorem tools_kept (hs : sense h f e = .ok a) :
     rcases ho with ho | rfl
     · exact ho
     · simp at ht
+
+/-- What arrives is context: a step keeps the frame's scope, and what it
+appends is neither a goal nor a tool. A frame's goal and tools are those it
+started with. -/
+theorem arrives_context (hs : sense h f e = .ok a) :
+    ∃ more, a.next.scope = f.scope ++ more ∧ ∀ o ∈ more, o.tool = none ∧ o.goal = false := by
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, _, -, -, -, rfl⟩ | ⟨_, _, _, -, -, rfl, -⟩
+  · exact ⟨[], by simp [forwardTo], by simp⟩
+  · exact ⟨_, rfl, by simp⟩
 
 /-! ## Locations are general -/
 

@@ -340,7 +340,7 @@ func CheckGuard(chain []Link, shapes map[Position]Shape) error {
 		if err := checkKeys(parsed.NativeRep().Expr(), byName); err != nil {
 			return err
 		}
-		opts := []cel.EnvOption{cel.CrossTypeNumericComparisons(true)}
+		opts := append([]cel.EnvOption{cel.CrossTypeNumericComparisons(true)}, guardLibs...)
 		for _, name := range idents(parsed.NativeRep().Expr()) {
 			if s, ok := byName[name]; ok {
 				opts = append(opts, cel.Variable(name, celType(s)))

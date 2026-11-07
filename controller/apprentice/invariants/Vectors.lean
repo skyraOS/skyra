@@ -540,7 +540,7 @@ def wStored : Walk.Stored → String
   | .pos p => wRef p
 
 def wObs (o : Walk.Obs) : Json := Json.mkObj [("value", svJson o.value), ("base", .str o.base),
-  ("tool", match o.tool with | some b => .str b | none => .null)]
+  ("tool", match o.tool with | some b => .str b | none => .null), ("goal", .bool o.goal)]
 
 def wFrame (f : Walk.Frame) : Json :=
   Json.mkObj [("scope", .arr (f.scope.map wObs).toArray),
@@ -637,51 +637,59 @@ frame narrowing the tools, or a rejection with its reason. -/
 def fTool (b : String) : Walk.Obs := { value := .str b, base := "tool(" ++ b ++ ")", tool := some b }
 
 def fScope : List Walk.Obs :=
-  [fTool "ls", fTool "cat", fTool "ls", { value := .str "/var/log", base := "goal" },
+  [{ value := .str "/var/log", base := "goal", goal := true }, fTool "ls", fTool "cat", fTool "ls",
    { value := .obj [("n", .num "2"), ("dir", .obj [("path", .str "/tmp")])], base := "ret(in(wc;goal);{\"dir\":{\"path\":string},\"n\":number})" },
    { value := .str "a.log\nb.log\nnotes.txt\n", base := "ret(in(ls;goal);string)" },
    { value := .bytes "one\ntwo".toUTF8, base := "ret(in(cat;goal);bytes)" },
    { value := .bytes (ByteArray.mk #[0xff, 0x0a]), base := "ret(in(cat;goal);bytes)" }]
 
-def fBare : List Walk.Obs := [{ value := .str "/var/log", base := "goal" }]
+def fBare : List Walk.Obs := [{ value := .str "/var/log", base := "goal", goal := true }]
 
 def fA (n : Nat) (sel : Frames.Sel := .whole) : Frames.Arg := { n, sel }
 
 def fLines (rs : List (Nat × Nat)) : Frames.Sel := .lines rs
 
 def fInstrs : List Frames.Instr :=
-  [ .ret (fA 4), .ret (fA 9), .run 1 [fA 4], .run 2 [fA 4, fA 5], .run 4 [fA 1], .run 9 [], .run 1 [fA 9],
-    .delegate "summarize" [fA 1, fA 4], .delegate "summarize" [fA 1, fA 2, fA 4], .delegate "summarize" [fA 1, fA 3, fA 4],
-    .delegate "classify" [fA 4, fA 5], .delegate "classify" [fA 9], .delegate "classify" [],
+  [ .ret (fA 1), .ret (fA 9), .run 2 [fA 1], .run 3 [fA 1, fA 5], .run 1 [fA 2], .run 9 [], .run 2 [fA 9],
+    .delegate (fA 1) [fA 2], .delegate (fA 1) [fA 2, fA 3],
+    .delegate (fA 1 (fLines [(1, 1)])) [fA 2, fA 4, fA 6], .delegate (fA 6) [fA 5, fA 2],
+    .delegate (fA 2) [fA 2], .delegate (fA 2 (fLines [(1, 1)])) [fA 2], .delegate (fA 9) [fA 2],
+    .delegate (fA 1) [], .delegate (fA 1) [fA 1], .delegate (fA 1) [fA 6, fA 2],
+    .delegate (fA 5 (.field ["dir", "path"])) [fA 2, fA 5 (.field ["dir", "path"])],
+    .delegate (fA 5 (.field ["x"])) [fA 2],
     -- cuts
     .ret (fA 5 (.field ["n"])), .ret (fA 5 (.field ["dir", "path"])), .ret (fA 5 (.field ["missing"])),
-    .ret (fA 4 (.field ["n"])), .ret (fA 6 (fLines [(2, 3)])), .ret (fA 6 (fLines [(1, 1), (3, 3)])),
+    .ret (fA 1 (.field ["n"])), .ret (fA 6 (fLines [(2, 3)])), .ret (fA 6 (fLines [(1, 1), (3, 3)])),
     .ret (fA 6 (fLines [(3, 4)])), .ret (fA 6 (fLines [(0, 1)])), .ret (fA 6 (fLines [(2, 1)])),
     .ret (fA 6 (fLines [])), .ret (fA 7 (fLines [(2, 2)])), .ret (fA 8 (fLines [(1, 1)])),
-    .ret (fA 5 (fLines [(1, 1)])), .ret (fA 4 (fLines [(1, 1)])),
-    .run 1 [fA 5 (.field ["dir", "path"])], .run 1 [fA 6 (fLines [(9, 9)])],
-    .delegate "summarize" [fA 1 (fLines [(1, 1)]), fA 2 (fLines [(1, 1)]), fA 6 (fLines [(1, 2)])],
-    .delegate "summarize" [fA 1, fA 2 (.field ["x"])] ]
+    .ret (fA 5 (fLines [(1, 1)])), .ret (fA 1 (fLines [(1, 1)])),
+    .run 2 [fA 5 (.field ["dir", "path"])], .run 2 [fA 6 (fLines [(9, 9)])],
+    .delegate (fA 1) [fA 2 (fLines [(1, 1)]), fA 3 (fLines [(1, 1)]), fA 6 (fLines [(1, 2)])],
+    .delegate (fA 1) [fA 2, fA 3 (.field ["x"])] ]
 
 def fArg (a : Frames.Arg) : Json := Json.mkObj [("n", jNat a.n), ("sel", .str a.sel.enc)]
 
 def fInstr : Frames.Instr → Json
   | .ret a => Json.mkObj [("return", fArg a)]
   | .run t args => Json.mkObj [("run", jNat t), ("args", .arr (args.map fArg).toArray)]
-  | .delegate task args => Json.mkObj [("delegate", .str task), ("args", .arr (args.map fArg).toArray)]
+  | .delegate g args => Json.mkObj [("delegate", fArg g), ("args", .arr (args.map fArg).toArray)]
 
 def fCutBase (b s : String) : String := "cut(" ++ b ++ ";" ++ s ++ ")"
 
 def fReason : Frames.Reason → Json
   | .unbound n => Json.mkObj [("unbound", jNat n)]
   | .cut n => Json.mkObj [("cut", jNat n)]
+  | .noTools => .str "noTools"
+  | .actDelegates => .str "actDelegates"
+  | .delegateRuns => .str "delegateRuns"
+  | .goalTool n => Json.mkObj [("goalTool", jNat n)]
   | .notTool n => Json.mkObj [("notTool", jNat n)]
   | .narrows p h => Json.mkObj [("narrows", .arr #[jNat p, jNat h])]
 
 def fKind : Frames.Kind → Json
   | .ret o => Json.mkObj [("return", wObs o)]
   | .run b ps => Json.mkObj [("run", .str b), ("passed", .arr (ps.map wObs).toArray)]
-  | .child t ps => Json.mkObj [("child", .str t), ("passed", .arr (ps.map wObs).toArray),
+  | .child ps => Json.mkObj [("child", .arr (ps.map wObs).toArray),
       ("table", wTable (Frames.childTable ps)), ("tools", .arr ((Frames.tools ps).map Json.str).toArray)]
   | .reject r => Json.mkObj [("reject", fReason r)]
 
@@ -693,9 +701,9 @@ def fInObs (o : Walk.Obs) : Json :=
   | _ => wObs o
 
 def framesFiles : List (String × List Json) :=
-  [ ("frames", [fScope, fBare].flatMap fun sc => fInstrs.map fun i =>
-      Json.mkObj [("in", Json.mkObj [("scope", .arr (sc.map fInObs).toArray), ("instr", fInstr i)]),
-        ("out", fKind (Frames.classify fCutBase sc i))]) ]
+  [ ("frames", [1, 2].flatMap fun k => [fScope, fBare].flatMap fun sc => fInstrs.map fun i =>
+      Json.mkObj [("in", Json.mkObj [("act", jNat k), ("scope", .arr (sc.map fInObs).toArray), ("instr", fInstr i)]),
+        ("out", fKind (Frames.classify fCutBase k sc i))]) ]
 
 /-! ## Proposal 58: dispatch
 

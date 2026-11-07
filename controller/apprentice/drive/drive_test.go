@@ -14,7 +14,7 @@ type script struct{ asked int }
 func (s *script) Guard(a tree.AskModel) (string, error) {
 	s.asked++
 	if len(a.Scope) == 2 { // echo, the goal
-		return `size($2) > 0 ? "$1 -n $2" : null`, nil
+		return `size($1) > 0 ? "$2 -n $1" : null`, nil
 	}
 	return `$3.startsWith("hello") ? "return $3" : null`, nil
 }
@@ -25,7 +25,7 @@ func TestRunLearns(t *testing.T) {
 	refs := map[string]tree.Version{}
 	for run, want := range []int{2, 0} {
 		model := &script{}
-		m := tree.NewMachine(Hashes, nil, refs, tree.Bounds{Transitions: 8, Refinements: 3}, []string{"echo"})
+		m := tree.NewMachine(Hashes, nil, refs, tree.Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"echo"})
 		m, v, err := Run(m, []byte("hello world"), model, Exec{})
 		if err != nil {
 			t.Fatal(err)
@@ -52,7 +52,7 @@ func (stubborn) Guard(tree.AskModel) (string, error) { return "not a guard (", n
 // A model that never writes a usable guard ends the frame with an error
 // observation, the run's value, not a failure.
 func TestRunAsksRunOut(t *testing.T) {
-	m := tree.NewMachine(Hashes, nil, nil, tree.Bounds{Transitions: 8, Refinements: 3}, nil)
+	m := tree.NewMachine(Hashes, nil, nil, tree.Bounds{Transitions: 8, Refinements: 3, Act: 1}, nil)
 	_, v, err := Run(m, []byte("x"), stubborn{}, Exec{})
 	e, ok := v.(map[string]any)
 	if err != nil || !ok || !strings.Contains(string(e["error"].([]byte)), "refinement bound exhausted: the model was asked 3 times") {
@@ -68,7 +68,7 @@ func (s *onFailure) Guard(a tree.AskModel) (string, error) {
 	s.asked++
 	switch arrived := a.Arrival.Vals["arrived"].(type) {
 	case string: // the goal
-		return `size($2) > 0 ? "$1 $2" : null`, nil
+		return `size($1) > 0 ? "$2 $1" : null`, nil
 	case map[string]any:
 		if arrived["exit"] != nil {
 			return `$3.exit != 0 ? "return $3" : null`, nil
@@ -81,7 +81,7 @@ func TestRunLearnsFailure(t *testing.T) {
 	refs := map[string]tree.Version{}
 	for run, want := range []int{2, 0} {
 		model := &onFailure{}
-		m := tree.NewMachine(Hashes, nil, refs, tree.Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+		m := tree.NewMachine(Hashes, nil, refs, tree.Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
 		m, v, err := Run(m, []byte("/no/such/dir"), model, Exec{})
 		if err != nil {
 			t.Fatal(err)

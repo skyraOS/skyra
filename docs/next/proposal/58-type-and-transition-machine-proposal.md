@@ -541,28 +541,71 @@ those `$n` name when the return arrives.
 **Tools are observations; the first position decides, as `exec` does.** A
 frame's tools are observations in its scope, each marked with its binary,
 its base keyed on the binary (`H(tool, binary)`). The root is granted
-them as `$1` to `$k`; its goal is the return of an invoke passed those
-tools, so the tools are positions of the goal's base, and arrives after
-them. Nothing that arrives is a tool, so a frame's tools are those it
+them; its goal is the return of an invoke passed those tools, so the tools
+are positions of the goal's base, and the goal becomes its `$1`, the tools
+`$2` on. Nothing that arrives is a tool, so a frame's tools are those it
 started with. An instruction is read by its first field, as `execvp` reads
 `argv[0]`:
 
 - `return $n` returns `$n` to the frame's caller.
-- A `$n` holding a tool runs that binary as a process: `$1 $2` with `$1`
-  the tool `ls` runs `ls` on `$2`. The tool is passed like any argument,
-  so the binary is in the invoke's input base.
-- A word is a task, and the instruction delegates to a child frame:
-  `summarize $1 $3` passes `$1` and `$3`, tools among them like any other
-  observation. Every other field is a `$n`. The task word and the bases
-  passed are the child's location, as any invoke's.
+- In an act frame, a `$n` holding a tool runs that binary as a process:
+  `$2 $1` with `$2` the tool `ls` runs `ls` on `$1`. The tool is passed
+  like any argument, so the binary is in the invoke's input base.
+- In a delegate, `delegate(goal($1[2]), $2, $4)` starts a child frame: its
+  goal is `goal(…)`, and the rest is what it is passed, tools among them
+  like any other observation. Its contract and the bases passed are the
+  child's location, as any invoke's.
+
+**An observation's role is goal, tool or context; a scope is in roles'
+order.** A frame holds three things, all observations: its goal, what it
+is to do; its tools, what it can run; and its context, what it was passed
+and every return that has arrived since. Its scope is its goal, `$1`, then
+its tools, then its context, in order. Tools are fixed when a frame starts
+and context only grows at the end, so every `$n` a learned guard names
+keeps its meaning when new values arrive. Whatever arrives is context,
+never a goal or a tool. A role is not a shape: the ask shows each
+parameter grouped by role, with its shape.
+
+**Kinds: act and delegate, divided by the act bound k.** A frame's kind is
+counted from the tool types it holds: at most `k`, it is an act frame,
+which runs its tools and returns; more, it is a delegate, which hands work
+on and returns, and never runs a tool itself. This is the old machine's
+act bound (`Profile.Act`), restored. `k` is a variable, with a default
+(`DefaultBounds.Act`, 1), and it is the owner's: it is set where the tree
+is started, by whoever owns the system, and no model is shown it. A model
+sees only what its kind may write: each kind has its own prompt, an act
+frame's offering no delegation and a delegate's no run, and no refusal
+reason states `k`. The node kinds of the system are, from the top, root,
+delegate, act and leaf: the root is given its kind by whoever starts it
+(not built here: the root is counted like any frame for now); delegates
+divide work; act frames run tools; leaves are the binaries they run.
+
+**A delegate takes its child's goal from an observation; it never writes
+one.** A goal the parent wrote as text would carry values copied out of its
+observations, never parameters, and would be reused, values and all, on the
+next run. So the child's goal is `goal(a)`, `a` a `$n` or a cut of one: the
+parent's own goal, a line of it, a field of a return. Like any cut it is
+computed from the observation each run and keyed on its base, so what is
+learned applies to the next goal. A goal is never a tool. The rest of the
+delegation is what the child is passed, and only the goal is labeled:
+whether an observation is a tool is fixed by its base, and everything else
+is context, so the parent says nothing more. The child's scope is in roles'
+order however the arguments were written: the goal, then the tools passed,
+then the context passed, each in the order written; nothing passed is a
+goal but its own, so a parent passing its goal passes it as context. The
+delegation's contract lists them in that order, so the child's `$k+1` is
+the k-th observation of the contract. A child is passed at least one tool,
+and strictly fewer types than its parent holds.
 
 A `$n` that names nothing, a first position that is a `$n` but not a tool,
-and a delegation that does not narrow are invalid instructions: the guard
-is refused before anything is committed, with the reason (“$2 is not a
-tool”, “a child holds fewer tools than its emitter: this passes 2 of the
-frame's 2”), and the model asked again within the refinement bound. A
-position's base fixes whether it holds a tool, so a guard runnable where
-it is written is runnable wherever it is selected.
+a run from a delegate, a delegation from an act frame, a delegation that
+does not narrow or passes no tool, and a goal taken from a tool are invalid
+instructions: the guard is refused before anything is committed, with the
+reason (“$1 is not a tool”, “you delegate and return: you do not run tools
+yourself”, “$2 is a tool, and a goal is what to do”), and the model asked
+again within the refinement bound. No reason states `k`. A position's base
+fixes whether it holds a tool, so a guard runnable where it is written is
+runnable wherever it is selected.
 
 **An argument is a `$n` or a cut of one.** Anywhere an instruction takes
 `$n` it may take a cut: runs of its lines, `$2[3:7]` or `$2[1,4:5]`,
@@ -585,13 +628,15 @@ Tool types are binaries, counted once however many observations hold
 them. What a child is passed is its scope, `$1` first; it holds only tools
 it was passed, so only tools its emitter holds, and strictly fewer types.
 Frames therefore nest no deeper than the root's tool types: a chain from
-the root is at most one longer than the number it holds. The live frames
-are a stack, the running one deepest.
+the root is at most one longer than the number it holds. Under the act
+bound, only a frame holding more than `k` delegates, so a chain from the
+root is at most its tool types past `k` frames, and one more for the act
+frame it ends in. The live frames are a stack, the running one deepest.
 
 **A child's return is its parent's return.** Delegation is the parent's
 invoke: one transition of the parent, its one pending invoke. The child's
 first transition stands at that invoke's input base, its table mapping
-`$k+1` to the k-th observation passed. When the child runs `return $n`,
+`$k+1` to the k-th observation of the contract, in roles' order. When the child runs `return $n`,
 the value walks back to the parent's pending invoke at `H(input base,
 shape)`, as a process's stdout does, but arrives as the value, never
 re-decoded. A child whose bound is exhausted returns its error observation
@@ -1654,6 +1699,26 @@ neither is taken as the guard, and the machine refuses it if it is not one.
 Tests use a scripted CLI; a live run against the CLI and real `ls` runs
 when `SKYRA_LIVE` is set.
 
+**Implemented: kinds, roles and goals, pure.** `Frames.lean` defines
+`kindOf` under the act bound `k`, a variable of `classify`; roles (`Role`,
+`role`; `Obs` gains `goal`); and delegation by goal
+(`Instr.delegate goal args`, the child's scope `byRole`). It proves an act
+frame never delegates (`act_never_delegates`) and a delegate never runs a
+tool (`delegate_never_runs`); only a frame holding more than `k` starts a
+child (`child_from_delegate`); a child holds at least one tool
+(`child_has_tool`), strictly fewer (`child_fewer`) and only its parent's
+(`child_sub`); its `$1` is its goal, taken from its parent's observations
+and never a tool (`child_goal`); its scope is goal, tools, context
+(`child_roles`); and a chain of delegations is at most the root's tool
+types past `k`, plus one (`delegates_depth`). `Walk.arrives_context`
+proves what arrives is context. The `frames` vectors run every case under
+`k` = 1 and 2: 148 cases. `controller/apprentice/tree` implements
+`KindOf`, `Obs.Role`, `DelegateContract` and the kinds' refusals, and puts
+the root's goal at `$1` when it arrives (`goalFirst`; the root's start is
+not yet in the Lean); `Bounds.Act` is `k`, set by the owner, and
+`AskModel` carries the frame's kind, never `k`. `drive` gives each kind its
+own system prompt, and renders the ask grouped by role.
+
 **Implemented: cuts, pure.** `Frames.lean` defines selectors (`Sel`:
 whole, lines, field), `cutValue`, `cutObs` and arguments (`Arg`), and
 classifies instructions over them. It proves all of `$n` is `$n`
@@ -1698,10 +1763,14 @@ Deterministic tests must demonstrate:
 - `sense` rejects undecodable bytes and unheld references alike, on both
   invoke and return, with a reason; the model may retry within its bound.
 - An instruction's first position decides it: `return $n`, a `$n` holding
-  a tool, or a task. A first position that is not a tool never runs; a
+  a tool, or `delegate`. A first position that is not a tool never runs; a
   delegation passing as many tool types as its emitter holds is refused;
   a child holds strictly fewer, so frames nest no deeper than the root's
   tool types; nothing that arrives is a tool.
+- An act frame never delegates and a delegate never runs a tool, under the
+  owner's act bound `k`, which no model is shown. A scope is goal, tools,
+  context; a child's goal is taken from an observation, never written,
+  never a tool, and is its `$1`; what arrives is context.
 - A cut takes its value from what it is cut from, is never a tool, and is
   keyed on the source's base and the selector; one that does not apply is
   refused; a learned cut runs on new values with no ask.

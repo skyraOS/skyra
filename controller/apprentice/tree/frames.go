@@ -1,11 +1,19 @@
 // Proposal 58: frames and children, as Frames.lean defines them. A frame's
-// tools are observations in its scope, each keyed on its binary. An
-// instruction's first position decides what it is, as exec's first argument
-// does: `return $n` returns to the caller; a $n holding a tool runs that
-// binary; a word is a task, delegating to a child frame passed observations,
-// tools among them like any other. A child holds strictly fewer tool types
-// than its emitter, so frames nest no deeper than the root's tool types.
-// An argument is a $n or a cut of one (cut.go).
+// tools are observations in its scope, each keyed on its binary. Its kind
+// is counted from them under the act bound k, the owner's: an act frame
+// holds at most k and runs them; a delegate holds more and hands work on.
+// An instruction's first position decides what it is, as exec's first
+// argument does: `return $n` returns to the caller; in an act frame, a $n
+// holding a tool runs that binary; in a delegate, `delegate(goal(a), …)`
+// starts a child, its goal taken from an observation, never written, and
+// passed observations, tools among them like any other. A child holds
+// strictly fewer tool types than its emitter, and at least one. An argument
+// is a $n or a cut of one (cut.go).
+//
+// An observation's role is goal, tool or context. A scope is its goal, $1,
+// then its tools, then its context, in order: tools are fixed when a frame
+// starts and context only grows at the end, so a $n a learned guard names
+// keeps its meaning.
 package tree
 
 import (
@@ -27,6 +35,23 @@ func Tools(scope []Obs) []string {
 	return out
 }
 
+// A FrameKind is what a frame may write: an act frame runs its tools, a
+// delegate hands work on; both return.
+type FrameKind uint8
+
+const (
+	KindActs FrameKind = iota
+	KindDelegates
+)
+
+// KindOf is a frame's kind under the act bound k.
+func KindOf(k int, scope []Obs) FrameKind {
+	if len(Tools(scope)) <= k {
+		return KindActs
+	}
+	return KindDelegates
+}
+
 // An InstrKind is what an instruction's first position makes it.
 type InstrKind uint8
 
@@ -43,14 +68,33 @@ type Arg struct {
 }
 
 // An Instr is an instruction as the core reads it. Return is the returned
-// argument; N is the tool run, a whole $n; Task names a delegation; Args
-// are the other arguments, in order.
+// argument; N is the tool run, a whole $n; Goal is a delegation's child's
+// goal; Args are the other arguments, in order.
 type Instr struct {
 	Kind   InstrKind
 	Return Arg
 	N      int
-	Task   string
+	Goal   Arg
 	Args   []Arg
+}
+
+// A Role is what an observation is to its frame.
+type Role uint8
+
+const (
+	RoleGoal Role = iota
+	RoleTool
+	RoleContext
+)
+
+func (o Obs) Role() Role {
+	switch {
+	case o.Goal:
+		return RoleGoal
+	case o.Tool != "":
+		return RoleTool
+	}
+	return RoleContext
 }
 
 // arg reads a field that is one argument: $n and its selector, nothing
@@ -85,7 +129,7 @@ func ParseInstr(tmpl string) (Instr, error) {
 	}
 	if n, w := number(head); w > 0 {
 		if w != len(head) {
-			return Instr{}, errors.New("the first position is a whole $n holding a tool, or a task")
+			return Instr{}, errors.New("a tool is run whole: the first position is a $n, not a cut")
 		}
 		in := Instr{Kind: InstrRun, N: n}
 		for _, f := range fields[1:] {
@@ -98,11 +142,20 @@ func ParseInstr(tmpl string) (Instr, error) {
 		}
 		return in, nil
 	}
-	if strings.Contains(head, "$") {
-		return Instr{}, errors.New("the first position is a $n holding a tool, or a task")
+	inner, ok := strings.CutPrefix(strings.TrimSpace(tmpl), "delegate(")
+	if inner, ok = strings.CutSuffix(inner, ")"); !ok {
+		return Instr{}, errInstr
 	}
-	in := Instr{Kind: InstrDelegate, Task: head}
-	for _, f := range fields[1:] {
+	parts := splitArgs(inner)
+	g, ok := strings.CutPrefix(parts[0], "goal(")
+	if g, ok = strings.CutSuffix(g, ")"); !ok {
+		return Instr{}, errors.New("a delegation's first argument is the goal: goal($n), or goal of a cut")
+	}
+	in := Instr{Kind: InstrDelegate}
+	if in.Goal, ok = arg(g); !ok {
+		return Instr{}, errors.New("a goal is taken from a $n, or a cut of one: " + g + " is neither")
+	}
+	for _, f := range parts[1:] {
 		a, ok := arg(f)
 		if !ok {
 			return Instr{}, errors.New("a delegation passes only observations: " + f + " is not a $n or a cut of one")
@@ -112,11 +165,34 @@ func ParseInstr(tmpl string) (Instr, error) {
 	return in, nil
 }
 
+var errInstr = errors.New("this is not an instruction: write one of the forms under Instructions")
+
+// splitArgs splits at the commas between arguments, not those inside a
+// cut's brackets or a goal's parentheses, each trimmed.
+func splitArgs(s string) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '[', '(':
+			depth++
+		case ']', ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(s[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, strings.TrimSpace(s[start:]))
+}
+
 // NotTool is a first position that is a $n but not a tool.
 type NotTool struct{ N int }
 
 func (e NotTool) Error() string {
-	return "$" + itoa(e.N) + " is not a tool: the first position runs a tool or names a task"
+	return "$" + itoa(e.N) + " is not a tool: the first position is a tool to run"
 }
 
 // CutFails is a cut that does not apply to $n's value: not text, lines it
@@ -130,29 +206,48 @@ func (e CutFails) Error() string {
 	return "$" + itoa(e.N) + e.Sel.String() + " does not apply: lines cut text, and a field cut an object holding it"
 }
 
+// ActDelegates is a delegation from an act frame, DelegateRuns a run from a
+// delegate, and NoTools a delegation passing no tool.
+var (
+	ActDelegates = errors.New("you run your tools and return: you do not delegate")
+	DelegateRuns = errors.New("you delegate and return: you do not run tools yourself")
+	NoTools      = errors.New("a delegation passes at least one tool")
+)
+
+// GoalTool is a goal taken from a tool, whole.
+type GoalTool struct{ N int }
+
+func (e GoalTool) Error() string {
+	return "$" + itoa(e.N) + " is a tool, and a goal is what to do: take it from the goal or the context"
+}
+
 // Narrows is a delegation that does not narrow: a child holds fewer tool
 // types than its emitter.
 type Narrows struct{ Passed, Held int }
 
 func (e Narrows) Error() string {
-	return "a child holds fewer tools than its emitter: this passes " + itoa(e.Passed) +
-		" of the frame's " + itoa(e.Held)
+	return "a delegation passes fewer tools than you have: this passes " + itoa(e.Passed) +
+		" of your " + itoa(e.Held)
 }
 
 // A Classified instruction: what it returns, the binary it runs, or the
-// child it starts, and what it passes.
+// child it starts, and what it passes: a child's whole scope, its goal,
+// then its tools, then its context, and the arguments they were taken by,
+// in that order.
 type Classified struct {
 	Kind   InstrKind
 	Return Obs
 	Binary string
-	Task   string
 	Passed []Obs
+	Order  []Arg
 }
 
-// ClassifyInstr judges an instruction against the frame's scope, cutting
-// its arguments; cutBase keys a cut's base. A rejection is Unbound,
-// CutFails, NotTool or Narrows.
-func ClassifyInstr(cutBase func(base, sel string) string, scope []Obs, in Instr) (Classified, error) {
+// ClassifyInstr judges an instruction against the frame's scope under the
+// act bound k, cutting its arguments; h keys a cut's base. A rejection is
+// Unbound, CutFails, NotTool, Narrows, GoalTool, NoTools, ActDelegates or
+// DelegateRuns.
+func ClassifyInstr(k int, h WalkHashes, scope []Obs, in Instr) (Classified, error) {
+	cutBase, kind := h.Cut, KindOf(k, scope)
 	f := Frame{Scope: scope}
 	argObs := func(a Arg) (Obs, error) {
 		o, ok := f.get(a.N)
@@ -184,6 +279,9 @@ func ClassifyInstr(cutBase func(base, sel string) string, scope []Obs, in Instr)
 		}
 		return Classified{Kind: InstrReturn, Return: o}, nil
 	case InstrRun:
+		if kind == KindDelegates {
+			return Classified{}, DelegateRuns
+		}
 		o, ok := f.get(in.N)
 		if !ok {
 			return Classified{}, Unbound{in.N}
@@ -197,14 +295,51 @@ func ClassifyInstr(cutBase func(base, sel string) string, scope []Obs, in Instr)
 		}
 		return Classified{Kind: InstrRun, Binary: o.Tool, Passed: append([]Obs{o}, ps...)}, nil
 	}
+	if kind == KindActs {
+		return Classified{}, ActDelegates
+	}
+	g, err := argObs(in.Goal)
+	if err != nil {
+		return Classified{}, err
+	}
+	if g.Tool != "" {
+		return Classified{}, GoalTool{in.Goal.N}
+	}
 	ps, err := resolve(in.Args)
 	if err != nil {
 		return Classified{}, err
 	}
-	if p, h := len(Tools(ps)), len(Tools(scope)); p >= h {
-		return Classified{}, Narrows{p, h}
+	switch p, held := len(Tools(ps)), len(Tools(scope)); {
+	case p == 0:
+		return Classified{}, NoTools
+	case p >= held:
+		return Classified{}, Narrows{p, held}
 	}
-	return Classified{Kind: InstrDelegate, Task: in.Task, Passed: ps}, nil
+	// The child's scope in roles' order: its goal, then the tools, then the
+	// rest, each in the order passed. Nothing passed is a goal.
+	g.Goal = true
+	c := Classified{Kind: InstrDelegate, Passed: []Obs{g}, Order: []Arg{in.Goal}}
+	for _, tools := range []bool{true, false} {
+		for i, o := range ps {
+			if (o.Tool != "") == tools {
+				o.Goal = false
+				c.Passed, c.Order = append(c.Passed, o), append(c.Order, in.Args[i])
+			}
+		}
+	}
+	return c, nil
+}
+
+// DelegateContract is a delegation's invoke contract, its arguments in the
+// child's order, the goal first: the k-th as the slot @passed[k], cut. Its
+// child's $k+1 is what @passed[k] holds.
+func DelegateContract(order []Arg) (string, []int) {
+	slots, ns := make([]string, len(order)), make([]int, len(order))
+	for i, a := range order {
+		slots[i], ns[i] = Passed(i).ref()+a.Sel.String(), a.N
+	}
+	slots[0] = "goal(" + slots[0] + ")"
+	return "delegate(" + strings.Join(slots, ", ") + ")", ns
 }
 
 // ChildArrival is a child's first arrival: at the input base its parent's

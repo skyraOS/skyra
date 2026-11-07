@@ -18,8 +18,8 @@ var stateNames = map[State]string{StateReject: "reject", StateHesitate: "hesitat
 var sizedBase = standIn.Return(standIn.Input(GoalContract, []string{standIn.Tool("t")}), `{"size":number}`)
 
 // The dispatch vectors' instructions are opaque letters and their guards
-// read the goal as $1. The replay grants the tool t, so the goal is $2, and
-// runs each letter as an argument to it: "D" is written "$1 D", stored
+// read the goal as $1. The replay grants the tool t, $2 after the goal, and
+// runs each letter as an argument to it: "D" is written "$2 D", stored
 // "@passed[0] D", and read back as "D".
 var (
 	asTool   = regexp.MustCompile(`"([A-Z])"`)
@@ -29,7 +29,7 @@ var (
 func toolWrites(ws []string) []string {
 	out := make([]string, len(ws))
 	for i, w := range ws {
-		out[i] = asTool.ReplaceAllString(strings.ReplaceAll(w, "$1", "$2"), `"$$1 $1"`)
+		out[i] = asTool.ReplaceAllString(w, `"$$2 $1"`)
 	}
 	return out
 }
@@ -51,7 +51,7 @@ func untool(t *testing.T, v Version) any {
 // with the next write: what Dispatch.decide gives.
 func decideOnce(t *testing.T, r Version, x int64, refinements int, writes []string) (map[string]any, Version) {
 	t.Helper()
-	m := NewMachine(standIn, nil, map[string]Version{sizedBase: r}, Bounds{Transitions: 64, Refinements: refinements}, []string{"t"})
+	m := NewMachine(standIn, nil, map[string]Version{sizedBase: r}, Bounds{Transitions: 64, Refinements: refinements, Act: 1}, []string{"t"})
 	m.stack[0].frame.Pending.Output = OutputJSON
 	m, eff, err := m.Step(Answered{Bytes: []byte(`{"size":` + itoa(int(x)) + `}`)})
 	if err != nil {
@@ -111,15 +111,15 @@ func init() {
 // A guard that does not store or check is rejected, and the model asked
 // again with the reason.
 func TestMachineRejects(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
 	m, _, _ = m.Step(Answered{Bytes: []byte("x")})
 	m.Bounds.Refinements = 6
 	for _, c := range []struct{ guard, reason string }{
 		{"not a guard (", "Syntax error"},
-		{`$2.size > 2 ? "$1 $2" : null`, "has no keys"},
-		{`true ? "$2" : null`, "$2 is not a tool"},
-		{`true ? "list $1 $2" : null`, "passes 1 of the frame's 1"},
-		{`size($2) > 99 ? "$1 $2" : null`, "does not select what arrived"},
+		{`$1.size > 2 ? "$2 $1" : null`, "has no keys"},
+		{`true ? "$1" : null`, "$1 is not a tool"},
+		{`true ? "delegate(goal($1), $2)" : null`, "you do not delegate"},
+		{`size($1) > 99 ? "$2 $1" : null`, "does not select what arrived"},
 	} {
 		var eff any
 		var err error
@@ -137,7 +137,7 @@ func TestMachineRejects(t *testing.T) {
 }
 
 func TestMachineRefusesStrayInputs(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 3, Refinements: 3}, nil)
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 3, Refinements: 3, Act: 1}, nil)
 	if _, _, err := m.Step(Wrote{"true"}); !errors.Is(err, ErrAsking) {
 		t.Fatalf("a guard nobody asked for: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestMachineRefusesStrayInputs(t *testing.T) {
 // A model that never writes a guard that runs ends its frame after
 // RefinementBound: an error observation for the caller, never a failure of the run.
 func TestMachineAsksRunOut(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 2}, nil)
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 2, Act: 1}, nil)
 	m, eff, _ := m.Step(Answered{Bytes: []byte("x")})
 	for i := 0; i < 2; i++ {
 		if _, ok := eff.(AskModel); !ok {
@@ -213,7 +213,7 @@ func TestMachineLearns(t *testing.T) {
 	model := func(a AskModel) string {
 		switch a.Base {
 		case goalAt("ls"):
-			return `size($2) > 0 ? "$1 $2" : null` // run the tool $1 on the goal
+			return `size($1) > 0 ? "$2 $1" : null` // run the tool $2 on the goal
 		case lsBase:
 			return `$3.contains("b.log") ? "return $3" : null`
 		}
@@ -228,7 +228,7 @@ func TestMachineLearns(t *testing.T) {
 	}
 	refs := map[string]Version{}
 	for run, want := range []int{2, 0} {
-		m, v, asks := driveTest(t, NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"}),
+		m, v, asks := driveTest(t, NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"}),
 			"/var/log", model, world)
 		if v != "a.log b.log" || len(asks) != want || m.Transitions() != 2 {
 			t.Fatalf("run %d: returned %v, asks %v, %d transitions", run, v, asks, m.Transitions())
@@ -241,10 +241,10 @@ func TestMachineLearns(t *testing.T) {
 // not a tool is refused before it is committed, and the model asked again
 // with the reason.
 func TestMachineRunsOnlyTools(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
 	m, _, _ = m.Step(Answered{Bytes: []byte("/var/log")})
-	m, eff, err := m.Step(Wrote{`true ? "$2 $1" : null`})
-	if ask, ok := eff.(AskModel); err != nil || !ok || !strings.Contains(ask.Reason, "$2 is not a tool") {
+	m, eff, err := m.Step(Wrote{`true ? "$1 $2" : null`})
+	if ask, ok := eff.(AskModel); err != nil || !ok || !strings.Contains(ask.Reason, "$1 is not a tool") {
 		t.Fatalf("%#v %v", eff, err)
 	}
 	if !slices.Equal(m.States(), Transition{StateStartle, StateReject, StateStartle}) {
@@ -256,14 +256,14 @@ func TestMachineRunsOnlyTools(t *testing.T) {
 // stored, and the next arrival asks again.
 func TestMachineUnlearned(t *testing.T) {
 	dateBase := standIn.Return(standIn.Input("@passed[0]", []string{standIn.Tool("date")}), "string")
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"date", "cat"})
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 2}, []string{"date", "cat"})
 	m, _, _ = m.Step(Answered{Bytes: []byte("/var/log")})
-	m, _, _ = m.Step(Wrote{`true ? "$1" : null`}) // date, passed only itself
+	m, _, _ = m.Step(Wrote{`true ? "$2" : null`}) // date, passed only itself
 	m, eff, _ := m.Step(Answered{Bytes: []byte("today")})
 	if ask, ok := eff.(AskModel); !ok || ask.Base != dateBase {
 		t.Fatalf("%#v", eff)
 	}
-	m, eff, err := m.Step(Wrote{`true ? "$2 $3 $4" : null`}) // cat and the goal are not in date's base
+	m, eff, err := m.Step(Wrote{`true ? "$3 $1 $4" : null`}) // cat and the goal are not in date's base
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,89 +282,13 @@ func TestMachineUnlearned(t *testing.T) {
 // A learned cycle that never asks still ends: the transition bound returns
 // the error observation.
 func TestMachineExhausts(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 3, Refinements: 3}, []string{"echo"})
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 3, Refinements: 3, Act: 1}, []string{"echo"})
 	_, v, _ := driveTest(t, m, "go", func(a AskModel) string {
-		return `true ? "$1 $` + itoa(len(a.Scope)) + `" : null`
+		return `true ? "$2 $1" : null`
 	}, func(RunInvoke) Answered { return Answered{Bytes: []byte("go")} })
 	e, ok := v.(map[string]any)
 	if !ok || string(e["error"].([]byte)) != "transition bound exhausted after 3 transitions" {
 		t.Fatalf("%#v", v)
-	}
-}
-
-// A delegation passing fewer tools than its emitter holds starts a child
-// frame: it runs at depth 1 with what it was passed as its scope, and what
-// it returns arrives at its parent. The second run asks nothing at either
-// depth.
-func TestMachineChild(t *testing.T) {
-	model := func(a AskModel) string {
-		switch {
-		case a.Depth == 0 && len(a.Scope) == 3: // ls, wc, the goal
-			return `size($3) > 0 ? "list $1 $3" : null` // a child holding only ls
-		case a.Depth == 1 && len(a.Scope) == 2: // the child: ls, the goal
-			if a.Scope[0].Tool != "ls" || a.Scope[1].Value != "/var/log" {
-				t.Fatalf("child scope %+v", a.Scope)
-			}
-			return `true ? "$1 $2" : null`
-		case a.Depth == 1 && len(a.Scope) == 3:
-			return `true ? "return $3" : null`
-		case a.Depth == 0 && len(a.Scope) == 4: // what the child returned
-			return `$4.contains("a.log") ? "return $4" : null`
-		}
-		t.Fatalf("asked at depth %d with %d in scope", a.Depth, len(a.Scope))
-		return ""
-	}
-	world := func(r RunInvoke) Answered {
-		if !slices.Equal(r.Argv, []string{"ls", "/var/log"}) {
-			t.Fatalf("ran %q", r.Argv)
-		}
-		return Answered{Bytes: []byte("a.log b.log")}
-	}
-	refs := map[string]Version{}
-	for run, want := range [][]int{{0, 1, 1, 0}, nil} {
-		m, v, asks := driveTest(t, NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3}, []string{"ls", "wc"}),
-			"/var/log", model, world)
-		if v != "a.log b.log" || !slices.Equal(asks, want) || m.Depth() != 0 {
-			t.Fatalf("run %d: returned %v, asks at depths %v, depth %d", run, v, asks, m.Depth())
-		}
-		refs = m.Refs
-	}
-}
-
-// A delegation that does not narrow is rejected: passing every tool the
-// emitter holds is not a child.
-func TestMachineChildMustNarrow(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls", "wc"})
-	m, _, _ = m.Step(Answered{Bytes: []byte("/var/log")})
-	_, eff, _ := m.Step(Wrote{`true ? "list $1 $2 $3" : null`})
-	if ask, ok := eff.(AskModel); !ok || ask.Depth != 0 || !strings.Contains(ask.Reason, "passes 2 of the frame's 2") {
-		t.Fatalf("%#v", eff)
-	}
-}
-
-// A child whose model never writes a guard that runs ends with an error
-// observation, which arrives at its parent like any return: the parent's
-// model reacts, and the run is not a failure.
-func TestMachineChildExhausted(t *testing.T) {
-	var parentSaw any
-	model := func(a AskModel) string {
-		if a.Depth == 1 {
-			return "not a guard ("
-		}
-		if len(a.Scope) == 3 { // ls, wc, the goal
-			return `true ? "try $1 $3" : null`
-		}
-		parentSaw = a.Arrival.Vals["arrived"]
-		return `true ? "return $4" : null`
-	}
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 2}, []string{"ls", "wc"})
-	_, v, asks := driveTest(t, m, "go", model, nil)
-	e, ok := parentSaw.(map[string]any)
-	if !ok || !strings.HasPrefix(string(e["error"].([]byte)), "refinement bound exhausted") {
-		t.Fatalf("the parent saw %#v", parentSaw)
-	}
-	if !slices.Equal(asks, []int{0, 1, 1, 0}) || v == nil {
-		t.Fatalf("asks %v, returned %#v", asks, v)
 	}
 }
 
@@ -373,14 +297,14 @@ func TestMachineChildExhausted(t *testing.T) {
 // runs with no ask.
 func TestMachineCutLearns(t *testing.T) {
 	model := func(a AskModel) string {
-		if len(a.Scope) == 2 { // ls, the goal
-			return `has($2.dir) ? "$1 $2.dir" : null`
+		if len(a.Scope) == 2 { // the goal, ls
+			return `has($1.dir) ? "$2 $1.dir" : null`
 		}
 		return `size($3) > 0 ? "return $3[1:1]" : null` // the first line ls gave
 	}
 	refs := map[string]Version{}
 	for run, c := range []struct{ goal, dir string }{{`{"dir":"/a"}`, "/a"}, {`{"dir":"/b"}`, "/b"}} {
-		m := NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+		m := NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
 		m.stack[0].frame.Pending.Output = OutputJSON
 		m, v, asks := driveTest(t, m, c.goal, model, func(r RunInvoke) Answered {
 			if !slices.Equal(r.Argv, []string{"ls", c.dir}) {
@@ -395,34 +319,13 @@ func TestMachineCutLearns(t *testing.T) {
 	}
 }
 
-// A child is passed a cut: its scope holds the cut value, not the whole
-// observation, and the cut is not a tool.
-func TestMachineChildGetsCut(t *testing.T) {
-	model := func(a AskModel) string {
-		if a.Depth == 1 {
-			if len(a.Scope) != 1 || a.Scope[0].Value != "b" || a.Scope[0].Tool != "" {
-				t.Fatalf("child scope %+v", a.Scope)
-			}
-			return `true ? "return $1" : null`
-		}
-		if len(a.Scope) == 2 {
-			return `true ? "second $2[2:2]" : null`
-		}
-		return `true ? "return $3" : null`
-	}
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
-	if _, v, _ := driveTest(t, m, "a\nb\nc", model, nil); v != "b" {
-		t.Fatalf("returned %#v", v)
-	}
-}
-
 // A cut that does not apply is refused before it is committed, with the
 // reason.
 func TestMachineCutRefused(t *testing.T) {
-	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
 	m, _, _ = m.Step(Answered{Bytes: []byte("one line")})
-	_, eff, _ := m.Step(Wrote{`true ? "$1 $2[2:2]" : null`})
-	if ask, ok := eff.(AskModel); !ok || !strings.Contains(ask.Reason, "$2[2:2] does not apply") {
+	_, eff, _ := m.Step(Wrote{`true ? "$2 $1[2:2]" : null`})
+	if ask, ok := eff.(AskModel); !ok || !strings.Contains(ask.Reason, "$1[2:2] does not apply") {
 		t.Fatalf("%#v", eff)
 	}
 }
@@ -436,9 +339,166 @@ func TestParseInstrCuts(t *testing.T) {
 	if in.Kind != InstrRun || in.N != 1 || fmt.Sprint(in.Args) != fmt.Sprint(want) {
 		t.Fatalf("%+v", in)
 	}
-	for _, bad := range []string{"$1[1:2] $2", "return $2[x]", "task $2 lit", "return $2.", "$1 $2[1"} {
+	for _, bad := range []string{"$1[1:2] $2", "return $2[x]", "task $2 lit", "return $2.", "$1 $2[1",
+		"delegate($1, $2)", "delegate(goal($1) $2)", "delegate(goal(x), $2)", "delegate(goal($1), lit)", "'spec' $1 $2"} {
 		if _, err := ParseInstr(bad); err == nil {
 			t.Errorf("%q parsed", bad)
 		}
+	}
+	in, err = ParseInstr("delegate(goal($1[1:2,4]), $2, $3.dir)")
+	want = []Arg{{2, Sel{}}, {3, Sel{Kind: SelField, Path: []string{"dir"}}}}
+	if err != nil || in.Kind != InstrDelegate || fmt.Sprint(in.Goal) != fmt.Sprint(Arg{1, Sel{Kind: SelLines, Runs: [][2]int{{1, 2}, {4, 4}}}}) ||
+		fmt.Sprint(in.Args) != fmt.Sprint(want) {
+		t.Fatalf("%+v %v", in, err)
+	}
+}
+
+// Guards may call the strings extension: the functions models reach for
+// when reading text check and evaluate.
+func TestGuardStrings(t *testing.T) {
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls"})
+	m, _, _ = m.Step(Answered{Bytes: []byte(" a\nb ")})
+	_, eff, err := m.Step(Wrote{`size($1.split("\n")) == 2 && $1.trim().startsWith("a") ? "$2 $1[2:2]" : null`})
+	if run, ok := eff.(RunInvoke); err != nil || !ok || !slices.Equal(run.Argv, []string{"ls", "b "}) {
+		t.Fatalf("%#v %v", eff, err)
+	}
+}
+
+// A delegate delegates: the child, an act frame, is passed its goal as $1
+// and runs at depth 1; what it returns arrives at its parent. The second
+// run asks nothing at either depth.
+func TestMachineChild(t *testing.T) {
+	model := func(a AskModel) string {
+		switch {
+		case a.Depth == 0 && len(a.Scope) == 3: // the goal, ls, wc
+			if a.Kind != KindDelegates || !a.Scope[0].Goal {
+				t.Fatalf("the root holds two tools under k=1: kind %v, %+v", a.Kind, a.Scope)
+			}
+			return `size($1) > 0 ? "delegate(goal($1), $2)" : null`
+		case a.Depth == 1 && len(a.Scope) == 2: // the goal, ls
+			if !a.Scope[0].Goal || a.Scope[0].Value != "/var/log" || a.Scope[1].Tool != "ls" || a.Kind != KindActs {
+				t.Fatalf("child %v %+v", a.Kind, a.Scope)
+			}
+			return `true ? "$2 $1" : null`
+		case a.Depth == 1 && len(a.Scope) == 3:
+			return `true ? "return $3" : null`
+		case a.Depth == 0 && len(a.Scope) == 4: // what the child returned
+			if a.Scope[3].Role() != RoleContext {
+				t.Fatalf("a return arrives as %v", a.Scope[3].Role())
+			}
+			return `$4.contains("a.log") ? "return $4" : null`
+		}
+		t.Fatalf("asked at depth %d with %d in scope", a.Depth, len(a.Scope))
+		return ""
+	}
+	world := func(r RunInvoke) Answered {
+		if !slices.Equal(r.Argv, []string{"ls", "/var/log"}) {
+			t.Fatalf("ran %q", r.Argv)
+		}
+		return Answered{Bytes: []byte("a.log b.log")}
+	}
+	refs := map[string]Version{}
+	for run, want := range [][]int{{0, 1, 1, 0}, nil} {
+		m, v, asks := driveTest(t, NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls", "wc"}),
+			"/var/log", model, world)
+		if v != "a.log b.log" || !slices.Equal(asks, want) || m.Depth() != 0 {
+			t.Fatalf("run %d: returned %v, asks at depths %v, depth %d", run, v, asks, m.Depth())
+		}
+		refs = m.Refs
+	}
+}
+
+// A delegate does not run its tools, and an act frame does not delegate:
+// each is refused with the reason, and the model asked again.
+func TestMachineKinds(t *testing.T) {
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls", "wc"})
+	m, _, _ = m.Step(Answered{Bytes: []byte("/var/log")})
+	_, eff, _ := m.Step(Wrote{`true ? "$2 $1" : null`})
+	if !asks(eff, DelegateRuns.Error()) {
+		t.Fatalf("%#v", eff)
+	}
+	// k is a variable: the same root under k=2 acts, and runs.
+	m = NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 2}, []string{"ls", "wc"})
+	m, _, _ = m.Step(Answered{Bytes: []byte("/var/log")})
+	if _, eff, _ := m.Step(Wrote{`true ? "$2 $1" : null`}); !isRun(eff) {
+		t.Fatalf("under k=2: %#v", eff)
+	}
+	if _, eff, _ := m.Step(Wrote{`true ? "delegate(goal($1), $2)" : null`}); !asks(eff, ActDelegates.Error()) {
+		t.Fatalf("under k=2 a delegation: %#v", eff)
+	}
+}
+
+func isRun(eff any) bool { _, ok := eff.(RunInvoke); return ok }
+
+// A delegation must narrow, pass a tool, and take its goal from an
+// observation that is not a tool.
+func TestMachineDelegationRules(t *testing.T) {
+	for _, c := range []struct{ guard, reason string }{
+		{`true ? "delegate(goal($1), $2, $3)" : null`, "passes 2 of your 2"},
+		{`true ? "delegate(goal($1), $1)" : null`, NoTools.Error()},
+		{`true ? "delegate(goal($2), $2)" : null`, "$2 is a tool"},
+		{`true ? "delegate(goal($1[3:3]), $2)" : null`, "$1[3:3] does not apply"},
+		{`true ? "delegate($1, $2)" : null`, "the goal"},
+		{`true ? "'list $1' $2 $1" : null`, "not an instruction"},
+	} {
+		m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls", "wc"})
+		m, _, _ = m.Step(Answered{Bytes: []byte("a\nb")})
+		if _, eff, _ := m.Step(Wrote{c.guard}); !asks(eff, c.reason) {
+			t.Errorf("%s: %#v, want %q", c.guard, eff, c.reason)
+		}
+	}
+}
+
+func asks(eff any, reason string) bool {
+	ask, ok := eff.(AskModel)
+	return ok && strings.Contains(ask.Reason, reason)
+}
+
+// A child whose model never writes a guard that runs ends with an error
+// observation, which arrives at its parent like any return: the parent's
+// model reacts, and the run is not a failure.
+func TestMachineChildExhausted(t *testing.T) {
+	var parentSaw any
+	model := func(a AskModel) string {
+		if a.Depth == 1 {
+			return "not a guard ("
+		}
+		if len(a.Scope) == 3 { // the goal, ls, wc
+			return `true ? "delegate(goal($1), $2)" : null`
+		}
+		parentSaw = a.Arrival.Vals["arrived"]
+		return `true ? "return $4" : null`
+	}
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 2, Act: 1}, []string{"ls", "wc"})
+	_, v, asks := driveTest(t, m, "go", model, nil)
+	e, ok := parentSaw.(map[string]any)
+	if !ok || !strings.HasPrefix(string(e["error"].([]byte)), "refinement bound exhausted") {
+		t.Fatalf("the parent saw %#v", parentSaw)
+	}
+	if !slices.Equal(asks, []int{0, 1, 1, 0}) || v == nil {
+		t.Fatalf("asks %v, returned %#v", asks, v)
+	}
+}
+
+// A child's goal and context are cuts: its scope holds the cut values, in
+// roles' order however they were written (the goal, the tools, the
+// context), and nothing passed is a goal but its own.
+func TestMachineChildGetsCut(t *testing.T) {
+	model := func(a AskModel) string {
+		if a.Depth == 1 {
+			s := a.Scope
+			if len(s) != 3 || s[0].Value != "b" || !s[0].Goal || s[1].Tool != "ls" || s[2].Value != "c" || s[2].Role() != RoleContext {
+				t.Fatalf("child scope %+v", s)
+			}
+			return `true ? "return $3" : null`
+		}
+		if len(a.Scope) == 3 {
+			return `true ? "delegate(goal($1[2:2]), $1[3:3], $2)" : null`
+		}
+		return `true ? "return $4" : null`
+	}
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3, Act: 1}, []string{"ls", "cat"})
+	if _, v, _ := driveTest(t, m, "a\nb\nc", model, nil); v != "c" {
+		t.Fatalf("returned %#v", v)
 	}
 }

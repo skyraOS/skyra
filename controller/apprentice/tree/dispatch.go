@@ -33,6 +33,7 @@ type level struct {
 	states  Transition // its states so far
 	asks    int        // the asks it has made
 	learned bool       // whether the refinement selects what trust last ran
+	goal    bool       // whether it waits on its goal: only the root, at its start
 }
 
 // A Machine is a stack of frames, the root first, and the refinements they
@@ -55,13 +56,17 @@ const GoalContract = "goal"
 type Bounds struct {
 	Transitions int // the transition bound: the most transitions a frame takes
 	Refinements int // the refinement bound: the most asks in one transition
+	// Act is the act bound, k: a frame holding at most Act tool types acts,
+	// one holding more delegates. It is the owner's, set where the tree is
+	// started; no model is shown it.
+	Act int
 }
 
 // DefaultBounds are the bounds a frame gets when its caller sets none.
-var DefaultBounds = Bounds{Transitions: 64, Refinements: 3}
+var DefaultBounds = Bounds{Transitions: 64, Refinements: 3, Act: 1}
 
-// NewMachine is a root frame granted its tools, $1 to $k, waiting on its
-// goal, which arrives as text after them.
+// NewMachine is a root frame granted its tools, waiting on its goal, which
+// arrives as text and becomes its $1, the tools $2 on.
 func NewMachine(h WalkHashes, outputs map[string]Output, refs map[string]Version, b Bounds, tools []string) Machine {
 	var scope []Obs
 	var args []int
@@ -76,7 +81,22 @@ func NewMachine(h WalkHashes, outputs map[string]Output, refs map[string]Version
 	root := Frame{Scope: scope, Pending: &Awaiting{Input: h.Input(GoalContract, bases), Output: OutputText,
 		Args: args, Passed: slices.Clone(scope)}}
 	return Machine{Hashes: h, Outputs: outputs, Refs: refs, Bounds: b,
-		stack: []level{{frame: root, bound: TransitionBound{Transitions: b.Transitions}}}}
+		stack: []level{{frame: root, bound: TransitionBound{Transitions: b.Transitions}, goal: true}}}
+}
+
+// goalFirst is the root's goal arrival with its scope in roles' order: the
+// goal $1, the tools after it. The goal's base is the goal contract's
+// return, keyed on the tools' bases and never on the goal's text.
+func goalFirst(a Arrival) Arrival {
+	scope := a.Next.Scope
+	goal := scope[len(scope)-1]
+	goal.Goal = true
+	a.Next.Scope = append([]Obs{goal}, scope[:len(scope)-1]...)
+	a.Table, a.Refs = map[int]Position{1: Arrived}, map[Position]int{Arrived: 1}
+	for i := range scope[:len(scope)-1] {
+		a.Table[i+2], a.Refs[Passed(i)] = Passed(i), i+2
+	}
+	return a
 }
 
 // Inputs.
@@ -102,12 +122,14 @@ type (
 		Argv     []string
 	}
 	// AskModel startles the model: what arrived, where, the frame's scope,
-	// and how deep the frame is (the root is 0). Reason is why the last
-	// guard was refused, if one was. Its guard comes back as Wrote.
+	// its kind (what it may write), and how deep it is (the root is 0).
+	// Reason is why the last guard was refused, if one was. Its guard comes
+	// back as Wrote. The act bound is not in it: a model sees only its kind.
 	AskModel struct {
 		Base    string
 		Arrival Arrival
 		Scope   []Obs
+		Kind    FrameKind
 		Depth   int
 		Reason  string
 	}
@@ -161,6 +183,9 @@ func (m Machine) Step(in any) (Machine, any, error) {
 		a, err := SenseReturn(m.Hashes, t.frame, in.Bytes, in.Exit, in.Stderr)
 		if err != nil {
 			return m, nil, err
+		}
+		if t.goal {
+			a, t.goal = goalFirst(a), false
 		}
 		m.arrive(a)
 		return m.decide()
@@ -220,7 +245,7 @@ func (m Machine) ask(reason string) (Machine, any, error) {
 	t.states = append(t.states, StateStartle)
 	t.asks++
 	return m, AskModel{Base: t.at.Base, Arrival: *t.at, Scope: slices.Clone(t.frame.Scope),
-		Depth: m.Depth(), Reason: reason}, nil
+		Kind: KindOf(m.Bounds.Act, t.frame.Scope), Depth: m.Depth(), Reason: reason}, nil
 }
 
 // reject refuses the guard or instruction and asks again.
@@ -319,7 +344,7 @@ func (m Machine) runnable(chain []Link, refs map[Position]int) error {
 		if err != nil {
 			return err
 		}
-		if _, err := ClassifyInstr(m.Hashes.Cut, m.top().frame.Scope, in); err != nil {
+		if _, err := ClassifyInstr(m.Bounds.Act, m.Hashes, m.top().frame.Scope, in); err != nil {
 			return err
 		}
 	}
@@ -348,7 +373,7 @@ func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, erro
 	if err != nil {
 		return m.reject(err)
 	}
-	c, err := ClassifyInstr(m.Hashes.Cut, t.frame.Scope, in)
+	c, err := ClassifyInstr(m.Bounds.Act, m.Hashes, t.frame.Scope, in)
 	if err != nil {
 		return m.reject(err)
 	}
@@ -363,6 +388,9 @@ func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, erro
 		return m.end(c.Return.Value, false)
 	}
 	contract, args := invokeOf(tmpl)
+	if c.Kind == InstrDelegate {
+		contract, args = DelegateContract(c.Order)
+	}
 	out := m.Outputs[c.Binary]
 	a, err := SenseInvoke(m.Hashes, t.frame, contract, out, args)
 	if err != nil {
