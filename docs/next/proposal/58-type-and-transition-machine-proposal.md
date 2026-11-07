@@ -2,7 +2,7 @@
 
 Date: 2026-11-06
 
-Status: **proposed; pure refinement, shape, walk and dispatch cores implemented, with a driver beside the old shell** (see Implementation). Split from
+Status: **proposed; pure refinement, shape, walk, dispatch and frame cores implemented, with a driver beside the old shell** (see Implementation). Split from
 [57](57-act-creation-and-returns-proposal.md), which keeps act creation and
 returns and builds on this proposal; nothing here depends on 57. Supersedes parts of [55](55-one-tool-trees-invariant-proposal.md)
 and [56](56-tree-machine-proposal.md), recorded in each. How an arriving
@@ -537,6 +537,50 @@ determined by the frame alone. Parallel work is several frames, each
 delegated, each with its own pending invoke. While a frame waits, nothing
 is appended to its scope, so what its invoke was passed is still what
 those `$n` name when the return arrives.
+
+**Tools are observations; the first position decides, as `exec` does.** A
+frame's tools are observations in its scope, each marked with its binary,
+its base keyed on the binary (`H(tool, binary)`). The root is granted
+them as `$1` to `$k`; its goal is the return of an invoke passed those
+tools, so the tools are positions of the goal's base, and arrives after
+them. Nothing that arrives is a tool, so a frame's tools are those it
+started with. An instruction is read by its first field, as `execvp` reads
+`argv[0]`:
+
+- `return $n` returns `$n` to the frame's caller.
+- A `$n` holding a tool runs that binary as a process: `$1 $2` with `$1`
+  the tool `ls` runs `ls` on `$2`. The tool is passed like any argument,
+  so the binary is in the invoke's input base.
+- A word is a task, and the instruction delegates to a child frame:
+  `summarize $1 $3` passes `$1` and `$3`, tools among them like any other
+  observation. Every other field is a `$n`. The task word and the bases
+  passed are the child's location, as any invoke's.
+
+A `$n` that names nothing, a first position that is a `$n` but not a tool,
+and a delegation that does not narrow are invalid instructions: the guard
+is refused before anything is committed, with the reason (“$2 is not a
+tool”, “a child holds fewer tools than its emitter: this passes 2 of the
+frame's 2”), and the model asked again within the refinement bound. A
+position's base fixes whether it holds a tool, so a guard runnable where
+it is written is runnable wherever it is selected.
+
+**A child narrows: it holds strictly fewer tool types than its emitter.**
+Tool types are binaries, counted once however many observations hold
+them. What a child is passed is its scope, `$1` first; it holds only tools
+it was passed, so only tools its emitter holds, and strictly fewer types.
+Frames therefore nest no deeper than the root's tool types: a chain from
+the root is at most one longer than the number it holds. The live frames
+are a stack, the running one deepest.
+
+**A child's return is its parent's return.** Delegation is the parent's
+invoke: one transition of the parent, its one pending invoke. The child's
+first transition stands at that invoke's input base, its table mapping
+`$k+1` to the k-th observation passed. When the child runs `return $n`,
+the value walks back to the parent's pending invoke at `H(input base,
+shape)`, as a process's stdout does, but arrives as the value, never
+re-decoded. A child whose bound is exhausted returns its error observation
+the same way: the parent's model reacts to it, and the run does not fail.
+Each frame has its own bounds.
 
 `sense` decides the direction from the emitter's position, not from the
 instruction. An invoke walks forward to the location its instruction
@@ -1533,7 +1577,7 @@ argv with each `$n` as its value's text), `AskModel`, `Finished`
 replays the `dispatch` vectors (1722 cases, each run twice to show reuse).
 `controller/apprentice/drive` drives a machine with a model and real
 processes: argv runs with no shell, so a value is one argument whatever it
-holds. The machine bounds the asks in one transition (`RefinementBound`):
+holds. The machine bounds the asks in one transition (`Bounds.Refinements`):
 rejected guards are not transitions and do not count against the transition bound, so a
 frame whose model never writes a guard that runs ends with an `{error:
 bytes}` observation for its caller, and the driver returns it as the run's
@@ -1545,12 +1589,36 @@ return. Invoke bases are not distinguished: an invoke is the outcome of
 the `trust` that selected it (guards are keyed on return bases, as in
 `Core.lean`). Not yet built: the store and versions' current/stale status
 (so a commit is never preempted, and `learned` is always true after a
-startle), `hesitate` retries, delegation to child frames and returns to a
-caller, the contract's `json`/`text` declaration in
+startle), `hesitate` retries, the contract's `json`/`text` declaration in
 its identity (in `Core.lean`'s `Contract` and `identify`), per-field CEL
 types (an object is a CEL map; `CheckGuard` checks keys and leaf kinds by
 walking the guard), `cel.bind` locals, unlearned runs, the two bounds on `Profile`
 (the old runtime has no `trust` transition to count), and the shell handlers.
+
+**Implemented: frames and children, pure.** `Obs` carries its tool's
+binary, if it is one. `Walk.lean` adds a child's return (`returned`, a
+value already shaped) beside a process's (`ret`), both walking back through
+one definition (`backTo`), and proves nothing that arrives is a tool
+(`tools_kept`), with the earlier walk theorems over all three events.
+`Invariants/Frames.lean` defines a scope's tool types, the three
+instruction forms and `classify`: a return, a run of a held binary, a
+child, or a rejection with its reason. It proves a child holds strictly
+fewer tool types than its emitter (`child_fewer`) and only tools its
+emitter holds (`child_sub`), a frame runs only a binary it holds
+(`run_held`), a first position that is not a tool never runs, frames nest
+no deeper than the root's tool types (`nests_depth`), and the child's
+table is right (`childTable_env`). The `frames` vectors classify thirteen
+instructions against two scopes. `controller/apprentice/tree/frames.go`
+implements `Tools`, `ParseInstr`, `ClassifyInstr` and `ChildArrival`, and
+replays them. The `Machine` is a stack of frames: `NewMachine` grants the
+root its tools; a delegation pushes a child and decides its first arrival;
+a child's return or exhausted bound pops it and walks the value back to its
+parent (`SenseReturned`); `AskModel` carries the frame's depth. The
+dispatch vectors' opaque instructions replay as arguments to a granted
+tool. Tests learn a child (four asks at two depths the first run, none
+the second), refuse a delegation that does not narrow, refuse a guard that
+runs a non-tool, and deliver a child's exhausted refinement bound to its
+parent as an observation.
 
 Update the invariant specification in `controller/apprentice/invariants/`
 first (the Lean definitions below), then the core's dispatch, `sense`,
@@ -1580,6 +1648,14 @@ Deterministic tests must demonstrate:
   handlers and core procedures remain distinct.
 - `sense` rejects undecodable bytes and unheld references alike, on both
   invoke and return, with a reason; the model may retry within its bound.
+- An instruction's first position decides it: `return $n`, a `$n` holding
+  a tool, or a task. A first position that is not a tool never runs; a
+  delegation passing as many tool types as its emitter holds is refused;
+  a child holds strictly fewer, so frames nest no deeper than the root's
+  tool types; nothing that arrives is a tool.
+- A child's return, or its exhausted bound's error observation, arrives at
+  its parent's pending invoke at `H(input base, shape)`, as a process's
+  result does.
 - `sense` derives the direction from the emitter, never from the bytes:
   an invoke names the forward table, a return the backward table of the
   invoke it answers; it infers no shape.

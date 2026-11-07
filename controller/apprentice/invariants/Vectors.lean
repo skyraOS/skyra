@@ -539,7 +539,8 @@ def wStored : Walk.Stored → String
   | .lit s => s
   | .pos p => wRef p
 
-def wObs (o : Walk.Obs) : Json := Json.mkObj [("value", svJson o.value), ("base", .str o.base)]
+def wObs (o : Walk.Obs) : Json := Json.mkObj [("value", svJson o.value), ("base", .str o.base),
+  ("tool", match o.tool with | some b => .str b | none => .null)]
 
 def wFrame (f : Walk.Frame) : Json :=
   Json.mkObj [("scope", .arr (f.scope.map wObs).toArray),
@@ -568,6 +569,7 @@ def wEvent : Walk.Event → Json
       ("output", .str (if o = .json then "json" else "text")),
       ("args", .arr (args.map fun n => Lean.toJson n).toArray)])]
   | .ret raw _ x err => Json.mkObj [("return", jBytes raw), ("exit", jNat x), ("stderr", jBytes err)]
+  | .returned v _ => Json.mkObj [("returned", svJson v)]
 
 def wFault : Walk.Fault → Json
   | .busy => Json.mkObj [("fault", "busy")]
@@ -601,8 +603,8 @@ def wFail (out : String) (x : Nat) (err : String) : Walk.Event :=
   .ret out.toUTF8 (.error (0, .syntax)) x err.toUTF8
 
 def wStart : Walk.Frame :=
-  { scope := [⟨.str "list the logs", "goal"⟩,
-      ⟨.obj [("dir", .str "/var/log"), ("size", .num "5")], "ret(in(find;goal);{\"dir\":string,\"size\":number})"⟩],
+  { scope := [{ value := .str "list the logs", base := "goal" },
+      { value := .obj [("dir", .str "/var/log"), ("size", .num "5")], base := "ret(in(find;goal);{\"dir\":string,\"size\":number})" }],
     pending := none }
 
 def wScenarios : List (Walk.Frame × List Walk.Event) :=
@@ -625,6 +627,47 @@ def walkFiles : List (String × List Json) :=
   [ ("walk", wScenarios.map fun (f, es) =>
       Json.mkObj [("in", Json.mkObj [("frame", wFrame f), ("events", .arr (es.map wEvent).toArray)]),
         ("out", .arr (wRun f es).toArray)]) ]
+
+/-! ## Proposal 58: frames
+
+Each case is a scope, tools among it, and an instruction by its first
+position; Lean classifies it: a return, a run of a held binary, a child
+frame narrowing the tools, or a rejection with its reason. -/
+
+def fTool (b : String) : Walk.Obs := { value := .str b, base := "tool(" ++ b ++ ")", tool := some b }
+
+def fScope : List Walk.Obs :=
+  [fTool "ls", fTool "cat", fTool "ls", { value := .str "/var/log", base := "goal" },
+   { value := .obj [("n", .num "2")], base := "ret(in(wc;goal);{\"n\":number})" }]
+
+def fBare : List Walk.Obs := [{ value := .str "/var/log", base := "goal" }]
+
+def fInstrs : List Frames.Instr :=
+  [ .ret 4, .ret 9, .run 1 [4], .run 2 [4, 5], .run 4 [1], .run 9 [], .run 1 [9],
+    .delegate "summarize" [1, 4], .delegate "summarize" [1, 2, 4], .delegate "summarize" [1, 3, 4],
+    .delegate "classify" [4, 5], .delegate "classify" [9], .delegate "classify" [] ]
+
+def fInstr : Frames.Instr → Json
+  | .ret n => Json.mkObj [("return", jNat n)]
+  | .run t args => Json.mkObj [("run", jNat t), ("args", .arr (args.map jNat).toArray)]
+  | .delegate task args => Json.mkObj [("delegate", .str task), ("args", .arr (args.map jNat).toArray)]
+
+def fReason : Frames.Reason → Json
+  | .unbound n => Json.mkObj [("unbound", jNat n)]
+  | .notTool n => Json.mkObj [("notTool", jNat n)]
+  | .narrows p h => Json.mkObj [("narrows", .arr #[jNat p, jNat h])]
+
+def fKind : Frames.Kind → Json
+  | .ret o => Json.mkObj [("return", wObs o)]
+  | .run b ps => Json.mkObj [("run", .str b), ("passed", .arr (ps.map wObs).toArray)]
+  | .child t ps => Json.mkObj [("child", .str t), ("passed", .arr (ps.map wObs).toArray),
+      ("table", wTable (Frames.childTable ps)), ("tools", .arr ((Frames.tools ps).map Json.str).toArray)]
+  | .reject r => Json.mkObj [("reject", fReason r)]
+
+def framesFiles : List (String × List Json) :=
+  [ ("frames", [fScope, fBare].flatMap fun sc => fInstrs.map fun i =>
+      Json.mkObj [("in", Json.mkObj [("scope", .arr (sc.map wObs).toArray), ("instr", fInstr i)]),
+        ("out", fKind (Frames.classify sc i))]) ]
 
 /-! ## Proposal 58: dispatch
 
@@ -784,7 +827,7 @@ def files (w : World) : List (String × List Json) :=
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)]) (jReturnResult (ret n g))),
     ("invoke", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)])
-        (jInvokeResult (invoke n g))) ] ++ refineFiles ++ shapeFiles ++ walkFiles ++ dispatchFiles
+        (jInvokeResult (invoke n g))) ] ++ refineFiles ++ shapeFiles ++ walkFiles ++ dispatchFiles ++ framesFiles
 
 /-- One case per line, so a change shows as a line in a diff. -/
 def render (name : String) (cases : List Json) : String :=

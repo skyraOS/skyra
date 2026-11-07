@@ -1,17 +1,20 @@
 // Proposal 58: dispatch, as Dispatch.lean defines one transition's control,
-// over the walk. A Machine is one frame and the refinements it reads. Each
-// input is a return's bytes or the guard the model wrote; each step gives
-// one effect: run an invoke, ask the model, or end. Nothing here does I/O:
-// the shell runs what RunInvoke names, asks the model what AskModel shows, and feeds
-// the answers back.
+// over the walk and frames. A Machine is a stack of frames, the root first,
+// and the refinements they read. Each input is a process's result or the
+// guard the model wrote; each step gives one effect: run an invoke, ask the
+// model, or end. Nothing here does I/O: the shell runs what RunInvoke names,
+// asks the model what AskModel shows, and feeds the answers back.
 //
 // An arrival is distinguished on its base's refinement. One instruction is
 // trusted; a conflict is reconciled, the older branch keeping the values;
 // null startles, and the model's guard is committed and its own
-// instruction run. Every run ends a transition, counted against the step
-// bound. The model is asked at most RefinementBound times in one transition, its
-// refinement bound: past that the frame ends with an error observation for its caller, as when
-// the transition bound is exhausted. The refinements are in memory until the store (58, slice 4).
+// instruction run. Every run ends a transition, counted against the frame's
+// transition bound; the model is asked at most its refinement bound's times
+// in one transition. An instruction runs a tool, returns, or delegates to a
+// child frame (frames.go), which is pushed and runs to its return; what it
+// returns, or its error observation when a bound is exhausted, arrives at
+// its parent as the return of the parent's pending invoke. The refinements
+// are in memory until the store (58, slice 4).
 package tree
 
 import (
@@ -22,24 +25,29 @@ import (
 	"strings"
 )
 
-// A Machine is one frame, the refinements it reads, and the transition in
-// progress.
-type Machine struct {
-	Hashes          WalkHashes
-	Outputs         map[string]Output  // each binary's declared output; text without one
-	Refs            map[string]Version // each base's current refinement
-	Bound           TransitionBound
-	RefinementBound int // the most asks in one transition: its refinement bound
-	Frame           Frame
-
+// A level is one frame on the stack and the transition in progress in it.
+type level struct {
+	frame   Frame
+	bound   TransitionBound
 	at      *Arrival   // the arrival whose transition is in progress
 	states  Transition // its states so far
 	asks    int        // the asks it has made
 	learned bool       // whether the refinement selects what trust last ran
 }
 
-// GoalContract is the contract a frame's goal answers: the frame starts
-// waiting on it, and the goal arrives as its return.
+// A Machine is a stack of frames, the root first, and the refinements they
+// read.
+type Machine struct {
+	Hashes  WalkHashes
+	Outputs map[string]Output  // each binary's declared output; text without one
+	Refs    map[string]Version // each base's current refinement
+	Bounds  Bounds             // every frame's
+
+	stack []level
+}
+
+// GoalContract is the contract a root's goal answers: the root starts
+// waiting on it, passed its tools, and the goal arrives as its return.
 const GoalContract = "goal"
 
 // Bounds are a frame's two bounds. Their values are not settled (58, open
@@ -52,11 +60,23 @@ type Bounds struct {
 // DefaultBounds are the bounds a frame gets when its caller sets none.
 var DefaultBounds = Bounds{Transitions: 64, Refinements: 3}
 
-// NewMachine is a frame waiting on its goal, which arrives as text.
-func NewMachine(h WalkHashes, outputs map[string]Output, refs map[string]Version, b Bounds) Machine {
-	return Machine{Hashes: h, Outputs: outputs, Refs: refs, Bound: TransitionBound{Transitions: b.Transitions},
-		RefinementBound: b.Refinements,
-		Frame:           Frame{Pending: &Awaiting{Input: h.Input(GoalContract, nil), Output: OutputText}}}
+// NewMachine is a root frame granted its tools, $1 to $k, waiting on its
+// goal, which arrives as text after them.
+func NewMachine(h WalkHashes, outputs map[string]Output, refs map[string]Version, b Bounds, tools []string) Machine {
+	var scope []Obs
+	var args []int
+	for i, t := range tools {
+		scope = append(scope, Obs{Value: t, Base: h.Tool(t), Tool: t})
+		args = append(args, i+1)
+	}
+	bases := make([]string, len(scope))
+	for i, o := range scope {
+		bases[i] = o.Base
+	}
+	root := Frame{Scope: scope, Pending: &Awaiting{Input: h.Input(GoalContract, bases), Output: OutputText,
+		Args: args, Passed: slices.Clone(scope)}}
+	return Machine{Hashes: h, Outputs: outputs, Refs: refs, Bounds: b,
+		stack: []level{{frame: root, bound: TransitionBound{Transitions: b.Transitions}}}}
 }
 
 // Inputs.
@@ -74,43 +94,53 @@ type (
 
 // Effects.
 type (
-	// RunInvoke is an invoke for the shell to run: Argv is the template's fields,
-	// each $n replaced by its value's text. Its bytes come back as Answered.
+	// RunInvoke is an invoke for the shell to run: Argv is the template's
+	// fields, each $n replaced by its value's text, the first the binary.
+	// Its result comes back as Answered.
 	RunInvoke struct {
 		Contract string
 		Argv     []string
 	}
-	// AskModel startles the model: what arrived, where, and the frame's scope.
-	// Reason is why the last guard was refused, if one was. Its guard comes
-	// back as Wrote.
+	// AskModel startles the model: what arrived, where, the frame's scope,
+	// and how deep the frame is (the root is 0). Reason is why the last
+	// guard was refused, if one was. Its guard comes back as Wrote.
 	AskModel struct {
 		Base    string
 		Arrival Arrival
 		Scope   []Obs
+		Depth   int
 		Reason  string
 	}
-	// Finished is the frame's return: `return $n` ran.
+	// Finished is the root's return: its `return $n` ran.
 	Finished struct{ Value any }
-	// Exhausted is the frame's outcome when a bound is exhausted, its transition bound
-	// or one transition's asks: an error observation for its caller.
+	// Exhausted is the root's outcome when one of its bounds is exhausted:
+	// an error observation. A child's goes to its parent instead.
 	Exhausted struct{ Value map[string]any }
 )
 
 // ErrAsking is an input the machine is not waiting for.
 var ErrAsking = errors.New("the machine is not waiting for this input")
 
-// Transitions is how many transitions the frame has taken.
-func (m Machine) Transitions() int { return m.Bound.Taken() }
+func (m *Machine) top() *level { return &m.stack[len(m.stack)-1] }
+
+// Frame is the frame running now: the deepest.
+func (m Machine) Frame() Frame { return m.stack[len(m.stack)-1].frame }
+
+// Depth is how deep the running frame is: the root is 0.
+func (m Machine) Depth() int { return len(m.stack) - 1 }
+
+// Transitions is how many transitions the running frame has taken.
+func (m Machine) Transitions() int { return m.stack[len(m.stack)-1].bound.Taken() }
 
 // Asking is whether the machine waits on the model.
-func (m Machine) Asking() bool { return m.at != nil }
+func (m Machine) Asking() bool { return m.stack[len(m.stack)-1].at != nil }
 
 // Learned is whether the refinement selects what trust last ran for the
 // values it ran on, or it ran once, unlearned.
-func (m Machine) Learned() bool { return m.learned }
+func (m Machine) Learned() bool { return m.stack[len(m.stack)-1].learned }
 
-// States is the transition in progress, so far.
-func (m Machine) States() Transition { return slices.Clone(m.states) }
+// States is the running frame's transition in progress, so far.
+func (m Machine) States() Transition { return slices.Clone(m.stack[len(m.stack)-1].states) }
 
 // Step takes one input and gives the next effect.
 func (m Machine) Step(in any) (Machine, any, error) {
@@ -118,24 +148,35 @@ func (m Machine) Step(in any) (Machine, any, error) {
 	if m.Refs == nil {
 		m.Refs = map[string]Version{}
 	}
+	m.stack = slices.Clone(m.stack)
+	if len(m.stack) == 0 {
+		return m, nil, ErrAsking
+	}
+	t := m.top()
 	switch in := in.(type) {
 	case Answered:
-		if m.at != nil {
+		if t.at != nil {
 			return m, nil, ErrAsking
 		}
-		a, err := SenseReturn(m.Hashes, m.Frame, in.Bytes, in.Exit, in.Stderr)
+		a, err := SenseReturn(m.Hashes, t.frame, in.Bytes, in.Exit, in.Stderr)
 		if err != nil {
 			return m, nil, err
 		}
-		m.Frame, m.at, m.states, m.asks = a.Next, &a, nil, 0
+		m.arrive(a)
 		return m.decide()
 	case Wrote:
-		if m.at == nil {
+		if t.at == nil {
 			return m, nil, ErrAsking
 		}
 		return m.wrote(in.Guard)
 	}
 	return m, nil, ErrAsking
+}
+
+// arrive starts the running frame's next transition at a.
+func (m *Machine) arrive(a Arrival) {
+	t := m.top()
+	t.frame, t.at, t.states, t.asks = a.Next, &a, nil, 0
 }
 
 func (m Machine) version(base string) Version {
@@ -145,44 +186,47 @@ func (m Machine) version(base string) Version {
 	return EmptyVersion()
 }
 
-// decide distinguishes the arrival on its base's refinement.
+// decide distinguishes the running frame's arrival on its base's
+// refinement.
 func (m Machine) decide() (Machine, any, error) {
-	a := m.at
+	t := m.top()
+	a := t.at
 	v := m.version(a.Base)
 	sel, err := Distinguish(v.Branches, a.Vals)
 	if err != nil {
 		return m, nil, err
 	}
 	if sel.Kind == SelectConflict {
-		m.states = append(m.states, StateReconcile)
+		t.states = append(t.states, StateReconcile)
 		if sel, v, _, err = Resolve(v, a.Vals); err != nil {
 			return m, nil, err
 		}
 		m.Refs[a.Base] = v
 	}
 	if sel.Kind == SelectOne {
-		m.learned = true
+		t.learned = true
 		return m.trust(sel.Instr, a.Refs)
 	}
 	return m.ask("")
 }
 
-// ask startles the model, or, its asks spent, ends the frame.
+// ask startles the model, or, the frame's asks spent, ends the frame.
 func (m Machine) ask(reason string) (Machine, any, error) {
-	if m.asks >= m.RefinementBound {
-		base := m.at.Base
-		m.at = nil
-		return m, Exhausted{Value: map[string]any{"error": []byte("refinement bound exhausted: the model was asked " + itoa(m.asks) +
-			" times at " + base + " without a guard that runs")}}, nil
+	t := m.top()
+	if t.asks >= m.Bounds.Refinements {
+		return m.end(map[string]any{"error": []byte("refinement bound exhausted: the model was asked " +
+			itoa(t.asks) + " times at " + t.at.Base + " without a guard that runs")}, true)
 	}
-	m.states = append(m.states, StateStartle)
-	m.asks++
-	return m, AskModel{Base: m.at.Base, Arrival: *m.at, Scope: slices.Clone(m.Frame.Scope), Reason: reason}, nil
+	t.states = append(t.states, StateStartle)
+	t.asks++
+	return m, AskModel{Base: t.at.Base, Arrival: *t.at, Scope: slices.Clone(t.frame.Scope),
+		Depth: m.Depth(), Reason: reason}, nil
 }
 
-// reject refuses the guard and asks again.
+// reject refuses the guard or instruction and asks again.
 func (m Machine) reject(err error) (Machine, any, error) {
-	m.states = append(m.states, StateReject)
+	t := m.top()
+	t.states = append(t.states, StateReject)
 	return m.ask(err.Error())
 }
 
@@ -190,7 +234,8 @@ func (m Machine) reject(err error) (Machine, any, error) {
 // instruction for what arrived. A guard reading a $n outside the base is
 // not stored: it runs once, unlearned.
 func (m Machine) wrote(guard string) (Machine, any, error) {
-	a := m.at
+	t := m.top()
+	a := t.at
 	chain, err := StoreGuard(guard, a.Table)
 	var u Unstorable
 	if errors.As(err, &u) {
@@ -202,12 +247,15 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	if err := CheckGuard(chain, shapesOf(*a)); err != nil {
 		return m.reject(err)
 	}
+	if err := m.runnable(chain, a.Refs); err != nil {
+		return m.reject(err)
+	}
 	v, _, _, err := CommitChain(m.version(a.Base), chain)
 	if err != nil {
 		return m.reject(err)
 	}
 	m.Refs[a.Base] = v
-	m.states = append(m.states, StateReconcile)
+	t.states = append(t.states, StateReconcile)
 	after, err := AfterStartle(chain, v.Branches, a.Vals)
 	if err != nil {
 		return m, nil, err
@@ -215,7 +263,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	if after.Startle {
 		return m.ask("the guard does not select what arrived")
 	}
-	m.learned = after.Learned
+	t.learned = after.Learned
 	return m.trust(after.Instr, a.Refs)
 }
 
@@ -223,10 +271,11 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 // outside the base positions of their own, and runs what it selects
 // without storing anything.
 func (m Machine) unlearned(guard string) (Machine, any, error) {
-	a := m.at
+	t := m.top()
+	a := t.at
 	table, refs, vals := maps.Clone(a.Table), maps.Clone(a.Refs), maps.Clone(a.Vals)
 	next := len(refs)
-	for i, o := range m.Frame.Scope {
+	for i, o := range t.frame.Scope {
 		n := i + 1
 		if _, ok := table[n]; ok {
 			continue
@@ -239,6 +288,9 @@ func (m Machine) unlearned(guard string) (Machine, any, error) {
 	if err != nil {
 		return m.reject(err)
 	}
+	if err := m.runnable(chain, refs); err != nil {
+		return m.reject(err)
+	}
 	after, err := AfterStartle(chain, nil, vals)
 	if err != nil {
 		return m.reject(err)
@@ -246,8 +298,32 @@ func (m Machine) unlearned(guard string) (Machine, any, error) {
 	if after.Startle {
 		return m.reject(errors.New("the guard does not select what arrived"))
 	}
-	m.learned = false
+	t.learned = false
 	return m.trust(after.Instr, refs)
+}
+
+// runnable judges each instruction a guard returns by its first position,
+// before anything is committed: a guard whose instruction cannot run is
+// refused. A position's base fixes whether it holds a tool, so what is
+// runnable here is runnable wherever the guard is selected.
+func (m Machine) runnable(chain []Link, refs map[Position]int) error {
+	for _, l := range chain {
+		if l.Instr == "" {
+			continue
+		}
+		tmpl, err := Bind(l.Instr, refs)
+		if err != nil {
+			return err
+		}
+		in, err := ParseInstr(tmpl)
+		if err != nil {
+			return err
+		}
+		if _, err := ClassifyInstr(m.top().frame.Scope, in); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func shapesOf(a Arrival) map[Position]Shape {
@@ -258,48 +334,75 @@ func shapesOf(a Arrival) map[Position]Shape {
 	return out
 }
 
-// trust ends the transition, counting it, and runs the instruction: bound
-// to the frame's $n, then invoked, or the frame's return.
+// trust binds the instruction to the frame's $n and judges it by its first
+// position; an invalid one is rejected and the model asked again. Otherwise
+// it ends the transition, counting it, and runs: a tool as a process, a
+// return to the caller, or a child frame.
 func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, error) {
+	t := m.top()
 	tmpl, err := Bind(stored, refs)
 	if err != nil {
 		return m, nil, err
 	}
-	m.states = append(m.states, StateTrust)
-	if err := m.Bound.Take(m.states); errors.Is(err, ErrTransitionBound) {
-		m.at = nil
-		return m, Exhausted{Value: m.Bound.Exhausted()}, nil
+	in, err := ParseInstr(tmpl)
+	if err != nil {
+		return m.reject(err)
+	}
+	c, err := ClassifyInstr(t.frame.Scope, in)
+	if err != nil {
+		return m.reject(err)
+	}
+	t.states = append(t.states, StateTrust)
+	if err := t.bound.Take(t.states); errors.Is(err, ErrTransitionBound) {
+		return m.end(t.bound.Exhausted(), true)
 	} else if err != nil {
 		return m, nil, err
 	}
-	m.at = nil
-	fields := strings.Fields(tmpl)
-	if len(fields) == 2 && fields[0] == "return" {
-		if n, w := number(fields[1]); w == len(fields[1]) {
-			if o, ok := m.Frame.get(n); ok {
-				return m, Finished{Value: o.Value}, nil
-			}
-			return m, nil, Unbound{n}
-		}
+	t.at = nil
+	if c.Kind == InstrReturn {
+		return m.end(c.Return.Value, false)
 	}
 	contract, args := invokeOf(tmpl)
-	var binary string
-	if len(fields) > 0 {
-		binary = fields[0]
-	}
-	a, err := SenseInvoke(m.Hashes, m.Frame, contract, m.Outputs[binary], args)
+	out := m.Outputs[c.Binary]
+	a, err := SenseInvoke(m.Hashes, t.frame, contract, out, args)
 	if err != nil {
 		return m, nil, err
 	}
-	m.Frame = a.Next
+	t.frame = a.Next
+	if c.Kind == InstrDelegate {
+		m.stack = append(m.stack, level{bound: TransitionBound{Transitions: m.Bounds.Transitions}})
+		m.arrive(ChildArrival(a, c.Passed))
+		return m.decide()
+	}
+	fields := strings.Fields(tmpl)
 	argv := make([]string, len(fields))
 	for i, f := range fields {
 		argv[i], _ = references(f, func(n int) (string, error) {
-			o, _ := m.Frame.get(n)
+			o, _ := t.frame.get(n)
 			return argText(o.Value), nil
 		})
 	}
 	return m, RunInvoke{Contract: contract, Argv: argv}, nil
+}
+
+// end ends the running frame with a value: the root's is the run's outcome;
+// a child's walks back to its parent's pending invoke, which decides it.
+// exhausted marks an exhausted bound's error observation.
+func (m Machine) end(v any, exhausted bool) (Machine, any, error) {
+	m.top().at = nil
+	if len(m.stack) == 1 {
+		if exhausted {
+			return m, Exhausted{Value: v.(map[string]any)}, nil
+		}
+		return m, Finished{Value: v}, nil
+	}
+	m.stack = m.stack[:len(m.stack)-1]
+	a, err := SenseReturned(m.Hashes, m.top().frame, v)
+	if err != nil {
+		return m, nil, err
+	}
+	m.arrive(a)
+	return m.decide()
 }
 
 // invokeOf is an instruction's invoke contract, the template with its k-th

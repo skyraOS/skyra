@@ -15,11 +15,13 @@ import (
 	"strings"
 )
 
-// An Obs is an observation in a frame's scope: its value and the hash of
-// the base it arrived at.
+// An Obs is an observation in a frame's scope: its value, the hash of the
+// base it arrived at, and, for a tool, its binary. Tools are granted at the
+// root; nothing that arrives is a tool.
 type Obs struct {
 	Value any
 	Base  string
+	Tool  string
 }
 
 // An Awaiting is the invoke a frame waits on: its input base, how its
@@ -39,11 +41,13 @@ type Frame struct {
 }
 
 // WalkHashes hash an input base (the contract and the bases of what is
-// passed, in order) and a return base (the input base it answers and the
-// encoding of the shape that came back).
+// passed, in order), a return base (the input base it answers and the
+// encoding of the shape that came back), and a tool's base, keyed on its
+// binary.
 type WalkHashes struct {
 	Input  func(contract string, passed []string) string
 	Return func(input, shape string) string
+	Tool   func(binary string) string
 }
 
 type Direction uint8
@@ -115,19 +119,31 @@ func SenseInvoke(h WalkHashes, f Frame, contract string, out Output, args []int)
 // failure otherwise), the base is its input base and that shape, the value
 // is appended to the scope, and nothing is pending.
 func SenseReturn(h WalkHashes, f Frame, stdout []byte, exit int, stderr []byte) (Arrival, error) {
-	p := f.Pending
-	if p == nil {
+	if f.Pending == nil {
 		return Arrival{}, ErrIdle
 	}
-	v, s := ArriveExit(p.Output, stdout, exit, stderr)
+	v, s := ArriveExit(f.Pending.Output, stdout, exit, stderr)
+	return backTo(h, f, v, s), nil
+}
+
+// SenseReturned walks back to the pending invoke with what its child frame
+// returned: a value from the child's scope, or its error observation.
+func SenseReturned(h WalkHashes, f Frame, v any) (Arrival, error) {
+	if f.Pending == nil {
+		return Arrival{}, ErrIdle
+	}
+	return backTo(h, f, v, ShapeOf(v)), nil
+}
+
+func backTo(h WalkHashes, f Frame, v any, s Shape) Arrival {
+	p := f.Pending
 	base := h.Return(p.Input, s.Enc())
 	n := len(f.Scope) + 1
 	a := Arrival{Dir: Back, Base: base, Vals: map[string]any{Arrived.cel(): v},
 		Table: map[int]Position{n: Arrived}, Refs: map[Position]int{Arrived: n}}
 	a.pass(p.Args, p.Passed)
-	scope := append(slices.Clip(f.Scope), Obs{Value: v, Base: base})
-	a.Next = Frame{Scope: scope}
-	return a, nil
+	a.Next = Frame{Scope: append(slices.Clip(f.Scope), Obs{Value: v, Base: base})}
+	return a
 }
 
 func (a *Arrival) pass(args []int, passed []Obs) {

@@ -7,7 +7,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 {
   echo "import Invariants"
-  echo "open Refine Shape Walk Dispatch"
+  echo "open Refine Shape Walk Dispatch Frames"
   grep -oE '^theorem [A-Za-z_.]+' Invariants/*.lean | awk '{print "#print axioms " $2}'
 } > "$tmp/Axioms.lean"
 out=$(lake env lean "$tmp/Axioms.lean")

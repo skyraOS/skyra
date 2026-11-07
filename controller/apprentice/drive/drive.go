@@ -70,6 +70,7 @@ var Hashes = tree.WalkHashes{
 		return hash("input", contract, passed)
 	},
 	Return: func(input, shape string) string { return hash("return", input, shape) },
+	Tool:   func(binary string) string { return hash("tool", binary) },
 }
 
 func hash(parts ...any) string {

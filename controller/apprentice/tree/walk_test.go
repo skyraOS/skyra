@@ -11,28 +11,17 @@ import (
 var standIn = WalkHashes{
 	Input:  func(c string, bs []string) string { return "in(" + c + ";" + strings.Join(bs, ",") + ")" },
 	Return: func(i, s string) string { return "ret(" + i + ";" + s + ")" },
+	Tool:   func(b string) string { return "tool(" + b + ")" },
 }
 
 // The replay of Walk.lean's vectors: each case's events, applied in turn.
 func init() {
 	replays["walk"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		var start struct {
-			Scope []struct {
-				Value json.RawMessage
-				Base  string
-			}
-		}
+		var start struct{ Scope json.RawMessage }
 		if err := json.Unmarshal(in["frame"], &start); err != nil {
 			t.Fatal(err)
 		}
-		var f Frame
-		for _, o := range start.Scope {
-			v, err := DecodeJSON(o.Value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			f.Scope = append(f.Scope, Obs{Value: v, Base: o.Base})
-		}
+		f := Frame{Scope: scopeOf(t, start.Scope)}
 		var events []struct {
 			Invoke *struct {
 				Contract, Output string
@@ -40,6 +29,7 @@ func init() {
 			}
 			Return, Stderr []int
 			Exit           int
+			Returned       json.RawMessage
 		}
 		if err := json.Unmarshal(in["events"], &events); err != nil {
 			t.Fatal(err)
@@ -50,6 +40,12 @@ func init() {
 			var err error
 			if e.Invoke != nil {
 				a, err = SenseInvoke(standIn, f, e.Invoke.Contract, outputOf(e.Invoke.Output), e.Invoke.Args)
+			} else if e.Returned != nil {
+				v, derr := DecodeJSON(e.Returned)
+				if derr != nil {
+					t.Fatal(derr)
+				}
+				a, err = SenseReturned(standIn, f, v)
 			} else {
 				a, err = SenseReturn(standIn, f, bytesOf(e.Return), e.Exit, bytesOf(e.Stderr))
 			}
@@ -62,6 +58,32 @@ func init() {
 		}
 		return out
 	}
+}
+
+// scopeOf reads a scope as the vectors write it.
+func scopeOf(t *testing.T, raw json.RawMessage) []Obs {
+	t.Helper()
+	var os []struct {
+		Value json.RawMessage
+		Base  string
+		Tool  *string
+	}
+	if err := json.Unmarshal(raw, &os); err != nil {
+		t.Fatal(err)
+	}
+	out := []Obs{}
+	for _, o := range os {
+		v, err := DecodeJSON(o.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ob := Obs{Value: v, Base: o.Base}
+		if o.Tool != nil {
+			ob.Tool = *o.Tool
+		}
+		out = append(out, ob)
+	}
+	return out
 }
 
 func bytesOf(ns []int) []byte {
@@ -96,7 +118,11 @@ func wFault(t *testing.T, err error) any {
 func wObs(os []Obs) []any {
 	out := []any{}
 	for _, o := range os {
-		out = append(out, map[string]any{"value": numbered(o.Value), "base": o.Base})
+		var tool any
+		if o.Tool != "" {
+			tool = o.Tool
+		}
+		out = append(out, map[string]any{"value": numbered(o.Value), "base": o.Base, "tool": tool})
 	}
 	return out
 }

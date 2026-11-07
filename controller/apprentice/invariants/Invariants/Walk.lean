@@ -18,11 +18,13 @@ namespace Walk
 
 open Shape
 
-/-- An observation in a frame's scope: its value and the hash of the base
-it arrived at. -/
+/-- An observation in a frame's scope: its value, the hash of the base it
+arrived at, and, for a tool, its binary. Tools are granted at the root;
+nothing that arrives is a tool. -/
 structure Obs where
   value : Value
   base : String
+  tool : Option String := none
 
 /-- A position of a base: what arrived there, or the k-th observation passed
 to the invoke a return answers (or, at an input base, the invoke itself). -/
@@ -59,6 +61,9 @@ inductive Event where
   shell's JSON decoding of it, as in `Shape.arrive`), its exit status and
   its stderr. -/
   | ret (raw : ByteArray) (decoded : Except (Nat × Failure) Value) (exit : Nat) (stderr : ByteArray)
+  /-- What the pending invoke's child frame returned: a value, already
+  shaped, or the child's error observation. -/
+  | returned (v : Value) (hs : (shapeOf v).isSome)
 
 inductive Fault where
   /-- An invoke while one is pending: one at a time. -/
@@ -122,25 +127,70 @@ def valueAt (p : Position) : List (Position × Value) → Option Value
 
 /-! ## The walk -/
 
+/-- Forward: the invoke's base, its passed positions, and the frame waiting. -/
+def forwardTo (h : Hashes) (f : Frame) (c : String) (o : Output) (args : List Nat)
+    (passed : List Obs) : Arrival :=
+  let base := h.input c (passed.map (·.base))
+  { dir := .forward, base, env := passedEnv 0 passed, table := passedTable 0 args,
+    next := { f with pending := some ⟨base, o, args, passed⟩ } }
+
+/-- Back: the return base of the pending invoke and the shape that came
+back; the value appended, never a tool; nothing pending. -/
+def backTo (h : Hashes) (f : Frame) (p : Pending) (v : Value) (s : Shape) : Arrival :=
+  let base := h.ret p.input s.enc
+  { dir := .back, base,
+    env := (.arrived, v) :: passedEnv 0 p.passed,
+    table := (f.scope.length + 1, .arrived) :: passedTable 0 p.args,
+    next := { scope := f.scope ++ [{ value := v, base }], pending := none } }
+
 def sense (h : Hashes) (f : Frame) : Event → Except Fault Arrival
   | .invoke c o args => match f.pending with
     | some _ => .error .busy
     | none => match resolve f.scope args with
       | .error e => .error e
-      | .ok passed =>
-        let base := h.input c (passed.map (·.base))
-        .ok { dir := .forward, base, env := passedEnv 0 passed, table := passedTable 0 args,
-              next := { f with pending := some ⟨base, o, args, passed⟩ } }
+      | .ok passed => .ok (forwardTo h f c o args passed)
   | .ret raw decoded exit err => match f.pending with
     | none => .error .idle
     | some p =>
       let v := arriveExit p.output raw decoded exit err
-      let s := (shapeOf v).get (arriveExit_shaped p.output raw decoded exit err)
-      let base := h.ret p.input s.enc
-      .ok { dir := .back, base,
-            env := (.arrived, v) :: passedEnv 0 p.passed,
-            table := (f.scope.length + 1, .arrived) :: passedTable 0 p.args,
-            next := { scope := f.scope ++ [⟨v, base⟩], pending := none } }
+      .ok (backTo h f p v ((shapeOf v).get (arriveExit_shaped p.output raw decoded exit err)))
+  | .returned v hs => match f.pending with
+    | none => .error .idle
+    | some p => .ok (backTo h f p v ((shapeOf v).get hs))
+
+/-- Every step is a forward walk from a frame waiting on nothing, or a back
+walk to the frame's pending invoke. -/
+theorem sense_ok (hs : sense h f e = .ok a) :
+    (∃ c o args passed, e = .invoke c o args ∧ f.pending = none ∧
+      resolve f.scope args = .ok passed ∧ a = forwardTo h f c o args passed) ∨
+    (∃ p v s, e ≠ .invoke c' o' args' ∧ f.pending = some p ∧ a = backTo h f p v s ∧
+      shapeOf v = some s) := by
+  cases e with
+  | invoke c o args =>
+    unfold sense at hs
+    cases hp : f.pending with
+    | some _ => simp [hp] at hs
+    | none =>
+      simp only [hp] at hs
+      cases hr : resolve f.scope args with
+      | error _ => simp [hr] at hs
+      | ok passed =>
+        simp only [hr, Except.ok.injEq] at hs
+        exact .inl ⟨c, o, args, passed, rfl, rfl, hr, hs.symm⟩
+  | ret raw d x err =>
+    unfold sense at hs
+    cases hp : f.pending with
+    | none => simp [hp] at hs
+    | some p =>
+      simp only [hp, Except.ok.injEq] at hs
+      exact .inr ⟨p, _, _, by simp, rfl, hs.symm, by simp⟩
+  | returned v hv =>
+    unfold sense at hs
+    cases hp : f.pending with
+    | none => simp [hp] at hs
+    | some p =>
+      simp only [hp, Except.ok.injEq] at hs
+      exact .inr ⟨p, v, _, by simp, rfl, hs.symm, by simp⟩
 
 /-- The step at the arrival: the base's current refinement, distinguished on
 this execution's values. The direction is not read. -/
@@ -162,23 +212,20 @@ theorem return_idle (h : Hashes) (hp : f.pending = none) :
     sense h f (.ret raw d x err) = .error .idle := by
   simp [sense, hp]
 
+theorem returned_idle (h : Hashes) (hp : f.pending = none) :
+    sense h f (.returned v hv) = .error .idle := by
+  simp [sense, hp]
+
 /-- An invoke walks forward, waits, and leaves the scope as it was. -/
 theorem invoke_waits (hs : sense h f (.invoke c o args) = .ok a) :
     a.dir = .forward ∧ f.pending = none ∧ a.next.scope = f.scope ∧
       ∃ passed, resolve f.scope args = .ok passed ∧
         a.base = h.input c (passed.map (·.base)) ∧
         a.next.pending = some ⟨a.base, o, args, passed⟩ := by
-  unfold sense at hs
-  cases hp : f.pending with
-  | some _ => simp [hp] at hs
-  | none =>
-    simp only [hp] at hs
-    cases hr : resolve f.scope args with
-    | error _ => simp [hr] at hs
-    | ok passed =>
-      simp only [hr, Except.ok.injEq] at hs
-      subst hs
-      exact ⟨rfl, rfl, rfl, passed, rfl, rfl, rfl⟩
+  rcases sense_ok (c' := c) (o' := o) (args' := args) hs with
+    ⟨c₁, o₁, args₁, passed, he, hp, hr, rfl⟩ | ⟨_, _, _, hne, -⟩
+  · cases he; exact ⟨rfl, hp, rfl, passed, hr, rfl, rfl⟩
+  · exact absurd rfl hne
 
 /-- A waiting frame cannot invoke again until the return. -/
 theorem one_at_a_time (hs : sense h f (.invoke c o args) = .ok a) :
@@ -194,7 +241,21 @@ theorem return_answers (hs : sense h f (.ret raw d x err) = .ok a) :
       a.base = h.ret p.input ((shapeOf (arriveExit p.output raw d x err)).get
         (arriveExit_shaped p.output raw d x err)).enc ∧
       a.next.pending = none ∧
-      a.next.scope = f.scope ++ [⟨arriveExit p.output raw d x err, a.base⟩] := by
+      a.next.scope = f.scope ++ [{ value := arriveExit p.output raw d x err, base := a.base }] := by
+  unfold sense at hs
+  cases hp : f.pending with
+  | none => simp [hp] at hs
+  | some p =>
+    simp only [hp, Except.ok.injEq] at hs
+    subst hs
+    exact ⟨rfl, p, rfl, rfl, rfl, rfl⟩
+
+/-- A child's return walks back the same way: to the parent's pending
+invoke, at the return base of the shape of the value returned. -/
+theorem returned_answers (hs : sense h f (.returned v hv) = .ok a) :
+    a.dir = .back ∧ ∃ p, f.pending = some p ∧
+      a.base = h.ret p.input ((shapeOf v).get hv).enc ∧ a.next.pending = none ∧
+      a.next.scope = f.scope ++ [{ value := v, base := a.base }] := by
   unfold sense at hs
   cases hp : f.pending with
   | none => simp [hp] at hs
@@ -205,11 +266,23 @@ theorem return_answers (hs : sense h f (.ret raw d x err) = .ok a) :
 
 /-- `$n` never changes what it names: a step only appends. -/
 theorem scope_prefix (hs : sense h f e = .ok a) : f.scope <+: a.next.scope := by
-  cases e with
-  | invoke c o args => rw [(invoke_waits hs).2.2.1]; exact List.prefix_refl _
-  | ret raw d x err =>
-    obtain ⟨-, p, -, -, -, he⟩ := return_answers hs
-    rw [he]; exact List.prefix_append _ _
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, _, -, -, -, rfl⟩ | ⟨_, _, _, -, -, rfl, -⟩
+  · exact List.prefix_refl _
+  · exact List.prefix_append _ _
+
+/-- Nothing that arrives is a tool: a frame's tools are those it started
+with. -/
+theorem tools_kept (hs : sense h f e = .ok a) :
+    ∀ o ∈ a.next.scope, o.tool.isSome → o ∈ f.scope := by
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, _, -, -, -, rfl⟩ | ⟨_, _, _, -, -, rfl, -⟩
+  · intro o ho _; exact ho
+  · intro o ho ht
+    simp only [backTo, List.mem_append, List.mem_singleton] at ho
+    rcases ho with ho | rfl
+    · exact ho
+    · simp at ht
 
 /-! ## Locations are general -/
 
@@ -234,13 +307,10 @@ def Frame.Valid (f : Frame) : Prop :=
 
 theorem sense_valid (hs : sense h f e = .ok a) : a.next.Valid := by
   intro p hp
-  cases e with
-  | invoke c o args =>
-    obtain ⟨-, -, hsc, ps, hr, -, hp'⟩ := invoke_waits hs
-    rw [hp'] at hp; cases hp; rw [hsc]; exact hr
-  | ret raw d x err =>
-    obtain ⟨-, _, -, -, hn, -⟩ := return_answers hs
-    rw [hn] at hp; cases hp
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, ps, -, -, hr, rfl⟩ | ⟨_, _, _, -, -, rfl, -⟩
+  · simp only [forwardTo] at hp; cases hp; exact hr
+  · simp [backTo] at hp
 
 theorem resolve_get {scope : List Obs} : ∀ {args : List Nat} {ps : List Obs},
     resolve scope args = .ok ps → ∀ {k n : Nat}, args[k]? = some n → ∃ o, get? scope n = some o ∧ ps[k]? = some o
@@ -297,38 +367,22 @@ theorem get_append (h : get? scope n = some o) : get? (scope ++ more) n = some o
 base, the value `$n` names in the frame. -/
 theorem table_env (hv : f.Valid) (hs : sense h f e = .ok a) (hf : find n a.table = some p) :
     valueAt p a.env = (get? a.next.scope n).map (·.value) := by
-  cases e with
-  | invoke c o args =>
-    unfold sense at hs
-    cases hp : f.pending with
-    | some _ => simp [hp] at hs
-    | none =>
-      simp only [hp] at hs
-      cases hr : resolve f.scope args with
-      | error _ => simp [hr] at hs
-      | ok ps =>
-        simp only [hr, Except.ok.injEq] at hs
-        subst hs
-        obtain ⟨j, rfl, hj⟩ := find_passed hf
-        obtain ⟨o', hg, hpj⟩ := resolve_get hr hj
-        rw [valueAt_passed, hpj]; simp [hg]
-  | ret raw d x err =>
-    unfold sense at hs
-    cases hp : f.pending with
-    | none => simp [hp] at hs
-    | some pd =>
-      simp only [hp, Except.ok.injEq] at hs
-      subst hs
-      simp only [find] at hf
-      split at hf
-      · rename_i e; cases hf; subst e
-        simp [valueAt, get?]
-      · obtain ⟨j, rfl, hj⟩ := find_passed hf
-        obtain ⟨o', hg, hpj⟩ := resolve_get (hv pd hp) hj
-        simp only [valueAt, reduceCtorEq, ite_false, Nat.zero_add]
-        have := valueAt_passed (ps := pd.passed) (k := 0) (j := j)
-        simp only [Nat.zero_add] at this
-        rw [this, hpj, get_append hg]
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, ps, -, -, hr, rfl⟩ | ⟨pd, v, s, -, hp, rfl, -⟩
+  · obtain ⟨j, rfl, hj⟩ := find_passed hf
+    obtain ⟨o', hg, hpj⟩ := resolve_get hr hj
+    simp only [forwardTo]
+    rw [valueAt_passed, hpj]; simp [hg]
+  · simp only [backTo, find] at hf
+    split at hf
+    · rename_i e; cases hf; subst e
+      simp [backTo, valueAt, get?]
+    · obtain ⟨j, rfl, hj⟩ := find_passed hf
+      obtain ⟨o', hg, hpj⟩ := resolve_get (hv pd hp) hj
+      simp only [backTo, valueAt, reduceCtorEq, ite_false, Nat.zero_add]
+      have := valueAt_passed (ps := pd.passed) (k := 0) (j := j)
+      simp only [Nat.zero_add] at this
+      rw [this, hpj, get_append hg]
 
 /-! ## Translation: `$n` to positions and back -/
 
@@ -427,26 +481,12 @@ theorem passedTable_nodup : ∀ {k : Nat} {args : List Nat}, ((passedTable k arg
 
 /-- No two `$n` share a position, so every table binds back. -/
 theorem table_nodup (hs : sense h f e = .ok a) : (a.table.map (·.2)).Nodup := by
-  cases e with
-  | invoke c o args =>
-    unfold sense at hs
-    cases hp : f.pending with
-    | some _ => simp [hp] at hs
-    | none =>
-      simp only [hp] at hs
-      cases hr : resolve f.scope args with
-      | error _ => simp [hr] at hs
-      | ok ps => simp only [hr, Except.ok.injEq] at hs; subst hs; exact passedTable_nodup
-  | ret raw d x err =>
-    unfold sense at hs
-    cases hp : f.pending with
-    | none => simp [hp] at hs
-    | some pd =>
-      simp only [hp, Except.ok.injEq] at hs
-      subst hs
-      simp only [List.map_cons, List.nodup_cons]
-      refine ⟨fun h => ?_, passedTable_nodup⟩
-      obtain ⟨j, e⟩ := passedTable_pos h; cases e
+  rcases sense_ok (c' := "") (o' := .text) (args' := []) hs with
+    ⟨_, _, _, _, -, -, -, rfl⟩ | ⟨_, _, _, -, -, rfl, -⟩
+  · exact passedTable_nodup
+  · simp only [backTo, List.map_cons, List.nodup_cons]
+    refine ⟨fun h => ?_, passedTable_nodup⟩
+    obtain ⟨j, e⟩ := passedTable_pos h; cases e
 
 /-- What a step learns binds back in the frame that learned it. -/
 theorem learned_binds (hs : sense h f e = .ok a) (hx : store a.table xs = .ok ys) :

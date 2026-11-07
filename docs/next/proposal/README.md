@@ -29,7 +29,10 @@ New implementation proposals:
   `null` calls the model through `startle`, and a conflict is reconciled
   with the older branch keeping the overlap. Every transition counts
   against a transition bound, and every ask within one against a
-  refinement bound. Stateless steps over one root on disk.
+  refinement bound. Tools are observations; an instruction's first
+  position runs a tool, returns, or delegates to a child frame holding
+  strictly fewer tool types, so frames nest no deeper than the root's
+  tools. Stateless steps over one root on disk.
   Proposed (2026-11-06).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
