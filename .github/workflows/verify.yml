@@ -11,9 +11,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
-          cache-dependency-path: |
-            controller/apprentice/go.sum
-            controller/typesys-prototype/go.sum
+          cache-dependency-path: controller/apprentice/typesys-prototype/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -27,13 +25,13 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: controller/typesys-prototype/invariants
+        working-directory: controller/apprentice/typesys-prototype/invariants
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
           path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('controller/typesys-prototype/invariants/lean-toolchain') }}
+          key: elan-${{ runner.os }}-${{ hashFiles('controller/apprentice/typesys-prototype/invariants/lean-toolchain') }}
       - name: Install elan
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then

@@ -1,9 +1,0 @@
-{
-  "input": {
-    "type": "object",
-    "required": ["provider"],
-    "fields": {
-      "provider": {"type": "string"}
-    }
-  }
-}

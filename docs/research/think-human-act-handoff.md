@@ -23,7 +23,7 @@ this handoff and must not be silently adopted as implementation requirements.
 | Spec storage | `controller/hosts/web/work.go` stores editable text revisions in `work.json` | Runtime-authored provenance, citations, and a grant proposal bound to the same immutable version |
 | Human Run | `handleWork` reads stored text but takes tools separately from `inbound.Reach` | A pass of an exact observation already held by the human, with its grant bound to that observation |
 | Act tree | `controller/hosts/web/trees.go` boots another root using the operator registry | Invocation beneath the Mission's human position, or an explicitly verified cross-root transfer |
-| Observations | `controller/typesys-prototype/tree/core.go` has scoped passing, receive, provenance, and return rules | An import/edge from a returned Think observation into the human scope and then into Act |
+| Observations | `controller/apprentice/typesys-prototype/tree/core.go` has scoped passing, receive, provenance, and return rules | An import/edge from a returned Think observation into the human scope and then into Act |
 | Tree start | `shell.Ask` takes a string goal and target names; `Started` takes an endowment shape and digest | An endowment that preserves external observation origin and its verified source edge |
 | Enforcement | `machine.narrowing`, `boundary.Authority.Allows`, sandbox rendering, and replay | Provision the approved contracts and OS authority from the human's held ceiling before Act runs |
 

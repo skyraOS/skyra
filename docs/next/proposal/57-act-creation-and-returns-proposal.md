@@ -128,7 +128,7 @@ outside this proposal; delegates do not acquire content creation privileges.
 
 ## Required Lean definitions and proofs
 
-Write Lean for this proposal in `controller/typesys-prototype/invariants/` before
+Write Lean for this proposal in `controller/apprentice/typesys-prototype/invariants/` before
 implementing the corresponding Go behavior. Define the two act return
 instructions, their destination-dependent admission rules, and optional
 creation in `perform_effect`. Prove that:
@@ -158,7 +158,7 @@ with their vectors.
 
 ## Implementation and unresolved details
 
-Update the invariant specification in `controller/typesys-prototype/invariants/`
+Update the invariant specification in `controller/apprentice/typesys-prototype/invariants/`
 first, then the corresponding Go admission and return checks, instruction
 parser, shell tool schemas, prompts, and provider instruction handling.
 Keep replay records explicit about creation, composition, dispatch, and

@@ -7,6 +7,11 @@
 # The binaries are staged under /private/tmp/skyra-site, so the paths stored
 # in each run's genesis record name that directory and not this machine's
 # home. Usage: website/record.sh [date]   (default: today)
+# Frozen for now: this needs the controller, which the typesys-prototype branch
+# removed (only controller/apprentice/typesys-prototype remains).
+echo "record.sh is frozen: the controller it needs was removed on this branch" >&2
+exit 1
+
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/.." && pwd)

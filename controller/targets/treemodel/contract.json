@@ -1,7 +1,0 @@
-{
-  "input": {
-    "type": "object",
-    "required": ["text"],
-    "fields": {"text": {"type": "string"}, "fresh": {"type": "bool"}, "tools": {"type": "array", "items": {"type": "string"}}, "instructions": {"type": "any"}}
-  }
-}

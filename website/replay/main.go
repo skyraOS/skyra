@@ -1,4 +1,8 @@
-//go:build js && wasm
+//go:build frozen && js && wasm
+
+// Frozen for now: this imports skyra/controller, which the typesys-prototype
+// branch removed (only controller/apprentice/typesys-prototype remains). The
+// frozen build tag keeps it out of the build until it is ported or deleted.
 
 // Command replay is the controller's replay, compiled to WebAssembly for the
 // website. It exposes one function to the page:

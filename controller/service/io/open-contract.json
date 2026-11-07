@@ -1,5 +1,0 @@
-{
-  "input": {"type":"object","required":["program"],"fields":{
-    "program":{"type":"string"}
-  }}
-}

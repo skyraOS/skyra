@@ -1,6 +1,11 @@
 #!/bin/sh
 # Builds what the static site needs from the controller: replay compiled to
 # WebAssembly, and Go's loader for it. The pages themselves are plain files.
+# Frozen for now: this needs the controller, which the typesys-prototype branch
+# removed (only controller/apprentice/typesys-prototype remains).
+echo "build.sh is frozen: the controller it needs was removed on this branch" >&2
+exit 1
+
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here/.."

@@ -1,3 +1,9 @@
+//go:build frozen
+
+// Frozen for now: this imports skyra/controller, which the typesys-prototype
+// branch removed (only controller/apprentice/typesys-prototype remains). The
+// frozen build tag keeps it out of the build until it is ported or deleted.
+
 // Command export turns a recorded run (a .skyra/ tree) into the bundle the
 // website replays: exactly the records and inputs replay reads to reach the
 // head, and nothing else from the tree. It replays the run before writing it,

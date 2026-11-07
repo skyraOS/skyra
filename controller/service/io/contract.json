@@ -1,7 +1,0 @@
-{
-  "input": {"type":"object","required":["incarnation","op","wait_ms"],"fields":{
-    "incarnation":{"type":"string"},"op":{"type":"string"},
-    "deliver":{"type":"array","items":{"type":"string"}},
-    "wait_ms":{"type":"number"},"prefix":{"type":"string"}
-  }}
-}

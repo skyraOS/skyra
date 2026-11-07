@@ -1400,7 +1400,7 @@ discovers the contract; the runtime interprets, remembers, and executes it.
 
 ## Required Lean definitions and proofs
 
-Write Lean for this proposal in `controller/typesys-prototype/invariants/` before
+Write Lean for this proposal in `controller/apprentice/typesys-prototype/invariants/` before
 implementing the corresponding Go behavior. Define `sense`, shapes, the
 scope table, refinement versions with local branch ids, `distinguish`,
 `trust`, `startle` and `reconcile`, and base-relative translation. Prove
@@ -1540,7 +1540,7 @@ review.
 ## Implementation and unresolved details
 
 **Implemented: one base's refinement, pure.**
-`controller/typesys-prototype/invariants/Invariants/Refine.lean` defines branches
+`controller/apprentice/typesys-prototype/invariants/Invariants/Refine.lean` defines branches
 with local ids and ranks, guard chains with effective conditions, commit
 with narrowing (the older keeps the overlap), `distinguish`, later-found
 conflicts and `resolve`, the after-`startle` rule, and the transition bound. It
@@ -1551,7 +1551,7 @@ possibly overlapping; values that were `null` select the chain's
 instruction after commit; `resolve` never ends in a conflict; what a step
 runs after `startle` does not depend on other commits; every frame ends
 within its transition bound, model calls or not, and an exhausted frame
-returns its error. `controller/typesys-prototype/tree/refine.go`
+returns its error. `controller/apprentice/typesys-prototype/tree/refine.go`
 implements the same in the core, with CEL guards, and replays the
 Lean's `refine*` vectors. `StoreGuard` substitutes `$n` with its position
 (`arrived`, `passedK`) outside string literals and with `@arrived`,
@@ -1569,7 +1569,7 @@ shape, output that does not decode being `{at, error: bytes, message}`
 holding those bytes, where decoding failed and why; no value JSON can
 express has that shape, so a tool's own
 `{"error": …}` is never mistaken for it.
-`controller/typesys-prototype/tree/shape.go` implements the same: `DecodeJSON`
+`controller/apprentice/typesys-prototype/tree/shape.go` implements the same: `DecodeJSON`
 refuses a repeated key at any depth, `Arrive` reads bytes under a declared
 `Output`, `Shape.Enc` is the canonical encoding, and `CheckGuard` refuses at
 commit a guard selecting a key its base's shape lacks or using a kind
@@ -1608,7 +1608,7 @@ values; the table is right (the position a `$n` maps to holds that `$n`'s
 value); no two numbers share a position; and a template stored under a
 table binds back to itself. The step at an arrival is `distinguish` on the
 base's refinement, which does not read the direction.
-`controller/typesys-prototype/tree/walk.go` implements the same (`SenseInvoke`,
+`controller/apprentice/typesys-prototype/tree/walk.go` implements the same (`SenseInvoke`,
 `SenseReturn`, `StoreInstr`, `Bind`), and replays the `walk` vectors with
 stand-in hashes; a test learns a guard at a return base in one frame and
 binds its instruction in another frame to that frame's own `$n`.
@@ -1627,7 +1627,7 @@ one transition, ending in exactly one `trust`; that a learned arrival is
 trusted with no ask; that a first guard covering the arrival is trusted and
 learned after one ask; that an unlearned run stores nothing; and that what a
 startle learns is reused: the next arrival at the base with those values is
-`[trust]` with no model call. `controller/typesys-prototype/tree/dispatch.go` is
+`[trust]` with no model call. `controller/apprentice/typesys-prototype/tree/dispatch.go` is
 the `Machine`: a frame (which starts waiting on its goal, the goal arriving
 as its return), its refinements in memory, and its two bounds (`Bounds`, variables with
 defaults in `DefaultBounds`). Each input
@@ -1636,7 +1636,7 @@ invoke contract, the template with its k-th reference as `@passed[k]`, and
 argv with each `$n` as its value's text), `AskModel`, `Finished`
 (`return $n`) or `Exhausted` (an exhausted bound's error observation). It
 replays the `dispatch` vectors (1722 cases, each run twice to show reuse).
-`controller/typesys-prototype/drive` drives a machine with a model and real
+`controller/apprentice/typesys-prototype/drive` drives a machine with a model and real
 processes: argv runs with no shell, so a value is one argument whatever it
 holds. The machine bounds the asks in one transition (`Bounds.Refinements`):
 rejected guards are not transitions and do not count against the transition bound, so a
@@ -1669,7 +1669,7 @@ emitter holds (`child_sub`), a frame runs only a binary it holds
 (`run_held`), a first position that is not a tool never runs, frames nest
 no deeper than the root's tool types (`nests_depth`), and the child's
 table is right (`childTable_env`). The `frames` vectors classify thirteen
-instructions against two scopes. `controller/typesys-prototype/tree/frames.go`
+instructions against two scopes. `controller/apprentice/typesys-prototype/tree/frames.go`
 implements `Tools`, `ParseInstr`, `ClassifyInstr` and `ChildArrival`, and
 replays them. The `Machine` is a stack of frames: `NewMachine` grants the
 root its tools; a delegation pushes a child and decides its first arrival;
@@ -1712,7 +1712,7 @@ and never a tool (`child_goal`); its scope is goal, tools, context
 (`child_roles`); and a chain of delegations is at most the root's tool
 types past `k`, plus one (`delegates_depth`). `Walk.arrives_context`
 proves what arrives is context. The `frames` vectors run every case under
-`k` = 1 and 2: 148 cases. `controller/typesys-prototype/tree` implements
+`k` = 1 and 2: 148 cases. `controller/apprentice/typesys-prototype/tree` implements
 `KindOf`, `Obs.Role`, `DelegateContract` and the kinds' refusals, and puts
 the root's goal at `$1` when it arrives (`goalFirst`; the root's start is
 not yet in the Lean); `Bounds.Act` is `k`, set by the owner, and
@@ -1727,14 +1727,14 @@ function of the value it is cut from (`cut_of_value`), its base is the
 source's base and the selector (`cut_base`), and the narrowing theorems
 still hold with cuts (`argObs_tool`). The `frames` vectors gain 36 cuts:
 fields, nested fields, lines and runs of text and of UTF-8 bytes, and every
-way a cut does not apply. `controller/typesys-prototype/tree/cut.go` implements
+way a cut does not apply. `controller/apprentice/typesys-prototype/tree/cut.go` implements
 them; the machine builds argv from the cut values and passes a child its
 cuts. A test learns `$1 $2.dir` on one goal and runs a second goal with
 another directory with no ask. Live, Claude given a two-line goal writes
 `$2.contains("\n/") ? "$1 $2[2:2]" : null`, and a second run on another
 directory asks nothing.
 
-Update the invariant specification in `controller/typesys-prototype/invariants/`
+Update the invariant specification in `controller/apprentice/typesys-prototype/invariants/`
 first (the Lean definitions below), then the core's dispatch, `sense`,
 shape inference and CEL evaluation, the shell's handlers, and the store.
 Today's runtime differs on every point this proposal settles: the shell

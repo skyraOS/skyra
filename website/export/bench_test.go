@@ -1,3 +1,9 @@
+//go:build frozen
+
+// Frozen for now: this imports skyra/controller, which the typesys-prototype
+// branch removed (only controller/apprentice/typesys-prototype remains). The
+// frozen build tag keeps it out of the build until it is ported or deleted.
+
 package main
 
 import (

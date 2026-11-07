@@ -1,5 +1,10 @@
 #!/bin/bash
 # skyra: one command for the whole project. Installed onto PATH by ./install.sh.
+# Frozen for now: this needs the controller, which the typesys-prototype branch
+# removed (only controller/apprentice/typesys-prototype remains).
+echo "skyra is frozen: the controller it needs was removed on this branch" >&2
+exit 1
+
 set -euo pipefail
 
 # Resolve the repo root through the symlink install.sh puts on PATH.
