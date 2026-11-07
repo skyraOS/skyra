@@ -30,6 +30,9 @@ inductive Value where
   /-- Untrusted bytes that did not decode. JSON has no such kind: only the
   system makes it. -/
   | bytes (b : ByteArray)
+  /-- A frame's exit status. JSON has no such kind: only a frame's return
+  makes it. -/
+  | exit (status : Nat)
 
 inductive Shape where
   | null
@@ -37,6 +40,9 @@ inductive Shape where
   | num
   | str
   | bytes
+  /-- An exit status, the status in the shape: two statuses are two shapes,
+  so they are two bases. -/
+  | exit (status : Nat)
   /-- The shapes of its elements, as a set: sorted by encoding, once each. -/
   | arr (elems : List Shape)
   /-- Its keys, each with its value's shape, sorted by key. -/
@@ -65,6 +71,7 @@ def Shape.enc : Shape → String
   | .num => "number"
   | .str => "string"
   | .bytes => "bytes"
+  | .exit n => "exit(" ++ toString n ++ ")"
   | .arr es => "[" ++ encElems es ++ "]"
   | .obj fs => "{" ++ encFields fs ++ "}"
 
@@ -219,6 +226,7 @@ def shapeOf : Value → Option Shape
   | .arr xs => (shapesOf xs).map canonArr
   | .obj kvs => if (kvs.map (·.1)).Nodup then (fieldsOf kvs).map (.obj ∘ sortKeys) else none
   | .bytes _ => some .bytes
+  | .exit n => some (.exit n)
 
 def shapesOf : List Value → Option (List Shape)
   | [] => some []
@@ -445,9 +453,10 @@ theorem shapeOf_key_kind {kvs kvs' : List (String × Value)} (h₁ : shapeOf (.o
 /-! ## Arrival -/
 
 mutual
-/-- A value JSON can express: no `bytes` anywhere in it. -/
+/-- A value JSON can express: no `bytes` or exit status anywhere in it. -/
 def Value.isJson : Value → Bool
   | .bytes _ => false
+  | .exit _ => false
   | .arr xs => allJson xs
   | .obj kvs => allJsonMembers kvs
   | _ => true
@@ -484,6 +493,7 @@ theorem fieldsOf_mem_rev : ∀ {kvs : List (String × Value)} {fs}, fieldsOf kvs
 theorem shapeOf_bytes_inv : ∀ {v : Value}, shapeOf v = some .bytes → ∃ b, v = .bytes b
   | .null, h | .bool _, h | .num _, h | .str _, h => by simp [shapeOf] at h
   | .bytes b, _ => ⟨b, rfl⟩
+  | .exit _, h => by simp [shapeOf] at h
   | .arr xs, h => by
     simp only [shapeOf] at h
     cases e : shapesOf xs <;> rw [e] at h <;> simp [canonArr] at h
@@ -568,6 +578,7 @@ theorem json_no_bytes_field {v : Value} (hj : v.isJson = true) {fs : List (Strin
   cases v with
   | null | bool _ | num _ | str _ => simp [shapeOf] at h
   | bytes b => simp [Value.isJson] at hj
+  | exit _ => simp [Value.isJson] at hj
   | arr xs =>
     simp only [shapeOf] at h
     cases e : shapesOf xs <;> rw [e] at h <;> simp [canonArr] at h
@@ -603,6 +614,42 @@ theorem json_not_failed {v : Value} (hj : v.isJson = true) : shapeOf v ≠ some 
 /-- A failure is not a decode error: they are different bases. -/
 theorem failed_not_error : failedShape ≠ errorShape := by
   simp [failedShape, errorShape]
+
+/-! ### A frame's return -/
+
+/-- What a frame's `return` gives its caller, built by the core, never
+written: its exit status, 0 when the goal is done and 1 when it is not, and
+what it returns as bytes, opaque until something runs over them; stderr
+only when the return names one. A tool's output is the OS's and is not
+this: only a frame, which the core makes, returns it. -/
+def returnValue (exit : Nat) (stdout : ByteArray) : Option ByteArray → Value
+  | none => .obj [("exit", .exit exit), ("stdout", .bytes stdout)]
+  | some err => .obj [("exit", .exit exit), ("stderr", .bytes err), ("stdout", .bytes stdout)]
+
+def returnShape (exit : Nat) : Bool → Shape
+  | false => .obj [("exit", .exit exit), ("stdout", .bytes)]
+  | true => .obj [("exit", .exit exit), ("stderr", .bytes), ("stdout", .bytes)]
+
+theorem returnValue_shape : shapeOf (returnValue exit out err) = some (returnShape exit err.isSome) := by
+  cases err <;> simp [returnValue, returnShape, shapeOf, fieldsOf, sortKeys, List.Nodup, keyLe, List.mergeSort]
+
+/-- No value JSON can express has a return's shape: a value a tool or a
+child printed is never taken for a return. -/
+theorem json_not_return {v : Value} (hj : v.isJson = true) : shapeOf v ≠ some (returnShape exit e) := by
+  intro h
+  cases e
+  · exact json_no_bytes_field hj h (k := "stdout") (by simp)
+  · exact json_no_bytes_field hj h (k := "stdout") (by simp)
+
+/-- Two exit statuses are two shapes: the runtime tells them apart before
+any guard runs. -/
+theorem returnShape_exit (h : x ≠ y) : returnShape x e ≠ returnShape y e' := by
+  cases e <;> cases e' <;> simp [returnShape, h]
+
+/-- A return is not a process's failure: its exit is a status, a failure's
+a number. -/
+theorem return_not_failed : returnShape exit e ≠ failedShape := by
+  cases e <;> simp [returnShape, failedShape]
 
 /-- A contract's declared output. Without a declaration it is `text`. -/
 inductive Output where

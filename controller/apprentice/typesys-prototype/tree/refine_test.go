@@ -384,3 +384,71 @@ func TestMacroGuard(t *testing.T) {
 		t.Fatalf("selects %+v (%v)", s, err)
 	}
 }
+
+// Two instructions agree when they pass the same parameters in the same
+// order: text between them is dropped when stored, as the seven Opus asks
+// in cel/ wrote it.
+func TestInstructionsCompareByParameters(t *testing.T) {
+	scope := map[int]Position{1: Passed(1), 3: Passed(3), 4: Passed(4), 5: Passed(5), 6: Passed(6)}
+	g := `$6.restarts < 3 ? "$3 restart $6.unit" : true ? "$4 -u $6.unit -n 100 --no-pager" : null`
+	h := `$6.restarts < 3 ? "$3   $6.unit" : true ? "$4 $6.unit" : null`
+	a, err := StoreGuard(g, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := StoreGuard(h, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range a {
+		if a[i].Instr != b[i].Instr {
+			t.Fatalf("%q and %q pass the same parameters", a[i].Instr, b[i].Instr)
+		}
+	}
+	if a[0].Instr != "@passed[3] @passed[6].unit" {
+		t.Fatalf("stored %q", a[0].Instr)
+	}
+	v, _, _, err := CommitChain(Version{Branches: []Branch{}}, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _, _, err = CommitChain(v, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals := map[string]any{"passed6": map[string]any{"restarts": 1.0, "unit": "api.service"}}
+	if s, err := Distinguish(v.Branches, vals); err != nil || s.Kind != SelectOne {
+		t.Fatalf("%+v %v", s, err)
+	}
+	for in, want := range map[string]string{
+		"return  1   $5":                  "return 1 $5",
+		"return 1 $5   $6.why":            "return 1 $5 $6.why",
+		"delegate(goal($1),$3,  $4[2:3])": "delegate(goal($1), $3, $4[2:3])",
+		"diff $7 $4":                      "diff $7 $4",
+	} {
+		if got := Canonical(in); got != want {
+			t.Fatalf("Canonical(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A return is a construction: its exit status is in its shape, so two
+// statuses are two bases, and nothing JSON can express has its shape.
+func TestReturnIsConstructed(t *testing.T) {
+	done := ShapeOf(ReturnValue(0, []byte("x"), nil, false)).Enc()
+	notDone := ShapeOf(ReturnValue(1, []byte("x"), nil, false)).Enc()
+	if done == notDone || done != `{"exit":exit(0),"stdout":bytes}` {
+		t.Fatalf("%s, %s", done, notDone)
+	}
+	if s := shapeOfJSON(t, `{"exit":0,"stdout":"x"}`).Enc(); s == done {
+		t.Fatalf("a JSON value took a return's shape: %s", s)
+	}
+	for _, bad := range []string{"return $5", "return 2 $5", "return 0 $5 $6 $7", "return 0 x"} {
+		if _, err := ParseInstr(bad); err == nil {
+			t.Fatalf("%q parsed", bad)
+		}
+	}
+	if Canonical("return 1 $5 $6") == Canonical("return 1 $5") {
+		t.Fatal("a return naming a stderr is the one that does not")
+	}
+}

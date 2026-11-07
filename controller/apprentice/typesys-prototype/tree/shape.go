@@ -35,6 +35,7 @@ const (
 	ShapeBytes // made only by the system: untrusted bytes that did not decode
 	ShapeArr
 	ShapeObj
+	ShapeExit // made only by a frame's return: an exit status, Status in the shape
 )
 
 // A Shape is a base type's structure. An array's Elems are the shapes of its
@@ -44,7 +45,12 @@ type Shape struct {
 	Kind   ShapeKind
 	Elems  []Shape
 	Fields []Field
+	Status int // an exit status's: two statuses are two shapes, so two bases
 }
+
+// An ExitStatus is a frame's exit status: 0 when its goal is done, 1 when
+// it is not. JSON has no such kind: only a frame's return makes it.
+type ExitStatus int
 
 type Field struct {
 	Key   string
@@ -64,6 +70,8 @@ func (s Shape) Enc() string {
 		return "string"
 	case ShapeBytes:
 		return "bytes"
+	case ShapeExit:
+		return "exit(" + itoa(s.Status) + ")"
 	case ShapeArr:
 		parts := make([]string, len(s.Elems))
 		for i, e := range s.Elems {
@@ -115,6 +123,8 @@ func ShapeOf(v any) Shape {
 		return Shape{Kind: ShapeStr}
 	case []byte:
 		return Shape{Kind: ShapeBytes}
+	case ExitStatus:
+		return Shape{Kind: ShapeExit, Status: int(v)}
 	case []any:
 		var elems []Shape
 		seen := map[string]bool{}
@@ -297,6 +307,19 @@ func ArriveExit(out Output, stdout []byte, exit int, stderr []byte) (any, Shape)
 	return v, ShapeOf(v)
 }
 
+// ReturnValue is what a frame's return gives its caller, built by the core,
+// never written: its exit status and what it returns as bytes, opaque until
+// something runs over them, and stderr only when the return names one. A
+// tool's output is the OS's and is never this. No value JSON can express
+// has its shape, and two statuses are two shapes (Shape.lean).
+func ReturnValue(exit int, stdout []byte, stderr []byte, hasErr bool) map[string]any {
+	v := map[string]any{"exit": ExitStatus(exit), "stdout": stdout}
+	if hasErr {
+		v["stderr"] = stderr
+	}
+	return v
+}
+
 // --- guards typed by shape ---
 
 // celType is a position's CEL type from its shape. An object is a map, so a
@@ -312,6 +335,8 @@ func celType(s Shape) *cel.Type {
 		return cel.DoubleType
 	case ShapeStr:
 		return cel.StringType
+	case ShapeExit:
+		return cel.IntType
 	case ShapeBytes:
 		return cel.BytesType
 	case ShapeArr:

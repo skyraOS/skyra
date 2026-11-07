@@ -159,11 +159,11 @@ func (a *Arrival) pass(args []int, passed []Obs) {
 	}
 }
 
-// StoreInstr stores an instruction template under a scope table: each $n
-// becomes its position's reference. A $n the table lacks is Unstorable: it
-// runs once, unlearned.
+// StoreInstr stores an instruction template under a scope table: its
+// canonical form, each $n then its position's reference. A $n the table
+// lacks is Unstorable: it runs once, unlearned.
 func StoreInstr(tmpl string, table map[int]Position) (string, error) {
-	return references(tmpl, func(n int) (string, error) {
+	return references(Canonical(tmpl), func(n int) (string, error) {
 		p, ok := table[n]
 		if !ok {
 			return "", Unstorable{n}

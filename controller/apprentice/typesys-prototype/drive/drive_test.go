@@ -14,9 +14,9 @@ type script struct{ asked int }
 func (s *script) Guard(a tree.AskModel) (string, error) {
 	s.asked++
 	if len(a.Scope) == 2 { // echo, the goal
-		return `size($1) > 0 ? "$2 -n $1" : null`, nil
+		return `size($1) > 0 ? "$2 $1" : null`, nil
 	}
-	return `$3.startsWith("hello") ? "return $3" : null`, nil
+	return `$3.startsWith("hello") ? "return 0 $3" : null`, nil
 }
 
 // Real processes: the first run asks at both bases, the second asks
@@ -30,7 +30,8 @@ func TestRunLearns(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if v != "hello world" || model.asked != want {
+		r, _ := v.(map[string]any)
+		if out, _ := r["stdout"].([]byte); r["exit"] != tree.ExitStatus(0) || string(out) != "hello world\n" || model.asked != want {
 			t.Fatalf("run %d: returned %#v after %d asks", run, v, model.asked)
 		}
 		refs = m.Refs
@@ -71,7 +72,7 @@ func (s *onFailure) Guard(a tree.AskModel) (string, error) {
 		return `size($1) > 0 ? "$2 $1" : null`, nil
 	case map[string]any:
 		if arrived["exit"] != nil {
-			return `$3.exit != 0 ? "return $3" : null`, nil
+			return `$3.exit != 0 ? "return 1 $3.stdout $3.stderr" : null`, nil
 		}
 	}
 	return "null", nil
@@ -87,8 +88,8 @@ func TestRunLearnsFailure(t *testing.T) {
 			t.Fatal(err)
 		}
 		f, ok := v.(map[string]any)
-		if !ok || f["exit"] == 0.0 || !strings.Contains(string(f["stderr"].([]byte)), "/no/such/dir") ||
-			tree.ShapeOf(f).Enc() != `{"exit":number,"stderr":bytes,"stdout":bytes}` {
+		if !ok || f["exit"] != tree.ExitStatus(1) || !strings.Contains(string(f["stderr"].([]byte)), "/no/such/dir") ||
+			tree.ShapeOf(f).Enc() != `{"exit":exit(1),"stderr":bytes,"stdout":bytes}` {
 			t.Fatalf("run %d returned %#v", run, v)
 		}
 		if model.asked != want {

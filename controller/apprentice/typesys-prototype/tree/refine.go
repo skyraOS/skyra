@@ -176,13 +176,7 @@ func StoreGuard(guard string, scope map[int]Position) ([]Link, error) {
 		return nil, err
 	}
 	for i, l := range chain {
-		instr, err := references(l.Instr, func(n int) (string, error) {
-			p, ok := scope[n]
-			if !ok {
-				return "", Unstorable{n}
-			}
-			return p.ref(), nil
-		})
+		instr, err := StoreInstr(l.Instr, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +332,7 @@ func holds(cond string, vals map[string]any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	out, _, err := prg.Eval(vals)
+	out, _, err := prg.Eval(celValues(vals))
 	if err != nil {
 		return false, err
 	}
@@ -374,6 +368,35 @@ func compileCond(cond string) (cel.Program, error) {
 		return nil, iss.Err()
 	}
 	return env.Program(checked)
+}
+
+// celValues is the values as CEL reads them: an exit status as an int.
+func celValues(vals map[string]any) map[string]any {
+	var conv func(any) any
+	conv = func(v any) any {
+		switch v := v.(type) {
+		case ExitStatus:
+			return int64(v)
+		case []any:
+			out := make([]any, len(v))
+			for i, x := range v {
+				out[i] = conv(x)
+			}
+			return out
+		case map[string]any:
+			out := make(map[string]any, len(v))
+			for k, x := range v {
+				out[k] = conv(x)
+			}
+			return out
+		}
+		return v
+	}
+	out := make(map[string]any, len(vals))
+	for k, v := range vals {
+		out[k] = conv(v)
+	}
+	return out
 }
 
 func idents(e ast.Expr) []string {

@@ -407,6 +407,7 @@ def svText : Shape.Value → String
   | .arr xs => "[" ++ svTexts xs ++ "]"
   | .obj kvs => "{" ++ svMembers kvs ++ "}"
   | .bytes _ => ""
+  | .exit _ => ""
 def svTexts : List Shape.Value → String
   | [] => ""
   | [x] => svText x
@@ -428,6 +429,7 @@ def svJson : Shape.Value → Json
   | .arr xs => .arr (svJsons xs).toArray
   | .obj kvs => Json.mkObj (svJsonMembers kvs)
   | .bytes b => .arr (b.toList.map fun x => Lean.Json.num (Lean.JsonNumber.fromNat x.toNat)).toArray
+  | .exit n => Json.mkObj [("exitStatus", Lean.Json.num (Lean.JsonNumber.fromNat n))]
 def svJsons : List Shape.Value → List Json
   | [] => []
   | x :: xs => svJson x :: svJsons xs
@@ -509,7 +511,16 @@ def shapeFiles : List (String × List Json) :=
       svValues.map (fun v => case .json (svText v).toUTF8 (svDecoded v)) ++
       (svTextBytes ++ (svValues.take 12).map svText ++ ["é ok", String.singleton (Char.ofNat 0x10FFFF)]).map
         (fun b => case .text b.toUTF8 (.error (0, .syntax))) ++
-      svBad.map fun (o, b, d) => case o ⟨b.toArray⟩ d) ]
+      svBad.map fun (o, b, d) => case o ⟨b.toArray⟩ d),
+    ("returnValue",
+      [0, 1].flatMap fun x => ["", "ok\n", "\xff"].flatMap fun out =>
+        [none, some "", some "why"].map fun err =>
+          let raw (s : String) : ByteArray := if s = "\xff" then ⟨#[0xff]⟩ else s.toUTF8
+          let v := Shape.returnValue x (raw out) (err.map raw)
+          Json.mkObj [("in", Json.mkObj [("exit", Lean.Json.num (Lean.JsonNumber.fromNat x)),
+              ("stdout", jBytes (raw out)), ("stderr", jOpt (fun e => jBytes (raw e)) err)]),
+            ("out", Json.mkObj [("value", svJson v),
+              ("shape", jOpt (fun s => .str (Shape.Shape.enc s)) (Shape.shapeOf v))])]) ]
 
 /-! ## Proposal 58: the walk
 

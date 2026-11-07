@@ -5,7 +5,10 @@ its scope, each keyed on its binary; the root is granted them, and nothing
 that arrives is a tool (`Walk.tools_kept`). An instruction's first position
 decides what it is, as `exec`'s first argument does:
 
-* `return $n` returns `$n` to the frame's caller;
+* `return 0 $n` returns to the frame's caller with the goal done, and
+  `return 1 $n` with it not done; `return x $n $m` names a stderr too. The
+  caller receives `Shape.returnValue`: the exit status, `$n`'s bytes as
+  stdout and `$m`'s as stderr;
 * a `$n` holding a tool runs that binary as a process, passing it and the
   rest like any invoke;
 * `delegate(goal(a), …)` starts a child frame: its goal is taken from an

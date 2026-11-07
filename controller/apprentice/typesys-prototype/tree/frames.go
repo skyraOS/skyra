@@ -68,11 +68,14 @@ type Arg struct {
 }
 
 // An Instr is an instruction as the core reads it. Return is the returned
-// argument; N is the tool run, a whole $n; Goal is a delegation's child's
-// goal; Args are the other arguments, in order.
+// argument, its stdout, and Exit its exit status, 0 when the goal is done and
+// 1 when it is not; N is the tool run, a whole $n; Goal is a delegation's
+// child's goal; Args are the other arguments, in order: a return's is its
+// stderr, if it names one.
 type Instr struct {
 	Kind   InstrKind
 	Return Arg
+	Exit   int
 	N      int
 	Goal   Arg
 	Args   []Arg
@@ -120,12 +123,20 @@ func ParseInstr(tmpl string) (Instr, error) {
 	}
 	head := fields[0]
 	if head == "return" {
-		if len(fields) == 2 {
-			if a, ok := arg(fields[1]); ok {
-				return Instr{Kind: InstrReturn, Return: a}, nil
+		if (len(fields) == 3 || len(fields) == 4) && (fields[1] == "0" || fields[1] == "1") {
+			in := Instr{Kind: InstrReturn, Exit: int(fields[1][0] - '0')}
+			a, ok := arg(fields[2])
+			in.Return = a
+			if ok && len(fields) == 4 {
+				var e Arg
+				e, ok = arg(fields[3])
+				in.Args = []Arg{e}
+			}
+			if ok {
+				return in, nil
 			}
 		}
-		return Instr{}, errors.New("return takes one $n, or a cut of one")
+		return Instr{}, errors.New("return takes an exit status, 0 when the goal is done or 1 when it is not, then its stdout, a $n or a cut of one, and optionally its stderr, another")
 	}
 	if n, w := number(head); w > 0 {
 		if w != len(head) {
@@ -166,6 +177,36 @@ func ParseInstr(tmpl string) (Instr, error) {
 }
 
 var errInstr = errors.New("this is not an instruction: write one of the forms under Instructions")
+
+// Canonical is an instruction as it is compared: its form and its $n, in
+// order, nothing else. Text the model wrote between them is dropped, so two
+// instructions agree exactly when they pass the same parameters in the same
+// order. One that is not an instruction is left as it is, to be refused
+// where it is bound.
+func Canonical(tmpl string) string {
+	in, err := ParseInstr(tmpl)
+	if err != nil {
+		return tmpl
+	}
+	return in.String()
+}
+
+func (a Arg) String() string { return "$" + itoa(a.N) + a.Sel.String() }
+
+// String is the instruction in its canonical form.
+func (in Instr) String() string {
+	args := make([]string, len(in.Args))
+	for i, a := range in.Args {
+		args[i] = a.String()
+	}
+	switch in.Kind {
+	case InstrReturn:
+		return strings.Join(append([]string{"return", itoa(in.Exit), in.Return.String()}, args...), " ")
+	case InstrDelegate:
+		return "delegate(" + strings.Join(append([]string{"goal(" + in.Goal.String() + ")"}, args...), ", ") + ")"
+	}
+	return strings.Join(append([]string{"$" + itoa(in.N)}, args...), " ")
+}
 
 // splitArgs splits at the commas between arguments, not those inside a
 // cut's brackets or a goal's parentheses, each trimmed.
@@ -237,6 +278,7 @@ func (e Narrows) Error() string {
 type Classified struct {
 	Kind   InstrKind
 	Return Obs
+	Exit   int
 	Binary string
 	Passed []Obs
 	Order  []Arg
@@ -277,7 +319,11 @@ func ClassifyInstr(k int, h WalkHashes, scope []Obs, in Instr) (Classified, erro
 		if err != nil {
 			return Classified{}, err
 		}
-		return Classified{Kind: InstrReturn, Return: o}, nil
+		ps, err := resolve(in.Args)
+		if err != nil {
+			return Classified{}, err
+		}
+		return Classified{Kind: InstrReturn, Return: o, Exit: in.Exit, Passed: ps}, nil
 	case InstrRun:
 		if kind == KindDelegates {
 			return Classified{}, DelegateRuns

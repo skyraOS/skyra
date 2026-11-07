@@ -20,11 +20,30 @@ func init() {
 		v, s := Arrive(out, raw)
 		return map[string]any{"value": numbered(v), "shape": s.Enc()}
 	}
+	replays["returnValue"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		raw := func(ns []int) []byte {
+			b := []byte{}
+			for _, n := range ns {
+				b = append(b, byte(n))
+			}
+			return b
+		}
+		errs := dec[*[]int](t, in["stderr"])
+		var stderr []byte
+		if errs != nil {
+			stderr = raw(*errs)
+		}
+		v := ReturnValue(dec[int](t, in["exit"]), raw(dec[[]int](t, in["stdout"])), stderr, errs != nil)
+		return map[string]any{"value": numbered(v), "shape": ShapeOf(v).Enc()}
+	}
 }
 
-// numbered writes bytes as the vectors do: a list of numbers.
+// numbered writes bytes as the vectors do, a list of numbers, and an exit
+// status as {"exitStatus": n}.
 func numbered(v any) any {
 	switch v := v.(type) {
+	case ExitStatus:
+		return map[string]any{"exitStatus": int(v)}
 	case []byte:
 		out := []any{}
 		for _, b := range v {

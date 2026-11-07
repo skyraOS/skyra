@@ -80,8 +80,8 @@ func hash(parts ...any) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// Run drives a machine from its goal to its end: the value `return $n`
-// gave, or the error observation of an exhausted bound, the transition bound or one
+// Run drives a machine from its goal to its end: what its return gave
+// (tree.ReturnValue), or the error observation of an exhausted bound, the transition bound or one
 // transition's refinement bound, which the machine itself decides.
 func Run(m tree.Machine, goal []byte, model Model, world World) (tree.Machine, any, error) {
 	m, eff, err := m.Step(tree.Answered{Bytes: goal})

@@ -34,6 +34,14 @@ New implementation proposals:
   strictly fewer tool types, so frames nest no deeper than the root's
   tools. Stateless steps over one root on disk.
   Proposed (2026-11-06).
+- [59 — Deciding by tally](59-tally-proposal.md): replaces 58's *older
+  keeps the overlap*. Each committed chain is one voter, selecting at most
+  one branch; the core counts the votes by canonical instruction, finest
+  grouping first (exact, then stdout, then exit or tool, never across
+  form), and an instruction wins when its lead clears a margin set by one
+  inhibition constant. No winner startles. Commit stops narrowing, so no
+  dissenting vote is deleted; `distinguish` is the tally at inhibition 0.
+  Proposed (2026-11-07).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code

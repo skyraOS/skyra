@@ -46,25 +46,35 @@ You are given parameters $1, $2, ..., grouped by role, each with its type and va
   Context   what you were passed, and what has arrived since
 
 The expression returns an instruction, as a string, or null:
-  size($4) > 0 ? "return $4" : null
-It always ends in null. For several cases chain them: c1 ? "a" : c2 ? "b" : null. For one that always applies: true ? "a" : null.
+  size($4) > 0 ? "return 0 $4" : null
+Each condition is followed by one instruction, and the chain ends in one null, after the last instruction:
+  c ? "a" : null
+  c1 ? "a" : c2 ? "b" : null
+  c1 ? "a" : true ? "b" : null      b applies otherwise
+There is no else: c1 ? "a" : "b" is refused, and so is c1 ? "a" : c2 ? "b" : "c" : null. For otherwise, end with true ? "c" : null.
 It may use CEL's standard functions and the strings extension, called as methods: $1.trim(), $1.split("\n"), $1.lowerAscii(), $1.indexOf("x"), $1.substring(0, 3), $1.replace("a", "b"). A program's output usually ends in a newline: trim it before an exact match.
 
 `
 
 const actInstructions = `Instructions:
   $2 $1 ...                    run the tool $2, with the other parameters as its arguments
-  return $4                    finish, with $4 as the answer
+  return 0 $4                  finish: the goal is done, with $4 as the answer
+  return 1 $4                  finish: the goal is not done, with $4 as what there is
+  return 1 $4 $5               the same, with $5 as why (either return may name a why)
 `
 
 const delegateInstructions = `Instructions:
   delegate(goal($1), $2, $4)   delegate: goal(...) is the goal you delegate, taken from a parameter or part of one;
                                the rest is what you pass: at least one tool, and fewer tools than you have
-  return $4                    finish, with $4 as the answer
+  return 0 $4                  finish: the goal is done, with $4 as the answer
+  return 1 $4                  finish: the goal is not done, with $4 as what there is
+  return 1 $4 $5               the same, with $5 as why (either return may name a why)
 You do not run tools yourself: you delegate.
 `
 
 const systemTail = `
+An instruction is made only of parameters, each a $n or part of one, in one of the forms above; a return also takes its exit status, 0 or 1. Write nothing else in it: no flags, subcommands, words or quotes. An instruction with any other text is rejected.
+
 Use part of a parameter instead of copying its text:
   $2[2]              line 2 of $2
   $2[3:7]            lines 3 to 7

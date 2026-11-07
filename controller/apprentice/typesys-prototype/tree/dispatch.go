@@ -133,7 +133,8 @@ type (
 		Depth   int
 		Reason  string
 	}
-	// Finished is the root's return: its `return $n` ran.
+	// Finished is the root's return: what its `return` built
+	// (ReturnValue).
 	Finished struct{ Value any }
 	// Exhausted is the root's outcome when one of its bounds is exhausted:
 	// an error observation. A child's goes to its parent instead.
@@ -385,7 +386,11 @@ func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, erro
 	}
 	t.at = nil
 	if c.Kind == InstrReturn {
-		return m.end(c.Return.Value, false)
+		var stderr []byte
+		if len(c.Passed) > 0 {
+			stderr = []byte(argText(c.Passed[0].Value))
+		}
+		return m.end(ReturnValue(c.Exit, []byte(argText(c.Return.Value)), stderr, len(c.Passed) > 0), false)
 	}
 	contract, args := invokeOf(tmpl)
 	if c.Kind == InstrDelegate {
