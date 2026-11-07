@@ -1,16 +1,13 @@
 package drive
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 
 	"skyra/apprentice/tree"
 )
@@ -77,47 +74,38 @@ func TestText(t *testing.T) {
 	}
 }
 
-// fake answers each request with the next scripted response, recording
-// the tool results it was sent.
-type fake struct {
+// cli is a scripted claude CLI: each run gives the next reply as its JSON
+// result, and records the arguments it was run with.
+type cli struct {
 	replies []string
-	sent    []anthropic.BetaMessageNewParams
+	runs    [][]string
 }
 
-func (f *fake) New(_ context.Context, p anthropic.BetaMessageNewParams, _ ...option.RequestOption) (*anthropic.BetaMessage, error) {
-	f.sent = append(f.sent, p)
-	var m anthropic.BetaMessage
-	if err := json.Unmarshal([]byte(f.replies[0]), &m); err != nil {
-		return nil, err
-	}
-	f.replies = f.replies[1:]
-	return &m, nil
+func (c *cli) run(args, env []string) ([]byte, error) {
+	c.runs = append(c.runs, args)
+	r := c.replies[0]
+	c.replies = c.replies[1:]
+	return json.Marshal(map[string]any{"result": r, "session_id": "s1", "is_error": false})
 }
 
-func toolUse(id, name, input string) string {
-	return `{"id":"m","type":"message","role":"assistant","model":"claude-opus-5-5","stop_reason":"tool_use",
-		"content":[{"type":"tool_use","id":"` + id + `","name":"` + name + `","input":` + input + `}]}`
-}
+func prompt(args []string) string { return args[len(args)-1] }
 
-func lastResult(t *testing.T, p anthropic.BetaMessageNewParams) string {
-	t.Helper()
-	b, _ := json.Marshal(p.Messages[len(p.Messages)-1])
-	return string(b)
-}
-
-// Claude may expand within one ask and then write its guard: one ask,
-// however many expansions.
+// Claude may expand within one ask and then write its guard: one ask, one
+// session, however many expansions.
 func TestClaudeExpandsThenGuards(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 4
-	f := &fake{replies: []string{toolUse("t1", "expand", `{"n":2,"from":4}`), toolUse("t2", "guard", `{"guard":"true ? \"return $2\" : null"}`)}}
-	m := &ClaudeModel{Messages: f, Model: "claude-opus-5-5"}
+	c := &cli{replies: []string{`{"expand": {"n": 2, "from": 4}}`, "```json\n{\"guard\": \"true ? \\\"return $2\\\" : null\"}\n```"}}
+	m := &ClaudeModel{Model: "claude-opus-5-5", Run: c.run}
 	g, err := m.Guard(ask(tree.Obs{Value: "ls", Tool: "ls"}, tree.Obs{Value: "a.log b.log"}))
 	if err != nil || g != `true ? "return $2" : null` {
 		t.Fatalf("%q %v", g, err)
 	}
-	if len(f.sent) != 2 || !strings.Contains(lastResult(t, f.sent[1]), "g b.") {
-		t.Fatalf("sent %d, last %s", len(f.sent), lastResult(t, f.sent[1]))
+	if len(c.runs) != 2 || !strings.HasPrefix(prompt(c.runs[1]), "g b.") || !slices.Contains(c.runs[1], "--resume") {
+		t.Fatalf("runs %q", c.runs)
+	}
+	if slices.Contains(c.runs[0], "--resume") || c.runs[0][slices.Index(c.runs[0], "--tools")+1] != "" {
+		t.Fatalf("first run %q", c.runs[0])
 	}
 }
 
@@ -126,40 +114,61 @@ func TestClaudeExpandsThenGuards(t *testing.T) {
 func TestClaudeExpandLimit(t *testing.T) {
 	defer func(n int) { ExpandLimit = n }(ExpandLimit)
 	ExpandLimit = 1
-	f := &fake{replies: []string{toolUse("t1", "expand", `{"n":1,"from":0}`), toolUse("t2", "expand", `{"n":1,"from":0}`),
-		toolUse("t3", "guard", `{"guard":"null"}`)}}
-	m := &ClaudeModel{Messages: f}
-	if _, err := m.Guard(ask(tree.Obs{Value: "x"})); err != nil {
+	c := &cli{replies: []string{`{"expand":{"n":1,"from":0}}`, `{"expand":{"n":1,"from":0}}`, `{"guard":"null"}`}}
+	if _, err := (&ClaudeModel{Run: c.run}).Guard(ask(tree.Obs{Value: "x"})); err != nil {
 		t.Fatal(err)
 	}
-	if r := lastResult(t, f.sent[2]); !strings.Contains(r, "the most allowed") || !strings.Contains(r, `"is_error":true`) {
-		t.Fatal(r)
+	if p := prompt(c.runs[2]); !strings.Contains(p, "the most allowed") {
+		t.Fatal(p)
 	}
 }
 
-// A live run against Claude and real processes, when SKYRA_LIVE is set: it
-// spends real tokens. The tree is run twice; the second run should ask
+// A reply that is not one JSON object is taken as the guard.
+func TestClaudePlainReply(t *testing.T) {
+	c := &cli{replies: []string{`size($1) > 0 ? "return $1" : null`}}
+	if g, _ := (&ClaudeModel{Run: c.run}).Guard(ask(tree.Obs{Value: "x"})); g != `size($1) > 0 ? "return $1" : null` {
+		t.Fatal(g)
+	}
+}
+
+// Inherited API credentials are refused, never used to bill.
+func TestClaudeRefusesAPIKeys(t *testing.T) {
+	if _, err := environment([]string{"HOME=/h", "ANTHROPIC_API_KEY=sk"}); err == nil {
+		t.Fatal("an API key was accepted")
+	}
+	if env, err := environment([]string{"HOME=/h", "ANTHROPIC_API_KEY="}); err != nil || !slices.Equal(env, []string{"HOME=/h"}) {
+		t.Fatalf("%q %v", env, err)
+	}
+}
+
+// A live run against the claude CLI, under the user's login, and real
+// processes, when SKYRA_LIVE is set. The tree is run twice; the second run should ask
 // nothing.
 func TestClaudeLive(t *testing.T) {
 	if os.Getenv("SKYRA_LIVE") == "" {
-		t.Skip("set SKYRA_LIVE=1 to run against Claude")
-	}
-	dir := t.TempDir()
-	for _, f := range []string{"a.log", "b.log", "notes.txt"} {
-		if err := os.WriteFile(filepath.Join(dir, f), []byte(f), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		t.Skip("set SKYRA_LIVE=1 to run against the claude CLI")
 	}
 	model := &counting{Model: NewClaudeModel()}
 	refs := map[string]tree.Version{}
-	for run := range 2 {
+	// Two runs on different directories: what the first learns should run
+	// the second with no ask.
+	for run, files := range [][]string{{"a.log", "b.log", "notes.txt"}, {"x.go", "y.go"}} {
+		dir := t.TempDir()
+		for _, f := range files {
+			if err := os.WriteFile(filepath.Join(dir, f), []byte(f), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 		model.asks = 0
 		m := tree.NewMachine(Hashes, nil, refs, tree.DefaultBounds, []string{"ls"})
-		m, v, err := Run(m, []byte("list the files in "+dir), model, Exec{})
+		m, v, err := Run(m, []byte("list the files in this directory:\n"+dir), model, Exec{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		t.Logf("run %d: %d asks, returned %s", run, model.asks, Text(v))
+		if want := strings.Join(files, "\n"); !strings.Contains(Text(v), files[0]) {
+			t.Errorf("run %d returned %q, want the files %q", run, Text(v), want)
+		}
 		refs = m.Refs
 	}
 }

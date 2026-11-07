@@ -638,22 +638,43 @@ def fTool (b : String) : Walk.Obs := { value := .str b, base := "tool(" ++ b ++ 
 
 def fScope : List Walk.Obs :=
   [fTool "ls", fTool "cat", fTool "ls", { value := .str "/var/log", base := "goal" },
-   { value := .obj [("n", .num "2")], base := "ret(in(wc;goal);{\"n\":number})" }]
+   { value := .obj [("n", .num "2"), ("dir", .obj [("path", .str "/tmp")])], base := "ret(in(wc;goal);{\"dir\":{\"path\":string},\"n\":number})" },
+   { value := .str "a.log\nb.log\nnotes.txt\n", base := "ret(in(ls;goal);string)" },
+   { value := .bytes "one\ntwo".toUTF8, base := "ret(in(cat;goal);bytes)" },
+   { value := .bytes (ByteArray.mk #[0xff, 0x0a]), base := "ret(in(cat;goal);bytes)" }]
 
 def fBare : List Walk.Obs := [{ value := .str "/var/log", base := "goal" }]
 
+def fA (n : Nat) (sel : Frames.Sel := .whole) : Frames.Arg := { n, sel }
+
+def fLines (rs : List (Nat × Nat)) : Frames.Sel := .lines rs
+
 def fInstrs : List Frames.Instr :=
-  [ .ret 4, .ret 9, .run 1 [4], .run 2 [4, 5], .run 4 [1], .run 9 [], .run 1 [9],
-    .delegate "summarize" [1, 4], .delegate "summarize" [1, 2, 4], .delegate "summarize" [1, 3, 4],
-    .delegate "classify" [4, 5], .delegate "classify" [9], .delegate "classify" [] ]
+  [ .ret (fA 4), .ret (fA 9), .run 1 [fA 4], .run 2 [fA 4, fA 5], .run 4 [fA 1], .run 9 [], .run 1 [fA 9],
+    .delegate "summarize" [fA 1, fA 4], .delegate "summarize" [fA 1, fA 2, fA 4], .delegate "summarize" [fA 1, fA 3, fA 4],
+    .delegate "classify" [fA 4, fA 5], .delegate "classify" [fA 9], .delegate "classify" [],
+    -- cuts
+    .ret (fA 5 (.field ["n"])), .ret (fA 5 (.field ["dir", "path"])), .ret (fA 5 (.field ["missing"])),
+    .ret (fA 4 (.field ["n"])), .ret (fA 6 (fLines [(2, 3)])), .ret (fA 6 (fLines [(1, 1), (3, 3)])),
+    .ret (fA 6 (fLines [(3, 4)])), .ret (fA 6 (fLines [(0, 1)])), .ret (fA 6 (fLines [(2, 1)])),
+    .ret (fA 6 (fLines [])), .ret (fA 7 (fLines [(2, 2)])), .ret (fA 8 (fLines [(1, 1)])),
+    .ret (fA 5 (fLines [(1, 1)])), .ret (fA 4 (fLines [(1, 1)])),
+    .run 1 [fA 5 (.field ["dir", "path"])], .run 1 [fA 6 (fLines [(9, 9)])],
+    .delegate "summarize" [fA 1 (fLines [(1, 1)]), fA 2 (fLines [(1, 1)]), fA 6 (fLines [(1, 2)])],
+    .delegate "summarize" [fA 1, fA 2 (.field ["x"])] ]
+
+def fArg (a : Frames.Arg) : Json := Json.mkObj [("n", jNat a.n), ("sel", .str a.sel.enc)]
 
 def fInstr : Frames.Instr → Json
-  | .ret n => Json.mkObj [("return", jNat n)]
-  | .run t args => Json.mkObj [("run", jNat t), ("args", .arr (args.map jNat).toArray)]
-  | .delegate task args => Json.mkObj [("delegate", .str task), ("args", .arr (args.map jNat).toArray)]
+  | .ret a => Json.mkObj [("return", fArg a)]
+  | .run t args => Json.mkObj [("run", jNat t), ("args", .arr (args.map fArg).toArray)]
+  | .delegate task args => Json.mkObj [("delegate", .str task), ("args", .arr (args.map fArg).toArray)]
+
+def fCutBase (b s : String) : String := "cut(" ++ b ++ ";" ++ s ++ ")"
 
 def fReason : Frames.Reason → Json
   | .unbound n => Json.mkObj [("unbound", jNat n)]
+  | .cut n => Json.mkObj [("cut", jNat n)]
   | .notTool n => Json.mkObj [("notTool", jNat n)]
   | .narrows p h => Json.mkObj [("narrows", .arr #[jNat p, jNat h])]
 
@@ -664,10 +685,17 @@ def fKind : Frames.Kind → Json
       ("table", wTable (Frames.childTable ps)), ("tools", .arr ((Frames.tools ps).map Json.str).toArray)]
   | .reject r => Json.mkObj [("reject", fReason r)]
 
+/-- An observation as a case's input: as `wObs`, bytes marked, since JSON
+has no bytes and an array of numbers is not one. -/
+def fInObs (o : Walk.Obs) : Json :=
+  match o.value with
+  | .bytes _ => (wObs o).setObjVal! "bytes" (.bool true)
+  | _ => wObs o
+
 def framesFiles : List (String × List Json) :=
   [ ("frames", [fScope, fBare].flatMap fun sc => fInstrs.map fun i =>
-      Json.mkObj [("in", Json.mkObj [("scope", .arr (sc.map wObs).toArray), ("instr", fInstr i)]),
-        ("out", fKind (Frames.classify sc i))]) ]
+      Json.mkObj [("in", Json.mkObj [("scope", .arr (sc.map fInObs).toArray), ("instr", fInstr i)]),
+        ("out", fKind (Frames.classify fCutBase sc i))]) ]
 
 /-! ## Proposal 58: dispatch
 

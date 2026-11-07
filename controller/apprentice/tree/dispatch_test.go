@@ -3,6 +3,7 @@ package tree
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -364,5 +365,80 @@ func TestMachineChildExhausted(t *testing.T) {
 	}
 	if !slices.Equal(asks, []int{0, 1, 1, 0}) || v == nil {
 		t.Fatalf("asks %v, returned %#v", asks, v)
+	}
+}
+
+// A learned cut takes from new values: the guard says where the argument
+// comes from, never what it was, so a second goal with another directory
+// runs with no ask.
+func TestMachineCutLearns(t *testing.T) {
+	model := func(a AskModel) string {
+		if len(a.Scope) == 2 { // ls, the goal
+			return `has($2.dir) ? "$1 $2.dir" : null`
+		}
+		return `size($3) > 0 ? "return $3[1:1]" : null` // the first line ls gave
+	}
+	refs := map[string]Version{}
+	for run, c := range []struct{ goal, dir string }{{`{"dir":"/a"}`, "/a"}, {`{"dir":"/b"}`, "/b"}} {
+		m := NewMachine(standIn, nil, refs, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+		m.stack[0].frame.Pending.Output = OutputJSON
+		m, v, asks := driveTest(t, m, c.goal, model, func(r RunInvoke) Answered {
+			if !slices.Equal(r.Argv, []string{"ls", c.dir}) {
+				t.Fatalf("run %d ran %q", run, r.Argv)
+			}
+			return Answered{Bytes: []byte(c.dir + "/x.log\n" + c.dir + "/y.log\n")}
+		})
+		if v != c.dir+"/x.log" || len(asks) != 2*(1-run) {
+			t.Fatalf("run %d: returned %#v after %d asks", run, v, len(asks))
+		}
+		refs = m.Refs
+	}
+}
+
+// A child is passed a cut: its scope holds the cut value, not the whole
+// observation, and the cut is not a tool.
+func TestMachineChildGetsCut(t *testing.T) {
+	model := func(a AskModel) string {
+		if a.Depth == 1 {
+			if len(a.Scope) != 1 || a.Scope[0].Value != "b" || a.Scope[0].Tool != "" {
+				t.Fatalf("child scope %+v", a.Scope)
+			}
+			return `true ? "return $1" : null`
+		}
+		if len(a.Scope) == 2 {
+			return `true ? "second $2[2:2]" : null`
+		}
+		return `true ? "return $3" : null`
+	}
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+	if _, v, _ := driveTest(t, m, "a\nb\nc", model, nil); v != "b" {
+		t.Fatalf("returned %#v", v)
+	}
+}
+
+// A cut that does not apply is refused before it is committed, with the
+// reason.
+func TestMachineCutRefused(t *testing.T) {
+	m := NewMachine(standIn, nil, nil, Bounds{Transitions: 8, Refinements: 3}, []string{"ls"})
+	m, _, _ = m.Step(Answered{Bytes: []byte("one line")})
+	_, eff, _ := m.Step(Wrote{`true ? "$1 $2[2:2]" : null`})
+	if ask, ok := eff.(AskModel); !ok || !strings.Contains(ask.Reason, "$2[2:2] does not apply") {
+		t.Fatalf("%#v", eff)
+	}
+}
+
+func TestParseInstrCuts(t *testing.T) {
+	in, err := ParseInstr("$1 -l $2.dir.path --x=$3[1:2,4] $4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Arg{{2, Sel{Kind: SelField, Path: []string{"dir", "path"}}}, {3, Sel{Kind: SelLines, Runs: [][2]int{{1, 2}, {4, 4}}}}, {4, Sel{}}}
+	if in.Kind != InstrRun || in.N != 1 || fmt.Sprint(in.Args) != fmt.Sprint(want) {
+		t.Fatalf("%+v", in)
+	}
+	for _, bad := range []string{"$1[1:2] $2", "return $2[x]", "task $2 lit", "return $2.", "$1 $2[1"} {
+		if _, err := ParseInstr(bad); err == nil {
+			t.Errorf("%q parsed", bad)
+		}
 	}
 }

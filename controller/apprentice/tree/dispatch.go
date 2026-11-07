@@ -319,7 +319,7 @@ func (m Machine) runnable(chain []Link, refs map[Position]int) error {
 		if err != nil {
 			return err
 		}
-		if _, err := ClassifyInstr(m.top().frame.Scope, in); err != nil {
+		if _, err := ClassifyInstr(m.Hashes.Cut, m.top().frame.Scope, in); err != nil {
 			return err
 		}
 	}
@@ -348,7 +348,7 @@ func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, erro
 	if err != nil {
 		return m.reject(err)
 	}
-	c, err := ClassifyInstr(t.frame.Scope, in)
+	c, err := ClassifyInstr(m.Hashes.Cut, t.frame.Scope, in)
 	if err != nil {
 		return m.reject(err)
 	}
@@ -374,12 +374,15 @@ func (m Machine) trust(stored string, refs map[Position]int) (Machine, any, erro
 		m.arrive(ChildArrival(a, c.Passed))
 		return m.decide()
 	}
+	// argv: each field with its arguments as their values' text, cut, in
+	// the order classified.
 	fields := strings.Fields(tmpl)
 	argv := make([]string, len(fields))
+	next := 0
 	for i, f := range fields {
-		argv[i], _ = references(f, func(n int) (string, error) {
-			o, _ := t.frame.get(n)
-			return argText(o.Value), nil
+		argv[i], _ = cutRefs(f, func(int, Sel) (string, error) {
+			next++
+			return argText(c.Passed[next-1].Value), nil
 		})
 	}
 	return m, RunInvoke{Contract: contract, Argv: argv}, nil

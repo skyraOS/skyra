@@ -71,6 +71,7 @@ var Hashes = tree.WalkHashes{
 	},
 	Return: func(input, shape string) string { return hash("return", input, shape) },
 	Tool:   func(binary string) string { return hash("tool", binary) },
+	Cut:    func(base, sel string) string { return hash("cut", base, sel) },
 }
 
 func hash(parts ...any) string {

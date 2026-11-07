@@ -42,12 +42,13 @@ type Frame struct {
 
 // WalkHashes hash an input base (the contract and the bases of what is
 // passed, in order), a return base (the input base it answers and the
-// encoding of the shape that came back), and a tool's base, keyed on its
-// binary.
+// encoding of the shape that came back), a tool's base, keyed on its
+// binary, and a cut's, keyed on the base it was cut from and the selector.
 type WalkHashes struct {
 	Input  func(contract string, passed []string) string
 	Return func(input, shape string) string
 	Tool   func(binary string) string
+	Cut    func(base, sel string) string
 }
 
 type Direction uint8

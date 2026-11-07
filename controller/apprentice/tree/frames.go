@@ -5,6 +5,7 @@
 // binary; a word is a task, delegating to a child frame passed observations,
 // tools among them like any other. A child holds strictly fewer tool types
 // than its emitter, so frames nest no deeper than the root's tool types.
+// An argument is a $n or a cut of one (cut.go).
 package tree
 
 import (
@@ -35,13 +36,35 @@ const (
 	InstrDelegate
 )
 
-// An Instr is an instruction as the core reads it. N is the returned $n or
-// the tool run; Task names a delegation; Args are the other $n, in order.
+// An Arg is a $n and what it takes of it.
+type Arg struct {
+	N   int
+	Sel Sel
+}
+
+// An Instr is an instruction as the core reads it. Return is the returned
+// argument; N is the tool run, a whole $n; Task names a delegation; Args
+// are the other arguments, in order.
 type Instr struct {
-	Kind InstrKind
-	N    int
-	Task string
-	Args []int
+	Kind   InstrKind
+	Return Arg
+	N      int
+	Task   string
+	Args   []Arg
+}
+
+// arg reads a field that is one argument: $n and its selector, nothing
+// else.
+func arg(f string) (Arg, bool) {
+	n, w := number(f)
+	if w == 0 {
+		return Arg{}, false
+	}
+	s, sw, err := selector(f[w:])
+	if err != nil || w+sw != len(f) {
+		return Arg{}, false
+	}
+	return Arg{n, s}, true
 }
 
 // ParseInstr reads a bound instruction, its $n the frame's, by its first
@@ -54,22 +77,24 @@ func ParseInstr(tmpl string) (Instr, error) {
 	head := fields[0]
 	if head == "return" {
 		if len(fields) == 2 {
-			if n, w := number(fields[1]); w == len(fields[1]) {
-				return Instr{Kind: InstrReturn, N: n}, nil
+			if a, ok := arg(fields[1]); ok {
+				return Instr{Kind: InstrReturn, Return: a}, nil
 			}
 		}
-		return Instr{}, errors.New("return takes one $n")
+		return Instr{}, errors.New("return takes one $n, or a cut of one")
 	}
 	if n, w := number(head); w > 0 {
 		if w != len(head) {
-			return Instr{}, errors.New("the first position is a $n holding a tool, or a task")
+			return Instr{}, errors.New("the first position is a whole $n holding a tool, or a task")
 		}
 		in := Instr{Kind: InstrRun, N: n}
 		for _, f := range fields[1:] {
-			references(f, func(n int) (string, error) {
-				in.Args = append(in.Args, n)
+			if _, err := cutRefs(f, func(n int, s Sel) (string, error) {
+				in.Args = append(in.Args, Arg{n, s})
 				return "", nil
-			})
+			}); err != nil {
+				return Instr{}, err
+			}
 		}
 		return in, nil
 	}
@@ -78,11 +103,11 @@ func ParseInstr(tmpl string) (Instr, error) {
 	}
 	in := Instr{Kind: InstrDelegate, Task: head}
 	for _, f := range fields[1:] {
-		n, w := number(f)
-		if w == 0 || w != len(f) {
-			return Instr{}, errors.New("a delegation passes only observations: " + f + " is not a $n")
+		a, ok := arg(f)
+		if !ok {
+			return Instr{}, errors.New("a delegation passes only observations: " + f + " is not a $n or a cut of one")
 		}
-		in.Args = append(in.Args, n)
+		in.Args = append(in.Args, a)
 	}
 	return in, nil
 }
@@ -92,6 +117,17 @@ type NotTool struct{ N int }
 
 func (e NotTool) Error() string {
 	return "$" + itoa(e.N) + " is not a tool: the first position runs a tool or names a task"
+}
+
+// CutFails is a cut that does not apply to $n's value: not text, lines it
+// does not have, or a field it does not hold.
+type CutFails struct {
+	N   int
+	Sel Sel
+}
+
+func (e CutFails) Error() string {
+	return "$" + itoa(e.N) + e.Sel.String() + " does not apply: lines cut text, and a field cut an object holding it"
 }
 
 // Narrows is a delegation that does not narrow: a child holds fewer tool
@@ -113,16 +149,28 @@ type Classified struct {
 	Passed []Obs
 }
 
-// ClassifyInstr judges an instruction against the frame's scope. A rejection is
-// Unbound, NotTool or Narrows.
-func ClassifyInstr(scope []Obs, in Instr) (Classified, error) {
+// ClassifyInstr judges an instruction against the frame's scope, cutting
+// its arguments; cutBase keys a cut's base. A rejection is Unbound,
+// CutFails, NotTool or Narrows.
+func ClassifyInstr(cutBase func(base, sel string) string, scope []Obs, in Instr) (Classified, error) {
 	f := Frame{Scope: scope}
-	resolve := func(args []int) ([]Obs, error) {
+	argObs := func(a Arg) (Obs, error) {
+		o, ok := f.get(a.N)
+		if !ok {
+			return Obs{}, Unbound{a.N}
+		}
+		c, ok := CutObs(cutBase, a.Sel, o)
+		if !ok {
+			return Obs{}, CutFails{a.N, a.Sel}
+		}
+		return c, nil
+	}
+	resolve := func(args []Arg) ([]Obs, error) {
 		var ps []Obs
-		for _, n := range args {
-			o, ok := f.get(n)
-			if !ok {
-				return nil, Unbound{n}
+		for _, a := range args {
+			o, err := argObs(a)
+			if err != nil {
+				return nil, err
 			}
 			ps = append(ps, o)
 		}
@@ -130,9 +178,9 @@ func ClassifyInstr(scope []Obs, in Instr) (Classified, error) {
 	}
 	switch in.Kind {
 	case InstrReturn:
-		o, ok := f.get(in.N)
-		if !ok {
-			return Classified{}, Unbound{in.N}
+		o, err := argObs(in.Return)
+		if err != nil {
+			return Classified{}, err
 		}
 		return Classified{Kind: InstrReturn, Return: o}, nil
 	case InstrRun:
@@ -163,10 +211,10 @@ func ClassifyInstr(scope []Obs, in Instr) (Classified, error) {
 // invoke stands at, with the passed positions, the child's $k+1 the k-th
 // observation passed.
 func ChildArrival(invoke Arrival, passed []Obs) Arrival {
-	a := Arrival{Dir: Forward, Base: invoke.Base, Vals: invoke.Vals,
+	a := Arrival{Dir: Forward, Base: invoke.Base, Vals: map[string]any{},
 		Table: map[int]Position{}, Refs: map[Position]int{}}
-	for k := range passed {
-		a.Table[k+1], a.Refs[Passed(k)] = Passed(k), k+1
+	for k, o := range passed {
+		a.Table[k+1], a.Refs[Passed(k)], a.Vals[Passed(k).cel()] = Passed(k), k+1, o.Value
 	}
 	a.Next = Frame{Scope: passed}
 	return a

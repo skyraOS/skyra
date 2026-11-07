@@ -1,45 +1,43 @@
 package drive
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/anthropics/anthropic-sdk-go/packages/param"
-	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 
 	"skyra/apprentice/tree"
 )
 
-// ClaudeModel is the model the machine startles: Claude, asked once per
-// AskModel. Within the ask it may expand truncated values (ExpandLimit
-// times, never counted against the refinement bound) and ends by writing
-// its guard.
+// ClaudeModel is the model the machine startles: the local Claude Code CLI
+// (`claude -p`) under the user's existing login, as controller/claude's
+// provider runs it. Its own tools, commands, hooks and MCP servers are off,
+// and inherited API credentials are refused rather than silently switching
+// a subscription to metered billing.
+//
+// One ask is one CLI session. Each reply is one JSON object: an expand,
+// answered by resuming the session (ExpandLimit times, never counted
+// against the refinement bound), or the guard, which ends the ask.
 type ClaudeModel struct {
-	Messages messenger // the Messages API; NewClaudeModel's client by default
-	Model    string
-	Effort   anthropic.BetaOutputConfigEffort
+	Program string // the CLI; "claude" on PATH by default
+	Model   string
+	Effort  string
+	// Run runs the CLI with these arguments and environment and gives its
+	// stdout; exec by default.
+	Run func(args, env []string) ([]byte, error)
 }
 
-type messenger interface {
-	New(ctx context.Context, p anthropic.BetaMessageNewParams, opts ...option.RequestOption) (*anthropic.BetaMessage, error)
-}
-
-// NewClaudeModel is Claude Opus 5.5 through the default client, which reads
-// its credentials from the environment.
+// NewClaudeModel is Claude Opus 5.5 through the claude CLI.
 func NewClaudeModel() *ClaudeModel {
-	c := anthropic.NewClient()
-	return &ClaudeModel{Messages: &c.Beta.Messages, Model: "claude-opus-5-5", Effort: anthropic.BetaOutputConfigEffortHigh}
+	return &ClaudeModel{Program: "claude", Model: "claude-opus-5-5", Effort: "high"}
 }
 
-// The system prompt is fixed, so it caches.
 const claudeSystem = `You write guards for a tree that learns. Each time it reaches a place it has not learned, it asks you what to do there. What you write is stored and reused: the next time anything arrives at the same base with values your guard selects, it runs with no model call.
 
-Observations are named $1, $2, ... in the frame's scope. A tool observation names a binary the frame may run. Values are truncated; call expand to read more of one.
+Observations are named $1, $2, ... in the frame's scope. A tool observation names a binary the frame may run. Values are truncated where marked.
 
 A guard is CEL that returns an instruction or null:
   size($2) > 0 ? "$1 $2" : null
@@ -51,99 +49,128 @@ An instruction is read by its first field:
   $t args...           $t is a tool: runs its binary with the args, each $n replaced by its value
   task $a $b ...       delegates to a child frame named task, passing only $n; the child must be passed fewer tools than this frame holds
 
-Your guard must select something for what has arrived. When you are done, call guard with it.`
+Anywhere an instruction takes $n it may take a cut of it instead:
+  $2[3:7]              lines 3 to 7 of $2's text, counted from 1
+  $2[1,4:5]            several runs of lines, joined
+  $2.dir               the field dir of $2, a JSON object ($2.dir.path goes deeper)
+Never copy text out of an observation into a guard or an instruction: what you write is reused on new values, so a copied value is only right for this one. Say where it comes from with a cut, and condition on shapes and fields rather than exact values.
 
-func (m *ClaudeModel) tools() []anthropic.BetaToolUnionParam {
-	expand := anthropic.BetaToolParam{
-		Name:        "expand",
-		Description: param.NewOpt("Read more of a truncated value: up to the show limit of $n's text from the byte offset from."),
-		Strict:      param.NewOpt(true),
-		InputSchema: anthropic.BetaToolInputSchemaParam{
-			Properties: map[string]any{
-				"n":    map[string]any{"type": "integer", "description": "the observation's number, as in $n"},
-				"from": map[string]any{"type": "integer", "description": "the byte offset to read from"},
-			},
-			Required:    []string{"n", "from"},
-			ExtraFields: map[string]any{"additionalProperties": false},
-		},
+Your guard must select something for what has arrived.
+
+Reply with exactly one JSON object and nothing else:
+  {"expand": {"n": 3, "from": 2048}}   to read more of a truncated value from a byte offset
+  {"guard": "<your guard>"}            to answer`
+
+// arguments are the provider's: print mode, the user's login and settings,
+// and nothing of Claude Code's own.
+func (m *ClaudeModel) arguments(session, prompt string) []string {
+	args := []string{"-p", "--output-format", "json", "--model", m.Model, "--tools", "", "--disable-slash-commands",
+		"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--setting-sources", "user",
+		"--settings", `{"disableAllHooks":true,"switchModelsOnFlag":false}`, "--system-prompt", claudeSystem}
+	if m.Effort != "" {
+		args = append(args, "--effort", m.Effort)
 	}
-	guard := anthropic.BetaToolParam{
-		Name:        "guard",
-		Description: param.NewOpt("Write your guard: CEL returning an instruction or null. This ends your turn."),
-		Strict:      param.NewOpt(true),
-		InputSchema: anthropic.BetaToolInputSchemaParam{
-			Properties:  map[string]any{"guard": map[string]any{"type": "string"}},
-			Required:    []string{"guard"},
-			ExtraFields: map[string]any{"additionalProperties": false},
-		},
+	if session != "" {
+		args = append(args, "--resume", session)
 	}
-	return []anthropic.BetaToolUnionParam{{OfTool: &expand}, {OfTool: &guard}}
+	return append(args, "--", prompt)
 }
 
-// Guard asks Claude for a guard at the ask. Expansions are answered in the
-// same conversation. If Claude ends without calling guard, its text is the
-// guard, and the machine refuses it if it is not one.
+// environment refuses inherited API and provider credentials: the CLI uses
+// the subscription login under HOME, never metered API billing.
+func environment(env []string) ([]string, error) {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		switch key {
+		case "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL",
+			"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY":
+			if value != "" {
+				return nil, fmt.Errorf("the subscription-only Claude model refuses %s", key)
+			}
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+func (m *ClaudeModel) run(args, env []string) ([]byte, error) {
+	if m.Run != nil {
+		return m.Run(args, env)
+	}
+	program := m.Program
+	if program == "" {
+		program = "claude"
+	}
+	cmd := exec.Command(program, args...)
+	cmd.Env = env
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("%s: %v: %s", program, err, strings.TrimSpace(errOut.String()))
+	}
+	return out.Bytes(), nil
+}
+
+// A reply is one expand or the guard.
+type reply struct {
+	Expand *struct{ N, From int }
+	Guard  *string
+}
+
+// parseReply reads the JSON object in the model's text, allowing a fence
+// around it. Text that holds none is taken as the guard, and the machine
+// refuses it if it is not one.
+func parseReply(text string) reply {
+	s := strings.TrimSpace(text)
+	if i, j := strings.Index(s, "{"), strings.LastIndex(s, "}"); i >= 0 && j > i {
+		var r reply
+		if json.Unmarshal([]byte(s[i:j+1]), &r) == nil && (r.Expand != nil || r.Guard != nil) {
+			return r
+		}
+	}
+	return reply{Guard: &s}
+}
+
+// Guard asks Claude for a guard at the ask, answering its expansions in
+// the same session.
 func (m *ClaudeModel) Guard(a tree.AskModel) (string, error) {
-	ctx := context.Background()
-	msgs := []anthropic.BetaMessageParam{anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(Render(a)))}
-	expands := 0
-	for {
-		resp, err := m.Messages.New(ctx, anthropic.BetaMessageNewParams{
-			Model:        m.Model,
-			MaxTokens:    16000,
-			System:       []anthropic.BetaTextBlockParam{{Text: claudeSystem, CacheControl: anthropic.NewBetaCacheControlEphemeralParam()}},
-			Messages:     msgs,
-			Tools:        m.tools(),
-			OutputConfig: anthropic.BetaOutputConfigParam{Effort: m.Effort},
-			Fallbacks:    anthropic.BetaFallbacksParamUnion{OfDefault: constant.ValueOf[constant.Default]()},
-			Betas:        []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01},
-		})
+	env, err := environment(os.Environ())
+	if err != nil {
+		return "", err
+	}
+	session, prompt := "", Render(a)
+	for expands := 0; ; {
+		out, err := m.run(m.arguments(session, prompt), env)
 		if err != nil {
 			return "", err
 		}
-		switch resp.StopReason {
-		case anthropic.BetaStopReasonRefusal:
-			return "", fmt.Errorf("the model declined: %s", resp.StopDetails.Explanation)
-		case anthropic.BetaStopReasonMaxTokens:
-			return "", errors.New("the model ran out of tokens before writing a guard")
+		var res struct {
+			Result    string `json:"result"`
+			SessionID string `json:"session_id"`
+			IsError   bool   `json:"is_error"`
 		}
-		msgs = append(msgs, resp.ToParam())
-		var results []anthropic.BetaContentBlockParamUnion
-		var text strings.Builder
-		for _, block := range resp.Content {
-			switch b := block.AsAny().(type) {
-			case anthropic.BetaTextBlock:
-				text.WriteString(b.Text)
-			case anthropic.BetaToolUseBlock:
-				switch b.Name {
-				case "guard":
-					var in struct{ Guard string }
-					if err := json.Unmarshal([]byte(b.JSON.Input.Raw()), &in); err != nil {
-						results = append(results, anthropic.NewBetaToolResultBlock(b.ID, "the input is not {\"guard\": string}", true))
-						continue
-					}
-					return in.Guard, nil
-				case "expand":
-					var in struct{ N, From int }
-					out, isErr := "", false
-					if err := json.Unmarshal([]byte(b.JSON.Input.Raw()), &in); err != nil {
-						out, isErr = "the input is not {\"n\": integer, \"from\": integer}", true
-					} else if expands >= ExpandLimit {
-						out, isErr = fmt.Sprintf("expanded %d times in this ask, the most allowed: write your guard", expands), true
-					} else if out, err = Expand(a, in.N, in.From); err != nil {
-						out, isErr = err.Error(), true
-					} else {
-						expands++
-					}
-					results = append(results, anthropic.NewBetaToolResultBlock(b.ID, out, isErr))
-				default:
-					results = append(results, anthropic.NewBetaToolResultBlock(b.ID, "no tool "+b.Name+": expand or guard", true))
-				}
+		if err := json.Unmarshal(out, &res); err != nil {
+			return "", fmt.Errorf("the claude CLI's output is not its JSON result: %v", err)
+		}
+		if res.IsError {
+			return "", errors.New("the claude CLI failed: " + res.Result)
+		}
+		session = res.SessionID
+		r := parseReply(res.Result)
+		if r.Guard != nil {
+			return *r.Guard, nil
+		}
+		switch {
+		case expands >= ExpandLimit:
+			prompt = fmt.Sprintf("Expanded %d times in this ask, the most allowed: reply with your guard.", expands)
+		default:
+			if prompt, err = Expand(a, r.Expand.N, r.Expand.From); err != nil {
+				prompt = "Not expanded: " + err.Error()
+			} else {
+				expands++
 			}
 		}
-		if len(results) == 0 {
-			return strings.TrimSpace(text.String()), nil
-		}
-		msgs = append(msgs, anthropic.NewBetaUserMessage(results...))
 	}
 }

@@ -564,6 +564,22 @@ frame's 2”), and the model asked again within the refinement bound. A
 position's base fixes whether it holds a tool, so a guard runnable where
 it is written is runnable wherever it is selected.
 
+**An argument is a `$n` or a cut of one.** Anywhere an instruction takes
+`$n` it may take a cut: runs of its lines, `$2[3:7]` or `$2[1,4:5]`,
+counted from 1 and inclusive, a final newline ending the last line; or a
+field path, `$2.dir.path`. Lines cut text (a string, or bytes that are
+UTF-8); a field cuts a JSON object that holds it. The model never writes
+the value: the instruction says where to take it from, so what is learned
+applies to the next value, as the old machine's goal cut did. A cut is
+part of binding an instruction: it is not a transition and not an ask,
+and costs neither bound. A cut observation's base is keyed on the base it
+was cut from and the selector, never the value, and it is never a tool:
+cutting a tool passes its name as text. A cut that does not apply (not
+text, lines it does not have, a field it does not hold) is an invalid
+instruction, refused with the reason. Without cuts, a model given the goal
+“list the files in /tmp/x” can only copy the path into its instruction,
+and what it learns runs for that one goal.
+
 **A child narrows: it holds strictly fewer tool types than its emitter.**
 Tool types are binaries, counted once however many observations hold
 them. What a child is passed is its scope, `$1` first; it holds only tools
@@ -1621,17 +1637,37 @@ runs a non-tool, and deliver a child's exhausted refinement bound to its
 parent as an observation.
 
 **Implemented: a real model, in the shell.** `drive.ClaudeModel` answers
-`AskModel` with Claude. An ask is rendered (`drive.Render`) with each `$n`'s
+`AskModel` with the local `claude -p` CLI under the user's login, as
+`controller/claude`'s provider runs it: Claude Code's own tools, commands,
+hooks and MCP servers off, and inherited API credentials refused rather
+than billed. An ask is rendered (`drive.Render`) with each `$n`'s
 shape and value, tools by binary, which `$n` are in the base, the depth, and
 why the last guard was refused. A value is shown up to `ShowLimit` bytes
 (2048, a variable) and marked where it is truncated; within the same ask
-the model may call `expand` to read more from an offset, at most
+(one CLI session, resumed) the model may reply with an expand to read more
+from an offset, at most
 `ExpandLimit` times (16, a variable). Expanding is part of one ask, so it
 never counts against the refinement bound, and the machine never sees it:
-what a value shows the model is presentation, not the core's. The ask ends
-when the model calls `guard`; a reply with no call is taken as the guard,
-and the machine refuses it if it is not one. Tests use a scripted Messages
-API; a live run against Claude and real `ls` runs when `SKYRA_LIVE` is set.
+what a value shows the model is presentation, not the core's. Each reply is one
+JSON object, an expand or the guard, which ends the ask; a reply holding
+neither is taken as the guard, and the machine refuses it if it is not one.
+Tests use a scripted CLI; a live run against the CLI and real `ls` runs
+when `SKYRA_LIVE` is set.
+
+**Implemented: cuts, pure.** `Frames.lean` defines selectors (`Sel`:
+whole, lines, field), `cutValue`, `cutObs` and arguments (`Arg`), and
+classifies instructions over them. It proves all of `$n` is `$n`
+(`cut_whole`), a cut is never a tool (`cut_not_tool`), a cut's value is a
+function of the value it is cut from (`cut_of_value`), its base is the
+source's base and the selector (`cut_base`), and the narrowing theorems
+still hold with cuts (`argObs_tool`). The `frames` vectors gain 36 cuts:
+fields, nested fields, lines and runs of text and of UTF-8 bytes, and every
+way a cut does not apply. `controller/apprentice/tree/cut.go` implements
+them; the machine builds argv from the cut values and passes a child its
+cuts. A test learns `$1 $2.dir` on one goal and runs a second goal with
+another directory with no ask. Live, Claude given a two-line goal writes
+`$2.contains("\n/") ? "$1 $2[2:2]" : null`, and a second run on another
+directory asks nothing.
 
 Update the invariant specification in `controller/apprentice/invariants/`
 first (the Lean definitions below), then the core's dispatch, `sense`,
@@ -1666,6 +1702,9 @@ Deterministic tests must demonstrate:
   delegation passing as many tool types as its emitter holds is refused;
   a child holds strictly fewer, so frames nest no deeper than the root's
   tool types; nothing that arrives is a tool.
+- A cut takes its value from what it is cut from, is never a tool, and is
+  keyed on the source's base and the selector; one that does not apply is
+  refused; a learned cut runs on new values with no ask.
 - A child's return, or its exhausted bound's error observation, arrives at
   its parent's pending invoke at `H(input base, shape)`, as a process's
   result does.

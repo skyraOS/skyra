@@ -12,6 +12,7 @@ var standIn = WalkHashes{
 	Input:  func(c string, bs []string) string { return "in(" + c + ";" + strings.Join(bs, ",") + ")" },
 	Return: func(i, s string) string { return "ret(" + i + ";" + s + ")" },
 	Tool:   func(b string) string { return "tool(" + b + ")" },
+	Cut:    func(b, s string) string { return "cut(" + b + ";" + s + ")" },
 }
 
 // The replay of Walk.lean's vectors: each case's events, applied in turn.
@@ -67,14 +68,22 @@ func scopeOf(t *testing.T, raw json.RawMessage) []Obs {
 		Value json.RawMessage
 		Base  string
 		Tool  *string
+		Bytes bool
 	}
 	if err := json.Unmarshal(raw, &os); err != nil {
 		t.Fatal(err)
 	}
 	out := []Obs{}
 	for _, o := range os {
-		v, err := DecodeJSON(o.Value)
-		if err != nil {
+		var err error
+		var v any
+		if o.Bytes {
+			var ns []int
+			if err := json.Unmarshal(o.Value, &ns); err != nil {
+				t.Fatal(err)
+			}
+			v = bytesOf(ns)
+		} else if v, err = DecodeJSON(o.Value); err != nil {
 			t.Fatal(err)
 		}
 		ob := Obs{Value: v, Base: o.Base}
