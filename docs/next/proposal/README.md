@@ -50,7 +50,8 @@ New implementation proposals:
   counted by `(model, focus)` source, so resampling cannot make a habit
   and a lone first commit cannot run a destructive tool. Voters whose
   lineage the tool's integrity allowlist (53) refuses abstain.
-  Proposed (2026-11-07).
+  Proposed (2026-11-07); stale (2026-11-09): written against 58's
+  contracts, which 61 replaces.
 - [61 — Definition and instantiation](61-static-and-dynamic-proposal.md):
   replaces 58's data model with six pairs, a definition and its
   instantiation each: interface and observation, implementation and

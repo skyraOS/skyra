@@ -2,7 +2,9 @@
 
 Date: 2026-11-07
 
-Status: **proposed**. Builds on [59](59-tally-proposal.md) and answers its
+Status: **stale** (2026-11-09): written against 58's contracts, which
+[61](61-static-and-dynamic-proposal.md) replaces; not to be built as is.
+Builds on [59](59-tally-proposal.md) and answers its
 open questions 2 (are two voters independent?) and 3 (where `ι` lives).
 Uses the lineage of [53](53-capabilities-and-information-flow-proposal.md).
 Everything else in 59 stands: voters, ballots, levels, `required`, finest
