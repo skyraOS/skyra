@@ -343,4 +343,286 @@ theorem key_arrived (rootOf : DefLoc → DefLoc) (f : Frame) (o : Observation) :
     (key rootOf { f with state := f.state ++ [.arrived o] }).seen = seen f ++ [o.iface] := by
   simp [key, seen, arrivals_append, arrivals]
 
+/-! ## Kinds and direction
+
+To invoke is to push, to return is to pop, and each operator's direction is
+its form. A frame's kind decides which operators it emits: an agent's by
+its scope's tool types under `k`, a leaf's by position, the frame an `act`
+pushes. -/
+
+/-- Direction is a function of the operator: every operator but `return`
+pushes. -/
+def Op.pushes : Op → Bool
+  | .ret => false
+  | _ => true
+
+/-- A scope's tool types: the leaves among its interfaces, each once. -/
+def toolTypes (entries : List Iface) : List DefLoc :=
+  (entries.filterMap fun | .leaf b => some b | _ => none).eraseDups
+
+/-- An agent's kind, counted under `k`: at most `k` tool types acts, more
+delegates, and none is no agent. -/
+def agentKind (k : Nat) (entries : List Iface) : Option Kind :=
+  let t := (toolTypes entries).length
+  if t = 0 then none else if t ≤ k then some .act else some .delegate
+
+/-- The operators a kind emits. -/
+def ops : Kind → List Op
+  | .root => [.delegate, .boot, .ret]
+  | .delegate => [.delegate, .ret]
+  | .act => [.act, .ret]
+  | .leaf => [.ret]
+
+/-- The kind of the frame an operator pushes, given its scope's
+interfaces: an act pushes a leaf, a delegation an agent counted under
+`k`, a boot a root, and a return pushes nothing. -/
+def pushed (k : Nat) : Op → List Iface → Option Kind
+  | .act, _ => some .leaf
+  | .delegate, entries => agentKind k entries
+  | .boot, _ => some .root
+  | .ret, _ => none
+
+theorem pushes_iff (o : Op) : o.pushes = false ↔ o = .ret := by
+  cases o <;> simp [Op.pushes]
+
+/-- A push has a kind, a pop has none. -/
+theorem pushed_ret (k : Nat) (entries : List Iface) : pushed k .ret entries = none := rfl
+
+theorem agentKind_ne_leaf (k : Nat) (entries : List Iface) : agentKind k entries ≠ some .leaf := by
+  simp only [agentKind]
+  split
+  · simp
+  · split <;> simp
+
+/-- A leaf emits only `return`. -/
+theorem leaf_emits (o : Op) : o ∈ ops .leaf ↔ o = .ret := by simp [ops]
+
+/-- Only an act frame emits `act`. -/
+theorem act_emitted (kd : Kind) : Op.act ∈ ops kd ↔ kd = .act := by
+  cases kd <;> simp [ops]
+
+/-- A leaf is pushed exactly by `act`. -/
+theorem pushed_leaf (k : Nat) (o : Op) (entries : List Iface) :
+    pushed k o entries = some .leaf ↔ o = .act := by
+  cases o with
+  | act => simp [pushed]
+  | delegate => simpa [pushed] using agentKind_ne_leaf k entries
+  | boot => simp [pushed]
+  | ret => simp [pushed]
+
+/-- Leaves by position: a leaf's parent is an act frame. Whatever pushed a
+leaf emitted `act`, and only an act frame emits it. -/
+theorem leaf_parent (k : Nat) (parent : Kind) (o : Op) (entries : List Iface)
+    (he : o ∈ ops parent) (hp : pushed k o entries = some .leaf) : parent = .act :=
+  (act_emitted parent).mp ((pushed_leaf k o entries).mp hp ▸ he)
+
+/-- A delegation pushes an act frame exactly when its scope holds between
+one and `k` tool types. -/
+theorem delegate_act (k : Nat) (entries : List Iface) :
+    pushed k .delegate entries = some .act ↔
+      1 ≤ (toolTypes entries).length ∧ (toolTypes entries).length ≤ k := by
+  simp only [pushed, agentKind]
+  split
+  · rename_i h; simp [h]
+  · rename_i h
+    split
+    · rename_i hk; simp [hk]; omega
+    · rename_i hk; simp [hk]
+
+/-! ## Frame identity
+
+A frame is identified by its reference and its interface: the frame that
+invoked it and which of its invokes it was, and its scope. The first frame
+of a process, by its program and grant. A slot is a frame and a `$n`. Lean
+computes no hash: hashes are given, and sound when they are injective and
+apart. -/
+
+/-- What boot hands the first frame: tools, definitions held by the
+booting frame; and context values. -/
+structure Grant where
+  tools : List DefLoc
+  context : List Value
+
+structure Ids where
+  child : InstLoc → Nat → Scope → InstLoc
+  first : DefLoc → Grant → InstLoc
+  slot : InstLoc → Nat → InstLoc
+  program : Program → DefLoc
+
+def Ids.Sound (h : Ids) : Prop :=
+  (∀ {p₁ p₂ n₁ n₂ s₁ s₂}, h.child p₁ n₁ s₁ = h.child p₂ n₂ s₂ → p₁ = p₂ ∧ n₁ = n₂ ∧ s₁ = s₂) ∧
+  (∀ {d₁ d₂ g₁ g₂}, h.first d₁ g₁ = h.first d₂ g₂ → d₁ = d₂ ∧ g₁ = g₂) ∧
+  (∀ {p n s d g}, h.child p n s ≠ h.first d g)
+
+/-- A frame's id from its path: the first frame's program and grant, then
+each invoke, latest first. -/
+def pathId (h : Ids) (d : DefLoc) (g : Grant) : List (Nat × Scope) → InstLoc
+  | [] => h.first d g
+  | (n, s) :: ps => h.child (pathId h d g ps) n s
+
+/-- A frame's id is its path: under sound hashes, one id is one program,
+one grant and one path from the first frame. -/
+theorem pathId_inj {h : Ids} (hs : h.Sound) :
+    ∀ {ps₁ ps₂ : List (Nat × Scope)} {d₁ d₂ g₁ g₂},
+      pathId h d₁ g₁ ps₁ = pathId h d₂ g₂ ps₂ → d₁ = d₂ ∧ g₁ = g₂ ∧ ps₁ = ps₂
+  | [], [], _, _, _, _, e => by
+    obtain ⟨rfl, rfl⟩ := hs.2.1 e; exact ⟨rfl, rfl, rfl⟩
+  | [], (_, _) :: _, _, _, _, _, e => absurd e.symm hs.2.2
+  | (_, _) :: _, [], _, _, _, _, e => absurd e hs.2.2
+  | (n₁, s₁) :: ps₁, (n₂, s₂) :: ps₂, _, _, _, _, e => by
+    obtain ⟨ep, rfl, rfl⟩ := hs.1 e
+    obtain ⟨rfl, rfl, rfl⟩ := pathId_inj hs ep
+    exact ⟨rfl, rfl, rfl⟩
+
+/-- Invoke: a frame pushes its `n`th child, of `scope`, bound to
+`bindings`. Its static link is its parent's program, its dynamic link its
+parent, and it starts with no state. -/
+def push (h : Ids) (parent : Frame) (n : Nat) (scope : Scope) (bindings : List Member) : Frame :=
+  ⟨h.child parent.id n scope, parent.program, some parent.id, scope, bindings, []⟩
+
+theorem push_id_inj {h : Ids} (hs : h.Sound)
+    (e : (push h f₁ n₁ s₁ b₁).id = (push h f₂ n₂ s₂ b₂).id) :
+    f₁.id = f₂.id ∧ n₁ = n₂ ∧ s₁ = s₂ :=
+  hs.1 e
+
+/-- A child is defined under its parent's program: every frame of a
+process reads one global scope and one set of constants. -/
+theorem push_static (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) :
+    (push h f n s b).program = f.program := rfl
+
+theorem push_dynamic (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) :
+    (push h f n s b).parent = some f.id := rfl
+
+/-- What happens to a frame after its creation: entries appended. -/
+def Frame.append (f : Frame) (es : List Entry) : Frame := { f with state := f.state ++ es }
+
+/-- A frame's id does not change as its state grows: bindings are state,
+not identity. -/
+theorem append_id (f : Frame) (es : List Entry) : (f.append es).id = f.id := rfl
+
+theorem append_scope (f : Frame) (es : List Entry) : (f.append es).scope = f.scope := rfl
+
+/-- 58's stamp: which frame, and which state of it. -/
+def stamp (f : Frame) : InstLoc × Nat := (f.id, f.state.length)
+
+theorem stamp_append (f : Frame) (es : List Entry) :
+    stamp (f.append es) = (f.id, f.state.length + es.length) := by
+  simp [stamp, Frame.append]
+
+/-- Every entry appended is a new state: no two states of one frame share a
+stamp. -/
+theorem stamp_apart (f : Frame) {es : List Entry} (h : es ≠ []) : stamp (f.append es) ≠ stamp f := by
+  rw [stamp_append]
+  intro e
+  have := (Prod.mk.inj e).2
+  exact h (List.eq_nil_of_length_eq_zero (by omega))
+
+/-! ## Boot
+
+`boot(program, grant)` pushes a process's first frame, or refuses. It runs
+from a root, as its `n`th invoke, or at genesis from nothing. -/
+
+/-- The definitions a frame holds as tools. -/
+def held (f : Frame) : List DefLoc := f.bindings.filterMap fun | .tool b => some b | .obs _ => none
+
+/-- The grant's context, arrived at slots from `n` on. -/
+def contextObs (h : Ids) (id : InstLoc) : Nat → List Value → Option (List Observation)
+  | _, [] => some []
+  | n, v :: vs => match arrive v (h.slot id n), contextObs h id (n + 1) vs with
+    | some o, some os => some (o :: os)
+    | _, _ => none
+
+/-- Boot's third check: the grant only narrows. At genesis nothing holds
+tools, and what may be passed is open (60's question 8). -/
+def narrows : Option (Frame × Nat) → Grant → Prop
+  | none, _ => True
+  | some (f, _), g => ∀ b ∈ g.tools, b ∈ held f
+
+/-- The first frame's id: by program and grant at genesis, else as any
+invoke. -/
+def bootId (h : Ids) (p : Program) (g : Grant) : Option (Frame × Nat) → InstLoc
+  | none => h.first (h.program p) g
+  | some (f, n) => h.child f.id n p.entry
+
+/-- The first frame's bindings: the grant's tools, then its context, in the
+entry scope's order. -/
+def grantBindings (g : Grant) (os : List Observation) : List Member :=
+  g.tools.map .tool ++ os.map .obs
+
+/-- Boot's checks: the program is well formed, the grant's interface is the
+entry scope position by position, and the grant only narrows. -/
+def Boots (p : Program) (g : Grant) (os : List Observation) (src : Option (Frame × Nat)) : Prop :=
+  p.wellFormed = true ∧ p.entry.kind = .root ∧
+    g.tools.map Iface.leaf ++ os.map (·.iface) = p.entry.entries ∧ narrows src g
+
+open Classical in
+/-- Boot: the checks, then exactly one frame pushed, its static link the
+program passed, its dynamic link the frame that booted it. -/
+noncomputable def boot (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) :
+    Option Frame :=
+  let id := bootId h p g src
+  match contextObs h id (g.tools.length + 1) g.context with
+  | none => none
+  | some os =>
+    if Boots p g os src then
+      some ⟨id, h.program p, src.map (·.1.id), p.entry, grantBindings g os, []⟩
+    else none
+
+/-- Boot gives a frame exactly when its checks pass, and the frame is the
+entry scope's, under the program passed, with nothing yet in its state. -/
+theorem boot_eq_some (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) (f : Frame) :
+    boot h p g src = some f ↔
+      ∃ os, contextObs h (bootId h p g src) (g.tools.length + 1) g.context = some os ∧
+        Boots p g os src ∧
+        f = ⟨bootId h p g src, h.program p, src.map (·.1.id), p.entry, grantBindings g os, []⟩ := by
+  unfold boot
+  simp only
+  split
+  · rename_i hc; simp [hc]
+  · rename_i os hc
+    simp only [hc, Option.some.injEq, exists_eq_left']
+    split
+    · rename_i hb; simp [hb, eq_comm]
+    · rename_i hb; simp [hb]
+
+theorem held_grant (g : Grant) (os : List Observation) :
+    (grantBindings g os).filterMap (fun | .tool b => some b | .obs _ => none) = g.tools := by
+  simp [grantBindings, List.filterMap_append, List.filterMap_map]
+  induction os <;> simp_all [Function.comp_def]
+
+/-- Boot only narrows: the first frame holds exactly the grant's tools, and
+each is held by the frame that booted it. -/
+theorem boot_narrows (h : Ids) (p : Program) (g : Grant) (f r : Frame) (n : Nat)
+    (hb : boot h p g (some (r, n)) = some f) : ∀ b ∈ held f, b ∈ held r := by
+  obtain ⟨os, -, ⟨-, -, -, hn⟩, rfl⟩ := (boot_eq_some h p g _ f).mp hb
+  intro b hb'
+  have : b ∈ g.tools := by simpa [held, held_grant] using hb'
+  exact hn b this
+
+/-- The first frame is a root of the entry scope, under the program passed,
+and its dynamic link is the frame that booted it. -/
+theorem boot_frame (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) (f : Frame)
+    (hb : boot h p g src = some f) :
+    f.scope = p.entry ∧ f.scope.kind = .root ∧ f.program = h.program p ∧
+      f.parent = src.map (·.1.id) ∧ f.state = [] := by
+  obtain ⟨os, -, ⟨-, hr, -, -⟩, rfl⟩ := (boot_eq_some h p g src f).mp hb
+  exact ⟨rfl, hr, rfl, rfl, rfl⟩
+
+/-- A refused program never boots. -/
+theorem boot_wellFormed (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat))
+    (hw : p.wellFormed = false) : boot h p g src = none := by
+  cases hb : boot h p g src with
+  | none => rfl
+  | some f =>
+    obtain ⟨os, -, ⟨hw', -⟩, -⟩ := (boot_eq_some h p g src f).mp hb
+    simp [hw] at hw'
+
+/-- The first frame's key is its program's root, a root's kind, and the
+entry scope: boot's order is canonical, so one program boots to one key. -/
+theorem boot_key (h : Ids) (rootOf : DefLoc → DefLoc) (p : Program) (g : Grant)
+    (src : Option (Frame × Nat)) (f : Frame) (hb : boot h p g src = some f) :
+    key rootOf f = ⟨rootOf (h.program p), .root, p.entry.entries⟩ := by
+  obtain ⟨hs, hr, hp, -, hst⟩ := boot_frame h p g src f hb
+  simp [key, seen, hs, hp, hst, arrivals, ← hr]
+
 end Model
