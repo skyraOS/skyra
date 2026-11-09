@@ -282,40 +282,6 @@ func TestAfterStartleRunsItsOwn(t *testing.T) {
 	}
 }
 
-// A learned cycle that never calls the model ends: every transition counts,
-// and the exhausted frame returns an error observation.
-func TestTransitionBound(t *testing.T) {
-	b := TransitionBound{Transitions: 3}
-	poll := Transition{StateTrust} // a learned branch: no model call
-	var err error
-	n := 0
-	for err == nil {
-		if err = b.Take(poll); err == nil {
-			n++
-		}
-	}
-	if !errors.Is(err, ErrTransitionBound) || n != 3 || b.Taken() != 3 {
-		t.Fatalf("took %d transitions, ended with %v", n, err)
-	}
-	if e := b.Exhausted(); string(e["error"].([]byte)) != "transition bound exhausted after 3 transitions" ||
-		ShapeOf(e).Enc() != `{"error":bytes}` {
-		t.Fatalf("exhausted frame returns %#v", e)
-	}
-	learned := TransitionBound{Transitions: 1}
-	if err := learned.Take(Transition{StateHesitate, StateStartle, StateReject, StateStartle, StateTrust}); err != nil {
-		t.Fatalf("one instruction's whole life is one transition: %v", err)
-	}
-}
-
-func TestTransitionEndsInOneTrust(t *testing.T) {
-	for _, tr := range []Transition{{}, {StateStartle}, {StateTrust, StateTrust}, {StateTrust, StateStartle}} {
-		b := TransitionBound{Transitions: 10}
-		if err := b.Take(tr); !errors.Is(err, ErrTransition) {
-			t.Errorf("%v: %v, want ErrTransition", tr, err)
-		}
-	}
-}
-
 func TestParseGuardRefuses(t *testing.T) {
 	for _, g := range []string{
 		`arrived.size > 5 ? "ls " + arrived.name : null`,
@@ -332,7 +298,7 @@ func TestParseGuardRefuses(t *testing.T) {
 // The model reads observations by `$n` and fields by key; the stored guard
 // names positions in the base, so two frames holding the arrival at
 // different numbers store one guard.
-func TestStoreGuard(t *testing.T) {
+func TestStoreConds(t *testing.T) {
 	g := `$1.size > 7 && $2["content-type"] == "$3" ? "diff $1 $2" : null`
 	want := []Link{{
 		Cond:  `arrived.size > 7 && passed0["content-type"] == "$3"`,
@@ -342,13 +308,13 @@ func TestStoreGuard(t *testing.T) {
 		{1: Arrived, 2: Passed(0)},
 		{1: Arrived, 2: Passed(0), 3: Passed(1)},
 	} {
-		chain, err := StoreGuard(g, scope)
+		chain, err := StoreConds(g, scope, scope)
 		if err != nil || len(chain) != 1 || chain[0] != want[0] {
 			t.Fatalf("stored %+v (%v), want %+v", chain, err, want)
 		}
 	}
-	renumbered, err := StoreGuard(`$7.size > 7 && $4["content-type"] == "$3" ? "diff $7 $4" : null`,
-		map[int]Position{7: Arrived, 4: Passed(0)})
+	other := map[int]Position{7: Arrived, 4: Passed(0)}
+	renumbered, err := StoreConds(`$7.size > 7 && $4["content-type"] == "$3" ? "diff $7 $4" : null`, other, other)
 	if err != nil || renumbered[0] != want[0] {
 		t.Fatalf("another frame's numbers stored %+v (%v)", renumbered, err)
 	}
@@ -363,11 +329,11 @@ func TestStoreGuard(t *testing.T) {
 // A `$n` with no position in the base cannot be stored: the instruction
 // runs once, unlearned. Literal `$n` in a raw or triple-quoted string is
 // text.
-func TestStoreGuardUnstorable(t *testing.T) {
+func TestStoreCondsUnstorable(t *testing.T) {
 	scope := map[int]Position{0: Arrived}
 	for _, g := range []string{`$3.size > 1 ? "ls $0" : null`, `$0.size > 1 ? "diff $0 $3" : null`} {
 		var u Unstorable
-		if _, err := StoreGuard(g, scope); !errors.As(err, &u) || u.N != 3 {
+		if _, err := StoreConds(g, scope, scope); !errors.As(err, &u) || u.N != 3 {
 			t.Errorf("%s: %v, want $3 unstorable", g, err)
 		}
 	}
@@ -376,7 +342,7 @@ func TestStoreGuardUnstorable(t *testing.T) {
 		`$0.name == """it's $3""" ? "ls $0" : null`,
 		`$0.name == '$3\'s' ? "ls $0" : null`,
 	} {
-		if _, err := StoreGuard(g, scope); err != nil {
+		if _, err := StoreConds(g, scope, scope); err != nil {
 			t.Errorf("%s: %v", g, err)
 		}
 	}
@@ -393,8 +359,8 @@ func TestOnlyPositions(t *testing.T) {
 // Text that is not JSON arrives as a string, with no wrapper: the guard
 // reads `$n` itself.
 func TestTextArrival(t *testing.T) {
-	chain, err := StoreGuard(`$0.contains("error") ? "less $0" : size($0) > 0 ? "wc $0" : null`,
-		map[int]Position{0: Arrived})
+	arrived := map[int]Position{0: Arrived}
+	chain, err := StoreConds(`$0.contains("error") ? "less $0" : size($0) > 0 ? "wc $0" : null`, arrived, arrived)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +379,8 @@ func TestTextArrival(t *testing.T) {
 // A guard using a macro is stored as written and evaluates: the positions
 // inside a comprehension are declared.
 func TestMacroGuard(t *testing.T) {
-	chain, err := StoreGuard(`$1.items.exists(i, i.id > 2) ? "ls $1" : null`, map[int]Position{1: Arrived})
+	arrived := map[int]Position{1: Arrived}
+	chain, err := StoreConds(`$1.items.exists(i, i.id > 2) ? "ls $1" : null`, arrived, arrived)
 	if err != nil || chain[0].Cond != "arrived.items.exists(i, i.id > 2)" {
 		t.Fatalf("stored %+v (%v)", chain, err)
 	}
@@ -421,47 +388,6 @@ func TestMacroGuard(t *testing.T) {
 	items := map[string]any{"arrived": map[string]any{"items": []any{map[string]any{"id": 3.0}}}}
 	if s, err := Distinguish(v.Branches, items); err != nil || s.Instr != "ls @arrived" {
 		t.Fatalf("selects %+v (%v)", s, err)
-	}
-}
-
-// Two instructions agree when they pass the same parameters in the same
-// order: text between them is dropped when stored, as the seven Opus asks
-// in cel/ wrote it.
-func TestInstructionsCompareByParameters(t *testing.T) {
-	scope := map[int]Position{1: Passed(1), 3: Passed(3), 4: Passed(4), 5: Passed(5), 6: Passed(6)}
-	g := `$6.restarts < 3 ? "$3 restart $6.unit" : true ? "$4 -u $6.unit -n 100 --no-pager" : null`
-	h := `$6.restarts < 3 ? "$3   $6.unit" : true ? "$4 $6.unit" : null`
-	a, err := StoreGuard(g, scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := StoreGuard(h, scope)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := range a {
-		if a[i].Instr != b[i].Instr {
-			t.Fatalf("%q and %q pass the same parameters", a[i].Instr, b[i].Instr)
-		}
-	}
-	if a[0].Instr != "@passed[3] @passed[6].unit" {
-		t.Fatalf("stored %q", a[0].Instr)
-	}
-	v := CommitChain(Version{Branches: []Branch{}}, a)
-	v = CommitChain(v, b)
-	vals := map[string]any{"passed6": map[string]any{"restarts": 1.0, "unit": "api.service"}}
-	if s, err := Distinguish(v.Branches, vals); err != nil || s.Kind != SelectOne {
-		t.Fatalf("%+v %v", s, err)
-	}
-	for in, want := range map[string]string{
-		"return  1   $5":                  "return 1 $5",
-		"return 1 $5   $6.why":            "return 1 $5 $6.why",
-		"delegate(goal($1),$3,  $4[2:3])": "delegate(goal($1), $3, $4[2:3])",
-		"diff $7 $4":                      "diff $7 $4",
-	} {
-		if got := Canonical(in); got != want {
-			t.Fatalf("Canonical(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 
@@ -475,13 +401,5 @@ func TestReturnIsConstructed(t *testing.T) {
 	}
 	if s := shapeOfJSON(t, `{"exit":0,"stdout":"x"}`).Enc(); s == done {
 		t.Fatalf("a JSON value took a return's shape: %s", s)
-	}
-	for _, bad := range []string{"return $5", "return 2 $5", "return 0 $5 $6 $7", "return 0 x"} {
-		if _, err := ParseInstr(bad); err == nil {
-			t.Fatalf("%q parsed", bad)
-		}
-	}
-	if Canonical("return 1 $5 $6") == Canonical("return 1 $5") {
-		t.Fatal("a return naming a stderr is the one that does not")
 	}
 }

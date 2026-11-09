@@ -153,7 +153,7 @@ func TestCheckGuard(t *testing.T) {
 		`$1.items.exists(i, i.id > 2) ? "ls $1" : null`,
 		`size($2) > 0 && $2.contains("error") ? "ls $2" : null`,
 	} {
-		chain, err := StoreGuard(g, scope)
+		chain, err := StoreConds(g, scope, scope)
 		if err != nil {
 			t.Fatalf("%s: %v", g, err)
 		}
@@ -169,7 +169,7 @@ func TestCheckGuard(t *testing.T) {
 		`$2 > 3 ? "ls $2" : null`,
 		`$2.size > 3 ? "ls $2" : null`,
 	} {
-		chain, err := StoreGuard(g, scope)
+		chain, err := StoreConds(g, scope, scope)
 		if err != nil {
 			t.Fatalf("%s: %v", g, err)
 		}
@@ -183,7 +183,7 @@ func TestCheckGuard(t *testing.T) {
 // output that did not decode.
 func TestGuardOnError(t *testing.T) {
 	v, s := Arrive(OutputText, []byte("caf\xe9"))
-	chain, err := StoreGuard(`size($0.error) > 0 ? "iconv -f latin1 $0" : null`, map[int]Position{0: Arrived})
+	chain, err := StoreConds(`size($0.error) > 0 ? "iconv -f latin1 $0" : null`, map[int]Position{0: Arrived}, map[int]Position{0: Arrived})
 	if err != nil {
 		t.Fatal(err)
 	}

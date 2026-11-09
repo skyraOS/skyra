@@ -123,39 +123,8 @@ func (u Unstorable) Error() string {
 	return "$" + itoa(u.N) + " is not in the base: it runs once, unlearned"
 }
 
-// StoreGuard translates the model's guard into its stored, base-relative
-// form. The guard reads observations as `$n` and their fields by key
-// (`$1.size`, `$1["content-type"]`); scope maps each number the frame holds
-// in the base to its position. Outside string literals, `$n` becomes its
-// position's CEL variable; in a returned template, its instruction
-// reference. A `$n` inside a condition's string literal is text.
-func StoreGuard(guard string, scope map[int]Position) ([]Link, error) {
-	src, err := substitute(guard, func(n int) (string, error) {
-		p, ok := scope[n]
-		if !ok {
-			return "", Unstorable{n}
-		}
-		return p.cel(), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	chain, err := ParseGuard(src)
-	if err != nil {
-		return nil, err
-	}
-	for i, l := range chain {
-		instr, err := StoreInstr(l.Instr, scope)
-		if err != nil {
-			return nil, err
-		}
-		chain[i].Instr = instr
-	}
-	return chain, nil
-}
-
-// StoreConds is StoreGuard for a machine that reads its own instructions:
-// each condition stored as StoreGuard stores it, under conds; each
+// StoreConds stores a guard for a machine that reads its own instructions:
+// each condition with its $n replaced by their positions' CEL, under conds; each
 // instruction as the model wrote it, only its $n replaced by their
 // positions' references under instrs.
 func StoreConds(guard string, conds, instrs map[int]Position) ([]Link, error) {
@@ -494,7 +463,7 @@ func CommitGuard(v Version, guard string) (Version, error) {
 	return CommitChain(v, chain), nil
 }
 
-// CommitChain commits a stored chain (StoreGuard's) as one new voter, named
+// CommitChain commits a stored chain (StoreConds's) as one new voter, named
 // by the local id of its first branch. Nothing is narrowed: a branch that
 // overlaps an older one with a different instruction is a dissenting vote,
 // counted when values arrive.
@@ -546,69 +515,45 @@ func AfterStartle(chain []Link, committed []Branch, vals map[string]any, t Tally
 
 // --- transitions and the transition bound ---
 
-// A State is one thing the system does with an instruction.
-type State uint8
-
-const (
-	_ State = iota
-	StateReject
-	StateHesitate
-	StateStartle
-	StateTally // a count that did not settle the instruction run: a conflict, or a commit counted
-	StateTrust
-)
-
-// A Transition is the life of one instruction: the states it passed
-// through. It ends in trust running the instruction, exactly once; the
-// outcome starts the next transition.
-type Transition []State
-
-// ErrTransition is a transition that does not end in exactly one trust.
-var ErrTransition = errors.New("a transition ends in trust, exactly once")
-
-// Check is whether t is a whole transition.
-func (t Transition) Check() error {
-	if len(t) == 0 || t[len(t)-1] != StateTrust || slices.Contains(t[:len(t)-1], StateTrust) {
-		return ErrTransition
+// Bind binds a stored instruction in a frame: each @arrived and @passed[k]
+// becomes the $n holding that position there. What a step stores binds back
+// to what it was written as.
+func Bind(stored string, refs map[Position]int) (string, error) {
+	var out strings.Builder
+	for i := 0; i < len(stored); {
+		p, w := position(stored[i:])
+		if w == 0 {
+			out.WriteByte(stored[i])
+			i++
+			continue
+		}
+		n, ok := refs[p]
+		if !ok {
+			return "", errors.New(p.ref() + " is not a position of this base")
+		}
+		out.WriteString("$" + itoa(n))
+		i += w
 	}
-	return nil
+	return out.String(), nil
 }
 
-// A TransitionBound counts the transitions a frame takes, whether or not they
-// call the model: a learned cycle that never calls the model still ends.
-// Each transition runs one instruction, so it bounds the frame's effects
-// too. Cycles are neither forbidden nor detected; the bound is what makes a
-// frame terminate. It is not yet a Profile field: the runtime has no trust
-// state to end a transition with.
-type TransitionBound struct {
-	Transitions int // the most transitions the frame may take
-	taken       int
-}
-
-// ErrTransitionBound is a frame's transition bound, exhausted.
-var ErrTransitionBound = errors.New("the frame's transition bound is exhausted")
-
-// Take counts one whole transition, or refuses it once the bound is
-// reached: the frame then ends, returning Exhausted.
-func (b *TransitionBound) Take(t Transition) error {
-	if err := t.Check(); err != nil {
-		return err
+// position reads @arrived or @passed[k] at the start of s, giving the
+// position and its width, or width 0.
+func position(s string) (Position, int) {
+	if strings.HasPrefix(s, "@arrived") {
+		return Arrived, len("@arrived")
 	}
-	if b.taken >= b.Transitions {
-		return ErrTransitionBound
+	rest, ok := strings.CutPrefix(s, "@passed[")
+	if !ok {
+		return 0, 0
 	}
-	b.taken++
-	return nil
-}
-
-// Taken is how many transitions the frame has taken.
-func (b *TransitionBound) Taken() int { return b.taken }
-
-// Exhausted is what an exhausted frame returns to its caller: an error
-// observation, {error: bytes}, holding the system's own message: not a
-// decode error, so a base of its own. The caller
-// receives it as any outcome: its base has no branch for it, so it is null,
-// and the caller's model is startled with it.
-func (b *TransitionBound) Exhausted() map[string]any {
-	return map[string]any{"error": []byte("transition bound exhausted after " + itoa(b.taken) + " transitions")}
+	k, w := 0, 0
+	for w < len(rest) && rest[w] >= '0' && rest[w] <= '9' && w < 9 {
+		k = k*10 + int(rest[w]-'0')
+		w++
+	}
+	if w == 0 || w >= len(rest) || rest[w] != ']' {
+		return 0, 0
+	}
+	return Passed(k), len("@passed[") + w + 1
 }

@@ -185,39 +185,3 @@ func Cut(v any, s Sel) (any, bool) {
 	}
 	return v, true
 }
-
-// CutObs is a cut observation: its value cut, its base keyed on the base it
-// was cut from and the selector, never a tool. All of $n is $n itself.
-func CutObs(cutBase func(base, sel string) string, s Sel, o Obs) (Obs, bool) {
-	if s.Kind == SelWhole {
-		return o, true
-	}
-	v, ok := Cut(o.Value, s)
-	if !ok {
-		return Obs{}, false
-	}
-	return Obs{Value: v, Base: cutBase(o.Base, s.String())}, true
-}
-
-// cutRefs rewrites each $n in tmpl, and the selector after it, through to.
-func cutRefs(tmpl string, to func(n int, s Sel) (string, error)) (string, error) {
-	var out strings.Builder
-	for i := 0; i < len(tmpl); {
-		if n, w := number(tmpl[i:]); w > 0 {
-			s, sw, err := selector(tmpl[i+w:])
-			if err != nil {
-				return "", err
-			}
-			text, err := to(n, s)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(text)
-			i += w + sw
-			continue
-		}
-		out.WriteByte(tmpl[i])
-		i++
-	}
-	return out.String(), nil
-}
