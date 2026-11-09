@@ -1,4 +1,4 @@
-import Invariants.Shape
+import Invariants.Frames
 
 /-! Proposal 60: definition and instantiation. The system has two sides.
 A definition is what every execution shares; an instantiation is what one
@@ -624,5 +624,334 @@ theorem boot_key (h : Ids) (rootOf : DefLoc → DefLoc) (p : Program) (g : Grant
     key rootOf f = ⟨rootOf (h.program p), .root, p.entry.entries⟩ := by
   obtain ⟨hs, hr, hp, -, hst⟩ := boot_frame h p g src f hb
   simp [key, seen, hs, hp, hst, arrivals, ← hr]
+
+/-! ## Cuts
+
+A cut divides an interface by a selector. The key keeps `I / sel`
+undivided; reducing it to a shape is a function, and agrees with the shape
+of the value the cut takes. Cutting a value is 58's (`Frames.cutValue`). -/
+
+def Sel.toCut : Sel → Frames.Sel
+  | .field path => .field path
+  | .lines runs => .lines runs
+
+/-- A value cut by selectors in order. -/
+def cutAll : Value → List Sel → Option Value
+  | v, [] => some v
+  | v, s :: ss => (Frames.cutValue s.toCut v).bind (cutAll · ss)
+
+/-- A field path through a shape. -/
+def fieldShape : Shape → List String → Option Shape
+  | s, [] => some s
+  | .obj fs, k :: ks => (fs.lookup k).bind (fieldShape · ks)
+  | _, _ :: _ => none
+
+/-- A shape divided by a selector: a field path's shape, or text's lines,
+which are text. An empty selector divides nothing, as `cutValue` refuses
+it. -/
+def reduceShape : Sel → Shape → Option Shape
+  | .field [], _ => none
+  | .field path, s => fieldShape s path
+  | .lines [], _ => none
+  | .lines _, .str => some .str
+  | .lines _, .bytes => some .str
+  | .lines _, _ => none
+
+/-- Reducing an interface: a cut of a shape is that shape divided, a cut of
+a cut is divided in turn, and nothing else is a cut. -/
+def Iface.reduce : Iface → Option Iface
+  | .cut i sel => i.reduce.bind fun
+    | .shape s => (reduceShape sel s).map .shape
+    | _ => none
+  | i => some i
+
+theorem lookup_mem {α : Type} : ∀ {l : List (String × α)} {k : String} {v : α},
+    l.lookup k = some v → (k, v) ∈ l
+  | [], _, _, h => by simp at h
+  | (k', v') :: l, k, v, h => by
+    by_cases e : k = k'
+    · subst e; simp at h; subst h; exact List.mem_cons_self ..
+    · have : (k == k') = false := by simpa using e
+      simp [List.lookup, this] at h
+      exact List.mem_cons_of_mem _ (lookup_mem h)
+
+theorem mem_lookup {α : Type} : ∀ {l : List (String × α)} {k : String} {v : α},
+    (l.map (·.1)).Nodup → (k, v) ∈ l → l.lookup k = some v
+  | [], _, _, _, h => by simp at h
+  | (k', v') :: l, k, v, nd, h => by
+    simp only [List.map_cons, List.nodup_cons] at nd
+    rcases List.mem_cons.mp h with e | hl
+    · simp only [Prod.mk.injEq] at e; obtain ⟨rfl, rfl⟩ := e; simp
+    · have : k ≠ k' := by
+        intro e; subst e; exact nd.1 (List.mem_map.mpr ⟨(k, v), hl, rfl⟩)
+      have hb : (k == k') = false := by simpa using this
+      simp [List.lookup, hb, mem_lookup nd.2 hl]
+
+/-- A field's value has the field's shape: dividing a shape by a key
+agrees with looking the key up in the value. -/
+theorem lookup_shape {kvs : List (String × Value)} {s : Shape} {k : String} {v : Value}
+    (h : shapeOf (.obj kvs) = some s) (hv : kvs.lookup k = some v) :
+    ∃ t, shapeOf v = some t ∧ (match s with | .obj fs => fs.lookup k | _ => none) = some t := by
+  obtain ⟨nd, fs, hf, rfl⟩ := shapeOf_obj h
+  obtain ⟨t, ht, hm⟩ := fieldsOf_mem hf (lookup_mem hv)
+  refine ⟨t, ht, ?_⟩
+  have ndk : ((sortKeys fs).map (·.1)).Nodup :=
+    (sortKeys_perm.map _).nodup_iff.mpr (by rw [fieldsOf_keys hf]; exact nd)
+  exact mem_lookup ndk (sortKeys_perm.symm.subset hm)
+
+theorem fieldAt_shape : ∀ (path : List String) {v v' : Value} {s : Shape},
+    shapeOf v = some s → Frames.fieldAt v path = some v' →
+      ∃ s', shapeOf v' = some s' ∧ fieldShape s path = some s'
+  | [], _, _, _, hs, hf => by simp [Frames.fieldAt] at hf; subst hf; exact ⟨_, hs, rfl⟩
+  | k :: ks, v, v', s, hs, hf => by
+    cases v with
+    | obj kvs =>
+      simp only [Frames.fieldAt, Option.bind_eq_some_iff] at hf
+      obtain ⟨w, hw, hf⟩ := hf
+      obtain ⟨t, ht, hl⟩ := lookup_shape hs hw
+      obtain ⟨s', h', hp⟩ := fieldAt_shape ks ht hf
+      obtain ⟨-, fs, -, rfl⟩ := shapeOf_obj hs
+      exact ⟨s', h', by simp only [fieldShape, Option.bind_eq_some_iff]; exact ⟨t, hl, hp⟩⟩
+    | _ => simp [Frames.fieldAt] at hf
+
+/-- A cut's value has its divided interface's shape. -/
+theorem cut_sound {v v' : Value} {s : Shape} (sel : Sel) (hs : shapeOf v = some s)
+    (hc : Frames.cutValue sel.toCut v = some v') :
+    ∃ s', shapeOf v' = some s' ∧ reduceShape sel s = some s' := by
+  cases sel with
+  | field path =>
+    cases path with
+    | nil => simp [Sel.toCut, Frames.cutValue] at hc
+    | cons k ks => exact fieldAt_shape (k :: ks) hs (by simpa [Sel.toCut, Frames.cutValue] using hc)
+  | lines runs =>
+    cases runs with
+    | nil => simp [Sel.toCut, Frames.cutValue] at hc
+    | cons r rs =>
+      simp only [Sel.toCut, Frames.cutValue, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hc
+      obtain ⟨t, ht, ls, -, rfl⟩ := hc
+      refine ⟨.str, rfl, ?_⟩
+      cases v <;> simp [Frames.textOf] at ht <;> simp [shapeOf] at hs <;> subst hs <;> rfl
+
+/-- Cut by selectors in order, a value keeps the interface reduced: the
+key's `I / sel / …` reduces to the shape of what the cut takes. -/
+theorem cutAll_sound : ∀ (sels : List Sel) {v v' : Value} {s : Shape} (i : Iface),
+    shapeOf v = some s → i.reduce = some (.shape s) → cutAll v sels = some v' →
+      ∃ s', shapeOf v' = some s' ∧ (sels.foldl .cut i).reduce = some (.shape s')
+  | [], _, _, _, _, hs, hi, hc => by
+    simp [cutAll] at hc; subst hc; exact ⟨_, hs, hi⟩
+  | sel :: sels, v, v', s, i, hs, hi, hc => by
+    simp only [cutAll, Option.bind_eq_some_iff] at hc
+    obtain ⟨w, hw, hc⟩ := hc
+    obtain ⟨t, ht, hr⟩ := cut_sound sel hs hw
+    exact cutAll_sound sels (.cut i sel) ht (by simp [Iface.reduce, hi, hr]) hc
+
+/-! ## Variables
+
+A frame's `$n` are its bindings, then its state, in order, from `$1`. The
+system instantiates the scope's and each arrival; the agent eliminates
+(cuts something held) or introduces (constructs from nothing). -/
+
+/-- What a `$n` holds: a tool, which has no value; a value seen, bound
+from the scope or arrived; an introduction; or an elimination of an
+earlier `$n`. -/
+inductive Item where
+  | tool (b : DefLoc)
+  | seen (v : Value)
+  | intro (l : Lit)
+  | elim (n : Nat) (sels : List Sel)
+
+def Member.item : Member → Item
+  | .tool b => .tool b
+  | .obs o => .seen o.value
+
+def Entry.item : Entry → Item
+  | .arrived o => .seen o.value
+  | .eliminated n s => .elim n s
+  | .introduced l => .intro l
+
+def items (f : Frame) : List Item := f.bindings.map (·.item) ++ f.state.map (·.item)
+
+/-- `$n`, from `$1`. -/
+def item (f : Frame) (n : Nat) : Option Item := if n = 0 then none else (items f)[n - 1]?
+
+def Lit.value : Lit → Value
+  | .str s => .str s
+  | .exit n => .exit n
+
+/-- Variables are append-only: what a `$n` holds never changes as the
+frame's state grows. -/
+theorem item_append (f : Frame) (es : List Entry) {n : Nat} (h : n ≤ (items f).length) :
+    item (f.append es) n = item f n := by
+  unfold item
+  split
+  · rfl
+  · have : items (f.append es) = items f ++ es.map (·.item) := by
+      simp [items, Frame.append, List.append_assoc]
+    rw [this, List.getElem?_append_left (by omega)]
+
+/-- Appending an entry binds it to the next `$n`. -/
+theorem item_next (f : Frame) (e : Entry) :
+    item (f.append [e]) ((items f).length + 1) = some e.item := by
+  simp [item, items, Frame.append]
+
+/-- Reading `$n` cut by `sels`. An elimination reads the earlier `$n` it
+eliminates; one of a later `$n` reads nothing. An introduction is never
+cut: what is constructed from nothing is constructed whole. A tool has no
+value. -/
+def read (f : Frame) (n : Nat) (sels : List Sel) : Option Value :=
+  match item f n with
+  | some (.seen v) => cutAll v sels
+  | some (.intro l) => if sels = [] then some l.value else none
+  | some (.elim m s) => if m < n then read f m (s ++ sels) else none
+  | _ => none
+termination_by n
+
+/-! ### Inlining at commit
+
+At commit each elimination an implementation reads is replaced by its
+definition and each introduction by its literal, so a stored
+implementation reads only what was seen. -/
+
+def inline (f : Frame) (n : Nat) (sels : List Sel) : Arg :=
+  match item f n with
+  | some (.elim m s) => if m < n then inline f m (s ++ sels) else .ref (.var n sels)
+  | some (.intro l) => if sels = [] then .lit l else .ref (.var n sels)
+  | _ => .ref (.var n sels)
+termination_by n
+
+/-- An argument's value in a frame. A global names a definition, which has
+no value. -/
+def evalArg (f : Frame) : Arg → Option Value
+  | .lit l => some l.value
+  | .ref (.var n sels) => read f n sels
+  | .ref (.name _) => none
+
+/-- Inlining at commit and evaluating gives the same value as reading. -/
+theorem inline_read (f : Frame) (n : Nat) (sels : List Sel) :
+    evalArg f (inline f n sels) = read f n sels := by
+  have hr : read f n sels = match item f n with
+      | some (.seen v) => cutAll v sels
+      | some (.intro l) => if sels = [] then some l.value else none
+      | some (.elim m s) => if m < n then read f m (s ++ sels) else none
+      | _ => none := by rw [read]
+  rw [inline, hr]
+  cases e : item f n with
+  | none => simp [evalArg, hr, e]
+  | some it =>
+    cases it with
+    | tool b => simp [evalArg, hr, e]
+    | seen v => simp [evalArg, hr, e]
+    | intro l => by_cases hs : sels = [] <;> simp [evalArg, hr, e, hs]
+    | elim m s =>
+      by_cases hm : m < n
+      · simp only [hm, ↓reduceIte]; exact inline_read f m (s ++ sels)
+      · simp [evalArg, hr, e, hm]
+termination_by n
+
+/-- An inlined argument reads only what was seen: a literal, or a `$n`
+holding a value seen, whenever the reference reads anything. -/
+theorem inline_seen (f : Frame) (n : Nat) (sels : List Sel) (h : read f n sels ≠ none) :
+    (∃ l, inline f n sels = .lit l) ∨
+      ∃ j sels' v, inline f n sels = .ref (.var j sels') ∧ item f j = some (.seen v) := by
+  rw [read] at h
+  rw [inline]
+  split
+  · rename_i m s hm
+    rw [hm] at h
+    split
+    · rename_i hlt; simp only [hlt, ↓reduceIte] at h; exact inline_seen f m (s ++ sels) h
+    · rename_i hlt; simp [hlt] at h
+  · rename_i l hl
+    rw [hl] at h
+    split
+    · exact .inl ⟨l, rfl⟩
+    · rename_i hs; simp [hs] at h
+  · rename_i h₁ h₂
+    cases e : item f n with
+    | none => rw [e] at h; simp at h
+    | some it =>
+      cases it with
+      | tool b => rw [e] at h; simp at h
+      | seen v => exact .inr ⟨n, sels, v, rfl, e⟩
+      | intro l => exact absurd e (h₂ l)
+      | elim m s => exact absurd e (h₁ m s)
+termination_by n
+
+/-! ### Introduction and the copy check
+
+An introduction constructs from nothing. A string introduced whose text
+appears in a value the frame holds is refused, with the `$n` that holds
+it: that is a copy, and the cut takes it instead. An exit status is never
+a copy. -/
+
+mutual
+/-- Every string a value holds, at any depth, keys included. -/
+def valueStrings : Value → List String
+  | .str s => [s]
+  | .arr xs => stringsList xs
+  | .obj kvs => stringsMembers kvs
+  | _ => []
+
+def stringsList : List Value → List String
+  | [] => []
+  | x :: xs => valueStrings x ++ stringsList xs
+
+def stringsMembers : List (String × Value) → List String
+  | [] => []
+  | (k, v) :: kvs => k :: valueStrings v ++ stringsMembers kvs
+end
+
+/-- Whether `$n` holds a value with `s` in its text. -/
+def holds (f : Frame) (s : String) (n : Nat) : Bool :=
+  match item f n with
+  | some (.seen v) => (valueStrings v ++ (Frames.textOf v).toList).any fun t => decide (s.toList <:+: t.toList)
+  | _ => false
+
+/-- Introduce: the entry to append, or the `$n` it would copy. -/
+def introduce (f : Frame) : Lit → Except Nat Entry
+  | .exit k => .ok (.introduced (.exit k))
+  | .str s => match (List.range' 1 (items f).length).find? (holds f s) with
+    | some n => .error n
+    | none => .ok (.introduced (.str s))
+
+/-- A refused introduction names a `$n` holding a value with its text. -/
+theorem introduce_refused {f : Frame} {s : String} {n : Nat} (h : introduce f (.str s) = .error n) :
+    ∃ v, item f n = some (.seen v) ∧
+      ∃ t ∈ valueStrings v ++ (Frames.textOf v).toList, s.toList <:+: t.toList := by
+  simp only [introduce] at h
+  split at h
+  · rename_i n' hf
+    cases h
+    have hh := List.find?_some hf
+    simp only [holds] at hh
+    split at hh
+    · rename_i v hv
+      obtain ⟨t, ht, hi⟩ := List.any_eq_true.mp hh
+      exact ⟨v, hv, t, ht, by simpa using hi⟩
+    · simp at hh
+  · cases h
+
+/-- An introduction no held value contains is accepted. -/
+theorem introduce_fresh {f : Frame} {s : String}
+    (h : ∀ n, holds f s n = false) : introduce f (.str s) = .ok (.introduced (.str s)) := by
+  simp only [introduce]
+  rw [List.find?_eq_none.mpr (fun n _ => by simp [h n])]
+
+/-- An exit status is never refused. -/
+theorem introduce_exit (f : Frame) (k : Nat) : introduce f (.exit k) = .ok (.introduced (.exit k)) := rfl
+
+/-- What introduce accepts is an introduction: live, so never in the key. -/
+theorem introduce_live (rootOf : DefLoc → DefLoc) {f : Frame} {l : Lit} {e : Entry}
+    (h : introduce f l = .ok e) : key rootOf (f.append [e]) = key rootOf f := by
+  have : e = .introduced l := by
+    cases l with
+    | exit k => simp [introduce] at h; exact h.symm
+    | str s =>
+      simp only [introduce] at h
+      split at h
+      · cases h
+      · cases h; rfl
+  subst this
+  exact key_live rootOf f _ (by simp)
 
 end Model
