@@ -316,6 +316,7 @@ observation:
 |---|---|---|
 | tools, models | static | definition space: `def B` |
 | static link, global names | static | definition space: the program, the operators |
+| model | static | definition space: the model its delegation chose, consulted at `startle` |
 | introductions | static | definition space |
 | goal, context, arrivals | dynamic | the log: observations |
 | eliminations | dynamic | the log: a source and a selector |
@@ -391,7 +392,11 @@ the kinds above are counted through the frame's static link, and:
 - **A delegation picks its model.** `delegate`'s first position takes a
   model, so which model the child consults at `startle` is a position of
   the instruction, type-checked and tallied like any other: the system
-  learns which model serves which goal.
+  learns which model serves which goal. The child holds it as a static
+  item, outside its scope, so it is never in the key: implementations
+  learned under one model count under another, and the model is the
+  voter's provenance. Only a delegation names one; an act's leaf
+  consults none.
 
 An **agent** decides: it has implementations and emits operators. A
 **leaf** cannot further the computation: it has no implementations, emits
@@ -885,6 +890,9 @@ In a new `invariants/Invariants/Model.lean`, before any Go:
   form; a string introduction appearing in a held value is refused.
 - **Cuts:** a cut's interface is its source's with the selector applied;
   reducing `I / sel` to a shape is a function, and the key keeps `I / sel`.
+- **A delegation picks its model:** a delegation's child consults exactly
+  one definition fitting `delegate`'s first position; no other invoke
+  names one; and a frame's model is never in its key.
 - **Leaves by position:** every frame an act frame pushes is a leaf, every
   leaf's parent is an act frame, and a leaf emits only `return`.
 - **The key is lossless:** a projection key (58's one hop) is a function

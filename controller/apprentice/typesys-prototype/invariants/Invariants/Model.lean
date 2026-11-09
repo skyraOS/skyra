@@ -197,7 +197,10 @@ inductive Entry where
 
 /-- A frame: one activation of a scope. Its id; its static link, the
 program it is defined under; its dynamic link, the frame that invoked it;
-its scope; what it binds from it; and its state. -/
+its scope; what it binds from it; its state; and the model it consults at
+`startle`, a definition its delegation chose. The model is static and
+outside the scope, so never in the key: it is how an implementation is
+authored, the voter's provenance. -/
 structure Frame where
   id : InstLoc
   program : DefLoc
@@ -205,6 +208,7 @@ structure Frame where
   scope : Scope
   bindings : List Member
   state : List Entry
+  model : Option DefLoc
 
 /-- What a decision gives. -/
 inductive Outcome where
@@ -253,6 +257,11 @@ theorem arrivals_append : ∀ (as bs : List Entry), arrivals (as ++ bs) = arriva
   | .arrived o :: as, bs => by simp [arrivals, arrivals_append as bs]
   | .eliminated _ _ :: as, bs => by simp [arrivals, arrivals_append as bs]
   | .introduced _ :: as, bs => by simp [arrivals, arrivals_append as bs]
+
+/-- The model a frame consults is never in its key: implementations learned
+under one model count under another. -/
+theorem key_model (rootOf : DefLoc → DefLoc) (f : Frame) (m : Option DefLoc) :
+    key rootOf { f with model := m } = key rootOf f := rfl
 
 /-! ## Definitions hold no value -/
 
@@ -515,23 +524,24 @@ theorem pathId_inj {h : Ids} (hs : h.Sound) :
     exact ⟨rfl, rfl, rfl⟩
 
 /-- Invoke: a frame pushes its `n`th child, of `scope`, bound to
-`bindings`. Its static link is its parent's program, its dynamic link its
-parent, and it starts with no state. -/
-def push (h : Ids) (parent : Frame) (n : Nat) (scope : Scope) (bindings : List Member) : Frame :=
-  ⟨h.child parent.id n scope, parent.program, some parent.id, scope, bindings, []⟩
+`bindings`, consulting `model`. Its static link is its parent's program,
+its dynamic link its parent, and it starts with no state. -/
+def push (h : Ids) (parent : Frame) (n : Nat) (scope : Scope) (bindings : List Member)
+    (model : Option DefLoc) : Frame :=
+  ⟨h.child parent.id n scope, parent.program, some parent.id, scope, bindings, [], model⟩
 
 theorem push_id_inj {h : Ids} (hs : h.Sound)
-    (e : (push h f₁ n₁ s₁ b₁).id = (push h f₂ n₂ s₂ b₂).id) :
+    (e : (push h f₁ n₁ s₁ b₁ m₁).id = (push h f₂ n₂ s₂ b₂ m₂).id) :
     f₁.id = f₂.id ∧ n₁ = n₂ ∧ s₁ = s₂ :=
   hs.1 e
 
 /-- A child is defined under its parent's program: every frame of a
 process reads one global scope and one set of constants. -/
-theorem push_static (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) :
-    (push h f n s b).program = f.program := rfl
+theorem push_static (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) (m : Option DefLoc) :
+    (push h f n s b m).program = f.program := rfl
 
-theorem push_dynamic (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) :
-    (push h f n s b).parent = some f.id := rfl
+theorem push_dynamic (h : Ids) (f : Frame) (n : Nat) (s : Scope) (b : List Member) (m : Option DefLoc) :
+    (push h f n s b m).parent = some f.id := rfl
 
 /-- What happens to a frame after its creation: entries appended. -/
 def Frame.append (f : Frame) (es : List Entry) : Frame := { f with state := f.state ++ es }
@@ -607,7 +617,7 @@ noncomputable def boot (h : Ids) (p : Program) (g : Grant) (src : Option (Frame 
   | none => none
   | some os =>
     if Boots p g os src then
-      some ⟨id, h.program p, src.map (·.1.id), p.entry, grantBindings g os, []⟩
+      some ⟨id, h.program p, src.map (·.1.id), p.entry, grantBindings g os, [], none⟩
     else none
 
 /-- Boot gives a frame exactly when its checks pass, and the frame is the
@@ -616,7 +626,7 @@ theorem boot_eq_some (h : Ids) (p : Program) (g : Grant) (src : Option (Frame ×
     boot h p g src = some f ↔
       ∃ os, contextObs h (bootId h p g src) (g.defs.length + 1) g.context = some os ∧
         Boots p g os src ∧
-        f = ⟨bootId h p g src, h.program p, src.map (·.1.id), p.entry, grantBindings g os, []⟩ := by
+        f = ⟨bootId h p g src, h.program p, src.map (·.1.id), p.entry, grantBindings g os, [], none⟩ := by
   unfold boot
   simp only
   split
@@ -1245,10 +1255,10 @@ def Tree.pending (t : Tree) (id : InstLoc) : Bool :=
 def Tree.invokes (t : Tree) (id : InstLoc) : Nat := (t.frames.filter (·.parent = some id)).length
 
 /-- A decision's edge. An invoke pushes a frame of `scope` by `op`, under
-the decider's program; a boot pushes the frame `boot` gave, under the
+the decider's program, consulting the model a delegation chose; a boot pushes the frame `boot` gave, under the
 program passed; a return pops. -/
 inductive Edge where
-  | invoke (op : Op) (scope : Scope) (bindings : List Member)
+  | invoke (op : Op) (scope : Scope) (bindings : List Member) (model : Option DefLoc)
   | boot (f : Frame)
   | ret (o : Observation)
 
@@ -1257,16 +1267,35 @@ def Edge.pushes : Edge → Bool
   | .ret _ => false
   | _ => true
 
+/-- A delegation names one model, a definition that fits `delegate`'s first
+position; any other invoke names none. -/
+def modelOk (models : List DefLoc) : Op → Option DefLoc → Bool
+  | .delegate, some m => decide (m ∈ models)
+  | .delegate, none => false
+  | _, none => true
+  | _, some _ => false
+
+theorem modelOk_delegate {models : List DefLoc} {m : Option DefLoc} (h : modelOk models .delegate m = true) :
+    ∃ M, m = some M ∧ M ∈ models := by
+  cases m with
+  | none => simp [modelOk] at h
+  | some M => exact ⟨M, rfl, by simpa [modelOk] using h⟩
+
+theorem modelOk_other {models : List DefLoc} {op : Op} {m : Option DefLoc} (h : modelOk models op m = true)
+    (hd : op ≠ .delegate) : m = none := by
+  cases op <;> cases m <;> simp_all [modelOk]
+
 /-- What the deciding frame may emit: an operator its kind emits, pushing
-the kind that operator pushes, a delegation narrowing tool types; a boot
-only from a kind that boots, of a root linked to the decider. `acts` gives
-each program's tools, read through a frame's static link. -/
-def admits (k : Nat) (acts : DefLoc → List DefLoc) (f : Frame) : Edge → Bool
-  | .invoke op s _ => decide (op ≠ .boot ∧ op ∈ ops f.scope.kind ∧
-      pushed k (acts f.program) op s.entries = some s.kind ∧
+the kind that operator pushes, a delegation narrowing tool types and
+naming one of its program's models; a boot only from a kind that boots, of
+a root linked to the decider. `reaches` gives what each program's
+operators reach, read through a frame's static link: `Program.reach`. -/
+def admits (k : Nat) (reaches : DefLoc → String → List DefLoc) (f : Frame) : Edge → Bool
+  | .invoke op s _ m => modelOk (reaches f.program "delegate") op m && decide (op ≠ .boot ∧ op ∈ ops f.scope.kind ∧
+      pushed k (reaches f.program "act") op s.entries = some s.kind ∧
       (op = .delegate →
         (∀ b ∈ defs s.entries, b ∈ defs f.scope.entries) ∧
-        (toolTypes (acts f.program) s.entries).length < (toolTypes (acts f.program) f.scope.entries).length))
+        (toolTypes (reaches f.program "act") s.entries).length < (toolTypes (reaches f.program "act") f.scope.entries).length))
   | .boot c => decide (Op.boot ∈ ops f.scope.kind ∧ c.parent = some f.id ∧ c.scope.kind = .root)
   | .ret _ => true
 
@@ -1274,13 +1303,13 @@ def admits (k : Nat) (acts : DefLoc → List DefLoc) (f : Frame) : Edge → Bool
 def Tree.land (t : Tree) (p : InstLoc) (o : Observation) : List Frame :=
   t.frames.map fun g => if g.id = p then g.append [.arrived o] else g
 
-def Tree.step (h : Ids) (k : Nat) (acts : DefLoc → List DefLoc) (t : Tree) (fid : InstLoc) (e : Edge) : Option Tree :=
+def Tree.step (h : Ids) (k : Nat) (reaches : DefLoc → String → List DefLoc) (t : Tree) (fid : InstLoc) (e : Edge) : Option Tree :=
   match t.find fid with
   | none => none
   | some f =>
-    if t.isOpen fid && !t.pending fid && admits k acts f e then
+    if t.isOpen fid && !t.pending fid && admits k reaches f e then
       match e with
-      | .invoke _ s b => some ⟨t.frames ++ [push h f (t.invokes fid) s b], t.closed⟩
+      | .invoke _ s b m => some ⟨t.frames ++ [push h f (t.invokes fid) s b m], t.closed⟩
       | .boot c => some ⟨t.frames ++ [c], t.closed⟩
       | .ret o => match f.parent with
         | none => none
@@ -1288,17 +1317,17 @@ def Tree.step (h : Ids) (k : Nat) (acts : DefLoc → List DefLoc) (t : Tree) (fi
     else none
 
 /-- The tree is a fold of the log: its edges, from genesis. -/
-def Tree.replay (h : Ids) (k : Nat) (acts : DefLoc → List DefLoc) (t : Tree) : List (InstLoc × Edge) → Option Tree
+def Tree.replay (h : Ids) (k : Nat) (reaches : DefLoc → String → List DefLoc) (t : Tree) : List (InstLoc × Edge) → Option Tree
   | [] => some t
-  | (fid, e) :: log => (t.step h k acts fid e).bind (·.replay h k acts log)
+  | (fid, e) :: log => (t.step h k reaches fid e).bind (·.replay h k reaches log)
 
 section
-variable {h : Ids} {k : Nat} {acts : DefLoc → List DefLoc} {t t' : Tree} {fid : InstLoc} {e : Edge}
+variable {h : Ids} {k : Nat} {reaches : DefLoc → String → List DefLoc} {t t' : Tree} {fid : InstLoc} {e : Edge}
 
-theorem step_some (hs : t.step h k acts fid e = some t') :
-    ∃ f, t.find fid = some f ∧ t.isOpen fid = true ∧ t.pending fid = false ∧ admits k acts f e = true ∧
+theorem step_some (hs : t.step h k reaches fid e = some t') :
+    ∃ f, t.find fid = some f ∧ t.isOpen fid = true ∧ t.pending fid = false ∧ admits k reaches f e = true ∧
       match e with
-      | .invoke _ s b => t' = ⟨t.frames ++ [push h f (t.invokes fid) s b], t.closed⟩
+      | .invoke _ s b m => t' = ⟨t.frames ++ [push h f (t.invokes fid) s b m], t.closed⟩
       | .boot c => t' = ⟨t.frames ++ [c], t.closed⟩
       | .ret o => ∃ p, f.parent = some p ∧ (t.find p).isSome ∧ t' = ⟨t.land p o, fid :: t.closed⟩ := by
   unfold Tree.step at hs
@@ -1310,7 +1339,7 @@ theorem step_some (hs : t.step h k acts fid e = some t') :
       simp only [Bool.and_eq_true, Bool.not_eq_true'] at hc
       refine ⟨f, hf, hc.1.1, hc.1.2, hc.2, ?_⟩
       cases e with
-      | invoke _ s b => exact (Option.some.inj hs).symm
+      | invoke _ s b _ => exact (Option.some.inj hs).symm
       | boot c => exact (Option.some.inj hs).symm
       | ret o =>
         simp only at hs
@@ -1323,19 +1352,19 @@ theorem step_some (hs : t.step h k acts fid e = some t') :
     · cases hs
 
 /-- A frame decides only while it is open, with nothing pending. -/
-theorem step_ready (hs : t.step h k acts fid e = some t') :
+theorem step_ready (hs : t.step h k reaches fid e = some t') :
     (∃ f, t.find fid = some f) ∧ t.isOpen fid = true ∧ t.pending fid = false := by
   obtain ⟨f, hf, ho, hp, -⟩ := step_some hs
   exact ⟨⟨f, hf⟩, ho, hp⟩
 
 /-- Every decision is one push or one pop: a push adds one frame and
 closes none; a return adds none and closes the frame that decided. -/
-theorem step_one (hs : t.step h k acts fid e = some t') :
+theorem step_one (hs : t.step h k reaches fid e = some t') :
     (e.pushes = true ∧ t'.frames.length = t.frames.length + 1 ∧ t'.closed = t.closed) ∨
       (e.pushes = false ∧ t'.frames.length = t.frames.length ∧ t'.closed = fid :: t.closed) := by
   obtain ⟨f, -, -, -, -, he⟩ := step_some hs
   cases e with
-  | invoke _ s b => rw [he]; exact .inl ⟨rfl, by simp, rfl⟩
+  | invoke _ s b _ => rw [he]; exact .inl ⟨rfl, by simp, rfl⟩
   | boot c => rw [he]; exact .inl ⟨rfl, by simp, rfl⟩
   | ret o =>
     obtain ⟨p, -, -, he⟩ := he
@@ -1343,10 +1372,10 @@ theorem step_one (hs : t.step h k acts fid e = some t') :
 
 /-- An invoke pushes the decider's next child, under its program, linked
 to it. -/
-theorem step_invoke {op : Op} {s : Scope} {b : List Member}
-    (hs : t.step h k acts fid (.invoke op s b) = some t') :
-    ∃ f, t.find fid = some f ∧ t'.frames = t.frames ++ [push h f (t.invokes fid) s b] ∧
-      (push h f (t.invokes fid) s b).parent = some fid := by
+theorem step_invoke {op : Op} {s : Scope} {b : List Member} {m : Option DefLoc}
+    (hs : t.step h k reaches fid (.invoke op s b m) = some t') :
+    ∃ f, t.find fid = some f ∧ t'.frames = t.frames ++ [push h f (t.invokes fid) s b m] ∧
+      (push h f (t.invokes fid) s b m).parent = some fid := by
   obtain ⟨f, hf, -, -, -, he⟩ := step_some hs
   rw [he]
   refine ⟨f, hf, rfl, ?_⟩
@@ -1356,20 +1385,38 @@ theorem step_invoke {op : Op} {s : Scope} {b : List Member}
 
 /-- A delegation passes a subset of the decider's scope: its child's tools
 are tools the decider holds, and strictly fewer of them. -/
-theorem step_delegate {s : Scope} {b : List Member}
-    (hs : t.step h k acts fid (.invoke .delegate s b) = some t') :
+theorem step_delegate {s : Scope} {b : List Member} {m : Option DefLoc}
+    (hs : t.step h k reaches fid (.invoke .delegate s b m) = some t') :
     ∃ f, t.find fid = some f ∧
-      (∀ x ∈ toolTypes (acts f.program) s.entries, x ∈ toolTypes (acts f.program) f.scope.entries) ∧
-      (toolTypes (acts f.program) s.entries).length < (toolTypes (acts f.program) f.scope.entries).length := by
+      (∀ x ∈ toolTypes (reaches f.program "act") s.entries, x ∈ toolTypes (reaches f.program "act") f.scope.entries) ∧
+      (toolTypes (reaches f.program "act") s.entries).length < (toolTypes (reaches f.program "act") f.scope.entries).length := by
   obtain ⟨f, hf, -, -, ha, -⟩ := step_some hs
-  simp only [admits, decide_eq_true_eq] at ha
-  obtain ⟨-, -, -, hn⟩ := ha
+  simp only [admits, Bool.and_eq_true, decide_eq_true_eq] at ha
+  obtain ⟨-, -, -, -, hn⟩ := ha
   obtain ⟨hsub, hlt⟩ := hn trivial
   exact ⟨f, hf, toolTypes_sub hsub, hlt⟩
 
+/-- A delegation picks its model: the child consults one definition that
+fits `delegate`'s first position in the decider's program. -/
+theorem step_model {s : Scope} {b : List Member} {m : Option DefLoc}
+    (hs : t.step h k reaches fid (.invoke .delegate s b m) = some t') :
+    ∃ f M, t.find fid = some f ∧ m = some M ∧ M ∈ reaches f.program "delegate" ∧
+      t'.frames = t.frames ++ [push h f (t.invokes fid) s b m] := by
+  obtain ⟨f, hf, -, -, ha, he⟩ := step_some hs
+  simp only [admits, Bool.and_eq_true] at ha
+  obtain ⟨M, rfl, hM⟩ := modelOk_delegate ha.1
+  exact ⟨f, M, hf, rfl, hM, by rw [he]⟩
+
+/-- Only a delegation picks a model: an act's leaf consults none. -/
+theorem step_no_model {op : Op} {s : Scope} {b : List Member} {m : Option DefLoc}
+    (hs : t.step h k reaches fid (.invoke op s b m) = some t') (hd : op ≠ .delegate) : m = none := by
+  obtain ⟨f, -, -, -, ha, -⟩ := step_some hs
+  simp only [admits, Bool.and_eq_true] at ha
+  exact modelOk_other ha.1 hd
+
 /-- A return lands its observation in exactly the frame its dynamic link
 names, appended as an arrival: what was returned is seen there. -/
-theorem step_ret {o : Observation} (hs : t.step h k acts fid (.ret o) = some t') :
+theorem step_ret {o : Observation} (hs : t.step h k reaches fid (.ret o) = some t') :
     ∃ f p, t.find fid = some f ∧ f.parent = some p ∧ (t.find p).isSome ∧
       t'.frames = t.land p o ∧ t'.closed = fid :: t.closed := by
   obtain ⟨f, hf, -, -, -, p, hp, hpf, he⟩ := step_some hs
@@ -1391,15 +1438,15 @@ theorem land_self (rootOf : DefLoc → DefLoc) {p : InstLoc} {o : Observation} {
   exact ⟨g, hg, by simp [hp]⟩
 
 /-- A frame that has returned never decides again. -/
-theorem step_closed (hc : fid ∈ t.closed) : t.step h k acts fid e = none := by
-  cases hs : t.step h k acts fid e with
+theorem step_closed (hc : fid ∈ t.closed) : t.step h k reaches fid e = none := by
+  cases hs : t.step h k reaches fid e with
   | none => rfl
   | some t' =>
     have := (step_ready hs).2.1
     simp [Tree.isOpen, hc] at this
 
 /-- Every return closes one frame. -/
-theorem replay_closed : ∀ {t t' : Tree} (log : List (InstLoc × Edge)), t.replay h k acts log = some t' →
+theorem replay_closed : ∀ {t t' : Tree} (log : List (InstLoc × Edge)), t.replay h k reaches log = some t' →
     t'.closed.length = t.closed.length + (log.filter fun x => !x.2.pushes).length
   | t, t', [], hr => by simp [Tree.replay] at hr; subst hr; simp
   | t, t', (fid, e) :: log, hr => by
@@ -1421,11 +1468,11 @@ theorem append_append (g : Frame) (es es' : List Entry) :
   simp [Frame.append, List.append_assoc]
 
 /-- One edge: every frame is kept, or kept with one arrival appended. -/
-theorem step_keeps (hs : t.step h k acts fid e = some t') {g : Frame} (hg : g ∈ t.frames) :
+theorem step_keeps (hs : t.step h k reaches fid e = some t') {g : Frame} (hg : g ∈ t.frames) :
     g ∈ t'.frames ∨ ∃ o, g.append [.arrived o] ∈ t'.frames := by
   obtain ⟨f, -, -, -, -, he⟩ := step_some hs
   cases e with
-  | invoke _ s b => rw [he]; exact .inl (List.mem_append_left _ hg)
+  | invoke _ s b _ => rw [he]; exact .inl (List.mem_append_left _ hg)
   | boot c => rw [he]; exact .inl (List.mem_append_left _ hg)
   | ret o =>
     obtain ⟨p, -, -, he⟩ := he
@@ -1436,7 +1483,7 @@ theorem step_keeps (hs : t.step h k acts fid e = some t') {g : Frame} (hg : g �
 
 /-- A run: every frame there at its start is there at its end, with only
 arrivals appended to its state. -/
-theorem replay_keeps : ∀ {t t' : Tree} (log : List (InstLoc × Edge)), t.replay h k acts log = some t' →
+theorem replay_keeps : ∀ {t t' : Tree} (log : List (InstLoc × Edge)), t.replay h k reaches log = some t' →
     ∀ g ∈ t.frames, ∃ es, g.append es ∈ t'.frames ∧ ∀ x ∈ es, ∃ o, x = .arrived o
   | t, t', [], hr, g, hg => by
     simp [Tree.replay] at hr; subst hr
@@ -1459,16 +1506,16 @@ A tree is well typed when every frame without a dynamic link is a root,
 and every other frame's parent is in the tree and emitted an operator its
 kind emits, pushing the frame's kind, a delegation narrowing tool types. -/
 
-def WellTyped (k : Nat) (acts : DefLoc → List DefLoc) (t : Tree) : Prop :=
+def WellTyped (k : Nat) (reaches : DefLoc → String → List DefLoc) (t : Tree) : Prop :=
   (∀ c ∈ t.frames, c.parent = none → c.scope.kind = .root) ∧
   (∀ c ∈ t.frames, ∀ p, c.parent = some p → ∃ f, t.find p = some f ∧ ∃ op ∈ ops f.scope.kind,
-    pushed k (acts c.program) op c.scope.entries = some c.scope.kind ∧
+    pushed k (reaches c.program "act") op c.scope.entries = some c.scope.kind ∧
     (op = .delegate →
-      (toolTypes (acts c.program) c.scope.entries).length < (toolTypes (acts f.program) f.scope.entries).length))
+      (toolTypes (reaches c.program "act") c.scope.entries).length < (toolTypes (reaches f.program "act") f.scope.entries).length))
 
 /-- Genesis: one root, no link, is well typed. -/
 theorem wellTyped_genesis {f : Frame} (hp : f.parent = none) (hr : f.scope.kind = .root) :
-    WellTyped k acts ⟨[f], []⟩ := by
+    WellTyped k reaches ⟨[f], []⟩ := by
   refine ⟨?_, ?_⟩
   · intro c hc _; simp at hc; subst hc; exact hr
   · intro c hc p hcp; simp at hc; subst hc; simp [hp] at hcp
@@ -1499,14 +1546,14 @@ theorem land_scope {p : InstLoc} {o : Observation} (g : Frame) :
   by_cases hg : g.id = p <;> simp [hg, Frame.append]
 
 /-- What a pushed frame needs of its parent to keep the tree well typed. -/
-def Admitted (k : Nat) (acts : DefLoc → List DefLoc) (f c : Frame) : Prop :=
-  ∃ op ∈ ops f.scope.kind, pushed k (acts c.program) op c.scope.entries = some c.scope.kind ∧
+def Admitted (k : Nat) (reaches : DefLoc → String → List DefLoc) (f c : Frame) : Prop :=
+  ∃ op ∈ ops f.scope.kind, pushed k (reaches c.program "act") op c.scope.entries = some c.scope.kind ∧
     (op = .delegate →
-      (toolTypes (acts c.program) c.scope.entries).length < (toolTypes (acts f.program) f.scope.entries).length)
+      (toolTypes (reaches c.program "act") c.scope.entries).length < (toolTypes (reaches f.program "act") f.scope.entries).length)
 
-theorem wellTyped_push {cl : List InstLoc} {f c : Frame} (hw : WellTyped k acts t)
-    (hf : t.find fid = some f) (hc : c.parent = some fid) (ha : Admitted k acts f c) :
-    WellTyped k acts ⟨t.frames ++ [c], cl⟩ := by
+theorem wellTyped_push {cl : List InstLoc} {f c : Frame} (hw : WellTyped k reaches t)
+    (hf : t.find fid = some f) (hc : c.parent = some fid) (ha : Admitted k reaches f c) :
+    WellTyped k reaches ⟨t.frames ++ [c], cl⟩ := by
   refine ⟨?_, ?_⟩
   · intro c' hc' hn
     rcases List.mem_append.mp hc' with hc' | hc'
@@ -1520,8 +1567,8 @@ theorem wellTyped_push {cl : List InstLoc} {f c : Frame} (hw : WellTyped k acts 
       rw [hc] at hp; cases hp
       exact ⟨f, find_append hf, ha⟩
 
-theorem wellTyped_land {cl : List InstLoc} {p : InstLoc} {o : Observation} (hw : WellTyped k acts t) :
-    WellTyped k acts ⟨t.land p o, cl⟩ := by
+theorem wellTyped_land {cl : List InstLoc} {p : InstLoc} {o : Observation} (hw : WellTyped k reaches t) :
+    WellTyped k reaches ⟨t.land p o, cl⟩ := by
   refine ⟨?_, ?_⟩
   · intro c' hc' hn
     simp only [Tree.land, List.mem_map] at hc'
@@ -1543,14 +1590,14 @@ theorem wellTyped_land {cl : List InstLoc} {p : InstLoc} {o : Observation} (hw :
 
 /-- Every edge keeps the tree well typed: the tree is well typed after
 every edge from genesis. -/
-theorem step_wellTyped (hw : WellTyped k acts t) (hs : t.step h k acts fid e = some t') : WellTyped k acts t' := by
+theorem step_wellTyped (hw : WellTyped k reaches t) (hs : t.step h k reaches fid e = some t') : WellTyped k reaches t' := by
   obtain ⟨f, hf, -, -, ha, he⟩ := step_some hs
   have hfid : f.id = fid := by have := List.find?_some hf; simpa using this
   cases e with
-  | invoke op s b =>
+  | invoke op s b m =>
     rw [he]
-    simp only [admits, decide_eq_true_eq] at ha
-    obtain ⟨-, hop, hpu, hn⟩ := ha
+    simp only [admits, Bool.and_eq_true, decide_eq_true_eq] at ha
+    obtain ⟨-, -, hop, hpu, hn⟩ := ha
     exact wellTyped_push hw hf (by simp [push, hfid]) ⟨op, hop, hpu, fun hd => (hn hd).2⟩
   | boot c =>
     rw [he]
@@ -1562,7 +1609,7 @@ theorem step_wellTyped (hw : WellTyped k acts t) (hs : t.step h k acts fid e = s
     rw [he]; exact wellTyped_land hw
 
 theorem replay_wellTyped : ∀ {t t' : Tree} (log : List (InstLoc × Edge)),
-    WellTyped k acts t → t.replay h k acts log = some t' → WellTyped k acts t'
+    WellTyped k reaches t → t.replay h k reaches log = some t' → WellTyped k reaches t'
   | t, t', [], hw, hr => by simp [Tree.replay] at hr; subst hr; exact hw
   | t, t', (fid, e) :: log, hw, hr => by
     simp only [Tree.replay, Option.bind_eq_some_iff] at hr
@@ -1580,8 +1627,8 @@ types. -/
 def measure (act : List DefLoc) (s : Scope) : Nat := if s.kind = .leaf then 0 else (toolTypes act s.entries).length
 
 /-- An act frame in a well-typed tree holds a tool. -/
-theorem act_has_tool (hw : WellTyped k acts t) {f : Frame} (hf : f ∈ t.frames) (ha : f.scope.kind = .act) :
-    1 ≤ (toolTypes (acts f.program) f.scope.entries).length := by
+theorem act_has_tool (hw : WellTyped k reaches t) {f : Frame} (hf : f ∈ t.frames) (ha : f.scope.kind = .act) :
+    1 ≤ (toolTypes (reaches f.program "act") f.scope.entries).length := by
   cases hp : f.parent with
   | none => have := hw.1 f hf hp; rw [ha] at this; cases this
   | some q =>
@@ -1594,9 +1641,9 @@ theorem act_has_tool (hw : WellTyped k acts t) {f : Frame} (hf : f ∈ t.frames)
     | ret => simp [pushed] at hpu
 
 /-- Within a process, a frame's measure is below its parent's. -/
-theorem measure_lt (hw : WellTyped k acts t) {c f : Frame} {p : InstLoc} (hc : c ∈ t.frames)
+theorem measure_lt (hw : WellTyped k reaches t) {c f : Frame} {p : InstLoc} (hc : c ∈ t.frames)
     (hp : c.parent = some p) (hf : t.find p = some f) (hr : c.scope.kind ≠ .root) :
-    measure (acts c.program) c.scope < measure (acts f.program) f.scope := by
+    measure (reaches c.program "act") c.scope < measure (reaches f.program "act") f.scope := by
   obtain ⟨f', hf', op, hop, hpu, hn⟩ := hw.2 c hc p hp
   rw [hf] at hf'; cases hf'
   have hfm : f ∈ t.frames := List.mem_of_find?_eq_some hf
@@ -1621,8 +1668,8 @@ inductive Chain (t : Tree) : List Frame → Prop
 
 /-- Depth is bounded: a chain within a process, no frame below its first a
 root, is no longer than its first frame's measure. -/
-theorem depth (hw : WellTyped k acts t) : ∀ {f : Frame} {cs : List Frame}, Chain t (f :: cs) →
-    (∀ c ∈ cs, c.scope.kind ≠ .root) → cs.length ≤ measure (acts f.program) f.scope
+theorem depth (hw : WellTyped k reaches t) : ∀ {f : Frame} {cs : List Frame}, Chain t (f :: cs) →
+    (∀ c ∈ cs, c.scope.kind ≠ .root) → cs.length ≤ measure (reaches f.program "act") f.scope
   | _, [], _, _ => Nat.zero_le _
   | f, c :: cs, .cons _ _ _ hc hp hf hch, hr => by
     have h₁ := measure_lt hw hc hp hf (hr c List.mem_cons_self)
