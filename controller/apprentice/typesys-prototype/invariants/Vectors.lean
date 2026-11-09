@@ -782,6 +782,225 @@ def dispatchFiles : List (String × List Json) :=
           ("writes", .arr (ws.map dWrote).toArray)]),
         ("out", Json.mkObj [("first", dOut o), ("again", dOut again)])]) ]
 
+
+/-! ## Proposal 61: definition and instantiation
+
+The model's answers, written under `vectors/model/`: what boot gives, a
+frame's key, the kind an operator pushes, a cut and its reduced interface,
+reading and inlining, the copy check, and the tree's edges. Hashes are
+spelled out as text, as 58's cut bases are, so a replay can form them. -/
+
+namespace M
+
+def jSel (s : Model.Sel) : Json := .str s.toCut.enc
+
+def jOp : Model.Op → Json
+  | .delegate => .str "delegate" | .act => .str "act" | .boot => .str "boot" | .ret => .str "return"
+
+def jKind : Model.Kind → Json
+  | .root => .str "root" | .delegate => .str "delegate" | .act => .str "act" | .leaf => .str "leaf"
+
+partial def jIface : Model.Iface → Json
+  | .shape s => Json.mkObj [("shape", .str s.enc)]
+  | .defn b => Json.mkObj [("def", .str b.hash)]
+  | .op o ps => Json.mkObj [("op", jOp o), ("parts", .arr (ps.map jIface).toArray)]
+  | .sum as => Json.mkObj [("sum", .arr (as.map jIface).toArray)]
+  | .cut i s => Json.mkObj [("cut", jIface i), ("sel", jSel s)]
+
+def jScope (s : Model.Scope) : Json :=
+  Json.mkObj [("kind", jKind s.kind), ("entries", .arr (s.entries.map jIface).toArray)]
+
+def jLit : Model.Lit → Json
+  | .str s => Json.mkObj [("str", .str s)]
+  | .exit n => Json.mkObj [("exit", jNat n)]
+
+def jObs (o : Model.Observation) : Json :=
+  Json.mkObj [("value", svJson o.value), ("iface", jIface o.iface), ("loc", .str o.loc.hash)]
+
+def jMember : Model.Member → Json
+  | .tool b => Json.mkObj [("tool", .str b.hash)]
+  | .obs o => Json.mkObj [("obs", jObs o)]
+
+def jSels (ss : List Model.Sel) : Json := .arr (ss.map jSel).toArray
+
+def jEntry : Model.Entry → Json
+  | .arrived o => Json.mkObj [("arrived", jObs o)]
+  | .eliminated n ss => Json.mkObj [("eliminate", jNat n), ("sels", jSels ss)]
+  | .introduced l => Json.mkObj [("introduce", jLit l)]
+
+def jFrame (f : Model.Frame) : Json :=
+  Json.mkObj [("id", .str f.id.hash), ("program", .str f.program.hash),
+    ("parent", jOpt (fun l => .str l.hash) f.parent), ("scope", jScope f.scope),
+    ("bindings", .arr (f.bindings.map jMember).toArray), ("state", .arr (f.state.map jEntry).toArray),
+    ("model", jOpt (fun l => .str l.hash) f.model)]
+
+def jArg : Model.Arg → Json
+  | .ref (.var n ss) => Json.mkObj [("var", jNat n), ("sels", jSels ss)]
+  | .ref (.name s) => Json.mkObj [("name", .str s)]
+  | .lit l => Json.mkObj [("lit", jLit l)]
+
+def ifaceText (i : Model.Iface) : String := (jIface i).compress
+
+/-- Hashes as text: a child by its parent, invoke index and scope; a first
+frame by its program and grant's definitions; a slot by its frame and `$n`. -/
+def ids : Model.Ids where
+  child p n s := ⟨"child(" ++ p.hash ++ "," ++ toString n ++ "," ++ (jScope s).compress ++ ")"⟩
+  first d g := ⟨"first(" ++ d.hash ++ ";" ++ ",".intercalate (g.defs.map (·.hash)) ++ ")"⟩
+  slot i n := ⟨i.hash ++ "#" ++ toString n⟩
+  program p := ⟨"program(" ++ p.version.hash ++ ")"⟩
+
+def ls : Model.DefLoc := ⟨"ls"⟩
+def cat : Model.DefLoc := ⟨"cat"⟩
+def claude : Model.DefLoc := ⟨"claude"⟩
+def gpt : Model.DefLoc := ⟨"gpt"⟩
+
+def consts : Model.Constants := ⟨1, 64, 3, (1, 2), 2⟩
+
+def global (tools models : List Model.DefLoc) : List (String × Model.Iface) :=
+  [("act", .op .act [.sum (tools.map .defn)]), ("delegate", .op .delegate [.sum (models.map .defn)])]
+
+/-- The program: `ls` and `cat` its tools, `claude` and `gpt` its models. -/
+def prog : Model.Program :=
+  ⟨⟨"v1"⟩, consts, global [ls, cat] [claude, gpt], ⟨.root, [.defn ls, .defn cat, .defn claude, .shape .str]⟩⟩
+
+/-- Refused: `cat` is both a tool and a model. -/
+def progOverlap : Model.Program := { prog with version := ⟨"v1-overlap"⟩, global := global [ls, cat] [claude, cat] }
+
+def jProgram (p : Model.Program) : Json :=
+  Json.mkObj [("version", .str p.version.hash),
+    ("constants", Json.mkObj [("act", jNat p.constants.act), ("transitions", jNat p.constants.transitions),
+      ("refinements", jNat p.constants.refinements),
+      ("inhibition", .arr #[jNat p.constants.inhibition.1, jNat p.constants.inhibition.2]),
+      ("floor", jNat p.constants.floor)]),
+    ("global", Json.mkObj (p.global.map fun (n, i) => (n, jIface i))), ("entry", jScope p.entry)]
+
+def booter (defs : List Model.DefLoc) : Model.Frame :=
+  ⟨⟨"user"⟩, ⟨"program(user)"⟩, none, ⟨.root, defs.map .defn⟩, defs.map .tool, [], none⟩
+
+def bootFile : List Json :=
+  let grantDefs : List (List Model.DefLoc) := [[ls, cat, claude], [cat, ls, claude], [ls, cat], [ls, cat, gpt]]
+  let contexts : List (List Shape.Value) := [[.str "/tmp/x"], [.num "3"], [], [.str "a", .str "b"]]
+  let srcs : List (Option (Model.Frame × Nat)) := [none, some (booter [ls, cat, claude, gpt], 0), some (booter [ls], 2)]
+  [prog, progOverlap].flatMap fun p => grantDefs.flatMap fun ds => contexts.flatMap fun cx => srcs.map fun src =>
+    Json.mkObj [("in", Json.mkObj [("program", jProgram p),
+        ("grant", Json.mkObj [("defs", .arr (ds.map (Json.str ·.hash)).toArray), ("context", .arr (cx.map svJson).toArray)]),
+        ("from", jOpt (fun (f, n) => Json.mkObj [("frame", jFrame f), ("invoke", jNat n)]) src)]),
+      ("out", jOpt jFrame (Model.boot ids p ⟨ds, cx⟩ src))]
+
+def obs (v : Shape.Value) (n : Nat) : Model.Observation :=
+  ⟨v, match Shape.shapeOf v with | some s => .shape s | none => .shape .null, ⟨"f#" ++ toString n⟩⟩
+
+def vDir : Shape.Value := .obj [("dir", .obj [("path", .str "/tmp")]), ("n", .num "1")]
+def vText : Shape.Value := .str "a\nb\nc"
+
+/-- A frame: `ls` and a goal bound; an object arrived; cuts, an introduction
+copying nothing, a forward elimination, an exit status. -/
+def frame : Model.Frame :=
+  ⟨⟨"f"⟩, ⟨"program(v1)"⟩, none, ⟨.act, [.defn ls, .shape .str]⟩,
+    [.tool ls, .obs (obs (Shape.Value.str "list /tmp") 2)],
+    [.arrived (obs vDir 3), .eliminated 3 [.field ["dir"]], .introduced (.str "-la"),
+      .eliminated 4 [.field ["path"]], .eliminated 9 [], .introduced (.exit 0), .arrived (obs vText 9)],
+    none⟩
+
+def keyFile : List Json :=
+  (List.range (frame.state.length + 1)).map fun n =>
+    let f := { frame with state := frame.state.take n }
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame f)]),
+      ("out", let k := Model.key (fun d => d) f
+        Json.mkObj [("root", .str k.root.hash), ("kind", jKind k.kind), ("seen", .arr (k.seen.map jIface).toArray)])]
+
+def kindFile : List Json :=
+  let atoms : List Model.Iface := [.defn ls, .defn cat, .defn claude, .shape .str]
+  ([1, 2] : List Nat).flatMap fun k => [Model.Op.delegate, .act, .boot, .ret].flatMap fun o =>
+    (upTo atoms 3).map fun es =>
+      Json.mkObj [("in", Json.mkObj [("act", jNat k), ("tools", .arr #[.str "ls", .str "cat"]),
+          ("op", jOp o), ("entries", .arr (es.map jIface).toArray)]),
+        ("out", Json.mkObj [("kind", jOpt jKind (Model.pushed k [ls, cat] o es)),
+          ("toolTypes", .arr ((Model.toolTypes [ls, cat] es).map (Json.str ·.hash)).toArray)])]
+
+def cutFile : List Json :=
+  let vals : List Shape.Value := [vDir, vText, .bytes "x\ny".toUTF8, .num "2"]
+  let sels : List (List Model.Sel) :=
+    [[], [.field ["dir"]], [.field ["dir", "path"]], [.field ["dir"], .field ["path"]], [.field ["nope"]],
+      [.field []], [.lines [(2, 3)]], [.lines [(1, 1), (3, 3)]], [.lines [(3, 4)]], [.lines []],
+      [.field ["dir", "path"], .lines [(1, 1)]]]
+  vals.flatMap fun v => sels.map fun ss =>
+    let i : Option Model.Iface := (Shape.shapeOf v).map .shape
+    Json.mkObj [("in", Json.mkObj [("value", svJson v), ("sels", jSels ss)]),
+      ("out", Json.mkObj [("value", jOpt svJson (Model.cutAll v ss)),
+        ("iface", jOpt jIface (i.map (ss.foldl .cut))),
+        ("reduced", jOpt jIface (i.bind fun i => (ss.foldl .cut i).reduce))])]
+
+def readFile : List Json :=
+  let sels : List (List Model.Sel) := [[], [.field ["path"]], [.lines [(1, 1)]]]
+  (List.range 11).flatMap fun n => sels.map fun ss =>
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame frame), ("n", jNat n), ("sels", jSels ss)]),
+      ("out", Json.mkObj [("read", jOpt svJson (Model.read frame n ss)), ("inline", jArg (Model.inline frame n ss))])]
+
+def introduceFile : List Json :=
+  let lits : List Model.Lit := [.str "-la", .str "/tmp", .str "list", .str "path", .str "b\nc", .str "zz", .str "",
+    .exit 0, .exit 2]
+  lits.map fun l =>
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame frame), ("lit", jLit l)]),
+      ("out", match Model.introduce frame l with
+        | .ok e => Json.mkObj [("entry", jEntry e)]
+        | .error n => Json.mkObj [("copies", jNat n)])]
+
+def jEdge : Model.Edge → Json
+  | .invoke o s b m => Json.mkObj [("invoke", jOp o), ("scope", jScope s),
+      ("bindings", .arr (b.map jMember).toArray), ("model", jOpt (fun l => .str l.hash) m)]
+  | .boot f => Json.mkObj [("boot", jFrame f)]
+  | .ret o => Json.mkObj [("return", jObs o)]
+
+def jTree (t : Model.Tree) : Json :=
+  Json.mkObj [("frames", .arr (t.frames.map jFrame).toArray), ("closed", .arr (t.closed.map (Json.str ·.hash)).toArray)]
+
+def reaches (d : Model.DefLoc) (name : String) : List Model.DefLoc :=
+  if d = ids.program prog then prog.reach name else []
+
+/-- From genesis: the root delegates an act frame consulting `claude`; the
+act frame runs `ls`, whose leaf returns; the act frame returns. Refused on
+the way: deciding while pending, an act delegating, a delegation naming
+no model or a tool, a narrowing that does not narrow, and returning from
+the root. -/
+def stepFile : List Json :=
+  match Model.boot ids prog ⟨[ls, cat, claude], [.str "/tmp/x"]⟩ none with
+  | none => []
+  | some r =>
+    let t₀ : Model.Tree := ⟨[r], []⟩
+    let actScope : Model.Scope := ⟨.act, [.shape .str, .defn ls]⟩
+    let a := ids.child r.id 0 actScope
+    let leafScope : Model.Scope := ⟨.leaf, [.defn ls, .shape .str]⟩
+    let l := ids.child a 0 leafScope
+    let out : Model.Observation := obs (Shape.Value.str "x\ny") 1
+    let edges : List (Model.InstLoc × Model.Edge) :=
+      [ (r.id, .invoke .delegate ⟨.delegate, [.shape .str, .defn ls, .defn cat]⟩ [] (some claude)),
+        (r.id, .invoke .delegate actScope [] none),
+        (r.id, .invoke .delegate actScope [] (some ls)),
+        (r.id, .invoke .delegate actScope [.tool ls] (some claude)),
+        (r.id, .ret out),
+        (a, .invoke .delegate ⟨.act, [.shape .str, .defn ls]⟩ [] (some claude)),
+        (a, .invoke .act leafScope [.tool ls] none),
+        (a, .ret out),
+        (l, .ret out),
+        (l, .ret out),
+        (a, .ret out),
+        (r.id, .ret out) ]
+    let rec go (t : Model.Tree) : List (Model.InstLoc × Model.Edge) → List Json
+      | [] => []
+      | (fid, e) :: es => match t.step ids 1 reaches fid e with
+        | some t' => Json.mkObj [("in", Json.mkObj [("tree", jTree t), ("frame", .str fid.hash), ("edge", jEdge e)]),
+            ("out", jTree t')] :: go t' es
+        | none => Json.mkObj [("in", Json.mkObj [("tree", jTree t), ("frame", .str fid.hash), ("edge", jEdge e)]),
+            ("out", .null)] :: go t es
+    go t₀ edges
+
+def files : List (String × List Json) :=
+  [ ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
+    ("model/read", readFile), ("model/introduce", introduceFile), ("model/step", stepFile) ]
+
+end M
+
 end Vectors
 
 /-! ## The files -/
@@ -896,7 +1115,7 @@ def files (w : World) : List (String × List Json) :=
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)]) (jReturnResult (ret n g))),
     ("invoke", [Seen.seen, .unseen].flatMap fun n => [true, false].map fun g =>
       case (Json.mkObj [("seen", jSeen n), ("guardHolds", .bool g)])
-        (jInvokeResult (invoke n g))) ] ++ refineFiles ++ shapeFiles ++ walkFiles ++ dispatchFiles ++ framesFiles
+        (jInvokeResult (invoke n g))) ] ++ refineFiles ++ shapeFiles ++ walkFiles ++ dispatchFiles ++ framesFiles ++ M.files
 
 /-- One case per line, so a change shows as a line in a diff. -/
 def render (name : String) (cases : List Json) : String :=
@@ -908,6 +1127,7 @@ def main (args : List String) : IO UInt32 := do
   let some w := Vectors.world
     | IO.eprintln "vectors: the world did not build"; return 1
   IO.FS.createDirAll dir
+  IO.FS.createDirAll (dir / "model")
   for (name, cases) in files w do
     IO.FS.writeFile (dir / (name ++ ".json")) (render name cases)
     IO.println s!"{name}: {cases.length}"
