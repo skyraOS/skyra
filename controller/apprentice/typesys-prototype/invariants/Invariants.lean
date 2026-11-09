@@ -7,3 +7,4 @@ import Invariants.Shape
 import Invariants.Walk
 import Invariants.Dispatch
 import Invariants.Frames
+import Invariants.Model
