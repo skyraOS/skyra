@@ -120,3 +120,100 @@ func TestClaudeTasks(t *testing.T) {
 	}
 	t.Logf("summary\n%s", strings.Join(summary, "\n"))
 }
+
+// A classTask is a pair of read-only tools held one class, and a goal
+// either should meet: the root, scripted, hands it to a child holding the
+// first, then to one holding the second, whose keys have nothing. Each
+// child's asks are Claude's.
+type classTask struct {
+	name  string
+	tools [2]string
+	setup func(t *testing.T, dir string) (goal string, ok func(string) bool)
+}
+
+var classTasks = []classTask{
+	{"cat and head", [2]string{"cat", "head"}, func(t *testing.T, dir string) (string, func(string) bool) {
+		path := filepath.Join(dir, "notes.txt")
+		write(t, path, "alpha\nbeta\n")
+		return "show the contents of this file:\n" + path, func(s string) bool { return strings.Contains(s, "beta") && strings.Contains(s, `"exit":0`) }
+	}},
+	{"ls and find", [2]string{"ls", "find"}, func(t *testing.T, dir string) (string, func(string) bool) {
+		write(t, filepath.Join(dir, "a.txt"), "")
+		write(t, filepath.Join(dir, "b.txt"), "")
+		return "list the files in this directory:\n" + dir,
+			func(s string) bool {
+				return strings.Contains(s, "a.txt") && strings.Contains(s, "b.txt") && strings.Contains(s, `"exit":0`)
+			}
+	}},
+	// Not interchangeable: wc counts what cat shows.
+	{"cat and wc", [2]string{"cat", "wc"}, func(t *testing.T, dir string) (string, func(string) bool) {
+		path := filepath.Join(dir, "notes.txt")
+		write(t, path, "alpha\nbeta\n")
+		return "show the contents of this file:\n" + path, func(s string) bool { return strings.Contains(s, "beta") && strings.Contains(s, `"exit":0`) }
+	}},
+}
+
+// rootScript answers the root's asks itself and the children's with the
+// live model: the root delegates to the first tool, then the second, then
+// returns what the second's child returned, its exit status with it.
+type rootScript struct {
+	*recorder
+	childAsks map[string]int // by the tool the child holds
+}
+
+func (r *rootScript) Guard(a model.Ask) (string, error) {
+	if a.Depth == 0 {
+		return map[int]string{
+			3: `true ? "delegate(goal($1), $2)" : null`,
+			4: `true ? "delegate(goal($1), $3)" : null`,
+			5: `true ? "return 0 $5" : null`,
+		}[len(a.Scope)], nil
+	}
+	for _, s := range a.Scope {
+		if s.Role == model.RoleTool {
+			r.childAsks[string(s.Tool)]++
+		}
+	}
+	return r.recorder.Guard(a)
+}
+
+// TestClaudeClasses is the live eval of classes, when SKYRA_LIVE is set:
+// each pair held one class, then undeclared. It reports, for the second
+// tool's child, how often it was asked, whether the class was refuted, and
+// whether what it returned meets the goal.
+func TestClaudeClasses(t *testing.T) {
+	if os.Getenv("SKYRA_LIVE") == "" {
+		t.Skip("set SKYRA_LIVE=1 to run the eval against the claude CLI")
+	}
+	var summary []string
+	for _, task := range classTasks {
+		t.Run(task.name, func(t *testing.T) {
+			pair := []model.DefLoc{model.DefLoc(task.tools[0]), model.DefLoc(task.tools[1])}
+			for _, classed := range []bool{true, false} {
+				dir := t.TempDir()
+				goal, ok := task.setup(t, dir)
+				p := Program(model.DefaultConstants, task.tools[:])
+				if classed {
+					p.ReadOnly, p.Classes = pair, [][]model.DefLoc{pair}
+				}
+				m, err := model.NewMachine(Ids{}, p, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				s := &rootScript{recorder: &recorder{Model: NewClaudeModel(), t: t}, childAsks: map[string]int{}}
+				w := &counted{}
+				m, v, err := Run(m, []byte(goal), s, w)
+				if err != nil {
+					t.Errorf("classed %v: %v", classed, err)
+					continue
+				}
+				got := Text(v.(map[string]any)["stdout"])
+				refuted := m.Memory.Refuted(model.ClassID(Ids{}, pair))
+				summary = append(summary, fmt.Sprintf("%-13s classed=%-5v %s child asked %d, %s child %d, refuted %-5v ran %v, %s: %q",
+					task.name, classed, task.tools[0], s.childAsks[task.tools[0]], task.tools[1], s.childAsks[task.tools[1]],
+					refuted, w.tools, map[bool]string{true: "meets the goal", false: "misses it"}[ok(got)], got))
+			}
+		})
+	}
+	t.Logf("summary\n%s", strings.Join(summary, "\n"))
+}
