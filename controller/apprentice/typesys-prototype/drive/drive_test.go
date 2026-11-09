@@ -45,7 +45,7 @@ func TestRunLearns(t *testing.T) {
 			t.Fatal(err)
 		}
 		r, _ := v.(map[string]any)
-		if out, _ := r["stdout"].([]byte); r["exit"] != tree.ExitStatus(0) || string(out) != "hello world\n" || mdl.asked != want {
+		if r["exit"] != tree.ExitStatus(0) || r["stdout"] != "hello world\n" || mdl.asked != want {
 			t.Fatalf("run %d: returned %#v after %d asks", run, v, mdl.asked)
 		}
 		mem = m.Memory
@@ -144,7 +144,7 @@ func TestRunDelegates(t *testing.T) {
 			t.Fatal(err)
 		}
 		r, _ := v.(map[string]any)
-		if out, _ := r["stdout"].([]byte); !strings.Contains(string(out), "only.txt") {
+		if out, _ := r["stdout"].(string); !strings.Contains(out, "only.txt") {
 			t.Fatalf("run %d returned %#v", run, v)
 		}
 		if want := []int{4, 0}[run]; len(s.asks) != want {
@@ -201,5 +201,29 @@ func TestRunRefusesEvalError(t *testing.T) {
 		if len(ver.Branches) != 0 {
 			t.Fatalf("committed at %s: %+v", k, ver.Branches)
 		}
+	}
+}
+
+// A return keeps its value's type: the act frame returns ls's text, and
+// the delegate reads it as text, with CEL's string methods, which bytes
+// would refuse.
+func TestReturnKeepsText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &scripted{guards: map[string]string{
+		"delegate 3": `true ? "delegate(goal($1), $2)" : null`,
+		"act 2":      `true ? "$2 $1" : null`,
+		"act 3":      `true ? "return 0 $3" : null`,
+		"delegate 4": `$4.stdout.trim() == "only.txt" ? "return 0 $4.stdout" : null`,
+	}}
+	_, v, err := Run(newMachine(t, []string{"ls", "cat"}, nil), []byte(dir), s, Exec{})
+	r, _ := v.(map[string]any)
+	if err != nil || r["stdout"] != "only.txt\n" {
+		t.Fatalf("%#v %v, last reason %q", v, err, s.asks[len(s.asks)-1].Reason)
+	}
+	if got := tree.ShapeOf(r).Enc(); got != `{"exit":exit(0),"stdout":string}` {
+		t.Fatalf("shape %s", got)
 	}
 }

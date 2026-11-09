@@ -301,7 +301,7 @@ func (m Machine) ask(reason string) (Machine, any, error) {
 func (m Machine) wrote(guard string) (Machine, any, error) {
 	f := m.Frame()
 	table, refs, shapes := tables(f)
-	chain, err := tree.StoreGuard(guard, table)
+	chain, err := tree.StoreConds(guard, table)
 	var u tree.Unstorable
 	if errors.As(err, &u) {
 		return m.ask(fmt.Sprintf("$%d is not in scope: the scope is $1 to $%d", u.N, len(table)))
@@ -346,40 +346,13 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 }
 
 // templateOf is a stored instruction as a template: bound back to the
-// frame's $n and read by its first position.
+// frame's $n and read (ParseInstr).
 func templateOf(stored string, refs map[tree.Position]int) (Template, error) {
 	bound, err := tree.Bind(stored, refs)
 	if err != nil {
 		return Template{}, err
 	}
-	in, err := tree.ParseInstr(bound)
-	if err != nil {
-		return Template{}, err
-	}
-	arg := func(a tree.Arg) Arg {
-		x := Arg{Var: a.N}
-		switch a.Sel.Kind {
-		case tree.SelLines:
-			x.Sels = []Sel{{Lines: true, Runs: a.Sel.Runs}}
-		case tree.SelField:
-			x.Sels = []Sel{{Path: a.Sel.Path}}
-		}
-		return x
-	}
-	var t Template
-	switch in.Kind {
-	case tree.InstrReturn:
-		exit := Lit{IsExit: true, Exit: in.Exit}
-		t = Template{Op: OpReturn, Args: []Arg{{Lit: &exit}, arg(in.Return)}}
-	case tree.InstrRun:
-		t = Template{Op: OpAct, Args: []Arg{{Var: in.N}}}
-	case tree.InstrDelegate:
-		t = Template{Op: OpDelegate, Args: []Arg{arg(in.Goal)}}
-	}
-	for _, a := range in.Args {
-		t.Args = append(t.Args, arg(a))
-	}
-	return t, nil
+	return ParseInstr(bound)
 }
 
 // fits is whether a template can run in a frame, whatever its values: its
@@ -460,12 +433,7 @@ func (m Machine) trust(f Frame, t Template) (Machine, any, error) {
 	}
 	switch t.Op {
 	case OpReturn:
-		var stderr []byte
-		if len(values) > 2 {
-			stderr = []byte(argText(values[2]))
-		}
-		return m.end(f.ID, tree.ReturnValue(int(values[0].(tree.ExitStatus)), []byte(argText(values[1])), stderr,
-			len(values) > 2), false)
+		return m.end(f.ID, ReturnValue(values[0].(tree.ExitStatus), values[1], values[2:]), false)
 	case OpAct:
 		tool := f.Items()[t.Args[0].Var-1].Tool
 		argv := []string{string(tool)}
@@ -540,6 +508,19 @@ func (m Machine) end(id InstLoc, v any, exhausted bool) (Machine, any, error) {
 	}
 	m.Tree = next
 	return m.decide(p.ID)
+}
+
+// ReturnValue is what a return gives its caller, built by the machine,
+// never written: its exit status, the value it returns as stdout, and,
+// when it names one, its why as stderr. Each keeps its own type: text
+// returned is text, an object keeps its fields. The exit status is a shape
+// no JSON value has, so a return is never mistaken for one.
+func ReturnValue(exit tree.ExitStatus, stdout any, why []any) map[string]any {
+	v := map[string]any{"exit": exit, "stdout": stdout}
+	if len(why) > 0 {
+		v["stderr"] = why[0]
+	}
+	return v
 }
 
 func errorValue(msg string) map[string]any { return map[string]any{"error": []byte(msg)} }

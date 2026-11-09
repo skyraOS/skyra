@@ -109,6 +109,9 @@ func digits(s string) (int, bool) {
 	return n, true
 }
 
+// ReadSel reads the selector at the start of s, and its width: 0 for none.
+func ReadSel(s string) (Sel, int, error) { return selector(s) }
+
 // ParseSel reads a whole selector, as String writes it.
 func ParseSel(s string) (Sel, error) {
 	sel, w, err := selector(s)

@@ -111,7 +111,7 @@ func hash(parts ...any) string {
 }
 
 // Run drives a machine from its goal to its end: what its return gave
-// (tree.ReturnValue), or the error observation of an exhausted bound, the
+// (model.ReturnValue), or the error observation of an exhausted bound, the
 // transition bound or one transition's refinement bound, which the machine
 // itself decides.
 func Run(m model.Machine, goal []byte, mdl Model, world World) (model.Machine, any, error) {

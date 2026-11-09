@@ -79,6 +79,7 @@ Use part of a parameter instead of copying its text:
   $2[2]              line 2 of $2
   $2[3:7]            lines 3 to 7
   $2.dir             the field dir of a JSON value ($2.dir.path goes deeper)
+  $4.stdout[1]       line 1 of $4's field stdout: each cut cuts what the last gave
 Your expression is reused when new values arrive, so never write a value's text into it.
 
 Reply with JSON and nothing else:
