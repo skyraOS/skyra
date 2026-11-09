@@ -61,12 +61,14 @@ inductive Op where
   deriving DecidableEq, Repr
 
 /-- An interface: an observation's type. A shape; a definition in memory,
-`def B`, a tool or a model by its program's endpoints; a composition, a product of interfaces; or a cut,
-an interface divided by a selector, kept undivided. -/
+`def B`, a tool or a model by which operator's position it fits; a
+composition, a product of interfaces; a sum, the alternatives one position
+takes; or a cut, an interface divided by a selector, kept undivided. -/
 inductive Iface where
   | shape (s : Shape)
   | defn (b : DefLoc)
   | op (o : Op) (parts : List Iface)
+  | sum (alts : List Iface)
   | cut (i : Iface) (s : Sel)
   deriving Repr
 
@@ -127,22 +129,22 @@ structure Constants where
   floor : Nat
   deriving DecidableEq, Repr
 
-/-- What each operator reaches: the models `delegate` reaches and the tools
-`act` reaches. -/
-structure Endpoints where
-  delegate : List DefLoc
-  act : List DefLoc
-  deriving DecidableEq, Repr
-
 /-- A program: the definition a process is instantiated from. The language
-version, its constants, its global scope by name, its endpoints, and the
-entry scope its grant must have. -/
+version, its constants, its global scope by name, each name's interface,
+and the entry scope its grant must have. -/
 structure Program where
   version : DefLoc
   constants : Constants
-  global : List (String × DefLoc)
-  endpoints : Endpoints
+  global : List (String × Iface)
   entry : Scope
+
+/-- The definitions an operator reaches: the alternatives of the sum at
+its interface's first position. `act`'s are the program's tools,
+`delegate`'s its models. -/
+def Program.reach (p : Program) (name : String) : List DefLoc :=
+  match p.global.lookup name with
+  | some (.op _ (.sum alts :: _)) => alts.filterMap fun | .defn b => some b | _ => none
+  | _ => []
 
 /-- Boot's first check: the program is well formed. -/
 def Program.wellFormed (p : Program) : Bool :=
@@ -150,7 +152,7 @@ def Program.wellFormed (p : Program) : Bool :=
     0 < p.constants.inhibition.2 && p.constants.inhibition.1 ≤ p.constants.inhibition.2 &&
     1 ≤ p.constants.floor && p.constants.floor ≤ 4 &&
     decide (p.global.map (·.1)).Nodup &&
-    p.endpoints.act.all (· ∉ p.endpoints.delegate)
+    (p.reach "act").all (· ∉ p.reach "delegate")
 
 /-- A key: what has been seen. Its root is its program's `H(version,
 global)`; then its kind; then the scope's interfaces and each arrival's,
@@ -359,8 +361,8 @@ theorem key_arrived (rootOf : DefLoc → DefLoc) (f : Frame) (o : Observation) :
 To invoke is to push, to return is to pop, and each operator's direction is
 its form. A frame's kind decides which operators it emits: an agent's by
 its scope's tool types under `k`, a leaf's by position, the frame an `act`
-pushes. Tool types are counted through the program's endpoints: `act` is
-the program's tools. -/
+pushes. Tool types are counted through the program: its tools are what
+fits `act`'s first position (`Program.reach`). -/
 
 /-- Direction is a function of the operator: every operator but `return`
 pushes. -/
@@ -453,9 +455,9 @@ theorem mem_toolTypes {act : List DefLoc} {entries : List Iface} {b : DefLoc} :
   simp [toolTypes, List.mem_eraseDups]
 
 /-- Models never count against `k`: in a well-formed program no tool type
-is a model. -/
+fits `delegate`. -/
 theorem toolTypes_not_model {p : Program} (hw : p.wellFormed = true) {entries : List Iface} {b : DefLoc}
-    (hb : b ∈ toolTypes p.endpoints.act entries) : b ∉ p.endpoints.delegate := by
+    (hb : b ∈ toolTypes (p.reach "act") entries) : b ∉ p.reach "delegate" := by
   simp only [Program.wellFormed, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq] at hw
   exact hw.2 b (mem_toolTypes.mp hb).2
 
@@ -588,12 +590,12 @@ def grantBindings (g : Grant) (os : List Observation) : List Member :=
   g.defs.map .tool ++ os.map .obs
 
 /-- Boot's checks: the program is well formed, the grant's interface is the
-entry scope position by position, every definition it passes is an
-endpoint, and the grant only narrows. -/
+entry scope position by position, every definition it passes fits an
+operator, and the grant only narrows. -/
 def Boots (p : Program) (g : Grant) (os : List Observation) (src : Option (Frame × Nat)) : Prop :=
   p.wellFormed = true ∧ p.entry.kind = .root ∧
     g.defs.map Iface.defn ++ os.map (·.iface) = p.entry.entries ∧
-    (∀ b ∈ g.defs, b ∈ p.endpoints.delegate ∨ b ∈ p.endpoints.act) ∧ narrows src g
+    (∀ b ∈ g.defs, b ∈ p.reach "delegate" ∨ b ∈ p.reach "act") ∧ narrows src g
 
 open Classical in
 /-- Boot: the checks, then exactly one frame pushed, its static link the
@@ -648,10 +650,10 @@ theorem boot_frame (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × N
   obtain ⟨os, -, ⟨-, hr, -, -, -⟩, rfl⟩ := (boot_eq_some h p g src f).mp hb
   exact ⟨rfl, hr, rfl, rfl, rfl⟩
 
-/-- Endpoints are typed at boot: every definition the first frame holds is
-a model or a tool of the program passed. -/
-theorem boot_endpoints (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) (f : Frame)
-    (hb : boot h p g src = some f) : ∀ b ∈ held f, b ∈ p.endpoints.delegate ∨ b ∈ p.endpoints.act := by
+/-- Tools and models are typed at boot: every definition the first frame
+holds fits `delegate` or `act` in the program passed. -/
+theorem boot_reach (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) (f : Frame)
+    (hb : boot h p g src = some f) : ∀ b ∈ held f, b ∈ p.reach "delegate" ∨ b ∈ p.reach "act" := by
   obtain ⟨os, -, ⟨-, -, -, he, -⟩, rfl⟩ := (boot_eq_some h p g src f).mp hb
   intro b hb'
   exact he b (by simpa [held, held_grant] using hb')

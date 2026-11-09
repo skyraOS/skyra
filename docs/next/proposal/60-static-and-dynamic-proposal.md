@@ -64,7 +64,7 @@ came from `cat`, from `ls`, as JSON, as a child's return, or as a goal. An
 observation's type is its shape (58, Shapes): `string` for text, keys
 recursively for JSON, `{exit, stdout: bytes, stderr: bytes}` for a
 failure. A definition's type is `def B`, `B` its hash in memory: a tool or a
-model, as the program's endpoints say (The program). `string` is the type of what the
+model, as the global operators' interfaces say (Scope and frame). `string` is the type of what the
 system has not yet understood. Authoring an implementation refines it:
 `$1 > … ? "cat $1"` reads `$1` as a filename.
 
@@ -262,7 +262,8 @@ Interfaces are built four ways:
 
 ```text
 I ::= shape                  a value's kind: string, {keys…}, bytes, exit(n), …
-    | def B                  a definition in memory: a tool or a model, by the program's endpoints
+    | def B                  a definition in memory: a tool or a model, by what fits an operator's position
+    | I₁ + … + Iₙ            a sum: the alternatives one position takes
     | op(I₁ × … × Iₙ)        composition, a product: delegate, act, boot, return
     | I / sel                a cut, division: I / .field, I / [a:b]
 ```
@@ -352,7 +353,8 @@ recorded at boot for replay and kept out of the key.
 | The model startled | No: it changes how an implementation was authored | the voter's provenance |
 
 Global scope is called by name, so it is encoded as a map, names to
-definition hashes, sorted: the root is `H(language version, map)`.
+interfaces, sorted: the root is `H(language version, map)`, each position's
+alternatives left out: the operators' forms, not what they reach.
 
 **A tool changes; what it returned does not.** A tool's type is
 `def B`, keyed on its binary, so a new `ls` passed from the root gives a new key to every scope
@@ -372,21 +374,24 @@ by what a binary is:
 | `agent act` | at most `k` tool types, at least one | act, return |
 | `leaf` | position: the frame an act frame pushes | return only |
 
-**Tools and models are endpoints, typed by the program.** Both are
-definitions invoked; they differ only in which operator reaches them. The
-program's `endpoints` lists the models `delegate` reaches and the tools
-`act` reaches, disjoint. A scope's **tool types** are its definitions in
-`act`, each once; models never count against `k`. So the kinds above are
-counted through the frame's static link, and:
+**Tools and models are typed by the operators' interfaces.** Both are
+definitions invoked; they differ only in which operator reaches them, and
+that is already in the program: its global scope maps `delegate` and
+`act` to their interfaces, and an operator's interface is a product whose
+first position is a sum of the definitions it takes. A **tool** is a
+definition that fits `act`'s first position; a **model**, one that fits
+`delegate`'s. No interface fits both. A scope's **tool types** are its
+definitions that fit `act`, each once; models never count against `k`. So
+the kinds above are counted through the frame's static link, and:
 
 - **What an act invokes is a tool**, so the frame it pushes is a leaf:
-  leaves by position and tools by endpoint say one thing.
+  leaves by position and tools by `act`'s interface say one thing.
 - **A delegation's tools are the parent's.** It passes a subset of its
-  scope, and its child's tools are the passed definitions in `act`.
-- **A delegation picks its model.** `delegate` reaches a model endpoint,
-  so which model the child consults at `startle` is a position of the
-  instruction, tallied like any other: the system learns which model
-  serves which goal.
+  scope, and its child's tools are the passed definitions that fit `act`.
+- **A delegation picks its model.** `delegate`'s first position takes a
+  model, so which model the child consults at `startle` is a position of
+  the instruction, type-checked and tallied like any other: the system
+  learns which model serves which goal.
 
 An **agent** decides: it has implementations and emits operators. A
 **leaf** cannot further the computation: it has no implementations, emits
@@ -446,12 +451,10 @@ program {
     inhibition:   [0, 1]         ι (59)
     floor:        1 … 4          the coarsest tally level (59), default 2
   }
-  global: {                      by name, sorted, each name once
-    delegate: hash,  return: hash,  goal: hash
-  }
-  endpoints: {                   what each operator reaches, disjoint
-    delegate: [ def B … ]        models
-    act:      [ def B … ]        tools
+  global: {                      by name, sorted, each name once: interfaces
+    delegate: delegate((def M₁ + … ) × goal × …)     models: its first position
+    act:      act((def T₁ + … ) × …)                 tools: its first position
+    return:   return(…),  goal: …
   }
   entry: scope {                 the first frame's scope: the grant's interface
     kind:     agent root
@@ -477,11 +480,11 @@ grant {
 `boot(program, grant) → frame | refusal`:
 
 1. **The program is well formed:** `k ≥ 1`, the floor is a level, `ι` is
-   in [0, 1], global names are sorted and each once, and the endpoints
-   partition: no definition is both a model and a tool.
+   in [0, 1], global names are sorted and each once, and no definition
+   fits both `act`'s first position and `delegate`'s.
 2. **The grant's interface is the entry scope**, position by position: the
-   definition at each position is that position's, by its hash, and is an
-   endpoint, a model or a tool; each context value has that position's
+   definition at each position is that position's, by its hash, and fits
+   an operator, a model or a tool; each context value has that position's
    interface.
 3. **The grant only narrows:** every definition it passes is held by the
    frame that boots it.
@@ -550,13 +553,14 @@ Think proposes; the user reviews and grants; Act does
 
 - **A definition's interface is `def B`.** A tool's `B` holds its binary
   hash. How a leaf's bytes are read is learned (Reading what arrives).
-- **Endpoints are typed at boot.** Memory holds every interface alike;
-  only the program says which definitions are models and which are tools.
-  Kind is the program's reading of memory, through the static link, not a
-  fact memory stores. The endpoints stay out of memory's root, as the
-  constants do: reclassifying a definition changes the kinds of the scopes
-  holding it, and kind is in the key. They grow only by booting another
-  program.
+- **Tools and models are typed at boot**, by the global operators'
+  interfaces. Memory holds every interface alike; only the program says
+  which definitions are models and which are tools. Kind is the
+  program's reading of memory, through the static link, not a fact memory
+  stores. The alternatives in an operator's positions stay out of
+  memory's root, as the constants do: reclassifying a definition changes
+  the kinds of the scopes holding it, and kind is in the key. They grow
+  only by booting another program.
 - **Identities.** `H(program)` names the program and is recorded with boot
   in the log. Memory's trie root is `H(version, global)`: the constants
   stay out.
@@ -891,9 +895,10 @@ In a new `invariants/Invariants/Model.lean`, before any Go:
   from genesis gives the same memory.
 - **Direction from the operator:** push or pop is determined by the
   instruction's form.
-- **Boot:** a program and a grant give a frame exactly when its
-  endpoints partition, the grant's interface is the entry scope, every
-  definition it passes is an endpoint, and every one is held; every
+- **Boot:** a program and a grant give a frame exactly when no
+  definition fits both `act` and `delegate`, the grant's interface is the
+  entry scope, every definition it passes fits one, and every one is
+  held; every
   frame of a process reads its program's global scope and constants
   through its static link.
 - **Frame identity:** `id` is injective on (parent, invoke index, scope)
