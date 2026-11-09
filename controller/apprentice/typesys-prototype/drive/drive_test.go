@@ -187,3 +187,19 @@ func TestRunTransitionBound(t *testing.T) {
 		t.Fatalf("%#v %v", v, err)
 	}
 }
+
+// A guard that does not evaluate on the values it was written for is
+// refused with the error, and nothing is committed: the model is asked
+// again, and the run does not fail.
+func TestRunRefusesEvalError(t *testing.T) {
+	s := &scripted{guards: map[string]string{"act 2": `int($1) > 0 ? "$2 $1" : null`}}
+	m, v, err := Run(newMachine(t, []string{"echo"}, nil), []byte("not a number"), s, Exec{})
+	if err != nil || len(s.asks) != 3 || !strings.Contains(s.asks[1].Reason, "does not evaluate on these values") {
+		t.Fatalf("%#v %v, asks %+v", v, err, s.asks)
+	}
+	for k, ver := range m.Memory {
+		if len(ver.Branches) != 0 {
+			t.Fatalf("committed at %s: %+v", k, ver.Branches)
+		}
+	}
+}

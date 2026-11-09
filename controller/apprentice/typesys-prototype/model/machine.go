@@ -323,6 +323,12 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 		}
 		links[i], chain[i].Instr = Link{Cond: l.Cond, Template: t}, t.Text()
 	}
+	// The chain's branches are cast on what the frame holds now, as every
+	// later decision here casts them: a guard that does not evaluate on the
+	// values it was written for is refused, never committed.
+	if _, err := tree.Cast(tree.CommitChain(tree.EmptyVersion(), chain).Branches, vals(f)); err != nil {
+		return m.ask("the guard does not evaluate on these values: " + err.Error())
+	}
 	k := m.key(f)
 	m.Memory.Apply(Event{Key: k, Startle: true, Impl: links})
 	after, err := tree.AfterStartle(chain, m.Memory[k.Text()].Branches, vals(f), m.tally())
