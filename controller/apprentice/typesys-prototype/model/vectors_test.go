@@ -11,12 +11,14 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"skyra/typesys-prototype/tree"
 )
 
 const vectorDir = "../invariants/vectors/model"
 
 // pending is the vector files no replay reads yet: the port's next steps.
-var pending = []string{"boot", "cut", "read", "introduce", "step"}
+var pending = []string{"boot", "step"}
 
 type vcase struct {
 	In  map[string]json.RawMessage `json:"in"`
@@ -73,7 +75,42 @@ func opt[T any](v T, ok bool) any {
 	return v
 }
 
+// optValue is a value as the vectors write it, or null.
+func optValue(v any, ok bool) any {
+	if !ok {
+		return nil
+	}
+	return ValueJSON(v)
+}
+
 var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
+	"cut": func(t *testing.T, in map[string]json.RawMessage) any {
+		v := DecodeValue(dec[any](t, in["value"]))
+		sels := dec[[]Sel](t, in["sels"])
+		cut, ok := CutAll(v, sels)
+		i := CutIface(ShapeIface(tree.ShapeOf(v)), sels)
+		r, rok := i.Reduce()
+		return map[string]any{"value": optValue(cut, ok), "iface": i, "reduced": opt(r, rok)}
+	},
+	"read": func(t *testing.T, in map[string]json.RawMessage) any {
+		f := dec[Frame](t, in["frame"])
+		n := dec[int](t, in["n"])
+		sels := dec[[]Sel](t, in["sels"])
+		v, ok := f.Read(n, sels)
+		a := f.Inline(n, sels)
+		if ev, eok := f.Eval(a); eok != ok || ok && !reflect.DeepEqual(ev, v) {
+			t.Errorf("$%d%v: inlined %v reads %v, %v; the reference %v, %v", n, sels, a, ev, eok, v, ok)
+		}
+		return map[string]any{"read": optValue(v, ok), "inline": a}
+	},
+	"introduce": func(t *testing.T, in map[string]json.RawMessage) any {
+		f := dec[Frame](t, in["frame"])
+		e, n, ok := f.Introduce(dec[Lit](t, in["lit"]))
+		if !ok {
+			return map[string]any{"copies": n}
+		}
+		return map[string]any{"entry": e}
+	},
 	"key": func(t *testing.T, in map[string]json.RawMessage) any {
 		f := dec[Frame](t, in["frame"])
 		return f.Key(func(d DefLoc) DefLoc { return d })

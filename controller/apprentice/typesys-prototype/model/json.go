@@ -283,8 +283,65 @@ func (l *Lit) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// ValueJSON is a value as the vectors write it: as JSON, bytes tagged
+// {"bytes": [...]} and an exit status {"exitStatus": n}.
+func ValueJSON(v any) any {
+	switch v := v.(type) {
+	case []byte:
+		ns := make([]int, len(v))
+		for i, b := range v {
+			ns[i] = int(b)
+		}
+		return map[string]any{"bytes": ns}
+	case tree.ExitStatus:
+		return map[string]any{"exitStatus": int(v)}
+	case []any:
+		out := make([]any, len(v))
+		for i, x := range v {
+			out[i] = ValueJSON(x)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			out[k] = ValueJSON(x)
+		}
+		return out
+	}
+	return v
+}
+
+// DecodeValue is ValueJSON's inverse, over what encoding/json decodes.
+func DecodeValue(j any) any {
+	switch j := j.(type) {
+	case []any:
+		out := make([]any, len(j))
+		for i, x := range j {
+			out[i] = DecodeValue(x)
+		}
+		return out
+	case map[string]any:
+		if bs, ok := j["bytes"].([]any); ok && len(j) == 1 {
+			out := make([]byte, len(bs))
+			for i, b := range bs {
+				out[i] = byte(b.(float64))
+			}
+			return out
+		}
+		if n, ok := j["exitStatus"].(float64); ok && len(j) == 1 {
+			return tree.ExitStatus(n)
+		}
+		out := make(map[string]any, len(j))
+		for k, x := range j {
+			out[k] = DecodeValue(x)
+		}
+		return out
+	}
+	return j
+}
+
 func (o Observation) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]any{"value": o.Value, "iface": o.Iface, "loc": o.Loc})
+	return json.Marshal(map[string]any{"value": ValueJSON(o.Value), "iface": o.Iface, "loc": o.Loc})
 }
 
 func (o *Observation) UnmarshalJSON(b []byte) error {
@@ -294,8 +351,18 @@ func (o *Observation) UnmarshalJSON(b []byte) error {
 		Loc   InstLoc `json:"loc"`
 	}
 	err := json.Unmarshal(b, &x)
-	*o = Observation{Value: x.Value, Iface: x.Iface, Loc: x.Loc}
+	*o = Observation{Value: DecodeValue(x.Value), Iface: x.Iface, Loc: x.Loc}
 	return err
+}
+
+func (a Arg) MarshalJSON() ([]byte, error) {
+	switch {
+	case a.Lit != nil:
+		return json.Marshal(map[string]any{"lit": a.Lit})
+	case a.Name != "":
+		return json.Marshal(map[string]any{"name": a.Name})
+	}
+	return json.Marshal(map[string]any{"var": a.Var, "sels": nonNil(a.Sels)})
 }
 
 func (m Member) MarshalJSON() ([]byte, error) {

@@ -794,6 +794,14 @@ namespace M
 
 def jSel (s : Model.Sel) : Json := .str s.toCut.enc
 
+/-- A value as 58's vectors write it, but bytes tagged, `{"bytes": […]}`,
+so they are never read back as an array of numbers. -/
+partial def jValue : Shape.Value → Json
+  | .bytes b => Json.mkObj [("bytes", .arr (b.toList.map fun x => jNat x.toNat).toArray)]
+  | .arr xs => .arr (xs.map jValue).toArray
+  | .obj kvs => Json.mkObj (kvs.map fun (k, v) => (k, jValue v))
+  | v => svJson v
+
 def jOp : Model.Op → Json
   | .delegate => .str "delegate" | .act => .str "act" | .boot => .str "boot" | .ret => .str "return"
 
@@ -815,7 +823,7 @@ def jLit : Model.Lit → Json
   | .exit n => Json.mkObj [("exit", jNat n)]
 
 def jObs (o : Model.Observation) : Json :=
-  Json.mkObj [("value", svJson o.value), ("iface", jIface o.iface), ("loc", .str o.loc.hash)]
+  Json.mkObj [("value", jValue o.value), ("iface", jIface o.iface), ("loc", .str o.loc.hash)]
 
 def jMember : Model.Member → Json
   | .tool b => Json.mkObj [("tool", .str b.hash)]
@@ -883,7 +891,7 @@ def bootFile : List Json :=
   let srcs : List (Option (Model.Frame × Nat)) := [none, some (booter [ls, cat, claude, gpt], 0), some (booter [ls], 2)]
   [prog, progOverlap].flatMap fun p => grantDefs.flatMap fun ds => contexts.flatMap fun cx => srcs.map fun src =>
     Json.mkObj [("in", Json.mkObj [("program", jProgram p),
-        ("grant", Json.mkObj [("defs", .arr (ds.map (Json.str ·.hash)).toArray), ("context", .arr (cx.map svJson).toArray)]),
+        ("grant", Json.mkObj [("defs", .arr (ds.map (Json.str ·.hash)).toArray), ("context", .arr (cx.map jValue).toArray)]),
         ("from", jOpt (fun (f, n) => Json.mkObj [("frame", jFrame f), ("invoke", jNat n)]) src)]),
       ("out", jOpt jFrame (Model.boot ids p ⟨ds, cx⟩ src))]
 
@@ -894,12 +902,14 @@ def vDir : Shape.Value := .obj [("dir", .obj [("path", .str "/tmp")]), ("n", .nu
 def vText : Shape.Value := .str "a\nb\nc"
 
 /-- A frame: `ls` and a goal bound; an object arrived; cuts, an introduction
-copying nothing, a forward elimination, an exit status. -/
+copying nothing, a forward elimination, an exit status, text arrived, and
+an elimination of itself. -/
 def frame : Model.Frame :=
   ⟨⟨"f"⟩, ⟨"program(v1)"⟩, none, ⟨.act, [.defn ls, .shape .str]⟩,
     [.tool ls, .obs (obs (Shape.Value.str "list /tmp") 2)],
     [.arrived (obs vDir 3), .eliminated 3 [.field ["dir"]], .introduced (.str "-la"),
-      .eliminated 4 [.field ["path"]], .eliminated 9 [], .introduced (.exit 0), .arrived (obs vText 9)],
+      .eliminated 4 [.field ["path"]], .eliminated 9 [], .introduced (.exit 0), .arrived (obs vText 9),
+      .eliminated 10 [.lines [(1, 1)]]],
     none⟩
 
 def keyFile : List Json :=
@@ -926,16 +936,16 @@ def cutFile : List Json :=
       [.field ["dir", "path"], .lines [(1, 1)]]]
   vals.flatMap fun v => sels.map fun ss =>
     let i : Option Model.Iface := (Shape.shapeOf v).map .shape
-    Json.mkObj [("in", Json.mkObj [("value", svJson v), ("sels", jSels ss)]),
-      ("out", Json.mkObj [("value", jOpt svJson (Model.cutAll v ss)),
+    Json.mkObj [("in", Json.mkObj [("value", jValue v), ("sels", jSels ss)]),
+      ("out", Json.mkObj [("value", jOpt jValue (Model.cutAll v ss)),
         ("iface", jOpt jIface (i.map (ss.foldl .cut))),
         ("reduced", jOpt jIface (i.bind fun i => (ss.foldl .cut i).reduce))])]
 
 def readFile : List Json :=
   let sels : List (List Model.Sel) := [[], [.field ["path"]], [.lines [(1, 1)]]]
-  (List.range 11).flatMap fun n => sels.map fun ss =>
+  (List.range 12).flatMap fun n => sels.map fun ss =>
     Json.mkObj [("in", Json.mkObj [("frame", jFrame frame), ("n", jNat n), ("sels", jSels ss)]),
-      ("out", Json.mkObj [("read", jOpt svJson (Model.read frame n ss)), ("inline", jArg (Model.inline frame n ss))])]
+      ("out", Json.mkObj [("read", jOpt jValue (Model.read frame n ss)), ("inline", jArg (Model.inline frame n ss))])]
 
 def introduceFile : List Json :=
   let lits : List Model.Lit := [.str "-la", .str "/tmp", .str "list", .str "path", .str "b\nc", .str "zz", .str "",
