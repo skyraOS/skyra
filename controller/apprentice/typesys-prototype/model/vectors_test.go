@@ -149,6 +149,51 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 		text, ok := f.JoinText(ps)
 		return map[string]any{"parts": ps, "text": opt(text, ok)}
 	},
+	"machine": func(t *testing.T, in map[string]json.RawMessage) any {
+		m, err := NewMachine(textIds{}, dec[Program](t, in["program"]), Replay(dec[[]Event](t, in["log"])))
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs := []any{Answered{Bytes: []byte(dec[string](t, in["goal"]))}}
+		for _, raw := range dec[[]map[string]json.RawMessage](t, in["inputs"]) {
+			if g, ok := raw["wrote"]; ok {
+				inputs = append(inputs, Wrote{Guard: dec[string](t, g)})
+				continue
+			}
+			a := dec[struct {
+				Stdout string `json:"stdout"`
+				Exit   int    `json:"exit"`
+				Stderr string `json:"stderr"`
+			}](t, raw["answered"])
+			inputs = append(inputs, Answered{Bytes: []byte(a.Stdout), Exit: a.Exit, Stderr: []byte(a.Stderr)})
+		}
+		var effects []any
+		for _, i := range inputs {
+			next, e, err := m.Step(i)
+			if err != nil {
+				effects = append(effects, map[string]any{"stuck": nil})
+				break
+			}
+			m = next
+			switch e := e.(type) {
+			case RunLeaf:
+				effects = append(effects, map[string]any{"runLeaf": map[string]any{"tool": e.Tool, "argv": e.Argv}})
+			case Ask:
+				effects = append(effects, map[string]any{"ask": map[string]any{"key": e.Key, "kind": e.Kind,
+					"depth": e.Depth, "refused": e.Refused}})
+			case Finished:
+				effects = append(effects, map[string]any{"finished": ValueJSON(e.Value)})
+			case Exhausted:
+				effects = append(effects, map[string]any{"exhausted": ValueJSON(e.Value)})
+			}
+		}
+		var mem []any
+		for _, k := range dec[[]Key](t, in["keys"]) {
+			v, seen := m.Memory[k.Text()]
+			mem = append(mem, opt(version(t, v), seen))
+		}
+		return map[string]any{"effects": effects, "tree": m.Tree, "memory": nonNil(mem)}
+	},
 	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
 		m := Replay(dec[[]Event](t, in["log"]))
 		var out []any

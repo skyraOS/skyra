@@ -1,6 +1,7 @@
 package model
 
-// The machine: 61's runtime, composed of what Model.lean defines. It is pure:
+// The machine: 61's runtime, composed of what Model.lean defines, and run
+// as Machine.lean runs it (vectors/model/machine). It is pure:
 // each Step takes one input and gives one effect for the shell to perform
 // (run a leaf, ask the model, or end), and changes nothing it was handed.
 //
@@ -59,12 +60,13 @@ type (
 	// write), how deep it is (the first frame is 0), its $n, the model its
 	// delegation chose, and why the last guard was refused, if one was.
 	Ask struct {
-		Key    Key
-		Kind   Kind
-		Depth  int
-		Scope  []Shown
-		Model  *DefLoc
-		Reason string
+		Key     Key
+		Kind    Kind
+		Depth   int
+		Scope   []Shown
+		Model   *DefLoc
+		Reason  string
+		Refused *Refusal
 	}
 	// Finished is the first frame's return.
 	Finished struct{ Value any }
@@ -91,6 +93,35 @@ type Shown struct {
 	Value  any
 	Origin string
 }
+
+// A Refusal is why the model is asked again, as Machine.lean names it:
+// what it wrote cannot run in the frame (fits); a literal is text a cut of
+// $N takes (copies); a join is refused (Join); an argument reads nothing
+// seen (unstored); the chain selects nothing for the values it was written
+// for (unselected); or an argument of the template run does not read
+// (unread). The shell's own, before a guard is stored: a condition reading
+// what is not seen (cond), a guard that does not parse or check (guard),
+// an instruction that does not parse (instr), or a guard that does not
+// evaluate (eval).
+type Refusal struct {
+	Code string
+	N    int
+	Join *JoinRefusal
+}
+
+func (r Refusal) MarshalJSON() ([]byte, error) {
+	switch {
+	case r.Code == "copies":
+		return json.Marshal(map[string]any{"copies": r.N})
+	case r.Join != nil && r.Join.Untext != nil:
+		return json.Marshal(map[string]any{"join": map[string]any{"untext": *r.Join.Untext}})
+	case r.Join != nil:
+		return json.Marshal(map[string]any{"join": map[string]any{"copies": r.Join.Copies}})
+	}
+	return json.Marshal(r.Code)
+}
+
+func refused(code string) Refusal { return Refusal{Code: code} }
 
 // ErrAsking is an input the machine is not waiting for.
 var ErrAsking = errors.New("the machine is not waiting for this input")
@@ -326,11 +357,11 @@ func (m Machine) decide(id InstLoc) (Machine, any, error) {
 	if o.Kind == tree.SelectOne {
 		return m.trust(f, o.Template)
 	}
-	return m.ask("")
+	return m.ask(nil, "")
 }
 
 // ask startles the model, or, the transition's asks spent, ends the frame.
-func (m Machine) ask(reason string) (Machine, any, error) {
+func (m Machine) ask(r *Refusal, reason string) (Machine, any, error) {
 	f := m.Frame()
 	if m.asks >= m.Program.Constants.Refinements {
 		return m.end(f.ID, errorValue(fmt.Sprintf("refinement bound exhausted: the model was asked %d times at this key "+
@@ -358,8 +389,11 @@ func (m Machine) ask(reason string) (Machine, any, error) {
 		}
 	}
 	return m, Ask{Key: m.key(f), Kind: f.Scope.Kind, Depth: m.Depth(f.ID), Scope: scope, Model: f.Model,
-		Reason: reason}, nil
+		Reason: reason, Refused: r}, nil
 }
+
+// refuse asks again, saying why.
+func (m Machine) refuse(r Refusal, reason string) (Machine, any, error) { return m.ask(&r, reason) }
 
 // wrote stores the model's guard at the frame's key, checks it by shape and
 // each template against the frame, commits it, and runs its own template
@@ -370,41 +404,42 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	chain, err := tree.StoreConds(guard, conds, instrs)
 	var u tree.Unstorable
 	if errors.As(err, &u) && u.N >= 1 && u.N <= len(instrs) {
-		return m.ask(fmt.Sprintf("$%d was made in this frame, a cut or a literal: a condition reads what was seen, "+
+		return m.refuse(refused("cond"), fmt.Sprintf("$%d was made in this frame, a cut or a literal: a condition reads what was seen, "+
 			"so read what it was made from", u.N))
 	}
 	if errors.As(err, &u) {
-		return m.ask(fmt.Sprintf("$%d is not in scope: the scope is $1 to $%d", u.N, len(instrs)))
+		return m.refuse(refused("cond"), fmt.Sprintf("$%d is not in scope: the scope is $1 to $%d", u.N, len(instrs)))
 	}
 	if err != nil {
-		return m.ask(err.Error())
+		return m.refuse(refused("guard"), err.Error())
 	}
 	if err := tree.CheckGuard(chain, shapes); err != nil {
-		return m.ask(err.Error())
+		return m.refuse(refused("guard"), err.Error())
 	}
 	links := make([]Link, len(chain))
 	for i, l := range chain {
 		t, err := templateOf(l.Instr, refs)
-		if err == nil {
-			t, err = joined(f, t)
-		}
-		if err == nil {
-			err = m.fits(f, t)
-		}
 		if err != nil {
-			return m.ask(err.Error())
+			return m.refuse(refused("instr"), err.Error())
+		}
+		if t, err = joined(f, t); err != nil {
+			j := err.(JoinRefusal)
+			return m.refuse(Refusal{Code: "join", Join: &j}, err.Error())
+		}
+		if err := m.fits(f, t); err != nil {
+			return m.refuse(refused("fits"), err.Error())
 		}
 		for _, a := range t.Args {
 			if a.Lit == nil {
 				continue
 			}
 			if _, n, ok := f.Introduce(*a.Lit); !ok {
-				return m.ask(fmt.Sprintf("'%s' is text a cut of $%d takes: cut it instead of writing it", a.Lit.Str, n))
+				return m.refuse(Refusal{Code: "copies", N: n}, fmt.Sprintf("'%s' is text a cut of $%d takes: cut it instead of writing it", a.Lit.Str, n))
 			}
 		}
 		st, ok := f.Store(t)
 		if !ok {
-			return m.ask("an argument reads nothing this frame has seen: a cut of a literal, or of a $n made after it")
+			return m.refuse(refused("unstored"), "an argument reads nothing this frame has seen: a cut of a literal, or of a $n made after it")
 		}
 		links[i], chain[i].Instr = Link{Cond: l.Cond, Template: st}, st.Text()
 	}
@@ -412,7 +447,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	// later decision here casts them: a guard that does not evaluate on the
 	// values it was written for is refused, never committed.
 	if _, err := tree.Cast(tree.CommitChain(tree.EmptyVersion(), chain).Branches, vals(f)); err != nil {
-		return m.ask("the guard does not evaluate on these values: " + err.Error())
+		return m.refuse(refused("eval"), "the guard does not evaluate on these values: "+err.Error())
 	}
 	k := m.key(f)
 	m.Memory.Apply(Event{Key: k, Startle: true, Impl: links})
@@ -421,7 +456,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 		return m, nil, err
 	}
 	if after.Startle {
-		return m.ask("the guard does not select what arrived")
+		return m.refuse(refused("unselected"), "the guard does not select what arrived")
 	}
 	t, err := ParseTemplate(after.Instr)
 	if err != nil {
@@ -506,7 +541,7 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 		return m, nil, fmt.Errorf("a stored template names a key position this frame does not have: %s", st.Text())
 	}
 	if err := m.fits(f, t); err != nil {
-		return m.ask(err.Error())
+		return m.refuse(refused("fits"), err.Error())
 	}
 	values := make([]any, len(t.Args))
 	for i, a := range t.Args {
@@ -515,7 +550,7 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 		}
 		v, ok := f.Eval(a)
 		if !ok {
-			return m.ask(fmt.Sprintf("%s does not apply to $%d's value", argSource(a), a.Var))
+			return m.refuse(refused("unread"), fmt.Sprintf("%s does not apply to $%d's value", argSource(a), a.Var))
 		}
 		values[i] = v
 	}

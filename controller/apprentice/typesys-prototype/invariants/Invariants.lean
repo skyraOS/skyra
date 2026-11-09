@@ -8,3 +8,4 @@ import Invariants.Walk
 import Invariants.Dispatch
 import Invariants.Frames
 import Invariants.Model
+import Invariants.Machine

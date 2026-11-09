@@ -1136,8 +1136,177 @@ def joinFile : List Json :=
         | .error (.copies n) => Json.mkObj [("copies", jNat n)]
         | .error (.untext a) => Json.mkObj [("untext", jArg a)])]
 
+/-! ### The machine
+
+Runs of the machine, each a program, a memory log, a goal and the answers
+it is given: the model's chains, written as the guard text the model sends
+(its `$n` the asked frame's), and each leaf's output. The effects, the
+last tree and memory at every key the run's frames had are the answer. -/
+
+/-- A condition on what a frame has seen, by key position: a string equal
+to `s`, or holding it. -/
+inductive MAtom where
+  | eq (p : Nat) (s : String)
+  | contains (p : Nat) (s : String)
+
+def MAtom.sat : MAtom → List Shape.Value → Bool
+  | .eq p s, vs => match vs[p]? with
+    | some (.str t) => t == s
+    | _ => false
+  | .contains p s, vs => match vs[p]? with
+    | some (.str t) => decide (s.toList <:+: t.toList)
+    | _ => false
+
+/-- An atom as CEL: each position by `name`, strings in quotes `q`. -/
+def MAtom.cel (name : Nat → String) (q : String) : MAtom → String
+  | .eq p s => s!"{name p} == {q}{s}{q}"
+  | .contains p s => s!"{name p}.contains({q}{s}{q})"
+
+def mCel (name : Nat → String) (q : String) : Refine.Cond MAtom → String
+  | .atom a => a.cel name q
+  | .tt => "true"
+  | .and p q' => "(" ++ mCel name q p ++ ") && (" ++ mCel name q q' ++ ")"
+  | .not p => "!(" ++ mCel name q p ++ ")"
+
+/-- As memory stores it, canonical: each position its `passed` name,
+strings in double quotes. -/
+def mStored : Refine.Cond MAtom → String := mCel (fun p => s!"passed{p}") "\""
+
+def jMBranch (b : Refine.Branch MAtom Model.Template) : Json :=
+  Json.mkObj [("id", jNat b.id), ("rank", jNat b.rank), ("voter", jNat b.voter),
+    ("cond", .str (mStored b.cond)), ("instr", jTemplate b.instr)]
+
+def jMRef (r : Refine.Refinement MAtom Model.Template) : Json :=
+  Json.mkObj [("next", jNat r.next), ("branches", jList jMBranch r.branches)]
+
+def jMEvent : Model.Event MAtom → Json
+  | .hesitate k => Json.mkObj [("hesitate", jKey k)]
+  | .startle k i => Json.mkObj [("startle", jKey k), ("impl", .arr (i.chain.map fun (c, t) =>
+      Json.mkObj [("cond", .str (mStored c)), ("template", jTemplate t)]).toArray)]
+
+def pieceText : Model.Arg → String
+  | .lit (.str s) => "'" ++ s ++ "'"
+  | .lit (.exit n) => toString n
+  | .ref (.var n ss) => "$" ++ toString n ++ String.join (ss.map (·.toCut.enc))
+  | .ref (.name s) => s
+  | .join _ => "?"
+
+def writtenArg (ps : List Model.Arg) : String := String.join (ps.map pieceText)
+
+/-- A written template as the model writes it. -/
+def writtenText (w : Machine.Written) : String :=
+  match w.op, w.args with
+  | .ret, as => "return " ++ " ".intercalate (as.map writtenArg)
+  | .delegate, g :: as => "delegate(goal(" ++ writtenArg g ++ ")" ++ String.join (as.map (", " ++ writtenArg ·)) ++ ")"
+  | _, as => " ".intercalate (as.map writtenArg)
+
+/-- A chain as the guard the model writes in a frame: each key position
+the `$n` it is there. -/
+def guardText (f : Model.Frame) (chain : List (Refine.Cond MAtom × Machine.Written)) : String :=
+  let name := fun p => "$" ++ toString ((Model.toItem f (p + 1)).getD 0)
+  String.join (chain.map fun (c, w) => mCel name "'" c ++ " ? \"" ++ writtenText w ++ "\" : ") ++ "null"
+
+def mEnv (p : Model.Program) : Machine.Env MAtom (List String) :=
+  ⟨ids, p, ids.program p, tPolicy (p.constants.inhibition.1 * 1000 / p.constants.inhibition.2) p.constants.floor,
+    MAtom.sat⟩
+
+def argvText : Shape.Value → String
+  | .str s => s
+  | v => (jValue v).compress
+
+def jRefusal : Option Machine.Refusal → Json
+  | none => .null
+  | some .fits => .str "fits"
+  | some (.copies n) => Json.mkObj [("copies", jNat n)]
+  | some (.join (.copies n)) => Json.mkObj [("join", Json.mkObj [("copies", jNat n)])]
+  | some (.join (.untext a)) => Json.mkObj [("join", Json.mkObj [("untext", jArg a)])]
+  | some .unstored => .str "unstored"
+  | some .unselected => .str "unselected"
+  | some .unread => .str "unread"
+
+def jEffect : Machine.Effect → Json
+  | .runLeaf t vs => Json.mkObj [("runLeaf", Json.mkObj [("tool", .str t.hash),
+      ("argv", .arr ((t.hash :: vs.map argvText).map Json.str).toArray)])]
+  | .ask k kind d r => Json.mkObj [("ask", Json.mkObj [("key", jKey k), ("kind", jKind kind), ("depth", jNat d),
+      ("refused", jRefusal r)])]
+  | .finished v => Json.mkObj [("finished", jValue v)]
+  | .exhausted v => Json.mkObj [("exhausted", jValue v)]
+
+/-- A leaf's output, as the shell is handed it. -/
+def jAnswered : Shape.Value → Json
+  | .str s => Json.mkObj [("stdout", .str s), ("exit", jNat 0), ("stderr", .str "")]
+  | .obj [("exit", .num n), ("stderr", .bytes e), ("stdout", .bytes o)] =>
+    Json.mkObj [("stdout", .str (String.fromUTF8! o)), ("exit", .num (n.toNat!)), ("stderr", .str (String.fromUTF8! e))]
+  | v => jValue v
+
+def failed (n : Nat) (out err : String) : Shape.Value :=
+  .obj [("exit", .num (toString n)), ("stderr", .bytes err.toUTF8), ("stdout", .bytes out.toUTF8)]
+
+/-- A run, and the log it leaves for the next. -/
+def runMachine (p : Model.Program) (log : List (Model.Event MAtom)) (goal : String)
+    (answers : List (Machine.Input MAtom)) : Json × List (Model.Event MAtom) :=
+  let E := mEnv p
+  let rec loop (s : Machine.State MAtom) : List (Machine.Input MAtom) → List Json × List Json × Machine.State MAtom
+    | [] => ([], [], s)
+    | i :: is =>
+      let shown := match i with
+        | .wrote ch => match s.tree.find s.cur with
+          | some f => Json.mkObj [("wrote", .str (guardText f ch))]
+          | none => .null
+        | .answered v => Json.mkObj [("answered", jAnswered v)]
+      match Machine.step E 10000 s i with
+      | none => ([shown], [Json.mkObj [("stuck", .null)]], s)
+      | some (s', e) =>
+        let (ins, effs, last) := loop s' is
+        (shown :: ins, jEffect e :: effs, last)
+  let (ins, effs, last) := loop (Machine.State.init log) (.answered (.str goal) :: answers)
+  let keys := (last.tree.frames.flatMap fun f =>
+    (List.range (f.state.length + 1)).map fun n => Machine.keyOf E { f with state := f.state.take n }).foldl
+      (fun ks k => if ks.contains k then ks else ks ++ [k]) []
+  (Json.mkObj [("in", Json.mkObj [("program", jProgram p), ("log", jList jMEvent log),
+      ("inputs", .arr (ins.drop 1).toArray), ("goal", .str goal), ("keys", jList jKey keys)]),
+    ("out", Json.mkObj [("effects", .arr effs.toArray), ("tree", jTree last.tree),
+      ("memory", jList (fun k => jOpt jMRef (last.memory k)) keys)])], last.log)
+
+def wr (chain : List (Refine.Cond MAtom × Machine.Written)) : Machine.Input MAtom := .wrote chain
+def lsOnly : Model.Program := { prog with global := global [ls] [claude] }
+def wv (n : Nat) (ss : List Model.Sel := []) : List Model.Arg := [var n ss]
+def ln (a b : Nat) : Model.Sel := .lines [(a, b)]
+def ex (n : Nat) : List Model.Arg := [.lit (.exit n)]
+
+/-- Learn, then reuse; quorum withheld; refusals to the refinement bound; a
+join, an unstored cut and an argument that does not read; a delegation; the
+transition bound; a failing leaf. -/
+def machineFile : List Json :=
+  let learn : List (Machine.Input MAtom) :=
+    [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "a.log\nb.txt\n"),
+      wr [(.atom (.contains 2 "a.log"), ⟨.ret, [ex 0, wv 4 [ln 1 1]]⟩), (.tt, ⟨.ret, [ex 1, wv 4]⟩)]]
+  let (a, logA) := runMachine lsOnly [] "list\n/tmp" learn
+  let (b, _) := runMachine lsOnly logA "list\n/var" [.answered (.str "c.md\n")]
+  let (c, _) := runMachine { lsOnly with constants := { consts with quorum := 2 } } logA "list\n/tmp"
+    [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "x\n")]
+  let (d, _) := runMachine lsOnly [] "hello\nworld"
+    [wr [(.tt, ⟨.act, [wv 2, [.lit (.str "world")]]⟩)], wr [(.tt, ⟨.act, [wv 1]⟩)],
+      wr [(.atom (.eq 0 "nope"), ⟨.act, [wv 2, wv 1]⟩)]]
+  let (e, _) := runMachine lsOnly [] "/tmp\na.txt"
+    [wr [(.tt, ⟨.act, [wv 2, [var 1 [ln 1 1], .lit (.str "/"), var 1 [ln 2 2]]]⟩)], .answered (.str "/tmp/a.txt\n"),
+      wr [(.tt, ⟨.ret, [ex 0, wv 5 [ln 1 1]]⟩)], wr [(.tt, ⟨.ret, [ex 0, wv 6 [.field ["x"]]]⟩)],
+      wr [(.tt, ⟨.ret, [ex 0, wv 6]⟩)]]
+  let (e2, _) := runMachine lsOnly [] "/tmp\na.txt"
+    [wr [(.tt, ⟨.act, [wv 2, [var 2, .lit (.str "/")]]⟩)], wr [(.tt, ⟨.act, [wv 2, [.lit (.str "a.txt"), var 1]]⟩)]]
+  let (f, _) := runMachine prog [] "show\n/tmp"
+    [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
+      .answered (.str "a.txt\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)],
+      wr [(.tt, ⟨.ret, [ex 0, wv 5 [.field ["stdout"]]]⟩)]]
+  let (g, _) := runMachine { lsOnly with constants := { consts with transitions := 1 } } [] "list\n/tmp"
+    [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "x\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)]]
+  let (h, _) := runMachine lsOnly [] "list\n/nope"
+    [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (failed 2 "" "ls: /nope: No such file\n"),
+      wr [(.tt, ⟨.ret, [ex 1, wv 4 [.field ["stderr"]]]⟩)]]
+  [a, b, c, d, e, e2, f, g, h]
+
 def files : List (String × List Json) :=
-  [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
+  [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/machine", machineFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
     ("model/read", readFile), ("model/introduce", introduceFile), ("model/step", stepFile) ]
 
 end M
