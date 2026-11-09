@@ -200,6 +200,17 @@ func (a *Arg) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (e Event) MarshalJSON() ([]byte, error) {
+	if !e.Startle {
+		return json.Marshal(map[string]any{"hesitate": e.Key})
+	}
+	impl := make([]map[string]any, len(e.Impl))
+	for i, l := range e.Impl {
+		impl[i] = map[string]any{"cond": l.Cond, "template": l.Template}
+	}
+	return json.Marshal(map[string]any{"startle": e.Key, "impl": impl})
+}
+
 func (e *Event) UnmarshalJSON(b []byte) error {
 	var x struct {
 		Hesitate *Key `json:"hesitate"`

@@ -155,12 +155,16 @@ const (
 	phaseDone
 )
 
-// A Machine is one run: its program, memory (which outlives it), and the
-// tree.
+// A Machine is one run: its program, memory (which outlives it), the
+// events this run has appended to the log, and the tree. Each event is
+// applied to memory as it is logged, so memory is always the replay of the
+// log it started from with Log after it (Machine.lean's step_replays): the
+// log is all a shell need keep.
 type Machine struct {
 	Ids     Ids
 	Program Program
 	Memory  Memory
+	Log     []Event
 	Tree    Tree
 
 	root    DefLoc // memory's root: the version and the operators' forms
@@ -469,7 +473,7 @@ func (m Machine) decide(id InstLoc) (Machine, any, error) {
 	f := m.Frame()
 	k := m.key(f)
 	if _, seen := m.Memory[k.Text()]; !seen {
-		m.Memory.Apply(Event{Key: k})
+		m = m.record(Event{Key: k})
 	}
 	t := m.tally()
 	o, err := m.Memory.Decide(t.Inhibition, t.Floor, m.Program.Constants.Quorum, k, vals(f))
@@ -485,6 +489,14 @@ func (m Machine) decide(id InstLoc) (Machine, any, error) {
 		}
 	}
 	return m.ask(nil, "")
+}
+
+// record appends an event to the log and applies it to memory. The log is
+// clipped first, so a machine a step was handed never sees the append.
+func (m Machine) record(e Event) Machine {
+	m.Log = append(slices.Clip(m.Log), e)
+	m.Memory.Apply(e)
+	return m
 }
 
 // ask startles the model, or, the transition's asks spent, ends the frame.
@@ -583,7 +595,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 		return m.refuse(refused("eval"), "the guard does not evaluate on these values: "+err.Error())
 	}
 	k := m.key(f)
-	m.Memory.Apply(Event{Key: k, Startle: true, Impl: links})
+	m = m.record(Event{Key: k, Startle: true, Impl: links})
 	after, err := tree.AfterStartle(chain, m.Memory[k.Text()].Branches, vals(f), m.tally())
 	if err != nil {
 		return m, nil, err

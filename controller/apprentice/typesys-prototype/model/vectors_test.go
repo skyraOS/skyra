@@ -6,6 +6,7 @@ package model
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -205,13 +206,22 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 				effects = append(effects, map[string]any{"exhausted": ValueJSON(e.Value)})
 			}
 		}
+		// Memory is the log's: the log it started from, then what this run
+		// appended, replays to it, refutations aside (step_replays).
+		replayed := Replay(append(dec[[]Event](t, in["log"]), m.Log...))
+		for _, c := range m.Memory.RefutedClasses() {
+			replayed.Refute(c)
+		}
+		if !maps.EqualFunc(replayed, m.Memory, func(a, b tree.Version) bool { return reflect.DeepEqual(a, b) }) {
+			t.Fatalf("memory is not its log's replay")
+		}
 		var mem []any
 		for _, k := range dec[[]Key](t, in["keys"]) {
 			v, seen := m.Memory[k.Text()]
 			mem = append(mem, opt(version(t, v), seen))
 		}
 		return map[string]any{"effects": effects, "tree": m.Tree, "memory": nonNil(mem),
-			"refuted": nonNil(m.Memory.RefutedClasses())}
+			"refuted": nonNil(m.Memory.RefutedClasses()), "log": nonNil(m.Log)}
 	},
 	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
 		m := Replay(dec[[]Event](t, in["log"]))

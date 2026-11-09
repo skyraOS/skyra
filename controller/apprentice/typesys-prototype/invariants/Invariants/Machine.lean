@@ -900,6 +900,102 @@ theorem judged_same (E : Env A K) (m : Memory A) (f : Frame) (tr : Trial) (v : V
     simp only [ne_eq, not_true_eq_false, ↓reduceIte]
     cases decideAt E.policy E.program.constants.quorum E.sat m k w <;> simp
 
+/-! ## Memory is the log's
+
+Every state the machine reaches holds the memory its log replays to: each
+event is appended to the log as it is applied to memory, and nothing else
+changes either. So the log a run leaves is all a shell need keep; memory is
+rebuilt from it. -/
+
+def Replays (s : State A) : Prop := s.memory = replay s.log
+
+theorem replays_apply {s : State A} (h : Replays s) (e : Event A) :
+    s.memory.apply e = replay (s.log ++ [e]) := by
+  rw [replay_append, h]; rfl
+
+theorem exhaust_replays (ex : Bool) (id : InstLoc) {s : State A} (h : Replays s) :
+    Replays (exhaust ex id s) := by
+  unfold exhaust; split
+  · exact h
+  · exact h
+
+theorem judge_replays (E : Env A K) (tr : Trial) (a b : Value) {s : State A} (h : Replays s) :
+    Replays (judge E s tr a b) := by
+  unfold judge; split
+  · split
+    · exact h
+    · exact h
+  · exact h
+
+theorem go_replays (E : Env A K) : ∀ (fuel : Nat) (c : Call) (s : State A) {s' : State A} {e : Effect},
+    Replays s → go E fuel c s = some (s', e) → Replays s'
+  | 0, _, _, _, _, _, h => by simp [go] at h
+  | fuel + 1, c, s, s', e, hr, h => by
+    have ih := go_replays E fuel
+    cases c with
+    | decide id =>
+      simp only [go] at h
+      repeat' split at h
+      all_goals first
+        | cases h; done
+        | exact ih _ _ (by exact replays_apply hr _) h
+        | exact ih _ _ (by exact hr) h
+    | finish id v ex =>
+      have hr' := exhaust_replays ex id hr
+      simp only [go] at h
+      split at h
+      · cases h
+      · split at h
+        · cases h; exact hr'
+        · obtain ⟨_, h⟩ := bind_some h
+          exact ih _ _ (by exact hr') h
+    | _ =>
+      simp only [go] at h
+      repeat' split at h
+      all_goals first
+        | cases h; done
+        | (cases h; exact hr)
+        | exact ih _ _ (by exact hr) h
+        | (obtain ⟨_, h⟩ := bind_some h; exact ih _ _ (by exact hr) h)
+
+theorem init_replays (log : List (Event A)) (r : List DefLoc) : Replays (State.init log r) := rfl
+
+theorem step_replays (E : Env A K) (fuel : Nat) (s : State A) (i : Input A) {s' : State A} {e : Effect}
+    (hr : Replays s) (h : step E fuel s i = some (s', e)) : Replays s' := by
+  cases i with
+  | answered v =>
+    simp only [step] at h
+    split at h
+    · simp only [genesis] at h
+      repeat' split at h
+      all_goals first
+        | cases h; done
+        | exact go_replays E _ _ _ (by exact hr) h
+    · split at h
+      · cases h; exact hr
+      · exact go_replays E _ _ _ (by exact hr) h
+    · split at h
+      · split at h
+        · exact go_replays E _ _ _ (judge_replays E _ _ _ (s := { s with pending := none }) hr) h
+        · cases h
+      · cases h
+    all_goals cases h
+  | wrote chain =>
+    simp only [step] at h
+    split at h
+    · simp only [wrote] at h
+      split at h
+      · cases h
+      · rename_i f _
+        split at h
+        · exact go_replays E _ _ _ (by exact hr) h
+        · rename_i stored _
+          have hr' : Replays { s with
+              memory := s.memory.apply (.startle (keyOf E f) ⟨stored⟩)
+              log := s.log ++ [.startle (keyOf E f) ⟨stored⟩] } := replays_apply hr _
+          split at h <;> exact go_replays E _ _ _ (by exact hr') h
+    · cases h
+
 end
 
 end Machine

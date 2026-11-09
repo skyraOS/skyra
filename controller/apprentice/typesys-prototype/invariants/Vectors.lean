@@ -1049,7 +1049,8 @@ def runMachine (p : Model.Program) (log : List (Model.Event MAtom)) (goal : Stri
       ("inputs", .arr (ins.drop 1).toArray), ("goal", .str goal), ("keys", jList jKey keys)]),
     ("out", Json.mkObj [("effects", .arr effs.toArray), ("tree", jTree last.tree),
       ("memory", jList (fun k => jOpt jMRef (last.memory k)) keys),
-      ("refuted", .arr ((sortedHashes last.refuted).map Json.str).toArray)])], last.log, last.refuted)
+      ("refuted", .arr ((sortedHashes last.refuted).map Json.str).toArray),
+      ("log", jList jMEvent (last.log.drop log.length))])], last.log, last.refuted)
 
 def wr (chain : List (Refine.Cond MAtom × Machine.Written)) : Machine.Input MAtom := .wrote chain
 def lsOnly : Model.Program := { prog with global := global [ls] [claude] }
