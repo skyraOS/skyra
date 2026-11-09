@@ -107,9 +107,9 @@ structure Template where
   deriving DecidableEq, Repr
 
 /-- An implementation: one guard chain, authored at one `startle`, 59's
-voter. Its conditions are abstract, as `Refine.Cond` is. -/
+voter. Its conditions are 59's, over abstract atoms. -/
 structure Impl (A : Type) where
-  chain : List (A × Template)
+  chain : List (Refine.Cond A × Template)
 
 /-- A scope: a frame's interface, what it is created with. Its kind, and
 the interfaces of what it was passed, in roles' order: goal, tools,
@@ -151,9 +151,9 @@ structure Key where
   kind : Kind
   seen : List Iface
 
-/-- Memory, the call graph: each key to its refinement, `none` for a key
-never seen, then the implementations authored there. -/
-def Memory (A : Type) := Key → Option (List (Impl A))
+/-- Memory, the call graph: each key to its refinement, 59's, holding the
+implementations authored there as voters; `none` for a key never seen. -/
+abbrev Memory (A : Type) := Key → Option (Refine.Refinement A Template)
 
 /-! ## Instantiations -/
 
@@ -953,5 +953,227 @@ theorem introduce_live (rootOf : DefLoc → DefLoc) {f : Frame} {l : Lit} {e : E
       · cases h; rfl
   subst this
   exact key_live rootOf f _ (by simp)
+
+/-! ## The key is lossless
+
+58 keyed a call on its one hop: the interfaces at the positions the call
+reads. 60 keys on the whole scope. The one hop is a function of the whole
+key and the call; the whole key is not a function of the one hop. -/
+
+/-- The interfaces a template reads, cut as it cuts them: 58's one hop. -/
+def project (k : Key) (t : Template) : List (Option Iface) :=
+  t.args.filterMap fun
+    | .ref (.var n sels) => some ((k.seen[n - 1]?).map (sels.foldl .cut))
+    | _ => none
+
+/-- The one hop sees only the positions the call reads: keys agreeing
+there project alike, whatever else they hold. -/
+theorem project_reads (t : Template) {k₁ k₂ : Key}
+    (h : ∀ n sels, Arg.ref (.var n sels) ∈ t.args → k₁.seen[n - 1]? = k₂.seen[n - 1]?) :
+    project k₁ t = project k₂ t := by
+  unfold project
+  generalize t.args = args at h
+  induction args with
+  | nil => rfl
+  | cons a as ih =>
+    have ih := ih fun n sels hm => h n sels (List.mem_cons_of_mem _ hm)
+    match a with
+    | .ref (.var n sels) => simp [h n sels List.mem_cons_self, ih]
+    | .ref (.name _) => simpa using ih
+    | .lit _ => simpa using ih
+
+/-- The converse fails: two keys, one hop, two scopes. What 58 merged, 60
+keeps apart. -/
+theorem project_lossy (root : DefLoc) :
+    ∃ k₁ k₂ : Key, ∃ t : Template, project k₁ t = project k₂ t ∧ k₁ ≠ k₂ := by
+  refine ⟨⟨root, .act, [.shape .str, .shape .num]⟩, ⟨root, .act, [.shape .str, .shape .bool]⟩,
+    ⟨.ret, [.ref (.var 1 [])]⟩, rfl, ?_⟩
+  intro e
+  simp only [Key.mk.injEq, List.cons.injEq, Iface.shape.injEq, true_and] at e
+  exact absurd e.1 (by intro h; cases h)
+
+/-! ## Reuse: exact match aligns by identity
+
+A reuse rule says which stored implementations count at a key, and how
+their references align with the key's positions. The base rule is exact
+match: only the key's own, aligned by identity. -/
+
+/-- Rebinding a template's references through an alignment. -/
+def Template.rebind (a : Nat → Nat) (t : Template) : Template :=
+  { t with args := t.args.map fun
+    | .ref (.var n sels) => .ref (.var (a n) sels)
+    | x => x }
+
+theorem rebind_id (t : Template) : t.rebind id = t := by
+  cases t with
+  | mk op args =>
+    simp only [Template.rebind, Template.mk.injEq, true_and]
+    induction args with
+    | nil => rfl
+    | cons x xs ih =>
+      match x with
+      | .ref (.var _ _) => simpa using ih
+      | .ref (.name _) => simpa using ih
+      | .lit _ => simpa using ih
+
+/-- A reuse rule: from a stored key to the key being decided, an alignment
+of positions, or none when the stored key does not count. -/
+def Rule := Key → Key → Option (Nat → Nat)
+
+open Classical in
+/-- The base rule. -/
+noncomputable def exact : Rule := fun s t => if s = t then some id else none
+
+theorem exact_self (k : Key) : exact k k = some id := by simp [exact]
+
+/-- Exact reuse counts only a key's own, and binds each reference to the
+same `$n`. -/
+theorem exact_only {s t : Key} {a : Nat → Nat} (h : exact s t = some a) :
+    s = t ∧ ∀ tm : Template, tm.rebind a = tm := by
+  unfold exact at h
+  split at h
+  · cases h; exact ⟨by assumption, rebind_id⟩
+  · cases h
+
+/-! ## Memory is a fold of the log
+
+The log's events are what has been seen: a `hesitate` records a key never
+seen, its refinement `null`; a `startle` commits an implementation at a
+key, 59's commit. Memory is the fold, from nothing. -/
+
+inductive Event (A : Type) where
+  | hesitate (k : Key)
+  | startle (k : Key) (impl : Impl A)
+
+def Event.key {A : Type} : Event A → Key
+  | .hesitate k => k
+  | .startle k _ => k
+
+section
+open Classical
+variable {A : Type}
+
+/-- The refinement at one key after one event there. -/
+def stepAt : Option (Refine.Refinement A Template) → Event A → Option (Refine.Refinement A Template)
+  | none, .hesitate _ => some .empty
+  | some r, .hesitate _ => some r
+  | r, .startle _ i => some (Refine.commit (r.getD .empty) i.chain)
+
+noncomputable def Memory.apply (m : Memory A) (e : Event A) : Memory A :=
+  fun k => if k = e.key then stepAt (m k) e else m k
+
+/-- Memory from the log. -/
+noncomputable def replay (log : List (Event A)) : Memory A := log.foldl Memory.apply fun _ => none
+
+/-- One key's refinement, from its events alone. -/
+def replayAt (log : List (Event A)) : Option (Refine.Refinement A Template) := log.foldl stepAt none
+
+theorem foldl_apply_at (k : Key) : ∀ (log : List (Event A)) (m : Memory A),
+    (log.foldl Memory.apply m) k = (log.filter (·.key = k)).foldl stepAt (m k)
+  | [], _ => rfl
+  | e :: log, m => by
+    rw [List.foldl_cons, foldl_apply_at k log]
+    by_cases h : e.key = k
+    · simp [h, Memory.apply]
+    · have hk : k ≠ e.key := fun e' => h e'.symm
+      simp [h, Memory.apply, hk]
+
+/-- What has been seen at a key decides its refinement, and nothing else
+does: memory at a key is the fold of that key's events alone. -/
+theorem replay_at (log : List (Event A)) (k : Key) :
+    replay log k = replayAt (log.filter (·.key = k)) := by
+  exact foldl_apply_at k log _
+
+/-- The log appends, memory folds on: replaying more is applying it. -/
+theorem replay_append (log more : List (Event A)) :
+    replay (log ++ more) = more.foldl Memory.apply (replay log) := by
+  exact List.foldl_append
+
+/-- A key with no event is unseen. -/
+theorem replay_unseen (log : List (Event A)) (k : Key) (h : ∀ e ∈ log, e.key ≠ k) :
+    replay log k = none := by
+  rw [replay_at]
+  have : log.filter (·.key = k) = [] := List.filter_eq_nil_iff.mpr (by simpa using h)
+  rw [this]; rfl
+
+theorem stepAt_some : ∀ (r : Option (Refine.Refinement A Template)) (e : Event A), (stepAt r e).isSome
+  | none, .hesitate _ => rfl
+  | some _, .hesitate _ => rfl
+  | none, .startle _ _ => rfl
+  | some _, .startle _ _ => rfl
+
+theorem foldl_stepAt_some : ∀ (log : List (Event A)) (r : Refine.Refinement A Template),
+    (log.foldl stepAt (some r)).isSome
+  | [], _ => rfl
+  | e :: log, r => by
+    rw [List.foldl_cons]
+    obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (some r) e)
+    rw [h]; exact foldl_stepAt_some log r'
+
+/-- A key with an event is seen, its refinement recorded, `null` until a
+`startle` commits there. -/
+theorem replay_seen (log : List (Event A)) (k : Key) (e : Event A) (he : e ∈ log) (hk : e.key = k) :
+    (replay log k).isSome := by
+  rw [replay_at]
+  obtain ⟨l₁, l₂, hl⟩ := List.mem_iff_append.mp he
+  have hf : log.filter (·.key = k) = l₁.filter (·.key = k) ++ e :: l₂.filter (·.key = k) := by
+    subst hl; simp [List.filter_append, hk]
+  rw [hf, replayAt, List.foldl_append, List.foldl_cons]
+  obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (l₁.filter (·.key = k) |>.foldl stepAt none) e)
+  rw [h]; exact foldl_stepAt_some _ r'
+
+/-- `hesitate` never erases: a refinement already there is kept. -/
+theorem hesitate_keeps (r : Refine.Refinement A Template) (k : Key) :
+    stepAt (some r) (.hesitate k) = some r := rfl
+
+/-- `startle` never erases: every branch already there is in the next
+version. -/
+theorem startle_keeps {r : Refine.Refinement A Template} {b} (k : Key) (i : Impl A)
+    (hb : b ∈ r.branches) : ∃ r', stepAt (some r) (.startle k i) = some r' ∧ b ∈ r'.branches :=
+  ⟨_, rfl, Refine.commit_keeps hb⟩
+
+/-! ## A decision is a tally
+
+Under the exact rule, the decision at a key is 59's tally over the
+implementations stored there. An unseen key, and a seen one never
+committed, are `null`: the path to `startle`. -/
+
+variable {V K : Type} [DecidableEq K]
+
+def Outcome.ofRefine : Refine.Outcome Template → Outcome
+  | .null => .null
+  | .select t => .select t
+  | .conflict => .conflict
+
+/-- The decision at a frame's key, given the values it reads. -/
+def decideAt (p : Refine.Policy Template K) (sat : A → V → Bool) (m : Memory A) (k : Key) (v : V) :
+    Outcome :=
+  match m k with
+  | none => .null
+  | some r => .ofRefine (Refine.tally p sat r.branches v)
+
+theorem decideAt_tally (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A} {k : Key}
+    {r : Refine.Refinement A Template} (h : m k = some r) (v : V) :
+    decideAt p sat m k v = .ofRefine (Refine.tally p sat r.branches v) := by
+  simp [decideAt, h]
+
+theorem decideAt_unseen (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A} {k : Key}
+    (h : m k = none) (v : V) : decideAt p sat m k v = .null := by
+  simp [decideAt, h]
+
+/-- A key seen and never committed is `null`: `hesitate` records `null`. -/
+theorem decideAt_hesitated (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A}
+    {k : Key} (h : m k = some .empty) (v : V) : decideAt p sat m k v = .null := by
+  simp [decideAt, h, Refine.tally, Refine.Refinement.empty, Refine.selected, Outcome.ofRefine]
+
+/-- The decision at a key depends on that key's events alone: logs agreeing
+on what was seen at a key decide there alike. -/
+theorem decideAt_local (p : Refine.Policy Template K) (sat : A → V → Bool)
+    {log₁ log₂ : List (Event A)} {k : Key}
+    (h : log₁.filter (·.key = k) = log₂.filter (·.key = k)) (v : V) :
+    decideAt p sat (replay log₁) k v = decideAt p sat (replay log₂) k v := by
+  simp only [decideAt, replay_at, h]
+
+end
 
 end Model
