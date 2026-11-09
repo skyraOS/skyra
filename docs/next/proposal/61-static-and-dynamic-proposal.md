@@ -1,4 +1,4 @@
-# 60 — Definition and instantiation
+# 61 — Definition and instantiation
 
 Date: 2026-11-09
 
@@ -784,7 +784,7 @@ bounds and the act bound.
 
 ## What renames
 
-| 58 / code | 60 |
+| 58 / code | 61 |
 |---|---|
 | base type, `ReturnBase`, `Obs.base`, `Arrival.base` | interface |
 | `InputBase`, `Pending.input` | gone: the frame pushed, in the tree |

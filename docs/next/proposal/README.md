@@ -41,7 +41,7 @@ New implementation proposals:
   form), and an instruction wins when its lead clears a margin set by one
   inhibition constant. No winner startles. Commit stops narrowing, so no
   dissenting vote is deleted; `distinguish` is the tally at inhibition 0.
-  Proposed (2026-11-07).
+  Proposed (2026-11-07); built (2026-11-09).
 - [60 — Effect classes](60-effect-classes-proposal.md): answers 59's
   open questions 2 and 3. Every contract carries an effect class set at
   registration (`none`, `read`, `write`, `external`, `irreversible`;
@@ -51,8 +51,7 @@ New implementation proposals:
   and a lone first commit cannot run a destructive tool. Voters whose
   lineage the tool's integrity allowlist (53) refuses abstain.
   Proposed (2026-11-07).
-  Proposed (2026-11-07); built (2026-11-09).
-- [60 — Definition and instantiation](60-static-and-dynamic-proposal.md):
+- [61 — Definition and instantiation](61-static-and-dynamic-proposal.md):
   replaces 58's data model with six pairs, a definition and its
   instantiation each: interface and observation, implementation and
   decision, reference and location, scope and frame, program and

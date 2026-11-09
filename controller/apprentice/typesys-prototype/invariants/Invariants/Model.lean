@@ -1,6 +1,6 @@
 import Invariants.Frames
 
-/-! Proposal 60: definition and instantiation. The system has two sides.
+/-! Proposal 61: definition and instantiation. The system has two sides.
 A definition is what every execution shares; an instantiation is what one
 execution holds. Six pairs, each a definition and its instantiation:
 
@@ -583,7 +583,7 @@ def contextObs (h : Ids) (id : InstLoc) : Nat → List Value → Option (List Ob
     | _, _ => none
 
 /-- Boot's third check: the grant only narrows. At genesis nothing holds
-tools, and what may be passed is open (60's question 8). -/
+tools, and what may be passed is open (61's question 8). -/
 def narrows : Option (Frame × Nat) → Grant → Prop
   | none, _ => True
   | some (f, _), g => ∀ b ∈ g.defs, b ∈ held f
@@ -1017,7 +1017,7 @@ theorem introduce_live (rootOf : DefLoc → DefLoc) {f : Frame} {l : Lit} {e : E
 /-! ## The key is lossless
 
 58 keyed a call on its one hop: the interfaces at the positions the call
-reads. 60 keys on the whole scope. The one hop is a function of the whole
+reads. 61 keys on the whole scope. The one hop is a function of the whole
 key and the call; the whole key is not a function of the one hop. -/
 
 /-- The interfaces a template reads, cut as it cuts them: 58's one hop. -/
@@ -1042,7 +1042,7 @@ theorem project_reads (t : Template) {k₁ k₂ : Key}
     | .ref (.name _) => simpa using ih
     | .lit _ => simpa using ih
 
-/-- The converse fails: two keys, one hop, two scopes. What 58 merged, 60
+/-- The converse fails: two keys, one hop, two scopes. What 58 merged, 61
 keeps apart. -/
 theorem project_lossy (root : DefLoc) :
     ∃ k₁ k₂ : Key, ∃ t : Template, project k₁ t = project k₂ t ∧ k₁ ≠ k₂ := by
