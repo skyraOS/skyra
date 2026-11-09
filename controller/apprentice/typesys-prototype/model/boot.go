@@ -41,6 +41,26 @@ type Program struct {
 	Classes   [][]DefLoc       `json:"classes,omitempty"`
 }
 
+// Forms are the global scope's forms, what memory's root holds: each
+// operator with its sum positions emptied, so what it reaches is left out.
+func (p Program) Forms() map[string]Iface {
+	forms := make(map[string]Iface, len(p.Global))
+	for n, i := range p.Global {
+		if i.Tag == IOp {
+			parts := make([]Iface, len(i.Parts))
+			for k, part := range i.Parts {
+				if part.Tag == ISum {
+					part = Iface{Tag: ISum, Parts: []Iface{}}
+				}
+				parts[k] = part
+			}
+			i.Parts = parts
+		}
+		forms[n] = i
+	}
+	return forms
+}
+
 // ClassID is a class's location: its members sorted, hashed by the shell.
 // A class is what it holds, never a name, so two programs share a trial
 // only of one set of tools.
@@ -136,13 +156,15 @@ func (g *Grant) UnmarshalJSON(b []byte) error {
 
 // Ids are the hashes: a child by its parent, invoke index and scope; a first
 // frame by its program and grant; a slot by its frame and $n; a program's
-// location; a class's, by its members sorted. The core computes none of them itself.
+// location; a class's, by its members sorted; memory's root, by the
+// language version and the global scope's forms. The core computes none of them itself.
 type Ids interface {
 	Child(parent InstLoc, n int, s Scope) InstLoc
 	First(program DefLoc, g Grant) InstLoc
 	Slot(frame InstLoc, n int) InstLoc
 	Program(p Program) DefLoc
 	Class(members []DefLoc) DefLoc
+	Root(version DefLoc, forms map[string]Iface) DefLoc
 }
 
 // A Booter is the frame a boot runs from, and which of its invokes it is.

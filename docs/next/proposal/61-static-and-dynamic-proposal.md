@@ -573,7 +573,7 @@ Think proposes; the user reviews and grants; Act does
 - **The log keeps the edge**: boot records `H(program)`, and the program
   is the observation Think returned and the user passed.
 - **Programs need not be in memory** for this. Act's frames key memory on
-  their program's `H(version, global)` and their own scopes, as any
+  their program's `H(version, forms)` and their own scopes, as any
   frame's do. Programs as memory entries (learning which program to boot,
   or reusing whole runs) is open question 9.
 
@@ -590,8 +590,9 @@ Think proposes; the user reviews and grants; Act does
   the kinds of the scopes holding it, and kind is in the key. They grow
   only by booting another program.
 - **Identities.** `H(program)` names the program and is recorded with boot
-  in the log. Memory's trie root is `H(version, global)`: the constants
-  stay out.
+  in the log. Memory's trie root is `H(version, forms)`, the global
+  scope's operators with what they reach left out: the constants stay out
+  too.
 - **The entry scope has no goal.** The user's goal is authored at each
   turn and passed down a delegation or a boot, so it is first `$1` in the
   frame below the root (open question 12).
@@ -610,7 +611,7 @@ changes what an implementation means:
 
 | Part of the program | In memory's key |
 |---|---|
-| global scope | yes: the trie's root |
+| global scope | its operators' forms: the trie's root; what they reach, through each key's tools |
 | `k` | yes, through each frame's kind |
 | entry scope | yes: the first frame's key |
 | bounds, `ι`, the floor, the quorum | no: constants of the run, recorded with boot in the log |
@@ -731,7 +732,7 @@ key holds what the stored implementation reads: a frame whose earlier
 decisions made other eliminations extracts it itself.
 
 **The key is a sequence, not one hash.** Each `$n`'s type is one step of a
-path in a trie, under a root for the global scope. Scopes with a common
+path in a trie, under a root for the global scope's forms. Scopes with a common
 history share a prefix, so order gives similarity at no extra cost: how
 far two keys agree, and where they part.
 
@@ -797,10 +798,16 @@ the keys: reuse happens only under a class not refuted at that point
 
 **Sharing across trees is the exact rule.** Memory is global: any frame
 whose complete scope, global and local, matches a key counts the
-implementations stored there. Two programs with different global scopes
-have different trie roots and share no key under the exact rule. That is
-why the whole scope is stored first: the exact rule is the base, and
-every wider rule is defined from it.
+implementations stored there. Two programs of one version and the same
+operators share a trie root, whatever tools and models they reach: a key
+holds each tool its frame holds, so a program reaching one more tool
+shares every key whose frames do not hold it, and only frames holding the
+new tool are new. A template learned under one may name what the other
+does not reach; it never runs there, since trust refuses what does not
+fit and the model is asked (Machine.lean's `keyOf_forms`, `trust_unfit`).
+Programs of another version or other operators share no key. That is why
+the whole scope is stored first: the exact rule is the base, and every
+wider rule is defined from it.
 
 ## What stays
 

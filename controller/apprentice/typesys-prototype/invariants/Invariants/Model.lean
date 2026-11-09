@@ -318,6 +318,22 @@ def Program.reach (p : Program) (name : String) : List DefLoc :=
   | some (.op _ (.sum alts :: _)) => alts.filterMap fun | .defn b => some b | _ => none
   | _ => []
 
+/-- An interface's form: an operator with each sum position emptied, so
+what the operator reaches is left out. -/
+def Iface.form : Iface → Iface
+  | .op o ps => .op o (ps.map fun | .sum _ => .sum [] | i => i)
+  | i => i
+
+/-- The global scope's forms: what memory's root holds, the operators and
+never what they reach. -/
+def Program.forms (p : Program) : List (String × Iface) := p.global.map fun (n, i) => (n, i.form)
+
+/-- An operator's form never reads what it reaches: a program reaching
+other tools or models has the same forms, and so the same root. -/
+theorem form_reach (o : Op) (as bs : List Iface) (rest : List Iface) :
+    (Iface.op o (.sum as :: rest)).form = (Iface.op o (.sum bs :: rest)).form := by
+  simp [Iface.form]
+
 /-- A program's classes are well formed: its read-only definitions are
 tools; each class has two members or more, all read-only; and each member
 is in one class. -/
@@ -334,7 +350,7 @@ def Program.wellFormed (p : Program) : Bool :=
     (p.reach "act").all (· ∉ p.reach "delegate")) && p.classesWellFormed
 
 /-- A key: what has been seen. Its root is its program's `H(version,
-global)`; then its kind; then the scope's interfaces and each arrival's,
+forms)`, the operators and never what they reach; then its kind; then the scope's interfaces and each arrival's,
 in order. -/
 structure Key where
   root : DefLoc
@@ -430,7 +446,7 @@ def arrivals : List Entry → List Iface
 /-- What a frame has seen: its scope, then what arrived. -/
 def seen (f : Frame) : List Iface := f.scope.entries ++ arrivals f.state
 
-/-- A frame's key. `rootOf` gives a program's root, `H(version, global)`. -/
+/-- A frame's key. `rootOf` gives a program's root, `H(version, forms)`. -/
 def key (rootOf : DefLoc → DefLoc) (f : Frame) : Key :=
   ⟨rootOf f.program, f.scope.kind, seen f⟩
 
@@ -685,6 +701,8 @@ structure Ids where
   first : DefLoc → Grant → InstLoc
   slot : InstLoc → Nat → InstLoc
   program : Program → DefLoc
+  /-- Memory's root: the language version and the global scope's forms. -/
+  root : DefLoc → List (String × Iface) → DefLoc
   /-- A class's location, of its members sorted: a class is what it holds,
   never a name, so two programs share a trial only of one set of tools. -/
   cls : List DefLoc → DefLoc

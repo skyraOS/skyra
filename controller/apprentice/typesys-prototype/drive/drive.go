@@ -84,6 +84,10 @@ func (Ids) Program(p model.Program) model.DefLoc { return model.DefLoc(hash("pro
 
 func (Ids) Class(members []model.DefLoc) model.DefLoc { return model.DefLoc(hash("class", members)) }
 
+func (Ids) Root(v model.DefLoc, forms map[string]model.Iface) model.DefLoc {
+	return model.DefLoc(hash("root", v, forms))
+}
+
 // Version is the language this shell runs: 58's shapes and cuts, CEL, the
 // template grammar the prompts teach, and return's value.
 const Version model.DefLoc = "skyra/61"

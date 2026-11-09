@@ -105,6 +105,10 @@ func (textIds) Slot(i InstLoc, n int) InstLoc { return InstLoc(string(i) + "#" +
 
 func (textIds) Program(p Program) DefLoc { return DefLoc("program(" + string(p.Version) + ")") }
 
+func (textIds) Root(v DefLoc, forms map[string]Iface) DefLoc {
+	return DefLoc("root(" + string(v) + ";" + compact(forms) + ")")
+}
+
 func (textIds) Class(ms []DefLoc) DefLoc {
 	names := make([]string, len(ms))
 	for i, d := range ms {

@@ -163,7 +163,7 @@ type Machine struct {
 	Memory  Memory
 	Tree    Tree
 
-	root    DefLoc // memory's root: the program without its constants
+	root    DefLoc // memory's root: the version and the operators' forms
 	loc     DefLoc // the program's location, every frame's static link
 	at      InstLoc
 	phase   phase
@@ -229,7 +229,7 @@ func NewMachine(ids Ids, p Program, mem Memory) (Machine, error) {
 		mem = Memory{}
 	}
 	return Machine{Ids: ids, Program: p, Memory: mem,
-		root: ids.Program(Program{Version: p.Version, Global: p.Global}), loc: ids.Program(p)}, nil
+		root: ids.Root(p.Version, p.Forms()), loc: ids.Program(p)}, nil
 }
 
 // Step takes one input and gives the next effect.

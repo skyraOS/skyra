@@ -114,13 +114,11 @@ structure State (A : Type) where
 def State.init {A : Type} (log : List (Event A)) (refuted : List DefLoc) : State A :=
   ⟨replay log, log, refuted, Tree.mk [] [], ⟨""⟩, .start, 0, fun _ => 0, fun _ => [], none⟩
 
-/-- What a run is of: its ids, its program and memory's root (the program
-without its constants), the tally's policy, and when an atom holds of the
-values a frame has seen. -/
+/-- What a run is of: its ids, its program, the tally's policy, and when
+an atom holds of the values a frame has seen. -/
 structure Env (A K : Type) where
   ids : Ids
   program : Program
-  root : DefLoc
   policy : Refine.Policy Template K
   sat : A → List Value → Bool
 
@@ -263,7 +261,14 @@ variable {A K : Type} [DecidableEq K]
 
 def reaches (E : Env A K) : DefLoc → String → List DefLoc := fun _ name => E.program.reach name
 
-def keyOf (E : Env A K) (f : Frame) : Key := key (fun _ => E.root) f
+/-- Memory's root: the program's version and its operators' forms. Its
+constants, entry scope, read-only tools, classes, and what its operators
+reach stay out: a key already holds each tool its frame holds, and its
+kind, so a program reaching one more tool shares every key whose frames
+do not hold it. -/
+def rootOf (E : Env A K) : DefLoc := E.ids.root E.program.version E.program.forms
+
+def keyOf (E : Env A K) (f : Frame) : Key := key (fun _ => rootOf E) f
 
 /-! ### Borrowing and trials -/
 
@@ -585,6 +590,28 @@ theorem written_stored {p : Refine.Policy Template K} {sat : A → List Value �
     have := chainSelect_mem hi
     simp only [Refine.commit, List.map_append, List.mem_append]
     exact .inr (by rw [chainBranches_instrs]; exact this)
+
+end
+
+/-! ## Programs share memory
+
+Two programs of one version and the same operators key every frame alike,
+whatever tools or models they reach. A template learned under one may
+name what the other does not reach; it is never run there: trust refuses
+a template that does not fit, and the model is asked. -/
+
+section
+variable {A K : Type} [DecidableEq K]
+
+omit [DecidableEq K] in
+theorem keyOf_forms (E : Env A K) (p : Program) (hv : p.version = E.program.version)
+    (hf : p.forms = E.program.forms) (f : Frame) : keyOf { E with program := p } f = keyOf E f := by
+  simp [keyOf, rootOf, hv, hf]
+
+theorem trust_unfit {E : Env A K} {fuel : Nat} {id : InstLoc} {st : Template} {b : Option Borrow}
+    {s : State A} {f : Frame} {t : Template} (hf : s.tree.find id = some f) (hb : st.bind f = some t)
+    (hu : fits E.program f t = false) : go E (fuel + 1) (.trust id st b) s = go E fuel (.ask (some .fits)) s := by
+  simp [go, hf, hb, hu]
 
 end
 

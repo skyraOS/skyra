@@ -165,7 +165,7 @@ func (f Frame) Seen() []Iface {
 	return seen
 }
 
-// Key is a frame's key; rootOf gives a program's root, H(version, global).
+// Key is a frame's key; rootOf gives a program's root, H(version, forms).
 func (f Frame) Key(rootOf func(DefLoc) DefLoc) Key {
 	return Key{Root: rootOf(f.Program), Kind: f.Scope.Kind, Seen: f.Seen()}
 }

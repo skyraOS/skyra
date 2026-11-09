@@ -1,6 +1,7 @@
 package drive
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,6 +154,59 @@ func TestRunDelegates(t *testing.T) {
 		}
 		if run == 0 && (s.asks[1].Depth != 1 || s.asks[1].Kind != model.KindAct || s.asks[1].Model == nil) {
 			t.Fatalf("the child's ask: %+v", s.asks[1])
+		}
+		mem = m.Memory
+	}
+}
+
+// A program reaching one more tool shares the memory of one that does not:
+// memory's root holds the operators, never what they reach. The second
+// program's root holds wc, so it asks; its ls child is the first's and
+// asks nothing.
+func TestRunSharesAcrossPrograms(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	child := map[string]string{
+		"act 2": `true ? "$2 $1" : null`,                // $1 goal, $2 ls
+		"act 3": `$3.size() > 0 ? "return 0 $3" : null`, // ls's stdout arrived
+	}
+	with := func(guards map[string]string) *scripted {
+		g := maps.Clone(child)
+		maps.Copy(g, guards)
+		return &scripted{guards: g}
+	}
+	var mem model.Memory
+	for _, c := range []struct {
+		tools []string
+		s     *scripted
+		asks  int
+	}{
+		{[]string{"ls", "cat"}, with(map[string]string{
+			"delegate 3": `true ? "delegate(goal($1), $2)" : null`, // $1 goal, $2 ls, $3 cat
+			"delegate 4": `true ? "return 0 $4.stdout" : null`,     // the ls child's return
+		}), 4},
+		{[]string{"ls", "cat", "wc"}, with(map[string]string{
+			"delegate 4": `true ? "delegate(goal($1), $2)" : null`, // $1 goal, $2 ls, $3 cat, $4 wc
+			"delegate 5": `true ? "return 0 $5.stdout" : null`,     // the ls child's return
+		}), 2},
+	} {
+		m, v, err := Run(newMachine(t, c.tools, mem), []byte(dir), c.s, Exec{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, _ := v.(map[string]any)
+		if out, _ := r["stdout"].(string); !strings.Contains(out, "only.txt") {
+			t.Fatalf("%v returned %#v", c.tools, v)
+		}
+		if len(c.s.asks) != c.asks {
+			t.Fatalf("%v: %d asks, want %d", c.tools, len(c.s.asks), c.asks)
+		}
+		for _, a := range c.s.asks {
+			if a.Depth != 0 && len(c.tools) == 3 {
+				t.Fatalf("the second program's child asked: %+v", a.Key)
+			}
 		}
 		mem = m.Memory
 	}

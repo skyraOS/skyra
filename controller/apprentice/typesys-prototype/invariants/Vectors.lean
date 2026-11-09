@@ -622,8 +622,10 @@ def ids : Model.Ids where
   slot i n := ⟨i.hash ++ "#" ++ toString n⟩
   program p := ⟨"program(" ++ p.version.hash ++ ")"⟩
   cls ms := ⟨"class(" ++ ",".intercalate (ms.map (·.hash)) ++ ")"⟩
+  root v fs := ⟨"root(" ++ v.hash ++ ";" ++ (Json.mkObj (fs.map fun (n, i) => (n, jIface i))).compress ++ ")"⟩
 
 def ls : Model.DefLoc := ⟨"ls"⟩
+def wc : Model.DefLoc := ⟨"wc"⟩
 def cat : Model.DefLoc := ⟨"cat"⟩
 def claude : Model.DefLoc := ⟨"claude"⟩
 def gpt : Model.DefLoc := ⟨"gpt"⟩
@@ -980,7 +982,7 @@ def guardText (f : Model.Frame) (chain : List (Refine.Cond MAtom × Machine.Writ
   String.join (chain.map fun (c, w) => mCel name "'" c ++ " ? \"" ++ writtenText w ++ "\" : ") ++ "null"
 
 def mEnv (p : Model.Program) : Machine.Env MAtom (List String) :=
-  ⟨ids, p, ids.program p, tPolicy (p.constants.inhibition.1 * 1000 / p.constants.inhibition.2) p.constants.floor,
+  ⟨ids, p, tPolicy (p.constants.inhibition.1 * 1000 / p.constants.inhibition.2) p.constants.floor,
     MAtom.sat⟩
 
 def argvText : Shape.Value → String
@@ -1112,7 +1114,17 @@ def machineFile : List Json :=
   let (i5, _, _) := runMachine progClass [] "show\n/tmp"
     (toLs ++ [wr [(.atom (.contains 3 "a.txt"), ⟨.ret, [ex 0, wv 4]⟩)], toCat, .answered (.str "hello\n"),
       .answered (.str "a.txt\n"), nope, nope, nope])
-  [a, b, c, d, e, e2, f, g, h, i, i2, i3, i4, i5]
+  -- Programs of one version and the same operators share memory: what the
+  -- ls child learned under ls and cat is reused under ls, cat and wc, and
+  -- only the root, which holds wc, asks again. A program with no model
+  -- keys its root alike, and refuses the delegation learned there.
+  let (j1, logJ, _) := runMachine prog [] "show\n/tmp"
+    (toLs ++ [retAny, wr [(.tt, ⟨.ret, [ex 0, wv 5 [.field ["stdout"]]]⟩)]])
+  let (j2, _, _) := runMachine { prog with global := global [ls, cat, wc] [claude, gpt] } logJ "show\n/tmp"
+    [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "a.txt\n"),
+      wr [(.tt, ⟨.ret, [ex 0, wv 6 [.field ["stdout"]]]⟩)]]
+  let (j3, _, _) := runMachine { prog with global := global [ls, cat] [] } logJ "show\n/tmp" []
+  [a, b, c, d, e, e2, f, g, h, i, i2, i3, i4, i5, j1, j2, j3]
 
 def files : List (String × List Json) :=
   [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/machine", machineFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
