@@ -139,6 +139,9 @@ func textOf(v any) (string, bool) {
 
 // lines splits text at newlines, a final newline ending the last line
 // rather than starting another.
+// Lines is text's lines, as a lines cut counts them.
+func Lines(s string) []string { return lines(s) }
+
 func lines(s string) []string {
 	ls := strings.Split(s, "\n")
 	if len(ls) > 1 && ls[len(ls)-1] == "" {

@@ -76,7 +76,9 @@ const systemTail = `
 An instruction is made of parameters, each a $n or part of one, in one of the forms above; a return also takes its exit status, 0 or 1. Where a tool needs text no parameter holds, such as a flag or a filter, write it as a literal in single quotes:
   $2 '-l' $1[2]
   $2 '.version' $1[2]
-A literal never copies a parameter's text: one that does is refused, so take that part of the parameter instead. Write nothing else: any other text in an instruction is rejected.
+Where a tool needs text built from parameters, such as a path from a directory and a name, write the parts together with no space between them, parameters and literals:
+  $2 $1[2]'/'$5.stdout[1]
+A literal never writes what a cut of a parameter takes, a whole value, a line or lines, or a field: one that does is refused, so cut it instead. Write nothing else: any other text in an instruction is rejected.
 
 Use part of a parameter instead of copying its text:
   $2[2]              line 2 of $2

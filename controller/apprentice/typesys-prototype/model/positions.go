@@ -39,32 +39,44 @@ func (f Frame) ToItem(s int) (int, bool) {
 }
 
 // Store is a template as memory stores it: each argument inlined, so it
-// reads only what was seen, and its reference a key position. It fails on
-// an argument that reads nothing seen.
+// reads only what was seen, and each reference, a join's parts among them,
+// a key position. It fails on an argument that reads nothing seen.
 func (f Frame) Store(t Template) (Template, bool) {
-	out := Template{Op: t.Op}
-	for _, a := range t.Args {
-		if a.Lit == nil && a.Name == "" {
-			a = f.Inline(a.Var, a.Sels)
-			if a.Lit == nil {
-				p, ok := f.ToKey(a.Var)
-				if !ok {
-					return Template{}, false
-				}
-				a.Var = p
-			}
-		}
-		out.Args = append(out.Args, a)
-	}
-	return out, true
+	return t.mapRefs(func(n int) (int, bool) { return f.ToKey(n) }, f.Inline)
 }
 
 // Bind is a stored template in a frame: each key position its $n there.
 func (f Frame) Bind(t Template) (Template, bool) {
+	return t.mapRefs(func(p int) (int, bool) { return f.ToItem(p) }, nil)
+}
+
+// mapRefs is a template with each reference renamed by to, after inline
+// when inline is given; false when to has no name for one.
+func (t Template) mapRefs(to func(int) (int, bool), inline func(int, []Sel) Arg) (Template, bool) {
 	out := Template{Op: t.Op}
 	for _, a := range t.Args {
-		if a.Lit == nil && a.Name == "" {
-			n, ok := f.ToItem(a.Var)
+		if a.Pieces != nil {
+			return Template{}, false
+		}
+		if inline != nil && a.Lit == nil && a.Name == "" && a.Join == nil {
+			a = inline(a.Var, a.Sels)
+		}
+		switch {
+		case a.Join != nil:
+			ps := make([]Part, len(a.Join))
+			for i, p := range a.Join {
+				if p.Str == nil {
+					n, ok := to(p.Var)
+					if !ok {
+						return Template{}, false
+					}
+					p.Var = n
+				}
+				ps[i] = p
+			}
+			a.Join = ps
+		case a.Lit == nil && a.Name == "":
+			n, ok := to(a.Var)
 			if !ok {
 				return Template{}, false
 			}

@@ -273,11 +273,35 @@ func recorded(t Template) []Entry {
 		case a.Lit != nil:
 			l := *a.Lit
 			es = append(es, Entry{Introduce: &l})
+		case a.Join != nil:
+			for _, p := range a.Join {
+				if p.Str == nil && len(p.Sels) > 0 {
+					es = append(es, Entry{Eliminate: p.Var, Sels: p.Sels})
+				}
+			}
+			es = append(es, Entry{Join: a.Join})
 		case len(a.Sels) > 0:
 			es = append(es, Entry{Eliminate: a.Var, Sels: a.Sels})
 		}
 	}
 	return es
+}
+
+// joined is a template with each join the model wrote made: its parts
+// inlined, its literals checked (Frame.JoinParts).
+func joined(f Frame, t Template) (Template, error) {
+	out := Template{Op: t.Op}
+	for _, a := range t.Args {
+		if a.Pieces != nil {
+			ps, err := f.JoinParts(a.Pieces)
+			if err != nil {
+				return Template{}, err
+			}
+			a = Arg{Join: ps}
+		}
+		out.Args = append(out.Args, a)
+	}
+	return out, nil
 }
 
 func (m Machine) tally() tree.Tally {
@@ -323,9 +347,12 @@ func (m Machine) ask(reason string) (Machine, any, error) {
 			scope = append(scope, Shown{Role: RoleGoal, Value: itemValue(f, 1, it)})
 		case it.Tag == ItemElim:
 			scope = append(scope, Shown{Role: RoleContext, Value: itemValue(f, i+1, it),
-				Origin: "cut from " + selText(Arg{Var: it.N, Sels: it.Sels})})
+				Origin: "cut from " + argSource(Arg{Var: it.N, Sels: it.Sels})})
 		case it.Tag == ItemIntro:
 			scope = append(scope, Shown{Role: RoleContext, Value: itemValue(f, i+1, it), Origin: "introduced"})
+		case it.Tag == ItemJoin:
+			scope = append(scope, Shown{Role: RoleContext, Value: itemValue(f, i+1, it),
+				Origin: "joined from " + argSource(Arg{Join: it.Parts})})
 		default:
 			scope = append(scope, Shown{Role: RoleContext, Value: itemValue(f, i+1, it)})
 		}
@@ -359,6 +386,9 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	for i, l := range chain {
 		t, err := templateOf(l.Instr, refs)
 		if err == nil {
+			t, err = joined(f, t)
+		}
+		if err == nil {
 			err = m.fits(f, t)
 		}
 		if err != nil {
@@ -369,8 +399,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 				continue
 			}
 			if _, n, ok := f.Introduce(*a.Lit); !ok {
-				return m.ask(fmt.Sprintf("'%s' copies text $%d holds: take that part of $%d instead of writing it",
-					a.Lit.Str, n, n))
+				return m.ask(fmt.Sprintf("'%s' is text a cut of $%d takes: cut it instead of writing it", a.Lit.Str, n))
 			}
 		}
 		st, ok := f.Store(t)
@@ -427,10 +456,13 @@ func (m Machine) fits(f Frame, t Template) error {
 	}
 	items := f.Items()
 	isTool := func(a Arg) bool {
-		return a.Lit == nil && a.Var >= 1 && a.Var <= len(items) && items[a.Var-1].Tag == ItemTool
+		return a.Lit == nil && a.Join == nil && a.Var >= 1 && a.Var <= len(items) && items[a.Var-1].Tag == ItemTool
 	}
 	for i, a := range t.Args {
-		if a.Lit != nil {
+		if a.Lit != nil || a.Join != nil {
+			if t.Op == OpAct && i == 0 {
+				return errors.New("a tool is run from a $n holding one: an introduction is not a tool")
+			}
 			continue
 		}
 		if a.Var < 1 || a.Var > len(items) {
@@ -478,12 +510,12 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 	}
 	values := make([]any, len(t.Args))
 	for i, a := range t.Args {
-		if a.Lit == nil && f.Items()[a.Var-1].Tag == ItemTool {
+		if a.Lit == nil && a.Join == nil && f.Items()[a.Var-1].Tag == ItemTool {
 			continue
 		}
 		v, ok := f.Eval(a)
 		if !ok {
-			return m.ask(fmt.Sprintf("%s does not apply to $%d's value", selText(a), a.Var))
+			return m.ask(fmt.Sprintf("%s does not apply to $%d's value", argSource(a), a.Var))
 		}
 		values[i] = v
 	}
@@ -522,7 +554,7 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 	var entries []Iface
 	var passed []func(InstLoc, int) Member
 	for i, a := range t.Args {
-		if v := values[i]; i == 0 || a.Lit != nil || f.Items()[a.Var-1].Tag != ItemTool {
+		if v := values[i]; i == 0 || a.Lit != nil || a.Join != nil || f.Items()[a.Var-1].Tag != ItemTool {
 			entries = append(entries, Arrive(v, "").Iface)
 			passed = append(passed, func(id InstLoc, n int) Member {
 				o := Arrive(v, m.Ids.Slot(id, n))
@@ -588,14 +620,6 @@ func ReturnValue(exit tree.ExitStatus, stdout any, why []any) map[string]any {
 }
 
 func errorValue(msg string) map[string]any { return map[string]any{"error": []byte(msg)} }
-
-func selText(a Arg) string {
-	s := "$" + strconv.Itoa(a.Var)
-	for _, x := range a.Sels {
-		s += x.Enc()
-	}
-	return s
-}
 
 // argText is a value as an argument: a string or bytes as themselves,
 // anything else as JSON.

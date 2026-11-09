@@ -5,6 +5,7 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -132,6 +133,21 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 			out["bound"], out["boundLive"] = opt(b, bok), opt(bl, blok)
 		}
 		return out
+	},
+	"join": func(t *testing.T, in map[string]json.RawMessage) any {
+		f := dec[Frame](t, in["frame"])
+		ps, err := f.JoinParts(dec[[]Arg](t, in["args"]))
+		var r JoinRefusal
+		switch {
+		case errors.As(err, &r) && r.Untext != nil:
+			return map[string]any{"untext": *r.Untext}
+		case errors.As(err, &r):
+			return map[string]any{"copies": r.Copies}
+		case err != nil:
+			t.Fatal(err)
+		}
+		text, ok := f.JoinText(ps)
+		return map[string]any{"parts": ps, "text": opt(text, ok)}
 	},
 	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
 		m := Replay(dec[[]Event](t, in["log"]))

@@ -5,10 +5,11 @@ package model
 // `delegate(goal($1), $2, …)` delegates. An argument is a $n and any chain
 // of selectors, each cutting what the last gave: $3.stdout[1] is line 1 of
 // $3's field stdout. Or it is an introduction: a literal in single quotes,
-// '-l' or '.version', text no $n holds, constructed whole. Nothing else may
+// '-l' or '.version', text no cut takes, constructed whole; or a join of
+// these written together, $3'/'$4, text built from parts. Nothing else may
 // be written: text that is not one of these is refused, never dropped.
 // Whether a literal copies what the frame holds is the machine's to check
-// (Frame.Introduce), not the grammar's.
+// (Frame.Introduce, Frame.JoinParts), not the grammar's.
 
 import (
 	"errors"
@@ -59,7 +60,7 @@ func ParseInstr(s string) (Template, error) {
 		return Template{}, errors.New("a delegation's first argument is the goal: goal($n), or goal of a cut")
 	}
 	args, err := argsOf(append([]string{g}, parts[1:]...))
-	if err == nil && args[0].Lit != nil {
+	if err == nil && (args[0].Lit != nil || args[0].Pieces != nil) {
 		return Template{}, errors.New("a goal is taken from a parameter, never written: goal($n), or goal of a cut")
 	}
 	return Template{Op: OpDelegate, Args: args}, err
@@ -106,34 +107,60 @@ func argsOf(fs []string) ([]Arg, error) {
 	return args, nil
 }
 
-// argOf reads one argument, all of f: a literal; or a $n, then its
-// selectors in order. A literal holds no $ or @, so it is never read as a
-// reference.
+// argOf reads one argument, all of f: pieces written together, each a
+// literal or a $n then its selectors in order; two or more are a join. A
+// literal holds no $ or @, so it is never read as a reference.
 func argOf(f string) (Arg, error) {
-	if len(f) >= 2 && f[0] == '\'' && f[len(f)-1] == '\'' {
-		text := f[1 : len(f)-1]
-		if strings.ContainsAny(text, "'$@") {
-			return Arg{}, fmt.Errorf("a literal holds no ', $ or @: %s does", f)
+	bad := fmt.Errorf("an argument is a $n, a cut of one, a literal in single quotes, or these written together, "+
+		"and nothing else: %s is none", f)
+	var pieces []Arg
+	for rest := f; rest != ""; {
+		var a Arg
+		var err error
+		if a, rest, err = pieceOf(rest, bad); err != nil {
+			return Arg{}, err
 		}
-		return Arg{Lit: &Lit{Str: text}}, nil
+		pieces = append(pieces, a)
 	}
-	bad := fmt.Errorf("an argument is a $n, a cut of one, or a literal in single quotes, and nothing else: %s is none", f)
+	switch len(pieces) {
+	case 0:
+		return Arg{}, bad
+	case 1:
+		return pieces[0], nil
+	}
+	return Arg{Pieces: pieces}, nil
+}
+
+// pieceOf reads one piece from the front of f, and what follows it.
+func pieceOf(f string, bad error) (Arg, string, error) {
+	if f[0] == '\'' {
+		end := strings.IndexByte(f[1:], '\'')
+		if end < 0 {
+			return Arg{}, "", bad
+		}
+		text := f[1 : end+1]
+		if strings.ContainsAny(text, "$@") {
+			return Arg{}, "", fmt.Errorf("a literal holds no ', $ or @: '%s' does", text)
+		}
+		return Arg{Lit: &Lit{Str: text}}, f[end+2:], nil
+	}
 	w := 1
 	for w < len(f) && f[w] >= '0' && f[w] <= '9' && w < 10 {
 		w++
 	}
 	if len(f) < 2 || f[0] != '$' || w == 1 {
-		return Arg{}, bad
+		return Arg{}, "", bad
 	}
 	n, _ := strconv.Atoi(f[1:w])
 	a := Arg{Var: n}
-	for rest := f[w:]; rest != ""; {
+	rest := f[w:]
+	for rest != "" && rest[0] != '$' && rest[0] != '\'' {
 		s, sw, err := tree.ReadSel(rest)
 		if err != nil {
-			return Arg{}, err
+			return Arg{}, "", err
 		}
 		if sw == 0 {
-			return Arg{}, bad
+			return Arg{}, "", bad
 		}
 		if s.Kind == tree.SelLines {
 			a.Sels = append(a.Sels, Sel{Lines: true, Runs: s.Runs})
@@ -142,7 +169,7 @@ func argOf(f string) (Arg, error) {
 		}
 		rest = rest[sw:]
 	}
-	return a, nil
+	return a, rest, nil
 }
 
 // splitArgs splits at the commas between arguments, not those inside a

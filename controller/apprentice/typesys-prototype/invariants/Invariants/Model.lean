@@ -248,11 +248,19 @@ inductive Lit where
   | exit (n : Nat)
   deriving DecidableEq, Repr
 
-/-- An argument of a stored template: a reference, or an introduction,
-inlined at commit. A template holds no free text. -/
+/-- A part of a join: text written, or a cut of a `$n` seen. -/
+inductive Part where
+  | str (s : String)
+  | seen (n : Nat) (sels : List Sel)
+  deriving DecidableEq, Repr
+
+/-- An argument of a stored template: a reference; or an introduction,
+inlined at commit, a literal or a join of parts. A template holds no free
+text. -/
 inductive Arg where
   | ref (r : Ref)
   | lit (l : Lit)
+  | join (ps : List Part)
   deriving DecidableEq, Repr
 
 /-- A template: an operator and its arguments, made entirely of variables. -/
@@ -353,6 +361,7 @@ inductive Entry where
   | arrived (o : Observation)
   | eliminated (n : Nat) (sels : List Sel)
   | introduced (l : Lit)
+  | joined (ps : List Part)
 
 /-- A frame: one activation of a scope. Its id; its static link, the
 program it is defined under; its dynamic link, the frame that invoked it;
@@ -403,6 +412,7 @@ def arrivals : List Entry → List Iface
   | .arrived o :: es => o.iface :: arrivals es
   | .eliminated _ _ :: es => arrivals es
   | .introduced _ :: es => arrivals es
+  | .joined _ :: es => arrivals es
 
 /-- What a frame has seen: its scope, then what arrived. -/
 def seen (f : Frame) : List Iface := f.scope.entries ++ arrivals f.state
@@ -416,6 +426,7 @@ theorem arrivals_append : ∀ (as bs : List Entry), arrivals (as ++ bs) = arriva
   | .arrived o :: as, bs => by simp [arrivals, arrivals_append as bs]
   | .eliminated _ _ :: as, bs => by simp [arrivals, arrivals_append as bs]
   | .introduced _ :: as, bs => by simp [arrivals, arrivals_append as bs]
+  | .joined _ :: as, bs => by simp [arrivals, arrivals_append as bs]
 
 /-- The model a frame consults is never in its key: implementations learned
 under one model count under another. -/
@@ -435,6 +446,7 @@ def Entry.mapValue (g : Value → Value) : Entry → Entry
   | .arrived o => .arrived (o.mapValue g)
   | .eliminated n s => .eliminated n s
   | .introduced l => .introduced l
+  | .joined ps => .joined ps
 
 /-- Every value a frame holds, changed by `g`. -/
 def Frame.mapValues (g : Value → Value) (f : Frame) : Frame :=
@@ -447,6 +459,7 @@ theorem arrivals_mapValue (g : Value → Value) :
     simp [arrivals, Entry.mapValue, Observation.mapValue, arrivals_mapValue g es]
   | .eliminated _ _ :: es => by simp [arrivals, Entry.mapValue, arrivals_mapValue g es]
   | .introduced _ :: es => by simp [arrivals, Entry.mapValue, arrivals_mapValue g es]
+  | .joined _ :: es => by simp [arrivals, Entry.mapValue, arrivals_mapValue g es]
 
 /-- A key is a function of types alone: changing every value a frame holds
 leaves its key unchanged. -/
@@ -483,6 +496,7 @@ def Entry.mapLoc (g : InstLoc → InstLoc) : Entry → Entry
   | .arrived o => .arrived (o.mapLoc g)
   | .eliminated n s => .eliminated n s
   | .introduced l => .introduced l
+  | .joined ps => .joined ps
 
 /-- Every location in the log a frame holds, renamed by `g`: its id, its
 dynamic link, and each observation's place. -/
@@ -500,6 +514,7 @@ theorem arrivals_mapLoc (g : InstLoc → InstLoc) :
     simp [arrivals, Entry.mapLoc, Observation.mapLoc, arrivals_mapLoc g es]
   | .eliminated _ _ :: es => by simp [arrivals, Entry.mapLoc, arrivals_mapLoc g es]
   | .introduced _ :: es => by simp [arrivals, Entry.mapLoc, arrivals_mapLoc g es]
+  | .joined _ :: es => by simp [arrivals, Entry.mapLoc, arrivals_mapLoc g es]
 
 /-- A key never reads the log: renaming every instantiation location a
 frame holds leaves its key unchanged, so memory depends on no run. -/
@@ -517,6 +532,7 @@ theorem key_live (rootOf : DefLoc → DefLoc) (f : Frame) (e : Entry)
   | arrived o => exact absurd rfl (he o)
   | eliminated n s => simp [key, seen, arrivals_append, arrivals]
   | introduced l => simp [key, seen, arrivals_append, arrivals]
+  | joined ps => simp [key, seen, arrivals_append, arrivals]
 
 /-- What arrives is seen: appending an arrival grows the key by exactly its
 interface, at the end. -/
@@ -979,12 +995,13 @@ system instantiates the scope's and each arrival; the agent eliminates
 (cuts something held) or introduces (constructs from nothing). -/
 
 /-- What a `$n` holds: a tool, which has no value; a value seen, bound
-from the scope or arrived; an introduction; or an elimination of an
-earlier `$n`. -/
+from the scope or arrived; an introduction, a literal or a join; or an
+elimination of an earlier `$n`. -/
 inductive Item where
   | tool (b : DefLoc)
   | seen (v : Value)
   | intro (l : Lit)
+  | join (ps : List Part)
   | elim (n : Nat) (sels : List Sel)
 
 def Member.item : Member → Item
@@ -995,6 +1012,7 @@ def Entry.item : Entry → Item
   | .arrived o => .seen o.value
   | .eliminated n s => .elim n s
   | .introduced l => .intro l
+  | .joined ps => .join ps
 
 def items (f : Frame) : List Item := f.bindings.map (·.item) ++ f.state.map (·.item)
 
@@ -1004,6 +1022,23 @@ def item (f : Frame) (n : Nat) : Option Item := if n = 0 then none else (items f
 def Lit.value : Lit → Value
   | .str s => .str s
   | .exit n => .exit n
+
+/-- Text joined: each part's, in order, or none when one has none. -/
+def catText : List (Option String) → Option String
+  | [] => some ""
+  | x :: xs => match x, catText xs with
+    | some a, some b => some (a ++ b)
+    | _, _ => none
+
+/-- A part's text: as written, or the text a cut of a `$n` seen reads. A
+part reads nothing else, so a join never reads through an elimination. -/
+def readPart (f : Frame) : Part → Option String
+  | .str s => some s
+  | .seen n sels => match item f n with
+    | some (.seen v) => (cutAll v sels).bind Frames.textOf
+    | _ => none
+
+def joinText (f : Frame) (ps : List Part) : Option String := catText (ps.map (readPart f))
 
 /-- Variables are append-only: what a `$n` holds never changes as the
 frame's state grows. -/
@@ -1029,6 +1064,7 @@ def read (f : Frame) (n : Nat) (sels : List Sel) : Option Value :=
   match item f n with
   | some (.seen v) => cutAll v sels
   | some (.intro l) => if sels = [] then some l.value else none
+  | some (.join ps) => if sels = [] then (joinText f ps).map .str else none
   | some (.elim m s) => if m < n then read f m (s ++ sels) else none
   | _ => none
 termination_by n
@@ -1043,6 +1079,7 @@ def inline (f : Frame) (n : Nat) (sels : List Sel) : Arg :=
   match item f n with
   | some (.elim m s) => if m < n then inline f m (s ++ sels) else .ref (.var n sels)
   | some (.intro l) => if sels = [] then .lit l else .ref (.var n sels)
+  | some (.join ps) => if sels = [] then .join ps else .ref (.var n sels)
   | _ => .ref (.var n sels)
 termination_by n
 
@@ -1052,6 +1089,7 @@ def evalArg (f : Frame) : Arg → Option Value
   | .lit l => some l.value
   | .ref (.var n sels) => read f n sels
   | .ref (.name _) => none
+  | .join ps => (joinText f ps).map .str
 
 /-- Inlining at commit and evaluating gives the same value as reading. -/
 theorem inline_read (f : Frame) (n : Nat) (sels : List Sel) :
@@ -1059,6 +1097,7 @@ theorem inline_read (f : Frame) (n : Nat) (sels : List Sel) :
   have hr : read f n sels = match item f n with
       | some (.seen v) => cutAll v sels
       | some (.intro l) => if sels = [] then some l.value else none
+      | some (.join ps) => if sels = [] then (joinText f ps).map .str else none
       | some (.elim m s) => if m < n then read f m (s ++ sels) else none
       | _ => none := by rw [read]
   rw [inline, hr]
@@ -1069,69 +1108,69 @@ theorem inline_read (f : Frame) (n : Nat) (sels : List Sel) :
     | tool b => simp [evalArg, hr, e]
     | seen v => simp [evalArg, hr, e]
     | intro l => by_cases hs : sels = [] <;> simp [evalArg, hr, e, hs]
+    | join ps => by_cases hs : sels = [] <;> simp [evalArg, hr, e, hs]
     | elim m s =>
       by_cases hm : m < n
       · simp only [hm, ↓reduceIte]; exact inline_read f m (s ++ sels)
       · simp [evalArg, hr, e, hm]
 termination_by n
 
-/-- An inlined argument reads only what was seen: a literal, or a `$n`
-holding a value seen, whenever the reference reads anything. -/
+/-- An inlined argument reads only what was seen: an introduction, or a
+`$n` holding a value seen, whenever the reference reads anything. -/
 theorem inline_seen (f : Frame) (n : Nat) (sels : List Sel) (h : read f n sels ≠ none) :
-    (∃ l, inline f n sels = .lit l) ∨
+    (∃ l, inline f n sels = .lit l) ∨ (∃ ps, inline f n sels = .join ps) ∨
       ∃ j sels' v, inline f n sels = .ref (.var j sels') ∧ item f j = some (.seen v) := by
   rw [read] at h
   rw [inline]
-  split
-  · rename_i m s hm
-    rw [hm] at h
-    split
-    · rename_i hlt; simp only [hlt, ↓reduceIte] at h; exact inline_seen f m (s ++ sels) h
-    · rename_i hlt; simp [hlt] at h
-  · rename_i l hl
-    rw [hl] at h
-    split
-    · exact .inl ⟨l, rfl⟩
-    · rename_i hs; simp [hs] at h
-  · rename_i h₁ h₂
-    cases e : item f n with
-    | none => rw [e] at h; simp at h
-    | some it =>
-      cases it with
-      | tool b => rw [e] at h; simp at h
-      | seen v => exact .inr ⟨n, sels, v, rfl, e⟩
-      | intro l => exact absurd e (h₂ l)
-      | elim m s => exact absurd e (h₁ m s)
+  cases e : item f n with
+  | none => simp [e] at h
+  | some it =>
+    cases it with
+    | tool b => simp [e] at h
+    | seen v => exact .inr (.inr ⟨n, sels, v, rfl, e⟩)
+    | intro l =>
+      by_cases hs : sels = []
+      · simp only [hs, ↓reduceIte]; exact .inl ⟨l, rfl⟩
+      · simp [e, hs] at h
+    | join ps =>
+      by_cases hs : sels = []
+      · simp only [hs, ↓reduceIte]; exact .inr (.inl ⟨ps, rfl⟩)
+      · simp [e, hs] at h
+    | elim m s =>
+      by_cases hm : m < n
+      · simp only [e, hm, ↓reduceIte] at h ⊢; exact inline_seen f m (s ++ sels) h
+      · simp [e, hm] at h
 termination_by n
 
 /-! ### Introduction and the copy check
 
-An introduction constructs from nothing. A string introduced whose text
-appears in a value the frame holds is refused, with the `$n` that holds
-it: that is a copy, and the cut takes it instead. An exit status is never
-a copy. -/
+An introduction constructs from nothing. A string is refused when a cut
+of a value the frame holds reads exactly its text, with that `$n`: that is
+a copy, and the cut takes it instead. What no cut takes, part of a line or
+of a string, is the agent's to write. An exit status is never a copy. -/
+
+/-- Every run of lines among `n`. -/
+def runSels (n : Nat) : List (List Sel) :=
+  (List.range n).flatMap fun i => (List.range (n - i)).map fun j => [.lines [(i + 1, i + 1 + j)]]
 
 mutual
-/-- Every string a value holds, at any depth, keys included. -/
-def valueStrings : Value → List String
-  | .str s => [s]
-  | .arr xs => stringsList xs
-  | .obj kvs => stringsMembers kvs
-  | _ => []
+/-- The cuts to try of a value: the whole; each run of its lines, when it
+is text; each field's cuts, through the field. -/
+def candidates : Value → List (List Sel)
+  | .str s => [] :: runSels (Frames.lines s).length
+  | .bytes b => [] :: ((String.fromUTF8? b).map fun s => runSels (Frames.lines s).length).getD []
+  | .obj kvs => [] :: memberCandidates kvs
+  | _ => [[]]
 
-def stringsList : List Value → List String
+def memberCandidates : List (String × Value) → List (List Sel)
   | [] => []
-  | x :: xs => valueStrings x ++ stringsList xs
-
-def stringsMembers : List (String × Value) → List String
-  | [] => []
-  | (k, v) :: kvs => k :: valueStrings v ++ stringsMembers kvs
+  | (k, v) :: kvs => (candidates v).map (Sel.field [k] :: ·) ++ memberCandidates kvs
 end
 
-/-- Whether `$n` holds a value with `s` in its text. -/
+/-- Whether a cut of `$n`, a value seen, reads exactly `s`. -/
 def holds (f : Frame) (s : String) (n : Nat) : Bool :=
   match item f n with
-  | some (.seen v) => (valueStrings v ++ (Frames.textOf v).toList).any fun t => decide (s.toList <:+: t.toList)
+  | some (.seen v) => (candidates v).any fun sels => (cutAll v sels).bind Frames.textOf == some s
   | _ => false
 
 /-- Introduce: the entry to append, or the `$n` it would copy. -/
@@ -1141,10 +1180,10 @@ def introduce (f : Frame) : Lit → Except Nat Entry
     | some n => .error n
     | none => .ok (.introduced (.str s))
 
-/-- A refused introduction names a `$n` holding a value with its text. -/
+/-- A refused introduction names a `$n` a cut of which reads its text:
+only what a cut takes is refused. -/
 theorem introduce_refused {f : Frame} {s : String} {n : Nat} (h : introduce f (.str s) = .error n) :
-    ∃ v, item f n = some (.seen v) ∧
-      ∃ t ∈ valueStrings v ++ (Frames.textOf v).toList, s.toList <:+: t.toList := by
+    ∃ sels, (read f n sels).bind Frames.textOf = some s := by
   simp only [introduce] at h
   split at h
   · rename_i n' hf
@@ -1153,8 +1192,9 @@ theorem introduce_refused {f : Frame} {s : String} {n : Nat} (h : introduce f (.
     simp only [holds] at hh
     split at hh
     · rename_i v hv
-      obtain ⟨t, ht, hi⟩ := List.any_eq_true.mp hh
-      exact ⟨v, hv, t, ht, by simpa using hi⟩
+      obtain ⟨sels, _, hi⟩ := List.any_eq_true.mp hh
+      refine ⟨sels, ?_⟩
+      rw [read, hv]; simpa using hi
     · simp at hh
   · cases h
 
@@ -1180,6 +1220,162 @@ theorem introduce_live (rootOf : DefLoc → DefLoc) {f : Frame} {l : Lit} {e : E
       · cases h; rfl
   subst this
   exact key_live rootOf f _ (by simp)
+
+/-! ### Joins
+
+A join introduces text built from parts: text written, each checked as a
+literal is, and cuts of `$n`. Each part is inlined as the join is made, a
+join it reads spliced in, so a join reads only what was seen. -/
+
+/-- Why a join is refused: a written part a cut of `$n` takes, or a part
+that reads no text. -/
+inductive JoinRefusal where
+  | copies (n : Nat)
+  | untext (a : Arg)
+  deriving DecidableEq, Repr
+
+def joinPart (f : Frame) : Arg → Except JoinRefusal (List Part)
+  | .lit (.str s) => match (List.range' 1 (items f).length).find? (holds f s) with
+    | some n => .error (.copies n)
+    | none => .ok [.str s]
+  | .ref (.var n sels) => match (read f n sels).bind Frames.textOf, inline f n sels with
+    | some _, .lit (.str s) => .ok [.str s]
+    | some _, .ref (.var j s) => .ok [.seen j s]
+    | some _, .join ps => .ok ps
+    | _, _ => .error (.untext (.ref (.var n sels)))
+  | a => .error (.untext a)
+
+/-- A join's parts, from what the agent wrote: literals and `$n`. -/
+def joinParts (f : Frame) : List Arg → Except JoinRefusal (List Part)
+  | [] => .ok []
+  | a :: as => match joinPart f a, joinParts f as with
+    | .ok p, .ok ps => .ok (p ++ ps)
+    | .error e, _ => .error e
+    | _, .error e => .error e
+
+theorem catText_append : ∀ (xs ys : List (Option String)),
+    catText (xs ++ ys) = match catText xs, catText ys with
+      | some a, some b => some (a ++ b)
+      | _, _ => none
+  | [], ys => by cases h : catText ys <;> simp [catText, h]
+  | x :: xs, ys => by
+    simp only [List.cons_append, catText, catText_append xs ys]
+    cases x <;> cases catText xs <;> cases catText ys <;> simp [String.append_assoc]
+
+theorem catText_some : ∀ {xs : List (Option String)} {t : String}, catText xs = some t → ∀ x ∈ xs, x ≠ none
+  | [], _, _ => by simp
+  | x :: xs, t, h => by
+    cases x with
+    | none => simp [catText] at h
+    | some a =>
+      cases hr : catText xs with
+      | none => simp [catText, hr] at h
+      | some b =>
+        intro y hy
+        rcases List.mem_cons.mp hy with rfl | hy
+        · simp
+        · exact catText_some hr y hy
+
+theorem joinText_append (f : Frame) (ps qs : List Part) :
+    joinText f (ps ++ qs) = match joinText f ps, joinText f qs with
+      | some a, some b => some (a ++ b)
+      | _, _ => none := by
+  simp [joinText, catText_append]
+
+/-- A part made from an argument reads the text the argument reads. -/
+theorem joinPart_text {f : Frame} {a : Arg} {ps : List Part} (h : joinPart f a = .ok ps) :
+    joinText f ps = (evalArg f a).bind Frames.textOf := by
+  match a with
+  | .lit (.str s) =>
+    simp only [joinPart] at h
+    split at h
+    · cases h
+    · cases h; simp [joinText, catText, readPart, evalArg, Lit.value, Frames.textOf]
+  | .lit (.exit _) => simp [joinPart] at h
+  | .ref (.name _) => simp [joinPart] at h
+  | .join _ => simp [joinPart] at h
+  | .ref (.var n sels) =>
+    have hr := inline_read f n sels
+    simp only [joinPart] at h
+    split at h
+    · rename_i t s ht hi
+      cases h
+      rw [hi] at hr
+      simp [joinText, catText, readPart, evalArg, ← hr, Lit.value, Frames.textOf]
+    · rename_i t j s ht hi
+      cases h
+      have hn : read f n sels ≠ none := by intro e; simp [e] at ht
+      rcases inline_seen f n sels hn with ⟨l, hl⟩ | ⟨qs, hq⟩ | ⟨j', s', v, hj, hv⟩
+      · rw [hi] at hl; cases hl
+      · rw [hi] at hq; cases hq
+      · rw [hi] at hj; cases hj
+        rw [hi] at hr
+        have hrj : read f j s = cutAll v s := by rw [read, hv]
+        simp only [evalArg] at hr ⊢
+        rw [← hr, hrj]
+        simp only [joinText, readPart, hv, List.map_cons, List.map_nil, catText]
+        cases (cutAll v s).bind Frames.textOf <;> simp
+    · rename_i t qs ht hi
+      simp only [Except.ok.injEq] at h
+      subst h
+      rw [hi] at hr
+      simp only [evalArg] at hr ⊢
+      rw [← hr]
+      cases joinText f qs <;> simp [Frames.textOf]
+    · cases h
+
+/-- A join reads its arguments' text, joined. -/
+theorem joinParts_text {f : Frame} : ∀ {as : List Arg} {ps : List Part}, joinParts f as = .ok ps →
+    joinText f ps = catText (as.map fun a => (evalArg f a).bind Frames.textOf)
+  | [], ps, h => by simp [joinParts] at h; cases h; rfl
+  | a :: as, ps, h => by
+    cases h₁ : joinPart f a with
+    | error e => simp [joinParts, h₁] at h
+    | ok p =>
+      cases h₂ : joinParts f as with
+      | error e => simp [joinParts, h₁, h₂] at h
+      | ok qs =>
+        simp only [joinParts, h₁, h₂, Except.ok.injEq] at h
+        subst h
+        rw [joinText_append, joinPart_text h₁, joinParts_text h₂]
+        simp [catText]
+
+/-- A join reads only what was seen: each cut it holds is of a value seen,
+whenever it reads anything. -/
+theorem joinText_seen {f : Frame} {ps : List Part} {t : String} (h : joinText f ps = some t) :
+    ∀ n s, Part.seen n s ∈ ps → ∃ v, item f n = some (.seen v) := by
+  intro n s hm
+  have := catText_some h (readPart f (.seen n s)) (List.mem_map_of_mem hm)
+  simp only [readPart] at this
+  split at this
+  · rename_i v hv; exact ⟨v, hv⟩
+  · exact absurd rfl this
+
+/-- A join's written parts are introductions: none is text a cut takes. -/
+theorem joinParts_copy {f : Frame} : ∀ {as : List Arg} {ps : List Part} {s : String},
+    joinParts f as = .ok ps → Arg.lit (.str s) ∈ as →
+      ∀ n ∈ List.range' 1 (items f).length, holds f s n = false
+  | [], _, _, _, hm => by simp at hm
+  | a :: as, ps, s, h, hm => by
+    cases h₁ : joinPart f a with
+    | error e => simp [joinParts, h₁] at h
+    | ok p =>
+      cases h₂ : joinParts f as with
+      | error e => simp [joinParts, h₁, h₂] at h
+      | ok qs =>
+        rcases List.mem_cons.mp hm with rfl | hm
+        · simp only [joinPart] at h₁
+          split at h₁
+          · cases h₁
+          · rename_i hf
+            intro n hn
+            simpa using List.find?_eq_none.mp hf n hn
+        · exact joinParts_copy h₂ hm
+
+/-- A join is live: never in the key. -/
+theorem joined_live (rootOf : DefLoc → DefLoc) (f : Frame) (ps : List Part) :
+    key rootOf (f.append [.joined ps]) = key rootOf f :=
+  key_live rootOf f _ (by simp)
 
 /-! ## The key is lossless
 
@@ -1208,6 +1404,7 @@ theorem project_reads (t : Template) {k₁ k₂ : Key}
     | .ref (.var n sels) => simp [h n sels List.mem_cons_self, ih]
     | .ref (.name _) => simpa using ih
     | .lit _ => simpa using ih
+    | .join _ => simpa using ih
 
 /-- The converse fails: two keys, one hop, two scopes. What 58 merged, 61
 keeps apart. -/
@@ -1225,10 +1422,20 @@ A reuse rule says which stored implementations count at a key, and how
 their references align with the key's positions. The base rule is exact
 match: only the key's own, aligned by identity. -/
 
-/-- Rebinding a template's references through an alignment. -/
+def Part.rebind (a : Nat → Nat) : Part → Part
+  | .seen n sels => .seen (a n) sels
+  | p => p
+
+theorem Part.rebind_id : ∀ p : Part, p.rebind id = p
+  | .seen _ _ => rfl
+  | .str _ => rfl
+
+/-- Rebinding a template's references through an alignment, a join's
+parts among them. -/
 def Template.rebind (a : Nat → Nat) (t : Template) : Template :=
   { t with args := t.args.map fun
     | .ref (.var n sels) => .ref (.var (a n) sels)
+    | .join ps => .join (ps.map (·.rebind a))
     | x => x }
 
 theorem rebind_id (t : Template) : t.rebind id = t := by
@@ -1242,6 +1449,11 @@ theorem rebind_id (t : Template) : t.rebind id = t := by
       | .ref (.var _ _) => simpa using ih
       | .ref (.name _) => simpa using ih
       | .lit _ => simpa using ih
+      | .join ps =>
+        have : ps.map (·.rebind id) = ps := by
+          conv => rhs; rw [← List.map_id ps]
+          exact List.map_congr_left fun p _ => Part.rebind_id p
+        simpa [this] using ih
 
 /-- A reuse rule: from a stored key to the key being decided, an alignment
 of positions, or none when the stored key does not count. -/
@@ -1295,23 +1507,37 @@ def toKey (f : Frame) (n : Nat) : Option Nat := posOf n (seenAt f) 1
 /-- Key position `s`'s `$n`. -/
 def toItem (f : Frame) (s : Nat) : Option Nat := if s = 0 then none else (seenAt f)[s - 1]?
 
-/-- An argument as memory stores it: inlined, its reference a key position. -/
-def storeArg (f : Frame) : Arg → Option Arg
-  | .ref (.var n sels) => match inline f n sels with
-    | .ref (.var m s) => (toKey f m).map fun p => .ref (.var p s)
-    | a => some a
-  | a => some a
-
-/-- A stored argument in a frame: its key position named by `$n` there. -/
-def bindArg (f : Frame) : Arg → Option Arg
-  | .ref (.var p s) => (toItem f p).map fun n => .ref (.var n s)
-  | a => some a
-
 def allSome {α β : Type} (g : α → Option β) : List α → Option (List β)
   | [] => some []
   | x :: xs => match g x, allSome g xs with
     | some y, some ys => some (y :: ys)
     | _, _ => none
+
+def storePart (f : Frame) : Part → Option Part
+  | .seen n s => (toKey f n).map fun p => .seen p s
+  | p => some p
+
+def bindPart (f : Frame) : Part → Option Part
+  | .seen p s => (toItem f p).map fun n => .seen n s
+  | p => some p
+
+/-- An inlined argument as memory stores it: each reference, a join's
+parts among them, a key position. -/
+def storeInlined (f : Frame) : Arg → Option Arg
+  | .ref (.var m s) => (toKey f m).map fun p => .ref (.var p s)
+  | .join ps => (allSome (storePart f) ps).map .join
+  | a => some a
+
+/-- An argument as memory stores it: inlined, its references key positions. -/
+def storeArg (f : Frame) : Arg → Option Arg
+  | .ref (.var n sels) => storeInlined f (inline f n sels)
+  | a => storeInlined f a
+
+/-- A stored argument in a frame: each key position named by `$n` there. -/
+def bindArg (f : Frame) : Arg → Option Arg
+  | .ref (.var p s) => (toItem f p).map fun n => .ref (.var n s)
+  | .join ps => (allSome (bindPart f) ps).map .join
+  | a => some a
 
 def Template.store (f : Frame) (t : Template) : Option Template :=
   (allSome (storeArg f) t.args).map fun as => ⟨t.op, as⟩
@@ -1417,11 +1643,15 @@ theorem arrival_position (f : Frame) (es : List Entry) (o : Observation)
 template is stored: a stored template binds alike before and after. -/
 theorem bind_live (f : Frame) (es : List Entry) (h : ∀ e ∈ es, e.item.isSeen = false) (t : Template) :
     t.bind (f.append es) = t.bind f := by
+  have hp : bindPart (f.append es) = bindPart f := by
+    funext p
+    cases p <;> simp [bindPart, toItem, seenAt_live f es h]
   have : bindArg (f.append es) = bindArg f := by
     funext a
     cases a with
     | ref r => cases r <;> simp [bindArg, toItem, seenAt_live f es h]
     | lit => rfl
+    | join ps => simp [bindArg, hp]
   simp [Template.bind, this]
 
 theorem allSome_mem {α β : Type} {g : α → Option β} :
@@ -1442,31 +1672,51 @@ theorem allSome_mem {α β : Type} {g : α → Option β} :
         · obtain ⟨w, hw, hg⟩ := allSome_mem hr z hz
           exact ⟨w, List.mem_cons_of_mem _ hw, hg⟩
 
+theorem storeParts_bind {f : Frame} : ∀ {ps qs : List Part}, allSome (storePart f) ps = some qs →
+    allSome (bindPart f) qs = some ps
+  | [], qs, h => by simp [allSome] at h; subst h; rfl
+  | p :: ps, qs, h => by
+    cases hp : storePart f p with
+    | none => simp [allSome, hp] at h
+    | some q =>
+      cases hr : allSome (storePart f) ps with
+      | none => simp [allSome, hp, hr] at h
+      | some qs' =>
+        simp only [allSome, hp, hr, Option.some.injEq] at h
+        subst h
+        have hq : bindPart f q = some p := by
+          cases p with
+          | str => simp [storePart] at hp; subst hp; rfl
+          | seen n s =>
+            obtain ⟨k, hk, rfl⟩ := Option.map_eq_some_iff.mp hp
+            simp [bindPart, toItem_toKey hk]
+        simp [allSome, hq, storeParts_bind hr]
+
+/-- An inlined argument, stored and bound back in its frame, is itself. -/
+theorem storeInlined_bind {f : Frame} {a a' : Arg} (h : storeInlined f a = some a') : bindArg f a' = some a := by
+  cases a with
+  | lit => simp [storeInlined] at h; subst h; rfl
+  | join ps =>
+    obtain ⟨qs, hq, rfl⟩ := Option.map_eq_some_iff.mp h
+    simp [bindArg, storeParts_bind hq]
+  | ref r =>
+    cases r with
+    | name => simp [storeInlined] at h; subst h; rfl
+    | var m s =>
+      obtain ⟨p, hp, rfl⟩ := Option.map_eq_some_iff.mp h
+      simp [bindArg, toItem_toKey hp]
+
 /-- A stored argument, bound back in the frame it was stored from, reads
 what the argument read. -/
 theorem bindArg_storeArg {f : Frame} {a a' : Arg} (h : storeArg f a = some a') :
     ∃ b, bindArg f a' = some b ∧ evalArg f b = evalArg f a := by
   cases a with
-  | lit l => simp [storeArg] at h; subst h; exact ⟨_, rfl, rfl⟩
   | ref r =>
     cases r with
-    | name s => simp [storeArg] at h; subst h; exact ⟨_, rfl, rfl⟩
-    | var n sels =>
-      have hr := inline_read f n sels
-      cases hi : inline f n sels with
-      | lit l =>
-        simp [storeArg, hi] at h; subst h
-        exact ⟨_, rfl, by rw [hi] at hr; simpa [evalArg] using hr⟩
-      | ref r' =>
-        cases r' with
-        | name s =>
-          simp [storeArg, hi] at h; subst h
-          exact ⟨_, rfl, by rw [hi] at hr; simpa [evalArg] using hr⟩
-        | var m s =>
-          simp only [storeArg, hi] at h
-          obtain ⟨p, hp, rfl⟩ := Option.map_eq_some_iff.mp h
-          refine ⟨.ref (.var m s), by simp [bindArg, toItem_toKey hp], ?_⟩
-          rw [hi] at hr; simpa [evalArg] using hr
+    | var n sels => exact ⟨_, storeInlined_bind h, inline_read f n sels⟩
+    | name => exact ⟨_, storeInlined_bind (by simpa [storeArg] using h), rfl⟩
+  | lit => exact ⟨_, storeInlined_bind (by simpa [storeArg] using h), rfl⟩
+  | join => exact ⟨_, storeInlined_bind (by simpa [storeArg] using h), rfl⟩
 
 theorem allSome_store_bind {f : Frame} : ∀ {xs ys : List Arg}, allSome (storeArg f) xs = some ys →
     ∃ zs, allSome (bindArg f) ys = some zs ∧ zs.map (evalArg f) = xs.map (evalArg f)
@@ -1501,11 +1751,31 @@ theorem bind_seen {f : Frame} {t t' : Template} (h : t.bind f = some t') :
   obtain ⟨a, _, ha⟩ := allSome_mem has _ hm
   cases a with
   | lit => simp [bindArg] at ha
+  | join => simp [bindArg] at ha
   | ref r =>
     cases r with
     | name => simp [bindArg] at ha
     | var p s' =>
       obtain ⟨m, hm', he⟩ := Option.map_eq_some_iff.mp ha
+      cases he; exact toItem_seen hm'
+
+/-- So does each part of a bound join. -/
+theorem bind_seen_parts {f : Frame} {t t' : Template} (h : t.bind f = some t') :
+    ∀ ps n s, Arg.join ps ∈ t'.args → Part.seen n s ∈ ps → ∃ x, item f n = some x ∧ x.isSeen = true := by
+  intro ps n s hm hp
+  obtain ⟨as, has, rfl⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨a, _, ha⟩ := allSome_mem has _ hm
+  cases a with
+  | lit => simp [bindArg] at ha
+  | ref r => cases r <;> simp [bindArg] at ha
+  | join qs =>
+    obtain ⟨ps', hps, he⟩ := Option.map_eq_some_iff.mp ha
+    cases he
+    obtain ⟨q, _, hq⟩ := allSome_mem hps _ hp
+    cases q with
+    | str => simp [bindPart] at hq
+    | seen p s' =>
+      obtain ⟨m, hm', he⟩ := Option.map_eq_some_iff.mp hq
       cases he; exact toItem_seen hm'
 
 /-! ## Memory is a fold of the log

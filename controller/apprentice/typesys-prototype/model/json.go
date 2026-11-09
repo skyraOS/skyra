@@ -355,8 +355,39 @@ func (o *Observation) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+func (p Part) MarshalJSON() ([]byte, error) {
+	if p.Str != nil {
+		return json.Marshal(map[string]any{"str": *p.Str})
+	}
+	return json.Marshal(map[string]any{"seen": p.Var, "sels": nonNil(p.Sels)})
+}
+
+func (p *Part) UnmarshalJSON(b []byte) error {
+	var x struct {
+		Str  *string `json:"str"`
+		Seen *int    `json:"seen"`
+		Sels []Sel   `json:"sels"`
+	}
+	if err := json.Unmarshal(b, &x); err != nil {
+		return err
+	}
+	switch {
+	case x.Str != nil:
+		*p = Part{Str: x.Str}
+	case x.Seen != nil:
+		*p = Part{Var: *x.Seen, Sels: x.Sels}
+	default:
+		return fmt.Errorf("part %s", b)
+	}
+	return nil
+}
+
 func (a Arg) MarshalJSON() ([]byte, error) {
 	switch {
+	case a.Pieces != nil:
+		return nil, fmt.Errorf("a join not yet made: %s", argSource(a))
+	case a.Join != nil:
+		return json.Marshal(map[string]any{"join": a.Join})
 	case a.Lit != nil:
 		return json.Marshal(map[string]any{"lit": a.Lit})
 	case a.Name != "":
@@ -397,6 +428,8 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		return json.Marshal(map[string]any{"arrived": e.Arrived})
 	case e.Introduce != nil:
 		return json.Marshal(map[string]any{"introduce": e.Introduce})
+	case e.Join != nil:
+		return json.Marshal(map[string]any{"join": e.Join})
 	}
 	return json.Marshal(map[string]any{"eliminate": e.Eliminate, "sels": nonNil(e.Sels)})
 }
@@ -407,6 +440,7 @@ func (e *Entry) UnmarshalJSON(b []byte) error {
 		Eliminate *int         `json:"eliminate"`
 		Sels      []Sel        `json:"sels"`
 		Introduce *Lit         `json:"introduce"`
+		Join      *[]Part      `json:"join"`
 	}
 	if err := json.Unmarshal(b, &x); err != nil {
 		return err
@@ -416,6 +450,8 @@ func (e *Entry) UnmarshalJSON(b []byte) error {
 		*e = Entry{Arrived: x.Arrived}
 	case x.Introduce != nil:
 		*e = Entry{Introduce: x.Introduce}
+	case x.Join != nil:
+		*e = Entry{Join: append([]Part{}, *x.Join...)}
 	case x.Eliminate != nil:
 		*e = Entry{Eliminate: *x.Eliminate, Sels: x.Sels}
 	default:

@@ -831,10 +831,15 @@ def jMember : Model.Member → Json
 
 def jSels (ss : List Model.Sel) : Json := .arr (ss.map jSel).toArray
 
+def jPart : Model.Part → Json
+  | .str s => Json.mkObj [("str", .str s)]
+  | .seen n ss => Json.mkObj [("seen", jNat n), ("sels", jSels ss)]
+
 def jEntry : Model.Entry → Json
   | .arrived o => Json.mkObj [("arrived", jObs o)]
   | .eliminated n ss => Json.mkObj [("eliminate", jNat n), ("sels", jSels ss)]
   | .introduced l => Json.mkObj [("introduce", jLit l)]
+  | .joined ps => Json.mkObj [("join", jList jPart ps)]
 
 def jFrame (f : Model.Frame) : Json :=
   Json.mkObj [("id", .str f.id.hash), ("program", .str f.program.hash),
@@ -846,6 +851,7 @@ def jArg : Model.Arg → Json
   | .ref (.var n ss) => Json.mkObj [("var", jNat n), ("sels", jSels ss)]
   | .ref (.name s) => Json.mkObj [("name", .str s)]
   | .lit l => Json.mkObj [("lit", jLit l)]
+  | .join ps => Json.mkObj [("join", jList jPart ps)]
 
 def ifaceText (i : Model.Iface) : String := (jIface i).compress
 
@@ -903,13 +909,13 @@ def vText : Shape.Value := .str "a\nb\nc"
 
 /-- A frame: `ls` and a goal bound; an object arrived; cuts, an introduction
 copying nothing, a forward elimination, an exit status, text arrived, and
-an elimination of itself. -/
+an elimination of itself; a join of a cut and text. -/
 def frame : Model.Frame :=
   ⟨⟨"f"⟩, ⟨"program(v1)"⟩, none, ⟨.act, [.defn ls, .shape .str]⟩,
     [.tool ls, .obs (obs (Shape.Value.str "list /tmp") 2)],
     [.arrived (obs vDir 3), .eliminated 3 [.field ["dir"]], .introduced (.str "-la"),
       .eliminated 4 [.field ["path"]], .eliminated 9 [], .introduced (.exit 0), .arrived (obs vText 9),
-      .eliminated 10 [.lines [(1, 1)]]],
+      .eliminated 10 [.lines [(1, 1)]], .joined [.seen 3 [.field ["dir", "path"]], .str "/x"]],
     none⟩
 
 def keyFile : List Json :=
@@ -1102,7 +1108,8 @@ eliminations and introductions. -/
 def storeFile : List Json :=
   let sels : List (List Model.Sel) := [[], [.field ["path"]], [.lines [(1, 1)]]]
   let args : List Model.Arg := ((List.range 13).flatMap fun n => sels.map fun ss => var n ss) ++
-    [.lit (.str "-la"), .lit (.exit 0), .ref (.name "claude")]
+    [.lit (.str "-la"), .lit (.exit 0), .ref (.name "claude"),
+      .join [.seen 3 [.field ["dir"]], .str "/"], .join [.seen 6 []], .join []]
   let live := frame.append [.introduced (.str "z"), .eliminated 3 [.field ["dir"]]]
   args.map fun a =>
     let t : Model.Template := ⟨.act, [var 1, a]⟩
@@ -1111,8 +1118,26 @@ def storeFile : List Json :=
       ("out", Json.mkObj [("stored", jOpt jTemplate st), ("bound", jOpt jTemplate (st.bind fun st => st.bind frame)),
         ("boundLive", jOpt jTemplate (st.bind fun st => st.bind live))])]
 
+/-- Joins over the test frame: cuts, an elimination and a join inlined,
+text written and refused, and parts that read no text. -/
+def joinFile : List Json :=
+  let cases : List (List Model.Arg) :=
+    [ [var 3 [.field ["dir", "path"]], .lit (.str "/"), var 9 [.lines [(1, 1)]]],
+      [var 6, .lit (.str "/"), var 9 [.lines [(2, 3)]]],
+      [var 11, .lit (.str ".txt")], [var 5, .lit (.str "x")], [],
+      [.lit (.str "/tmp")], [.lit (.str "list /tmp")], [.lit (.str "b\nc")], [.lit (.str "a\nb\nc")],
+      [.lit (.str "/")], [.lit (.str "/tm")], [.lit (.str "a\nb\n")],
+      [var 3], [var 8], [.lit (.exit 0)], [var 1], [var 7], [var 10], [var 12],
+      [.ref (.name "claude")], [.join [.str "x"]] ]
+  cases.map fun as =>
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame frame), ("args", jList jArg as)]),
+      ("out", match Model.joinParts frame as with
+        | .ok ps => Json.mkObj [("parts", jList jPart ps), ("text", jOpt .str (Model.joinText frame ps))]
+        | .error (.copies n) => Json.mkObj [("copies", jNat n)]
+        | .error (.untext a) => Json.mkObj [("untext", jArg a)])]
+
 def files : List (String × List Json) :=
-  [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
+  [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
     ("model/read", readFile), ("model/introduce", introduceFile), ("model/step", stepFile) ]
 
 end M

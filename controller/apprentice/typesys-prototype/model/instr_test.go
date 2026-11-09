@@ -27,6 +27,10 @@ func TestParseInstr(t *testing.T) {
 		"$2 '-n' 'a b' $1":               {Op: OpAct, Args: []Arg{v(2), lit("-n"), lit("a b"), v(1)}},
 		"delegate(goal($1), $2, 'x, y')": {Op: OpDelegate, Args: []Arg{v(1), v(2), lit("x, y")}},
 		"return 1 $3 'not found'":        {Op: OpReturn, Args: []Arg{exit(1), v(3), lit("not found")}},
+		"$2 $3'/'$4":                     {Op: OpAct, Args: []Arg{v(2), {Pieces: []Arg{v(3), lit("/"), v(4)}}}},
+		"$2 $1[2]'/'$5.stdout[1]":        {Op: OpAct, Args: []Arg{v(2), {Pieces: []Arg{v(1, line(2, 2)), lit("/"), v(5, field("stdout"), line(1, 1))}}}},
+		"$2 $3$4 '-'$1":                  {Op: OpAct, Args: []Arg{v(2), {Pieces: []Arg{v(3), v(4)}}, {Pieces: []Arg{lit("-"), v(1)}}}},
+		"return 0 $3'.txt'":              {Op: OpReturn, Args: []Arg{exit(0), {Pieces: []Arg{v(3), lit(".txt")}}}},
 	} {
 		got, err := ParseInstr(s)
 		if err != nil || !reflect.DeepEqual(got, want) {
@@ -34,19 +38,22 @@ func TestParseInstr(t *testing.T) {
 		}
 	}
 	for s, why := range map[string]string{
-		"$2 -la":                  "nothing else",
-		"$2 $1 extra":             "nothing else",
-		"$2 $1)":                  "nothing else",
-		"$2.x $1":                 "run whole",
-		"return 2 $1":             "exit status",
-		"return 0 $1 $2 $3":       "exit status",
-		"delegate($1, $2)":        "goal",
-		"ls $1":                   "not an instruction",
-		"$2 $1[x]":                "a cut is",
-		"$2 '-l":                  "unterminated",
-		"$2 'a$1'":                "holds no",
-		"'ls' $1":                 "not an instruction",
-		"delegate(goal('x'), $2)": "never written",
+		"$2 -la":                    "nothing else",
+		"$2 $1 extra":               "nothing else",
+		"$2 $1)":                    "nothing else",
+		"$2.x $1":                   "run whole",
+		"return 2 $1":               "exit status",
+		"return 0 $1 $2 $3":         "exit status",
+		"delegate($1, $2)":          "goal",
+		"ls $1":                     "not an instruction",
+		"$2 $1[x]":                  "a cut is",
+		"$2 '-l":                    "unterminated",
+		"$2 'a$1'":                  "holds no",
+		"'ls' $1":                   "not an instruction",
+		"delegate(goal('x'), $2)":   "never written",
+		"delegate(goal($1'x'), $2)": "never written",
+		"$2 $3'/'x":                 "nothing else",
+		"$2 $3'/":                   "unterminated",
 	} {
 		if _, err := ParseInstr(s); err == nil || !strings.Contains(err.Error(), why) {
 			t.Errorf("%s: %v, want %q", s, err, why)

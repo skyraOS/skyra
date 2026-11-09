@@ -119,9 +119,17 @@ type Member struct {
 // are live.
 type Entry struct {
 	Arrived   *Observation
-	Eliminate int   // the $n eliminated, when Arrived and Introduce are nil
+	Eliminate int   // the $n eliminated, when the rest are nil
 	Sels      []Sel // what the elimination cuts
 	Introduce *Lit
+	Join      []Part // a join's parts, when not nil
+}
+
+// A Part is a part of a join: text written, or a cut of a $n seen.
+type Part struct {
+	Str  *string
+	Var  int
+	Sels []Sel
 }
 
 // A Frame is one activation of a scope. Its static link is its program, its

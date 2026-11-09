@@ -279,10 +279,56 @@ func TestRunIntroduces(t *testing.T) {
 		}
 		mem = m.Memory
 	}
-	s := &scripted{guards: map[string]string{"act 2": `true ? "$2 'ell' $1" : null`}}
-	Run(newMachine(t, []string{"echo"}, nil), []byte("hello"), s, Exec{})
-	if len(s.asks) < 2 || !strings.Contains(s.asks[1].Reason, "'ell' copies text $1 holds") {
+	// Only what a cut takes is refused: a line of the goal is, part of one
+	// is the model's to write.
+	s := &scripted{guards: map[string]string{"act 2": `true ? "$2 'world' $1" : null`}}
+	Run(newMachine(t, []string{"echo"}, nil), []byte("hello\nworld"), s, Exec{})
+	if len(s.asks) < 2 || !strings.Contains(s.asks[1].Reason, "'world' is text a cut of $1 takes") {
 		t.Fatalf("asks %+v", s.asks)
+	}
+	s = &scripted{guards: map[string]string{"act 2": `true ? "$2 'ell' $1" : null`, "act 4": `true ? "return 0 $4" : null`}}
+	if _, v, err := Run(newMachine(t, []string{"echo"}, nil), []byte("hello"), s, Exec{}); err != nil ||
+		v.(map[string]any)["stdout"] != "ell hello\n" {
+		t.Fatalf("%#v %v after asks %+v", v, err, s.asks)
+	}
+}
+
+// A join is an introduction built from parts: echo runs on the path the
+// model joined from the goal's two lines, recorded as the line cuts, then
+// the join; the next run, learned, joins its own lines and asks nothing. A
+// join reading no text, or writing what a cut takes, is refused.
+func TestRunJoins(t *testing.T) {
+	var mem model.Memory
+	for run, goal := range []string{"/tmp\na.txt", "/var\nb.md"} {
+		s := &scripted{guards: map[string]string{
+			"act 2": `true ? "$2 $1[1]'/'$1[2]" : null`, // $3, $4: the cuts; $5: the join; echo's output $6
+			"act 6": `true ? "return 0 $6" : null`,
+		}}
+		m, v, err := Run(newMachine(t, []string{"echo"}, mem), []byte(goal), s, Exec{})
+		want := strings.Replace(goal, "\n", "/", 1) + "\n"
+		if r, _ := v.(map[string]any); err != nil || r["stdout"] != want || len(s.asks) != []int{2, 0}[run] {
+			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, len(s.asks))
+		}
+		if len(s.asks) == 2 && s.asks[1].Scope[4].Origin != "joined from $1[1:1]'/'$1[2:2]" {
+			t.Fatalf("run %d: $5 shown as %+v", run, s.asks[1].Scope[4])
+		}
+		st := m.Tree.Frames[0].State
+		if len(st) != 5 || st[0].Eliminate != 1 || st[1].Eliminate != 1 || st[2].Join == nil || st[3].Arrived == nil ||
+			st[4].Introduce == nil {
+			t.Fatalf("run %d: the act frame's state %+v", run, st)
+		}
+		mem = m.Memory
+	}
+	for guard, reason := range map[string]string{
+		`true ? "$2 $2'/x'" : null`:             "$2 reads no text",
+		`true ? "$2 'a/'$1" : null`:             "a cut of $1 takes text the join writes",
+		`true ? "delegate(goal($1'x'))" : null`: "a goal is taken from a parameter",
+	} {
+		s := &scripted{guards: map[string]string{"act 2": guard}}
+		Run(newMachine(t, []string{"echo"}, nil), []byte("a/"), s, Exec{})
+		if len(s.asks) < 2 || !strings.Contains(s.asks[1].Reason, reason) {
+			t.Errorf("%s: asks %+v", guard, s.asks)
+		}
 	}
 }
 

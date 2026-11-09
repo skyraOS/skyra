@@ -154,11 +154,14 @@ func (a *Arg) UnmarshalJSON(b []byte) error {
 		Sels []Sel   `json:"sels"`
 		Name *string `json:"name"`
 		Lit  *Lit    `json:"lit"`
+		Join *[]Part `json:"join"`
 	}
 	if err := json.Unmarshal(b, &x); err != nil {
 		return err
 	}
 	switch {
+	case x.Join != nil:
+		*a = Arg{Join: append([]Part{}, *x.Join...)}
 	case x.Lit != nil:
 		*a = Arg{Lit: x.Lit}
 	case x.Name != nil:

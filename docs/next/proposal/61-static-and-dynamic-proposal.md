@@ -189,10 +189,19 @@ introduce $8 := "-la"         constructed from nothing: 57's create
   always tells them apart. An elimination is a location, its source's and
   the selector; nothing enters the log. An introduction is a definition: its
   literal is code, as a guard's `x > 7` is.
-- **An introduction is not a copy.** A string introduced whose text appears in a value
-  the frame holds is refused, with the cut that takes it instead ("that is in
-  `$1`; cut `$1 / [2:2]`"). `-la` is an introduction; `/tmp/x` copied from the
-  goal is not.
+- **An introduction is not a copy.** A string introduced that a cut of a value the
+  frame holds reads exactly, the whole value, a run of its lines or a field, is
+  refused, with the cut that takes it instead ("a cut of `$1` takes it; cut
+  `$1 / [2:2]`"). `-la` is an introduction; `/tmp/x` copied from the goal's
+  second line is not. What no cut takes, part of a line, is the agent's to
+  write: refusing it would leave no way to say it (`Model.introduce_refused`).
+- **An introduction may join what was seen with what is new.** `$1 / [1:1]
+  '/' $1 / [2:2]`, written `$1[1]'/'$1[2]`, introduces the text of its parts
+  joined: each part text written, checked as a literal is, or a cut of a `$n`
+  seen. Its parts are inlined as it is made, a join it reads spliced in, so a
+  join reads only what was seen and is stored by key position like any
+  reference (`Model.joinParts_text`, `joinText_seen`, `joinParts_copy`).
+  Running it records each cut it takes, then the join, a `$n` of its own.
 - **An introduction is never cut.** What is constructed from nothing is
   constructed whole: `$8 / [1:1]`, `$8` an introduction, reads nothing;
   introduce the part instead. So inlining at commit always replaces an
