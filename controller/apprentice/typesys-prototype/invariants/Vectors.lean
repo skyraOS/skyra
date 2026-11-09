@@ -808,6 +808,7 @@ def jEvent : Model.Event Atom → Json
   | .hesitate k => Json.mkObj [("hesitate", jKey k)]
   | .startle k i => Json.mkObj [("startle", jKey k), ("impl", .arr (i.chain.map fun (c, t) =>
       Json.mkObj [("cond", .str (condCel c)), ("template", jTemplate t)]).toArray)]
+  | .forget k => Json.mkObj [("forget", jKey k)]
 
 def jTOutcome : Model.Outcome → Json
   | .null => .null
@@ -838,12 +839,12 @@ def t5 : Model.Template := ⟨.delegate, [.ref (.name "claude"), var 1]⟩
 def impl (chain : List (Refine.Cond Atom × Model.Template)) : Model.Impl Atom := ⟨chain⟩
 
 /-- Every log of up to three events from a pool at two keys: hesitations,
-and startles of one or two links. Each key's refinement is the fold of its
-events alone. -/
+startles of one or two links, and a forget. Each key's refinement is the
+fold of its events alone; a forget takes it back to unseen. -/
 def memoryFile : List Json :=
   let pool : List (Model.Event Atom) :=
     [.hesitate k1, .hesitate k2, .startle k1 (impl [(.tt, t1)]),
-      .startle k1 (impl [(.atom (.gt 2), t2), (.tt, t3)]), .startle k2 (impl [(.atom .even, t4)])]
+      .startle k1 (impl [(.atom (.gt 2), t2), (.tt, t3)]), .startle k2 (impl [(.atom .even, t4)]), .forget k1]
   let logs := [[]] ++ pool.map ([·]) ++ (pool.flatMap fun a => pool.map fun b => [a, b]) ++
     (pool.flatMap fun a => pool.flatMap fun b => pool.map fun c => [a, b, c])
   logs.map fun log =>
@@ -958,6 +959,7 @@ def jMEvent : Model.Event MAtom → Json
   | .hesitate k => Json.mkObj [("hesitate", jKey k)]
   | .startle k i => Json.mkObj [("startle", jKey k), ("impl", .arr (i.chain.map fun (c, t) =>
       Json.mkObj [("cond", .str (mStored c)), ("template", jTemplate t)]).toArray)]
+  | .forget k => Json.mkObj [("forget", jKey k)]
 
 def pieceText : Model.Arg → String
   | .lit (.str s) => "'" ++ s ++ "'"

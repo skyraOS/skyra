@@ -38,12 +38,15 @@ type Link struct {
 	Template Template
 }
 
-// An Event is what the log records at a key: a hesitate, or a startle
-// committing an implementation, one guard chain.
+// An Event is what the log records at a key: a hesitate, a startle
+// committing an implementation, one guard chain, or a forget, taking the
+// key back to unseen. The machine never forgets; a person does, through
+// the shell.
 type Event struct {
 	Key     Key
 	Startle bool
 	Impl    []Link
+	Forget  bool
 }
 
 // Text is a key's canonical JSON: memory's index.
@@ -53,9 +56,14 @@ func (k Key) Text() string { return compact(k) }
 type Memory map[string]tree.Version
 
 // Apply is memory after one event: a hesitate keeps what is there, or
-// records the key, committed to nothing; a startle commits its chain whole.
+// records the key, committed to nothing; a startle commits its chain
+// whole; a forget erases the key, everything committed there gone.
 func (m Memory) Apply(e Event) {
 	k := e.Key.Text()
+	if e.Forget {
+		delete(m, k)
+		return
+	}
 	v, seen := m[k]
 	if !seen {
 		v = tree.EmptyVersion()
@@ -201,6 +209,9 @@ func (a *Arg) UnmarshalJSON(b []byte) error {
 }
 
 func (e Event) MarshalJSON() ([]byte, error) {
+	if e.Forget {
+		return json.Marshal(map[string]any{"forget": e.Key})
+	}
 	if !e.Startle {
 		return json.Marshal(map[string]any{"hesitate": e.Key})
 	}
@@ -215,6 +226,7 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 	var x struct {
 		Hesitate *Key `json:"hesitate"`
 		Startle  *Key `json:"startle"`
+		Forget   *Key `json:"forget"`
 		Impl     []struct {
 			Cond     string   `json:"cond"`
 			Template Template `json:"template"`
@@ -226,6 +238,8 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 	switch {
 	case x.Hesitate != nil:
 		*e = Event{Key: *x.Hesitate}
+	case x.Forget != nil:
+		*e = Event{Key: *x.Forget, Forget: true}
 	case x.Startle != nil:
 		*e = Event{Key: *x.Startle, Startle: true}
 		for _, l := range x.Impl {

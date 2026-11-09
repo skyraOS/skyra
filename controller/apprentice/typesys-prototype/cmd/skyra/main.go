@@ -14,6 +14,11 @@
 //
 // lists what the store has learned, each key by an id. Keys are shared by
 // every program that meets them, so this is the whole store.
+//
+//	skyra -forget 8006bb4dc5a3 [more ids]
+//
+// forgets those keys: a forget is appended to the log, never an edit of
+// it, and the next run that meets one asks again.
 package main
 
 import (
@@ -83,6 +88,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, mdl drive.Mod
 	store := fs.String("store", defaultStore(), "the log on disk")
 	talk := fs.Bool("v", false, "write each ask and the guard written to stderr")
 	show := fs.Bool("show", false, "list what the store has learned")
+	forget := fs.Bool("forget", false, "forget the keys whose ids are the arguments, as -show lists them")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -98,6 +104,21 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, mdl drive.Mod
 		return p
 	}
 	s := drive.Store{Path: *store}
+	if *forget {
+		if fs.NArg() == 0 {
+			fmt.Fprintln(stderr, "skyra: -forget takes the ids of the keys to forget, as -show lists them")
+			return 2
+		}
+		keys, err := s.Forget(fs.Args())
+		if err != nil {
+			fmt.Fprintln(stderr, "skyra:", err)
+			return 2
+		}
+		for i, k := range keys {
+			fmt.Fprintf(stdout, "forgot %s  %s\n", fs.Arg(i), k.Kind)
+		}
+		return 0
+	}
 	if *show {
 		mem, err := s.Load()
 		if err != nil {

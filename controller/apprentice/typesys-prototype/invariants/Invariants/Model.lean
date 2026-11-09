@@ -1816,15 +1816,25 @@ theorem bind_seen_parts {f : Frame} {t t' : Template} (h : t.bind f = some t') :
 
 The log's events are what has been seen: a `hesitate` records a key never
 seen, its refinement `null`; a `startle` commits an implementation at a
-key, 59's commit. Memory is the fold, from nothing. -/
+key, 59's commit; a `forget` takes a key back to unseen, everything
+committed there gone. The machine never forgets: a person does, through
+the shell, appending to the log, never editing it. Memory is the fold,
+from nothing. -/
 
 inductive Event (A : Type) where
   | hesitate (k : Key)
   | startle (k : Key) (impl : Impl A)
+  | forget (k : Key)
 
 def Event.key {A : Type} : Event A → Key
   | .hesitate k => k
   | .startle k _ => k
+  | .forget k => k
+
+/-- Whether an event is a forget. -/
+def Event.forgets {A : Type} : Event A → Bool
+  | .forget _ => true
+  | _ => false
 
 section
 variable {A : Type}
@@ -1834,6 +1844,7 @@ def stepAt : Option (Refine.Refinement A Template) → Event A → Option (Refin
   | none, .hesitate _ => some .empty
   | some r, .hesitate _ => some r
   | r, .startle _ i => some (Refine.commit (r.getD .empty) i.chain)
+  | _, .forget _ => none
 
 def Memory.apply (m : Memory A) (e : Event A) : Memory A :=
   fun k => if k = e.key then stepAt (m k) e else m k
@@ -1872,31 +1883,48 @@ theorem replay_unseen (log : List (Event A)) (k : Key) (h : ∀ e ∈ log, e.key
   have : log.filter (·.key = k) = [] := List.filter_eq_nil_iff.mpr (by simpa using h)
   rw [this]; rfl
 
-theorem stepAt_some : ∀ (r : Option (Refine.Refinement A Template)) (e : Event A), (stepAt r e).isSome
-  | none, .hesitate _ => rfl
-  | some _, .hesitate _ => rfl
-  | none, .startle _ _ => rfl
-  | some _, .startle _ _ => rfl
+theorem stepAt_some : ∀ (r : Option (Refine.Refinement A Template)) (e : Event A),
+    e.forgets = false → (stepAt r e).isSome
+  | none, .hesitate _, _ => rfl
+  | some _, .hesitate _, _ => rfl
+  | none, .startle _ _, _ => rfl
+  | some _, .startle _ _, _ => rfl
 
 theorem foldl_stepAt_some : ∀ (log : List (Event A)) (r : Refine.Refinement A Template),
-    (log.foldl stepAt (some r)).isSome
-  | [], _ => rfl
-  | e :: log, r => by
+    (∀ e ∈ log, e.forgets = false) → (log.foldl stepAt (some r)).isSome
+  | [], _, _ => rfl
+  | e :: log, r, hf => by
     rw [List.foldl_cons]
-    obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (some r) e)
-    rw [h]; exact foldl_stepAt_some log r'
+    obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (some r) e (hf e List.mem_cons_self))
+    rw [h]; exact foldl_stepAt_some log r' (fun e he => hf e (List.mem_cons_of_mem _ he))
 
 /-- A key with an event is seen, its refinement recorded, `null` until a
-`startle` commits there. -/
-theorem replay_seen (log : List (Event A)) (k : Key) (e : Event A) (he : e ∈ log) (hk : e.key = k) :
-    (replay log k).isSome := by
+`startle` commits there, so long as nothing forgot it after. -/
+theorem replay_seen (l₁ l₂ : List (Event A)) (k : Key) (e : Event A) (hk : e.key = k)
+    (he : e.forgets = false) (hl : ∀ e' ∈ l₂, e'.key = k → e'.forgets = false) :
+    (replay (l₁ ++ e :: l₂) k).isSome := by
   rw [replay_at]
-  obtain ⟨l₁, l₂, hl⟩ := List.mem_iff_append.mp he
-  have hf : log.filter (·.key = k) = l₁.filter (·.key = k) ++ e :: l₂.filter (·.key = k) := by
-    subst hl; simp [List.filter_append, hk]
+  have hf : (l₁ ++ e :: l₂).filter (·.key = k) = l₁.filter (·.key = k) ++ e :: l₂.filter (·.key = k) := by
+    simp [List.filter_append, hk]
   rw [hf, replayAt, List.foldl_append, List.foldl_cons]
-  obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (l₁.filter (·.key = k) |>.foldl stepAt none) e)
-  rw [h]; exact foldl_stepAt_some _ r'
+  obtain ⟨r', h⟩ := Option.isSome_iff_exists.mp (stepAt_some (l₁.filter (·.key = k) |>.foldl stepAt none) e he)
+  rw [h]
+  exact foldl_stepAt_some _ r' (fun e' h' => by
+    obtain ⟨hm, hk'⟩ := List.mem_filter.mp h'
+    exact hl e' hm (by simpa using hk'))
+
+/-- To forget a key is to have never learned it: after `forget k`, the
+key is what the events after it alone make it. -/
+theorem replay_forget (log more : List (Event A)) (k : Key) :
+    replay (log ++ .forget k :: more) k = replay more k := by
+  rw [replay_at, replay_at, replayAt, replayAt]
+  simp [List.filter_append, Event.key, stepAt]
+
+/-- Forgetting one key leaves every other key as it was. -/
+theorem replay_forget_other (log more : List (Event A)) {k k' : Key} (h : k' ≠ k) :
+    replay (log ++ .forget k :: more) k' = replay (log ++ more) k' := by
+  rw [replay_at, replay_at]
+  simp [List.filter_append, Event.key, Ne.symm h]
 
 /-- `hesitate` never erases: a refinement already there is kept. -/
 theorem hesitate_keeps (r : Refine.Refinement A Template) (k : Key) :

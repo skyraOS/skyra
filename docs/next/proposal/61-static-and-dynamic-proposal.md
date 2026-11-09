@@ -978,7 +978,14 @@ In a new `invariants/Invariants/Model.lean`, before any Go:
 - **Exact reuse aligns by identity:** an implementation counted at its
   own key binds each reference to the same `$n`.
 - **Memory is a fold of the log:** replaying the committed `startle`s
-  from genesis gives the same memory.
+  from genesis gives the same memory. Every state the machine reaches
+  holds its log's replay (Machine.lean's `step_replays`), so the log is
+  all a shell keeps.
+- **Forgetting is never having learned:** a person may append a
+  `forget k`; the machine never does. After it, `k` is what the events
+  after it alone make it, and every other key is untouched
+  (`replay_forget`, `replay_forget_other`). The log is only appended to,
+  never edited.
 - **Direction from the operator:** push or pop is determined by the
   instruction's form.
 - **Boot:** a program and a grant give a frame exactly when no

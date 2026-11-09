@@ -113,3 +113,49 @@ func TestCommandShows(t *testing.T) {
 		t.Fatalf("%d keys, want 2:\n%s", n, out.String())
 	}
 }
+
+// -forget takes a key back to unseen: -show no longer lists it, the next
+// run asks there again, and its other keys are kept. An id with nothing
+// learned is refused, and nothing is appended.
+func TestCommandForgets(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "log.jsonl")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644)
+	cmd := func(args ...string) (int, string) {
+		var out bytes.Buffer
+		code := run(append([]string{"-store", store}, args...), strings.NewReader(""), &out, &bytes.Buffer{}, listing(), drive.Exec{})
+		return code, out.String()
+	}
+	cmd("-tools", "ls", dir)
+	mem, err := drive.Store{Path: store}.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls, err := drive.Learn(mem)
+	if err != nil || len(ls) != 2 {
+		t.Fatalf("%d keys learned: %v", len(ls), err)
+	}
+	// The return key is the one that has seen ls's output, $3.
+	ret := ls[0].ID
+	if len(ls[1].Key.Seen) == 3 {
+		ret = ls[1].ID
+	}
+	before, _ := os.ReadFile(store)
+	if code, _ := cmd("-forget", ret, "000000000000"); code != 2 {
+		t.Fatalf("an unknown id: exit %d", code)
+	}
+	if after, _ := os.ReadFile(store); !bytes.Equal(before, after) {
+		t.Fatal("a refused forget appended")
+	}
+	if code, out := cmd("-forget", ret); code != 0 || !strings.HasPrefix(out, "forgot "+ret) {
+		t.Fatalf("exit %d, %q", code, out)
+	}
+	if _, shown := cmd("-show"); strings.Contains(shown, ret) || strings.Count(shown, "implementation 1:") != 1 {
+		t.Fatalf("after forgetting %s:\n%s", ret, shown)
+	}
+	s := listing()
+	var out bytes.Buffer
+	if code := run([]string{"-store", store, "-tools", "ls", dir}, strings.NewReader(""), &out, &bytes.Buffer{}, s, drive.Exec{}); code != 0 || s.asks != 1 {
+		t.Fatalf("after forgetting: exit %d, %d asks, want 1", code, s.asks)
+	}
+}
