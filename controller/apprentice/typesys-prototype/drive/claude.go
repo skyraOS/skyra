@@ -86,6 +86,9 @@ Use part of a parameter instead of copying its text:
   $2.dir             the field dir of a JSON value ($2.dir.path goes deeper)
   $4.stdout[1]       line 1 of $4's field stdout: each cut cuts what the last gave
 Your expression is reused when new values arrive, so never write a value's text into it: a literal is reused too, so write only what holds for every value, a flag or a filter, never a name or a path.
+It is reused for other goals too: any goal whose parameters have the same types reaches the same expression, whatever it asks. So guard on the goal whatever you take from what it asks, a filter, a flag, what to return, and leave a goal that asks something else to null:
+  $1.contains("version") ? "$2 '--version'" : null
+What you would do whatever the goal asked needs no such guard.
 
 Reply with JSON and nothing else:
   {"cel": "<expression>"}
