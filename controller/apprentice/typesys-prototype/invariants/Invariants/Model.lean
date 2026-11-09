@@ -49,6 +49,107 @@ inductive Sel where
   | lines (runs : List (Nat × Nat))
   deriving DecidableEq, Repr
 
+/-! ## Equality
+
+Shapes and interfaces are nested, so their equality is written by hand,
+as `Core`'s observations' is. With it, boot, the key, memory and reuse
+compute. -/
+
+mutual
+def shapeDecEq : (a b : Shape) → Decidable (a = b)
+  | .null, .null => isTrue rfl
+  | .bool, .bool => isTrue rfl
+  | .num, .num => isTrue rfl
+  | .str, .str => isTrue rfl
+  | .bytes, .bytes => isTrue rfl
+  | .exit m, .exit n => if h : m = n then isTrue (h ▸ rfl) else isFalse (fun e => h (Shape.exit.inj e))
+  | .arr xs, .arr ys => match shapesDecEq xs ys with
+    | isTrue h => isTrue (h ▸ rfl)
+    | isFalse h => isFalse (fun e => h (Shape.arr.inj e))
+  | .obj xs, .obj ys => match fieldsDecEq xs ys with
+    | isTrue h => isTrue (h ▸ rfl)
+    | isFalse h => isFalse (fun e => h (Shape.obj.inj e))
+  | .null, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .null, .num => isFalse (fun h => Shape.noConfusion h)
+  | .null, .str => isFalse (fun h => Shape.noConfusion h)
+  | .null, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .null, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .null, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .null, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .null => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .num => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .str => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .bool, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .num, .null => isFalse (fun h => Shape.noConfusion h)
+  | .num, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .num, .str => isFalse (fun h => Shape.noConfusion h)
+  | .num, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .num, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .num, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .num, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .str, .null => isFalse (fun h => Shape.noConfusion h)
+  | .str, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .str, .num => isFalse (fun h => Shape.noConfusion h)
+  | .str, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .str, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .str, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .str, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .null => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .num => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .str => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .bytes, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .null => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .num => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .str => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .arr _ => isFalse (fun h => Shape.noConfusion h)
+  | .exit _, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .null => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .num => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .str => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .arr _, .obj _ => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .null => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .bool => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .num => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .str => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .bytes => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .exit _ => isFalse (fun h => Shape.noConfusion h)
+  | .obj _, .arr _ => isFalse (fun h => Shape.noConfusion h)
+
+def shapesDecEq : (a b : List Shape) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | [], _ :: _ => isFalse (by intro h; cases h)
+  | _ :: _, [] => isFalse (by intro h; cases h)
+  | x :: xs, y :: ys => match shapeDecEq x y, shapesDecEq xs ys with
+    | isTrue h₁, isTrue h₂ => isTrue (h₁ ▸ h₂ ▸ rfl)
+    | isFalse h₁, _ => isFalse (fun e => h₁ (List.cons.inj e).1)
+    | _, isFalse h₂ => isFalse (fun e => h₂ (List.cons.inj e).2)
+
+def fieldsDecEq : (a b : List (String × Shape)) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | [], _ :: _ => isFalse (by intro h; cases h)
+  | _ :: _, [] => isFalse (by intro h; cases h)
+  | (k, x) :: xs, (l, y) :: ys =>
+    if hk : k = l then
+      match shapeDecEq x y, fieldsDecEq xs ys with
+      | isTrue h₁, isTrue h₂ => isTrue (hk ▸ h₁ ▸ h₂ ▸ rfl)
+      | isFalse h₁, _ => isFalse (fun e => h₁ (Prod.mk.inj (List.cons.inj e).1).2)
+      | _, isFalse h₂ => isFalse (fun e => h₂ (List.cons.inj e).2)
+    else isFalse (fun e => hk (Prod.mk.inj (List.cons.inj e).1).1)
+end
+
+instance : DecidableEq Shape := shapeDecEq
+
 /-! ## Definitions -/
 
 /-- The operators. To invoke is to push, to return is to pop; each agent
@@ -71,6 +172,58 @@ inductive Iface where
   | sum (alts : List Iface)
   | cut (i : Iface) (s : Sel)
   deriving Repr
+
+mutual
+def ifaceDecEq : (a b : Iface) → Decidable (a = b)
+  | .shape x, .shape y => if h : x = y then isTrue (h ▸ rfl) else isFalse (fun e => h (Iface.shape.inj e))
+  | .defn x, .defn y => if h : x = y then isTrue (h ▸ rfl) else isFalse (fun e => h (Iface.defn.inj e))
+  | .op o xs, .op q ys =>
+    if ho : o = q then
+      match ifacesDecEq xs ys with
+      | isTrue h => isTrue (ho ▸ h ▸ rfl)
+      | isFalse h => isFalse (fun e => h (Iface.op.inj e).2)
+    else isFalse (fun e => ho (Iface.op.inj e).1)
+  | .sum xs, .sum ys => match ifacesDecEq xs ys with
+    | isTrue h => isTrue (h ▸ rfl)
+    | isFalse h => isFalse (fun e => h (Iface.sum.inj e))
+  | .cut i s, .cut j t =>
+    if hs : s = t then
+      match ifaceDecEq i j with
+      | isTrue h => isTrue (hs ▸ h ▸ rfl)
+      | isFalse h => isFalse (fun e => h (Iface.cut.inj e).1)
+    else isFalse (fun e => hs (Iface.cut.inj e).2)
+  | .shape _, .defn _ => isFalse (fun h => Iface.noConfusion h)
+  | .shape _, .op _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .shape _, .sum _ => isFalse (fun h => Iface.noConfusion h)
+  | .shape _, .cut _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .defn _, .shape _ => isFalse (fun h => Iface.noConfusion h)
+  | .defn _, .op _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .defn _, .sum _ => isFalse (fun h => Iface.noConfusion h)
+  | .defn _, .cut _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .op _ _, .shape _ => isFalse (fun h => Iface.noConfusion h)
+  | .op _ _, .defn _ => isFalse (fun h => Iface.noConfusion h)
+  | .op _ _, .sum _ => isFalse (fun h => Iface.noConfusion h)
+  | .op _ _, .cut _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .sum _, .shape _ => isFalse (fun h => Iface.noConfusion h)
+  | .sum _, .defn _ => isFalse (fun h => Iface.noConfusion h)
+  | .sum _, .op _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .sum _, .cut _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .cut _ _, .shape _ => isFalse (fun h => Iface.noConfusion h)
+  | .cut _ _, .defn _ => isFalse (fun h => Iface.noConfusion h)
+  | .cut _ _, .op _ _ => isFalse (fun h => Iface.noConfusion h)
+  | .cut _ _, .sum _ => isFalse (fun h => Iface.noConfusion h)
+
+def ifacesDecEq : (a b : List Iface) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | [], _ :: _ => isFalse (by intro h; cases h)
+  | _ :: _, [] => isFalse (by intro h; cases h)
+  | x :: xs, y :: ys => match ifaceDecEq x y, ifacesDecEq xs ys with
+    | isTrue h₁, isTrue h₂ => isTrue (h₁ ▸ h₂ ▸ rfl)
+    | isFalse h₁, _ => isFalse (fun e => h₁ (List.cons.inj e).1)
+    | _, isFalse h₂ => isFalse (fun e => h₂ (List.cons.inj e).2)
+end
+
+instance : DecidableEq Iface := ifaceDecEq
 
 /-- A frame's kind, a prefix of its scope's type: an agent decides, a leaf
 only returns. -/
@@ -119,6 +272,7 @@ context. -/
 structure Scope where
   kind : Kind
   entries : List Iface
+  deriving DecidableEq
 
 /-- A program's constants. `ι` is a ratio, `num / den`. -/
 structure Constants where
@@ -161,6 +315,7 @@ structure Key where
   root : DefLoc
   kind : Kind
   seen : List Iface
+  deriving DecidableEq
 
 /-- Memory, the call graph: each key to its refinement, 59's, holding the
 implementations authored there as voters; `none` for a key never seen. -/
@@ -607,10 +762,18 @@ def Boots (p : Program) (g : Grant) (os : List Observation) (src : Option (Frame
     g.defs.map Iface.defn ++ os.map (·.iface) = p.entry.entries ∧
     (∀ b ∈ g.defs, b ∈ p.reach "delegate" ∨ b ∈ p.reach "act") ∧ narrows src g
 
-open Classical in
+instance (src : Option (Frame × Nat)) (g : Grant) : Decidable (narrows src g) :=
+  match src with
+  | none => isTrue trivial
+  | some (f, _) => inferInstanceAs (Decidable (∀ b ∈ g.defs, b ∈ held f))
+
+instance (p : Program) (g : Grant) (os : List Observation) (src : Option (Frame × Nat)) :
+    Decidable (Boots p g os src) := by
+  unfold Boots; infer_instance
+
 /-- Boot: the checks, then exactly one frame pushed, its static link the
 program passed, its dynamic link the frame that booted it. -/
-noncomputable def boot (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) :
+def boot (h : Ids) (p : Program) (g : Grant) (src : Option (Frame × Nat)) :
     Option Frame :=
   let id := bootId h p g src
   match contextObs h id (g.defs.length + 1) g.context with
@@ -1080,9 +1243,8 @@ theorem rebind_id (t : Template) : t.rebind id = t := by
 of positions, or none when the stored key does not count. -/
 def Rule := Key → Key → Option (Nat → Nat)
 
-open Classical in
 /-- The base rule. -/
-noncomputable def exact : Rule := fun s t => if s = t then some id else none
+def exact : Rule := fun s t => if s = t then some id else none
 
 theorem exact_self (k : Key) : exact k k = some id := by simp [exact]
 
@@ -1110,7 +1272,6 @@ def Event.key {A : Type} : Event A → Key
   | .startle k _ => k
 
 section
-open Classical
 variable {A : Type}
 
 /-- The refinement at one key after one event there. -/
@@ -1119,11 +1280,11 @@ def stepAt : Option (Refine.Refinement A Template) → Event A → Option (Refin
   | some r, .hesitate _ => some r
   | r, .startle _ i => some (Refine.commit (r.getD .empty) i.chain)
 
-noncomputable def Memory.apply (m : Memory A) (e : Event A) : Memory A :=
+def Memory.apply (m : Memory A) (e : Event A) : Memory A :=
   fun k => if k = e.key then stepAt (m k) e else m k
 
 /-- Memory from the log. -/
-noncomputable def replay (log : List (Event A)) : Memory A := log.foldl Memory.apply fun _ => none
+def replay (log : List (Event A)) : Memory A := log.foldl Memory.apply fun _ => none
 
 /-- One key's refinement, from its events alone. -/
 def replayAt (log : List (Event A)) : Option (Refine.Refinement A Template) := log.foldl stepAt none
