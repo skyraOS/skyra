@@ -192,6 +192,13 @@ introduce $8 := "-la"         constructed from nothing: 57's create
   the frame holds is refused, with the cut that takes it instead ("that is in
   `$1`; cut `$1 / [2:2]`"). `-la` is an introduction; `/tmp/x` copied from the
   goal is not.
+- **An introduction is never cut.** What is constructed from nothing is
+  constructed whole: `$8 / [1:1]`, `$8` an introduction, reads nothing;
+  introduce the part instead. So inlining at commit always replaces an
+  introduction by its literal (`Model.inline_seen`).
+- **An elimination cuts an earlier `$n`.** `eliminate $7 := $9 / .f` reads
+  nothing: a variable is defined only from what is already bound, so
+  reading an elimination ends (`Model.read`).
 - **Variables are append-only.** An elimination or introduction takes the next `$n`;
   nothing is rebound. `$1 = $1 / [2:2]` is refused: stored implementations
   read `$1` and rely on it naming one thing.
@@ -806,6 +813,8 @@ bounds and the act bound.
     cut a flag out of the man page. Candidates: check only against the
     goal and the context passed, not arrivals; or show the refusal and let
     the model introduce it again to override.
+    `introduce ""` is refused whenever the frame holds any string, since
+    the empty text is in every text.
 18. **Asking at an introduction.** Whether typing an introduction is its
     own ask or part of the ask that authored it, whether it counts against
     the refinement bound, and what lets the system deduce an
