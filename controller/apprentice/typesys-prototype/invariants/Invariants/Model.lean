@@ -214,9 +214,11 @@ structure Process where
   program : DefLoc
   frames : List InstLoc
 
-/-- A tree: every frame, linked by dynamic links. -/
+/-- A tree: every frame, linked by dynamic links, and the frames that have
+returned. -/
 structure Tree where
   frames : List Frame
+  closed : List InstLoc
 
 /-! ## The key -/
 
@@ -1173,6 +1175,168 @@ theorem decideAt_local (p : Refine.Policy Template K) (sat : A → V → Bool)
     (h : log₁.filter (·.key = k) = log₂.filter (·.key = k)) (v : V) :
     decideAt p sat (replay log₁) k v = decideAt p sat (replay log₂) k v := by
   simp only [decideAt, replay_at, h]
+
+end
+
+/-! ## The tree
+
+Every decision is one edge: an invoke pushes one frame, a return pops one.
+A frame decides only while open and with nothing pending, and a return
+lands its observation in exactly the frame its dynamic link names. -/
+
+def Tree.find (t : Tree) (id : InstLoc) : Option Frame := t.frames.find? (·.id = id)
+
+def Tree.isOpen (t : Tree) (id : InstLoc) : Bool := !(t.closed.contains id)
+
+/-- A frame waits while a frame it invoked has not returned. -/
+def Tree.pending (t : Tree) (id : InstLoc) : Bool :=
+  t.frames.any fun c => c.parent = some id && t.isOpen c.id
+
+/-- How many frames a frame has invoked: its next invoke's index. -/
+def Tree.invokes (t : Tree) (id : InstLoc) : Nat := (t.frames.filter (·.parent = some id)).length
+
+/-- A decision's edge. -/
+inductive Edge where
+  | invoke (scope : Scope) (bindings : List Member)
+  | ret (o : Observation)
+
+/-- Direction is the edge's form, as it is the operator's. -/
+def Edge.pushes : Edge → Bool
+  | .invoke _ _ => true
+  | .ret _ => false
+
+/-- Where a return lands: the frame its dynamic link names. -/
+def Tree.land (t : Tree) (p : InstLoc) (o : Observation) : List Frame :=
+  t.frames.map fun g => if g.id = p then g.append [.arrived o] else g
+
+def Tree.step (h : Ids) (t : Tree) (fid : InstLoc) (e : Edge) : Option Tree :=
+  match t.find fid with
+  | none => none
+  | some f =>
+    if t.isOpen fid && !t.pending fid then
+      match e with
+      | .invoke s b => some ⟨t.frames ++ [push h f (t.invokes fid) s b], t.closed⟩
+      | .ret o => match f.parent with
+        | none => none
+        | some p => if (t.find p).isSome then some ⟨t.land p o, fid :: t.closed⟩ else none
+    else none
+
+/-- The tree is a fold of the log: its edges, from boot's frame. -/
+def Tree.replay (h : Ids) (t : Tree) : List (InstLoc × Edge) → Option Tree
+  | [] => some t
+  | (fid, e) :: log => (t.step h fid e).bind (·.replay h log)
+
+section
+variable {h : Ids} {t t' : Tree} {fid : InstLoc} {e : Edge}
+
+/-- A frame decides only while it is open, with nothing pending. -/
+theorem step_ready (hs : t.step h fid e = some t') :
+    (∃ f, t.find fid = some f) ∧ t.isOpen fid = true ∧ t.pending fid = false := by
+  unfold Tree.step at hs
+  split at hs
+  · cases hs
+  · rename_i f hf
+    split at hs
+    · rename_i hc
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at hc
+      exact ⟨⟨f, hf⟩, hc.1, hc.2⟩
+    · cases hs
+
+/-- Every decision is one push or one pop: an invoke adds one frame and
+closes none; a return adds none and closes the frame that decided. -/
+theorem step_one (hs : t.step h fid e = some t') :
+    (e.pushes = true ∧ t'.frames.length = t.frames.length + 1 ∧ t'.closed = t.closed) ∨
+      (e.pushes = false ∧ t'.frames.length = t.frames.length ∧ t'.closed = fid :: t.closed) := by
+  unfold Tree.step at hs
+  split at hs
+  · cases hs
+  · split at hs
+    · cases e with
+      | invoke s b => cases hs; exact .inl ⟨rfl, by simp, rfl⟩
+      | ret o =>
+        simp only at hs
+        split at hs
+        · cases hs
+        · split at hs
+          · cases hs; exact .inr ⟨rfl, by simp [Tree.land], rfl⟩
+          · cases hs
+    · cases hs
+
+/-- An invoke pushes the decider's next child, under its program, linked
+to it. -/
+theorem step_invoke {s : Scope} {b : List Member} (hs : t.step h fid (.invoke s b) = some t') :
+    ∃ f, t.find fid = some f ∧ t'.frames = t.frames ++ [push h f (t.invokes fid) s b] ∧
+      (push h f (t.invokes fid) s b).parent = some fid := by
+  unfold Tree.step at hs
+  split at hs
+  · cases hs
+  · rename_i f hf
+    split at hs
+    · cases hs
+      refine ⟨f, hf, rfl, ?_⟩
+      have := List.find?_some hf
+      simp only [decide_eq_true_eq] at this
+      simp [push, this]
+    · cases hs
+
+/-- A return lands its observation in exactly the frame its dynamic link
+names, appended as an arrival: what was returned is seen there. -/
+theorem step_ret {o : Observation} (hs : t.step h fid (.ret o) = some t') :
+    ∃ f p, t.find fid = some f ∧ f.parent = some p ∧ (t.find p).isSome ∧
+      t'.frames = t.land p o ∧ t'.closed = fid :: t.closed := by
+  unfold Tree.step at hs
+  split at hs
+  · cases hs
+  · rename_i f hf
+    split at hs
+    · simp only at hs
+      split at hs
+      · cases hs
+      · rename_i p hp
+        split at hs
+        · rename_i hpf; cases hs; exact ⟨f, p, hf, hp, hpf, rfl, rfl⟩
+        · cases hs
+    · cases hs
+
+/-- Landing changes no other frame: a frame's state changes only through
+what is passed to it. -/
+theorem land_other {p : InstLoc} {o : Observation} {g : Frame} (hg : g ∈ t.frames) (hp : g.id ≠ p) :
+    g ∈ t.land p o := by
+  simp only [Tree.land, List.mem_map]
+  exact ⟨g, hg, by simp [hp]⟩
+
+/-- The frame landed in grows by exactly the arrival, and its key by
+exactly its interface. -/
+theorem land_self (rootOf : DefLoc → DefLoc) {p : InstLoc} {o : Observation} {g : Frame}
+    (hg : g ∈ t.frames) (hp : g.id = p) :
+    g.append [.arrived o] ∈ t.land p o ∧ (key rootOf (g.append [.arrived o])).seen = seen g ++ [o.iface] := by
+  refine ⟨?_, key_arrived rootOf g o⟩
+  simp only [Tree.land, List.mem_map]
+  exact ⟨g, hg, by simp [hp]⟩
+
+/-- A frame that has returned never decides again. -/
+theorem step_closed (hc : fid ∈ t.closed) : t.step h fid e = none := by
+  cases hs : t.step h fid e with
+  | none => rfl
+  | some t' =>
+    have := (step_ready hs).2.1
+    simp [Tree.isOpen, hc] at this
+
+/-- Replaying the log is stepping each edge in turn. -/
+theorem replay_cons (fid : InstLoc) (e : Edge) (log : List (InstLoc × Edge)) :
+    t.replay h ((fid, e) :: log) = (t.step h fid e).bind (·.replay h log) := rfl
+
+/-- Pops never outnumber the frames closed: every return closes one. -/
+theorem replay_closed : ∀ {t t' : Tree} (log : List (InstLoc × Edge)), t.replay h log = some t' →
+    t'.closed.length = t.closed.length + (log.filter fun x => !x.2.pushes).length
+  | t, t', [], hr => by simp [Tree.replay] at hr; subst hr; simp
+  | t, t', (fid, e) :: log, hr => by
+    simp only [Tree.replay, Option.bind_eq_some_iff] at hr
+    obtain ⟨t₁, h₁, h₂⟩ := hr
+    rw [replay_closed log h₂]
+    rcases step_one h₁ with ⟨hp, -, hc⟩ | ⟨hp, -, hc⟩
+    · simp [hc, hp]
+    · simp [hc, hp]; omega
 
 end
 
