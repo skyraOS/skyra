@@ -255,18 +255,27 @@ func TestRunQuorum(t *testing.T) {
 }
 
 // A literal is an introduction: echo runs with the flag the model wrote,
-// and the next run, learned, runs it again with no ask. A literal copying
-// what the frame holds is refused, naming the $n to cut instead.
+// recorded as $3 in the act frame, so echo's output arrives as $4; the next
+// run, learned, records the same and asks nothing. A literal copying what
+// the frame holds is refused, naming the $n to cut instead.
 func TestRunIntroduces(t *testing.T) {
 	var mem model.Memory
 	for run, goal := range []string{"hello", "world"} {
 		s := &scripted{guards: map[string]string{
 			"act 2": `true ? "$2 '-n' $1" : null`,
-			"act 3": `true ? "return 0 $3" : null`,
+			"act 4": `true ? "return 0 $4" : null`,
 		}}
 		m, v, err := Run(newMachine(t, []string{"echo"}, mem), []byte(goal), s, Exec{})
 		if r, _ := v.(map[string]any); err != nil || r["stdout"] != goal || len(s.asks) != []int{2, 0}[run] {
 			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, len(s.asks))
+		}
+		if len(s.asks) == 2 && s.asks[1].Scope[2].Origin != "introduced" {
+			t.Fatalf("run %d: $3 shown as %+v", run, s.asks[1].Scope[2])
+		}
+		st := m.Tree.Frames[0].State
+		if len(st) != 3 || st[0].Introduce == nil || st[0].Introduce.Str != "-n" || st[1].Arrived == nil ||
+			st[2].Introduce == nil || !st[2].Introduce.IsExit {
+			t.Fatalf("run %d: the act frame's state %+v", run, st)
 		}
 		mem = m.Memory
 	}
@@ -274,5 +283,58 @@ func TestRunIntroduces(t *testing.T) {
 	Run(newMachine(t, []string{"echo"}, nil), []byte("hello"), s, Exec{})
 	if len(s.asks) < 2 || !strings.Contains(s.asks[1].Reason, "'ell' copies text $1 holds") {
 		t.Fatalf("asks %+v", s.asks)
+	}
+}
+
+// A cut is an elimination, recorded as the frame's next $n, and stored by
+// key position: the second run, whose goal arrives at the same key,
+// records the same entries and asks nothing. A condition reading an
+// elimination's $n is refused: conditions read what was seen.
+func TestRunEliminates(t *testing.T) {
+	var mem model.Memory
+	for run, goal := range []string{"ignored\nhello", "skipped\nworld"} {
+		s := &scripted{guards: map[string]string{
+			"act 2": `true ? "$2 $1[2]" : null`,       // $3: the cut $1[2]; echo's output arrives as $4
+			"act 4": `true ? "return 0 $4[1]" : null`, // $5: the cut $4[1]
+		}}
+		m, v, err := Run(newMachine(t, []string{"echo"}, mem), []byte(goal), s, Exec{})
+		want := strings.Split(goal, "\n")[1]
+		if r, _ := v.(map[string]any); err != nil || r["stdout"] != want || len(s.asks) != []int{2, 0}[run] {
+			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, len(s.asks))
+		}
+		st := m.Tree.Frames[0].State
+		if len(st) != 4 || st[0].Eliminate != 1 || st[1].Arrived == nil || st[2].Introduce == nil || st[3].Eliminate != 4 {
+			t.Fatalf("run %d: the act frame's state %+v", run, st)
+		}
+		mem = m.Memory
+	}
+	s := &scripted{guards: map[string]string{
+		"act 2": `true ? "$2 $1[2]" : null`,
+		"act 4": `$3 == "x" ? "return 0 $4" : null`,
+	}}
+	Run(newMachine(t, []string{"echo"}, nil), []byte("a\nb"), s, Exec{})
+	if len(s.asks) < 3 || !strings.Contains(s.asks[2].Reason, "$3 was made in this frame") {
+		t.Fatalf("asks %+v", s.asks)
+	}
+}
+
+// Memory stores by key position, so a stored $n means the same whatever
+// was eliminated before it. Run 0 cuts the goal ($3, an elimination), so
+// echo's output arrives as $4; run 1 takes the other branch, cutting
+// nothing, so it arrives as $3. Both reach one key, and the return run 0
+// stored there binds to the arrival in each.
+func TestStoredByKeyPosition(t *testing.T) {
+	var mem model.Memory
+	for run, goal := range []string{"skip\nhello", "world"} {
+		s := &scripted{guards: map[string]string{
+			"act 2": `$1.contains("\n") ? "$2 $1[2]" : true ? "$2 $1" : null`,
+			"act 4": `true ? "return 0 $4" : null`,
+		}}
+		m, v, err := Run(newMachine(t, []string{"echo"}, mem), []byte(goal), s, Exec{})
+		want := []string{"hello\n", "world\n"}[run]
+		if r, _ := v.(map[string]any); err != nil || r["stdout"] != want || len(s.asks) != []int{2, 0}[run] {
+			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, len(s.asks))
+		}
+		mem = m.Memory
 	}
 }

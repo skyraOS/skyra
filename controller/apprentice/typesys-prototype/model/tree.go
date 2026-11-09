@@ -141,6 +141,19 @@ func (t Tree) Land(p InstLoc, o Observation) []Frame {
 	return fs
 }
 
+// Record is the tree with entries appended to a frame's state: what a
+// decision eliminated and introduced there. No other frame changes.
+func (t Tree) Record(id InstLoc, es []Entry) Tree {
+	fs := make([]Frame, len(t.Frames))
+	for i, g := range t.Frames {
+		if g.ID == id {
+			g.State = append(slices.Clone(g.State), es...)
+		}
+		fs[i] = g
+	}
+	return Tree{Frames: fs, Closed: t.Closed}
+}
+
 // Step is one decision's edge from the frame fid, or false when it is
 // refused: the frame is unknown, closed, pending, or the edge not admitted;
 // or a return has no parent in the tree.

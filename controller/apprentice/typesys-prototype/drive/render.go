@@ -111,6 +111,9 @@ func Render(a model.Ask) string {
 			text := Text(o.Value)
 			shown, more := chunk(text, 0, ShowLimit)
 			head := fmt.Sprintf("$%d (%s):", n, tree.ShapeOf(o.Value).Enc())
+			if o.Origin != "" {
+				head = fmt.Sprintf("$%d (%s, %s):", n, tree.ShapeOf(o.Value).Enc(), o.Origin)
+			}
 			if strings.Contains(shown, "\n") {
 				fmt.Fprintf(&b, "%s\n%s\n", head, strings.TrimSuffix(shown, "\n"))
 			} else {

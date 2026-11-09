@@ -155,11 +155,12 @@ func StoreGuard(guard string, scope map[int]Position) ([]Link, error) {
 }
 
 // StoreConds is StoreGuard for a machine that reads its own instructions:
-// each condition stored as StoreGuard stores it, each instruction as the
-// model wrote it, only its $n replaced by their positions' references.
-func StoreConds(guard string, scope map[int]Position) ([]Link, error) {
+// each condition stored as StoreGuard stores it, under conds; each
+// instruction as the model wrote it, only its $n replaced by their
+// positions' references under instrs.
+func StoreConds(guard string, conds, instrs map[int]Position) ([]Link, error) {
 	src, err := substitute(guard, func(n int) (string, error) {
-		p, ok := scope[n]
+		p, ok := conds[n]
 		if !ok {
 			return "", Unstorable{n}
 		}
@@ -174,7 +175,7 @@ func StoreConds(guard string, scope map[int]Position) ([]Link, error) {
 	}
 	for i, l := range chain {
 		instr, err := references(l.Instr, func(n int) (string, error) {
-			p, ok := scope[n]
+			p, ok := instrs[n]
 			if !ok {
 				return "", Unstorable{n}
 			}
