@@ -51,6 +51,17 @@ New implementation proposals:
   and a lone first commit cannot run a destructive tool. Voters whose
   lineage the tool's integrity allowlist (53) refuses abstain.
   Proposed (2026-11-07).
+- [60 — Definition and instantiation](60-static-and-dynamic-proposal.md):
+  replaces 58's data model with six pairs, a definition and its
+  instantiation each: interface and observation, implementation and
+  decision, reference and location, scope and frame, program and
+  process, call graph and tree. A definition never holds a value, and
+  locations point from instantiation to definition only. Memory is a
+  key-value store of what has been seen: a frame's scope and arrivals, in
+  order, as a trie path; live state (eliminations, introductions) never
+  enters the key. Every decision invokes or returns; boot, exposed to
+  the root, is Act. Kinds are relative: delegate and act by k, a leaf by
+  position. Draft (2026-11-09).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
