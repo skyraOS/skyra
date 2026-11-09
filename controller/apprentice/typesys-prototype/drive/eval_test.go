@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/typesys-prototype/tree"
+	"skyra/typesys-prototype/model"
 )
 
 // An evalTask is a task run twice against the claude CLI and real
@@ -64,7 +64,7 @@ type recorder struct {
 	refusals []string
 }
 
-func (r *recorder) Guard(a tree.AskModel) (string, error) {
+func (r *recorder) Guard(a model.Ask) (string, error) {
 	r.asks++
 	r.depth = max(r.depth, a.Depth)
 	if a.Reason != "" {
@@ -84,20 +84,23 @@ func TestClaudeTasks(t *testing.T) {
 	var summary []string
 	for _, task := range evalTasks {
 		t.Run(task.name, func(t *testing.T) {
-			refs := map[string]tree.Version{}
+			var mem model.Memory
 			var row []string
 			for run := range 2 {
 				dir := t.TempDir()
 				goal, ok := task.setup(t, dir, run)
 				rec := &recorder{Model: NewClaudeModel(), t: t}
-				m := tree.NewMachine(Hashes, nil, refs, tree.DefaultBounds, task.tools)
+				m, err := NewMachine(model.DefaultConstants, task.tools, mem)
+				if err != nil {
+					t.Fatal(err)
+				}
 				m, v, err := Run(m, []byte(goal), rec, Exec{})
 				if err != nil {
 					t.Errorf("run %d: %v", run, err)
 					row = append(row, "error")
 					return
 				}
-				refs = m.Refs
+				mem = m.Memory
 				got := Text(v)
 				right := ok(got)
 				if !right {

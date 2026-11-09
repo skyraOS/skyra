@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"skyra/typesys-prototype/model"
 	"skyra/typesys-prototype/tree"
 )
 
@@ -85,12 +86,12 @@ func chunk(s string, off, limit int) (string, bool) {
 // role, the goal, the tools, then the context, each with its type and its
 // value up to ShowLimit bytes, and why its last CEL was refused, if it was.
 // A scope is in roles' order, so each group's $n run on from the last.
-func Render(a tree.AskModel) string {
+func Render(a model.Ask) string {
 	var b strings.Builder
 	groups := []struct {
 		title string
-		role  tree.Role
-	}{{"Goal", tree.RoleGoal}, {"Tools", tree.RoleTool}, {"Context", tree.RoleContext}}
+		role  model.Role
+	}{{"Goal", model.RoleGoal}, {"Tools", model.RoleTool}, {"Context", model.RoleContext}}
 	for g, group := range groups {
 		if g > 0 {
 			b.WriteString("\n")
@@ -98,12 +99,12 @@ func Render(a tree.AskModel) string {
 		b.WriteString(group.title + ":\n")
 		any := false
 		for i, o := range a.Scope {
-			if o.Role() != group.role {
+			if o.Role != group.role {
 				continue
 			}
 			any = true
 			n := i + 1
-			if o.Role() == tree.RoleTool {
+			if o.Role == model.RoleTool {
 				fmt.Fprintf(&b, "$%d: %s\n", n, o.Tool)
 				continue
 			}
@@ -130,7 +131,7 @@ func Render(a tree.AskModel) string {
 }
 
 // Expand is the next part of $n's value from off, up to ShowLimit bytes.
-func Expand(a tree.AskModel, n, off int) (string, error) {
+func Expand(a model.Ask, n, off int) (string, error) {
 	if n < 1 || n > len(a.Scope) {
 		return "", fmt.Errorf("$%d is not in scope: the scope is $1 to $%d", n, len(a.Scope))
 	}

@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"skyra/typesys-prototype/tree"
+	"skyra/typesys-prototype/model"
 )
 
 // ClaudeModel is the model the machine startles: the local Claude Code CLI
@@ -87,8 +87,8 @@ Reply with JSON and nothing else:
 `
 
 // System is the system prompt for a frame of this kind.
-func System(k tree.FrameKind) string {
-	if k == tree.KindDelegates {
+func System(k model.Kind) string {
+	if k == model.KindDelegate {
 		return systemHead + delegateInstructions + systemTail
 	}
 	return systemHead + actInstructions + systemTail
@@ -170,7 +170,7 @@ func parseReply(text string) reply {
 
 // Guard asks Claude for a guard at the ask, answering its expansions in
 // the same session.
-func (m *ClaudeModel) Guard(a tree.AskModel) (string, error) {
+func (m *ClaudeModel) Guard(a model.Ask) (string, error) {
 	env, err := environment(os.Environ())
 	if err != nil {
 		return "", err

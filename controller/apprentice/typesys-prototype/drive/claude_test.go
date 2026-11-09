@@ -9,19 +9,21 @@ import (
 	"strings"
 	"testing"
 
-	"skyra/typesys-prototype/tree"
+	"skyra/typesys-prototype/model"
 )
 
-func ask(scope ...tree.Obs) tree.AskModel {
-	return tree.AskModel{Base: "b", Scope: scope, Arrival: tree.Arrival{Table: map[int]tree.Position{len(scope): tree.Arrived}}}
-}
+func ask(scope ...model.Shown) model.Ask { return model.Ask{Scope: scope} }
+
+func goal(v any) model.Shown          { return model.Shown{Role: model.RoleGoal, Value: v} }
+func tool(d model.DefLoc) model.Shown { return model.Shown{Role: model.RoleTool, Tool: d} }
+func ctx(v any) model.Shown           { return model.Shown{Role: model.RoleContext, Value: v} }
 
 // A value past the show limit is truncated, and expanding reads the rest
 // in parts to the end.
 func TestRenderTruncatesAndExpands(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 8
-	a := ask(tree.Obs{Value: "abcdefghijklmnopqrst", Goal: true}, tree.Obs{Value: "ls", Tool: "ls"})
+	a := ask(goal("abcdefghijklmnopqrst"), tool("ls"))
 	r := Render(a)
 	if !strings.HasPrefix(r, "Goal:\n$1 (string): abcdefgh\n…[truncated: 8 of 20 bytes shown; expand $1 from 8]\n\nTools:\n$2: ls\n\nContext:\nnone\n") ||
 		strings.Contains(r, "abcdefghi") {
@@ -51,7 +53,7 @@ func TestRenderTruncatesAndExpands(t *testing.T) {
 func TestTruncateAtRunes(t *testing.T) {
 	defer func(n int) { ShowLimit = n }(ShowLimit)
 	ShowLimit = 3
-	a := ask(tree.Obs{Value: "aéé"}) // 1 + 2 + 2 bytes
+	a := ask(ctx("aéé")) // 1 + 2 + 2 bytes
 	if r := Render(a); !strings.Contains(r, "$1 (string): aé\n…[truncated: 3 of 5") {
 		t.Fatalf("%s", r)
 	}
@@ -97,7 +99,7 @@ func TestClaudeExpandsThenGuards(t *testing.T) {
 	ShowLimit = 4
 	c := &cli{replies: []string{`{"expand": {"n": 3, "from": 4}}`, "```json\n{\"cel\": \"true ? \\\"return $2\\\" : null\"}\n```"}}
 	m := &ClaudeModel{Model: "claude-opus-5-5", Run: c.run}
-	g, err := m.Guard(ask(tree.Obs{Value: "x", Goal: true}, tree.Obs{Value: "ls", Tool: "ls"}, tree.Obs{Value: "a.log b.log"}))
+	g, err := m.Guard(ask(goal("x"), tool("ls"), ctx("a.log b.log")))
 	if err != nil || g != `true ? "return $2" : null` {
 		t.Fatalf("%q %v", g, err)
 	}
@@ -115,7 +117,7 @@ func TestClaudeExpandLimit(t *testing.T) {
 	defer func(n int) { ExpandLimit = n }(ExpandLimit)
 	ExpandLimit = 1
 	c := &cli{replies: []string{`{"expand":{"n":1,"from":0}}`, `{"expand":{"n":1,"from":0}}`, `{"cel":"null"}`}}
-	if _, err := (&ClaudeModel{Run: c.run}).Guard(ask(tree.Obs{Value: "x"})); err != nil {
+	if _, err := (&ClaudeModel{Run: c.run}).Guard(ask(ctx("x"))); err != nil {
 		t.Fatal(err)
 	}
 	if p := prompt(c.runs[2]); !strings.Contains(p, "the most allowed") {
@@ -126,7 +128,7 @@ func TestClaudeExpandLimit(t *testing.T) {
 // A reply that is not one JSON object is taken as the guard.
 func TestClaudePlainReply(t *testing.T) {
 	c := &cli{replies: []string{`size($1) > 0 ? "return $1" : null`}}
-	if g, _ := (&ClaudeModel{Run: c.run}).Guard(ask(tree.Obs{Value: "x"})); g != `size($1) > 0 ? "return $1" : null` {
+	if g, _ := (&ClaudeModel{Run: c.run}).Guard(ask(ctx("x"))); g != `size($1) > 0 ? "return $1" : null` {
 		t.Fatal(g)
 	}
 }
@@ -148,8 +150,8 @@ func TestClaudeLive(t *testing.T) {
 	if os.Getenv("SKYRA_LIVE") == "" {
 		t.Skip("set SKYRA_LIVE=1 to run against the claude CLI")
 	}
-	model := &counting{Model: NewClaudeModel()}
-	refs := map[string]tree.Version{}
+	counter := &counting{Model: NewClaudeModel()}
+	var mem model.Memory
 	// Two runs on different directories: what the first learns should run
 	// the second with no ask.
 	for run, files := range [][]string{{"a.log", "b.log", "notes.txt"}, {"x.go", "y.go"}} {
@@ -159,17 +161,20 @@ func TestClaudeLive(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		model.asks = 0
-		m := tree.NewMachine(Hashes, nil, refs, tree.DefaultBounds, []string{"ls"})
-		m, v, err := Run(m, []byte("list the files in this directory:\n"+dir), model, Exec{})
+		counter.asks = 0
+		m, err := NewMachine(model.DefaultConstants, []string{"ls"}, mem)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("run %d: %d asks, returned %s", run, model.asks, Text(v))
+		m, v, err := Run(m, []byte("list the files in this directory:\n"+dir), counter, Exec{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("run %d: %d asks, returned %s", run, counter.asks, Text(v))
 		if want := strings.Join(files, "\n"); !strings.Contains(Text(v), files[0]) {
 			t.Errorf("run %d returned %q, want the files %q", run, Text(v), want)
 		}
-		refs = m.Refs
+		mem = m.Memory
 	}
 }
 
@@ -178,21 +183,21 @@ type counting struct {
 	asks int
 }
 
-func (c *counting) Guard(a tree.AskModel) (string, error) {
+func (c *counting) Guard(a model.Ask) (string, error) {
 	c.asks++
 	g, err := c.Model.Guard(a)
 	c.t(a, g)
 	return g, err
 }
 
-func (c *counting) t(a tree.AskModel, g string) {
+func (c *counting) t(a model.Ask, g string) {
 	fmt.Printf("--- ask at depth %d\n%s\n=> %s\n", a.Depth, Render(a), g)
 }
 
 // Each kind's prompt shows only what it may write, and neither says how
 // many tools make a kind.
 func TestSystemByKind(t *testing.T) {
-	act, del := System(tree.KindActs), System(tree.KindDelegates)
+	act, del := System(model.KindAct), System(model.KindDelegate)
 	if strings.Contains(act, "delegate") || !strings.Contains(act, "run the tool $2") {
 		t.Error("the act prompt offers delegation, or not running")
 	}
