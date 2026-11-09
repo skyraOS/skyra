@@ -53,10 +53,19 @@ func NewBallot(base string, bs []Branch, vals map[string]any) (Ballot, error) {
 // (1000 is 1): the margin a winner needs is ⌈(1 − ι) · cast⌉, never below 1,
 // so 1000 is a plurality and 0 is every vote cast. Floor is the coarsest
 // level counted, 2 when 0: continuing is never merged with finishing, one
-// tool with another, or exit 0 with exit 1.
+// tool with another, or exit 0 with exit 1. Group is an instruction's group
+// at a level, GroupKey when nil.
 type Tally struct {
 	Inhibition int
 	Floor      int
+	Group      func(k int, instr string) string
+}
+
+func (t Tally) group(k int, instr string) string {
+	if t.Group == nil {
+		return GroupKey(k, instr)
+	}
+	return t.Group(k, instr)
 }
 
 // Exact is the finest level: the whole instruction.
@@ -124,11 +133,11 @@ func (t Tally) Decide(votes []Vote) Selection {
 	for _, k := range t.Levels() {
 		count := map[string]int{}
 		for _, v := range votes {
-			count[GroupKey(k, v.Instr)]++
+			count[t.group(k, v.Instr)]++
 		}
 		var best *Vote
 		for i, x := range votes {
-			g := GroupKey(k, x.Instr)
+			g := t.group(k, x.Instr)
 			n, wins := count[g], req <= count[g]
 			for h, c := range count {
 				if h != g && c+req > n {

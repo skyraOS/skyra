@@ -104,7 +104,39 @@ func (textIds) Slot(i InstLoc, n int) InstLoc { return InstLoc(string(i) + "#" +
 
 func (textIds) Program(p Program) DefLoc { return DefLoc("program(" + string(p.Version) + ")") }
 
+// version is a refinement as the vectors write it: each branch's
+// instruction its template.
+func version(t *testing.T, v tree.Version) any {
+	bs := make([]any, len(v.Branches))
+	for i, b := range v.Branches {
+		tmpl, err := ParseTemplate(b.Instr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bs[i] = map[string]any{"id": b.ID, "rank": b.Rank, "voter": b.Voter, "cond": b.Cond, "instr": tmpl}
+	}
+	return map[string]any{"next": v.Next, "branches": bs}
+}
+
 var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
+	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
+		m := Replay(dec[[]Event](t, in["log"]))
+		var out []any
+		for _, k := range dec[[]Key](t, in["keys"]) {
+			v, seen := m[k.Text()]
+			out = append(out, opt(version(t, v), seen))
+		}
+		return out
+	},
+	"decide": func(t *testing.T, in map[string]json.RawMessage) any {
+		vals := map[string]any{"arrived": map[string]any{"size": dec[int64](t, in["x"])}}
+		o, err := Replay(dec[[]Event](t, in["log"])).Decide(dec[int](t, in["inhibition"]), dec[int](t, in["floor"]),
+			dec[Key](t, in["key"]), vals)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return o
+	},
 	"step": func(t *testing.T, in map[string]json.RawMessage) any {
 		rs := dec[map[DefLoc]map[string][]DefLoc](t, in["reaches"])
 		reaches := func(d DefLoc, name string) []DefLoc { return rs[d][name] }

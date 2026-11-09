@@ -1010,8 +1010,83 @@ def stepFile : List Json :=
             ("out", .null)] :: go t es
     go t₀ edges
 
+def jKey (k : Model.Key) : Json :=
+  Json.mkObj [("root", .str k.root.hash), ("kind", jKind k.kind), ("seen", .arr (k.seen.map jIface).toArray)]
+
+def jTemplate (t : Model.Template) : Json :=
+  Json.mkObj [("op", jOp t.op), ("args", .arr (t.args.map jArg).toArray)]
+
+def jTBranch (b : Refine.Branch Atom Model.Template) : Json :=
+  Json.mkObj [("id", jNat b.id), ("rank", jNat b.rank), ("voter", jNat b.voter),
+    ("cond", .str (condCel b.cond)), ("instr", jTemplate b.instr)]
+
+def jTRef (r : Refine.Refinement Atom Model.Template) : Json :=
+  Json.mkObj [("next", jNat r.next), ("branches", jList jTBranch r.branches)]
+
+def jEvent : Model.Event Atom → Json
+  | .hesitate k => Json.mkObj [("hesitate", jKey k)]
+  | .startle k i => Json.mkObj [("startle", jKey k), ("impl", .arr (i.chain.map fun (c, t) =>
+      Json.mkObj [("cond", .str (condCel c)), ("template", jTemplate t)]).toArray)]
+
+def jTOutcome : Model.Outcome → Json
+  | .null => .null
+  | .select t => Json.mkObj [("select", jTemplate t)]
+  | .conflict => .str "conflict"
+
+/-- A template's group at level `k`, as 59 groups an instruction: its first
+`k` parts, its operator then its arguments, or the whole template at the
+exact level. Floor 2 never merges two operators, or two heads. -/
+def tGroup (k : Nat) (t : Model.Template) : List String :=
+  if exact ≤ k then [(jTemplate t).compress] else ((jOp t.op :: t.args.map jArg).take k).map (·.compress)
+
+def tPolicy (ι floor : Nat) : Refine.Policy Model.Template (List String) := ⟨tGroup, levels floor, ι⟩
+
+def k1 : Model.Key := ⟨⟨"user"⟩, .act, [.shape .str, .defn ls]⟩
+def k2 : Model.Key := ⟨⟨"user"⟩, .act, [.shape .str, .defn ls, .shape .str]⟩
+
+def var (n : Nat) (ss : List Model.Sel := []) : Model.Arg := .ref (.var n ss)
+
+/-- Templates: running `ls` on a cut, or on an introduction; returning an
+exit status, or what arrived; delegating to `claude`. -/
+def t1 : Model.Template := ⟨.act, [var 2, var 3 [.field ["path"]]]⟩
+def t2 : Model.Template := ⟨.act, [var 2, .lit (.str "-la")]⟩
+def t3 : Model.Template := ⟨.ret, [.lit (.exit 0)]⟩
+def t4 : Model.Template := ⟨.ret, [var 3]⟩
+def t5 : Model.Template := ⟨.delegate, [.ref (.name "claude"), var 1]⟩
+
+def impl (chain : List (Refine.Cond Atom × Model.Template)) : Model.Impl Atom := ⟨chain⟩
+
+/-- Every log of up to three events from a pool at two keys: hesitations,
+and startles of one or two links. Each key's refinement is the fold of its
+events alone. -/
+def memoryFile : List Json :=
+  let pool : List (Model.Event Atom) :=
+    [.hesitate k1, .hesitate k2, .startle k1 (impl [(.tt, t1)]),
+      .startle k1 (impl [(.atom (.gt 2), t2), (.tt, t3)]), .startle k2 (impl [(.atom .even, t4)])]
+  let logs := [[]] ++ pool.map ([·]) ++ (pool.flatMap fun a => pool.map fun b => [a, b]) ++
+    (pool.flatMap fun a => pool.flatMap fun b => pool.map fun c => [a, b, c])
+  logs.map fun log =>
+    Json.mkObj [("in", Json.mkObj [("log", .arr (log.map jEvent).toArray), ("keys", .arr #[jKey k1, jKey k2])]),
+      ("out", .arr (([k1, k2] : List Model.Key).map fun k => jOpt jTRef (Model.replay log k)).toArray)]
+
+/-- Decisions at a key three voters committed to, or one hesitated at, or
+none: each a tally over templates. At the other key, unseen, `null`. -/
+def decideFile : List Json :=
+  let pool : List (Model.Impl Atom) :=
+    [impl [(.tt, t1)], impl [(.tt, t2)], impl [(.atom (.gt 2), t1)], impl [(.tt, t3)], impl [(.tt, t4)],
+      impl [(.atom .even, t5)]]
+  let logs : List (List (Model.Event Atom)) := [[], [.hesitate k1]] ++
+    (pool.flatMap fun a => pool.flatMap fun b => pool.map fun c => [a, b, c].map (.startle k1))
+  logs.flatMap fun log => ([k1, k2] : List Model.Key).flatMap fun k =>
+    (if k = k2 then [(0, 500, 2)] else
+      ([0, 3] : List Int).flatMap fun x => ([0, 500, 1000] : List Nat).flatMap fun ι =>
+        ([1, 2] : List Nat).map fun f => (x, ι, f)).map fun (x, ι, f) =>
+      Json.mkObj [("in", Json.mkObj [("log", .arr (log.map jEvent).toArray), ("key", jKey k), ("x", jInt x),
+          ("inhibition", jNat ι), ("floor", jNat f)]),
+        ("out", jTOutcome (Model.decideAt (tPolicy ι f) Atom.sat (Model.replay log) k x))]
+
 def files : List (String × List Json) :=
-  [ ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
+  [ ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
     ("model/read", readFile), ("model/introduce", introduceFile), ("model/step", stepFile) ]
 
 end M
