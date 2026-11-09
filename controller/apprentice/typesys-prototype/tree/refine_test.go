@@ -3,6 +3,7 @@ package tree
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -401,5 +402,38 @@ func TestReturnIsConstructed(t *testing.T) {
 	}
 	if s := shapeOfJSON(t, `{"exit":0,"stdout":"x"}`).Enc(); s == done {
 		t.Fatalf("a JSON value took a return's shape: %s", s)
+	}
+}
+
+// Written takes back what CommitChain adds: each voter's chain is what was
+// committed, conditions holding && themselves included.
+func TestWrittenInvertsCommit(t *testing.T) {
+	chains := [][]Link{
+		{{Cond: "true", Instr: "a"}},
+		{{Cond: "size(passed3) > 0", Instr: "a"}, {Cond: "true", Instr: "b"}},
+		{{Cond: "(passed0 == 1) && (passed1 == 2)", Instr: "a"}, {Cond: "passed0 == 3 && true", Instr: "b"}, {Cond: "true", Instr: "c"}},
+	}
+	v := EmptyVersion()
+	for _, c := range chains {
+		v = CommitChain(v, c)
+	}
+	byVoter := map[int][]Branch{}
+	var voters []int
+	for _, b := range v.Branches {
+		if byVoter[b.Voter] == nil {
+			voters = append(voters, b.Voter)
+		}
+		byVoter[b.Voter] = append(byVoter[b.Voter], b)
+	}
+	for i, n := range voters {
+		got, ok := Written(byVoter[n])
+		if !ok || !reflect.DeepEqual(got, chains[i]) {
+			t.Fatalf("voter %d: %v, %v", n, got, ok)
+		}
+	}
+	bad := byVoter[voters[1]]
+	bad[1].Cond = "true"
+	if _, ok := Written(bad); ok {
+		t.Fatal("a condition not CommitChain's was taken back")
 	}
 }

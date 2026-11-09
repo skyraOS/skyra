@@ -82,3 +82,34 @@ func TestCommandRefuses(t *testing.T) {
 		}
 	}
 }
+
+// -show lists each key learned by its id, its chain as the model wrote
+// it; an empty store lists nothing.
+func TestCommandShows(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "log.jsonl")
+	var out bytes.Buffer
+	if code := run([]string{"-show", "-store", store}, strings.NewReader(""), &out, &bytes.Buffer{}, listing(), drive.Exec{}); code != 0 || out.Len() != 0 {
+		t.Fatalf("an empty store: exit %d, %q", code, out.String())
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644)
+	run([]string{"-tools", "ls", "-store", store, dir}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, listing(), drive.Exec{})
+	out.Reset()
+	if code := run([]string{"-show", "-store", store}, strings.NewReader(""), &out, &bytes.Buffer{}, listing(), drive.Exec{}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for _, want := range []string{
+		"  act, root ",
+		"  $2 ls\n",
+		"    true ? $2 $1\n",
+		"    $3.contains(\"only.txt\") ? return 0 $3\n",
+		"    true ? return 1 $3 'no only.txt'\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("no %q in\n%s", want, out.String())
+		}
+	}
+	if n := strings.Count(out.String(), "implementation 1:"); n != 2 {
+		t.Fatalf("%d keys, want 2:\n%s", n, out.String())
+	}
+}

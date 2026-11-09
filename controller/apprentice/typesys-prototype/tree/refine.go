@@ -481,6 +481,23 @@ func CommitChain(v Version, chain []Link) Version {
 	return out
 }
 
+// Written is the chain one voter committed, as the model wrote it: its
+// branches in rank order, each condition with the earlier ones' negations
+// taken back off. False when a branch's condition is not CommitChain's.
+func Written(chain []Branch) ([]Link, bool) {
+	links := make([]Link, len(chain))
+	var prev []string
+	for k, b := range chain {
+		c, ok := strings.CutPrefix(b.Cond, "(")
+		if c, ok = strings.CutSuffix(c, ") && ("+notAny(prev)+")"); !ok {
+			return nil, false
+		}
+		links[k] = Link{Cond: c, Instr: b.Instr}
+		prev = append(prev, c)
+	}
+	return links, true
+}
+
 // --- after startle ---
 
 // After is what a step does once startle has committed.

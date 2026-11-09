@@ -9,6 +9,11 @@
 // The goal is the arguments, joined by spaces, or stdin when there are
 // none. What the tree returns is printed, its exit status the command's;
 // a bound exhausted prints its error and exits 2.
+//
+//	skyra -show
+//
+// lists what the store has learned, each key by an id. Keys are shared by
+// every program that meets them, so this is the whole store.
 package main
 
 import (
@@ -77,8 +82,37 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, mdl drive.Mod
 	act := fs.Int("act", model.DefaultConstants.Act, "k: an agent holding more tool types than this delegates")
 	store := fs.String("store", defaultStore(), "the log on disk")
 	talk := fs.Bool("v", false, "write each ask and the guard written to stderr")
+	show := fs.Bool("show", false, "list what the store has learned")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	program := func() model.Program {
+		c := model.DefaultConstants
+		c.Act = *act
+		var names []string
+		for _, d := range defs(*tools) {
+			names = append(names, string(d))
+		}
+		p := drive.Program(c, names)
+		p.ReadOnly, p.Classes = defs(*readOnly), cls
+		return p
+	}
+	s := drive.Store{Path: *store}
+	if *show {
+		mem, err := s.Load()
+		if err != nil {
+			fmt.Fprintln(stderr, "skyra:", err)
+			return 2
+		}
+		ls, err := drive.Learn(mem)
+		if err == nil {
+			err = drive.Show(stdout, ls)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "skyra:", err)
+			return 2
+		}
+		return 0
 	}
 	if *tools == "" {
 		fmt.Fprintln(stderr, "skyra: -tools is required")
@@ -98,19 +132,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, mdl drive.Mod
 		return 2
 	}
 
-	c := model.DefaultConstants
-	c.Act = *act
-	var names []string
-	for _, d := range defs(*tools) {
-		names = append(names, string(d))
-	}
-	p := drive.Program(c, names)
-	p.ReadOnly, p.Classes = defs(*readOnly), cls
+	p := program()
 	if *talk {
 		mdl = verbose{Model: mdl, w: stderr}
 	}
 
-	s := drive.Store{Path: *store}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
 		fmt.Fprintln(stderr, "skyra:", err)
 		return 2
