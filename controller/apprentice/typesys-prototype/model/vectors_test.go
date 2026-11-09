@@ -131,7 +131,7 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 	"decide": func(t *testing.T, in map[string]json.RawMessage) any {
 		vals := map[string]any{"arrived": map[string]any{"size": dec[int64](t, in["x"])}}
 		o, err := Replay(dec[[]Event](t, in["log"])).Decide(dec[int](t, in["inhibition"]), dec[int](t, in["floor"]),
-			dec[Key](t, in["key"]), vals)
+			dec[int](t, in["quorum"]), dec[Key](t, in["key"]), vals)
 		if err != nil {
 			t.Fatal(err)
 		}

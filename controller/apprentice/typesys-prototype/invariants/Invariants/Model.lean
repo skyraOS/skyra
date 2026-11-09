@@ -281,6 +281,10 @@ structure Constants where
   refinements : Nat
   inhibition : Nat × Nat
   floor : Nat
+  /-- How many implementations a key needs before its tally is trusted:
+  independent sightings, orthogonal to `inhibition`, which is how much
+  they must agree once there are enough. -/
+  quorum : Nat
   deriving DecidableEq, Repr
 
 /-- A program: the definition a process is instantiated from. The language
@@ -304,7 +308,7 @@ def Program.reach (p : Program) (name : String) : List DefLoc :=
 def Program.wellFormed (p : Program) : Bool :=
   1 ≤ p.constants.act && 1 ≤ p.constants.transitions && 1 ≤ p.constants.refinements &&
     0 < p.constants.inhibition.2 && p.constants.inhibition.1 ≤ p.constants.inhibition.2 &&
-    1 ≤ p.constants.floor && p.constants.floor ≤ 4 &&
+    1 ≤ p.constants.floor && p.constants.floor ≤ 4 && 1 ≤ p.constants.quorum &&
     decide (p.global.map (·.1)).Nodup &&
     (p.reach "act").all (· ∉ p.reach "delegate")
 
@@ -1356,8 +1360,11 @@ theorem startle_keeps {r : Refine.Refinement A Template} {b} (k : Key) (i : Impl
 /-! ## A decision is a tally
 
 Under the exact rule, the decision at a key is 59's tally over the
-implementations stored there. An unseen key, and a seen one never
-committed, are `null`: the path to `startle`. -/
+implementations stored there, once there are a quorum of them. An unseen
+key, a seen one never committed, and one with fewer implementations than
+the quorum are `null`: the path to `startle`. Quorum and inhibition are
+orthogonal: quorum is how many independent sightings before anything is
+trusted, inhibition how much they must agree once there are enough. -/
 
 variable {V K : Type} [DecidableEq K]
 
@@ -1366,33 +1373,61 @@ def Outcome.ofRefine : Refine.Outcome Template → Outcome
   | .select t => .select t
   | .conflict => .conflict
 
-/-- The decision at a frame's key, given the values it reads. -/
-def decideAt (p : Refine.Policy Template K) (sat : A → V → Bool) (m : Memory A) (k : Key) (v : V) :
-    Outcome :=
+/-- The implementations a refinement holds: its voters, each once. -/
+def implementations (r : Refine.Refinement A Template) : Nat :=
+  (r.branches.map (·.voter)).eraseDups.length
+
+/-- The decision at a frame's key, given the values it reads: `null` below
+the quorum `q`, the tally from it. -/
+def decideAt (p : Refine.Policy Template K) (q : Nat) (sat : A → V → Bool) (m : Memory A) (k : Key)
+    (v : V) : Outcome :=
   match m k with
   | none => .null
-  | some r => .ofRefine (Refine.tally p sat r.branches v)
+  | some r => if implementations r < q then .null else .ofRefine (Refine.tally p sat r.branches v)
 
-theorem decideAt_tally (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A} {k : Key}
-    {r : Refine.Refinement A Template} (h : m k = some r) (v : V) :
-    decideAt p sat m k v = .ofRefine (Refine.tally p sat r.branches v) := by
-  simp [decideAt, h]
+/-- From the quorum, the decision is 59's tally, whatever the quorum. -/
+theorem decideAt_tally (p : Refine.Policy Template K) {q : Nat} (sat : A → V → Bool) {m : Memory A}
+    {k : Key} {r : Refine.Refinement A Template} (h : m k = some r) (hq : q ≤ implementations r) (v : V) :
+    decideAt p q sat m k v = .ofRefine (Refine.tally p sat r.branches v) := by
+  simp [decideAt, h, Nat.not_lt.mpr hq]
 
-theorem decideAt_unseen (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A} {k : Key}
-    (h : m k = none) (v : V) : decideAt p sat m k v = .null := by
+/-- Below the quorum nothing is trusted: the decision is `null`, the path
+to `startle`, however the implementations agree. -/
+theorem decideAt_below (p : Refine.Policy Template K) {q : Nat} (sat : A → V → Bool) {m : Memory A}
+    {k : Key} {r : Refine.Refinement A Template} (h : m k = some r) (hq : implementations r < q) (v : V) :
+    decideAt p q sat m k v = .null := by
+  simp [decideAt, h, hq]
+
+/-- Quorum is orthogonal to the tally: raising it never changes what is
+selected, only withholds it. A decision under a quorum is the decision
+under any lower one. -/
+theorem decideAt_quorum_mono (p : Refine.Policy Template K) {q q' : Nat} (sat : A → V → Bool)
+    {m : Memory A} {k : Key} {v : V} {t : Template} (hq : q ≤ q')
+    (h : decideAt p q' sat m k v = .select t) : decideAt p q sat m k v = .select t := by
+  unfold decideAt at *
+  split at h
+  · cases h
+  · rename_i r _
+    split at h
+    · cases h
+    · have : ¬ implementations r < q := by omega
+      simpa [this] using h
+
+theorem decideAt_unseen (p : Refine.Policy Template K) (q : Nat) (sat : A → V → Bool) {m : Memory A}
+    {k : Key} (h : m k = none) (v : V) : decideAt p q sat m k v = .null := by
   simp [decideAt, h]
 
 /-- A key seen and never committed is `null`: `hesitate` records `null`. -/
-theorem decideAt_hesitated (p : Refine.Policy Template K) (sat : A → V → Bool) {m : Memory A}
-    {k : Key} (h : m k = some .empty) (v : V) : decideAt p sat m k v = .null := by
+theorem decideAt_hesitated (p : Refine.Policy Template K) (q : Nat) (sat : A → V → Bool) {m : Memory A}
+    {k : Key} (h : m k = some .empty) (v : V) : decideAt p q sat m k v = .null := by
   simp [decideAt, h, Refine.tally, Refine.Refinement.empty, Refine.selected, Outcome.ofRefine]
 
 /-- The decision at a key depends on that key's events alone: logs agreeing
 on what was seen at a key decide there alike. -/
-theorem decideAt_local (p : Refine.Policy Template K) (sat : A → V → Bool)
+theorem decideAt_local (p : Refine.Policy Template K) (q : Nat) (sat : A → V → Bool)
     {log₁ log₂ : List (Event A)} {k : Key}
     (h : log₁.filter (·.key = k) = log₂.filter (·.key = k)) (v : V) :
-    decideAt p sat (replay log₁) k v = decideAt p sat (replay log₂) k v := by
+    decideAt p q sat (replay log₁) k v = decideAt p q sat (replay log₂) k v := by
   simp only [decideAt, replay_at, h]
 
 end

@@ -13,13 +13,17 @@ import (
 )
 
 // Constants are a program's: k, the transition and refinement bounds, ι as
-// a ratio, and the tally's floor.
+// a ratio, the tally's floor, and the quorum: how many implementations a
+// key needs before its tally is trusted. Quorum is how many independent
+// sightings before anything is trusted, ι how much they must agree once
+// there are enough.
 type Constants struct {
 	Act         int    `json:"act"`
 	Transitions int    `json:"transitions"`
 	Refinements int    `json:"refinements"`
 	Inhibition  [2]int `json:"inhibition"`
 	Floor       int    `json:"floor"`
+	Quorum      int    `json:"quorum"`
 }
 
 // A Program is the language version, the constants, the global scope by
@@ -47,7 +51,7 @@ func (p Program) Reach(name string) []DefLoc {
 func (p Program) WellFormed() bool {
 	c := p.Constants
 	if c.Act < 1 || c.Transitions < 1 || c.Refinements < 1 ||
-		c.Inhibition[1] <= 0 || c.Inhibition[0] > c.Inhibition[1] || c.Floor < 1 || c.Floor > 4 {
+		c.Inhibition[1] <= 0 || c.Inhibition[0] > c.Inhibition[1] || c.Floor < 1 || c.Floor > 4 || c.Quorum < 1 {
 		return false
 	}
 	models := p.Reach("delegate")

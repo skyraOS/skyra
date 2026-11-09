@@ -104,11 +104,22 @@ type Outcome struct {
 	Template Template
 }
 
+// Implementations is how many implementations a refinement holds: its
+// voters, each once.
+func Implementations(v tree.Version) int {
+	voters := map[int]bool{}
+	for _, b := range v.Branches {
+		voters[b.Voter] = true
+	}
+	return len(voters)
+}
+
 // Decide is the decision at a key, given the values it reads: null for a
-// key unseen or never committed, else the tally, grouping by template.
-func (m Memory) Decide(inhibition, floor int, k Key, vals map[string]any) (Outcome, error) {
+// key unseen, never committed, or holding fewer implementations than the
+// quorum; else the tally, grouping by template.
+func (m Memory) Decide(inhibition, floor, quorum int, k Key, vals map[string]any) (Outcome, error) {
 	v, seen := m[k.Text()]
-	if !seen {
+	if !seen || Implementations(v) < quorum {
 		return Outcome{Kind: tree.SelectNull}, nil
 	}
 	votes, err := tree.Cast(v.Branches, vals)

@@ -11,7 +11,7 @@ import (
 	"skyra/typesys-prototype/tree"
 )
 
-var testConstants = model.Constants{Act: 1, Transitions: 8, Refinements: 3, Inhibition: [2]int{0, 1}, Floor: 2}
+var testConstants = model.Constants{Act: 1, Transitions: 8, Refinements: 3, Inhibition: [2]int{0, 1}, Floor: 2, Quorum: 1}
 
 func newMachine(t *testing.T, tools []string, mem model.Memory) model.Machine {
 	t.Helper()
@@ -225,5 +225,31 @@ func TestReturnKeepsText(t *testing.T) {
 	}
 	if got := tree.ShapeOf(r).Enc(); got != `{"exit":exit(0),"stdout":string}` {
 		t.Fatalf("shape %s", got)
+	}
+}
+
+// Under a quorum of 2 nothing is trusted until a key holds two
+// implementations: the first two runs each ask at both keys, committing
+// one more each time, and the third asks nothing.
+func TestRunQuorum(t *testing.T) {
+	c := testConstants
+	c.Quorum = 2
+	var mem model.Memory
+	for run, want := range []int{2, 2, 0} {
+		mdl := &script{}
+		m, err := NewMachine(c, []string{"echo"}, mem)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, v, err := Run(m, []byte("hello world"), mdl, Exec{})
+		if r, _ := v.(map[string]any); err != nil || r["stdout"] != "hello world\n" || mdl.asked != want {
+			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, mdl.asked)
+		}
+		mem = m.Memory
+	}
+	for k, v := range mem {
+		if n := model.Implementations(v); n != 2 {
+			t.Fatalf("%s holds %d implementations", k, n)
+		}
 	}
 }

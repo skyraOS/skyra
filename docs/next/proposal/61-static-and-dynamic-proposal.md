@@ -350,7 +350,7 @@ recorded at boot for replay and kept out of the key.
 | The language version: shape encoding, CEL environment, cut and template grammar, `return`'s value | Yes: one text would parse or evaluate differently | global, one version hash |
 | The act bound `k` | Yes: it decides a scope's kind, and so which instructions are valid | the local key holds each scope's **kind** instead, so processes with different `k` share keys where kinds agree |
 | Transition and refinement bounds | No: they bound how long, not what | the program's constants |
-| `ι` and the floor (59) | No: they change the decision, not the implementations | the program's constants |
+| `ι`, the floor (59) and the quorum | No: they change the decision, not the implementations | the program's constants |
 | The model startled | No: it changes how an implementation was authored | the voter's provenance |
 
 Global scope is called by name, so it is encoded as a map, names to
@@ -455,6 +455,8 @@ program {
     refinements:  nat ≥ 1        the refinement bound, asks per transition
     inhibition:   [0, 1]         ι (59)
     floor:        1 … 4          the coarsest tally level (59), default 2
+    quorum:       nat ≥ 1        implementations a key needs before its tally
+                                 is trusted, default 1
   }
   global: {                      by name, sorted, each name once: interfaces
     delegate: delegate((def M₁ + … ) × goal × …)     models: its first position
@@ -485,7 +487,7 @@ grant {
 `boot(program, grant) → frame | refusal`:
 
 1. **The program is well formed:** `k ≥ 1`, the floor is a level, `ι` is
-   in [0, 1], global names are sorted and each once, and no definition
+   in [0, 1], the quorum is at least 1, global names are sorted and each once, and no definition
    fits both `act`'s first position and `delegate`'s.
 2. **The grant's interface is the entry scope**, position by position: the
    definition at each position is that position's, by its hash, and fits
@@ -519,7 +521,7 @@ checks are invariant 1's: the emitter is never the checker.
 {
   "version": "sha256:…",
   "constants": { "act": 1, "transitions": 64, "refinements": 3,
-                 "inhibition": 0.75, "floor": 2 },
+                 "inhibition": 0.75, "floor": 2, "quorum": 1 },
   "global": { "delegate": "sha256:…", "goal": "sha256:…", "return": "sha256:…" },
   "entry": {
     "kind": "agent root",
@@ -590,7 +592,7 @@ changes what an implementation means:
 | global scope | yes: the trie's root |
 | `k` | yes, through each frame's kind |
 | entry scope | yes: the first frame's key |
-| bounds, `ι`, the floor | no: constants of the run, recorded with boot in the log |
+| bounds, `ι`, the floor, the quorum | no: constants of the run, recorded with boot in the log |
 
 Two programs differing only in bounds or `ι` share memory; two differing
 in `k` share it where kinds agree. Programs may later live in memory too,
@@ -765,6 +767,15 @@ The mechanisms of 58 and 59 carry over, keyed by the new interface:
 refinement `null`; `startle`; `trust`; versions, one current per key and
 the rest stale, in lineage; 59's tally, voters, inhibition and floor; both
 bounds and the act bound.
+
+**Quorum** is new, and orthogonal to inhibition. Quorum is how many
+independent sightings before anything is trusted: a key's tally runs only
+once it holds that many implementations, one per `startle`, and below it
+the decision is `null`, so the model is asked again and its implementation
+is one more voter. Inhibition is how much the implementations must agree
+once there are enough. Raising the quorum never changes what the tally
+selects, only withholds it (`decideAt_quorum_mono`); from the quorum, the
+decision is 59's tally whatever the quorum (`decideAt_tally`).
 
 ## What changes
 

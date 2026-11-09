@@ -112,7 +112,7 @@ type Machine struct {
 
 // DefaultConstants are a program's when its owner sets none: their values
 // are not settled (58, open question 6).
-var DefaultConstants = Constants{Act: 1, Transitions: 64, Refinements: 3, Inhibition: [2]int{0, 1}, Floor: 2}
+var DefaultConstants = Constants{Act: 1, Transitions: 64, Refinements: 3, Inhibition: [2]int{0, 1}, Floor: 2, Quorum: 1}
 
 // NewProgram is a program whose act reaches the tools and whose delegate
 // reaches the models. Its entry scope is a root holding them all.
@@ -261,7 +261,7 @@ func (m Machine) decide(id InstLoc) (Machine, any, error) {
 		m.Memory.Apply(Event{Key: k})
 	}
 	t := m.tally()
-	o, err := m.Memory.Decide(t.Inhibition, t.Floor, k, vals(f))
+	o, err := m.Memory.Decide(t.Inhibition, t.Floor, m.Program.Constants.Quorum, k, vals(f))
 	if err != nil {
 		return m, nil, err
 	}

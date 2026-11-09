@@ -862,7 +862,7 @@ def cat : Model.DefLoc := ⟨"cat"⟩
 def claude : Model.DefLoc := ⟨"claude"⟩
 def gpt : Model.DefLoc := ⟨"gpt"⟩
 
-def consts : Model.Constants := ⟨1, 64, 3, (1, 2), 2⟩
+def consts : Model.Constants := ⟨1, 64, 3, (1, 2), 2, 1⟩
 
 def global (tools models : List Model.DefLoc) : List (String × Model.Iface) :=
   [("act", .op .act [.sum (tools.map .defn)]), ("delegate", .op .delegate [.sum (models.map .defn)])]
@@ -879,7 +879,7 @@ def jProgram (p : Model.Program) : Json :=
     ("constants", Json.mkObj [("act", jNat p.constants.act), ("transitions", jNat p.constants.transitions),
       ("refinements", jNat p.constants.refinements),
       ("inhibition", .arr #[jNat p.constants.inhibition.1, jNat p.constants.inhibition.2]),
-      ("floor", jNat p.constants.floor)]),
+      ("floor", jNat p.constants.floor), ("quorum", jNat p.constants.quorum)]),
     ("global", Json.mkObj (p.global.map fun (n, i) => (n, jIface i))), ("entry", jScope p.entry)]
 
 def booter (defs : List Model.DefLoc) : Model.Frame :=
@@ -1069,21 +1069,24 @@ def memoryFile : List Json :=
     Json.mkObj [("in", Json.mkObj [("log", .arr (log.map jEvent).toArray), ("keys", .arr #[jKey k1, jKey k2])]),
       ("out", .arr (([k1, k2] : List Model.Key).map fun k => jOpt jTRef (Model.replay log k)).toArray)]
 
-/-- Decisions at a key three voters committed to, or one hesitated at, or
-none: each a tally over templates. At the other key, unseen, `null`. -/
+/-- Decisions at a key one, two or three voters committed to, or one
+hesitated at, or none: each a tally over templates, under quorums below,
+at and above the voters there. At the other key, unseen, `null`. -/
 def decideFile : List Json :=
   let pool : List (Model.Impl Atom) :=
     [impl [(.tt, t1)], impl [(.tt, t2)], impl [(.atom (.gt 2), t1)], impl [(.tt, t3)], impl [(.tt, t4)],
       impl [(.atom .even, t5)]]
   let logs : List (List (Model.Event Atom)) := [[], [.hesitate k1]] ++
+    pool.map (fun a => [.startle k1 a]) ++
+    (pool.flatMap fun a => pool.map fun b => [a, b].map (.startle k1)) ++
     (pool.flatMap fun a => pool.flatMap fun b => pool.map fun c => [a, b, c].map (.startle k1))
   logs.flatMap fun log => ([k1, k2] : List Model.Key).flatMap fun k =>
-    (if k = k2 then [(0, 500, 2)] else
+    (if k = k2 then [(0, 500, 2, 1)] else
       ([0, 3] : List Int).flatMap fun x => ([0, 500, 1000] : List Nat).flatMap fun ι =>
-        ([1, 2] : List Nat).map fun f => (x, ι, f)).map fun (x, ι, f) =>
+        ([1, 2] : List Nat).flatMap fun f => ([1, 2, 3] : List Nat).map fun q => (x, ι, f, q)).map fun (x, ι, f, q) =>
       Json.mkObj [("in", Json.mkObj [("log", .arr (log.map jEvent).toArray), ("key", jKey k), ("x", jInt x),
-          ("inhibition", jNat ι), ("floor", jNat f)]),
-        ("out", jTOutcome (Model.decideAt (tPolicy ι f) Atom.sat (Model.replay log) k x))]
+          ("inhibition", jNat ι), ("floor", jNat f), ("quorum", jNat q)]),
+        ("out", jTOutcome (Model.decideAt (tPolicy ι f) q Atom.sat (Model.replay log) k x))]
 
 def files : List (String × List Json) :=
   [ ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
