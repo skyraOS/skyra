@@ -73,14 +73,17 @@ You do not run tools yourself: you delegate.
 `
 
 const systemTail = `
-An instruction is made only of parameters, each a $n or part of one, in one of the forms above; a return also takes its exit status, 0 or 1. Write nothing else in it: no flags, subcommands, words or quotes. An instruction with any other text is rejected.
+An instruction is made of parameters, each a $n or part of one, in one of the forms above; a return also takes its exit status, 0 or 1. Where a tool needs text no parameter holds, such as a flag or a filter, write it as a literal in single quotes:
+  $2 '-l' $1[2]
+  $2 '.version' $1[2]
+A literal never copies a parameter's text: one that does is refused, so take that part of the parameter instead. Write nothing else: any other text in an instruction is rejected.
 
 Use part of a parameter instead of copying its text:
   $2[2]              line 2 of $2
   $2[3:7]            lines 3 to 7
   $2.dir             the field dir of a JSON value ($2.dir.path goes deeper)
   $4.stdout[1]       line 1 of $4's field stdout: each cut cuts what the last gave
-Your expression is reused when new values arrive, so never write a value's text into it.
+Your expression is reused when new values arrive, so never write a value's text into it: a literal is reused too, so write only what holds for every value, a flag or a filter, never a name or a path.
 
 Reply with JSON and nothing else:
   {"cel": "<expression>"}

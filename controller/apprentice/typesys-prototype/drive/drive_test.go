@@ -253,3 +253,26 @@ func TestRunQuorum(t *testing.T) {
 		}
 	}
 }
+
+// A literal is an introduction: echo runs with the flag the model wrote,
+// and the next run, learned, runs it again with no ask. A literal copying
+// what the frame holds is refused, naming the $n to cut instead.
+func TestRunIntroduces(t *testing.T) {
+	var mem model.Memory
+	for run, goal := range []string{"hello", "world"} {
+		s := &scripted{guards: map[string]string{
+			"act 2": `true ? "$2 '-n' $1" : null`,
+			"act 3": `true ? "return 0 $3" : null`,
+		}}
+		m, v, err := Run(newMachine(t, []string{"echo"}, mem), []byte(goal), s, Exec{})
+		if r, _ := v.(map[string]any); err != nil || r["stdout"] != goal || len(s.asks) != []int{2, 0}[run] {
+			t.Fatalf("run %d: %#v %v after %d asks", run, v, err, len(s.asks))
+		}
+		mem = m.Memory
+	}
+	s := &scripted{guards: map[string]string{"act 2": `true ? "$2 'ell' $1" : null`}}
+	Run(newMachine(t, []string{"echo"}, nil), []byte("hello"), s, Exec{})
+	if len(s.asks) < 2 || !strings.Contains(s.asks[1].Reason, "'ell' copies text $1 holds") {
+		t.Fatalf("asks %+v", s.asks)
+	}
+}

@@ -11,6 +11,8 @@ package model
 // stored there selects one, or startles the model, whose guard is committed
 // as one more implementation and its own template run. Every $n a frame
 // holds is in its key, so every guard is stored: nothing runs unlearned.
+// A literal the model writes is an introduction, refused at commit when it
+// copies text the frame holds, so what can be cut is cut.
 // A template's operator is one tree edge: an act pushes a leaf the world
 // runs, a delegation a child, a return pops into the parent. A bound
 // exhausted pops too, with an error observation.
@@ -320,6 +322,15 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 		}
 		if err != nil {
 			return m.ask(err.Error())
+		}
+		for _, a := range t.Args {
+			if a.Lit == nil {
+				continue
+			}
+			if _, n, ok := f.Introduce(*a.Lit); !ok {
+				return m.ask(fmt.Sprintf("'%s' copies text $%d holds: take that part of $%d instead of writing it",
+					a.Lit.Str, n, n))
+			}
 		}
 		links[i], chain[i].Instr = Link{Cond: l.Cond, Template: t}, t.Text()
 	}
