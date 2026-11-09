@@ -490,6 +490,13 @@ only when they hold the same tools. Memory stays at exact keys; the class
 is a reuse rule over them (Reuse rules, below), and trials refute it. The
 memory root leaves classes out, as it leaves out the constants.
 
+**The declaration is the person's responsibility.** A class asserts that
+its tools do the same job; the system cannot check what a tool means, and
+does not try to. Trials are a backstop, not a proof: they catch a wrong
+class only where it shows, as outputs of another shape or outputs the
+learned guards tell apart. Declare a class only for tools that answer the
+same goals the same way.
+
 ### The grant
 
 The observation that instantiates the entry scope:
@@ -795,6 +802,17 @@ too. A frame that borrowed and then exhausts a bound refutes its classes
 as well. Refutation is final and outlives the run, kept in memory beside
 the keys: reuse happens only under a class not refuted at that point
 (Machine.lean's `borrow_sound`, `go_refuted`).
+
+**What a trial cannot see.** A trial judges by the guards learned with the
+original member, so it is only as strong as they are. In the live eval
+(drive's `TestClaudeClasses`), `cat` and `wc` declared one class: the
+return Claude wrote with `cat` was `size($4) > 0 ? "return 0 $4"`, which
+selects for `wc`'s counts as for `cat`'s text, so the class stood and
+`wc`'s counts came back as the file's contents, exit 0. Undeclared, the
+model asked at the `wc` child returned 1: `wc` cannot show contents. A
+wrong class turns an honest failure into a wrong answer, which is why the
+declaration is the person's to get right. `cat` and `head`, and `ls` and
+`find`, each saved the second child every ask, with right answers.
 
 **Sharing across trees is the exact rule.** Memory is global: any frame
 whose complete scope, global and local, matches a key counts the
