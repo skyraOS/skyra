@@ -226,7 +226,8 @@ variable {A K : Type} [DecidableEq K]
 
 def reaches (E : Env A K) : DefLoc → String → List DefLoc := fun _ name => E.program.reach name
 
-def keyOf (E : Env A K) (f : Frame) : Key := key (fun _ => E.root) f
+/-- The key a frame decides at: its key, each definition by its class. -/
+def keyOf (E : Env A K) (f : Frame) : Key := E.program.classKey (key (fun _ => E.root) f)
 
 /-- An act's edge: the leaf pushed, running the tool on the values past
 it; the leaf, the tree, the tool and its arguments. -/
@@ -398,6 +399,15 @@ eliminates and introduces is never seen. -/
 theorem recorded_key (rootOf : DefLoc → DefLoc) (f : Frame) (t : Template) :
     key rootOf (f.append (recorded t)) = key rootOf f := by
   simp [key, seen, Frame.append, arrivals_append, arrivals_nil (recorded_live t)]
+
+/-- So too the key the machine decides at, through the program's classes. -/
+theorem recorded_keyOf (E : Env A K) (f : Frame) (t : Template) :
+    keyOf E (f.append (recorded t)) = keyOf E f := by
+  simp only [keyOf, recorded_key]
+
+/-- With no classes, the machine decides at the frame's key itself. -/
+theorem keyOf_unclassed (E : Env A K) (h : E.program.classes = []) (f : Frame) :
+    keyOf E f = key (fun _ => E.root) f := classKey_none h _
 
 /-! ## What the machine runs is stored
 

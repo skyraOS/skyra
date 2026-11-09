@@ -477,8 +477,20 @@ program {
     defs:     [ def B … ]                               in order: $1 …
     context:  [ interface … ]                               then context
   }
+  classes: [                     definitions declared interchangeable, default none
+    { class: def C, members: [ def B … ] }
+  ]
 }
 ```
+
+**A class is the program saying two definitions are interchangeable.** A
+key holds the class in place of each member, so what is learned with one
+member runs with another at the same position: an implementation names
+tools by position, never by name. Nothing else is reused across
+definitions; reuse between two tools is only ever what a person declared
+(Model.lean's `classOf_eq`). The memory root leaves classes out, as it
+leaves out the constants: they change which keys meet, not what a key
+means.
 
 ### The grant
 
@@ -497,7 +509,9 @@ grant {
 
 1. **The program is well formed:** `k ≥ 1`, the floor is a level, `ι` is
    in [0, 1], the quorum is at least 1, global names are sorted and each once, and no definition
-   fits both `act`'s first position and `delegate`'s.
+   fits both `act`'s first position and `delegate`'s. Each class is named
+   once, by no definition the program reaches; each member is in one
+   class; a class's members are all tools or all models.
 2. **The grant's interface is the entry scope**, position by position: the
    definition at each position is that position's, by its hash, and fits
    an operator, a model or a tool; each context value has that position's
@@ -761,6 +775,11 @@ A rule gives two things:
 
 A rule is a pure function of memory, the key and the chain, so a decision
 replays.
+
+**Classes are not a reuse rule.** A rule widens what counts at a key it
+leaves exact; a class is declared by the program, before any key is made,
+and the exact rule applies to keys made through it. The key is still
+everything seen, with a member seen as its class.
 
 **Sharing across trees is the exact rule.** Memory is global: any frame
 whose complete scope, global and local, matches a key counts the

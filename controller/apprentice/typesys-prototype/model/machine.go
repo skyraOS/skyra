@@ -90,6 +90,7 @@ const (
 type Shown struct {
 	Role   Role
 	Tool   DefLoc
+	Class  *Class // the tool's class, when the program declares one
 	Value  any
 	Origin string
 }
@@ -238,7 +239,10 @@ func (m Machine) step(fid InstLoc, e Edge) (Tree, bool) {
 	return m.Tree.Step(m.Ids, m.Program.Constants.Act, reaches, fid, e)
 }
 
-func (m Machine) key(f Frame) Key { return f.Key(func(DefLoc) DefLoc { return m.root }) }
+// key is the key a frame decides at: its key, each definition by its class.
+func (m Machine) key(f Frame) Key {
+	return m.Program.ClassKey(f.Key(func(DefLoc) DefLoc { return m.root }))
+}
 
 // genesis pushes the first frame: the goal, then the tools.
 func (m Machine) genesis(goal any) (Machine, any, error) {
@@ -373,7 +377,7 @@ func (m Machine) ask(r *Refusal, reason string) (Machine, any, error) {
 	for i, it := range f.Items() {
 		switch {
 		case it.Tag == ItemTool:
-			scope = append(scope, Shown{Role: RoleTool, Tool: it.Tool})
+			scope = append(scope, Shown{Role: RoleTool, Tool: it.Tool, Class: m.Program.classOfTool(it.Tool)})
 		case i == 0:
 			scope = append(scope, Shown{Role: RoleGoal, Value: itemValue(f, 1, it)})
 		case it.Tag == ItemElim:

@@ -297,12 +297,16 @@ structure Constants where
 
 /-- A program: the definition a process is instantiated from. The language
 version, its constants, its global scope by name, each name's interface,
-and the entry scope its grant must have. -/
+and the entry scope its grant must have. Its classes are definitions it
+declares interchangeable, each a name and its members: a key holds the
+class in place of each member, so what is learned with one is reused with
+the others. -/
 structure Program where
   version : DefLoc
   constants : Constants
   global : List (String × Iface)
   entry : Scope
+  classes : List (DefLoc × List DefLoc) := []
 
 /-- The definitions an operator reaches: the alternatives of the sum at
 its interface's first position. `act`'s are the program's tools,
@@ -312,13 +316,32 @@ def Program.reach (p : Program) (name : String) : List DefLoc :=
   | some (.op _ (.sum alts :: _)) => alts.filterMap fun | .defn b => some b | _ => none
   | _ => []
 
+/-- A program's classes are well formed: each class named once, and no
+name a definition the program reaches; each member in one class; a class's
+members all tools or all models. -/
+def Program.classesWellFormed (p : Program) : Bool :=
+  decide (p.classes.map (·.1)).Nodup && decide (p.classes.flatMap (·.2)).Nodup &&
+    p.classes.all fun c => c.1 ∉ p.reach "act" ++ p.reach "delegate" &&
+      (c.2.all (· ∈ p.reach "act") || c.2.all (· ∈ p.reach "delegate"))
+
 /-- Boot's first check: the program is well formed. -/
 def Program.wellFormed (p : Program) : Bool :=
-  1 ≤ p.constants.act && 1 ≤ p.constants.transitions && 1 ≤ p.constants.refinements &&
+  (1 ≤ p.constants.act && 1 ≤ p.constants.transitions && 1 ≤ p.constants.refinements &&
     0 < p.constants.inhibition.2 && p.constants.inhibition.1 ≤ p.constants.inhibition.2 &&
     1 ≤ p.constants.floor && p.constants.floor ≤ 4 && 1 ≤ p.constants.quorum &&
     decide (p.global.map (·.1)).Nodup &&
-    (p.reach "act").all (· ∉ p.reach "delegate")
+    (p.reach "act").all (· ∉ p.reach "delegate")) && p.classesWellFormed
+
+/-- A definition's class: the class it is a member of, or itself. -/
+def Program.classOf (p : Program) (b : DefLoc) : DefLoc :=
+  match p.classes.find? (fun c => decide (b ∈ c.2)) with
+  | some c => c.1
+  | none => b
+
+/-- An interface as a key holds it: a definition by its class. -/
+def Program.classIface (p : Program) : Iface → Iface
+  | .defn b => .defn (p.classOf b)
+  | i => i
 
 /-- A key: what has been seen. Its root is its program's `H(version,
 global)`; then its kind; then the scope's interfaces and each arrival's,
@@ -328,6 +351,9 @@ structure Key where
   kind : Kind
   seen : List Iface
   deriving DecidableEq
+
+/-- A key as memory holds it: each definition seen by its class. -/
+def Program.classKey (p : Program) (k : Key) : Key := { k with seen := k.seen.map p.classIface }
 
 /-- Memory, the call graph: each key to its refinement, 59's, holding the
 implementations authored there as voters; `none` for a key never seen. -/
@@ -643,7 +669,98 @@ fits `delegate`. -/
 theorem toolTypes_not_model {p : Program} (hw : p.wellFormed = true) {entries : List Iface} {b : DefLoc}
     (hb : b ∈ toolTypes (p.reach "act") entries) : b ∉ p.reach "delegate" := by
   simp only [Program.wellFormed, Bool.and_eq_true, List.all_eq_true, decide_eq_true_eq] at hw
-  exact hw.2 b (mem_toolTypes.mp hb).2
+  exact hw.1.2 b (mem_toolTypes.mp hb).2
+
+/-! ## Classes
+
+A program's classes are the only reuse across definitions: a key holds a
+class in place of each member, and every other interface as it is. -/
+
+/-- With no classes, a key is as it was. -/
+theorem classKey_none {p : Program} (h : p.classes = []) (k : Key) : p.classKey k = k := by
+  have hi : p.classIface = id := by
+    funext i; cases i <;> simp [Program.classIface, Program.classOf, h]
+  simp [Program.classKey, hi]
+
+/-- Under a list whose names are each once, one name is one entry. -/
+theorem eq_of_nodup_map {α β : Type} (f : α → β) :
+    ∀ {l : List α}, (l.map f).Nodup → ∀ {x y}, x ∈ l → y ∈ l → f x = f y → x = y
+  | [], _, _, _, hx, _, _ => absurd hx List.not_mem_nil
+  | a :: t, hn, x, y, hx, hy, e => by
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    rcases List.mem_cons.mp hx with ex | hx' <;> rcases List.mem_cons.mp hy with ey | hy'
+    · rw [ex, ey]
+    · subst ex; exact absurd ⟨y, hy', e.symm⟩ hn.1
+    · subst ey; exact absurd ⟨x, hx', e⟩ hn.1
+    · exact eq_of_nodup_map f hn.2 hx' hy' e
+
+/-- Under lists whose members are each once in all, one member is in one
+list. -/
+theorem eq_of_nodup_flatMap {α β : Type} (f : α → List β) {b : β} :
+    ∀ {l : List α}, (l.flatMap f).Nodup → ∀ {x y}, x ∈ l → y ∈ l → b ∈ f x → b ∈ f y → x = y
+  | [], _, _, _, hx, _, _, _ => absurd hx List.not_mem_nil
+  | a :: t, hn, x, y, hx, hy, bx, by' => by
+    simp only [List.flatMap_cons, List.nodup_append] at hn
+    have hd : ∀ z ∈ t, b ∈ f a → b ∈ f z → False := fun z hz ha hz' =>
+      hn.2.2 b ha b (List.mem_flatMap.mpr ⟨z, hz, hz'⟩) rfl
+    rcases List.mem_cons.mp hx with ex | hx' <;> rcases List.mem_cons.mp hy with ey | hy'
+    · rw [ex, ey]
+    · subst ex; exact (hd y hy' bx by').elim
+    · subst ey; exact (hd x hx' by' bx).elim
+    · exact eq_of_nodup_flatMap f hn.2.1 hx' hy' bx by'
+
+theorem find?_class {p : Program} {b : DefLoc} {c : DefLoc × List DefLoc}
+    (h : p.classes.find? (fun c => decide (b ∈ c.2)) = some c) : c ∈ p.classes ∧ b ∈ c.2 :=
+  ⟨List.mem_of_find?_eq_some h, by simpa using List.find?_some h⟩
+
+/-- A member keys as its class. -/
+theorem classOf_member {p : Program} (hw : p.classesWellFormed = true) {c : DefLoc × List DefLoc}
+    (hc : c ∈ p.classes) {b : DefLoc} (hb : b ∈ c.2) : p.classOf b = c.1 := by
+  simp only [Program.classesWellFormed, Bool.and_eq_true, decide_eq_true_eq] at hw
+  unfold Program.classOf
+  rcases hf : p.classes.find? (fun c => decide (b ∈ c.2)) with _ | c'
+  · exact absurd hb (by simpa using List.find?_eq_none.mp hf c hc)
+  · obtain ⟨hc', hb'⟩ := find?_class hf
+    rw [hf, eq_of_nodup_flatMap (·.2) hw.1.2 hc' hc hb' hb]
+
+/-- Two definitions a program reaches key alike only when the program
+declares them one class: what is learned with one is reused with another
+only where the program says. -/
+theorem classOf_eq {p : Program} (hw : p.classesWellFormed = true) {a b : DefLoc}
+    (ha : a ∈ p.reach "act" ++ p.reach "delegate") (hb : b ∈ p.reach "act" ++ p.reach "delegate")
+    (h : p.classOf a = p.classOf b) : a = b ∨ ∃ c ∈ p.classes, a ∈ c.2 ∧ b ∈ c.2 := by
+  have hw' := hw
+  simp only [Program.classesWellFormed, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hw'
+  have named : ∀ c ∈ p.classes, ∀ d ∈ p.reach "act" ++ p.reach "delegate", c.1 ≠ d :=
+    fun c hc d hd e => (hw'.2 c hc).1 (e ▸ hd)
+  unfold Program.classOf at h
+  rcases hfa : p.classes.find? (fun c => decide (a ∈ c.2)) with _ | ca <;>
+    rcases hfb : p.classes.find? (fun c => decide (b ∈ c.2)) with _ | cb <;>
+    simp only [hfa, hfb] at h
+  · exact .inl h
+  · exact (named cb (find?_class hfb).1 a ha h.symm).elim
+  · exact (named ca (find?_class hfa).1 b hb h).elim
+  · obtain ⟨hca, hac⟩ := find?_class hfa
+    obtain ⟨hcb, hbc⟩ := find?_class hfb
+    obtain rfl := eq_of_nodup_map (·.1) hw'.1.1 hca hcb h
+    exact .inr ⟨ca, hca, hac, hbc⟩
+
+/-- In a key, two interfaces agree only when they are one, or two members
+of one declared class. -/
+theorem classIface_eq {p : Program} (hw : p.classesWellFormed = true) {i j : Iface}
+    (hi : ∀ a, i = .defn a → a ∈ p.reach "act" ++ p.reach "delegate")
+    (hj : ∀ b, j = .defn b → b ∈ p.reach "act" ++ p.reach "delegate")
+    (h : p.classIface i = p.classIface j) :
+    i = j ∨ ∃ c ∈ p.classes, ∃ a b, i = .defn a ∧ j = .defn b ∧ a ∈ c.2 ∧ b ∈ c.2 := by
+  cases i <;> cases j
+  case defn.defn a b =>
+    simp only [Program.classIface, Iface.defn.injEq] at h
+    rcases classOf_eq hw (hi a rfl) (hj b rfl) h with rfl | ⟨c, hc, ha, hb⟩
+    · exact .inl rfl
+    · exact .inr ⟨c, hc, a, b, rfl, rfl, ha, hb⟩
+  all_goals first
+    | exact .inl h
+    | simp [Program.classIface] at h
 
 /-- A scope passing a subset of another's definitions passes a subset of
 its tools. -/

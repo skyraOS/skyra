@@ -157,6 +157,52 @@ func TestRunDelegates(t *testing.T) {
 	}
 }
 
+// Declared one class, ls and find key alike: the root hands the goal to
+// an ls child, then to a find child, which runs what the ls child learned
+// without asking. The ask says so. Undeclared, the find child asks too.
+func TestRunClasses(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lister := model.Class{Class: "lister", Members: []model.DefLoc{"ls", "find"}}
+	for _, c := range []struct {
+		classes []model.Class
+		asks    int
+	}{{[]model.Class{lister}, 5}, {nil, 7}} {
+		s := &scripted{guards: map[string]string{
+			"delegate 3": `true ? "delegate(goal($1), $2)" : null`, // $1 goal, $2 ls, $3 find
+			"act 2":      `true ? "$2 $1" : null`,                  // $1 goal, $2 the tool
+			"act 3":      `$3.size() > 0 ? "return 0 $3" : null`,   // the tool's stdout arrived
+			"delegate 4": `true ? "delegate(goal($1), $3)" : null`, // ls's return arrived
+			"delegate 5": `true ? "return 0 $5.stdout" : null`,     // find's return arrived
+		}}
+		m, err := NewMachine(testConstants, []string{"ls", "find"}, nil, c.classes...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, v, err := Run(m, []byte(dir), s, Exec{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, _ := v.(map[string]any)
+		if out, _ := r["stdout"].(string); !strings.Contains(out, filepath.Join(dir, "only.txt")) {
+			t.Fatalf("classes %v: returned %#v", c.classes, v)
+		}
+		if len(s.asks) != c.asks {
+			t.Fatalf("classes %v: %d asks, want %d", c.classes, len(s.asks), c.asks)
+		}
+		note := "(class lister: what you write here is also run with find in its place)"
+		if shown := Render(s.asks[1]); strings.Contains(shown, note) != (c.classes != nil) {
+			t.Fatalf("classes %v: the ls child's ask:\n%s", c.classes, shown)
+		}
+	}
+	if _, err := NewMachine(testConstants, []string{"ls", "find"}, nil,
+		model.Class{Class: "ls", Members: []model.DefLoc{"find"}}); err == nil {
+		t.Fatal("a class named for a tool was booted")
+	}
+}
+
 // A guard the frame cannot run is refused with why, and the model asked
 // again: an act frame does not delegate, and a tool is run from a $n
 // holding one.

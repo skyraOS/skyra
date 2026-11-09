@@ -105,7 +105,7 @@ func Render(a model.Ask) string {
 			any = true
 			n := i + 1
 			if o.Role == model.RoleTool {
-				fmt.Fprintf(&b, "$%d: %s\n", n, o.Tool)
+				fmt.Fprintf(&b, "$%d: %s%s\n", n, o.Tool, classNote(o))
 				continue
 			}
 			text := Text(o.Value)
@@ -131,6 +131,25 @@ func Render(a model.Ask) string {
 		fmt.Fprintf(&b, "\nYour last CEL was refused: %s\n", a.Reason)
 	}
 	return b.String()
+}
+
+// classNote says what else a tool stands for: what is written with it is
+// reused, unasked, wherever one of its class's other members is here.
+func classNote(o model.Shown) string {
+	if o.Class == nil {
+		return ""
+	}
+	var others []string
+	for _, m := range o.Class.Members {
+		if m != o.Tool {
+			others = append(others, string(m))
+		}
+	}
+	if len(others) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (class %s: what you write here is also run with %s in its place)",
+		o.Class.Class, strings.Join(others, ", "))
 }
 
 // Expand is the next part of $n's value from off, up to ShowLimit bytes.

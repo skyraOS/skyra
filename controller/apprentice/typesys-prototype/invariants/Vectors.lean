@@ -634,10 +634,24 @@ def global (tools models : List Model.DefLoc) : List (String × Model.Iface) :=
 
 /-- The program: `ls` and `cat` its tools, `claude` and `gpt` its models. -/
 def prog : Model.Program :=
-  ⟨⟨"v1"⟩, consts, global [ls, cat] [claude, gpt], ⟨.root, [.defn ls, .defn cat, .defn claude, .shape .str]⟩⟩
+  ⟨⟨"v1"⟩, consts, global [ls, cat] [claude, gpt], ⟨.root, [.defn ls, .defn cat, .defn claude, .shape .str]⟩, []⟩
 
 /-- Refused: `cat` is both a tool and a model. -/
 def progOverlap : Model.Program := { prog with version := ⟨"v1-overlap"⟩, global := global [ls, cat] [claude, cat] }
+
+def lister : Model.DefLoc := ⟨"lister"⟩
+
+/-- `ls` and `cat` declared one class. -/
+def progClass : Model.Program := { prog with classes := [(lister, [ls, cat])] }
+
+/-- Refused classes: a member in two; a class named for a tool; a tool and
+a model in one; a member the program does not reach; a name twice. -/
+def progsBadClass : List Model.Program :=
+  [ { prog with classes := [(lister, [ls]), (⟨"reader"⟩, [ls, cat])] },
+    { prog with classes := [(ls, [cat])] },
+    { prog with classes := [(lister, [ls, claude])] },
+    { prog with classes := [(lister, [ls, ⟨"sed"⟩])] },
+    { prog with classes := [(lister, [ls]), (lister, [cat])] } ]
 
 def jProgram (p : Model.Program) : Json :=
   Json.mkObj [("version", .str p.version.hash),
@@ -645,7 +659,9 @@ def jProgram (p : Model.Program) : Json :=
       ("refinements", jNat p.constants.refinements),
       ("inhibition", .arr #[jNat p.constants.inhibition.1, jNat p.constants.inhibition.2]),
       ("floor", jNat p.constants.floor), ("quorum", jNat p.constants.quorum)]),
-    ("global", Json.mkObj (p.global.map fun (n, i) => (n, jIface i))), ("entry", jScope p.entry)]
+    ("global", Json.mkObj (p.global.map fun (n, i) => (n, jIface i))), ("entry", jScope p.entry),
+    ("classes", .arr (p.classes.map fun (c, ms) =>
+      Json.mkObj [("class", .str c.hash), ("members", .arr (ms.map (Json.str ·.hash)).toArray)]).toArray)]
 
 def booter (defs : List Model.DefLoc) : Model.Frame :=
   ⟨⟨"user"⟩, ⟨"program(user)"⟩, none, ⟨.root, defs.map .defn⟩, defs.map .tool, [], none⟩
@@ -654,7 +670,7 @@ def bootFile : List Json :=
   let grantDefs : List (List Model.DefLoc) := [[ls, cat, claude], [cat, ls, claude], [ls, cat], [ls, cat, gpt]]
   let contexts : List (List Shape.Value) := [[.str "/tmp/x"], [.num "3"], [], [.str "a", .str "b"]]
   let srcs : List (Option (Model.Frame × Nat)) := [none, some (booter [ls, cat, claude, gpt], 0), some (booter [ls], 2)]
-  [prog, progOverlap].flatMap fun p => grantDefs.flatMap fun ds => contexts.flatMap fun cx => srcs.map fun src =>
+  ([prog, progOverlap, progClass] ++ progsBadClass).flatMap fun p => grantDefs.flatMap fun ds => contexts.flatMap fun cx => srcs.map fun src =>
     Json.mkObj [("in", Json.mkObj [("program", jProgram p),
         ("grant", Json.mkObj [("defs", .arr (ds.map (Json.str ·.hash)).toArray), ("context", .arr (cx.map jValue).toArray)]),
         ("from", jOpt (fun (f, n) => Json.mkObj [("frame", jFrame f), ("invoke", jNat n)]) src)]),
@@ -1062,7 +1078,16 @@ def machineFile : List Json :=
   let (h, _) := runMachine lsOnly [] "list\n/nope"
     [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (failed 2 "" "ls: /nope: No such file\n"),
       wr [(.tt, ⟨.ret, [ex 1, wv 4 [.field ["stderr"]]]⟩)]]
-  [a, b, c, d, e, e2, f, g, h]
+  -- ls and cat one class: the cat child reuses what the ls child learned,
+  -- and without the class it asks.
+  let start := [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
+      .answered (.str "a.txt\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)],
+      wr [(.tt, ⟨.delegate, [wv 1, wv 3, wv 1 [ln 2 2]]⟩)]]
+  let done := wr [(.tt, ⟨.ret, [ex 0, wv 7 [.field ["stdout"]]]⟩)]
+  let (i, _) := runMachine progClass [] "show\n/tmp" (start ++ [.answered (.str "hello\n"), done])
+  let (i2, _) := runMachine prog [] "show\n/tmp" (start ++ [wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
+    .answered (.str "hello\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)], done])
+  [a, b, c, d, e, e2, f, g, h, i, i2]
 
 def files : List (String × List Json) :=
   [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/machine", machineFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),

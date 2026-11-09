@@ -90,18 +90,21 @@ const Version model.DefLoc = "skyra/61"
 const ModelDef model.DefLoc = "model"
 
 // Program is the program a shell grants its tools under: act reaches them,
-// delegate the model.
-func Program(c model.Constants, tools []string) model.Program {
+// delegate the model; the classes are tools it declares interchangeable.
+func Program(c model.Constants, tools []string, classes ...model.Class) model.Program {
 	defs := make([]model.DefLoc, len(tools))
 	for i, t := range tools {
 		defs[i] = model.DefLoc(t)
 	}
-	return model.NewProgram(Version, c, defs, []model.DefLoc{ModelDef})
+	p := model.NewProgram(Version, c, defs, []model.DefLoc{ModelDef})
+	p.Classes = classes
+	return p
 }
 
-// NewMachine is a run of the tools under the constants, over memory.
-func NewMachine(c model.Constants, tools []string, mem model.Memory) (model.Machine, error) {
-	return model.NewMachine(Ids{}, Program(c, tools), mem)
+// NewMachine is a run of the tools under the constants and classes, over
+// memory.
+func NewMachine(c model.Constants, tools []string, mem model.Memory, classes ...model.Class) (model.Machine, error) {
+	return model.NewMachine(Ids{}, Program(c, tools, classes...), mem)
 }
 
 func hash(parts ...any) string {
