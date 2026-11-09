@@ -1,11 +1,11 @@
-// Proposal 58: one base's versioned refinement, as Refine.lean defines it.
-// A version holds branches, each a CEL condition selecting an instruction.
-// The model writes a guard, a chain `c₀ ? "i₀" : c₁ ? "i₁" : null`, and never
-// sees the existing branches. The chain is stored as independent branches,
-// each new branch narrowed where it meets an older one with a different
-// instruction: the older keeps the overlap. A transition is one
-// instruction's life, ending in trust; a frame takes at most its transition bound of them,
-// and an exhausted frame returns an error observation.
+// Proposals 58 and 59: one base's versioned refinement, as Refine.lean
+// defines it. A version holds branches, each a CEL condition selecting an
+// instruction. The model writes a guard, a chain `c₀ ? "i₀" : c₁ ? "i₁" :
+// null`, and never sees the existing branches. The chain is stored whole,
+// as branches under one voter; when values arrive, the votes are tallied
+// (tally.go). A transition is one instruction's life, ending in trust; a
+// frame takes at most its transition bound of them, and an exhausted frame
+// returns an error observation.
 //
 // Everything here is pure. Which version is current, the store, and the
 // scope table are not in this file.
@@ -27,10 +27,12 @@ import (
 
 // A Branch is one condition and the instruction it selects. ID is its local
 // id, unique only within its base's refinement; Rank is the local id it was
-// first committed under, which orders it: a lower rank is older.
+// first committed under, which orders it: a lower rank is older; Voter is
+// the local id its chain was committed under (59).
 type Branch struct {
 	ID    int    `json:"id"`
 	Rank  int    `json:"rank"`
+	Voter int    `json:"voter"`
 	Cond  string `json:"cond"`  // CEL: the effective condition
 	Instr string `json:"instr"` // the instruction template it selects
 }
@@ -47,25 +49,10 @@ type Version struct {
 func EmptyVersion() Version { return Version{Next: 1, Branches: []Branch{}} }
 
 // A Link is one condition of the model's chain and its instruction, as
-// written: not yet effective, not yet narrowed.
+// written: not yet effective.
 type Link struct {
 	Cond  string
 	Instr string
-}
-
-// A Reconcile is one narrowing: the older branch, the newer one retired,
-// and the remainder added in its place.
-type Reconcile struct {
-	Older     int `json:"older"`
-	Retired   int `json:"retired"`
-	Remainder int `json:"remainder"`
-}
-
-// Possible is a pair whose overlap could not be decided at commit: the
-// older branch and the newer. A value landing in it is found by Resolve.
-type Possible struct {
-	Older int
-	Newer int
 }
 
 // The condition forms the Lean names, written as CEL. The Go writes exactly
@@ -79,24 +66,6 @@ func notAny(cs []string) string {
 		return "true"
 	}
 	return and(not(cs[0]), notAny(cs[1:]))
-}
-
-// remainder is the newer branch outside the older: a new local id, the
-// newer's rank and instruction.
-func remainder(o, n Branch, id int) Branch {
-	return Branch{ID: id, Rank: n.Rank, Cond: and(n.Cond, not(o.Cond)), Instr: n.Instr}
-}
-
-// reconcile retires the newer branch n by local id and adds its remainder.
-// Every other branch is carried unchanged: nothing is erased.
-func reconcile(v Version, o, n Branch) Version {
-	bs := make([]Branch, 0, len(v.Branches))
-	for _, b := range v.Branches {
-		if b.ID != n.ID {
-			bs = append(bs, b)
-		}
-	}
-	return Version{Next: v.Next + 1, Branches: append(bs, remainder(o, n, v.Next))}
 }
 
 // --- guards ---
@@ -442,11 +411,11 @@ func selected(bs []Branch, vals map[string]any) ([]Branch, error) {
 	return out, nil
 }
 
-// A Selection is distinguish's outcome: null, one instruction, or a
-// conflict.
+// A Selection is a tally's outcome: null, one instruction, or a conflict.
 type Selection struct {
 	Kind  SelectionKind
 	Instr string // for SelectOne
+	Level int    // for SelectOne from a tally: the level it was decided at
 }
 
 type SelectionKind uint8
@@ -460,7 +429,8 @@ const (
 // Distinguish selects: null when nothing selects the values, one
 // instruction when every selected branch agrees on it, otherwise a
 // conflict. Two branches selecting one instruction are not a conflict. The
-// outcome does not depend on the branches' order.
+// outcome does not depend on the branches' order. It is the tally at ι = 0,
+// at the exact level only (Lean: distinguish_tally).
 func Distinguish(bs []Branch, vals map[string]any) (Selection, error) {
 	sel, err := selected(bs, vals)
 	if err != nil {
@@ -479,116 +449,32 @@ func Distinguish(bs []Branch, vals map[string]any) (Selection, error) {
 
 // --- commit ---
 
-// narrow narrows a new branch against each older one with a different
-// instruction: where the overlap is decided, the new branch is retired and
-// its remainder taken; where it is not, the pair is possibly overlapping.
-func narrow(olds []Branch, next int, cur Branch) (Branch, int, []Reconcile, []Possible, error) {
-	var recs []Reconcile
-	var poss []Possible
-	for _, o := range olds {
-		if o.Instr == cur.Instr {
-			continue
-		}
-		overlap, decided, err := Overlaps(o.Cond, cur.Cond)
-		if err != nil {
-			return Branch{}, 0, nil, nil, err
-		}
-		switch {
-		case !decided:
-			poss = append(poss, Possible{Older: o.ID, Newer: cur.ID})
-		case overlap:
-			recs = append(recs, Reconcile{Older: o.ID, Retired: cur.ID, Remainder: next})
-			cur = remainder(o, cur, next)
-			next++
-		}
-	}
-	return cur, next, recs, poss, nil
-}
-
 // CommitGuard is startle's commit: the new version is the current branches,
-// unchanged, plus the guard's branches, each with its effective condition
-// and already narrowed. The raw new branch is retired and its remainder
-// added at once.
-func CommitGuard(v Version, guard string) (Version, []Reconcile, []Possible, error) {
+// unchanged, plus the guard's, whole, each with its effective condition.
+func CommitGuard(v Version, guard string) (Version, error) {
 	chain, err := ParseGuard(guard)
 	if err != nil {
-		return Version{}, nil, nil, err
+		return Version{}, err
 	}
-	return CommitChain(v, chain)
+	return CommitChain(v, chain), nil
 }
 
-// CommitChain commits a stored chain (StoreGuard's).
-func CommitChain(v Version, chain []Link) (Version, []Reconcile, []Possible, error) {
-	out := Version{Branches: slices.Clone(v.Branches)}
-	var recs []Reconcile
-	var poss []Possible
-	next := v.Next
+// CommitChain commits a stored chain (StoreGuard's) as one new voter, named
+// by the local id of its first branch. Nothing is narrowed: a branch that
+// overlaps an older one with a different instruction is a dissenting vote,
+// counted when values arrive.
+func CommitChain(v Version, chain []Link) Version {
+	out := Version{Next: v.Next + len(chain), Branches: slices.Clone(v.Branches)}
 	var prev []string
-	for _, l := range chain {
-		raw := Branch{ID: next, Rank: next, Cond: and(l.Cond, notAny(prev)), Instr: l.Instr}
-		b, nx, rs, ps, err := narrow(v.Branches, next+1, raw)
-		if err != nil {
-			return Version{}, nil, nil, err
-		}
-		out.Branches = append(out.Branches, b)
-		recs, poss = append(recs, rs...), append(poss, ps...)
-		next = nx
+	for k, l := range chain {
+		out.Branches = append(out.Branches, Branch{ID: v.Next + k, Rank: v.Next + k, Voter: v.Next,
+			Cond: and(l.Cond, notAny(prev)), Instr: l.Instr})
 		prev = append(prev, l.Cond)
 	}
-	out.Next = next
 	if out.Branches == nil {
 		out.Branches = []Branch{}
 	}
-	return out, recs, poss, nil
-}
-
-// --- conflicts found later ---
-
-// lowest is the oldest branch: the lowest rank, the first on a tie.
-func lowest(bs []Branch) (Branch, bool) {
-	if len(bs) == 0 {
-		return Branch{}, false
-	}
-	m := bs[0]
-	for _, b := range bs[1:] {
-		if b.Rank < m.Rank {
-			m = b
-		}
-	}
-	return m, true
-}
-
-// Resolve settles the values: each conflict is reconciled, the oldest
-// selected branch keeping the overlap against the oldest that disagrees
-// with it, until the outcome is null or one instruction. Each reconcile
-// takes one branch away from the values, so it ends within the branches
-// there are.
-func Resolve(v Version, vals map[string]any) (Selection, Version, []Reconcile, error) {
-	var recs []Reconcile
-	for fuel := len(v.Branches); fuel > 0; fuel-- {
-		sel, err := selected(v.Branches, vals)
-		if err != nil {
-			return Selection{}, Version{}, nil, err
-		}
-		o, ok := lowest(sel)
-		if !ok {
-			break
-		}
-		var other []Branch
-		for _, b := range sel {
-			if b.Instr != o.Instr {
-				other = append(other, b)
-			}
-		}
-		n, ok := lowest(other)
-		if !ok {
-			break
-		}
-		recs = append(recs, Reconcile{Older: o.ID, Retired: n.ID, Remainder: v.Next})
-		v = reconcile(v, o, n)
-	}
-	s, err := Distinguish(v.Branches, vals)
-	return s, v, recs, err
+	return out
 }
 
 // --- after startle ---
@@ -602,10 +488,9 @@ type After struct {
 
 // AfterStartle evaluates over the version the step committed, never the
 // live HEAD. It runs the instruction its own model's chain gives the values,
-// whatever that version selects: an older branch committed concurrently
-// keeps the stored values, and the step runs its own instruction once,
-// unlearned.
-func AfterStartle(chain []Link, committed []Branch, vals map[string]any) (After, error) {
+// whatever that version's tally selects: other voters may outvote it, and
+// the step runs its own instruction once, unlearned.
+func AfterStartle(chain []Link, committed []Branch, vals map[string]any, t Tally) (After, error) {
 	for _, l := range chain {
 		ok, err := holds(l.Cond, vals)
 		if err != nil {
@@ -614,166 +499,14 @@ func AfterStartle(chain []Link, committed []Branch, vals map[string]any) (After,
 		if !ok {
 			continue
 		}
-		s, err := Distinguish(committed, vals)
+		votes, err := Cast(committed, vals)
 		if err != nil {
 			return After{}, err
 		}
+		s := t.Decide(votes)
 		return After{Instr: l.Instr, Learned: s.Kind == SelectOne && s.Instr == l.Instr}, nil
 	}
 	return After{Startle: true}, nil
-}
-
-// --- deciding overlap ---
-
-// Overlaps decides whether two conditions can hold of one value. It decides
-// exactly when both are Boolean combinations of comparisons of one variable
-// with numeric constants, testing every half-point around each constant;
-// anything else is undecided, and the pair is possibly overlapping.
-func Overlaps(p, q string) (overlap, decided bool, err error) {
-	ep, err := parseCond(p)
-	if err != nil {
-		return false, false, err
-	}
-	eq, err := parseCond(q)
-	if err != nil {
-		return false, false, err
-	}
-	var name string
-	var ks []float64
-	if !interval(ep, &name, &ks) || !interval(eq, &name, &ks) {
-		return false, false, nil
-	}
-	points := []float64{0}
-	if len(ks) > 0 {
-		points = points[:0]
-		for _, k := range ks {
-			points = append(points, k-0.5, k, k+0.5)
-		}
-	}
-	for _, x := range points {
-		if at(ep, x) && at(eq, x) {
-			return true, true, nil
-		}
-	}
-	return false, true, nil
-}
-
-func parseCond(c string) (ast.Expr, error) {
-	parsed, iss := parseEnv.Parse(c)
-	if iss != nil && iss.Err() != nil {
-		return nil, iss.Err()
-	}
-	return parsed.NativeRep().Expr(), nil
-}
-
-var comparisons = []string{operators.Greater, operators.GreaterEquals, operators.Less,
-	operators.LessEquals, operators.Equals, operators.NotEquals}
-
-// interval reports whether e is in the decidable fragment, collecting its
-// constants. Every comparison must read the same one variable.
-func interval(e ast.Expr, name *string, ks *[]float64) bool {
-	switch e.Kind() {
-	case ast.LiteralKind:
-		_, ok := e.AsLiteral().(types.Bool)
-		return ok
-	case ast.CallKind:
-		c := e.AsCall()
-		args := c.Args()
-		switch fn := c.FunctionName(); {
-		case fn == operators.LogicalAnd || fn == operators.LogicalOr:
-			return interval(args[0], name, ks) && interval(args[1], name, ks)
-		case fn == operators.LogicalNot:
-			return interval(args[0], name, ks)
-		case slices.Contains(comparisons, fn):
-			ref, ok := path(args[0])
-			if !ok {
-				return false
-			}
-			k, ok := constant(args[1])
-			if !ok || (*name != "" && *name != ref) {
-				return false
-			}
-			*name = ref
-			*ks = append(*ks, k)
-			return true
-		}
-	}
-	return false
-}
-
-// path is a reference as one name: a position, then fields by key
-// (arrived.size, arrived["content-type"]).
-func path(e ast.Expr) (string, bool) {
-	switch e.Kind() {
-	case ast.IdentKind:
-		return e.AsIdent(), true
-	case ast.SelectKind:
-		sel := e.AsSelect()
-		if sel.IsTestOnly() {
-			return "", false
-		}
-		op, ok := path(sel.Operand())
-		return op + "." + sel.FieldName(), ok
-	case ast.CallKind:
-		c := e.AsCall()
-		if c.FunctionName() != operators.Index {
-			return "", false
-		}
-		key, ok := literalString(c.Args()[1])
-		if !ok {
-			return "", false
-		}
-		op, ok := path(c.Args()[0])
-		return op + "[" + key + "]", ok
-	}
-	return "", false
-}
-
-func constant(e ast.Expr) (float64, bool) {
-	if e.Kind() != ast.LiteralKind {
-		return 0, false
-	}
-	switch n := e.AsLiteral().(type) {
-	case types.Int:
-		return float64(n), true
-	case types.Uint:
-		return float64(n), true
-	case types.Double:
-		return float64(n), n == n // not NaN
-	}
-	return 0, false
-}
-
-// at evaluates an expression of the decidable fragment at x.
-func at(e ast.Expr, x float64) bool {
-	if e.Kind() == ast.LiteralKind {
-		return bool(e.AsLiteral().(types.Bool))
-	}
-	c := e.AsCall()
-	args := c.Args()
-	switch c.FunctionName() {
-	case operators.LogicalAnd:
-		return at(args[0], x) && at(args[1], x)
-	case operators.LogicalOr:
-		return at(args[0], x) || at(args[1], x)
-	case operators.LogicalNot:
-		return !at(args[0], x)
-	}
-	k, _ := constant(args[1])
-	switch c.FunctionName() {
-	case operators.Greater:
-		return x > k
-	case operators.GreaterEquals:
-		return x >= k
-	case operators.Less:
-		return x < k
-	case operators.LessEquals:
-		return x <= k
-	case operators.Equals:
-		return x == k
-	default:
-		return x != k
-	}
 }
 
 // --- transitions and the transition bound ---
@@ -786,7 +519,7 @@ const (
 	StateReject
 	StateHesitate
 	StateStartle
-	StateReconcile
+	StateTally // a count that did not settle the instruction run: a conflict, or a commit counted
 	StateTrust
 )
 

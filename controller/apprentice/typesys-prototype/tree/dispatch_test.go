@@ -6,41 +6,49 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 var stateNames = map[State]string{StateReject: "reject", StateHesitate: "hesitate",
-	StateStartle: "startle", StateReconcile: "reconcile", StateTrust: "trust"}
+	StateStartle: "startle", StateTally: "tally", StateTrust: "trust"}
+
+// letters are the dispatch vectors' instructions, each granted as a tool
+// of its own: the k-th letter is $(k+2), after the goal.
+var letters = []string{"A", "B", "C", "D", "E", "F"}
 
 // sizedBase is where {"size": x} arrives as a goal declared json, at a
-// root granted the tool t.
-var sizedBase = standIn.Return(standIn.Input(GoalContract, []string{standIn.Tool("t")}), `{"size":number}`)
+// root granted the letters.
+var sizedBase = func() string {
+	bases := make([]string, len(letters))
+	for i, l := range letters {
+		bases[i] = standIn.Tool(l)
+	}
+	return standIn.Return(standIn.Input(GoalContract, bases), `{"size":number}`)
+}()
 
 // The dispatch vectors' instructions are opaque letters and their guards
 // read the goal as $1. An instruction is only parameters, so the replay
-// grants the tool t, $2 after the goal, and writes the k-th letter as t
-// run with itself k+1 times: "C" is written "$2 $2 $2 $2", stored as
-// @passed[0] four times, run as four numbered slots, and read back as "C".
+// writes the k-th letter as the tool $(k+2) run bare: "C" is written "$4",
+// stored as @passed[2], and read back as "C". Distinct letters are distinct
+// tools, so a tally groups them apart at every level, as the Lean does.
 var (
 	asTool = regexp.MustCompile(`"([A-Z])"`)
-	stored = regexp.MustCompile(`@passed\[[0-9]+\]( @passed\[[0-9]+\])+`)
+	stored = regexp.MustCompile(`@passed\[([0-9]+)\]`)
 )
 
-func letterRun(l byte, ref string) string {
-	return ref + strings.Repeat(" "+ref, int(l-'A')+1)
-}
-
 func fromTool(s string) string {
-	return stored.ReplaceAllStringFunc(s, func(run string) string {
-		return string(rune('A' + strings.Count(run, "@") - 2))
+	return stored.ReplaceAllStringFunc(s, func(ref string) string {
+		k, _ := strconv.Atoi(stored.FindStringSubmatch(ref)[1])
+		return letters[k]
 	})
 }
 
 func toolWrites(ws []string) []string {
 	out := make([]string, len(ws))
 	for i, w := range ws {
-		out[i] = asTool.ReplaceAllStringFunc(w, func(q string) string { return `"` + letterRun(q[1], "$2") + `"` })
+		out[i] = asTool.ReplaceAllStringFunc(w, func(q string) string { return `"$` + itoa(int(q[1]-'A')+2) + `"` })
 	}
 	return out
 }
@@ -60,9 +68,10 @@ func untool(t *testing.T, v Version) any {
 
 // decideOnce runs one arrival of {"size": x} against r, answering each ask
 // with the next write: what Dispatch.decide gives.
-func decideOnce(t *testing.T, r Version, x int64, refinements int, writes []string) (map[string]any, Version) {
+func decideOnce(t *testing.T, r Version, x int64, refinements int, tl Tally, writes []string) (map[string]any, Version) {
 	t.Helper()
-	m := NewMachine(standIn, nil, map[string]Version{sizedBase: r}, Bounds{Transitions: 64, Refinements: refinements, Act: 1}, []string{"t"})
+	m := NewMachine(standIn, nil, map[string]Version{sizedBase: r},
+		Bounds{Transitions: 64, Refinements: refinements, Act: len(letters), Tally: tl}, letters)
 	m.stack[0].frame.Pending.Output = OutputJSON
 	m, eff, err := m.Step(Answered{Bytes: []byte(`{"size":` + itoa(int(x)) + `}`)})
 	if err != nil {
@@ -90,7 +99,7 @@ func decideOnce(t *testing.T, r Version, x int64, refinements int, writes []stri
 		"instr": nil, "learned": false, "ended": false}
 	switch e := eff.(type) {
 	case RunInvoke:
-		out["instr"], out["learned"] = fromTool(e.Contract), m.Learned()
+		out["instr"], out["learned"] = e.Argv[0], m.Learned()
 	case Exhausted:
 		out["ended"] = true
 	}
@@ -103,7 +112,7 @@ func toolVersion(t *testing.T, raw json.RawMessage) Version {
 	v := dec[Version](t, raw)
 	for i := range v.Branches {
 		if v.Branches[i].Instr != "" {
-			v.Branches[i].Instr = letterRun(v.Branches[i].Instr[0], Passed(0).ref())
+			v.Branches[i].Instr = Passed(int(v.Branches[i].Instr[0] - 'A')).ref()
 		}
 	}
 	return v
@@ -113,8 +122,9 @@ func toolVersion(t *testing.T, raw json.RawMessage) Version {
 func init() {
 	replays["dispatch"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		x, max := dec[int64](t, in["x"]), dec[int](t, in["refinementBound"])
-		first, r := decideOnce(t, toolVersion(t, in["refinement"]), x, max, toolWrites(dec[[]string](t, in["writes"])))
-		again, _ := decideOnce(t, r, x, max, nil)
+		tl := tallyOf(t, in)
+		first, r := decideOnce(t, toolVersion(t, in["refinement"]), x, max, tl, toolWrites(dec[[]string](t, in["writes"])))
+		again, _ := decideOnce(t, r, x, max, tl, nil)
 		return map[string]any{"first": first, "again": again}
 	}
 }

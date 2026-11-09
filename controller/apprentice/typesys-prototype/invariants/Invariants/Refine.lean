@@ -1,11 +1,12 @@
-/-! Proposal 58: one base's versioned refinement. A refinement holds
-branches, each a condition (CEL, abstracted here as `Cond`) selecting an
-instruction. The model writes a guard, a chain of conditions, and never sees
-the existing branches; the system stores the chain as independent branches,
-narrows each new branch where it meets an older one with a different
-instruction (the older keeps the overlap), and selects. A transition is
-one instruction's life, ending in `trust`; a frame takes at most its transition bound
-of them, and an exhausted frame returns an error.
+/-! Proposals 58 and 59: one base's versioned refinement. A refinement
+holds branches, each a condition (CEL, abstracted here as `Cond`)
+selecting an instruction. The model writes a guard, a chain of conditions,
+and never sees the existing branches; the system stores the chain whole,
+as branches under one voter. When values arrive, each voter whose branch
+selects them casts that branch's instruction, and `tally` counts the votes
+(59). A transition is one instruction's life, ending in `trust`; a frame
+takes at most its transition bound of them, and an exhausted frame returns
+an error.
 
 Everything here is pure. Which version is current, the store, and the
 scope table are not in this module. -/
@@ -45,10 +46,12 @@ theorem notAny_eval {sat : A → V → Bool} :
 
 /-- A branch. `id` is its local id, unique only within its base's
 refinement; `rank` is the local id it was first committed under, which
-orders it: a lower rank is older. -/
+orders it: a lower rank is older; `voter` is the local id its chain was
+committed under. -/
 structure Branch (A I : Type) where
   id : Nat
   rank : Nat
+  voter : Nat
   cond : Cond A
   instr : I
   deriving Repr, DecidableEq
@@ -159,452 +162,519 @@ theorem distinguish_perm (h : bs.Perm bs') : distinguish sat bs v = distinguish 
       cases ho
     | conflict => rfl
 
-omit [DecidableEq I] in
-/-- Retiring a branch never widens another: what the rest select is
-unchanged. -/
-theorem retire_selected (k : Nat) :
-    selected sat (bs.filter (·.id != k)) v = (selected sat bs v).filter (·.id != k) := by
-  simp only [selected, List.filter_filter, Bool.and_comm]
-
 end
 
-/-! ## Reconciling: the older keeps the overlap -/
-
-/-- The newer branch's remainder outside the older: a new local id, the
-newer's rank and instruction. -/
-def remainder (o n : Branch A I) (id : Nat) : Branch A I :=
-  { id, rank := n.rank, cond := .and n.cond (.not o.cond), instr := n.instr }
-
-/-- Retire the newer branch `n` by local id and add its remainder. -/
-def reconcile (r : Refinement A I) (o n : Branch A I) : Refinement A I :=
-  { next := r.next + 1,
-    branches := r.branches.filter (·.id != n.id) ++ [remainder o n r.next] }
-
-section
-variable {sat : A → V → Bool} {r : Refinement A I} {o n b : Branch A I} {v : V}
-
-theorem remainder_rank : (remainder o n k).rank = n.rank := rfl
-theorem remainder_instr : (remainder o n k).instr = n.instr := rfl
-
-/-- In the overlap the older keeps the values: the remainder never selects
-what the older selects. -/
-theorem remainder_disjoint (h : o.selects sat v = true) : (remainder o n k).selects sat v = false := by
-  simp_all [remainder, Branch.selects, Cond.eval]
-
-/-- Outside the older, the newer's selection is kept. -/
-theorem remainder_outside (hn : n.selects sat v = true) (ho : o.selects sat v = false) :
-    (remainder o n k).selects sat v = true := by
-  simp_all [remainder, Branch.selects, Cond.eval]
-
-theorem remainder_sub (h : (remainder o n k).selects sat v = true) : n.selects sat v = true := by
-  simp_all [remainder, Branch.selects, Cond.eval]
-
-/-- No erasure: every branch but the retired one is carried unchanged. -/
-theorem reconcile_keeps (hb : b ∈ r.branches) (hid : b.id ≠ n.id) :
-    b ∈ (reconcile r o n).branches := by
-  simp [reconcile, hb, hid]
-
-/-- The values that triggered `startle` were `null`, so no older branch
-selects them; they lie in the remainder and still select the new
-instruction. -/
-theorem witness_kept (hn : n.selects sat v = true) (hnull : selected sat r.branches v = [])
-    (ho : o ∈ r.branches) : (remainder o n k).selects sat v = true := by
-  apply remainder_outside hn
-  cases h : o.selects sat v
-  · rfl
-  · have : o ∈ selected sat r.branches v := List.mem_filter.mpr ⟨ho, h⟩
-    rw [hnull] at this; cases this
-
-theorem reconcile_wellFormed (hr : r.WellFormed) (hn : n ∈ r.branches) :
-    (reconcile r o n).WellFormed := by
-  obtain ⟨lt, ids, ranks⟩ := hr
-  have keep : ∀ b ∈ r.branches.filter (·.id != n.id), b ∈ r.branches ∧ b.id ≠ n.id := by
-    intro b hb; simpa using List.mem_filter.mp hb
-  refine ⟨?_, ?_, ?_⟩
-  · intro b hb
-    simp only [reconcile, List.mem_append, List.mem_singleton] at hb
-    rcases hb with hb | rfl
-    · obtain ⟨hb, -⟩ := keep b hb
-      exact ⟨Nat.lt_succ_of_lt (lt b hb).1, (lt b hb).2⟩
-    · exact ⟨Nat.lt_succ_self _, Nat.le_of_lt (Nat.lt_of_le_of_lt (lt n hn).2 (lt n hn).1)⟩
-  · simp only [reconcile, List.map_append, List.map_cons, List.map_nil]
-    rw [List.nodup_append]
-    refine ⟨(List.filter_sublist).map _ |>.nodup ids, by simp, ?_⟩
-    intro a ha c hc
-    simp only [List.mem_singleton] at hc
-    subst hc
-    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
-    exact Nat.ne_of_lt (lt x (keep x hx).1).1
-  · simp only [reconcile, List.map_append, List.map_cons, List.map_nil]
-    rw [List.nodup_append]
-    refine ⟨(List.filter_sublist).map _ |>.nodup ranks, by simp, ?_⟩
-    intro a ha c hc
-    simp only [List.mem_singleton] at hc
-    subst hc
-    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
-    obtain ⟨hx, hid⟩ := keep x hx
-    intro e
-    exact hid (congrArg Branch.id (nodup_map_inj ranks hx hn e))
-
-end
-
-/-! ## Commit: the model's chain, narrowed against the older branches -/
+/-! ## Commit: the model's chain, stored whole -/
 
 /-- The branches of a chain `c₀ ? i₀ : c₁ ? i₁ : … : null`, each with its
 effective condition (its own, and no earlier one in the chain), local ids
-and ranks from `next`. -/
-def chainBranches : Nat → List (Cond A) → List (Cond A × I) → List (Branch A I)
+and ranks from `next`, and all under one voter. -/
+def chainBranches (voter : Nat) : Nat → List (Cond A) → List (Cond A × I) → List (Branch A I)
   | _, _, [] => []
   | next, prev, (c, i) :: rest =>
-    { id := next, rank := next, cond := .and c (notAny prev), instr := i } ::
-      chainBranches (next + 1) (prev ++ [c]) rest
+    { id := next, rank := next, voter, cond := .and c (notAny prev), instr := i } ::
+      chainBranches voter (next + 1) (prev ++ [c]) rest
 
 /-- What the chain itself selects: its first condition that holds. -/
 def chainSelect (sat : A → V → Bool) : List (Cond A × I) → V → Option I
   | [], _ => none
   | (c, i) :: rest, v => if c.eval sat v then some i else chainSelect sat rest v
 
-/-- One reconcile: the older branch, the retired one, and the remainder. -/
-structure Record where
-  older : Nat
-  retired : Nat
-  remainder : Nat
-  deriving Repr, DecidableEq
-
-structure Narrowed (A I : Type) where
-  branch : Branch A I
-  next : Nat
-  records : List Record
-  possible : List (Nat × Nat)
-
-/-- Narrow a new branch against each older one with a different
-instruction. `overlaps` decides an overlap (`some`) or cannot (`none`):
-an undecided pair is recorded as possibly overlapping. -/
-def narrow [DecidableEq I] (overlaps : Cond A → Cond A → Option Bool) :
-    List (Branch A I) → Nat → Branch A I → Narrowed A I
-  | [], next, cur => ⟨cur, next, [], []⟩
-  | o :: os, next, cur =>
-    if o.instr = cur.instr then narrow overlaps os next cur
-    else match overlaps o.cond cur.cond with
-      | some true =>
-        let m := narrow overlaps os (next + 1) (remainder o cur next)
-        { m with records := ⟨o.id, cur.id, next⟩ :: m.records }
-      | some false => narrow overlaps os next cur
-      | none =>
-        let m := narrow overlaps os next cur
-        { m with possible := (o.id, cur.id) :: m.possible }
-
-structure Committed (A I : Type) where
-  branches : List (Branch A I)
-  next : Nat
-  records : List Record
-  possible : List (Nat × Nat)
-
-def commitChain [DecidableEq I] (overlaps : Cond A → Cond A → Option Bool)
-    (olds : List (Branch A I)) : Nat → List (Cond A) → List (Cond A × I) → Committed A I
-  | next, _, [] => ⟨[], next, [], []⟩
-  | next, prev, (c, i) :: rest =>
-    let m := narrow overlaps olds (next + 1)
-      { id := next, rank := next, cond := .and c (notAny prev), instr := i }
-    let k := commitChain overlaps olds m.next (prev ++ [c]) rest
-    ⟨m.branch :: k.branches, k.next, m.records ++ k.records, m.possible ++ k.possible⟩
-
-/-- `startle`'s commit: the new version is the current branches, unchanged,
-plus the chain's branches, each already narrowed. The raw new branch is
-retired and its remainder added at once. -/
-def commit [DecidableEq I] (overlaps : Cond A → Cond A → Option Bool) (r : Refinement A I)
-    (chain : List (Cond A × I)) : Refinement A I × List Record × List (Nat × Nat) :=
-  let k := commitChain overlaps r.branches r.next [] chain
-  (⟨k.next, r.branches ++ k.branches⟩, k.records, k.possible)
+/-- `startle`'s commit: the current branches, unchanged, and the chain's,
+whole. The chain is one new voter, named by the local id of its first
+branch. Nothing is narrowed: a branch that overlaps an older one with a
+different instruction is a dissenting vote, counted by `tally`. -/
+def commit (r : Refinement A I) (chain : List (Cond A × I)) : Refinement A I :=
+  ⟨r.next + chain.length, r.branches ++ chainBranches r.next r.next [] chain⟩
 
 section
-variable [DecidableEq I] {sat : A → V → Bool} {ov : Cond A → Cond A → Option Bool}
-  {olds : List (Branch A I)} {r : Refinement A I} {b : Branch A I}
-  {chain : List (Cond A × I)} {i : I} {v : V}
+variable {sat : A → V → Bool} {r : Refinement A I} {b : Branch A I}
+  {chain : List (Cond A × I)} {i : I} {v : V} {vt : Nat}
 
 /-- No erasure: every current branch is in the new version. -/
-theorem commit_keeps (hb : b ∈ r.branches) : b ∈ (commit ov r chain).1.branches := by
+theorem commit_keeps (hb : b ∈ r.branches) : b ∈ (commit r chain).branches := by
   simp [commit, hb]
 
-theorem narrow_instr : ∀ {os : List (Branch A I)} {nx cur}, (narrow ov os nx cur).branch.instr = cur.instr
-  | [], _, _ => rfl
-  | o :: os, nx, cur => by
-    unfold narrow
-    split
-    · exact narrow_instr
-    · split
-      · exact narrow_instr
-      · exact narrow_instr
-      · exact narrow_instr
-
-/-- Narrowing only narrows. -/
-theorem narrow_sub : ∀ {os : List (Branch A I)} {nx cur},
-    (narrow ov os nx cur).branch.selects sat v = true → cur.selects sat v = true
-  | [], _, _, h => h
-  | o :: os, nx, cur, h => by
-    unfold narrow at h
-    split at h
-    · exact narrow_sub h
-    · split at h
-      · exact remainder_sub (narrow_sub h)
-      · exact narrow_sub h
-      · exact narrow_sub h
-
-/-- Narrowing keeps whatever no older branch selects. -/
-theorem narrow_keeps : ∀ {os : List (Branch A I)} {nx cur},
-    cur.selects sat v = true → (∀ o ∈ os, o.selects sat v = false) →
-      (narrow ov os nx cur).branch.selects sat v = true
-  | [], _, _, h, _ => h
-  | o :: os, nx, cur, h, hos => by
-    have ho := hos o (by simp)
-    have hos' : ∀ o ∈ os, o.selects sat v = false := fun o' h' => hos o' (by simp [h'])
-    unfold narrow
-    split
-    · exact narrow_keeps h hos'
-    · split
-      · exact narrow_keeps (remainder_outside h ho) hos'
-      · exact narrow_keeps h hos'
-      · exact narrow_keeps h hos'
-
-/-- The overlaps decision is sound: `some false` means no value satisfies both. -/
-def Sound (sat : A → V → Bool) (ov : Cond A → Cond A → Option Bool) : Prop :=
-  ∀ p q, ov p q = some false → ∀ v, p.eval sat v = false ∨ q.eval sat v = false
-
-/-- The older keeps the overlap: a narrowed branch selects a value an older
-branch with a different instruction selects only where the pair was
-recorded as possibly overlapping. -/
-theorem narrow_older (hs : Sound sat ov) : ∀ {os : List (Branch A I)} {nx cur},
-    ∀ o ∈ os, o.instr ≠ cur.instr → o.selects sat v = true →
-      (narrow ov os nx cur).branch.selects sat v = true →
-        ∃ k, (o.id, k) ∈ (narrow ov os nx cur).possible
-  | [], _, _, o, ho, _, _, _ => by simp at ho
-  | o' :: os, nx, cur, o, ho, hne, hv, hf => by
-    by_cases heq : o'.instr = cur.instr
-    · simp only [narrow, heq, ite_true] at hf ⊢
-      rcases List.mem_cons.mp ho with rfl | ho
-      · exact absurd heq hne
-      · exact narrow_older hs o ho hne hv hf
-    · simp only [narrow, heq, ite_false] at hf ⊢
-      cases hov : ov o'.cond cur.cond with
-      | none =>
-        simp only [hov] at hf ⊢
-        rcases List.mem_cons.mp ho with rfl | ho
-        · exact ⟨cur.id, by simp⟩
-        · obtain ⟨k, hk⟩ := narrow_older hs o ho hne hv hf
-          exact ⟨k, by simp [hk]⟩
-      | some bb =>
-        cases bb
-        · simp only [hov] at hf ⊢
-          rcases List.mem_cons.mp ho with rfl | ho
-          · rcases hs _ _ hov v with h | h
-            · simp [Branch.selects, h] at hv
-            · have := narrow_sub hf; simp [Branch.selects, h] at this
-          · exact narrow_older hs o ho hne hv hf
-        · simp only [hov] at hf ⊢
-          rcases List.mem_cons.mp ho with rfl | ho
-          · have := remainder_disjoint (n := cur) (k := nx) hv
-            rw [narrow_sub hf] at this; cases this
-          · exact narrow_older hs o ho (by rwa [remainder_instr]) hv hf
-
-theorem commitChain_sub : ∀ {nx prev} {chain : List (Cond A × I)},
-    ∀ b ∈ (commitChain ov olds nx prev chain).branches, b.selects sat v = true →
-      ∀ c ∈ prev, c.eval sat v = false
-  | _, _, [], b, hb, _ => by simp [commitChain] at hb
+theorem chainBranches_sub : ∀ {nx prev} {chain : List (Cond A × I)},
+    ∀ b ∈ chainBranches vt nx prev chain, b.selects sat v = true → ∀ c ∈ prev, c.eval sat v = false
+  | _, _, [], b, hb, _ => by simp [chainBranches] at hb
   | nx, prev, (c, i) :: rest, b, hb, hv => by
-    simp only [commitChain, List.mem_cons] at hb
+    simp only [chainBranches, List.mem_cons] at hb
     rcases hb with rfl | hb
-    · have := narrow_sub hv
-      simp only [Branch.selects, Cond.eval, Bool.and_eq_true] at this
-      exact (notAny_eval.mp this.2)
+    · simp only [Branch.selects, Cond.eval, Bool.and_eq_true] at hv
+      exact notAny_eval.mp hv.2
     · intro c' hc'
-      exact commitChain_sub b hb hv c' (by simp [hc'])
+      exact chainBranches_sub b hb hv c' (by simp [hc'])
 
-/-- After `startle`, the values that were `null` select exactly the
-instruction the model's chain gives them: the new branches are disjoint,
-and narrowing keeps what no older branch selects. -/
-theorem commitChain_witness (hnull : ∀ o ∈ olds, o.selects sat v = false) :
-    ∀ {nx prev} {chain : List (Cond A × I)}, (∀ c ∈ prev, c.eval sat v = false) →
-      ∀ b ∈ (commitChain ov olds nx prev chain).branches,
-        b.selects sat v = true → chainSelect sat chain v = some b.instr
-  | _, _, [], _, b, hb, _ => by simp [commitChain] at hb
+/-- One voter, one vote: at most one of a chain's branches selects any
+values. -/
+theorem chain_one_vote : ∀ {nx prev} {chain : List (Cond A × I)},
+    (selected sat (chainBranches vt nx prev chain) v).length ≤ 1
+  | _, _, [] => by simp [chainBranches, selected]
+  | nx, prev, (c, i) :: rest => by
+    simp only [chainBranches, selected, List.filter_cons]
+    split
+    · rename_i h
+      have hc : c.eval sat v = true := by
+        simp only [Branch.selects, Cond.eval, Bool.and_eq_true] at h; exact h.1
+      rw [List.filter_eq_nil_iff.mpr (fun b hb hv => by
+        have := chainBranches_sub b hb (by simpa using hv) c (by simp)
+        rw [hc] at this; cases this)]
+      simp
+    · exact chain_one_vote
+
+theorem chainBranches_witness : ∀ {nx prev} {chain : List (Cond A × I)},
+    (∀ c ∈ prev, c.eval sat v = false) →
+      ∀ b ∈ chainBranches vt nx prev chain, b.selects sat v = true → chainSelect sat chain v = some b.instr
+  | _, _, [], _, b, hb, _ => by simp [chainBranches] at hb
   | nx, prev, (c, i) :: rest, hprev, b, hb, hv => by
-    simp only [commitChain, List.mem_cons] at hb
+    simp only [chainBranches, List.mem_cons] at hb
     rcases hb with rfl | hb
-    · have := narrow_sub hv
-      simp only [Branch.selects, Cond.eval, Bool.and_eq_true] at this
-      simp [chainSelect, this.1, narrow_instr]
-    · have hc := commitChain_sub b hb hv c (by simp)
+    · simp only [Branch.selects, Cond.eval, Bool.and_eq_true] at hv
+      simp [chainSelect, hv.1]
+    · have hc := chainBranches_sub b hb hv c (by simp)
       simp only [chainSelect, hc]
-      exact commitChain_witness hnull (fun c' h' => by
+      exact chainBranches_witness (fun c' h' => by
         rcases List.mem_append.mp h' with h' | h'
         · exact hprev c' h'
         · simp at h'; exact h' ▸ hc) b hb hv
 
-theorem commitChain_covers (hnull : ∀ o ∈ olds, o.selects sat v = false) :
-    ∀ {nx prev} {chain : List (Cond A × I)}, (∀ c ∈ prev, c.eval sat v = false) →
-      chainSelect sat chain v = some i →
-        ∃ b ∈ (commitChain ov olds nx prev chain).branches, b.selects sat v = true
+theorem chainBranches_covers : ∀ {nx prev} {chain : List (Cond A × I)},
+    (∀ c ∈ prev, c.eval sat v = false) → chainSelect sat chain v = some i →
+      ∃ b ∈ chainBranches vt nx prev chain, b.selects sat v = true
   | _, _, [], _, h => by simp [chainSelect] at h
   | nx, prev, (c, i') :: rest, hprev, h => by
     simp only [chainSelect] at h
     split at h
     · rename_i hc
-      simp only [commitChain, List.mem_cons]
-      exact ⟨_, .inl rfl, narrow_keeps (by
-        simp [Branch.selects, Cond.eval, hc, notAny_eval.mpr hprev]) hnull⟩
+      simp only [chainBranches, List.mem_cons]
+      exact ⟨_, .inl rfl, by simp [Branch.selects, Cond.eval, hc, notAny_eval.mpr hprev]⟩
     · rename_i hc
-      simp only [commitChain, List.mem_cons]
-      exact (commitChain_covers hnull (nx := _) (prev := prev ++ [c]) (fun c' h' => by
+      simp only [chainBranches, List.mem_cons]
+      exact (chainBranches_covers (prev := prev ++ [c]) (fun c' h' => by
         rcases List.mem_append.mp h' with h' | h'
         · exact hprev c' h'
         · simp at h'; simpa [h'] using hc) h).imp fun _ ⟨hb, hv⟩ => ⟨.inr hb, hv⟩
 
-/-- The case that triggered `startle` still runs the new instruction: if no
-current branch selected the values and the model's chain covers them, the
-committed version selects the chain's instruction for them. -/
-theorem commit_witness (hnull : selected sat r.branches v = [])
-    (hc : chainSelect sat chain v = some i) : distinguish sat (commit ov r chain).1.branches v = .select i := by
+end
+
+/-! ## Tally
+
+Each voter whose branch selects the values casts that branch's
+instruction; the votes cast are the ballot. They are grouped by key, at the
+finest level first: `group k i` is instruction `i`'s key at level `k`.
+A group wins a level when its lead over every other group, and over none,
+clears the margin `required`, which the inhibition `ι` sets. The tally then
+runs the exact instruction in the group with the most votes, ties to the
+oldest. With no winner at any level, it is a conflict. -/
+
+/-- How a base tallies: each instruction's key at a level, the levels tried
+finest first and down to the floor, and the inhibition `ι`, in thousandths
+(1000 is 1). -/
+structure Policy (I K : Type) where
+  group : Nat → I → K
+  levels : List Nat
+  inhibition : Nat
+
+/-- The margin a winner needs among `cast` votes: `⌈(1 − ι) · cast⌉`, never
+below 1. `ι = 1` is a plurality; `ι = 0` is every vote cast. -/
+def required (ι cast : Nat) : Nat := max 1 (((1000 - ι) * cast + 999) / 1000)
+
+theorem one_le_required : 1 ≤ required ι c := Nat.le_max_left _ _
+
+theorem required_le (h : 0 < c) : required ι c ≤ c := by
+  have : (1000 - ι) * c ≤ 1000 * c := Nat.mul_le_mul_right _ (Nat.sub_le _ _)
+  unfold required
+  generalize (1000 - ι) * c = a at *
+  omega
+
+theorem required_anti (h : ι ≤ ι') : required ι' c ≤ required ι c := by
+  have : (1000 - ι') * c ≤ (1000 - ι) * c := Nat.mul_le_mul_right _ (by omega)
+  unfold required
+  generalize (1000 - ι') * c = a at *
+  generalize (1000 - ι) * c = b at *
+  omega
+
+theorem required_zero (h : 0 < c) : required 0 c = c := by
+  simp only [required, Nat.sub_zero]; omega
+
+section
+variable {K : Type} [DecidableEq K] (p : Policy I K)
+
+/-- The votes in group `g` at level `k`. -/
+def groupVotes (k : Nat) (ballot : List (Branch A I)) (g : K) : Nat :=
+  (ballot.filter fun y => p.group k y.instr = g).length
+
+/-- `x`'s group wins level `k`: it has the margin, and leads every other
+group by it. -/
+def wins (k : Nat) (ballot : List (Branch A I)) (x : Branch A I) : Bool :=
+  let req := required p.inhibition ballot.length
+  let n := groupVotes p k ballot (p.group k x.instr)
+  decide (req ≤ n) && ballot.all fun y =>
+    decide (p.group k y.instr = p.group k x.instr) || decide (groupVotes p k ballot (p.group k y.instr) + req ≤ n)
+
+variable [DecidableEq I]
+
+/-- The votes for `x`'s exact instruction. -/
+def exactVotes (ballot : List (Branch A I)) (x : Branch A I) : Nat :=
+  (ballot.filter fun y => y.instr = x.instr).length
+
+/-- `x` is ahead of `y`: more votes for its exact instruction, or as many
+and older. -/
+def ahead (ballot : List (Branch A I)) (x y : Branch A I) : Bool :=
+  decide (exactVotes ballot y < exactVotes ballot x) ||
+    (decide (exactVotes ballot x = exactVotes ballot y) && decide (x.rank < y.rank))
+
+/-- The vote furthest ahead. -/
+def best (ballot : List (Branch A I)) : List (Branch A I) → Option (Branch A I)
+  | [] => none
+  | x :: xs => match best ballot xs with
+    | none => some x
+    | some y => if ahead ballot y x then some y else some x
+
+def tallyAt (ballot : List (Branch A I)) : List Nat → Outcome I
+  | [] => .conflict
+  | k :: ks => match best ballot (ballot.filter (wins p k ballot)) with
+    | some x => .select x.instr
+    | none => tallyAt ballot ks
+
+/-- `null` when no voter selects the values; otherwise the instruction the
+first level with a winner runs, or a conflict. -/
+def tally (sat : A → V → Bool) (bs : List (Branch A I)) (v : V) : Outcome I :=
+  match selected sat bs v with
+  | [] => .null
+  | b :: rest => tallyAt p (b :: rest) p.levels
+
+variable {p} {sat : A → V → Bool} {bs bs' ballot ballot' l : List (Branch A I)}
+  {x y z : Branch A I} {v : V} {i : I} {k : Nat}
+
+theorem ahead_irrefl : ahead ballot x x = false := by simp [ahead]
+
+theorem ahead_asymm (h : ahead ballot x y = true) : ahead ballot y x = false := by
+  simp only [ahead, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_false_iff,
+    Bool.and_eq_false_iff, decide_eq_false_iff_not] at *
+  omega
+
+theorem not_ahead_trans (h₁ : ahead ballot x y = false) (h₂ : ahead ballot y z = false) :
+    ahead ballot x z = false := by
+  simp only [ahead, Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not] at *
+  omega
+
+theorem best_mem : ∀ {l : List (Branch A I)} {x}, best ballot l = some x → x ∈ l
+  | [], _, h => by simp [best] at h
+  | z :: zs, x, h => by
+    unfold best at h
+    split at h
+    · cases h; simp
+    · split at h
+      · cases h; rename_i w hw _; exact List.mem_cons_of_mem _ (best_mem hw)
+      · cases h; simp
+
+theorem best_none : ∀ {l : List (Branch A I)}, best ballot l = none ↔ l = []
+  | [] => by simp [best]
+  | z :: zs => by unfold best; split <;> (try split) <;> simp
+
+/-- Nothing in the list is ahead of the best. -/
+theorem best_max : ∀ {l : List (Branch A I)} {x}, best ballot l = some x →
+    ∀ y ∈ l, ahead ballot y x = false
+  | [], _, h, _, _ => by simp [best] at h
+  | z :: zs, x, h, y, hy => by
+    unfold best at h
+    split at h
+    · rename_i hn
+      cases h
+      have := best_none.mp hn; subst this
+      simp at hy; subst hy; exact ahead_irrefl
+    · rename_i w hw
+      split at h
+      · rename_i hwz
+        cases h
+        rcases List.mem_cons.mp hy with rfl | hy
+        · exact ahead_asymm hwz
+        · exact best_max hw y hy
+      · rename_i hwz
+        cases h
+        rcases List.mem_cons.mp hy with rfl | hy
+        · exact ahead_irrefl
+        · exact not_ahead_trans (best_max hw y hy) (by simpa using hwz)
+
+/-- Two votes neither ahead of the other are one, ranks being distinct. -/
+theorem ahead_eq (hr : (ballot.map (·.rank)).Nodup) (hx : x ∈ ballot) (hy : y ∈ ballot)
+    (h₁ : ahead ballot x y = false) (h₂ : ahead ballot y x = false) : x = y := by
+  have : x.rank = y.rank := by
+    simp only [ahead, Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not] at h₁ h₂
+    omega
+  exact nodup_map_inj hr hx hy this
+
+omit [DecidableEq I] in
+theorem groupVotes_perm (h : ballot.Perm ballot') (g : K) :
+    groupVotes p k ballot g = groupVotes p k ballot' g := (h.filter _).length_eq
+
+theorem exactVotes_perm (h : ballot.Perm ballot') (x : Branch A I) :
+    exactVotes ballot x = exactVotes ballot' x := (h.filter _).length_eq
+
+omit [DecidableEq I] in
+theorem all_perm (h : ballot.Perm ballot') (f : Branch A I → Bool) : ballot.all f = ballot'.all f := by
+  apply Bool.eq_iff_iff.mpr
+  simp only [List.all_eq_true]
+  exact ⟨fun H y hy => H y (h.mem_iff.mpr hy), fun H y hy => H y (h.mem_iff.mp hy)⟩
+
+omit [DecidableEq I] in
+theorem wins_perm (h : ballot.Perm ballot') : wins p k ballot' = wins p k ballot := by
+  funext x
+  simp only [wins, groupVotes_perm h, h.length_eq, all_perm h]
+
+theorem best_ballot_perm (h : ballot.Perm ballot') : ∀ {l : List (Branch A I)}, best ballot' l = best ballot l
+  | [] => rfl
+  | z :: zs => by
+    have e : ahead ballot' = ahead ballot := by
+      funext a c; simp only [ahead, exactVotes_perm h]
+    simp only [best, best_ballot_perm h (l := zs), e]
+
+omit [DecidableEq I] in
+/-- A group wins a level only when no other does. -/
+theorem wins_unique (hx : x ∈ ballot) (hy : y ∈ ballot) (wx : wins p k ballot x = true)
+    (wy : wins p k ballot y = true) : p.group k x.instr = p.group k y.instr := by
+  apply Decidable.byContradiction
+  intro hne
+  simp only [wins, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, Bool.or_eq_true] at wx wy
+  have r := one_le_required (ι := p.inhibition) (c := ballot.length)
+  rcases wx.2 y hy with h1 | h1
+  · exact hne h1.symm
+  rcases wy.2 x hx with h2 | h2
+  · exact hne h2
+  omega
+
+/-- Ballots are unordered: a tally does not depend on the order of the
+votes, ranks being distinct. -/
+theorem tallyAt_perm (hr : (ballot.map (·.rank)).Nodup) (h : ballot.Perm ballot') :
+    ∀ ls, tallyAt p ballot ls = tallyAt p ballot' ls
+  | [] => rfl
+  | k :: ks => by
+    simp only [tallyAt]
+    rw [wins_perm h, best_ballot_perm h]
+    have hc : (ballot.filter (wins p k ballot)).Perm (ballot'.filter (wins p k ballot)) := h.filter _
+    cases hx : best ballot (ballot.filter (wins p k ballot)) with
+    | none =>
+      have e : ballot'.filter (wins p k ballot) = [] := by
+        rw [best_none.mp hx] at hc; exact hc.symm.eq_nil
+      rw [e]
+      simp only [best]
+      exact tallyAt_perm hr h ks
+    | some x =>
+      have hmx := best_mem hx
+      cases hy : best ballot (ballot'.filter (wins p k ballot)) with
+      | none =>
+        rw [best_none.mp hy] at hc
+        rw [hc.eq_nil] at hmx; cases hmx
+      | some y =>
+        have hmy := best_mem hy
+        have hmx' := hc.mem_iff.mp hmx
+        have hmy' := hc.mem_iff.mpr hmy
+        have := ahead_eq hr (List.mem_filter.mp hmx).1 (List.mem_filter.mp hmy').1
+          (best_max hy x hmx') (best_max hx y hmy')
+        simp [this]
+
+theorem tally_perm (hr : (bs.map (·.rank)).Nodup) (h : bs.Perm bs') :
+    tally p sat bs v = tally p sat bs' v := by
+  have hs := selected_perm (sat := sat) (v := v) h
+  have hrs : ((selected sat bs v).map (·.rank)).Nodup := (List.filter_sublist.map _).nodup hr
+  unfold tally
+  cases e : selected sat bs v with
+  | nil => rw [e] at hs; rw [hs.symm.eq_nil]
+  | cons b rest =>
+    rw [e] at hs hrs
+    cases e' : selected sat bs' v with
+    | nil => rw [e'] at hs; exact absurd hs.length_eq (by simp)
+    | cons b' rest' => rw [e'] at hs; exact tallyAt_perm hrs hs _
+
+theorem tallyAt_ne_null : ∀ {ls}, tallyAt p ballot ls ≠ .null
+  | [] => by simp [tallyAt]
+  | k :: ks => by
+    simp only [tallyAt]
+    cases best ballot (ballot.filter (wins p k ballot)) with
+    | some x => simp
+    | none => exact tallyAt_ne_null
+
+theorem tally_null : tally p sat bs v = .null ↔ selected sat bs v = [] := by
+  unfold tally
+  cases selected sat bs v with
+  | nil => simp
+  | cons b rest => exact ⟨fun h => absurd h tallyAt_ne_null, fun h => by cases h⟩
+
+theorem tallyAt_conflict : ∀ {ls}, tallyAt p ballot ls = .conflict ↔
+    ∀ k ∈ ls, ∀ x ∈ ballot, wins p k ballot x = false
+  | [] => by simp [tallyAt]
+  | k :: ks => by
+    simp only [tallyAt]
+    cases hx : best ballot (ballot.filter (wins p k ballot)) with
+    | some x =>
+      have hm := List.mem_filter.mp (best_mem hx)
+      constructor
+      · intro h; cases h
+      · intro H; have := H k (by simp) x hm.1; rw [hm.2] at this; cases this
+    | none =>
+      have he := List.filter_eq_nil_iff.mp (best_none.mp hx)
+      simp only
+      rw [tallyAt_conflict]
+      constructor
+      · intro H k' hk' x hx'
+        rcases List.mem_cons.mp hk' with rfl | hk'
+        · simpa using he x hx'
+        · exact H k' hk' x hx'
+      · intro H k' hk' x hx'; exact H k' (by simp [hk']) x hx'
+
+theorem tallyAt_select : ∀ {ls}, tallyAt p ballot ls = .select i →
+    ∃ k ∈ ls, ∃ x ∈ ballot, x.instr = i ∧ wins p k ballot x = true ∧
+      ∀ y ∈ ballot, wins p k ballot y = true → p.group k y.instr = p.group k i
+  | [], h => by simp [tallyAt] at h
+  | k :: ks, h => by
+    simp only [tallyAt] at h
+    cases hx : best ballot (ballot.filter (wins p k ballot)) with
+    | some x =>
+      simp only [hx, Outcome.select.injEq] at h
+      subst h
+      have hm := List.mem_filter.mp (best_mem hx)
+      exact ⟨k, by simp, x, hm.1, rfl, hm.2, fun y hy wy => wins_unique hy hm.1 wy hm.2⟩
+    | none =>
+      simp only [hx] at h
+      obtain ⟨k', hk', rest⟩ := tallyAt_select h
+      exact ⟨k', by simp [hk'], rest⟩
+
+/-- The floor holds: the instruction run is a vote of the group that won,
+at a level the policy tries, and every vote that won with it shares its
+key there. With levels no coarser than the floor, and keys that agree at
+every coarser level, no vote counted for it differs from it above the
+floor. -/
+theorem tally_group (h : tally p sat bs v = .select i) :
+    ∃ k ∈ p.levels, ∃ x ∈ selected sat bs v, x.instr = i ∧ wins p k (selected sat bs v) x = true ∧
+      ∀ y ∈ selected sat bs v, wins p k (selected sat bs v) y = true → p.group k y.instr = p.group k i := by
+  unfold tally at h
+  cases e : selected sat bs v with
+  | nil => rw [e] at h; cases h
+  | cons b rest => rw [e] at h; exact tallyAt_select h
+
+/-- Unanimity: when every vote cast is one instruction, it wins, at any
+inhibition. -/
+theorem tally_unanimous (hne : selected sat bs v ≠ []) (hall : ∀ b ∈ selected sat bs v, b.instr = i)
+    (hl : p.levels ≠ []) : tally p sat bs v = .select i := by
+  unfold tally
+  cases e : selected sat bs v with
+  | nil => exact absurd e hne
+  | cons b0 rest =>
+    rw [e] at hall
+    obtain ⟨k, ks, hk⟩ : ∃ k ks, p.levels = k :: ks := by
+      cases h : p.levels with
+      | nil => exact absurd h hl
+      | cons k ks => exact ⟨k, ks, rfl⟩
+    rw [hk]
+    simp only [tallyAt]
+    have hw : (b0 :: rest).filter (wins p k (b0 :: rest)) = b0 :: rest := by
+      apply List.filter_eq_self.mpr
+      intro x hx
+      have hcount : groupVotes p k (b0 :: rest) (p.group k x.instr) = (b0 :: rest).length := by
+        unfold groupVotes
+        rw [List.filter_eq_self.mpr]
+        intro y hy; simp [hall y hy, hall x hx]
+      simp only [wins, hcount, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, Bool.or_eq_true]
+      exact ⟨required_le (by simp), fun y hy => .inl (by rw [hall y hy, hall x hx])⟩
+    rw [hw]
+    cases hb : best (b0 :: rest) (b0 :: rest) with
+    | none => exact absurd (best_none.mp hb) (by simp)
+    | some x => simp [hall x (best_mem hb)]
+
+omit [DecidableEq I] in
+theorem wins_mono {q : Policy I K} (hg : q.group = p.group) (h : p.inhibition ≤ q.inhibition)
+    (w : wins p k ballot x = true) : wins q k ballot x = true := by
+  obtain ⟨g, ls, ι⟩ := p
+  obtain ⟨g', ls', ι'⟩ := q
+  simp only at hg h; subst hg
+  simp only [wins, groupVotes, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true] at w ⊢
+  have r := required_anti (c := ballot.length) h
+  obtain ⟨w1, w2⟩ := w
+  have w1 := of_decide_eq_true w1
+  exact ⟨decide_eq_true (by omega), fun y hy => (w2 y hy).imp id fun hy' =>
+    decide_eq_true (by have := of_decide_eq_true hy'; omega)⟩
+
+/-- Deciding is monotone in the inhibition: a tally that decides at `ι`
+decides at every higher `ι'`. What it decides may differ, a finer level
+deciding first (proposal 59, open question 6). -/
+theorem tally_decides_mono (h : ι ≤ ι') (d : tally { p with inhibition := ι } sat bs v ≠ .conflict) :
+    tally { p with inhibition := ι' } sat bs v ≠ .conflict := by
+  unfold tally at *
+  cases e : selected sat bs v with
+  | nil => simp
+  | cons b rest =>
+    rw [e] at d
+    intro hc
+    apply d
+    rw [tallyAt_conflict] at hc ⊢
+    intro k hk x hx
+    cases hw : wins { p with inhibition := ι } k (b :: rest) x
+    · rfl
+    · have := wins_mono (p := { p with inhibition := ι }) (q := { p with inhibition := ι' }) rfl h hw
+      rw [hc k hk x hx] at this; cases this
+
+theorem filter_full {q : α → Bool} {l : List α} (h : l.length ≤ (l.filter q).length) :
+    ∀ a ∈ l, q a = true :=
+  List.filter_eq_self.mp
+    ((List.filter_sublist (p := q) (l := l)).eq_of_length (Nat.le_antisymm (List.length_filter_le _ _) h))
+
+end
+
+/-- `distinguish` is a tally: the exact instruction as the key, one level,
+and `ι = 0`, every vote cast. -/
+theorem distinguish_tally [DecidableEq I] {sat : A → V → Bool} {bs : List (Branch A I)} {v : V} (k : Nat) :
+    tally ⟨fun _ i => i, [k], 0⟩ sat bs v = distinguish sat bs v := by
+  cases hd : distinguish sat bs v with
+  | null => exact tally_null.mpr (distinguish_null.mp hd)
+  | select i =>
+    obtain ⟨ne, all⟩ := distinguish_select.mp hd
+    exact tally_unanimous ne all (by simp)
+  | conflict =>
+    unfold tally
+    cases e : selected sat bs v with
+    | nil => rw [distinguish_null.mpr e] at hd; cases hd
+    | cons b rest =>
+      apply tallyAt_conflict.mpr
+      intro k' _ x hx
+      cases hw : wins ⟨fun _ i => i, [k], 0⟩ k' (b :: rest) x
+      · rfl
+      · exfalso
+        have hreq : required 0 (b :: rest).length = (b :: rest).length := required_zero (by simp)
+        simp only [wins, groupVotes, hreq, Bool.and_eq_true, decide_eq_true_eq] at hw
+        have hall : ∀ y ∈ selected sat bs v, y.instr = x.instr := by
+          rw [e]; intro y hy; simpa using filter_full hw.1 y hy
+        have := distinguish_select.mpr ⟨by rw [e]; simp, hall⟩
+        rw [this] at hd; cases hd
+
+/-- What triggered `startle` still runs the new instruction: if no current
+branch selected the values and the model's chain covers them, the new
+chain is the only vote, and the committed version selects its
+instruction. -/
+theorem commit_witness {K : Type} [DecidableEq I] [DecidableEq K] {p : Policy I K} {sat : A → V → Bool}
+    {r : Refinement A I} {chain : List (Cond A × I)} {v : V} {i : I}
+    (hnull : selected sat r.branches v = []) (hc : chainSelect sat chain v = some i)
+    (hl : p.levels ≠ []) : tally p sat (commit r chain).branches v = .select i := by
   have olds : ∀ o ∈ r.branches, o.selects sat v = false := by
     intro o ho
     cases h : o.selects sat v
     · rfl
     · have : o ∈ selected sat r.branches v := List.mem_filter.mpr ⟨ho, h⟩
       rw [hnull] at this; cases this
-  have news := commitChain_witness (ov := ov) (nx := r.next) (prev := []) (chain := chain) olds
-    (by simp)
-  obtain ⟨b, hb, hv⟩ := commitChain_covers (ov := ov) (nx := r.next) (prev := []) olds (by simp) hc
-  apply distinguish_select.mpr
-  refine ⟨fun e => ?_, fun b' hb' => ?_⟩
-  · have : b ∈ selected sat (commit ov r chain).1.branches v :=
+  refine tally_unanimous ?_ ?_ hl
+  · obtain ⟨b, hb, hv⟩ := chainBranches_covers (vt := r.next) (nx := r.next) (prev := []) (by simp) hc
+    intro e
+    have : b ∈ selected sat (commit r chain).branches v :=
       List.mem_filter.mpr ⟨by simp [commit, hb], hv⟩
     rw [e] at this; cases this
-  · obtain ⟨hb', hv'⟩ := List.mem_filter.mp hb'
+  · intro b' hb'
+    obtain ⟨hb', hv'⟩ := List.mem_filter.mp hb'
     simp only [commit, List.mem_append] at hb'
     rcases hb' with hb' | hb'
     · rw [olds b' hb'] at hv'; cases hv'
-    · have := news b' hb' hv'; rw [hc] at this; exact (Option.some.inj this).symm
-
-end
-
-/-! ## Conflicts found later -/
-
-/-- The oldest branch of a list: the lowest rank, the first on a tie. -/
-def lowest : List (Branch A I) → Option (Branch A I)
-  | [] => none
-  | b :: bs => match lowest bs with
-    | none => some b
-    | some c => if c.rank < b.rank then some c else some b
-
-theorem lowest_mem : ∀ {bs : List (Branch A I)} {b}, lowest bs = some b → b ∈ bs
-  | [], _, h => by simp [lowest] at h
-  | x :: xs, b, h => by
-    unfold lowest at h
-    split at h
-    · cases h; simp
-    · split at h
-      · cases h; rename_i c hc _; exact List.mem_cons_of_mem _ (lowest_mem hc)
-      · cases h; simp
-
-theorem lowest_none : ∀ {bs : List (Branch A I)}, lowest bs = none ↔ bs = []
-  | [] => by simp [lowest]
-  | x :: xs => by unfold lowest; split <;> (try split) <;> simp
-
-/-- A conflict's pair: the oldest selected branch, and the oldest selected
-branch with a different instruction. -/
-def conflictPair [DecidableEq I] (sat : A → V → Bool) (bs : List (Branch A I)) (v : V) :
-    Option (Branch A I × Branch A I) := do
-  let s := selected sat bs v
-  let o ← lowest s
-  let n ← lowest (s.filter (·.instr != o.instr))
-  pure (o, n)
-
-/-- Resolve the values: reconcile each conflict, older keeping the overlap,
-until the outcome is `null` or one instruction. -/
-def resolve [DecidableEq I] (sat : A → V → Bool) :
-    Nat → Refinement A I → V → Outcome I × Refinement A I × List Record
-  | 0, r, v => (distinguish sat r.branches v, r, [])
-  | fuel + 1, r, v => match conflictPair sat r.branches v with
-    | none => (distinguish sat r.branches v, r, [])
-    | some (o, n) =>
-      let x := resolve sat fuel (reconcile r o n) v
-      (x.1, x.2.1, ⟨o.id, n.id, r.next⟩ :: x.2.2)
-
-section
-variable [DecidableEq I] {sat : A → V → Bool} {r : Refinement A I} {v : V}
-
-theorem conflictPair_none (h : conflictPair sat r.branches v = none) :
-    distinguish sat r.branches v ≠ .conflict := by
-  simp only [conflictPair, Option.bind_eq_bind, Option.pure_def] at h
-  cases ho : lowest (selected sat r.branches v) with
-  | none => rw [distinguish_null.mpr (lowest_none.mp ho)]; simp
-  | some o =>
-    rw [ho] at h
-    simp only [Option.bind_some, Option.bind_eq_none_iff, reduceCtorEq, imp_false] at h
-    cases hn : lowest ((selected sat r.branches v).filter (·.instr != o.instr)) with
-    | some n => exact absurd hn (h n)
-    | none =>
-      have e := lowest_none.mp hn
-      rw [distinguish_select.mpr ⟨fun e' => by rw [e'] at ho; simp [lowest] at ho, fun b hb => Decidable.byContradiction fun hne => by
-        have : b ∈ (selected sat r.branches v).filter (·.instr != o.instr) :=
-          List.mem_filter.mpr ⟨hb, by simpa using hne⟩
-        rw [e] at this; cases this⟩]
-      simp
-
-theorem conflictPair_some (h : conflictPair sat r.branches v = some (o, n)) :
-    o ∈ selected sat r.branches v ∧ n ∈ selected sat r.branches v := by
-  simp only [conflictPair, Option.bind_eq_bind, Option.pure_def] at h
-  cases ho : lowest (selected sat r.branches v) with
-  | none => rw [ho] at h; cases h
-  | some o' =>
-    rw [ho] at h
-    simp only [Option.bind_some] at h
-    cases hn : lowest ((selected sat r.branches v).filter (·.instr != o'.instr)) with
-    | none => rw [hn] at h; cases h
-    | some n' =>
-      rw [hn] at h
-      simp only [Option.bind_some, Option.some.injEq, Prod.mk.injEq] at h
-      obtain ⟨rfl, rfl⟩ := h
-      exact ⟨lowest_mem ho, (List.mem_filter.mp (lowest_mem hn)).1⟩
-
-theorem length_filter_lt {p : α → Bool} : ∀ {l : List α} {x}, x ∈ l → p x = false →
-    (l.filter p).length < l.length
-  | [], _, h, _ => by simp at h
-  | a :: l, x, h, hp => by
-    rcases List.mem_cons.mp h with rfl | h
-    · simp only [List.filter_cons, hp]
-      exact Nat.lt_succ_of_le (List.length_filter_le _ _)
-    · simp only [List.filter_cons]
-      split
-      · exact Nat.succ_lt_succ (length_filter_lt h hp)
-      · exact Nat.lt_succ_of_lt (length_filter_lt h hp)
-
-/-- Each reconcile takes one branch away from the values: the newer is
-retired, and its remainder does not select them. -/
-theorem reconcile_fewer (h : conflictPair sat r.branches v = some (o, n)) :
-    (selected sat (reconcile r o n).branches v).length < (selected sat r.branches v).length := by
-  obtain ⟨⟨ho, hov⟩, ⟨hn, hnv⟩⟩ := (conflictPair_some h).imp List.mem_filter.mp List.mem_filter.mp
-  have : selected sat (reconcile r o n).branches v = selected sat (r.branches.filter (·.id != n.id)) v := by
-    simp [selected, reconcile, List.filter_append, remainder_disjoint (n := n) (k := r.next) hov]
-  rw [this, retire_selected]
-  exact length_filter_lt (List.mem_filter.mpr ⟨hn, hnv⟩) (by simp)
-
-/-- With fuel for every selected branch, resolving never ends in a
-conflict. -/
-theorem resolve_settles : ∀ {fuel} {r : Refinement A I}, r.WellFormed →
-    (selected sat r.branches v).length ≤ fuel → (resolve sat fuel r v).1 ≠ .conflict
-  | 0, r, _, hl => by
-    simp only [resolve]
-    rw [distinguish_null.mpr (List.eq_nil_of_length_eq_zero (Nat.le_zero.mp hl))]; simp
-  | fuel + 1, r, hr, hl => by
-    simp only [resolve]
-    split
-    · rename_i h; exact conflictPair_none h
-    · rename_i o n h
-      have hn := (List.mem_filter.mp (conflictPair_some h).2).1
-      exact resolve_settles (reconcile_wellFormed hr hn)
-        (Nat.le_of_lt_succ (Nat.lt_of_lt_of_le (reconcile_fewer h) hl))
-
-end
+    · have := chainBranches_witness (prev := []) (by simp) b' hb' hv'
+      rw [hc] at this; exact (Option.some.inj this).symm
 
 /-! ## After `startle` -/
 
@@ -620,30 +690,34 @@ def After.instr : After I → Option I
   | .trust i _ => some i
 
 /-- The step evaluates over the root it committed. It runs the instruction
-its own model's chain gives these values, whatever that root selects: an
-older branch committed concurrently keeps the stored values, and the step
-runs its own instruction once. -/
-def afterStartle [DecidableEq I] (sat : A → V → Bool) (chain : List (Cond A × I))
-    (committed : List (Branch A I)) (v : V) : After I :=
+its own model's chain gives these values, whatever that root's tally
+selects: other voters may outvote it, and the step runs its own
+instruction once, unlearned. -/
+def afterStartle {K : Type} [DecidableEq I] [DecidableEq K] (p : Policy I K) (sat : A → V → Bool)
+    (chain : List (Cond A × I)) (committed : List (Branch A I)) (v : V) : After I :=
   match chainSelect sat chain v with
   | none => .startleAgain
-  | some i => .trust i (distinguish sat committed v == .select i)
+  | some i => .trust i (tally p sat committed v == .select i)
 
 /-- What the step runs does not depend on what any other commit stored. -/
-theorem afterStartle_own [DecidableEq I] {sat : A → V → Bool} (c₁ c₂ : List (Branch A I)) :
-    (afterStartle sat chain c₁ v).instr = (afterStartle sat chain c₂ v).instr := by
+theorem afterStartle_own {K : Type} [DecidableEq I] [DecidableEq K] {p : Policy I K}
+    {sat : A → V → Bool} (c₁ c₂ : List (Branch A I)) :
+    (afterStartle p sat chain c₁ v).instr = (afterStartle p sat chain c₂ v).instr := by
   unfold afterStartle; split <;> rfl
 
-theorem afterStartle_instr [DecidableEq I] {sat : A → V → Bool} {c : List (Branch A I)} :
-    (afterStartle sat chain c v).instr = chainSelect sat chain v := by
+theorem afterStartle_instr {K : Type} [DecidableEq I] [DecidableEq K] {p : Policy I K}
+    {sat : A → V → Bool} {c : List (Branch A I)} :
+    (afterStartle p sat chain c v).instr = chainSelect sat chain v := by
   unfold afterStartle; split <;> simp_all [After.instr]
 
 /-! ## Transitions and the transition bound -/
 
 /-- The states of a transition: everything the system does with one
-instruction. -/
+instruction. `tally` is a count that did not settle on the instruction
+run: a conflict, or a startle's commit, counted with the votes already
+there. -/
 inductive State where
-  | reject | hesitate | startle | reconcile | trust
+  | reject | hesitate | startle | tally | trust
   deriving Repr, DecidableEq
 
 /-- A transition is the life of one instruction: the states it passed

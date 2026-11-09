@@ -2,7 +2,7 @@
 
 Date: 2026-11-07
 
-Status: **proposed**. Builds on
+Status: **built** (2026-11-09; see Built, at the end). Builds on
 [58](58-type-and-transition-machine-proposal.md) and replaces its rule for
 a conflict, *the older branch keeps the overlap* (58, Reconciling a
 conflict; Conflicts found later; At commit). Everything else in 58 stands:
@@ -250,3 +250,32 @@ table above.
   where the two pick different instructions.
 - Measure tally cost per step against `distinguish`: it evaluates the same
   branches, and the grouping is over the votes cast.
+
+## Built
+
+- **Lean** (`Invariants/Refine.lean`, `Dispatch.lean`): `Branch.voter`;
+  `commit` stores the chain whole under the voter `r.next`; `Policy`
+  (key function, levels, `ι`), `required`, `wins`, `best`, `tallyAt`,
+  `tally`. Proved: `chain_one_vote`, `tally_perm` (ranks distinct),
+  `wins_unique`, `tally_unanimous`, `tally_decides_mono`, `tally_group`
+  (the floor, stated as: the instruction run and every winning vote share
+  the winning key), `distinguish_tally`, `commit_witness`. Dispatch tallies;
+  a conflict startles. `narrow`, `reconcile`, `remainder`, `resolve` and
+  their proofs are gone, as are the `refineOverlaps` and `refineResolve`
+  vectors; `refineTally` is new and includes the experiment's ballots,
+  which reproduce the table above.
+- **Go** (`tree/tally.go`): `Cast` evaluates the branches into votes, and
+  `NewBallot` names them with the base (the static interface) and
+  `ObservationID` of the values (its dynamic observation); each `Vote`
+  carries its voter and branch (the static implementation) and its
+  canonical instruction (the decision). `Tally.Decide` is the Lean's
+  `tallyAt` over levels from `Exact` (4) down to `Floor`. `Bounds.Tally`
+  configures a machine; `AskModel.Ballot` carries the ballot for the
+  record, not to the model. `Overlaps` is gone with narrowing.
+- **Choices made.** `ι` is an integer in thousandths, so `required` is
+  exact in both languages. The zero `Tally` is `ι = 0`, floor 2: a base
+  decides only when every vote cast agrees at some level down to the
+  tool or exit status (open question 3 still decides where `ι` lives).
+  The state `reconcile` is renamed `tally`: a count that did not settle
+  the instruction run, a conflict or a startle's commit. Levels are
+  tried finest first (open question 6 stays open).

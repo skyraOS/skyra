@@ -246,10 +246,7 @@ func TestLearnedReturnBindsElsewhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, _, _, err := CommitChain(EmptyVersion(), chain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := CommitChain(EmptyVersion(), chain)
 
 	// Another frame, the same location: its observations are elsewhere in
 	// its scope, but from the same bases.

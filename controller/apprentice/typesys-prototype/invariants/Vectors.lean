@@ -252,13 +252,11 @@ def stores : List Store := Id.run do
     frontier := next
   return out
 
-/-! ## Proposal 58: refinements
+/-! ## Proposals 58 and 59: refinements
 
 The atoms compare one field, `arrived.size`, with a constant, or test it
-for evenness; the values are that field's. Conditions are written as CEL, the way the Go receives them.
-Overlap is decided exactly for comparisons by testing every half-point
-around each constant (so `x > 7 && x < 8` overlaps, as it does over
-numbers), and left undecided whenever `even` appears. -/
+for evenness; the values are that field's. Conditions are written as CEL,
+the way the Go receives them. -/
 
 inductive Atom where
   | gt (k : Int) | lt (k : Int) | eq (k : Int) | even
@@ -270,13 +268,6 @@ def Atom.sat : Atom → Int → Bool
   | .eq k, x => x == k
   | .even, x => x % 2 == 0
 
-/-- The atom on doubled values: `p` stands for `p / 2`. -/
-def Atom.half : Atom → Int → Bool
-  | .gt k, p => p > 2 * k
-  | .lt k, p => p < 2 * k
-  | .eq k, p => p == 2 * k
-  | .even, _ => false
-
 /-- Written as a stored guard reads it: the arrival's `size` field, which
 the model wrote as `$1.size`. -/
 def Atom.cel : Atom → String
@@ -285,29 +276,11 @@ def Atom.cel : Atom → String
   | .eq k => s!"arrived.size == {k}"
   | .even => "int(arrived.size) % 2 == 0"
 
-def Atom.const : Atom → List Int
-  | .gt k | .lt k | .eq k => [k]
-  | .even => []
-
 def condCel : Refine.Cond Atom → String
   | .atom a => a.cel
   | .tt => "true"
   | .and p q => "(" ++ condCel p ++ ") && (" ++ condCel q ++ ")"
   | .not p => "!(" ++ condCel p ++ ")"
-
-def condAtoms : Refine.Cond Atom → List Atom
-  | .atom a => [a]
-  | .tt => []
-  | .and p q => condAtoms p ++ condAtoms q
-  | .not p => condAtoms p
-
-def overlaps (p q : Refine.Cond Atom) : Option Bool :=
-  let atoms := condAtoms p ++ condAtoms q
-  if atoms.contains .even then none
-  else
-    let ks := atoms.flatMap Atom.const
-    let points := if ks.isEmpty then [0] else ks.flatMap fun k => [2 * k - 1, 2 * k, 2 * k + 1]
-    some (points.any fun x => p.eval Atom.half x && q.eval Atom.half x)
 
 abbrev RBranch := Refine.Branch Atom String
 abbrev RRef := Refine.Refinement Atom String
@@ -315,16 +288,11 @@ abbrev RRef := Refine.Refinement Atom String
 def jNat (n : Nat) : Json := Lean.Json.num (Lean.JsonNumber.fromNat n)
 
 def jBranch (b : RBranch) : Json :=
-  Json.mkObj [("id", jNat b.id), ("rank", jNat b.rank), ("cond", .str (condCel b.cond)),
-    ("instr", .str b.instr)]
+  Json.mkObj [("id", jNat b.id), ("rank", jNat b.rank), ("voter", jNat b.voter),
+    ("cond", .str (condCel b.cond)), ("instr", .str b.instr)]
 
 def jRef (r : RRef) : Json :=
   Json.mkObj [("next", jNat r.next), ("branches", jList jBranch r.branches)]
-
-def jRecord (x : Refine.Record) : Json :=
-  Json.mkObj [("older", jNat x.older), ("retired", jNat x.retired), ("remainder", jNat x.remainder)]
-
-def jPossible (x : Nat × Nat) : Json := .arr #[jNat x.1, jNat x.2]
 
 def jOutcome : Refine.Outcome String → Json
   | .null => .null
@@ -334,6 +302,32 @@ def jOutcome : Refine.Outcome String → Json
 def jAfter : Refine.After String → Json
   | .startleAgain => .str "startle"
   | .trust i l => Json.mkObj [("trust", .str i), ("learned", .bool l)]
+
+/-- A stored instruction's parts, as the Go's `Parts` reads them: its form,
+then its head (the tool run, a return's exit status, the delegated goal),
+then the rest in order. -/
+def parts (i : String) : List String :=
+  if i.startsWith "delegate(" then
+    match (((i.drop 9).dropEnd 1).toString).splitOn ", " with
+    | [] => ["delegate"]
+    | g :: rest => "delegate" :: (((g.drop 5).dropEnd 1).toString) :: rest
+  else match i.splitOn " " with
+    | "return" :: rest => "return" :: rest
+    | fs => "run" :: fs
+
+/-- The exact level. -/
+def exact : Nat := 4
+
+/-- An instruction's key at level `k`: its first `k` parts, or the whole
+instruction at the exact level. -/
+def group (k : Nat) (i : String) : List String :=
+  if exact ≤ k then [i] else (parts i).take k
+
+/-- The levels from the exact one down to the floor. -/
+def levels (floor : Nat) : List Nat := (List.range (exact + 1 - floor)).map (exact - ·)
+
+def policy (inhibition floor : Nat) : Refine.Policy String (List String) :=
+  ⟨group, levels floor, inhibition⟩
 
 /-- The guard as the model writes it: `c₀ ? "i₀" : c₁ ? "i₁" : null`. -/
 def guardCel : List (Refine.Cond Atom × String) → String
@@ -350,8 +344,7 @@ def chains1 : List (List (Refine.Cond Atom × String)) := links.map ([·])
 def chains2 : List (List (Refine.Cond Atom × String)) :=
   (links.flatMap fun a => links.map fun b => [a, b]).take 40
 
-def commitR (r : RRef) (chain : List (Refine.Cond Atom × String)) : RRef :=
-  (Refine.commit overlaps r chain).1
+def commitR (r : RRef) (chain : List (Refine.Cond Atom × String)) : RRef := Refine.commit r chain
 
 /-- The empty refinement and every one a single one-link guard makes. -/
 def refs1 : List RRef := Refine.Refinement.empty :: chains1.map (commitR .empty)
@@ -359,38 +352,65 @@ def refs1 : List RRef := Refine.Refinement.empty :: chains1.map (commitR .empty)
 /-- Every refinement two one-link guards make, one after the other. -/
 def refs2 : List RRef := chains1.flatMap fun a => chains1.map fun b => commitR (commitR .empty a) b
 
-/-- Refinements with possibly overlapping branches, as commit leaves them
-when overlap is undecided: conflicts for `resolve` to find. -/
-def refsPossible : List RRef :=
-  chains1.flatMap fun a => chains1.filterMap fun b =>
-    let r := commitR (commitR .empty a) b
-    if (Refine.commit overlaps (commitR .empty a) b).2.2.isEmpty then none else some r
+/-- Refinements of two voters that disagree: different instructions. -/
+def refsSplit : List RRef :=
+  (chains1.flatMap fun a => chains1.filterMap fun b =>
+    if a.map (·.2) = b.map (·.2) then none else some (commitR (commitR .empty a) b)).take 30
 
 def values : List Int := [0, 2, 3, 5, 6, 8, 9]
 
 def jInt (x : Int) : Json := Lean.Json.num (Lean.JsonNumber.fromInt x)
 
+/-- Instructions as they are stored: canonical, each `$n` a position. -/
+def tInstrs : List String :=
+  ["return 1 @passed[4] @passed[5]", "return 1 @passed[4]", "@passed[1] @passed[5].url",
+    "return 0 @passed[4]", "delegate(goal(@passed[0]), @passed[1])"]
+
+/-- Three voters, each one link from a pool. -/
+def tallyRefs : List RRef :=
+  let pool := ([Refine.Cond.tt, .atom (.gt 2)].flatMap fun c => (tInstrs.take 4).map fun i => [(c, i)])
+  pool.flatMap fun a => pool.flatMap fun b => pool.map fun c => commitR (commitR (commitR .empty a) b) c
+
+/-- The `cel/` experiment's ballots (proposal 59): seven voters, each one
+link that holds. -/
+def experiment : List RRef :=
+  let r := fun (is : List String) => is.foldl (fun r i => commitR r [(.tt, i)]) Refine.Refinement.empty
+  let a := "return 1 @passed[4] @passed[5]"
+  let b := "return 1 @passed[4]"
+  let c := "@passed[1] @passed[5].url"
+  [ r (List.replicate 7 "return 0 @passed[4]"),
+    r (List.replicate 6 a ++ [b]),
+    r (List.replicate 4 a ++ [c, c, b]) ]
+
+def tallyCase (r : RRef) (x : Int) (ι floor : Nat) : Json :=
+  Json.mkObj [("in", Json.mkObj [("refinement", jRef r), ("x", jInt x), ("inhibition", jNat ι),
+      ("floor", jNat floor)]),
+    ("out", jOutcome (Refine.tally (policy ι floor) Atom.sat r.branches x))]
+
+/-- The policy dispatch and `afterStartle` vectors use. -/
+def dInhibition : Nat := 0
+def dFloor : Nat := 2
+
 def refineFiles : List (String × List Json) :=
   let case (i o : Json) : Json := Json.mkObj [("in", i), ("out", o)]
-  [ ("refineOverlaps", links.flatMap fun (p, _) => links.filterMap fun (q, i) =>
-      if i = "A" then some (case (Json.mkObj [("p", .str (condCel p)), ("q", .str (condCel q))])
-        (jOpt Json.bool (overlaps p q))) else none),
-    ("refineCommit", refs1.flatMap fun r => (chains1 ++ chains2).map fun chain =>
-      let (r', recs, poss) := Refine.commit overlaps r chain
+  [ ("refineCommit", refs1.flatMap fun r => (chains1 ++ chains2).map fun chain =>
       case (Json.mkObj [("refinement", jRef r), ("guard", .str (guardCel chain))])
-        (Json.mkObj [("refinement", jRef r'), ("records", jList jRecord recs),
-          ("possible", jList jPossible poss)])),
+        (jRef (Refine.commit r chain))),
     ("refineDistinguish", refs2.flatMap fun r => values.map fun v =>
       case (Json.mkObj [("refinement", jRef r), ("x", jInt v)])
         (jOutcome (Refine.distinguish Atom.sat r.branches v))),
-    ("refineResolve", refsPossible.flatMap fun r => values.map fun v =>
-      let (o, r', recs) := Refine.resolve Atom.sat r.branches.length r v
-      case (Json.mkObj [("refinement", jRef r), ("x", jInt v)])
-        (Json.mkObj [("outcome", jOutcome o), ("refinement", jRef r'), ("records", jList jRecord recs)])),
+    ("refineTally",
+      (tallyRefs.flatMap fun r => [0, 3].flatMap fun x => [0, 500, 750, 1000].map fun ι =>
+        tallyCase r x ι 2) ++
+      (tallyRefs.take 64).flatMap (fun r => [1, 3, 4].map fun f => tallyCase r 3 500 f) ++
+      (refsSplit.flatMap fun r => [3, 6].map fun x => tallyCase r x 1000 2) ++
+      experiment.flatMap fun r => [0, 250, 500, 750, 1000].flatMap fun ι => [2, 4].map fun f =>
+        tallyCase r 0 ι f),
     ("refineAfterStartle", (chains1 ++ chains2.take 10).flatMap fun chain =>
-      refs1.flatMap fun r => [3, 6, 9].map fun v =>
-        case (Json.mkObj [("guard", .str (guardCel chain)), ("committed", jRef r), ("x", jInt v)])
-          (jAfter (Refine.afterStartle Atom.sat chain r.branches v))) ]
+      (refs1 ++ refsSplit.take 6).flatMap fun r => [3, 6, 9].map fun v =>
+        case (Json.mkObj [("guard", .str (guardCel chain)), ("committed", jRef r), ("x", jInt v),
+            ("inhibition", jNat dInhibition), ("floor", jNat dFloor)])
+          (jAfter (Refine.afterStartle (policy dInhibition dFloor) Atom.sat chain r.branches v))) ]
 
 /-! ## Proposal 58: shapes
 
@@ -727,7 +747,7 @@ more written. -/
 
 def dState : Refine.State → String
   | .reject => "reject" | .hesitate => "hesitate" | .startle => "startle"
-  | .reconcile => "reconcile" | .trust => "trust"
+  | .tally => "tally" | .trust => "trust"
 
 def dWrote : Dispatch.Wrote Atom String → Json
   | .guard c => .str ((guardCel c).replace "arrived" "$1")
@@ -753,10 +773,12 @@ def dWrites : List (List (Dispatch.Wrote Atom String)) :=
 def dBound : Nat := 3
 
 def dispatchFiles : List (String × List Json) :=
-  [ ("dispatch", (refs1 ++ refsPossible).flatMap fun r => values.flatMap fun x => dWrites.map fun ws =>
-      let o := Dispatch.decide Atom.sat overlaps x dBound r ws
-      let again := Dispatch.decide Atom.sat overlaps x dBound o.refinement []
+  [ ("dispatch", (refs1 ++ refsSplit).flatMap fun r => values.flatMap fun x => dWrites.map fun ws =>
+      let p := policy dInhibition dFloor
+      let o := Dispatch.decide p Atom.sat x dBound r ws
+      let again := Dispatch.decide p Atom.sat x dBound o.refinement []
       Json.mkObj [("in", Json.mkObj [("refinement", jRef r), ("x", jInt x), ("refinementBound", jNat dBound),
+          ("inhibition", jNat dInhibition), ("floor", jNat dFloor),
           ("writes", .arr (ws.map dWrote).toArray)]),
         ("out", Json.mkObj [("first", dOut o), ("again", dOut again)])]) ]
 

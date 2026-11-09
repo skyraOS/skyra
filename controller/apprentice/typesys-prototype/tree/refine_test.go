@@ -3,27 +3,18 @@ package tree
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
 // The replays of Refine.lean's vectors, the refine* files.
 func init() {
-	replays["refineOverlaps"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		overlap, decided, err := Overlaps(dec[string](t, in["p"]), dec[string](t, in["q"]))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !decided {
-			return nil
-		}
-		return overlap
-	}
 	replays["refineCommit"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		v, recs, poss, err := CommitGuard(dec[Version](t, in["refinement"]), dec[string](t, in["guard"]))
+		v, err := CommitGuard(dec[Version](t, in["refinement"]), dec[string](t, in["guard"]))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return map[string]any{"refinement": v, "records": eRecords(recs), "possible": ePossible(poss)}
+		return v
 	}
 	replays["refineDistinguish"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		s, err := Distinguish(dec[Version](t, in["refinement"]).Branches, xVals(t, in))
@@ -32,19 +23,19 @@ func init() {
 		}
 		return eSelection(s)
 	}
-	replays["refineResolve"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
-		s, v, recs, err := Resolve(dec[Version](t, in["refinement"]), xVals(t, in))
+	replays["refineTally"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
+		votes, err := Cast(dec[Version](t, in["refinement"]).Branches, xVals(t, in))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return map[string]any{"outcome": eSelection(s), "refinement": v, "records": eRecords(recs)}
+		return eSelection(tallyOf(t, in).Decide(votes))
 	}
 	replays["refineAfterStartle"] = func(t *testing.T, _ Apprentice, in map[string]json.RawMessage) any {
 		chain, err := ParseGuard(dec[string](t, in["guard"]))
 		if err != nil {
 			t.Fatal(err)
 		}
-		a, err := AfterStartle(chain, dec[Version](t, in["committed"]).Branches, xVals(t, in))
+		a, err := AfterStartle(chain, dec[Version](t, in["committed"]).Branches, xVals(t, in), tallyOf(t, in))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,6 +49,11 @@ func init() {
 // xVals is the vectors' x as the arrival's size field.
 func xVals(t *testing.T, in map[string]json.RawMessage) map[string]any {
 	return sized(dec[int64](t, in["x"]))
+}
+
+// tallyOf is the vectors' inhibition and floor.
+func tallyOf(t *testing.T, in map[string]json.RawMessage) Tally {
+	return Tally{Inhibition: dec[int](t, in["inhibition"]), Floor: dec[int](t, in["floor"])}
 }
 
 func sized(x any) map[string]any {
@@ -74,31 +70,24 @@ func eSelection(s Selection) any {
 	return nil
 }
 
-func eRecords(rs []Reconcile) []any {
-	out := []any{}
-	for _, r := range rs {
-		out = append(out, r)
-	}
-	return out
-}
+// --- 58's and 59's checks ---
 
-func ePossible(ps []Possible) []any {
-	out := []any{}
-	for _, p := range ps {
-		out = append(out, []int{p.Older, p.Newer})
-	}
-	return out
-}
-
-// --- 58's checks ---
-
-func commitOK(t *testing.T, v Version, guard string) (Version, []Reconcile, []Possible) {
+func commitOK(t *testing.T, v Version, guard string) Version {
 	t.Helper()
-	v2, recs, poss, err := CommitGuard(v, guard)
+	v2, err := CommitGuard(v, guard)
 	if err != nil {
 		t.Fatalf("%s: %v", guard, err)
 	}
-	return v2, recs, poss
+	return v2
+}
+
+func tallies(t *testing.T, v Version, x any, tl Tally) Selection {
+	t.Helper()
+	votes, err := Cast(v.Branches, sized(x))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tl.Decide(votes)
 }
 
 func selects(t *testing.T, v Version, x any) Selection {
@@ -110,126 +99,185 @@ func selects(t *testing.T, v Version, x any) Selection {
 	return s
 }
 
-// The older keeps the overlap; the values that triggered startle select
-// the new instruction; nothing the older selected changes.
-func TestOlderKeepsTheOverlap(t *testing.T) {
-	v, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : null`)
-	v, recs, _ := commitOK(t, v, `arrived.size > 2 ? "B" : null`)
-	if len(recs) != 1 || recs[0] != (Reconcile{Older: 1, Retired: 2, Remainder: 3}) {
-		t.Fatalf("records %v", recs)
+// A chain is stored whole, under one voter; an overlap with an older
+// branch is a dissenting vote, never narrowed away, and outside it the new
+// chain is the only vote.
+func TestOverlapIsAVote(t *testing.T) {
+	v := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : null`)
+	v = commitOK(t, v, `arrived.size > 2 ? "B" : null`)
+	if b := v.Branches[1]; b.ID != 2 || b.Rank != 2 || b.Voter != 2 || b.Cond != "(arrived.size > 2) && (true)" {
+		t.Fatalf("the second chain stored as %+v", b)
 	}
-	if b := v.Branches[len(v.Branches)-1]; b.ID != 3 || b.Rank != 2 {
-		t.Fatalf("the remainder is b%d with rank %d, not b3 with b2's rank", b.ID, b.Rank)
+	plurality := Tally{Inhibition: 1000}
+	if s := tallies(t, v, int64(3), Tally{}); s.Kind != SelectOne || s.Instr != "B" {
+		t.Errorf("x = 3 tallies %+v, want B", s)
 	}
-	for x, want := range map[int64]string{3: "B", 7: "B", 8: "A", 100: "A"} {
-		if s := selects(t, v, x); s.Kind != SelectOne || s.Instr != want {
-			t.Errorf("x = %d selects %+v, want %s", x, s, want)
-		}
+	if s := tallies(t, v, int64(8), plurality); s.Kind != SelectConflict {
+		t.Errorf("x = 8, one vote each, tallies %+v, want a conflict at any inhibition", s)
 	}
-	if s := selects(t, v, int64(1)); s.Kind != SelectNull {
-		t.Errorf("x = 1 selects %+v, want null", s)
+	v = commitOK(t, v, `arrived.size > 0 ? "A" : null`)
+	if s := tallies(t, v, int64(8), plurality); s.Kind != SelectOne || s.Instr != "A" {
+		t.Errorf("x = 8, two to one, tallies %+v, want A by plurality", s)
 	}
-}
-
-// One broad guard cannot erase what other trees learned: `true` narrows to
-// what no branch covered.
-func TestBroadGuardNarrows(t *testing.T) {
-	v, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "ls $1" : arrived.size < 0 ? "stat $1" : null`)
-	v, _, poss := commitOK(t, v, `true ? "rm $1" : null`)
-	if len(poss) != 0 {
-		t.Fatalf("possibly overlapping %v: every overlap here is decidable", poss)
-	}
-	for x, want := range map[float64]string{8: "ls $1", -1: "stat $1", 3: "rm $1", 7.5: "ls $1", 0: "rm $1"} {
-		if s := selects(t, v, x); s.Kind != SelectOne || s.Instr != want {
-			t.Errorf("x = %v selects %+v, want %s", x, s, want)
-		}
+	if s := tallies(t, v, int64(8), Tally{}); s.Kind != SelectConflict {
+		t.Errorf("x = 8, two to one, tallies %+v, want a conflict when every vote is needed", s)
 	}
 }
 
-// A chain is stored as independent branches: within one guard, the first
-// condition that holds wins, and retiring one branch widens no other.
+// One broad guard cannot erase what other trees learned: it is one vote
+// wherever another voter cast one.
+func TestBroadGuardIsOneVote(t *testing.T) {
+	v := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "ls $1" : arrived.size < 0 ? "stat $1" : null`)
+	v = commitOK(t, v, `true ? "rm $1" : null`)
+	for x, want := range map[float64]string{3: "rm $1", 0: "rm $1"} {
+		if s := tallies(t, v, x, Tally{Inhibition: 1000}); s.Kind != SelectOne || s.Instr != want {
+			t.Errorf("x = %v tallies %+v, want %s", x, s, want)
+		}
+	}
+	for _, x := range []float64{8, -1, 7.5} {
+		if s := tallies(t, v, x, Tally{Inhibition: 1000}); s.Kind != SelectConflict {
+			t.Errorf("x = %v tallies %+v, want a conflict", x, s)
+		}
+	}
+}
+
+// A chain is stored as branches with effective conditions: within one
+// guard, the first condition that holds wins, so a voter casts one vote.
 func TestChainEffectiveConditions(t *testing.T) {
-	v, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : arrived.size > 5 ? "C" : null`)
-	if s := selects(t, v, int64(9)); s.Instr != "A" || s.Kind != SelectOne {
-		t.Fatalf("x = 9 selects %+v", s)
-	}
-	if s := selects(t, v, int64(6)); s.Instr != "C" || s.Kind != SelectOne {
-		t.Fatalf("x = 6 selects %+v", s)
+	v := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : arrived.size > 5 ? "C" : null`)
+	for x, want := range map[int64]string{9: "A", 6: "C"} {
+		votes, err := Cast(v.Branches, sized(x))
+		if err != nil || len(votes) != 1 || votes[0].Instr != want || votes[0].Voter != 1 {
+			t.Fatalf("x = %d casts %+v (%v), want one vote for %s by voter 1", x, votes, err, want)
+		}
 	}
 	rest := Version{Next: v.Next, Branches: v.Branches[1:]}
 	if s := selects(t, rest, int64(9)); s.Kind != SelectNull {
-		t.Fatalf("with b1 retired, x = 9 selects %+v: b2 widened", s)
+		t.Fatalf("without b1, x = 9 selects %+v: b2 widened", s)
 	}
 }
 
-// Overlap is decided over numbers, not integers, and left undecided past
-// simple comparisons of one variable.
-func TestOverlaps(t *testing.T) {
-	for _, c := range []struct {
-		p, q             string
-		overlap, decided bool
+// The cel/ experiment's ballots (proposal 59's table), at every inhibition.
+func TestExperimentTally(t *testing.T) {
+	const (
+		done   = "return 0 @passed[4]"
+		why    = "return 1 @passed[4] @passed[5]"
+		noWhy  = "return 1 @passed[4]"
+		curl   = "@passed[1] @passed[5].url"
+		decide = "startle"
+	)
+	ballot := func(instrs ...string) []Vote {
+		votes := make([]Vote, len(instrs))
+		for i, in := range instrs {
+			votes[i] = Vote{Voter: i + 1, Branch: i + 1, Rank: i + 1, Instr: in}
+		}
+		return votes
+	}
+	rows := []struct {
+		name  string
+		votes []Vote
+		want  map[int]string // by inhibition
 	}{
-		{"arrived.size > 7", "arrived.size < 8", true, true},
-		{"arrived.size > 7", "arrived.size < 7", false, true},
-		{"arrived.size >= 7", "arrived.size <= 7", true, true},
-		{"arrived.size == 5", "!(arrived.size == 5)", false, true},
-		{"true", "arrived.size > 1000", true, true},
-		{"arrived.size % 2 == 0", "arrived.size > 1", false, false},
-		{"arrived.size > 1", "passed0.size > 1", false, false},
-		{"size(arrived.name) > 1", "arrived.size > 1", false, false},
-	} {
-		o, d, err := Overlaps(c.p, c.q)
-		if err != nil || o != c.overlap || d != c.decided {
-			t.Errorf("%s ∧ %s: overlap %v decided %v (%v), want %v %v", c.p, c.q, o, d, err, c.overlap, c.decided)
+		{"200", ballot(done, done, done, done, done, done, done),
+			map[int]string{1000: done, 750: done, 500: done, 250: done, 0: done}},
+		{"503, restarts 3", ballot(why, why, why, why, why, why, noWhy),
+			map[int]string{1000: why, 750: why, 500: why, 250: why, 0: why}},
+		{"503, restarts 1", ballot(why, why, why, why, curl, curl, noWhy),
+			map[int]string{1000: why, 750: why, 500: decide, 250: decide, 0: decide}},
+	}
+	for _, r := range rows {
+		for ι, want := range r.want {
+			s := Tally{Inhibition: ι}.Decide(r.votes)
+			got := s.Instr
+			if s.Kind != SelectOne {
+				got = decide
+			}
+			if got != want {
+				t.Errorf("%s at ι = %d: %s, want %s", r.name, ι, got, want)
+			}
+		}
+	}
+	// At ι = 0 the six with a why and the one without merge at level 3.
+	if s := (Tally{}).Decide(rows[1].votes); s.Level != 3 {
+		t.Errorf("restarts 3 at ι = 0 decided at level %d, want 3", s.Level)
+	}
+}
+
+// A tally does not depend on the order of the votes.
+func TestTallyOrder(t *testing.T) {
+	votes := []Vote{{Rank: 1, Instr: "A"}, {Rank: 2, Instr: "B"}, {Rank: 3, Instr: "A"},
+		{Rank: 4, Instr: "@passed[0] x"}, {Rank: 5, Instr: "@passed[0] y"}, {Rank: 6, Instr: "@passed[0] y"}}
+	for _, tl := range []Tally{{}, {Inhibition: 500}, {Inhibition: 1000}, {Inhibition: 1000, Floor: 4}} {
+		want := tl.Decide(votes)
+		for i := range votes {
+			rotated := append(append([]Vote{}, votes[i:]...), votes[:i]...)
+			if got := tl.Decide(rotated); got != want {
+				t.Fatalf("%+v: rotated by %d tallies %+v, not %+v", tl, i, got, want)
+			}
 		}
 	}
 }
 
-// A conflict found later, from a pair commit could not decide, is
-// reconciled with the older keeping it, and resolving ends in no conflict.
-func TestResolveLaterConflict(t *testing.T) {
-	v, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 2 ? "A" : null`)
-	v, _, poss := commitOK(t, v, `arrived.size % 2 == 0 ? "B" : null`)
-	if len(poss) != 1 || poss[0] != (Possible{Older: 1, Newer: 2}) {
-		t.Fatalf("possible %v", poss)
+// An instruction's parts are its form, its head, then the rest.
+func TestInstrParts(t *testing.T) {
+	for in, want := range map[string]string{
+		"return 1 @passed[4] @passed[5]":          "return 1 @passed[4] @passed[5]",
+		"@passed[1] @passed[5].url":               "run @passed[1] @passed[5].url",
+		"delegate(goal(@passed[0]), @passed[1])":  "delegate @passed[0] @passed[1]",
+		"delegate(goal(@passed[0][2]), @arrived)": "delegate @passed[0][2] @arrived",
+	} {
+		if got := strings.Join(InstrParts(in), " "); got != want {
+			t.Errorf("InstrParts(%q) = %q, want %q", in, got, want)
+		}
 	}
-	if s := selects(t, v, int64(6)); s.Kind != SelectConflict {
-		t.Fatalf("x = 6 selects %+v, want a conflict", s)
+	if GroupKey(2, "return 1 @passed[4]") != GroupKey(2, "return 1 @passed[4] @passed[5]") ||
+		GroupKey(2, "return 0 @passed[4]") == GroupKey(2, "return 1 @passed[4]") ||
+		GroupKey(1, "@passed[1] @arrived") == GroupKey(1, "return 0 @arrived") {
+		t.Error("level 2 groups by form and head, level 1 by form")
 	}
-	s, v2, recs, err := Resolve(v, sized(int64(6)))
-	if err != nil || s.Kind != SelectOne || s.Instr != "A" {
-		t.Fatalf("resolved to %+v (%v), want A", s, err)
+}
+
+// A ballot names the base, the values by identity, and each vote's voter
+// and branch.
+func TestBallotIdentity(t *testing.T) {
+	v := commitOK(t, EmptyVersion(), `arrived.size > 2 ? "A" : null`)
+	v = commitOK(t, v, `arrived.size > 7 ? "B" : arrived.size > 1 ? "A" : null`)
+	b, err := NewBallot("base", v.Branches, sized(int64(3)))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(recs) != 1 || recs[0].Older != 1 || recs[0].Retired != 2 {
-		t.Fatalf("records %v", recs)
+	if b.Base != "base" || b.Observation != ObservationID(sized(int64(3))) ||
+		b.Observation == ObservationID(sized(int64(4))) {
+		t.Fatalf("ballot identity %+v", b)
 	}
-	if s := selects(t, v2, int64(2)); s.Instr != "B" {
-		t.Fatalf("x = 2 lost the newer's selection outside the overlap: %+v", s)
+	if len(b.Votes) != 2 || b.Votes[0] != (Vote{Voter: 1, Branch: 1, Rank: 1, Instr: "A"}) ||
+		b.Votes[1] != (Vote{Voter: 2, Branch: 3, Rank: 3, Instr: "A"}) {
+		t.Fatalf("votes %+v", b.Votes)
 	}
 }
 
 // After startle the step runs its own model's instruction, whatever the
-// committed version selects; it is learned only if the version selects it.
+// committed version tallies; it is learned only if the tally selects it.
 func TestAfterStartleRunsItsOwn(t *testing.T) {
 	chain, err := ParseGuard(`arrived.size > 2 ? "B" : null`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 2 ? "B" : null`)
-	// A concurrent commit won the race with an older branch covering x = 9.
-	theirs, _, _ := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : null`)
-	raced, _, _ := commitOK(t, theirs, `arrived.size > 2 ? "B" : null`)
+	mine := commitOK(t, EmptyVersion(), `arrived.size > 2 ? "B" : null`)
+	// A concurrent commit landed a voter covering x = 9 with another instruction.
+	theirs := commitOK(t, EmptyVersion(), `arrived.size > 7 ? "A" : null`)
+	raced := commitOK(t, theirs, `arrived.size > 2 ? "B" : null`)
 	vals := sized(int64(9))
 	for _, c := range []struct {
 		v       Version
 		learned bool
 	}{{mine, true}, {raced, false}} {
-		a, err := AfterStartle(chain, c.v.Branches, vals)
+		a, err := AfterStartle(chain, c.v.Branches, vals, Tally{})
 		if err != nil || a.Startle || a.Instr != "B" || a.Learned != c.learned {
 			t.Errorf("after startle %+v (%v), want B learned %v", a, err, c.learned)
 		}
 	}
-	if a, _ := AfterStartle(chain, mine.Branches, sized(int64(1))); !a.Startle {
+	if a, _ := AfterStartle(chain, mine.Branches, sized(int64(1)), Tally{}); !a.Startle {
 		t.Errorf("an uncovered value must startle again, got %+v", a)
 	}
 }
@@ -304,10 +352,7 @@ func TestStoreGuard(t *testing.T) {
 	if err != nil || renumbered[0] != want[0] {
 		t.Fatalf("another frame's numbers stored %+v (%v)", renumbered, err)
 	}
-	v, _, _, err := CommitChain(EmptyVersion(), renumbered)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := CommitChain(EmptyVersion(), renumbered)
 	vals := map[string]any{"arrived": map[string]any{"size": 9.0},
 		"passed0": map[string]any{"content-type": "$3"}}
 	if s, err := Distinguish(v.Branches, vals); err != nil || s.Instr != "diff @arrived @passed[0]" {
@@ -339,7 +384,7 @@ func TestStoreGuardUnstorable(t *testing.T) {
 
 // A stored guard reads positions only: any other variable fails.
 func TestOnlyPositions(t *testing.T) {
-	v, _, _ := commitOK(t, EmptyVersion(), `goal.size > 1 ? "A" : null`)
+	v := commitOK(t, EmptyVersion(), `goal.size > 1 ? "A" : null`)
 	if _, err := Distinguish(v.Branches, map[string]any{"goal": map[string]any{"size": 2}}); err == nil {
 		t.Fatal("a guard read a variable that is not a position")
 	}
@@ -353,10 +398,7 @@ func TestTextArrival(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, _, _, err := CommitChain(EmptyVersion(), chain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := CommitChain(EmptyVersion(), chain)
 	for text, want := range map[string]string{"error: no such file\n": "less @arrived", "a.txt\nb.txt\n": "wc @arrived"} {
 		s, err := Distinguish(v.Branches, map[string]any{"arrived": text})
 		if err != nil || s.Kind != SelectOne || s.Instr != want {
@@ -375,10 +417,7 @@ func TestMacroGuard(t *testing.T) {
 	if err != nil || chain[0].Cond != "arrived.items.exists(i, i.id > 2)" {
 		t.Fatalf("stored %+v (%v)", chain, err)
 	}
-	v, _, _, err := CommitChain(EmptyVersion(), chain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := CommitChain(EmptyVersion(), chain)
 	items := map[string]any{"arrived": map[string]any{"items": []any{map[string]any{"id": 3.0}}}}
 	if s, err := Distinguish(v.Branches, items); err != nil || s.Instr != "ls @arrived" {
 		t.Fatalf("selects %+v (%v)", s, err)
@@ -408,14 +447,8 @@ func TestInstructionsCompareByParameters(t *testing.T) {
 	if a[0].Instr != "@passed[3] @passed[6].unit" {
 		t.Fatalf("stored %q", a[0].Instr)
 	}
-	v, _, _, err := CommitChain(Version{Branches: []Branch{}}, a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, _, _, err = CommitChain(v, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := CommitChain(Version{Branches: []Branch{}}, a)
+	v = CommitChain(v, b)
 	vals := map[string]any{"passed6": map[string]any{"restarts": 1.0, "unit": "api.service"}}
 	if s, err := Distinguish(v.Branches, vals); err != nil || s.Kind != SelectOne {
 		t.Fatalf("%+v %v", s, err)

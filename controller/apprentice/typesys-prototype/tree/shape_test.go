@@ -190,10 +190,7 @@ func TestGuardOnError(t *testing.T) {
 	if err := CheckGuard(chain, map[Position]Shape{Arrived: s}); err != nil {
 		t.Fatalf("refused: %v", err)
 	}
-	ver, _, _, err := CommitChain(EmptyVersion(), chain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ver := CommitChain(EmptyVersion(), chain)
 	if sel, err := Distinguish(ver.Branches, map[string]any{"arrived": v}); err != nil || sel.Instr != "iconv -f latin1 @arrived" {
 		t.Fatalf("selects %+v (%v)", sel, err)
 	}

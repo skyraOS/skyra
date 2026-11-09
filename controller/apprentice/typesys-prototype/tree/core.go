@@ -351,10 +351,11 @@ type hashes struct {
 // of id share one, whatever their parts; the version keeps a changed format
 // from matching old records.
 const (
-	inputTag      = "skyra/input/v2" // v2: the contract, not its binary
-	returnTag     = "skyra/return/v1"
-	refinementTag = "skyra/refinement/v1"
-	seenTag       = "skyra/seen/v1"
+	inputTag       = "skyra/input/v2" // v2: the contract, not its binary
+	returnTag      = "skyra/return/v1"
+	refinementTag  = "skyra/refinement/v1"
+	seenTag        = "skyra/seen/v1"
+	observationTag = "skyra/observation/v1"
 )
 
 // canonical is the JSON of v as JSON.stringify writes it: no HTML escaping,

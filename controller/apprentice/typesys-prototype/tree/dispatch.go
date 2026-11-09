@@ -1,13 +1,13 @@
-// Proposal 58: dispatch, as Dispatch.lean defines one transition's control,
-// over the walk and frames. A Machine is a stack of frames, the root first,
+// Proposals 58 and 59: dispatch, as Dispatch.lean defines one
+// transition's control, over the walk and frames. A Machine is a stack of frames, the root first,
 // and the refinements they read. Each input is a process's result or the
 // guard the model wrote; each step gives one effect: run an invoke, ask the
 // model, or end. Nothing here does I/O: the shell runs what RunInvoke names,
 // asks the model what AskModel shows, and feeds the answers back.
 //
-// An arrival is distinguished on its base's refinement. One instruction is
-// trusted; a conflict is reconciled, the older branch keeping the values;
-// null startles, and the model's guard is committed and its own
+// An arrival is tallied on its base's refinement: the instruction the
+// tally selects is trusted; a conflict, no group winning, startles as null
+// does, and the model's guard is committed as one more voter and its own
 // instruction run. Every run ends a transition, counted against the frame's
 // transition bound; the model is asked at most its refinement bound's times
 // in one transition. An instruction runs a tool, returns, or delegates to a
@@ -33,6 +33,7 @@ type level struct {
 	states  Transition // its states so far
 	asks    int        // the asks it has made
 	learned bool       // whether the refinement selects what trust last ran
+	ballot  Ballot     // the votes cast on the arrival, when it was tallied
 	goal    bool       // whether it waits on its goal: only the root, at its start
 }
 
@@ -60,6 +61,9 @@ type Bounds struct {
 	// one holding more delegates. It is the owner's, set where the tree is
 	// started; no model is shown it.
 	Act int
+	// Tally is how a base's votes decide (59); the zero Tally needs every
+	// vote cast, at some level down to the floor.
+	Tally Tally
 }
 
 // DefaultBounds are the bounds a frame gets when its caller sets none.
@@ -132,6 +136,9 @@ type (
 		Kind    FrameKind
 		Depth   int
 		Reason  string
+		// Ballot is what the arrival's tally counted, for the record: on a
+		// conflict, the votes that split. The model is not shown it.
+		Ballot Ballot
 	}
 	// Finished is the root's return: what its `return` built
 	// (ReturnValue).
@@ -202,7 +209,7 @@ func (m Machine) Step(in any) (Machine, any, error) {
 // arrive starts the running frame's next transition at a.
 func (m *Machine) arrive(a Arrival) {
 	t := m.top()
-	t.frame, t.at, t.states, t.asks = a.Next, &a, nil, 0
+	t.frame, t.at, t.states, t.asks, t.ballot = a.Next, &a, nil, 0, Ballot{}
 }
 
 func (m Machine) version(base string) Version {
@@ -212,26 +219,23 @@ func (m Machine) version(base string) Version {
 	return EmptyVersion()
 }
 
-// decide distinguishes the running frame's arrival on its base's
-// refinement.
+// decide tallies the running frame's arrival on its base's refinement: the
+// instruction the tally selects is trusted; a conflict startles, as null
+// does, and the model's guard is one more voter.
 func (m Machine) decide() (Machine, any, error) {
 	t := m.top()
 	a := t.at
-	v := m.version(a.Base)
-	sel, err := Distinguish(v.Branches, a.Vals)
+	b, err := NewBallot(a.Base, m.version(a.Base).Branches, a.Vals)
 	if err != nil {
 		return m, nil, err
 	}
-	if sel.Kind == SelectConflict {
-		t.states = append(t.states, StateReconcile)
-		if sel, v, _, err = Resolve(v, a.Vals); err != nil {
-			return m, nil, err
-		}
-		m.Refs[a.Base] = v
-	}
-	if sel.Kind == SelectOne {
+	t.ballot = b
+	switch sel := m.Bounds.Tally.Decide(b.Votes); sel.Kind {
+	case SelectOne:
 		t.learned = true
 		return m.trust(sel.Instr, a.Refs)
+	case SelectConflict:
+		t.states = append(t.states, StateTally)
 	}
 	return m.ask("")
 }
@@ -246,7 +250,7 @@ func (m Machine) ask(reason string) (Machine, any, error) {
 	t.states = append(t.states, StateStartle)
 	t.asks++
 	return m, AskModel{Base: t.at.Base, Arrival: *t.at, Scope: slices.Clone(t.frame.Scope),
-		Kind: KindOf(m.Bounds.Act, t.frame.Scope), Depth: m.Depth(), Reason: reason}, nil
+		Kind: KindOf(m.Bounds.Act, t.frame.Scope), Depth: m.Depth(), Reason: reason, Ballot: t.ballot}, nil
 }
 
 // reject refuses the guard or instruction and asks again.
@@ -276,13 +280,10 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	if err := m.runnable(chain, a.Refs); err != nil {
 		return m.reject(err)
 	}
-	v, _, _, err := CommitChain(m.version(a.Base), chain)
-	if err != nil {
-		return m.reject(err)
-	}
+	v := CommitChain(m.version(a.Base), chain)
 	m.Refs[a.Base] = v
-	t.states = append(t.states, StateReconcile)
-	after, err := AfterStartle(chain, v.Branches, a.Vals)
+	t.states = append(t.states, StateTally)
+	after, err := AfterStartle(chain, v.Branches, a.Vals, m.Bounds.Tally)
 	if err != nil {
 		return m, nil, err
 	}
@@ -317,7 +318,7 @@ func (m Machine) unlearned(guard string) (Machine, any, error) {
 	if err := m.runnable(chain, refs); err != nil {
 		return m.reject(err)
 	}
-	after, err := AfterStartle(chain, nil, vals)
+	after, err := AfterStartle(chain, nil, vals, m.Bounds.Tally)
 	if err != nil {
 		return m.reject(err)
 	}
