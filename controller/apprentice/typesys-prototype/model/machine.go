@@ -227,28 +227,13 @@ func (m Machine) genesis(goal any) (Machine, any, error) {
 	return m.decide(id)
 }
 
-// seen is each $n a frame has seen (a tool, a binding, an arrival) by its
-// position in the key, from 1, and back. Eliminations and introductions
-// have none.
-func seen(f Frame) (toKey, toItem map[int]int) {
-	toKey, toItem = map[int]int{}, map[int]int{}
-	for i, it := range f.Items() {
-		if it.Tag == ItemTool || it.Tag == ItemSeen {
-			s := len(toKey) + 1
-			toKey[i+1], toItem[s] = s, i+1
-		}
-	}
-	return toKey, toItem
-}
-
 // vals are what a frame has seen as a guard reads it, the key's position s
 // as passed{s-1}: a tool as its name, every other $n as its value.
 func vals(f Frame) map[string]any {
 	out := map[string]any{}
-	toKey, _ := seen(f)
-	for n, s := range toKey {
+	for i, n := range f.SeenAt() {
 		it, _ := f.Item(n)
-		out["passed"+strconv.Itoa(s-1)] = itemValue(f, n, it)
+		out["passed"+strconv.Itoa(i)] = itemValue(f, n, it)
 	}
 	return out
 }
@@ -268,50 +253,15 @@ func tables(f Frame) (conds, instrs map[int]tree.Position, refs map[tree.Positio
 	shapes map[tree.Position]tree.Shape) {
 	conds, instrs, refs, shapes = map[int]tree.Position{}, map[int]tree.Position{}, map[tree.Position]int{},
 		map[tree.Position]tree.Shape{}
-	toKey, _ := seen(f)
 	for i, it := range f.Items() {
 		p := tree.Passed(i)
 		instrs[i+1], refs[p] = p, i+1
-		if s, ok := toKey[i+1]; ok {
+		if s, ok := f.ToKey(i + 1); ok {
 			conds[i+1] = tree.Passed(s - 1)
 			shapes[tree.Passed(s-1)] = tree.ShapeOf(itemValue(f, i+1, it))
 		}
 	}
 	return conds, instrs, refs, shapes
-}
-
-// stored is a template as memory stores it: inlined, so it reads only what
-// was seen, and each reference its key position.
-func stored(f Frame, t Template) Template {
-	toKey, _ := seen(f)
-	out := Template{Op: t.Op}
-	for _, a := range t.Args {
-		if a.Lit == nil {
-			a = f.Inline(a.Var, a.Sels)
-		}
-		if a.Lit == nil {
-			a.Var = toKey[a.Var]
-		}
-		out.Args = append(out.Args, a)
-	}
-	return out
-}
-
-// bound is a stored template in a frame: each key position its $n there.
-func bound(f Frame, t Template) (Template, error) {
-	_, toItem := seen(f)
-	out := Template{Op: t.Op}
-	for _, a := range t.Args {
-		if a.Lit == nil {
-			n, ok := toItem[a.Var]
-			if !ok {
-				return Template{}, fmt.Errorf("the key has no position %d", a.Var)
-			}
-			a.Var = n
-		}
-		out.Args = append(out.Args, a)
-	}
-	return out, nil
 }
 
 // recorded is what running a template records: each cut an elimination,
@@ -423,8 +373,11 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 					a.Lit.Str, n, n))
 			}
 		}
-		t = stored(f, t)
-		links[i], chain[i].Instr = Link{Cond: l.Cond, Template: t}, t.Text()
+		st, ok := f.Store(t)
+		if !ok {
+			return m.ask("an argument reads nothing this frame has seen: a cut of a literal, or of a $n made after it")
+		}
+		links[i], chain[i].Instr = Link{Cond: l.Cond, Template: st}, st.Text()
 	}
 	// The chain's branches are cast on what the frame holds now, as every
 	// later decision here casts them: a guard that does not evaluate on the
@@ -516,9 +469,9 @@ func (m Machine) fits(f Frame, t Template) error {
 // delegation pushes a child, which decides. A template whose arguments do
 // not read in this frame is refused, and the model asked.
 func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
-	t, err := bound(f, st)
-	if err != nil {
-		return m, nil, err
+	t, ok := f.Bind(st)
+	if !ok {
+		return m, nil, fmt.Errorf("a stored template names a key position this frame does not have: %s", st.Text())
 	}
 	if err := m.fits(f, t); err != nil {
 		return m.ask(err.Error())

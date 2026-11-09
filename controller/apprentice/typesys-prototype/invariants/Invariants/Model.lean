@@ -1261,6 +1261,253 @@ theorem exact_only {s t : Key} {a : Nat → Nat} (h : exact s t = some a) :
   · cases h; exact ⟨by assumption, rebind_id⟩
   · cases h
 
+/-! ## Key positions
+
+Memory stores a template by what it reads in the key, never by `$n`. An
+elimination or an introduction takes a `$n` of its own but no place in
+the key, which holds only what was seen; so an arrival after one is
+numbered later while its place in the key is not. A stored template names
+each reference by its key position: `store` inlines it and names it so,
+`bind` names it by `$n` again in the frame it runs in. -/
+
+/-- A tool or a value seen: what the key holds. -/
+def Item.isSeen : Item → Bool
+  | .tool _ => true
+  | .seen _ => true
+  | _ => false
+
+/-- The `$n`, counted from `k`, of the items seen, in order. -/
+def seenFrom : Nat → List Item → List Nat
+  | _, [] => []
+  | k, x :: xs => if x.isSeen then k :: seenFrom (k + 1) xs else seenFrom (k + 1) xs
+
+/-- The `$n` a frame has seen: key position `s` is the `s`-th, from 1. -/
+def seenAt (f : Frame) : List Nat := seenFrom 1 (items f)
+
+/-- Where `m` is in a list, counted from `i`. -/
+def posOf (m : Nat) : List Nat → Nat → Option Nat
+  | [], _ => none
+  | x :: xs, i => if x = m then some i else posOf m xs (i + 1)
+
+/-- `$n`'s key position, if it was seen. -/
+def toKey (f : Frame) (n : Nat) : Option Nat := posOf n (seenAt f) 1
+
+/-- Key position `s`'s `$n`. -/
+def toItem (f : Frame) (s : Nat) : Option Nat := if s = 0 then none else (seenAt f)[s - 1]?
+
+/-- An argument as memory stores it: inlined, its reference a key position. -/
+def storeArg (f : Frame) : Arg → Option Arg
+  | .ref (.var n sels) => match inline f n sels with
+    | .ref (.var m s) => (toKey f m).map fun p => .ref (.var p s)
+    | a => some a
+  | a => some a
+
+/-- A stored argument in a frame: its key position named by `$n` there. -/
+def bindArg (f : Frame) : Arg → Option Arg
+  | .ref (.var p s) => (toItem f p).map fun n => .ref (.var n s)
+  | a => some a
+
+def allSome {α β : Type} (g : α → Option β) : List α → Option (List β)
+  | [] => some []
+  | x :: xs => match g x, allSome g xs with
+    | some y, some ys => some (y :: ys)
+    | _, _ => none
+
+def Template.store (f : Frame) (t : Template) : Option Template :=
+  (allSome (storeArg f) t.args).map fun as => ⟨t.op, as⟩
+
+def Template.bind (f : Frame) (t : Template) : Option Template :=
+  (allSome (bindArg f) t.args).map fun as => ⟨t.op, as⟩
+
+theorem seenFrom_append (k : Nat) (xs ys : List Item) :
+    seenFrom k (xs ++ ys) = seenFrom k xs ++ seenFrom (k + xs.length) ys := by
+  induction xs generalizing k with
+  | nil => simp [seenFrom]
+  | cons x xs ih =>
+    simp only [List.cons_append, seenFrom, List.length_cons]
+    rw [ih, show k + 1 + xs.length = k + (xs.length + 1) by omega]
+    split <;> simp
+
+theorem seenFrom_mem : ∀ {k : Nat} {xs : List Item} {n : Nat}, n ∈ seenFrom k xs →
+    k ≤ n ∧ n < k + xs.length ∧ ∃ x, xs[n - k]? = some x ∧ x.isSeen = true
+  | _, [], _, h => by simp [seenFrom] at h
+  | k, x :: xs, n, h => by
+    simp only [seenFrom] at h
+    split at h
+    · rename_i hx
+      rcases List.mem_cons.mp h with rfl | h
+      · exact ⟨Nat.le_refl _, by simp, x, by simp, hx⟩
+      · obtain ⟨h₁, h₂, y, hy, hs⟩ := seenFrom_mem h
+        refine ⟨by omega, by simp; omega, y, ?_, hs⟩
+        rw [show n - k = (n - (k + 1)) + 1 by omega]; simpa using hy
+    · obtain ⟨h₁, h₂, y, hy, hs⟩ := seenFrom_mem h
+      refine ⟨by omega, by simp; omega, y, ?_, hs⟩
+      rw [show n - k = (n - (k + 1)) + 1 by omega]; simpa using hy
+
+theorem posOf_some : ∀ {m : Nat} {l : List Nat} {i p : Nat}, posOf m l i = some p → i ≤ p ∧ l[p - i]? = some m
+  | _, [], _, _, h => by simp [posOf] at h
+  | m, x :: xs, i, p, h => by
+    simp only [posOf] at h
+    split at h
+    · rename_i hx; cases h; exact ⟨Nat.le_refl _, by simp [hx]⟩
+    · obtain ⟨h₁, h₂⟩ := posOf_some h
+      refine ⟨by omega, ?_⟩
+      rw [show p - i = (p - (i + 1)) + 1 by omega]; simpa using h₂
+
+theorem posOf_append_last : ∀ {m : Nat} {l : List Nat} {i : Nat}, m ∉ l → posOf m (l ++ [m]) i = some (i + l.length)
+  | _, [], _, _ => by simp [posOf]
+  | m, x :: xs, i, h => by
+    simp only [List.mem_cons, not_or] at h
+    simp only [List.cons_append, posOf, Ne.symm h.1, ↓reduceIte, List.length_cons]
+    rw [posOf_append_last h.2]; congr 1; omega
+
+/-- A key position names the `$n` it was taken from. -/
+theorem toItem_toKey {f : Frame} {m p : Nat} (h : toKey f m = some p) : toItem f p = some m := by
+  obtain ⟨h₁, h₂⟩ := posOf_some h
+  have hp : p ≠ 0 := by omega
+  simpa [toItem, hp] using h₂
+
+/-- What a key position names was seen: a tool or a value, never an
+elimination or an introduction. -/
+theorem toItem_seen {f : Frame} {s n : Nat} (h : toItem f s = some n) :
+    ∃ x, item f n = some x ∧ x.isSeen = true := by
+  unfold toItem at h
+  split at h
+  · cases h
+  · have hm : n ∈ seenAt f := List.mem_of_getElem? h
+    obtain ⟨h₁, _, x, hx, hs⟩ := seenFrom_mem hm
+    have hn : n ≠ 0 := by omega
+    exact ⟨x, by simp [item, hn, hx], hs⟩
+
+theorem seenFrom_live : ∀ (k : Nat) (es : List Entry), (∀ e ∈ es, e.item.isSeen = false) →
+    seenFrom k (es.map (·.item)) = []
+  | _, [], _ => rfl
+  | k, e :: es, h => by
+    rw [List.map_cons, seenFrom, h e List.mem_cons_self]
+    simp only [Bool.false_eq_true, ↓reduceIte]
+    exact seenFrom_live (k + 1) es (fun e he => h e (List.mem_cons_of_mem _ he))
+
+theorem items_append (f : Frame) (es : List Entry) : items (f.append es) = items f ++ es.map (·.item) := by
+  simp [items, Frame.append, List.append_assoc]
+
+/-- Appending eliminations and introductions moves no key position. -/
+theorem seenAt_live (f : Frame) (es : List Entry) (h : ∀ e ∈ es, e.item.isSeen = false) :
+    seenAt (f.append es) = seenAt f := by
+  simp [seenAt, items_append, seenFrom_append, seenFrom_live _ es h]
+
+/-- An arrival takes the next key position, however many eliminations and
+introductions came before it: its place in the key is what was seen
+before it, never how it is numbered. -/
+theorem arrival_position (f : Frame) (es : List Entry) (o : Observation)
+    (h : ∀ e ∈ es, e.item.isSeen = false) :
+    toKey (f.append (es ++ [.arrived o])) ((items f).length + es.length + 1) =
+      some ((seenAt f).length + 1) := by
+  have hs : seenAt (f.append (es ++ [.arrived o])) = seenAt f ++ [(items f).length + es.length + 1] := by
+    rw [seenAt, items_append, List.map_append, ← List.append_assoc, seenFrom_append, ← items_append,
+      ← seenAt, seenAt_live f es h, items_append]
+    simp [seenFrom, Item.isSeen, Entry.item]
+    omega
+  have hn : (items f).length + es.length + 1 ∉ seenAt f := by
+    intro hm
+    obtain ⟨_, h₂, _⟩ := seenFrom_mem hm
+    omega
+  rw [toKey, hs, posOf_append_last hn, Nat.add_comm]
+
+/-- Binding is unchanged by eliminations and introductions after a
+template is stored: a stored template binds alike before and after. -/
+theorem bind_live (f : Frame) (es : List Entry) (h : ∀ e ∈ es, e.item.isSeen = false) (t : Template) :
+    t.bind (f.append es) = t.bind f := by
+  have : bindArg (f.append es) = bindArg f := by
+    funext a
+    cases a with
+    | ref r => cases r <;> simp [bindArg, toItem, seenAt_live f es h]
+    | lit => rfl
+  simp [Template.bind, this]
+
+theorem allSome_mem {α β : Type} {g : α → Option β} :
+    ∀ {xs : List α} {ys : List β}, allSome g xs = some ys → ∀ y ∈ ys, ∃ x ∈ xs, g x = some y
+  | [], ys, h => by simp [allSome] at h; subst h; simp
+  | x :: xs, ys, h => by
+    cases hx : g x with
+    | none => simp [allSome, hx] at h
+    | some y =>
+      cases hr : allSome g xs with
+      | none => simp [allSome, hx, hr] at h
+      | some ys' =>
+        simp only [allSome, hx, hr, Option.some.injEq] at h
+        subst h
+        intro z hz
+        rcases List.mem_cons.mp hz with rfl | hz
+        · exact ⟨x, List.mem_cons_self, hx⟩
+        · obtain ⟨w, hw, hg⟩ := allSome_mem hr z hz
+          exact ⟨w, List.mem_cons_of_mem _ hw, hg⟩
+
+/-- A stored argument, bound back in the frame it was stored from, reads
+what the argument read. -/
+theorem bindArg_storeArg {f : Frame} {a a' : Arg} (h : storeArg f a = some a') :
+    ∃ b, bindArg f a' = some b ∧ evalArg f b = evalArg f a := by
+  cases a with
+  | lit l => simp [storeArg] at h; subst h; exact ⟨_, rfl, rfl⟩
+  | ref r =>
+    cases r with
+    | name s => simp [storeArg] at h; subst h; exact ⟨_, rfl, rfl⟩
+    | var n sels =>
+      have hr := inline_read f n sels
+      cases hi : inline f n sels with
+      | lit l =>
+        simp [storeArg, hi] at h; subst h
+        exact ⟨_, rfl, by rw [hi] at hr; simpa [evalArg] using hr⟩
+      | ref r' =>
+        cases r' with
+        | name s =>
+          simp [storeArg, hi] at h; subst h
+          exact ⟨_, rfl, by rw [hi] at hr; simpa [evalArg] using hr⟩
+        | var m s =>
+          simp only [storeArg, hi] at h
+          obtain ⟨p, hp, rfl⟩ := Option.map_eq_some_iff.mp h
+          refine ⟨.ref (.var m s), by simp [bindArg, toItem_toKey hp], ?_⟩
+          rw [hi] at hr; simpa [evalArg] using hr
+
+theorem allSome_store_bind {f : Frame} : ∀ {xs ys : List Arg}, allSome (storeArg f) xs = some ys →
+    ∃ zs, allSome (bindArg f) ys = some zs ∧ zs.map (evalArg f) = xs.map (evalArg f)
+  | [], ys, h => by simp [allSome] at h; subst h; exact ⟨[], rfl, rfl⟩
+  | x :: xs, ys, h => by
+    cases hx : storeArg f x with
+    | none => simp [allSome, hx] at h
+    | some y =>
+      cases hr : allSome (storeArg f) xs with
+      | none => simp [allSome, hx, hr] at h
+      | some ys' =>
+        simp only [allSome, hx, hr, Option.some.injEq] at h
+        subst h
+        obtain ⟨b, hb, he⟩ := bindArg_storeArg hx
+        obtain ⟨zs, hz, hzs⟩ := allSome_store_bind hr
+        exact ⟨b :: zs, by simp [allSome, hb, hz], by simp [he, hzs]⟩
+
+/-- A stored template, bound back in the frame it was stored from, reads
+what the template read, argument by argument. -/
+theorem store_bind {f : Frame} {t st : Template} (h : t.store f = some st) :
+    ∃ t', st.bind f = some t' ∧ t'.op = t.op ∧ t'.args.map (evalArg f) = t.args.map (evalArg f) := by
+  obtain ⟨as, has, rfl⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨zs, hz, hzs⟩ := allSome_store_bind has
+  exact ⟨⟨t.op, zs⟩, by simp [Template.bind, hz], rfl, hzs⟩
+
+/-- A bound template reads only what was seen: each reference names a
+tool or a value seen, never an elimination or an introduction. -/
+theorem bind_seen {f : Frame} {t t' : Template} (h : t.bind f = some t') :
+    ∀ n s, Arg.ref (.var n s) ∈ t'.args → ∃ x, item f n = some x ∧ x.isSeen = true := by
+  intro n s hm
+  obtain ⟨as, has, rfl⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨a, _, ha⟩ := allSome_mem has _ hm
+  cases a with
+  | lit => simp [bindArg] at ha
+  | ref r =>
+    cases r with
+    | name => simp [bindArg] at ha
+    | var p s' =>
+      obtain ⟨m, hm', he⟩ := Option.map_eq_some_iff.mp ha
+      cases he; exact toItem_seen hm'
+
 /-! ## Memory is a fold of the log
 
 The log's events are what has been seen: a `hesitate` records a key never

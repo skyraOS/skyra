@@ -1088,8 +1088,31 @@ def decideFile : List Json :=
           ("inhibition", jNat ι), ("floor", jNat f), ("quorum", jNat q)]),
         ("out", jTOutcome (Model.decideAt (tPolicy ι f) q Atom.sat (Model.replay log) k x))]
 
+/-- Each state of the test frame, and the `$n` it has seen: what the key
+holds, never an elimination or an introduction. -/
+def positionsFile : List Json :=
+  (List.range (frame.state.length + 1)).map fun k =>
+    let f := { frame with state := frame.state.take k }
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame f)]),
+      ("out", Json.mkObj [("seenAt", .arr ((Model.seenAt f).map jNat).toArray)])]
+
+/-- Templates over the test frame's every `$n` and selector, and literals:
+each stored by key position, bound back, and bound again after more
+eliminations and introductions. -/
+def storeFile : List Json :=
+  let sels : List (List Model.Sel) := [[], [.field ["path"]], [.lines [(1, 1)]]]
+  let args : List Model.Arg := ((List.range 13).flatMap fun n => sels.map fun ss => var n ss) ++
+    [.lit (.str "-la"), .lit (.exit 0), .ref (.name "claude")]
+  let live := frame.append [.introduced (.str "z"), .eliminated 3 [.field ["dir"]]]
+  args.map fun a =>
+    let t : Model.Template := ⟨.act, [var 1, a]⟩
+    let st := t.store frame
+    Json.mkObj [("in", Json.mkObj [("frame", jFrame frame), ("template", jTemplate t), ("live", jFrame live)]),
+      ("out", Json.mkObj [("stored", jOpt jTemplate st), ("bound", jOpt jTemplate (st.bind fun st => st.bind frame)),
+        ("boundLive", jOpt jTemplate (st.bind fun st => st.bind live))])]
+
 def files : List (String × List Json) :=
-  [ ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
+  [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
     ("model/read", readFile), ("model/introduce", introduceFile), ("model/step", stepFile) ]
 
 end M

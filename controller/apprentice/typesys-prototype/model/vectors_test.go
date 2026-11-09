@@ -119,6 +119,20 @@ func version(t *testing.T, v tree.Version) any {
 }
 
 var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
+	"positions": func(t *testing.T, in map[string]json.RawMessage) any {
+		return map[string]any{"seenAt": nonNil(dec[Frame](t, in["frame"]).SeenAt())}
+	},
+	"store": func(t *testing.T, in map[string]json.RawMessage) any {
+		f, live := dec[Frame](t, in["frame"]), dec[Frame](t, in["live"])
+		st, ok := f.Store(dec[Template](t, in["template"]))
+		out := map[string]any{"stored": opt(st, ok), "bound": nil, "boundLive": nil}
+		if ok {
+			b, bok := f.Bind(st)
+			bl, blok := live.Bind(st)
+			out["bound"], out["boundLive"] = opt(b, bok), opt(bl, blok)
+		}
+		return out
+	},
 	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
 		m := Replay(dec[[]Event](t, in["log"]))
 		var out []any
