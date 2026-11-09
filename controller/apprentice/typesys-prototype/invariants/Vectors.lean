@@ -1124,7 +1124,16 @@ def machineFile : List Json :=
     [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "a.txt\n"),
       wr [(.tt, ⟨.ret, [ex 0, wv 6 [.field ["stdout"]]]⟩)]]
   let (j3, _, _) := runMachine { prog with global := global [ls, cat] [] } logJ "show\n/tmp" []
-  [a, b, c, d, e, e2, f, g, h, i, i2, i3, i4, i5, j1, j2, j3]
+  -- A conflict at a frame's own key is the model's to settle: the cat
+  -- child's key holds two voters, one that runs cat when the goal reads "x"
+  -- and one that returns, so a goal reading "x" makes them conflict. The
+  -- ls child's key could lend an act, and does not. The voters are learned
+  -- with no class declared, which shares the root.
+  let (k1, logK, _) := runMachine prog [] "show\n/tmp"
+    (toLs ++ [retAny, toCat, wr [(.atom (.contains 0 "x"), ⟨.act, [wv 2, wv 3]⟩)],
+      wr [(.tt, ⟨.ret, [ex 1, wv 3]⟩)], wr [(.tt, ⟨.ret, [ex 0, wv 7 [.field ["stdout"]]]⟩)]])
+  let (k2, _, _) := runMachine progClass logK "show\n/x" [.answered (.str "a.txt\n")]
+  [a, b, c, d, e, e2, f, g, h, i, i2, i3, i4, i5, j1, j2, j3, k1, k2]
 
 def files : List (String × List Json) :=
   [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/machine", machineFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
