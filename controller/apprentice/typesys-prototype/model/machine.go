@@ -23,6 +23,17 @@ package model
 // A template's operator is one tree edge: an act pushes a leaf the world
 // runs, a delegation a child, a return pops into the parent. A bound
 // exhausted pops too, with an error observation.
+//
+// A frame whose own key has nothing may borrow under the program's classes,
+// read-only tools held interchangeable, each a hypothesis: the key with one
+// member swapped for another of an unrefuted class is tallied, and what it
+// selects runs here as it is, its tools by position. A borrowed act running
+// the swapped member is a trial: the member it was learned with runs on the
+// same arguments as a shadow, and the class is refuted when the two outputs
+// refine differently at the key it was learned at, by shape or by the
+// template selected there. Agreement is no evidence for the class, and a
+// null none against. A frame that borrowed and ends with a bound exhausted
+// refutes its classes too. Refutations are kept in memory.
 
 import (
 	"encoding/json"
@@ -68,6 +79,13 @@ type (
 		Reason  string
 		Refused *Refusal
 	}
+	// Shadow is a trial's shadow: the member a borrowed act was learned
+	// with, run on the same arguments. What it gives comes back as Answered,
+	// is compared, and is dropped.
+	Shadow struct {
+		Tool DefLoc
+		Argv []string
+	}
 	// Finished is the first frame's return.
 	Finished struct{ Value any }
 	// Exhausted is the first frame's outcome when one of its bounds is
@@ -90,7 +108,7 @@ const (
 type Shown struct {
 	Role   Role
 	Tool   DefLoc
-	Class  *Class // the tool's class, when the program declares one
+	Mates  []DefLoc // the tool's class's other members, while it is not refuted
 	Value  any
 	Origin string
 }
@@ -130,9 +148,10 @@ var ErrAsking = errors.New("the machine is not waiting for this input")
 type phase uint8
 
 const (
-	phaseStart phase = iota // waiting on the goal
-	phaseAsk                // waiting on the model's guard
-	phaseRun                // waiting on the leaf the world runs
+	phaseStart  phase = iota // waiting on the goal
+	phaseAsk                 // waiting on the model's guard
+	phaseRun                 // waiting on the leaf the world runs
+	phaseShadow              // waiting on a trial's shadow
 	phaseDone
 )
 
@@ -144,12 +163,32 @@ type Machine struct {
 	Memory  Memory
 	Tree    Tree
 
-	root  DefLoc // memory's root: the program without its constants
-	loc   DefLoc // the program's location, every frame's static link
-	at    InstLoc
-	phase phase
-	asks  int             // the asks of the transition in progress
-	taken map[InstLoc]int // each frame's transitions
+	root    DefLoc // memory's root: the program without its constants
+	loc     DefLoc // the program's location, every frame's static link
+	at      InstLoc
+	phase   phase
+	asks    int                  // the asks of the transition in progress
+	taken   map[InstLoc]int      // each frame's transitions
+	trials  map[InstLoc][]DefLoc // the classes each frame borrowed under
+	pending *trial               // a trial waiting on its shadow
+}
+
+// A borrowing is the class a template was borrowed under, the key position
+// swapped, the frame's member there, and the member it was learned with.
+type borrowing struct {
+	cls      DefLoc
+	pos      int
+	own, src DefLoc
+}
+
+// A trial is a borrowed act: the frame that ran it, its arguments, and its
+// leaf's output once it came.
+type trial struct {
+	b       borrowing
+	frame   InstLoc
+	argv    []string
+	real    any
+	arrived bool
 }
 
 // DefaultConstants are a program's when its owner sets none: their values
@@ -195,9 +234,12 @@ func NewMachine(ids Ids, p Program, mem Memory) (Machine, error) {
 
 // Step takes one input and gives the next effect.
 func (m Machine) Step(in any) (Machine, any, error) {
-	m.Memory, m.taken = maps.Clone(m.Memory), maps.Clone(m.taken)
+	m.Memory, m.taken, m.trials = maps.Clone(m.Memory), maps.Clone(m.taken), maps.Clone(m.trials)
 	if m.taken == nil {
 		m.taken = map[InstLoc]int{}
+	}
+	if m.trials == nil {
+		m.trials = map[InstLoc][]DefLoc{}
 	}
 	switch in := in.(type) {
 	case Answered:
@@ -207,7 +249,22 @@ func (m Machine) Step(in any) (Machine, any, error) {
 			return m.genesis(v)
 		case phaseRun:
 			v, _ := tree.ArriveExit(tree.OutputText, in.Bytes, in.Exit, in.Stderr)
+			if tr := m.pending; tr != nil {
+				next := *tr
+				next.real, next.arrived = v, true
+				m.pending, m.phase = &next, phaseShadow
+				return m, Shadow{Tool: tr.b.src, Argv: append([]string{string(tr.b.src)}, tr.argv...)}, nil
+			}
 			return m.end(m.at, v, false)
+		case phaseShadow:
+			if tr := m.pending; tr != nil && tr.arrived {
+				v, _ := tree.ArriveExit(tree.OutputText, in.Bytes, in.Exit, in.Stderr)
+				m.pending = nil
+				if m.judged(*tr, tr.real, v) {
+					m.Memory.Refute(tr.b.cls)
+				}
+				return m.end(m.at, tr.real, false)
+			}
 		}
 	case Wrote:
 		if m.phase == phaseAsk {
@@ -239,9 +296,70 @@ func (m Machine) step(fid InstLoc, e Edge) (Tree, bool) {
 	return m.Tree.Step(m.Ids, m.Program.Constants.Act, reaches, fid, e)
 }
 
-// key is the key a frame decides at: its key, each definition by its class.
-func (m Machine) key(f Frame) Key {
-	return m.Program.ClassKey(f.Key(func(DefLoc) DefLoc { return m.root }))
+func (m Machine) key(f Frame) Key { return f.Key(func(DefLoc) DefLoc { return m.root }) }
+
+func swapKey(k Key, n int, d DefLoc) Key {
+	k.Seen = slices.Clone(k.Seen)
+	k.Seen[n] = DefIface(d)
+	return k
+}
+
+// borrow is the reuse rule over classes: in the program's order, under
+// each class not refuted, each swap in the key's order, the first whose key
+// selects. A swapped key whose guards do not evaluate on these values
+// selects nothing.
+func (m Machine) borrow(k Key, vs map[string]any) (Template, *borrowing) {
+	t := m.tally()
+	for _, c := range m.Program.Classes {
+		id := ClassID(m.Ids, c)
+		if m.Memory.Refuted(id) {
+			continue
+		}
+		for n, it := range k.Seen {
+			if it.Tag != IDef || !slices.Contains(c, it.Def) {
+				continue
+			}
+			for _, src := range c {
+				if src == it.Def {
+					continue
+				}
+				o, err := m.Memory.Decide(t.Inhibition, t.Floor, m.Program.Constants.Quorum, swapKey(k, n, src), vs)
+				if err == nil && o.Kind == tree.SelectOne {
+					return o.Template, &borrowing{cls: id, pos: n, own: it.Def, src: src}
+				}
+			}
+		}
+	}
+	return Template{}, nil
+}
+
+// judged is whether a trial refutes its class: the leaf's output and the
+// shadow's land at different keys where the template was learned, or the
+// tally there selects a different template for each.
+func (m Machine) judged(tr trial, real, shadow any) bool {
+	f, ok := m.Tree.Find(tr.frame)
+	if !ok {
+		return false
+	}
+	loc := m.Ids.Slot(tr.frame, len(f.Items())+1)
+	learned := func(v any) (Key, map[string]any) {
+		o := Arrive(v, loc)
+		g := f
+		g.State = append(slices.Clone(f.State), Entry{Arrived: &o})
+		vs := vals(g)
+		vs["passed"+strconv.Itoa(tr.b.pos)] = string(tr.b.src)
+		return swapKey(m.key(g), tr.b.pos, tr.b.src), vs
+	}
+	k1, v1 := learned(real)
+	k2, v2 := learned(shadow)
+	if k1.Text() != k2.Text() {
+		return true
+	}
+	t, q := m.tally(), m.Program.Constants.Quorum
+	o1, err1 := m.Memory.Decide(t.Inhibition, t.Floor, q, k1, v1)
+	o2, err2 := m.Memory.Decide(t.Inhibition, t.Floor, q, k2, v2)
+	return err1 == nil && err2 == nil && o1.Kind == tree.SelectOne && o2.Kind == tree.SelectOne &&
+		o1.Template.Text() != o2.Template.Text()
 }
 
 // genesis pushes the first frame: the goal, then the tools.
@@ -358,8 +476,13 @@ func (m Machine) decide(id InstLoc) (Machine, any, error) {
 	if err != nil {
 		return m, nil, err
 	}
-	if o.Kind == tree.SelectOne {
-		return m.trust(f, o.Template)
+	switch o.Kind {
+	case tree.SelectOne:
+		return m.trust(f, o.Template, nil)
+	case tree.SelectNull:
+		if st, b := m.borrow(k, vals(f)); b != nil {
+			return m.trust(f, st, b)
+		}
 	}
 	return m.ask(nil, "")
 }
@@ -377,7 +500,13 @@ func (m Machine) ask(r *Refusal, reason string) (Machine, any, error) {
 	for i, it := range f.Items() {
 		switch {
 		case it.Tag == ItemTool:
-			scope = append(scope, Shown{Role: RoleTool, Tool: it.Tool, Class: m.Program.classOfTool(it.Tool)})
+			sh := Shown{Role: RoleTool, Tool: it.Tool}
+			if mates := m.Program.Mates(it.Tool); mates != nil {
+				if c := slices.Concat([]DefLoc{it.Tool}, mates); !m.Memory.Refuted(ClassID(m.Ids, c)) {
+					sh.Mates = mates
+				}
+			}
+			scope = append(scope, sh)
 		case i == 0:
 			scope = append(scope, Shown{Role: RoleGoal, Value: itemValue(f, 1, it)})
 		case it.Tag == ItemElim:
@@ -466,7 +595,7 @@ func (m Machine) wrote(guard string) (Machine, any, error) {
 	if err != nil {
 		return m, nil, err
 	}
-	return m.trust(f, t)
+	return m.trust(f, t, nil)
 }
 
 // templateOf is a stored instruction as a template: bound back to the
@@ -538,8 +667,9 @@ func (m Machine) fits(f Frame, t Template) error {
 // trust runs a template, ending the transition and counting it against the
 // frame's bound: a return pops, an act pushes a leaf for the world, a
 // delegation pushes a child, which decides. A template whose arguments do
-// not read in this frame is refused, and the model asked.
-func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
+// not read in this frame is refused, and the model asked. A borrowed act
+// running the frame's own member is a trial.
+func (m Machine) trust(f Frame, st Template, b *borrowing) (Machine, any, error) {
 	t, ok := f.Bind(st)
 	if !ok {
 		return m, nil, fmt.Errorf("a stored template names a key position this frame does not have: %s", st.Text())
@@ -566,6 +696,9 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 		m.Tree = m.Tree.Record(f.ID, es)
 		f, _ = m.Tree.Find(f.ID)
 	}
+	if b != nil {
+		m.trials[f.ID] = append([]DefLoc{b.cls}, m.trials[f.ID]...)
+	}
 	switch t.Op {
 	case OpReturn:
 		return m.end(f.ID, ReturnValue(values[0].(tree.ExitStatus), values[1], values[2:]), false)
@@ -587,7 +720,10 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 		if !ok {
 			return m, nil, errors.New("the tree refused an act the frame fits")
 		}
-		m.Tree, m.at, m.phase = next, leaf, phaseRun
+		m.Tree, m.at, m.phase, m.pending = next, leaf, phaseRun, nil
+		if b != nil && tool == b.own {
+			m.pending = &trial{b: *b, frame: f.ID, argv: argv[1:]}
+		}
 		return m, RunLeaf{Tool: tool, Argv: argv}, nil
 	}
 	var entries []Iface
@@ -628,6 +764,11 @@ func (m Machine) trust(f Frame, st Template) (Machine, any, error) {
 // any other's lands in its parent, which decides. exhausted marks an
 // exhausted bound's error observation.
 func (m Machine) end(id InstLoc, v any, exhausted bool) (Machine, any, error) {
+	if exhausted {
+		for _, c := range m.trials[id] {
+			m.Memory.Refute(c)
+		}
+	}
 	f, _ := m.Tree.Find(id)
 	if f.Parent == nil {
 		m.phase = phaseDone

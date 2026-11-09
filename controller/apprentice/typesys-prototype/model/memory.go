@@ -9,6 +9,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"skyra/typesys-prototype/tree"
@@ -67,6 +68,31 @@ func (m Memory) Apply(e Event) {
 		v = tree.CommitChain(v, links)
 	}
 	m[k] = v
+}
+
+// Refuted classes are kept in memory beside the keys, outside any key: a
+// key's text is a JSON object, and these are not.
+const refutedPrefix = "refuted:"
+
+// Refute records a class refuted.
+func (m Memory) Refute(c DefLoc) { m[refutedPrefix+string(c)] = tree.EmptyVersion() }
+
+// Refuted is whether a class has been refuted.
+func (m Memory) Refuted(c DefLoc) bool {
+	_, ok := m[refutedPrefix+string(c)]
+	return ok
+}
+
+// RefutedClasses are the classes refuted, sorted.
+func (m Memory) RefutedClasses() []DefLoc {
+	var cs []DefLoc
+	for k := range m {
+		if c, ok := strings.CutPrefix(k, refutedPrefix); ok {
+			cs = append(cs, DefLoc(c))
+		}
+	}
+	slices.Sort(cs)
+	return cs
 }
 
 // Replay is memory from the log.

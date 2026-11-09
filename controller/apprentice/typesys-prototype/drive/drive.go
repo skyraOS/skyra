@@ -82,6 +82,8 @@ func (Ids) Slot(i model.InstLoc, n int) model.InstLoc {
 
 func (Ids) Program(p model.Program) model.DefLoc { return model.DefLoc(hash("program", p)) }
 
+func (Ids) Class(members []model.DefLoc) model.DefLoc { return model.DefLoc(hash("class", members)) }
+
 // Version is the language this shell runs: 58's shapes and cuts, CEL, the
 // template grammar the prompts teach, and return's value.
 const Version model.DefLoc = "skyra/61"
@@ -90,21 +92,18 @@ const Version model.DefLoc = "skyra/61"
 const ModelDef model.DefLoc = "model"
 
 // Program is the program a shell grants its tools under: act reaches them,
-// delegate the model; the classes are tools it declares interchangeable.
-func Program(c model.Constants, tools []string, classes ...model.Class) model.Program {
+// delegate the model. Read-only tools and classes are the caller's to set.
+func Program(c model.Constants, tools []string) model.Program {
 	defs := make([]model.DefLoc, len(tools))
 	for i, t := range tools {
 		defs[i] = model.DefLoc(t)
 	}
-	p := model.NewProgram(Version, c, defs, []model.DefLoc{ModelDef})
-	p.Classes = classes
-	return p
+	return model.NewProgram(Version, c, defs, []model.DefLoc{ModelDef})
 }
 
-// NewMachine is a run of the tools under the constants and classes, over
-// memory.
-func NewMachine(c model.Constants, tools []string, mem model.Memory, classes ...model.Class) (model.Machine, error) {
-	return model.NewMachine(Ids{}, Program(c, tools, classes...), mem)
+// NewMachine is a run of the tools under the constants, over memory.
+func NewMachine(c model.Constants, tools []string, mem model.Memory) (model.Machine, error) {
+	return model.NewMachine(Ids{}, Program(c, tools), mem)
 }
 
 func hash(parts ...any) string {
@@ -130,6 +129,12 @@ func Run(m model.Machine, goal []byte, mdl Model, world World) (model.Machine, a
 		case model.RunLeaf:
 			var out model.Answered
 			if out, err = world.Run(e); err != nil {
+				return m, nil, err
+			}
+			m, eff, err = m.Step(out)
+		case model.Shadow:
+			var out model.Answered
+			if out, err = world.Run(model.RunLeaf{Tool: e.Tool, Argv: e.Argv}); err != nil {
 				return m, nil, err
 			}
 			m, eff, err = m.Step(out)

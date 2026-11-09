@@ -28,54 +28,36 @@ type Constants struct {
 
 // A Program is the language version, the constants, the global scope by
 // name, each name's interface, and the entry scope a grant must have. Its
-// classes are definitions it declares interchangeable: a key holds the
-// class in place of each member, so what is learned with one is reused
-// with the others.
+// read-only tools are those it declares without effects; its classes are
+// read-only tools it holds to be interchangeable, each a hypothesis, never
+// a fact: a frame whose own key has nothing may try what one member learned
+// with another in its place, until a trial refutes the class (machine.go).
 type Program struct {
 	Version   DefLoc           `json:"version"`
 	Constants Constants        `json:"constants"`
 	Global    map[string]Iface `json:"global"`
 	Entry     Scope            `json:"entry"`
-	Classes   []Class          `json:"classes,omitempty"`
+	ReadOnly  []DefLoc         `json:"readOnly,omitempty"`
+	Classes   [][]DefLoc       `json:"classes,omitempty"`
 }
 
-// A Class is a name and the definitions it stands for in a key.
-type Class struct {
-	Class   DefLoc   `json:"class"`
-	Members []DefLoc `json:"members"`
+// ClassID is a class's location: its members sorted, hashed by the shell.
+// A class is what it holds, never a name, so two programs share a trial
+// only of one set of tools.
+func ClassID(ids Ids, members []DefLoc) DefLoc {
+	sorted := slices.Clone(members)
+	slices.Sort(sorted)
+	return ids.Class(sorted)
 }
 
-// ClassOf is a definition's class, or the definition itself.
-func (p Program) ClassOf(d DefLoc) DefLoc {
+// Mates are the other members of a tool's class, or none.
+func (p Program) Mates(d DefLoc) []DefLoc {
 	for _, c := range p.Classes {
-		if slices.Contains(c.Members, d) {
-			return c.Class
-		}
-	}
-	return d
-}
-
-// classOfTool is the class a definition is a member of, if any.
-func (p Program) classOfTool(d DefLoc) *Class {
-	for _, c := range p.Classes {
-		if slices.Contains(c.Members, d) {
-			return &c
+		if slices.Contains(c, d) {
+			return slices.DeleteFunc(slices.Clone(c), func(m DefLoc) bool { return m == d })
 		}
 	}
 	return nil
-}
-
-// ClassKey is a key as memory holds it: each definition seen by its class.
-func (p Program) ClassKey(k Key) Key {
-	seen := make([]Iface, len(k.Seen))
-	for i, it := range k.Seen {
-		if it.Tag == IDef {
-			it = DefIface(p.ClassOf(it.Def))
-		}
-		seen[i] = it
-	}
-	k.Seen = seen
-	return k
 }
 
 // Reach is the definitions an operator reaches: the alternatives of the
@@ -103,35 +85,27 @@ func (p Program) WellFormed() bool {
 			return false
 		}
 	}
-	return p.classesWellFormed(tools, models)
+	return p.classesWellFormed(tools)
 }
 
-// classesWellFormed: each class named once, and no name a definition the
-// program reaches; each member in one class; a class's members all tools
-// or all models.
-func (p Program) classesWellFormed(tools, models []DefLoc) bool {
-	names, members := map[DefLoc]bool{}, map[DefLoc]bool{}
-	within := func(ms, ds []DefLoc) bool {
-		for _, m := range ms {
-			if !slices.Contains(ds, m) {
-				return false
-			}
-		}
-		return true
-	}
-	for _, c := range p.Classes {
-		if names[c.Class] || slices.Contains(tools, c.Class) || slices.Contains(models, c.Class) {
+// classesWellFormed: its read-only definitions are tools; each class has
+// two members or more, all read-only; and each member is in one class.
+func (p Program) classesWellFormed(tools []DefLoc) bool {
+	for _, d := range p.ReadOnly {
+		if !slices.Contains(tools, d) {
 			return false
 		}
-		names[c.Class] = true
-		for _, m := range c.Members {
-			if members[m] {
+	}
+	members := map[DefLoc]bool{}
+	for _, c := range p.Classes {
+		if len(c) < 2 {
+			return false
+		}
+		for _, m := range c {
+			if members[m] || !slices.Contains(p.ReadOnly, m) {
 				return false
 			}
 			members[m] = true
-		}
-		if !within(c.Members, tools) && !within(c.Members, models) {
-			return false
 		}
 	}
 	return true
@@ -162,12 +136,13 @@ func (g *Grant) UnmarshalJSON(b []byte) error {
 
 // Ids are the hashes: a child by its parent, invoke index and scope; a first
 // frame by its program and grant; a slot by its frame and $n; a program's
-// location. The core computes none of them itself.
+// location; a class's, by its members sorted. The core computes none of them itself.
 type Ids interface {
 	Child(parent InstLoc, n int, s Scope) InstLoc
 	First(program DefLoc, g Grant) InstLoc
 	Slot(frame InstLoc, n int) InstLoc
 	Program(p Program) DefLoc
+	Class(members []DefLoc) DefLoc
 }
 
 // A Booter is the frame a boot runs from, and which of its invokes it is.

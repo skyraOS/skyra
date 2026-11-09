@@ -133,23 +133,18 @@ func Render(a model.Ask) string {
 	return b.String()
 }
 
-// classNote says what else a tool stands for: what is written with it is
-// reused, unasked, wherever one of its class's other members is here.
+// classNote says what a tool is held interchangeable with: what is written
+// with it may be tried, unasked, where one of them is in its place.
 func classNote(o model.Shown) string {
-	if o.Class == nil {
+	if len(o.Mates) == 0 {
 		return ""
 	}
-	var others []string
-	for _, m := range o.Class.Members {
-		if m != o.Tool {
-			others = append(others, string(m))
-		}
+	names := make([]string, len(o.Mates))
+	for i, m := range o.Mates {
+		names[i] = string(m)
 	}
-	if len(others) == 0 {
-		return ""
-	}
-	return fmt.Sprintf(" (class %s: what you write here is also run with %s in its place)",
-		o.Class.Class, strings.Join(others, ", "))
+	return fmt.Sprintf(" (held interchangeable with %s: what you write here may be tried with it in its place)",
+		strings.Join(names, ", "))
 }
 
 // Expand is the next part of $n's value from off, up to ShowLimit bytes.

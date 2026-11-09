@@ -3,6 +3,7 @@ package drive
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -157,50 +158,85 @@ func TestRunDelegates(t *testing.T) {
 	}
 }
 
-// Declared one class, ls and find key alike: the root hands the goal to
-// an ls child, then to a find child, which runs what the ls child learned
-// without asking. The ask says so. Undeclared, the find child asks too.
+// ls and find read-only and held one class: the root hands the goal to an
+// ls child, then to a find child, whose own keys have nothing, so it borrows
+// what the ls child learned, find in ls's place, with ls run as the
+// shadow. Where the ls child's return reads only that something came back,
+// the two outputs refine alike and the find child is never asked. Where it
+// reads what came back, they do not: the class is refuted, the find child
+// asked. Undeclared, the find child is asked at both its keys.
 func TestRunClasses(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "only.txt"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	lister := model.Class{Class: "lister", Members: []model.DefLoc{"ls", "find"}}
+	lister := []model.DefLoc{"ls", "find"}
 	for _, c := range []struct {
-		classes []model.Class
-		asks    int
-	}{{[]model.Class{lister}, 5}, {nil, 7}} {
+		name     string
+		classed  bool
+		ret      string
+		asks     int
+		refuted  bool
+		shadowed bool
+	}{
+		{"agrees", true, `$3.size() > 0 ? "return 0 $3" : null`, 5, false, true},
+		{"refutes", true, `$3.startsWith("only") ? "return 0 $3" : true ? "return 1 $3" : null`, 6, true, true},
+		{"undeclared", false, `$3.size() > 0 ? "return 0 $3" : null`, 7, false, false},
+	} {
 		s := &scripted{guards: map[string]string{
 			"delegate 3": `true ? "delegate(goal($1), $2)" : null`, // $1 goal, $2 ls, $3 find
 			"act 2":      `true ? "$2 $1" : null`,                  // $1 goal, $2 the tool
-			"act 3":      `$3.size() > 0 ? "return 0 $3" : null`,   // the tool's stdout arrived
+			"act 3":      c.ret,                                    // the tool's stdout arrived
 			"delegate 4": `true ? "delegate(goal($1), $3)" : null`, // ls's return arrived
 			"delegate 5": `true ? "return 0 $5.stdout" : null`,     // find's return arrived
 		}}
-		m, err := NewMachine(testConstants, []string{"ls", "find"}, nil, c.classes...)
+		p := Program(testConstants, []string{"ls", "find"})
+		if c.classed {
+			p.ReadOnly, p.Classes = lister, [][]model.DefLoc{lister}
+		}
+		m, err := model.NewMachine(Ids{}, p, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, v, err := Run(m, []byte(dir), s, Exec{})
+		w := &counted{}
+		m, v, err := Run(m, []byte(dir), s, w)
 		if err != nil {
 			t.Fatal(err)
 		}
 		r, _ := v.(map[string]any)
-		if out, _ := r["stdout"].(string); !strings.Contains(out, filepath.Join(dir, "only.txt")) {
-			t.Fatalf("classes %v: returned %#v", c.classes, v)
+		if out, _ := r["stdout"].(string); !strings.Contains(out, "only.txt") {
+			t.Fatalf("%s: returned %#v", c.name, v)
 		}
 		if len(s.asks) != c.asks {
-			t.Fatalf("classes %v: %d asks, want %d", c.classes, len(s.asks), c.asks)
+			t.Fatalf("%s: %d asks, want %d", c.name, len(s.asks), c.asks)
 		}
-		note := "(class lister: what you write here is also run with find in its place)"
-		if shown := Render(s.asks[1]); strings.Contains(shown, note) != (c.classes != nil) {
-			t.Fatalf("classes %v: the ls child's ask:\n%s", c.classes, shown)
+		if got := m.Memory.Refuted(model.ClassID(Ids{}, lister)); got != c.refuted {
+			t.Fatalf("%s: refuted %v", c.name, got)
+		}
+		if want := map[bool][]string{true: {"ls", "find", "ls"}, false: {"ls", "find"}}[c.shadowed]; !slices.Equal(w.tools, want) {
+			t.Fatalf("%s: ran %v, want %v", c.name, w.tools, want)
+		}
+		note := "(held interchangeable with find: what you write here may be tried with it in its place)"
+		if shown := Render(s.asks[1]); strings.Contains(shown, note) != c.classed {
+			t.Fatalf("%s: the ls child's ask:\n%s", c.name, shown)
 		}
 	}
-	if _, err := NewMachine(testConstants, []string{"ls", "find"}, nil,
-		model.Class{Class: "ls", Members: []model.DefLoc{"find"}}); err == nil {
-		t.Fatal("a class named for a tool was booted")
+	p := Program(testConstants, []string{"ls", "find"})
+	p.Classes = [][]model.DefLoc{lister}
+	if _, err := model.NewMachine(Ids{}, p, nil); err == nil {
+		t.Fatal("a class of tools not declared read-only was booted")
 	}
+}
+
+// counted is the world, keeping the tools it ran in order, shadows too.
+type counted struct {
+	Exec
+	tools []string
+}
+
+func (w *counted) Run(e model.RunLeaf) (model.Answered, error) {
+	w.tools = append(w.tools, string(e.Tool))
+	return w.Exec.Run(e)
 }
 
 // A guard the frame cannot run is refused with why, and the model asked

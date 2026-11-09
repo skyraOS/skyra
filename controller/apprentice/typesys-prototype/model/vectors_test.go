@@ -105,6 +105,14 @@ func (textIds) Slot(i InstLoc, n int) InstLoc { return InstLoc(string(i) + "#" +
 
 func (textIds) Program(p Program) DefLoc { return DefLoc("program(" + string(p.Version) + ")") }
 
+func (textIds) Class(ms []DefLoc) DefLoc {
+	names := make([]string, len(ms))
+	for i, d := range ms {
+		names[i] = string(d)
+	}
+	return DefLoc("class(" + strings.Join(names, ",") + ")")
+}
+
 // version is a refinement as the vectors write it: each branch's
 // instruction its template.
 func version(t *testing.T, v tree.Version) any {
@@ -150,7 +158,11 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 		return map[string]any{"parts": ps, "text": opt(text, ok)}
 	},
 	"machine": func(t *testing.T, in map[string]json.RawMessage) any {
-		m, err := NewMachine(textIds{}, dec[Program](t, in["program"]), Replay(dec[[]Event](t, in["log"])))
+		start := Replay(dec[[]Event](t, in["log"]))
+		for _, c := range dec[[]DefLoc](t, in["refuted"]) {
+			start.Refute(c)
+		}
+		m, err := NewMachine(textIds{}, dec[Program](t, in["program"]), start)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,6 +190,8 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 			switch e := e.(type) {
 			case RunLeaf:
 				effects = append(effects, map[string]any{"runLeaf": map[string]any{"tool": e.Tool, "argv": e.Argv}})
+			case Shadow:
+				effects = append(effects, map[string]any{"shadow": map[string]any{"tool": e.Tool, "argv": e.Argv}})
 			case Ask:
 				effects = append(effects, map[string]any{"ask": map[string]any{"key": e.Key, "kind": e.Kind,
 					"depth": e.Depth, "refused": e.Refused}})
@@ -192,7 +206,8 @@ var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
 			v, seen := m.Memory[k.Text()]
 			mem = append(mem, opt(version(t, v), seen))
 		}
-		return map[string]any{"effects": effects, "tree": m.Tree, "memory": nonNil(mem)}
+		return map[string]any{"effects": effects, "tree": m.Tree, "memory": nonNil(mem),
+			"refuted": nonNil(m.Memory.RefutedClasses())}
 	},
 	"memory": func(t *testing.T, in map[string]json.RawMessage) any {
 		m := Replay(dec[[]Event](t, in["log"]))

@@ -477,20 +477,18 @@ program {
     defs:     [ def B … ]                               in order: $1 …
     context:  [ interface … ]                               then context
   }
-  classes: [                     definitions declared interchangeable, default none
-    { class: def C, members: [ def B … ] }
-  ]
+  readOnly: [ def T … ]          tools declared without effects, default none
+  classes:  [ [ def T … ] … ]    read-only tools held interchangeable, default none
 }
 ```
 
-**A class is the program saying two definitions are interchangeable.** A
-key holds the class in place of each member, so what is learned with one
-member runs with another at the same position: an implementation names
-tools by position, never by name. Nothing else is reused across
-definitions; reuse between two tools is only ever what a person declared
-(Model.lean's `classOf_eq`). The memory root leaves classes out, as it
-leaves out the constants: they change which keys meet, not what a key
-means.
+**A class is a hypothesis, not a fact.** It names read-only tools a person
+holds interchangeable, and it permits trying one in another's place; it
+never makes them one. A class is its members: its location is the hash of
+its members sorted, never a name, so two programs share a class's record
+only when they hold the same tools. Memory stays at exact keys; the class
+is a reuse rule over them (Reuse rules, below), and trials refute it. The
+memory root leaves classes out, as it leaves out the constants.
 
 ### The grant
 
@@ -509,9 +507,9 @@ grant {
 
 1. **The program is well formed:** `k ≥ 1`, the floor is a level, `ι` is
    in [0, 1], the quorum is at least 1, global names are sorted and each once, and no definition
-   fits both `act`'s first position and `delegate`'s. Each class is named
-   once, by no definition the program reaches; each member is in one
-   class; a class's members are all tools or all models.
+   fits both `act`'s first position and `delegate`'s. Every read-only
+   definition is a tool; each class has two members or more, all
+   read-only; each member is in one class.
 2. **The grant's interface is the entry scope**, position by position: the
    definition at each position is that position's, by its hash, and fits
    an operator, a model or a tool; each context value has that position's
@@ -776,10 +774,26 @@ A rule gives two things:
 A rule is a pure function of memory, the key and the chain, so a decision
 replays.
 
-**Classes are not a reuse rule.** A rule widens what counts at a key it
-leaves exact; a class is declared by the program, before any key is made,
-and the exact rule applies to keys made through it. The key is still
-everything seen, with a member seen as its class.
+**Classes are a reuse rule, tried.** When a frame's own key selects nothing
+(null; a conflict is the model's to settle), the rule takes, under each
+class not refuted, the frame's key with one member swapped for another of
+the class, and the first such key that selects gives the template. Its
+alignment is the identity, since a template names tools by position. What
+a frame learned at its own key always comes first, and nothing borrowed is
+stored at the borrowing key: only what the model writes there is.
+
+**Each borrowed act is a trial.** When it runs the swapped member, the
+member it was learned with runs too, on the same arguments, as a shadow:
+read-only, so running it changes nothing. The two outputs are read as the
+key the template was learned at would read them. They refute the class
+when they land at different keys there, by shape, or when its tally
+selects a different template for each. One selecting what the other does
+is no evidence for the class, since a weak guard selects anything; a null
+is none against it, since a key's own tool falls to null on new outputs
+too. A frame that borrowed and then exhausts a bound refutes its classes
+as well. Refutation is final and outlives the run, kept in memory beside
+the keys: reuse happens only under a class not refuted at that point
+(Machine.lean's `borrow_sound`, `go_refuted`).
 
 **Sharing across trees is the exact rule.** Memory is global: any frame
 whose complete scope, global and local, matches a key counts the

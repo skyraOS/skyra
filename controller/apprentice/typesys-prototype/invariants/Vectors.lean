@@ -621,6 +621,7 @@ def ids : Model.Ids where
   first d g := ⟨"first(" ++ d.hash ++ ";" ++ ",".intercalate (g.defs.map (·.hash)) ++ ")"⟩
   slot i n := ⟨i.hash ++ "#" ++ toString n⟩
   program p := ⟨"program(" ++ p.version.hash ++ ")"⟩
+  cls ms := ⟨"class(" ++ ",".intercalate (ms.map (·.hash)) ++ ")"⟩
 
 def ls : Model.DefLoc := ⟨"ls"⟩
 def cat : Model.DefLoc := ⟨"cat"⟩
@@ -634,24 +635,21 @@ def global (tools models : List Model.DefLoc) : List (String × Model.Iface) :=
 
 /-- The program: `ls` and `cat` its tools, `claude` and `gpt` its models. -/
 def prog : Model.Program :=
-  ⟨⟨"v1"⟩, consts, global [ls, cat] [claude, gpt], ⟨.root, [.defn ls, .defn cat, .defn claude, .shape .str]⟩, []⟩
+  ⟨⟨"v1"⟩, consts, global [ls, cat] [claude, gpt], ⟨.root, [.defn ls, .defn cat, .defn claude, .shape .str]⟩, [], []⟩
 
 /-- Refused: `cat` is both a tool and a model. -/
 def progOverlap : Model.Program := { prog with version := ⟨"v1-overlap"⟩, global := global [ls, cat] [claude, cat] }
 
-def lister : Model.DefLoc := ⟨"lister"⟩
+/-- `ls` and `cat` read-only, and held one class. -/
+def progClass : Model.Program := { prog with readOnly := [ls, cat], classes := [[ls, cat]] }
 
-/-- `ls` and `cat` declared one class. -/
-def progClass : Model.Program := { prog with classes := [(lister, [ls, cat])] }
-
-/-- Refused classes: a member in two; a class named for a tool; a tool and
-a model in one; a member the program does not reach; a name twice. -/
+/-- Refused classes: a member not read-only; a read-only model; a class of
+one; a member in two classes. -/
 def progsBadClass : List Model.Program :=
-  [ { prog with classes := [(lister, [ls]), (⟨"reader"⟩, [ls, cat])] },
-    { prog with classes := [(ls, [cat])] },
-    { prog with classes := [(lister, [ls, claude])] },
-    { prog with classes := [(lister, [ls, ⟨"sed"⟩])] },
-    { prog with classes := [(lister, [ls]), (lister, [cat])] } ]
+  [ { prog with readOnly := [ls], classes := [[ls, cat]] },
+    { prog with readOnly := [ls, cat, claude], classes := [[ls, cat]] },
+    { prog with readOnly := [ls, cat], classes := [[ls]] },
+    { prog with readOnly := [ls, cat], classes := [[ls, cat], [cat, ls]] } ]
 
 def jProgram (p : Model.Program) : Json :=
   Json.mkObj [("version", .str p.version.hash),
@@ -660,8 +658,8 @@ def jProgram (p : Model.Program) : Json :=
       ("inhibition", .arr #[jNat p.constants.inhibition.1, jNat p.constants.inhibition.2]),
       ("floor", jNat p.constants.floor), ("quorum", jNat p.constants.quorum)]),
     ("global", Json.mkObj (p.global.map fun (n, i) => (n, jIface i))), ("entry", jScope p.entry),
-    ("classes", .arr (p.classes.map fun (c, ms) =>
-      Json.mkObj [("class", .str c.hash), ("members", .arr (ms.map (Json.str ·.hash)).toArray)]).toArray)]
+    ("readOnly", .arr (p.readOnly.map (Json.str ·.hash)).toArray),
+    ("classes", .arr (p.classes.map fun ms => .arr (ms.map (Json.str ·.hash)).toArray).toArray)]
 
 def booter (defs : List Model.DefLoc) : Model.Frame :=
   ⟨⟨"user"⟩, ⟨"program(user)"⟩, none, ⟨.root, defs.map .defn⟩, defs.map .tool, [], none⟩
@@ -1002,6 +1000,8 @@ def jRefusal : Option Machine.Refusal → Json
 def jEffect : Machine.Effect → Json
   | .runLeaf t vs => Json.mkObj [("runLeaf", Json.mkObj [("tool", .str t.hash),
       ("argv", .arr ((t.hash :: vs.map argvText).map Json.str).toArray)])]
+  | .shadow t vs => Json.mkObj [("shadow", Json.mkObj [("tool", .str t.hash),
+      ("argv", .arr ((t.hash :: vs.map argvText).map Json.str).toArray)])]
   | .ask k kind d r => Json.mkObj [("ask", Json.mkObj [("key", jKey k), ("kind", jKind kind), ("depth", jNat d),
       ("refused", jRefusal r)])]
   | .finished v => Json.mkObj [("finished", jValue v)]
@@ -1017,9 +1017,13 @@ def jAnswered : Shape.Value → Json
 def failed (n : Nat) (out err : String) : Shape.Value :=
   .obj [("exit", .num (toString n)), ("stderr", .bytes err.toUTF8), ("stdout", .bytes out.toUTF8)]
 
-/-- A run, and the log it leaves for the next. -/
+def sortedHashes (ds : List Model.DefLoc) : List String :=
+  (ds.map (·.hash)).mergeSort fun a b => !decide (b < a)
+
+/-- A run, and the log and the classes refuted it leaves for the next. -/
 def runMachine (p : Model.Program) (log : List (Model.Event MAtom)) (goal : String)
-    (answers : List (Machine.Input MAtom)) : Json × List (Model.Event MAtom) :=
+    (answers : List (Machine.Input MAtom)) (refuted : List Model.DefLoc := []) :
+    Json × List (Model.Event MAtom) × List Model.DefLoc :=
   let E := mEnv p
   let rec loop (s : Machine.State MAtom) : List (Machine.Input MAtom) → List Json × List Json × Machine.State MAtom
     | [] => ([], [], s)
@@ -1034,14 +1038,16 @@ def runMachine (p : Model.Program) (log : List (Model.Event MAtom)) (goal : Stri
       | some (s', e) =>
         let (ins, effs, last) := loop s' is
         (shown :: ins, jEffect e :: effs, last)
-  let (ins, effs, last) := loop (Machine.State.init log) (.answered (.str goal) :: answers)
+  let (ins, effs, last) := loop (Machine.State.init log refuted) (.answered (.str goal) :: answers)
   let keys := (last.tree.frames.flatMap fun f =>
     (List.range (f.state.length + 1)).map fun n => Machine.keyOf E { f with state := f.state.take n }).foldl
       (fun ks k => if ks.contains k then ks else ks ++ [k]) []
   (Json.mkObj [("in", Json.mkObj [("program", jProgram p), ("log", jList jMEvent log),
+      ("refuted", .arr ((sortedHashes refuted).map Json.str).toArray),
       ("inputs", .arr (ins.drop 1).toArray), ("goal", .str goal), ("keys", jList jKey keys)]),
     ("out", Json.mkObj [("effects", .arr effs.toArray), ("tree", jTree last.tree),
-      ("memory", jList (fun k => jOpt jMRef (last.memory k)) keys)])], last.log)
+      ("memory", jList (fun k => jOpt jMRef (last.memory k)) keys),
+      ("refuted", .arr ((sortedHashes last.refuted).map Json.str).toArray)])], last.log, last.refuted)
 
 def wr (chain : List (Refine.Cond MAtom × Machine.Written)) : Machine.Input MAtom := .wrote chain
 def lsOnly : Model.Program := { prog with global := global [ls] [claude] }
@@ -1056,38 +1062,57 @@ def machineFile : List Json :=
   let learn : List (Machine.Input MAtom) :=
     [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "a.log\nb.txt\n"),
       wr [(.atom (.contains 2 "a.log"), ⟨.ret, [ex 0, wv 4 [ln 1 1]]⟩), (.tt, ⟨.ret, [ex 1, wv 4]⟩)]]
-  let (a, logA) := runMachine lsOnly [] "list\n/tmp" learn
-  let (b, _) := runMachine lsOnly logA "list\n/var" [.answered (.str "c.md\n")]
-  let (c, _) := runMachine { lsOnly with constants := { consts with quorum := 2 } } logA "list\n/tmp"
+  let (a, logA, _) := runMachine lsOnly [] "list\n/tmp" learn
+  let (b, _, _) := runMachine lsOnly logA "list\n/var" [.answered (.str "c.md\n")]
+  let (c, _, _) := runMachine { lsOnly with constants := { consts with quorum := 2 } } logA "list\n/tmp"
     [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "x\n")]
-  let (d, _) := runMachine lsOnly [] "hello\nworld"
+  let (d, _, _) := runMachine lsOnly [] "hello\nworld"
     [wr [(.tt, ⟨.act, [wv 2, [.lit (.str "world")]]⟩)], wr [(.tt, ⟨.act, [wv 1]⟩)],
       wr [(.atom (.eq 0 "nope"), ⟨.act, [wv 2, wv 1]⟩)]]
-  let (e, _) := runMachine lsOnly [] "/tmp\na.txt"
+  let (e, _, _) := runMachine lsOnly [] "/tmp\na.txt"
     [wr [(.tt, ⟨.act, [wv 2, [var 1 [ln 1 1], .lit (.str "/"), var 1 [ln 2 2]]]⟩)], .answered (.str "/tmp/a.txt\n"),
       wr [(.tt, ⟨.ret, [ex 0, wv 5 [ln 1 1]]⟩)], wr [(.tt, ⟨.ret, [ex 0, wv 6 [.field ["x"]]]⟩)],
       wr [(.tt, ⟨.ret, [ex 0, wv 6]⟩)]]
-  let (e2, _) := runMachine lsOnly [] "/tmp\na.txt"
+  let (e2, _, _) := runMachine lsOnly [] "/tmp\na.txt"
     [wr [(.tt, ⟨.act, [wv 2, [var 2, .lit (.str "/")]]⟩)], wr [(.tt, ⟨.act, [wv 2, [.lit (.str "a.txt"), var 1]]⟩)]]
-  let (f, _) := runMachine prog [] "show\n/tmp"
+  let (f, _, _) := runMachine prog [] "show\n/tmp"
     [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
       .answered (.str "a.txt\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)],
       wr [(.tt, ⟨.ret, [ex 0, wv 5 [.field ["stdout"]]]⟩)]]
-  let (g, _) := runMachine { lsOnly with constants := { consts with transitions := 1 } } [] "list\n/tmp"
+  let (g, _, _) := runMachine { lsOnly with constants := { consts with transitions := 1 } } [] "list\n/tmp"
     [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (.str "x\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)]]
-  let (h, _) := runMachine lsOnly [] "list\n/nope"
+  let (h, _, _) := runMachine lsOnly [] "list\n/nope"
     [wr [(.tt, ⟨.act, [wv 2, wv 1 [ln 2 2]]⟩)], .answered (failed 2 "" "ls: /nope: No such file\n"),
       wr [(.tt, ⟨.ret, [ex 1, wv 4 [.field ["stderr"]]]⟩)]]
-  -- ls and cat one class: the cat child reuses what the ls child learned,
-  -- and without the class it asks.
-  let start := [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
-      .answered (.str "a.txt\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)],
-      wr [(.tt, ⟨.delegate, [wv 1, wv 3, wv 1 [ln 2 2]]⟩)]]
+  -- ls and cat one class. The root hands the goal to an ls child, then to
+  -- a cat child, whose own key has nothing: it borrows what the ls child
+  -- learned, and its act is a trial, ls its shadow.
+  let toLs := [wr [(.tt, ⟨.delegate, [wv 1, wv 2, wv 1 [ln 2 2]]⟩)], wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
+      .answered (.str "a.txt\n")]
+  let toCat := wr [(.tt, ⟨.delegate, [wv 1, wv 3, wv 1 [ln 2 2]]⟩)]
   let done := wr [(.tt, ⟨.ret, [ex 0, wv 7 [.field ["stdout"]]]⟩)]
-  let (i, _) := runMachine progClass [] "show\n/tmp" (start ++ [.answered (.str "hello\n"), done])
-  let (i2, _) := runMachine prog [] "show\n/tmp" (start ++ [wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)],
-    .answered (.str "hello\n"), wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)], done])
-  [a, b, c, d, e, e2, f, g, h, i, i2]
+  let retAny := wr [(.tt, ⟨.ret, [ex 0, wv 4]⟩)]
+  let found := wr [(.atom (.contains 3 "a.txt"), ⟨.ret, [ex 0, wv 4]⟩), (.tt, ⟨.ret, [ex 1, wv 4]⟩)]
+  -- The shadow refines as the leaf does: the borrowed return runs too.
+  let (i, _, _) := runMachine progClass [] "show\n/tmp"
+    (toLs ++ [retAny, toCat, .answered (.str "hello\n"), .answered (.str "a.txt\n"), done])
+  -- Undeclared, the cat child asks at both keys.
+  let (i2, _, _) := runMachine prog [] "show\n/tmp"
+    (toLs ++ [retAny, toCat, wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)], .answered (.str "hello\n"), retAny, done])
+  -- The ls child's return reads its output: the leaf's and the shadow's
+  -- select two templates, so the class is refuted, and the cat child asks.
+  let (i3, log3, ref3) := runMachine progClass [] "show\n/tmp"
+    (toLs ++ [found, toCat, .answered (.str "hello\n"), .answered (.str "a.txt\n"), retAny, done])
+  -- Refuted stays refuted: the next run's cat child asks, and borrows nothing.
+  let (i4, _, _) := runMachine progClass log3 "show\n/tmp"
+    [.answered (.str "a.txt\n"), wr [(.tt, ⟨.act, [wv 2, wv 3]⟩)], .answered (.str "hello\n")] ref3
+  -- No evidence from the shadow (the leaf's output selects nothing), then
+  -- the cat child exhausts its refinement bound: that refutes the class.
+  let nope := wr [(.atom (.eq 3 "nope"), ⟨.ret, [ex 0, wv 4]⟩)]
+  let (i5, _, _) := runMachine progClass [] "show\n/tmp"
+    (toLs ++ [wr [(.atom (.contains 3 "a.txt"), ⟨.ret, [ex 0, wv 4]⟩)], toCat, .answered (.str "hello\n"),
+      .answered (.str "a.txt\n"), nope, nope, nope])
+  [a, b, c, d, e, e2, f, g, h, i, i2, i3, i4, i5]
 
 def files : List (String × List Json) :=
   [ ("model/positions", positionsFile), ("model/store", storeFile), ("model/join", joinFile), ("model/machine", machineFile), ("model/memory", memoryFile), ("model/decide", decideFile), ("model/boot", bootFile), ("model/key", keyFile), ("model/kind", kindFile), ("model/cut", cutFile),
