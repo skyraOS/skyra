@@ -19,7 +19,7 @@ import (
 const vectorDir = "../invariants/vectors/model"
 
 // pending is the vector files no replay reads yet: the port's next steps.
-var pending = []string{"step"}
+var pending = []string{}
 
 type vcase struct {
 	In  map[string]json.RawMessage `json:"in"`
@@ -105,6 +105,13 @@ func (textIds) Slot(i InstLoc, n int) InstLoc { return InstLoc(string(i) + "#" +
 func (textIds) Program(p Program) DefLoc { return DefLoc("program(" + string(p.Version) + ")") }
 
 var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
+	"step": func(t *testing.T, in map[string]json.RawMessage) any {
+		rs := dec[map[DefLoc]map[string][]DefLoc](t, in["reaches"])
+		reaches := func(d DefLoc, name string) []DefLoc { return rs[d][name] }
+		tr := dec[Tree](t, in["tree"])
+		next, ok := tr.Step(textIds{}, dec[int](t, in["act"]), reaches, dec[InstLoc](t, in["frame"]), dec[Edge](t, in["edge"]))
+		return opt(next, ok)
+	},
 	"boot": func(t *testing.T, in map[string]json.RawMessage) any {
 		var from *Booter
 		if string(in["from"]) != "null" {
@@ -221,5 +228,25 @@ func TestParseSel(t *testing.T) {
 		if got := s.Enc(); got != enc {
 			t.Errorf("%s: round-trips as %s", enc, got)
 		}
+	}
+}
+
+// The tree is a fold of its edges: replaying the edges the step vectors
+// accept, from their first tree, gives the last tree they reach.
+func TestReplay(t *testing.T) {
+	cases := loadVectors(t, "step")
+	rs := dec[map[DefLoc]map[string][]DefLoc](t, cases[0].In["reaches"])
+	reaches := func(d DefLoc, name string) []DefLoc { return rs[d][name] }
+	var log []LogEdge
+	var last json.RawMessage
+	for _, c := range cases {
+		if string(c.Out) != "null" {
+			log = append(log, LogEdge{Frame: dec[InstLoc](t, c.In["frame"]), Edge: dec[Edge](t, c.In["edge"])})
+			last = c.Out
+		}
+	}
+	got, ok := dec[Tree](t, cases[0].In["tree"]).Replay(textIds{}, dec[int](t, cases[0].In["act"]), reaches, log)
+	if !ok || !reflect.DeepEqual(normal(t, got), normal(t, last)) {
+		t.Fatalf("replaying %d edges: %v, %v; want %s", len(log), got, ok, last)
 	}
 }

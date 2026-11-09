@@ -996,12 +996,17 @@ def stepFile : List Json :=
         (l, .ret out),
         (a, .ret out),
         (r.id, .ret out) ]
+    let reach := Json.mkObj [((ids.program prog).hash, Json.mkObj [
+      ("act", .arr ((prog.reach "act").map (Json.str ·.hash)).toArray),
+      ("delegate", .arr ((prog.reach "delegate").map (Json.str ·.hash)).toArray)])]
     let rec go (t : Model.Tree) : List (Model.InstLoc × Model.Edge) → List Json
       | [] => []
       | (fid, e) :: es => match t.step ids 1 reaches fid e with
-        | some t' => Json.mkObj [("in", Json.mkObj [("tree", jTree t), ("frame", .str fid.hash), ("edge", jEdge e)]),
+        | some t' => Json.mkObj [("in", Json.mkObj [("act", jNat 1), ("reaches", reach), ("tree", jTree t),
+            ("frame", .str fid.hash), ("edge", jEdge e)]),
             ("out", jTree t')] :: go t' es
-        | none => Json.mkObj [("in", Json.mkObj [("tree", jTree t), ("frame", .str fid.hash), ("edge", jEdge e)]),
+        | none => Json.mkObj [("in", Json.mkObj [("act", jNat 1), ("reaches", reach), ("tree", jTree t),
+            ("frame", .str fid.hash), ("edge", jEdge e)]),
             ("out", .null)] :: go t es
     go t₀ edges
 
