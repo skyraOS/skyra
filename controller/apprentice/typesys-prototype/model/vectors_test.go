@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 const vectorDir = "../invariants/vectors/model"
 
 // pending is the vector files no replay reads yet: the port's next steps.
-var pending = []string{"boot", "step"}
+var pending = []string{"step"}
 
 type vcase struct {
 	In  map[string]json.RawMessage `json:"in"`
@@ -83,7 +84,39 @@ func optValue(v any, ok bool) any {
 	return ValueJSON(v)
 }
 
+// textIds are the vectors' hashes, spelled out as text, as Vectors.lean
+// forms them.
+type textIds struct{}
+
+func (textIds) Child(p InstLoc, n int, s Scope) InstLoc {
+	return InstLoc("child(" + string(p) + "," + strconv.Itoa(n) + "," + s.Text() + ")")
+}
+
+func (textIds) First(d DefLoc, g Grant) InstLoc {
+	ds := make([]string, len(g.Defs))
+	for i, x := range g.Defs {
+		ds[i] = string(x)
+	}
+	return InstLoc("first(" + string(d) + ";" + strings.Join(ds, ",") + ")")
+}
+
+func (textIds) Slot(i InstLoc, n int) InstLoc { return InstLoc(string(i) + "#" + strconv.Itoa(n)) }
+
+func (textIds) Program(p Program) DefLoc { return DefLoc("program(" + string(p.Version) + ")") }
+
 var replays = map[string]func(*testing.T, map[string]json.RawMessage) any{
+	"boot": func(t *testing.T, in map[string]json.RawMessage) any {
+		var from *Booter
+		if string(in["from"]) != "null" {
+			x := dec[struct {
+				Frame  Frame `json:"frame"`
+				Invoke int   `json:"invoke"`
+			}](t, in["from"])
+			from = &Booter{Frame: x.Frame, Invoke: x.Invoke}
+		}
+		f, ok := Boot(textIds{}, dec[Program](t, in["program"]), dec[Grant](t, in["grant"]), from)
+		return opt(f, ok)
+	},
 	"cut": func(t *testing.T, in map[string]json.RawMessage) any {
 		v := DecodeValue(dec[any](t, in["value"]))
 		sels := dec[[]Sel](t, in["sels"])
