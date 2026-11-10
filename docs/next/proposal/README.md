@@ -129,7 +129,10 @@ New implementation proposals:
   selects a step. The signal is the reward prediction error: a return
   missed and held is better than expected and moves the prediction
   toward it; credit runs down from the person's verdict. 65's identity
-  stability is how well predictions are met. Draft (2026-11-10).
+  stability is how well predictions are met. A return is one unit; a
+  part's importance is learned from history: reach toward the root, then
+  spread within the program, then condensation by containment, never
+  length. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code

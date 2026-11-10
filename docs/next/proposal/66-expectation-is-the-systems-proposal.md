@@ -90,6 +90,49 @@ learning reaches the predictions before it:
 - **A verdict never comes for some runs.** What a run without one
   contributes is policy: counted as held, or not counted.
 
+## Importance is learned from history
+
+**A return is one unit.** A child's return arrives at its parent as one
+introduction (65), whole, and that is the baseline: the system assumes
+all of it is returned and received. How much of it mattered is not
+measured in its text, words or bytes, which say nothing of importance.
+It is known only from what happened to it over time.
+
+**A part is ranked, in order, by:**
+
+1. **Reach: how close to the root it traveled.** The farthest hop toward
+   the root that anything introduced from it reached, in a return that
+   held. Counted in hops of the S, so it is structural.
+2. **Spread: how many sightings it has at its address, within the
+   program.** A part used at more nodes carries more of the program's
+   load. Which runs count is the fold's policy (65, What the data owes a
+   policy).
+3. **Condensation: how small it is, by containment.** Addresses order
+   parts without measuring them: `$6 ⊃ $6.stdout ⊃ $6.stdout[1]`. Of two
+   parts with the same reach and spread, the one contained in the other
+   is the condensed form: what was carried, without what was not.
+
+- **There is no fourth.** Parts alike in all three are a tie, and both
+  are kept: a ranking need not be total. Length is never a measure.
+- **History before structure.** Reach and spread are what happened;
+  condensation is a property of one address. What a value is for is
+  learned from where it went before it is read from what it is.
+- **Each rank is relative to its own variable.** A variable's prediction
+  (above) includes how far and how widely its parts usually travel. A
+  binding whose part travels farther than its variable's usually do, and
+  holds, is better than expected.
+- **Reading is not importance.** How often an introduction is eliminated
+  is attention, not load: a large output read five ways may matter or
+  may only be large. Reach and spread say that something was carried.
+- **Used includes deciding.** A part read by an elimination that owns an
+  introduction is used though its text goes no farther: "move" read for
+  `mv`; an `ls` run to see whether a file exists (64, Use is credit). Its
+  reach is that introduction's.
+
+**Credit is reach, held**: a binding is credited by the farthest return
+that held through it, judged against its variable's predicted reach, and
+its condensed form says which part earned it.
+
 ## Expectation is identity stability
 
 **65's identity stability is how well an identity's predictions are
@@ -178,6 +221,9 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
   events give the same decisions.
 - **A prediction is never passed:** no `predict` is in the scope, the
   bindings or the key of the frame it is about.
+- **Importance is a function of the log:** a part's reach, spread and
+  condensation at a point are folds of the log before it; condensation is
+  containment of addresses, a partial order, and no rank reads text.
 - **Credit waits for the verdict:** a held return's error is settled only
   by a `verdict` above it, or by the policy for a run without one.
 
