@@ -119,6 +119,9 @@ New implementation proposals:
   the column of its sightings. A decision passes three policies, each
   set at boot and changed by a log event: identity stable, history
   stable, the steps agree.
+  The model reads *cut* and *assert*, mapped once to eliminate and
+  introduce, under seven checked rules; live runs on ls, cat, wc and
+  date show the goal rules end tautological premises.
   Draft (2026-11-10).
 - [66 — Amendment to 64: expectation is the system's](66-expectation-is-the-systems-proposal.md):
   the model does not write `expect`, and there is no second ask. The

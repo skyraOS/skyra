@@ -304,6 +304,79 @@ return $9 $10
   With only lines and fields (61) they cannot each be eliminated. 62's
   runs of words (Lexical units), matched by text, are built with this.
 
+## What the model is told
+
+**The model's words are cut and assert.** The system's terms stand
+(introduce, eliminate), and the prompt maps them once:
+
+| The model reads | The system's term | Why this word |
+|---|---|---|
+| **cut** | eliminate | it means *take a part of this*, and the model took parts with it: in the live runs (below) no step cut the goal whole, where with *read* and *eliminate* most did |
+| **assert** | introduce | it says the value is a claim; with it, `exit(0)` was asserted from the goal (*show the contents*), where before it was from `cat`'s exit status |
+
+"Cut" is retired as a system term (Terms) because proof theory gives it
+another meaning; the model is not asked to use it in that sense, and the
+mapping is stated wherever the prompt is.
+
+**What the prompt says**, in this order:
+
+```text
+Definitions
+  Cut:        a signal of what you think matters.
+  Assertion:  your inference from a cut.
+
+Premise
+  The more honest you are with your cuts, the better your memory will serve you in the future.
+
+Rules
+  1. Assertions can never be cut. Cut only the goal and what arrived.
+  2. The goal is always cut at least twice when you act; once when you return.
+  3. Every assertion is derived from a single cut, and every cut gives a single assertion.
+  4. Every act and every return sends at least two assertions, and at least one of them is
+     derived from a cut of the goal.
+  5. Never leave an argument out: where a tool needs none, assert null from the cut that
+     shows it needs none.
+  6. exit(0) asserts the goal is done; exit(1) asserts it is not.
+  7. A literal is remembered as written: assert only what holds for every goal, a flag,
+     never a name, a path, or text you could cut.
+
+Grammar
+  the forms (cut, assert, act, return), addresses, values, and one example
+```
+
+- **The order is the order a step is written in**: what may be cut, how
+  much of the goal, what an assertion is from, what is sent, what a
+  return means, what a literal costs.
+- **Rule 2 is less for a return.** A return asserts that the goal is
+  done, from a cut of the goal, and what it returns, from what arrived;
+  a second cut of the goal there would be a reason made up to meet a
+  count.
+- **Rule 4 is not rules 2 and 3 again.** An assertion may be made and
+  not sent; rule 4 makes what is sent answer to the goal.
+- **Every rule is checked**: a step that breaks one is refused, told
+  which, and asked again. Rules 1 to 5 and 7 are 65's syntax; rule 6 is
+  the meaning of the return's head.
+
+**What the live runs showed** (`ls`/`cat` on two directories, `wc`,
+`date`; 2026-11-10):
+
+- **The forms were written from one example**, with two or three
+  refusals a run at most, the same mistake each time: cutting its own
+  earlier assertion. Rule 1 is that refusal, written down.
+- **Without the goal rules, premises were tautological**: `ls` asserted
+  from a cut of `$1.tools[1]`, itself. With rules 2 and 4, every chosen
+  value was asserted from a cut of the goal: `cat` from *show the
+  contents*, `-l` from *lines*, `date` from *what time*.
+- **`null` was claimed against a cut** at the first `date`: `null` from
+  *is it*, and `date` ran with no argument.
+- **What arrived was sometimes cut whole** (`$6.stdout`, newline and
+  all), the act failed, and the next step cut `$6.stdout[1]`. The world
+  corrected it in one step, as 66 expects.
+- **A later version of the prompt was declined by the API** before any
+  output, intermittently, for content that is not unsafe. The prompt is
+  being rebuilt from the last version that ran cleanly, one rule at a
+  time.
+
 ## Memory: one store, through the S
 
 ### The S
@@ -573,6 +646,8 @@ replay would not give the same decisions. So it is appended, as a
 | refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `unused`, `repeated`, `fragment`; those concerning a condition go |
 | 61: a key is a frame's scope and arrivals; the model is never in it | where (the OS), who (one binary, the model's for a frame), role, then what |
 | 61: one memory for frames | one store through the S: root, frame and leaf keys, by role |
+| the model writes eliminate and introduce | it reads cut and assert, mapped once; seven rules, each checked |
+| `exit(0)` from anything | from a cut of the goal: rule 4, and rule 6's meaning |
 | 63, section 1: quorum counted on the ballot | built, as the default history policy |
 | 59: the tally's constants are the program's | three policies, set at boot and changed by an event in the log |
 | 61: position and slot; "variable" for `$n` loosely | variable (identity, level), binding (frame, level), reference, level, location |
@@ -658,16 +733,10 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
    introduction is unchanged whatever its premise reads: shown to the
    person, counted against the model, or moved to the dependency that
    stayed equal.
-2. **What `return 0` must be from.** Whether `exit(0)` must be introduced
-   from an elimination of the goal, as the `yes` example's is, and not of
-   what arrived.
-3. **Predicates.** A threshold (`restarts > 2`) is not text read again.
+2. **Predicates.** A threshold (`restarts > 2`) is not text read again.
    Nothing in `ls`, `cat`, `wc`, `date`, `mv` or `rm` needs one. Whether
    one returns as a kind of elimination, with no expression around it.
-4. **The whole elimination in the prompt.** Whether the model is told it
-   may read a value whole. Told, it may read each address whole and stop;
-   untold, it may invent a part to satisfy the rule.
-5. **Policy per *who*.** What may be shared between binaries, and what
+3. **Policy per *who*.** What may be shared between binaries, and what
    an effect must have read first (an `rm null` learned where the frame
    never looked runs wherever its binary is started), are policies over
    the data, set per *who*. Not designed here.
