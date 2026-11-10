@@ -1,0 +1,8 @@
+--- ask (level $2), attempt 1
+cut $2 := $1.goal / "what time"
+cut $3 := $1.goal / "is it"
+assert $4 := $1.tools[1] from $2
+assert $5 := null from $3
+act $4 $5
+=== ran ['date'] -> {"exit": 0, "stdout": "Tue Nov 10 09:10:41 EST 2026\n", "stderr": ""}
+claude CLI exit 1:  {"duration_api_ms":2915,"stop_reason":"refusal","session_id":"f3e8c7cc-34f7-4f4c-ad79-0a7f7f1142cf","total_cost_usd":0.0121504,"usage":{"input_tokens":4,"cache_creation_input_tokens":1467,"cache_read_input_tokens":1992,"output_tokens":0,"output_tokens_details":{"thinking_tokens":0},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":1467,"ephemeral_5m_input_tokens":0},"inference_geo":"global","iterations":[{"i

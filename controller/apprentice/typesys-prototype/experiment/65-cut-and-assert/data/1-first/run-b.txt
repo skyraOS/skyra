@@ -1,0 +1,37 @@
+--- ask (level $2), attempt 1
+eliminate $2 := $1.tools[1]
+eliminate $3 := $1.goal[2]
+introduce $4 := $1.tools[1] from $2
+introduce $5 from $3
+act $4 $5
+=== ran ['ls', '<testdir>/b'] -> {"exit": 0, "stdout": "config.json\n", "stderr": ""}
+--- ask (level $7), attempt 1
+eliminate $7 := $1.tools[2]
+eliminate $8 := $5
+eliminate $9 := $6.stdout[1]
+introduce $10 := $1.tools[2] from $7
+introduce $11 from $8
+introduce $12 from $9
+act $10 $11'/'$12
+REFUSED unstored: $5 is not a value this frame received or that arrived
+--- ask (level $7), attempt 2
+eliminate $7 := $1.tools[2]
+eliminate $8 := $1.goal[2]
+eliminate $9 := $6.stdout[1]
+introduce $10 := $1.tools[2] from $7
+introduce $11 from $8
+introduce $12 from $9
+act $10 $11'/'$12
+=== ran ['cat', '<testdir>/b/config.json'] -> {"exit": 0, "stdout": "{\"name\": \"skyra\"}\n", "stderr": ""}
+--- ask (level $14), attempt 1
+eliminate $14 := $13.stdout[1]
+introduce $15 from $14
+return exit(0) $15
+REFUSED instr: exit(0) in the sending line is not an introduction of this step
+--- ask (level $14), attempt 2
+eliminate $14 := $13.exit
+eliminate $15 := $13.stdout[1]
+introduce $16 := exit(0) from $14
+introduce $17 from $15
+return $16 $17
+=== return exit 0: ['{"name": "skyra"}']

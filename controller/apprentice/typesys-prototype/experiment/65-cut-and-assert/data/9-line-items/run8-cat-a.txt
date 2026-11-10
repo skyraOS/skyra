@@ -1,0 +1,34 @@
+--- ask (level $2), attempt 1
+cut $2 := $1.goal / "show the contents"
+cut $3 := $1.goal[2]
+assert $4 := $1.tools[1] from $2
+assert $5 from $3
+act $4 $5
+=== ran ['ls', '<testdir>/a'] -> {"exit": 0, "stdout": "notes.txt\n", "stderr": ""}
+--- ask (level $7), attempt 1
+cut $7 := $1.goal / "the only file"
+cut $8 := $1.goal / "<testdir>/a"
+cut $9 := $6.stdout
+assert $10 := $1.tools[2] from $7
+assert $11 from $8
+assert $12 from $9
+act $10 $11'/'$12
+=== ran ['cat', '<testdir>/a/notes.txt\n'] -> {"exit": 1, "stdout": "", "stderr": "cat: <testdir>/a/notes.txt\n: No such file or directory\n"}
+--- ask (level $14), attempt 1
+cut $14 := $1.goal / "in this directory"
+cut $15 := $13.stderr / "<testdir>/a/notes.txt"
+assert $16 := $1.tools[2] from $14
+assert $17 from $15
+act $16 $17
+=== ran ['cat', '<testdir>/a/notes.txt'] -> {"exit": 0, "stdout": "hello from notes\nsecond line\n", "stderr": ""}
+--- ask (level $19), attempt 1
+cut $19 := $1.goal / "show"
+cut $20 := $18.exit
+cut $21 := $1.goal / "contents"
+cut $22 := $18.stdout
+assert $23 := exit(0) from $19
+assert $24 from $20
+assert $25 from $21
+assert $26 from $22
+return ($23 $24) ($25 $26)
+=== return 0: '0'; 'contents': 'hello from notes\nsecond line\n'

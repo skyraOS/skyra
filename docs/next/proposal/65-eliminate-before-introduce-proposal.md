@@ -212,7 +212,7 @@ next.
 | Composition | Head, the predicate | Arguments, the subject |
 |---|---|---|
 | act | the tool run | what it is run on |
-| return | the exit status, `0` or `1` | what is returned, and why |
+| return | line items, each a goal assertion and a child assertion; the first is the exit status and its evidence | (see Returns are line items) |
 | delegate | the goal passed | the tools |
 
 **Refusals.** The model is asked again, told which:
@@ -330,10 +330,13 @@ Premise
 
 Rules
   1. Assertions can never be cut. Cut only the goal and what arrived.
-  2. The goal is always cut at least twice when you act; once when you return.
+  2. When you act, the goal is cut at least once.
   3. Every assertion is derived from a single cut, and every cut gives a single assertion.
-  4. Every act and every return sends at least two assertions, and at least one of them is
-     derived from a cut of the goal.
+  4. Every act sends at least two assertions, and at least one of them is derived from a
+     cut of the goal. A return is line items: each is two assertions, the first from a cut
+     of the goal (what it answers), the second from a cut of what arrived (the answer).
+     The first line item says whether the goal is done: exit(0) or exit(1), and what
+     arrived that shows it.
   5. Never leave an argument out: where a tool needs none, assert null from the cut that
      shows it needs none.
   6. exit(0) asserts the goal is done; exit(1) asserts it is not.
@@ -341,18 +344,45 @@ Rules
      never a name, a path, or text you could cut.
 
 Grammar
-  the forms (cut, assert, act, return), addresses, values, and one example
+  the forms (cut, assert, act, return ($g $a) ($g $a) …), addresses, values, and an
+  example of an act and of a return
 ```
 
 - **The order is the order a step is written in**: what may be cut, how
   much of the goal, what an assertion is from, what is sent, what a
   return means, what a literal costs.
-- **Rule 2 is less for a return.** A return asserts that the goal is
-  done, from a cut of the goal, and what it returns, from what arrived;
-  a second cut of the goal there would be a reason made up to meet a
-  count.
 - **Rule 4 is not rules 2 and 3 again.** An assertion may be made and
   not sent; rule 4 makes what is sent answer to the goal.
+
+### Returns are line items
+
+**Each line item is what it answers and the answer**: an assertion from
+a cut of the goal, then one from a cut of what arrived.
+
+```text
+cut $19 := $1.goal / "show"          assert $23 := exit(0) from $19
+cut $20 := $18.exit                  assert $24 from $20
+cut $21 := $1.goal / "contents"      assert $25 from $21
+cut $22 := $18.stdout                assert $26 from $22
+return ($23 $24) ($25 $26)
+```
+
+- **The exit status is its own line item.** "The goal is done", from the
+  goal, beside "the tool exited 0", from the child: both claims kept, so
+  neither stands in for the other. The `yes` test is the item's first
+  half (Why).
+- **A return says only what it has.** A frame whose answer is that it is
+  done (`mv`, `rm`) returns one item, the exit and its evidence, with
+  nothing made up to fill a count. A return cuts the goal once per item,
+  so a return with a payload cuts it at least twice.
+- **The parent receives a record labelled by the goal**: each item names
+  the part of the goal it answers, so the parent can cut by those words.
+  The labels are text, values: the key holds the record's shape, how
+  many items and each item's types, never the labels (61, The rule).
+- **The verdict can fall on an item**: "the contents" refuted while
+  "done" held is a finer signal (66) than the return refuted whole.
+- **What an act needs of the goal is one cut**, the reason for what it
+  runs; a return needs one per item.
 - **Every rule is checked**: a step that breaks one is refused, told
   which, and asked again. Rules 1 to 5 and 7 are 65's syntax; rule 6 is
   the meaning of the return's head.
@@ -372,6 +402,14 @@ Grammar
 - **What arrived was sometimes cut whole** (`$6.stdout`, newline and
   all), the act failed, and the next step cut `$6.stdout[1]`. The world
   corrected it in one step, as 66 expects.
+- **With returns as line items** the padding went: `mv` and `rm`
+  returned one item, `(exit(0)` from the goal, the exit status`)`, and
+  `wc` returned `("the lines of this file", "2")`. All six programs right,
+  one refusal (a tool cut), fixed on the next ask.
+- **The experiment is kept** in
+  `controller/apprentice/typesys-prototype/experiment/65-cut-and-assert/`:
+  the driver, the prompt levels, a setup script, and every transcript
+  under `data/`, by round.
 - **One layout of the prompt was declined by the API** before any
   output, for content that is not unsafe: the rules numbered under
   headings, with the grammar after them. The same seven rules, the
@@ -688,6 +726,9 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
   its eliminations and its introductions, each premise at a lower `$n`,
   within the frame.
 - **A committed step composes two or more.**
+- **A committed return is line items:** each item is two introductions,
+  the first from an elimination of the goal and the second from one of
+  an arrival; the first item's first introduction is an exit status.
 - **Isolation** (`isolate`): in a committed step, varying what one
   elimination reads changes at most the one introduction it owns.
 - **The child traces to the parent:** each part of a child's start is an
