@@ -101,7 +101,9 @@ New implementation proposals:
   every clause (a condition, a class, a citation) is retired, since each
   wrong answer so far came from one. An introduction is the model's
   assertion, and each names exactly one elimination of its own, written
-  before it, or the step is refused `untried`. The pairing is a record,
+  before it, or the step is refused `untried`. A decision is a sentence:
+  a head and at least one argument, two introductions or more, or it is
+  refused `fragment`. The pairing is a record,
   never a condition: trials test it first. An elimination need not
   subtract, but two alike are one, so a step with more assertions than
   sources must cut; word cuts are built with it. Built first: parts

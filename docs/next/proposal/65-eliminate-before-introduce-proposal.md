@@ -48,6 +48,31 @@ or the operator (61, Variables: every operator is an introduction).
 `$2 …` asserts this tool is the one to run. The system cannot check any
 of them.
 
+### A decision is a sentence
+
+**A decision is a head and at least one argument: two introductions or
+more.** It is a subject and a predicate, and no complete sentence lacks
+either. An exec is the same: a binary and its arguments.
+
+| Operator | Head, the predicate | Arguments, the subject |
+|---|---|---|
+| act | the tool run, `$2` | what it is run on |
+| return | the exit status, `0` or `1` | what is returned, and why |
+| delegate | the delegation | the goal passed, and the tools |
+
+- **The operator is counted by its parts.** 61 counts an operator as one
+  introduction. Here its head is one, and each argument is one more: the
+  assertion that this value goes in this place. 64's agreement already
+  counts this way: the same operator on the same position.
+- **An argument's value is a literal or a cut.** A literal is introduced
+  and names an elimination of its own, as below. A cut is an elimination,
+  and it is its own: passing what was read costs nothing more.
+- **So the floor is cheap where the model reads** and costs only where it
+  writes text of its own.
+- **Refused as `fragment`**: a head with no argument. It is a predicate
+  whose subject is implicit. `ls` alone reads the working directory, which
+  the frame never saw, and `return 0` alone is a `yes` to nothing.
+
 **One for one.** Each introduction names exactly one elimination, its
 own, written before it:
 
@@ -78,9 +103,12 @@ return 0 $3 from $4
   cannot be the reason for both.
 - **Before it.** Variables are append-only, and an introduction names an
   elimination at a lower `$n`. A cut written inside the operator,
-  `$2 $1[2]`, is an argument, not the operator's elimination.
-- **Every step eliminates.** The operator is an introduction and every
-  step has one.
+  `$2 $1[2]`, is an argument, its own elimination, never the head's.
+- **`from` after the operator pairs its head**: `ls` with `$1 / "list"`,
+  `exit(0)` with the question. Each argument is paired as above: a cut
+  with itself, a literal with the elimination it names.
+- **Every step eliminates.** Every step has a head, and the head is
+  paired.
 - **Refused as `untried`**: an introduction with no elimination, with
   more than one, with one another introduction holds, or with one after
   it. The model is asked again, told which.
@@ -103,8 +131,10 @@ it made for which claim. The system uses it in two places:
 tried:
 
 ```text
-eliminate $3 := $1                                  tried, subtracts nothing
-return 0 $2 from $3
+$3: {exit: 0, stdout: "yes\n", stderr: ""}          arrived
+
+eliminate $4 := $1                                  tried, subtracts nothing
+return 0 $3 from $4
 ```
 
 - **A whole elimination is a cut with no selector.** It reads its source
@@ -159,7 +189,8 @@ does not vote and B startles. Spec A on another directory votes.
 | 64 | 65 |
 |---|---|
 | a step: eliminations, introductions, one operator | the same, each introduction naming one elimination of its own, before it |
-| refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried` |
+| an operator is one introduction (61) | its head and each argument: a decision is two or more |
+| refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `fragment` |
 | a cut is a selector applied | and the empty selector, a whole elimination; two alike are one |
 | runs of words, 62's | built with this: one for one needs them |
 | a trial varies a dependency | the paired elimination first |
@@ -167,7 +198,8 @@ does not vote and B startles. Spec A on another directory votes.
 
 In the code: `drive`'s prompts ask for a step, not a CEL chain, and say
 to pair each introduction with its own elimination; `Machine.wrote`
-parses a step and refuses `untried` before any template check; `Sel`
+parses a step and refuses `fragment` and `untried` before any template
+check; `Sel`
 gains a word run matched by text; `recorded` keeps the step's
 eliminations in order with their pairings, beside the cuts inlined from
 the operator; `tree.Cast` reads the derived dependencies above in place
@@ -180,8 +212,11 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
 - **A committed step is paired:** every step `wrote` commits maps its
   introductions injectively to eliminations, each at a lower `$n` than
   its introduction.
-- **`untried` is the only new refusal:** a step that is not so paired is
-  refused `untried`, and nothing is appended.
+- **A committed decision is a sentence:** its operator has a head and at
+  least one argument, so a committed step has two introductions or more.
+- **`untried` and `fragment` are the only new refusals:** a step that is
+  not so paired is refused `untried`, a head with no argument `fragment`,
+  and nothing is appended for either.
 - **Two eliminations alike are refused:** a committed step's
   eliminations are pairwise distinct as (source, selector).
 - **A whole elimination reads its source:** `cut` with no selector is the
@@ -197,12 +232,11 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
 
 ## Open
 
-1. **How many introductions a decision needs.** A floor would make every
-   decision document more than one assertion. As 61 counts them,
-   `return 0 $3` has two (the return and `exit(0)`) and `$2 $3` one (the
-   operator), so a floor of three refuses both unless the model writes a
-   literal it does not need, and an unneeded flag is an assertion that
-   reaches the world.
+1. **A tool whose input is the world.** `date` and `ps` read nothing
+   the frame holds, and their natural call has no argument. Under the
+   floor each needs a flag paired with an elimination (`date '+%s'`), or
+   the head alone is refused. Whether that is right, or whether such a
+   tool is declared, as `readOnly` is, to take the world as its subject.
 2. **A pairing the sightings contradict.** What is done when a unit's
    paired elimination goes free: shown to the person, counted against the
    model, or the pairing moved to the dependency that stayed equal.
