@@ -96,14 +96,16 @@ New implementation proposals:
   follows what a return used. `k` has a base of 1 and is widened only by
   sightings. Every reuse rule of 61 to 63 is one removed dependency. Thresholds are set per effect: for an act on a tool not
   `readOnly`, only a passed part goes free. Draft (2026-11-10).
-- [65 — Amendment to 64: no assertion before an elimination](65-eliminate-before-introduce-proposal.md):
+- [65 — Amendment to 64: every assertion has its own elimination](65-eliminate-before-introduce-proposal.md):
   eliminations and introductions are the whole of what the model writes;
   every clause (a condition, a class, a citation) is retired, since each
   wrong answer so far came from one. An introduction is the model's
-  assertion, and the first in a step has an elimination before it, or
-  the step is refused `untried`. An elimination need not subtract: a
-  whole one is allowed, costs reuse and never correctness. Built first:
-  parts passed into the operator free, everything else equal. Draft
+  assertion, and each names exactly one elimination of its own, written
+  before it, or the step is refused `untried`. The pairing is a record,
+  never a condition: trials test it first. An elimination need not
+  subtract, but two alike are one, so a step with more assertions than
+  sources must cut; word cuts are built with it. Built first: parts
+  passed into the operator free, everything else equal. Draft
   (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the

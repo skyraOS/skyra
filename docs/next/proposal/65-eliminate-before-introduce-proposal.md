@@ -1,12 +1,13 @@
-# 65 — Amendment to 64: no assertion before an elimination
+# 65 — Amendment to 64: every assertion has its own elimination
 
 Date: 2026-11-10
 
 Status: **draft**. Amends [64](64-dependence-and-trial-proposal.md);
 everything in 64 it does not name stands. It takes 64's two primitives as
 the whole of what the model writes, retires every clause around them, and
-adds one requirement: **the model eliminates before it introduces.**
-Nothing here is built. The syntax shown is provisional.
+adds one requirement: **each introduction is paired with exactly one
+elimination of its own, written before it.** Nothing here is built. The
+syntax shown is provisional.
 
 ## Why: what has worked and what has not
 
@@ -33,6 +34,12 @@ why, in one rule: the model's only assertion is an introduction, and
 everything the system decides about when it applies comes from
 eliminations, which the system computes.
 
+**An assertion alone means nothing.** A model, a person or a program that
+prints `yes` has said nothing until something around it is eliminated:
+yes to what. `exit(0)` is the same `yes`. Its meaning is the goal it
+answers, and a return that eliminated none of the goal has asserted it
+was met without looking at what was asked.
+
 ## The rule
 
 **An introduction is the model's assertion**: a literal, an exit status,
@@ -41,36 +48,63 @@ or the operator (61, Variables: every operator is an introduction).
 `$2 …` asserts this tool is the one to run. The system cannot check any
 of them.
 
-**No assertion before an elimination.** In a step, the first
-introduction has an elimination before it. A step that opens with an
-introduction is refused, `untried`, and the model is asked again:
+**One for one.** Each introduction names exactly one elimination, its
+own, written before it:
 
 ```text
 $1: "list all files in this directory:\n/tmp"      goal
 $2: leaf ls                                         tool
 
-eliminate $3 := $1[2]                               tried, and subtracts
-eliminate $4 := $1[1]                               tried, and subtracts
-introduce $5 := '-a'
-$2 $5 $3
+eliminate $3 := $1[2]                               the directory
+eliminate $4 := $1 / "list"
+eliminate $5 := $1 / "all files"
+introduce $6 := '-a' from $5
+$2 $6 $3 from $4
 ```
 
+```text
+$1: "is /tmp/x a directory? answer yes or no:\n/tmp/x"
+$3: {exit: 0, stdout: "yes\n", stderr: ""}          arrived
+
+eliminate $4 := $1[1]                               the question
+return 0 $3 from $4
+```
+
+- **Exactly one.** An introduction with no elimination is refused, and so
+  is one naming two: a step is a list of single derivations, each
+  readable on its own.
+- **Its own.** Two introductions never share an elimination. `-a` and
+  `ls` above each have their own look at the goal; one look at `$1[1]`
+  cannot be the reason for both.
+- **Before it.** Variables are append-only, and an introduction names an
+  elimination at a lower `$n`. A cut written inside the operator,
+  `$2 $1[2]`, is an argument, not the operator's elimination.
 - **Every step eliminates.** The operator is an introduction and every
-  step has one, so no step is accepted without an elimination.
-- **Before means before.** A cut written inside the operator, `$2 $1[2]`,
-  is an elimination made in the same breath as the assertion. It counts
-  as an elimination, not as one before it. The requirement is order:
-  read, then assert.
-- **Once is enough.** Variables are append-only, so an elimination before
-  the first introduction is before every later one. Whether each
-  introduction needs one of its own is open question 1.
+  step has one.
+- **Refused as `untried`**: an introduction with no elimination, with
+  more than one, with one another introduction holds, or with one after
+  it. The model is asked again, told which.
+
+**The pairing is a record, not a clause.** It does not say the
+introduction depends only on its elimination, and it is compiled into
+nothing. Under 64 the unit still depends on everything its frame has
+seen. The pairing is the model documenting its own assertion: which look
+it made for which claim. The system uses it in two places:
+
+- **It is read first.** A trial varies a unit's paired elimination before
+  any other dependency (64, Trials), since it is where the model said to
+  look.
+- **It is checked against the world.** A unit whose dependency on its
+  paired elimination goes free, the same assertion whatever that part
+  reads, has a pairing the sightings contradict. That is counted against
+  the model's documentation, and shown (Open, 2).
 
 **An elimination need not subtract.** What is required is that the model
 tried:
 
 ```text
 eliminate $3 := $1                                  tried, subtracts nothing
-return 0 $3
+return 0 $2 from $3
 ```
 
 - **A whole elimination is a cut with no selector.** It reads its source
@@ -79,26 +113,28 @@ return 0 $3
   the part and the rest. A whole cut splits nothing, so the step depends
   on all of `$1`, equal, and is reused only where `$1` reads what it read.
   Not subtracting costs reuse and never correctness.
-- **Subtracting is how a step earns reuse.** Only a part cut out can go
-  among or free. A model that never subtracts is asked at every new
-  value, and the asks are the signal (64, The signal) that it should.
-
-**An elimination need not be used.** One that no introduction reads still
-splits its source, so it is still where a value can come apart. It
-records where the model looked (62's attention, recorded), with no claim
-about what that look decided.
+- **One for one makes it subtract.** Two eliminations alike are one look,
+  and the second is refused. So a source can be taken whole once. A step
+  with more assertions than sources must cut, and every cut is a place a
+  value can come apart.
+- **It needs word cuts.** `-a` and `ls` both come from the goal's first
+  line. With only lines and fields (61), they cannot have an elimination
+  each. 62's runs of words (Lexical units), matched by text, are built
+  with this.
 
 ## What it is not
 
-- **Not a citation.** An introduction names nothing. It does not say what
-  it was derived from, so there is no `Γ` to get wrong. Which eliminations
-  matter is found by sightings and trials (64, Dependence).
+- **Not a citation.** 62's citation was a set the model wrote, compiled
+  into the guard, so it decided when the link selected. A pairing is one
+  elimination, and it decides nothing: what matters is still found by
+  sightings and trials (64, Dependence).
 - **Not a condition.** An elimination selects nothing by itself. It votes
   only through the dependencies of the units after it.
-- **Not a check of meaning.** The system checks that an elimination came
-  first and that it reads something seen. It cannot check that the model
-  looked at the right thing. A step that eliminates `$2` and asserts
-  `-a` for *list all files* is accepted, and it depends on all of `$1`.
+- **Not a check of meaning.** The system checks that every introduction
+  has its own elimination and that each reads something seen. It cannot
+  check that the model looked at the right thing. A step that pairs `-a`
+  with `$1[2]`, the directory, is accepted, and the pairing is the first
+  thing a trial tests.
 
 ## Built first: passed parts free, the rest equal
 
@@ -122,29 +158,38 @@ does not vote and B startles. Spec A on another directory votes.
 
 | 64 | 65 |
 |---|---|
-| a step: eliminations, introductions, one operator | the same, and the first introduction has an elimination before it |
+| a step: eliminations, introductions, one operator | the same, each introduction naming one elimination of its own, before it |
 | refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried` |
-| a cut is a selector applied | and the empty selector, a whole elimination |
+| a cut is a selector applied | and the empty selector, a whole elimination; two alike are one |
+| runs of words, 62's | built with this: one for one needs them |
+| a trial varies a dependency | the paired elimination first |
 | `passed` at 1, an open question | built first, with every other dependency equal |
 
 In the code: `drive`'s prompts ask for a step, not a CEL chain, and say
-to eliminate first; `Machine.wrote` parses a step and refuses `untried`
-before any template check; `recorded` keeps the step's own eliminations
-in order, beside the cuts inlined from the operator; `tree.Cast` reads
-the derived dependencies above in place of `Link.Cond`.
+to pair each introduction with its own elimination; `Machine.wrote`
+parses a step and refuses `untried` before any template check; `Sel`
+gains a word run matched by text; `recorded` keeps the step's
+eliminations in order with their pairings, beside the cuts inlined from
+the operator; `tree.Cast` reads the derived dependencies above in place
+of `Link.Cond`.
 
 ## Required Lean definitions and proofs
 
 In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
 
-- **A committed step tried:** every step `wrote` commits has an
-  elimination at a lower `$n` than its first introduction.
-- **`untried` is the only new refusal:** a step that opens with an
-  introduction is refused `untried`, and nothing is appended.
+- **A committed step is paired:** every step `wrote` commits maps its
+  introductions injectively to eliminations, each at a lower `$n` than
+  its introduction.
+- **`untried` is the only new refusal:** a step that is not so paired is
+  refused `untried`, and nothing is appended.
+- **Two eliminations alike are refused:** a committed step's
+  eliminations are pairwise distinct as (source, selector).
 - **A whole elimination reads its source:** `cut` with no selector is the
   identity, and its interface is its source's (`cut_sound`, extended).
 - **A whole elimination splits nothing:** a step whose eliminations are
   all whole votes only at values equal to those it was authored at.
+- **The pairing decides nothing:** two steps differing only in their
+  pairings vote alike at every frame.
 - **Passed parts are free, the rest equal:** two frames that agree on
   everything a step does not pass decide alike under it, whatever they
   pass.
@@ -152,13 +197,19 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
 
 ## Open
 
-1. **Per introduction.** Whether each introduction needs an elimination
-   of its own between it and the last, so `-a` and the operator each
-   follow a look. It is stricter and asks for eliminations nothing reads.
-2. **What `return 0` must eliminate.** `exit(0)` asserts the goal is met.
-   Whether it needs an elimination of the goal, `$1` or part of it, and
-   not only of what arrived.
-3. **Trying in the prompt.** Whether the model is told that a whole
+1. **How many introductions a decision needs.** A floor would make every
+   decision document more than one assertion. As 61 counts them,
+   `return 0 $3` has two (the return and `exit(0)`) and `$2 $3` one (the
+   operator), so a floor of three refuses both unless the model writes a
+   literal it does not need, and an unneeded flag is an assertion that
+   reaches the world.
+2. **A pairing the sightings contradict.** What is done when a unit's
+   paired elimination goes free: shown to the person, counted against the
+   model, or the pairing moved to the dependency that stayed equal.
+3. **What `return 0` must pair with.** Whether `exit(0)` must pair with an
+   elimination of the goal, `$1` or part of it, as the `yes` example
+   does, and not of what arrived.
+4. **Trying in the prompt.** Whether the model is told that a whole
    elimination is allowed, or only that it must eliminate. Told, it may
-   always write `$1` whole and never subtract; untold, it may invent a
-   cut to satisfy the rule.
+   take each source whole and stop; untold, it may invent a cut to
+   satisfy the rule.
