@@ -73,6 +73,31 @@ either. An exec is the same: a binary and its arguments.
   whose subject is implicit. `ls` alone reads the working directory, which
   the frame never saw, and `return 0` alone is a `yes` to nothing.
 
+**Nothing is asserted, never left out.** A model that holds that a head
+needs no subject says so: it introduces `null`, paired as any
+introduction is, and the system runs it as nothing.
+
+```text
+$1: "what time is it?"
+$2: leaf date
+
+eliminate $3 := $1 / "what time"
+eliminate $4 := $1                         nothing in it is an argument
+introduce $5 := null from $4
+$2 $5 from $3                              runs: date
+```
+
+- **`null` is an introduction**, so it counts toward the two, and it
+  names its own elimination: the look that found nothing to pass.
+- **The system sees nothing.** An act passes no argument for it; a
+  return returns nothing for it (`rm`'s `return 0 null`: done, nothing to
+  show). It is not the string `'null'`, and it copies no text.
+- **It is still a unit** (64), with dependencies like any literal. `ls
+  null` reads the working directory, as `ls` alone would, but now the
+  model has said so, paired it with a look, and a trial can test it.
+- **So `fragment` is only an omission.** A head with no argument is
+  refused; a head with `null` is a claim.
+
 ### Two to the parent, one to the child
 
 **A decision is two introductions or more where it is written, and one
@@ -172,7 +197,7 @@ it made for which claim. The system uses it in two places:
 - **It is checked against the world.** A unit whose dependency on its
   paired elimination goes free, the same assertion whatever that part
   reads, has a pairing the sightings contradict. That is counted against
-  the model's documentation, and shown (Open, 2).
+  the model's documentation, and shown (Open, 1).
 
 **An elimination need not subtract.** What is required is that the model
 tried:
@@ -237,6 +262,7 @@ does not vote and B startles. Spec A on another directory votes.
 |---|---|
 | a step: eliminations, introductions, one operator | the same, each introduction naming one elimination of its own, before it |
 | an operator is one introduction (61) | its head and each argument: a decision is two or more |
+| an argument left out | `null`, introduced and paired: the system passes nothing |
 | refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `fragment` |
 | a cut is a selector applied | and the empty selector, a whole elimination; two alike are one |
 | runs of words, 62's | built with this: one for one needs them |
@@ -265,6 +291,8 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
   one value, the observation its parent's operator made, and every value
   a frame holds is that, a return that arrived, or a cut or introduction
   made in the frame.
+- **`null` is nothing:** an act or return built with a `null` argument
+  runs as one without it, and `null` copies no text.
 - **Every assertion traces to what arrived:** each introduction a
   committed step makes is paired with an elimination whose source is the
   frame's start or an arrival, through cuts.
@@ -286,18 +314,13 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
 
 ## Open
 
-1. **A tool whose input is the world.** `date` and `ps` read nothing
-   the frame holds, and their natural call has no argument. Under the
-   floor each needs a flag paired with an elimination (`date '+%s'`), or
-   the head alone is refused. Whether that is right, or whether such a
-   tool is declared, as `readOnly` is, to take the world as its subject.
-2. **A pairing the sightings contradict.** What is done when a unit's
+1. **A pairing the sightings contradict.** What is done when a unit's
    paired elimination goes free: shown to the person, counted against the
    model, or the pairing moved to the dependency that stayed equal.
-3. **What `return 0` must pair with.** Whether `exit(0)` must pair with an
+2. **What `return 0` must pair with.** Whether `exit(0)` must pair with an
    elimination of the goal, `$1` or part of it, as the `yes` example
    does, and not of what arrived.
-4. **Trying in the prompt.** Whether the model is told that a whole
+3. **Trying in the prompt.** Whether the model is told that a whole
    elimination is allowed, or only that it must eliminate. Told, it may
    take each source whole and stop; untold, it may invent a cut to
    satisfy the rule.

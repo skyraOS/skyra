@@ -103,7 +103,8 @@ New implementation proposals:
   assertion, and each names exactly one elimination of its own, written
   before it, or the step is refused `untried`. A decision is a sentence:
   a head and at least one argument, two introductions or more, or it is
-  refused `fragment`. Two introductions to the parent, one to the
+  refused `fragment`; a head that needs no subject takes `null`,
+  introduced and paired, which the system runs as nothing. Two introductions to the parent, one to the
   child: the child starts with only the one value its parent's operator
   made, and must eliminate it before it can assert anything, so every
   edge forces composition. The pairing is a record,
