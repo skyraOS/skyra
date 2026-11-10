@@ -22,7 +22,8 @@ natural deduction's, and used only as defined here.
 | **E eliminates V** | E reads a part of V. One value is eliminated by many. | V is E's major premise |
 | **I is introduced from E** | I is put in the place of what E read. Within a frame, each introduction is from exactly one elimination, and each elimination owns exactly one introduction. | E is I's premise |
 | **premise** | the elimination an introduction is from | the same |
-| **composition** | the introductions a step puts together into the one value it sends: an act, a return, a delegation | an introduction rule with several premises |
+| **composition** | the introductions a step puts together into the one value it emits: an act, a return, a delegation, a join | an introduction rule with several premises |
+| **emission** | the operator that sends a composition: `act`, `return`, `delegate`, and a join's separator. Not an introduction, and outside the rules below | the rule's name, not a premise |
 
 - **The methods are `introduce` and `eliminate`**, in Lean and in Go:
   `eliminate` reads a part of a value, `introduce` puts a value in its
@@ -89,9 +90,9 @@ eliminate $7 := $1.goal / "Move"
 eliminate $8 := $6.stdout[1]                   file.txt
 eliminate $9 := $1.goal / "this folder"
 introduce $10 := $1.tools[2] from $7           mv, in place of "Move"
-introduce $11 := $5'/'$8 from $8               in place of "that file"
+introduce $11 from $8                          file.txt, in place of "that file"
 introduce $12 := '.' from $9                   in place of "this folder"
-$10 $11 $12                                    mv ~/Desktop/file.txt .
+$10 $5'/'$11 $12                               mv ~/Desktop/file.txt .
 ```
 
 **An introduction's value comes from one of three places**, and which
@@ -124,18 +125,36 @@ are a dissent, and the tally settles it.
 1 introduction  →  n eliminations  →  ≥ 2 introductions, composed into 1
 ```
 
-- **A frame receives one value**: its parent's composition, or for the
-  root the person's request with the tools they provisioned. Nothing
-  else: no goal of the parent's, no tool the parent kept. This is 61's
-  narrowing, made the shape of the frame.
+**It is the same in both directions.** An invocation and a return are
+one shape: whoever receives sees one introduction, eliminates it, and
+emits two introductions or more, composed into one for whoever receives
+next.
+
+| Direction | Received, one introduction | Emitted, two or more composed |
+|---|---|---|
+| invoke | the child's start: the parent's composition | the child's act, delegation or return |
+| return | the parent's arrival: the child's return | the parent's next act, delegation or return |
+
+- **A frame receives one value at a time**: its start, the parent's
+  composition or for the root the person's request with the tools they
+  provisioned; then each arrival, one return. Nothing else: no goal of
+  the parent's, no tool the parent kept. This is 61's narrowing, made the
+  shape of the frame.
 - **Every introduction is from exactly one elimination**, of this frame,
   at a lower `$n`. Two introductions are never from one elimination.
 - **Every elimination owns exactly one introduction.** An elimination
   owning none is a reading that leads nowhere.
 - **A step composes two introductions or more.** It is a subject and a
   predicate, and no complete sentence lacks either; an exec is a binary
-  and its arguments. The composition line is made only of `$n`, each an
-  introduction (61: an instruction made entirely of variables).
+  and its arguments.
+- **Emission does not count.** `act`, `return`, `delegate` and a join's
+  separator (`'/'` in `$5'/'$11`) are how a composition is sent, not
+  introductions: they need no elimination and count toward nothing. The
+  composition line is made only of `$n`, each an introduction, and
+  emission (61: an instruction made entirely of variables).
+- **An introduction may be composed more than once.** `$5`, `~/Desktop`,
+  is in the `ls` and the `mv`. It is still from one elimination; what is
+  owned is the introduction, not each use of it.
 
 | Composition | Head, the predicate | Arguments, the subject |
 |---|---|---|
@@ -371,6 +390,3 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
 4. **The whole elimination in the prompt.** Whether the model is told it
    may read a value whole. Told, it may read each address whole and stop;
    untold, it may invent a part to satisfy the rule.
-5. **Joins.** `$5'/'$8` puts an earlier introduction into the value of a
-   later one. Whether a value held may be an introduction of this frame,
-   or only what was received and what arrived.
