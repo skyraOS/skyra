@@ -10,6 +10,11 @@ of 1, 2 and 6, and changes one thing 62 proposed (how a template holds an
 introduction). Sections 2, 5 and 7 change code that is built; the rest
 amend what 62 has not built yet. The syntax shown is provisional.
 
+**Partly superseded** (2026-11-10) by
+[64](64-dependence-and-trial-proposal.md), which removes the guard and
+with it citation. Sections 1, 3, 5 and 7 stand. Section 2 is moot there,
+and sections 4 and 6 are restated as states of a dependency.
+
 62 found the gap: what was learned is reused where nothing ties it to
 what it was learned from, and citation is the tie. The same gap is open
 in six more places. In each, evidence gathered in one place is counted,

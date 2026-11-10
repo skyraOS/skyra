@@ -80,7 +80,18 @@ New implementation proposals:
   Every operator cites, and an act on a tool not `readOnly` reads its
   goal closed: every word cited or passed. A refutation is an event in
   the log. `span` counts an antichain of keys agreeing link for link, off
-  unless set. The copy check searches. Draft (2026-11-10).
+  unless set. The copy check searches. Draft (2026-11-10); sections 2, 4
+  and 6 superseded by 64.
+- [64 — Two primitives: dependence assumed, removed by trial](64-dependence-and-trial-proposal.md):
+  replaces the guard. The model writes only eliminations and
+  introductions, never a condition; a predicate is an elimination the
+  system computes. Every unit starts depending on everything its frame
+  has seen, and each dependency is equal, among or free: it moves only
+  when the same unit is derived again where it read something else, and
+  is free at `span` distinct values. A trial ask varies what the model is
+  shown and is never run. Every reuse rule of 61 to 63 is one removed
+  dependency. Thresholds are set per effect: for an act on a tool not
+  `readOnly`, only a passed part goes free. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
