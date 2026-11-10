@@ -115,6 +115,10 @@ New implementation proposals:
   model's for a frame, provisioned by the administrator) and role; what
   is the request or argv, literally, at root and leaf, and the types
   received at a frame. Sharing between binaries is policy, never data.
+  A value is a binding (frame, level); a variable (identity, level) is
+  the column of its sightings. A decision passes three policies, each
+  set at boot and changed by a log event: identity stable, history
+  stable, the steps agree.
   Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the

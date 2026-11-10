@@ -22,6 +22,10 @@ natural deduction's, and used only as defined here.
 | **E eliminates V** | E reads a part of V. One value is eliminated by many. | V is E's major premise |
 | **I is introduced from E** | I is put in the place of what E read. Within a frame, each introduction is from exactly one elimination, and each elimination owns exactly one introduction. | E is I's premise |
 | **premise** | the elimination an introduction is from | the same |
+| **variable** | an identity and a level: `$n` at every frame with that identity | a variable, bound once in its scope |
+| **binding** | a frame and a level: the one value `$n` holds in that frame | a variable's value in one activation |
+| **reference** | an occurrence of `$n` in a step: names a variable, and read in a frame gives its binding | an occurrence of a variable |
+| **level** | the `n` in `$n`, counted from the frame's start | a de Bruijn level |
 | **composition** | the introductions a step puts together into the one value it emits: an act, a return, a delegation, a join | an introduction rule with several premises |
 | **emission** | the operator that sends a composition: `act`, `return`, `delegate`, and a join's separator. Not an introduction, and outside the rules below | the rule's name, not a premise |
 
@@ -150,8 +154,8 @@ next.
 - **Emission does not count.** `act`, `return`, `delegate` and a join's
   separator (`'/'` in `$5'/'$11`) are how a composition is sent, not
   introductions: they need no elimination and count toward nothing. The
-  composition line is made only of `$n`, each an introduction, and
-  emission (61: an instruction made entirely of variables).
+  composition line is made only of references, each to an introduction,
+  and emission (61: an instruction made entirely of variables).
 - **An introduction may be composed more than once.** `$5`, `~/Desktop`,
   is in the `ls` and the `mv`. It is still from one elimination; what is
   owned is the introduction, not each use of it.
@@ -288,7 +292,7 @@ request        received    read parts   emitted        return         received  
 **One identity is one binary.** What makes up a *who* (a model, its
 version, its settings, a tool and its flags' dialect) is provisioned by
 the administrator, and the system does not standardize it. It sees one
-variable: the binary, by content hash. Claude Opus 5 and Claude Opus 5.5
+thing: the binary, by content hash. Claude Opus 5 and Claude Opus 5.5
 are two binaries, each wrapped by the administrator, and two identities.
 
 - **The model is in a frame's *who*.** A frame's who is the binary of the
@@ -376,6 +380,30 @@ So the data guarantees:
   is what makes a step well formed and what a trial varies first; it is
   not a condition.
 
+### Variables and bindings
+
+**A value is found by its frame and its level.** Levels are append-only,
+so `$n` in a frame is written once and never changes: a binding never
+dangles and never comes to mean something else. A part of it is found
+from there by elimination (61, Reference and location).
+
+| Address | Gives | Is |
+|---|---|---|
+| frame + level | one value | a **binding**: a row, one sighting |
+| identity + level | every value bound at that level, at every frame with that identity | a **variable**: a column, all the sightings |
+
+- **A frame is named by its process and itself.** Two runs each have a
+  frame 1; a binding's frame is unique across processes, so the store's
+  ids are (process, frame).
+- **A binding's identity follows from it**: the frame's path up to the
+  level, its start and the arrivals before `$n`. Carried in an address,
+  it is a check.
+- **A variable is stable by construction.** It is an identity and a
+  level, both static, so it names the same thing for as long as its
+  identity exists. Every sighting a policy counts is a binding of it.
+- **The API exposes values by binding, and stability is computed over
+  variables.**
+
 ### Built first: when a step votes
 
 64's dependencies need trials and `span` to move. Before those are built,
@@ -401,6 +429,45 @@ spec A on another directory votes.
 **Each condition is a set of strings at a place.** *Equal* is a set of
 one, 64's *among* is a larger set, and *free* is no condition. So 64's
 trials later change how the sets grow, not how a vote is counted.
+
+### Deciding: three policies
+
+**A decision is made at a stable identity, on a settled history, by
+agreement.** Each is a policy, set at boot and changeable over the
+program's life. The system exposes what each reads: the identity, each
+step's eliminations with what each read, its introductions, and two
+counts.
+
+| Policy | Asks | Reads | Today |
+|---|---|---|---|
+| **identity is stable** | does this identity behave the same each time it is met? | the sightings of its variables, and what followed each: a hesitate, a surprise | nothing; `hesitate` is its coarse form |
+| **history is stable** | has what was decided here settled? | the votes cast at these values, and how they split | `quorum`, counted on the ballot (63, section 1) |
+| **the steps agree** | which step, by how much? | the steps voting | 59's `group`, `levels`, `floor` and margin `required(ι, cast)` |
+
+- **Identity stability is about the world**: whether the same identity
+  predicts what follows it. `date` never is; `ls ~/Desktop` is until the
+  desktop changes.
+- **History stability is about the decisions**: whether the steps
+  written at an identity agree. A model can agree with itself at an
+  identity whose world keeps changing, and a stable `ls` can draw three
+  steps from a model not yet settled. The two fail apart.
+- **Any one failing is `null`**, and the frame asks.
+
+**What no policy changes:**
+
+- **A decision selects only a step written at its identity.** A policy
+  chooses or withholds; it never authors.
+- **No vote is `null`, and `null` asks.**
+- **The tally's own properties hold under every policy**: order does not
+  matter (`tally_perm`), at most one winner (`wins_unique`), unanimous
+  votes select (`tally_unanimous`).
+- **A stricter stability policy only withholds** (`decideAt_quorum_mono`,
+  generalized).
+
+**A policy change is an event in the log.** A decision is a function of
+memory and the policy in force; with the policy outside the log, a
+replay would not give the same decisions. So it is appended, as a
+`forget` is, and memory and every decision replay exactly.
 
 ## What it is not
 
@@ -429,7 +496,9 @@ trials later change how the sets grow, not how a vote is counted.
 | refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `unused`, `repeated`, `fragment`; those concerning a condition go |
 | 61: a key is a frame's scope and arrivals; the model is never in it | where (the OS), who (one binary, the model's for a frame), role, then what |
 | 61: one memory for frames | one store through the S: root, frame and leaf keys, by role |
-| 63, section 1: quorum counted on the ballot | built: needed once steps vote only at the text they read |
+| 63, section 1: quorum counted on the ballot | built, as the default history policy |
+| 59: the tally's constants are the program's | three policies, set at boot and changed by an event in the log |
+| 61: "variable" for `$n` in a frame and across frames | variable (identity, level), binding (frame, level), reference, level |
 | `passed` at 1, an open question | built first, with every word not read equal |
 
 In the code: `introduce` and `eliminate` are the methods in `model`; the
@@ -481,7 +550,18 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
   step's at a word none of its eliminations read is not voted for by it.
 - **`from` decides nothing** (`premise_irrelevant`): two steps alike but
   for their premises vote alike at every frame.
-- **Quorum counts votes cast on the values**, not steps at the key.
+- **A binding is unique:** (process, frame, level) gives at most one
+  value, and it never changes once written.
+- **A variable is static:** (identity, level) is a function of definitions
+  only, and every binding of it is at a frame with that identity.
+- **Three policies decide:** a `Policy` record of identity stability,
+  history stability and agreement, with `quorum` counted on the ballot
+  and 59's equations as the default.
+- **The floor holds under every policy:** a decision selects only a step
+  written at its identity; no vote is `null`; `tally_perm`, `wins_unique`
+  and `tally_unanimous` hold; a stricter stability policy only withholds.
+- **A policy is in the log:** decisions replay exactly across a policy
+  change.
 - **A key's prefix is where, who and role:** two keys differing in any
   of them share nothing, and a frame's who is its model's binary.
 - **Roles bind differently:** root and leaf events carry introductions
