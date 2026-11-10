@@ -26,6 +26,7 @@ natural deduction's, and used only as defined here.
 | **binding** | a frame and a level: the one value `$n` holds in that frame | a variable's value in one activation |
 | **reference** | an occurrence of `$n` in a step: names a variable, and read in a frame gives its binding | an occurrence of a variable |
 | **level** | the `n` in `$n`, counted from the frame's start | a de Bruijn level |
+| **location** | 61's: an absolute address, a hash; what a binding resolves to | an address in the store |
 | **composition** | the introductions a step puts together into the one value it emits: an act, a return, a delegation, a join | an introduction rule with several premises |
 | **emission** | the operator that sends a composition: `act`, `return`, `delegate`, and a join's separator. Not an introduction, and outside the rules below | the rule's name, not a premise |
 
@@ -41,6 +42,14 @@ natural deduction's, and used only as defined here.
   once by an elimination of it, which here is a tree edge: a parent
   introduces, a child eliminates. The code's `Cut`, `CutAll` and
   `tree/cut.go` are renamed `eliminate` as they are touched.
+- **Variable and binding replace 61's position and slot.** 61's
+  *position* (interface + `$n`, the key through `$n`) is a variable; its
+  *slot* (`id(frame)#n`) is a binding, which resolves to a location. A
+  reference `$4` names level 4; in a frame, the binding at level 4 gives
+  a location, the hash of the value. The code's `model/positions.go` and
+  `tree.Position` are renamed as they are touched.
+- **A level is not a location.** A level is relative, meaningful only in
+  a scope; a location is absolute. A frame holds locations, at levels.
 - **"Decision" keeps 61's meaning**: what the tally gives at a frame. A
   step is what the model writes; the decision is which step runs.
 
@@ -498,7 +507,7 @@ replay would not give the same decisions. So it is appended, as a
 | 61: one memory for frames | one store through the S: root, frame and leaf keys, by role |
 | 63, section 1: quorum counted on the ballot | built, as the default history policy |
 | 59: the tally's constants are the program's | three policies, set at boot and changed by an event in the log |
-| 61: "variable" for `$n` in a frame and across frames | variable (identity, level), binding (frame, level), reference, level |
+| 61: position and slot; "variable" for `$n` loosely | variable (identity, level), binding (frame, level), reference, level, location |
 | `passed` at 1, an open question | built first, with every word not read equal |
 
 In the code: `introduce` and `eliminate` are the methods in `model`; the
