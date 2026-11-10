@@ -1,0 +1,445 @@
+[
+ {
+  "cond": "premise",
+  "case": "cat-a",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "cat-a",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "cat-a",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "cat-b",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "cat-b",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "cat-b",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "date",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"what time\"\ncut $3 := $1.goal / \"is it?\"\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   2,
+   2
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "date",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"what time\"\ncut $3 := $1.goal / \"is it?\"\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   2,
+   2
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "date",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"what time is it\"\ncut $3 := $1.tools[1]\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": "cut",
+  "goal_cuts": 1,
+  "whole": 0,
+  "words": [
+   4
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "mv",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "mv",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "mv",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "rm",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "rm",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "rm",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "wc",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "wc",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ },
+ {
+  "cond": "premise",
+  "case": "wc",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-a",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-a",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-a",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-b",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-b",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "cat-b",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "date",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"what time\"\ncut $3 := $1.goal / \"is it?\"\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   2,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "date",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"what time\"\ncut $3 := $1.goal / \"is it?\"\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   2,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "date",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"what time\"\ncut $3 := $1.goal / \"is it?\"\nassert $4 := $1.tools[1] from $2\nassert $5 := null from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   2,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "mv",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "mv",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "mv",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file in the first folder\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   7
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "rm",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "rm",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"the only file in this directory\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   6
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "rm",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"the only file\"\ncut $3 := $1.goal[2]\nassert $4 := $1.tools[1] from $2\nassert $5 from $3\nact $4 $5",
+  "refused": null,
+  "goal_cuts": 2,
+  "whole": 0,
+  "words": [
+   3
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "wc",
+  "rep": 0,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "wc",
+  "rep": 1,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ },
+ {
+  "cond": "none",
+  "case": "wc",
+  "rep": 2,
+  "step": "cut $2 := $1.goal / \"count\"\ncut $3 := $1.goal / \"the lines\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 := '-l' from $3\nassert $7 from $4\nact $5 $6 $7",
+  "refused": null,
+  "goal_cuts": 3,
+  "whole": 0,
+  "words": [
+   1,
+   2
+  ]
+ }
+]

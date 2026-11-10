@@ -39,6 +39,7 @@ used.
 | `7-levels` | round 3's layout, the changes added one level at a time | ls/cat × levels 0–7 | none declined; the content was never the cause, the layout was |
 | `8-seven-rules` | level 7 | 6 programs | all right, no refusals; `mv` and `rm` looked with `ls` before acting; returns padded to meet rule 4 (`mv` returned "into the second folder") |
 | `9-line-items` | level 8: a return is line items (goal, child) | 6 programs | all right; one refusal (cut a tool), fixed; padding gone: `mv` and `rm` return only `(exit(0) from the goal, the exit status)`; payloads labeled: `("the lines of this file", "2")` |
+| `10-premise-ab` | level 8 with and without the premise, first step only (`ab.py`) | 6 programs × 3 × 2 = 36 asks | no effect on what was asserted: all 36 asserted the same tools and arguments. One difference in the cuts: for `ls`, with the premise 6 of 6 cut "the only file in this directory", without it 2 of 6 (else "in this directory"). One refusal, with the premise (date cut a tool) |
 
 ## Findings
 
