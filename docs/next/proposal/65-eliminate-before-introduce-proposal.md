@@ -251,14 +251,92 @@ return $9 $10
   With only lines and fields (61) they cannot each be eliminated. 62's
   runs of words (Lexical units), matched by text, are built with this.
 
-## Memory: introductions are keys, eliminations are values
+## Memory: one store, through the S
 
-**Memory is set up as it is.** 61's key is what a frame has received,
-and its value what was learned there. In these terms:
+### The S
 
-- **A key is the type of the introductions a frame has received**: its
-  start, then each arrival. A type, never a value: a request's text is
-  not in its key (61, The rule), or no two goals would share anything.
+Every role receives one introduction and emits introductions. Only the
+middle one is required to eliminate between them:
+
+```text
+root          frame (delegate / act)                 leaf          frame                                  root
+introduce  →  [ introduce → eliminate → introduce ]  →  introduce  →  [ introduce → eliminate → introduce ]  →  introduce  → …
+request        received    read parts   emitted        return         received    read parts   emitted        verdict, next request
+```
+
+- **Root and leaf: the system requires introductions only.** The person
+  asserts a request and takes or rejects what returns; a binary takes
+  its argv and gives its return. Neither shows the system an
+  elimination, and none is asked for.
+- **Frames: the system requires an elimination before every
+  introduction.** A frame is the only place the system decides, so it is
+  the only place it can demand a derivation.
+- **Memory is a never-ending S through it.** Each hop writes into the
+  memory of the role that receives.
+
+### Identity: where, who, role, what
+
+**A key is an identity, and its prefix is where, who and role:**
+
+| Part | Is |
+|---|---|
+| **where** | the OS |
+| **who** | one binary |
+| **role** | root, frame (delegate or act), or leaf |
+| **what** | depends on the role |
+
+**One identity is one binary.** What makes up a *who* (a model, its
+version, its settings, a tool and its flags' dialect) is provisioned by
+the administrator, and the system does not standardize it. It sees one
+variable: the binary, by content hash. Claude Opus 5 and Claude Opus 5.5
+are two binaries, each wrapped by the administrator, and two identities.
+
+- **The model is in a frame's *who*.** A frame's who is the binary of the
+  model that writes its steps. This reverses 61 (Scope and frame: the
+  model is never in the key) for isolation's sake: a trial measures a
+  model (64, Trials), and votes from two models in one memory cannot be
+  told apart. What one model learned does not count for another; a new
+  binary starts unlearned.
+- **The working directory is not in *where*.** A frame knows its
+  directory only by calling something that shows it, `ls` or `pwd`, and
+  then it is an introduction a leaf asserted, in the frame's path like
+  any arrival. A leaf's return under the same argv in another directory
+  is a different return at the same identity: a surprise (64,
+  Expectation), recorded.
+- **What a directory means for an effect is the administrator's.** A
+  binary that must act only in one place is provisioned to: its wrapper
+  sets its directory, and that is in its hash.
+
+**Role says how a key is used:**
+
+| Role | who | what | Writes | Used for |
+|---|---|---|---|---|
+| **root** | the person's entry, the `skyra` binary | the request, as asserted | the request; then the verdict, taken or rejected | where credit is anchored (64, The signal) |
+| **frame** | the model's binary | the types of what it has received: its start, then each arrival | steps | decisions: the tally |
+| **leaf** | the tool's binary | its composition, literally: the argv | the return observed | expectation, trials and shadows; for a read-only tool, what to expect without running |
+
+- **One store, not three.** Role is in the key, so there is one memory,
+  one key shape, and one fold of the log (`step_replays`).
+- ***What* is a value at root and leaf, and a type at a frame.** Root
+  and leaf are observed: their what is the request and the argv as they
+  were. A frame decides, so its what stays a type, or nothing would be
+  reused (61, The rule). A key holds no value only where it is reused.
+- **A frame's identity is what it has received, in order.** Its start,
+  then each return: 61's trie path. When a child returns, the frame's
+  identity is no longer its start alone: it is its start and the child's
+  introduction. The step stored at the shorter path stays true of it; it
+  is the step that made the call.
+- **Invoke and return are one operation:** a frame receives one
+  introduction, and memory appends it to the frame's path. A child's path
+  starts with its parent's composition; a parent's grows by its child's
+  return. The parent cannot tell whether its child was a frame or a
+  leaf.
+- **Each arrival is isolated.** It is one introduction at one position
+  of the path, so a trial at a parent varies one child's return and
+  holds the rest.
+
+### What a frame's value holds
+
 - **A value is the steps written there**, each with its eliminations and
   the text each read.
 - **The request's identity is checked in the value.** A step depends on
@@ -321,6 +399,8 @@ trials later change how the sets grow, not how a vote is counted.
 | 61: a frame starts with its scope, `$1 … $n` | with one value, its parent's composition; the root's is the person's request |
 | 61: a cut is a selector applied | an address, and `eliminate`, a part read at it |
 | refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `unused`, `repeated`, `fragment`; those concerning a condition go |
+| 61: a key is a frame's scope and arrivals; the model is never in it | where (the OS), who (one binary, the model's for a frame), role, then what |
+| 61: one memory for frames | one store through the S: root, frame and leaf keys, by role |
 | 63, section 1: quorum counted on the ballot | built: needed once steps vote only at the text they read |
 | `passed` at 1, an open question | built first, with every word not read equal |
 
@@ -374,6 +454,13 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
 - **`from` decides nothing** (`premise_irrelevant`): two steps alike but
   for their premises vote alike at every frame.
 - **Quorum counts votes cast on the values**, not steps at the key.
+- **A key's prefix is where, who and role:** two keys differing in any
+  of them share nothing, and a frame's who is its model's binary.
+- **Roles bind differently:** root and leaf events carry introductions
+  only and are never refused for lack of an elimination; frame steps are
+  refused without one.
+- **Invoke and return are one append:** a frame's key after an arrival is
+  its key before, extended by that arrival's type.
 
 ## Open
 
@@ -390,3 +477,11 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
 4. **The whole elimination in the prompt.** Whether the model is told it
    may read a value whole. Told, it may read each address whole and stop;
    untold, it may invent a part to satisfy the rule.
+5. **An effect in an unseen directory.** A frame that learned `rm null`
+   or a relative path where it never looked would run it wherever the
+   binary is started. Whether an effect's argument must be introduced from
+   an arrival that showed the place, or whether the administrator's
+   wrapper is always where that is settled.
+6. **Moving across binaries.** A new model's binary starts unlearned.
+   Whether what an old one learned is offered to the new one, as a
+   borrow a trial refutes, or never.

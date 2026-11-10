@@ -109,8 +109,12 @@ New implementation proposals:
   and the frame is its projection: the child's one value is the parent's
   hypothesis, tested at the child and corroborated by its return. A step
   votes where its literal and held substitutions read the same text
-  again, passed parts free and every word not read equal. Draft
-  (2026-11-10).
+  again, passed parts free and every word not read equal. Memory is one
+  store through the S of root, frame and leaf: only frames must
+  eliminate. A key's prefix is where (the OS), who (one binary, the
+  model's for a frame, provisioned by the administrator) and role; what
+  is the request or argv, literally, at root and leaf, and the types
+  received at a frame. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
