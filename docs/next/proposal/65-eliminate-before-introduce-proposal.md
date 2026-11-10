@@ -64,14 +64,61 @@ either. An exec is the same: a binary and its arguments.
   introduction. Here its head is one, and each argument is one more: the
   assertion that this value goes in this place. 64's agreement already
   counts this way: the same operator on the same position.
-- **An argument's value is a literal or a cut.** A literal is introduced
-  and names an elimination of its own, as below. A cut is an elimination,
-  and it is its own: passing what was read costs nothing more.
+- **An argument is an introduction, paired as any is.** A literal names
+  an elimination of its own, as below. A cut is paired with the
+  elimination it places: passing what was read costs nothing more.
 - **So the floor is cheap where the model reads** and costs only where it
   writes text of its own.
 - **Refused as `fragment`**: a head with no argument. It is a predicate
   whose subject is implicit. `ls` alone reads the working directory, which
   the frame never saw, and `return 0` alone is a `yes` to nothing.
+
+### Two to the parent, one to the child
+
+**A decision is two introductions or more where it is written, and one
+where it arrives.** The parent writes a head and its arguments. They
+compose into one observation of one composite interface (61, Interface
+and observation: every operator makes one), and that is all the child
+receives.
+
+```text
+parent    $1: "count the lines of this file:\n/tmp/x"
+          $2: leaf cat
+          $3: leaf wc
+          eliminate $4 := $1 / "count"
+          delegate(goal($1), $3) from $4         three introductions
+
+child     $1: delegation(goal: string, tool: leaf wc)   one introduction
+          eliminate $2 := $1.goal
+          eliminate $3 := $1.tool
+          eliminate $4 := $2[2]                  the file
+          eliminate $5 := $2 / "lines"
+          eliminate $6 := $2 / "count"
+          introduce $7 := '-l' from $5
+          $3 $7 $4 from $6                       wc -l /tmp/x
+```
+
+- **The child sees only what the parent gave it.** Its frame starts with
+  one value, nothing else: no goal of the parent's, no tool the parent
+  kept. This is 61's narrowing, made the shape of the frame.
+- **So the child must eliminate before it can assert anything.** Its only
+  value is an introduction it did not make. Each assertion it makes is
+  paired with a cut of that one value, so one for one, below, is met by
+  taking apart what was passed, and by nothing else.
+- **A return is the same, upward.** The child's `return` is its head and
+  arguments; the parent receives one arrival, `{exit, stdout, stderr}`,
+  and eliminates it before asserting on it. A leaf is a child: `ls`
+  receives one argv, and gives one return.
+- **This forces composition.** Every edge of the tree carries one
+  composite value. Each frame takes apart what arrived, asserts on the
+  parts, and composes two or more of them into what it sends. A frame
+  cannot pass a value on untouched: forwarding still needs a head paired
+  with a look at it.
+- **It is introduction and elimination as in type theory.** A product is
+  introduced by pairing and eliminated by projection; here the pairing is
+  the parent's decision and the projections are the child's first
+  eliminations. Every introduction that crosses an edge is met by an
+  elimination on the other side.
 
 **One for one.** Each introduction names exactly one elimination, its
 own, written before it:
@@ -214,6 +261,13 @@ In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
   its introduction.
 - **A committed decision is a sentence:** its operator has a head and at
   least one argument, so a committed step has two introductions or more.
+- **One to the child:** a delegation's child frame starts with exactly
+  one value, the observation its parent's operator made, and every value
+  a frame holds is that, a return that arrived, or a cut or introduction
+  made in the frame.
+- **Every assertion traces to what arrived:** each introduction a
+  committed step makes is paired with an elimination whose source is the
+  frame's start or an arrival, through cuts.
 - **`untried` and `fragment` are the only new refusals:** a step that is
   not so paired is refused `untried`, a head with no argument `fragment`,
   and nothing is appended for either.
