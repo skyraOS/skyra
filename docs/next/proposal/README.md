@@ -120,6 +120,16 @@ New implementation proposals:
   set at boot and changed by a log event: identity stable, history
   stable, the steps agree.
   Draft (2026-11-10).
+- [66 — Amendment to 64: expectation is the system's](66-expectation-is-the-systems-proposal.md):
+  the model does not write `expect`, and there is no second ask. The
+  system predicts each hop of the S from the log: which eliminations
+  follow an introduction, which introduction follows an elimination
+  (65's reverse index), what a call returns. A prediction is fixed and
+  logged before its act, never shown to what it predicts, and never
+  selects a step. The signal is the reward prediction error: a return
+  missed and held is better than expected and moves the prediction
+  toward it; credit runs down from the person's verdict. 65's identity
+  stability is how well predictions are met. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
