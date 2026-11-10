@@ -312,6 +312,29 @@ are two binaries, each wrapped by the administrator, and two identities.
   sets its directory, and that is in its hash. Anything more, such as
   requiring an effect to follow a look, is policy per *who* (Open, 5).
 
+### What the data owes a policy
+
+Policies are not designed here, and the system has no API for them yet.
+The data must not stand in the way of one. A policy has two places to
+act, and both exist:
+
+| Hook | Where | A policy decides |
+|---|---|---|
+| **the fold** | memory, a fold of the log | which events count toward a key: this *who*'s only, or another binary's too |
+| **the gate** | between a decision and its act, at `trust` | whether this act may run |
+
+So the data guarantees:
+
+- **Every event carries its identity**: where, who and role. A fold can
+  select by *who* only if the *who* was written, and a log written
+  without it cannot be read under a policy later.
+- **Memory stays a pure fold.** A policy changes which events a fold
+  reads, never the events, so memory is the log's replay under any
+  policy.
+- **The gate sees the step**: its eliminations and what each read, not
+  only its composition, so a rule such as *an effect follows a look* can
+  be checked there.
+
 **Role says how a key is used:**
 
 | Role | who | what | Writes | Used for |
@@ -464,6 +487,11 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
 - **Roles bind differently:** root and leaf events carry introductions
   only and are never refused for lack of an elimination; frame steps are
   refused without one.
+- **Every event carries where, who and role**, and memory is a fold of
+  the log under any selection of its events by them (`step_replays`,
+  restated over a filtered log).
+- **The gate's input is the step:** the edge an act runs from is a
+  function of the decided step, its eliminations and what each read.
 - **Invoke and return are one append:** a frame's key after an arrival is
   its key before, extended by that arrival's type.
 
