@@ -72,6 +72,15 @@ New implementation proposals:
   alternatives at one position are held interchangeable on what memory
   holds, gated by a new constant, `span`, and refuted by trial as before.
   Draft (2026-11-10).
+- [63 — Amendment to 61 and 62: evidence counts where it was cast](63-evidence-and-replay-proposal.md):
+  settles 62's open questions 4, 7 and 8. Quorum counts the votes cast on
+  the values, not the implementations at the key; a chain is committed
+  only if it selects what it was written for. A template pins the
+  literal it was authored with, and the shared entry only proposes.
+  Every operator cites, and an act on a tool not `readOnly` reads its
+  goal closed: every word cited or passed. A refutation is an event in
+  the log. `span` counts an antichain of keys agreeing link for link, off
+  unless set. The copy check searches. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
