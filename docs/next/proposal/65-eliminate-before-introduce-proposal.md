@@ -30,6 +30,41 @@ natural deduction's, and used only as defined here.
 | **composition** | the introductions a step puts together into the one value it emits: an act, a return, a delegation, a join | an introduction rule with several premises |
 | **emission** | the operator that sends a composition: `act`, `return`, `delegate`, and a join's separator. Not an introduction, and outside the rules below | the rule's name, not a premise |
 
+**Introduction and elimination are forms, not a seventh pair.** 61's
+pairs stand: interface and observation, implementation and decision.
+Introduction and elimination are what both are made of, each with a
+static side and a dynamic side:
+
+| | Static (definition) | Dynamic (instantiation) |
+|---|---|---|
+| a value | interface | observation |
+| what decides | implementation | decision |
+| an introduction | as written in a step: a literal, a reference placed, `null` | the observation it made in a frame |
+| an elimination | as written: an address and a part | the observation it read, bound at its level |
+
+```text
+static:   interface   → [ implementation: eliminate …, introduce … ] →  interface
+dynamic:  observation → [ decision: each elimination reads, each introduction makes ] → observation
+```
+
+- **An interface is defined by introductions**: the type of what was
+  introduced, as a type theory defines a type by its introduction forms.
+  The interface a frame receives is that of its parent's composition;
+  the one it emits, that of its own.
+- **An implementation is defined by its eliminations**: what it reads,
+  and so where it votes. Its introductions define the next interface,
+  not it.
+- **So memory's key is introductions and its value eliminations**: a key
+  is the interfaces received, a value the implementations whose
+  eliminations decide when each applies.
+- **Syntax is the static side, data the dynamic.** One received, n
+  eliminations, two introductions or more is the rule a step obeys as
+  written; n to n to n is the graph the log holds.
+- **The child's eliminations are in harmony with the parent's
+  introductions** (natural deduction's *harmony*): eliminating gives back
+  only what was introduced, so a child can read nothing its parent did not
+  give it.
+
 - **The methods are `introduce` and `eliminate`**, in Lean and in Go:
   `eliminate` reads a part of a value, `introduce` puts a value in its
   place. Nothing else makes a value in a frame.
