@@ -21,7 +21,7 @@ LEVEL=8 python3 -u -I step.py testdir/case-cat-a.json
 
 `LEVEL` picks the prompt: 0 is the base (round 3's, with a grep example in place of
 wc), and each level adds one change (`LEVELS` in `step.py`); 7 is the seven rules,
-8 adds line-item returns. The rendered prompts are in `prompts/`: `level-0.txt` to `level-8.txt`, and
+8 adds line-item returns. The rendered prompts are in `prompts/`: `level-0.txt` to `level-9.txt`, and
 `declined.txt`, the layout the API declined. `step-declined.py` keeps that driver
 (rounds 4 to 6). In `data/`, `<testdir>` stands for the scratch directory the runs
 used.
@@ -40,6 +40,7 @@ used.
 | `8-seven-rules` | level 7 | 6 programs | all right, no refusals; `mv` and `rm` looked with `ls` before acting; returns padded to meet rule 4 (`mv` returned "into the second folder") |
 | `9-line-items` | level 8: a return is line items (goal, child) | 6 programs | all right; one refusal (cut a tool), fixed; padding gone: `mv` and `rm` return only `(exit(0) from the goal, the exit status)`; payloads labeled: `("the lines of this file", "2")` |
 | `10-premise-ab` | level 8 with and without the premise, first step only (`ab.py`) | 6 programs × 3 × 2 = 36 asks | no effect on what was asserted: all 36 asserted the same tools and arguments. One difference in the cuts: for `ls`, with the premise 6 of 6 cut "the only file in this directory", without it 2 of 6 (else "in this directory"). One refusal, with the premise (date cut a tool) |
+| `11-final` | level 8 against level 9 (`var`, assertions from several cuts, `final: act:` / `final: return:` naming assertions from any step), with a seventh case whose reason is scattered (`bench.py`) | 7 programs × 3 × 2 = 42 | all 42 right, no refusals at either level. Multi-cut assertions used in every run, only as the path join and the line items; no final named an earlier step's assertion. Labels moved but not better: `mv` again returned `("into the second folder", "")`. The scattered case was right by position: every run took `ls`'s line 1, which happened to be the notes file, and never cut "with notes in its name" as the reason |
 
 ## Findings
 

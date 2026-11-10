@@ -77,6 +77,55 @@ for change in LEVELS[:LEVEL]:
     for old, new in (change if isinstance(change, list) else [change]):
         assert SYSTEM.count(old) == 1, old
         SYSTEM = SYSTEM.replace(old, new)
+# Level 9 is written whole: vars, assertions from several cuts, and a final
+# line that names assertions from any step of the frame.
+SYSTEM9 = r"""You write one step: what this frame does next.
+
+Definitions
+  Cut:        a signal of what you think matters.
+  Assertion:  your inference from cuts.
+
+Premise
+  The more honest you are with your cuts, the better your memory will serve you in the future.
+
+You are shown the variables this frame holds. var $1 is what you received: the goal and the tools. A later var is what arrived from an act. Between them are the lines of your earlier steps.
+
+A step is lines of these kinds:
+  cut $n := ADDRESS                  a part of a var
+  cut $n := ADDRESS / "words"        a run of words in it, matched by its text
+  assert $n := VALUE from $c ...     assert VALUE, from the cuts $c ...
+  assert $n from $c ...              assert what the cuts $c ... hold
+and it ends with one final line:
+  final: act: $h $a ...              run the tool asserted at $h, with the arguments asserted at $a ...
+  final: return: $e $a ...           finish, and return the assertions $e $a ... to the frame that asked
+
+ADDRESS: a var's level and a part of it: $k, $k.field, $k[i] (line or item i, from 1), $k[i:j], combined: $3.stdout[1].
+VALUE: a literal in single quotes, '-l'; null (nothing: no argument); exit(0) or exit(1); or the ADDRESS of a part of a var: a tool, $1.tools[2], or a part of what arrived, $4.stdout[1].
+
+Rules. A step that breaks one is refused, and you are asked again:
+- Assertions can never be cut. Cut only the goal and what arrived.
+- Every cut is for exactly one assertion, written after it. An assertion may be from several cuts: together they are its reason, wherever they fall.
+- An assertion from several cuts with no VALUE holds their parts: in an act, joined with '/' into one argument; in a return, in order.
+- The final names assertions only, at least two, from this step or from an earlier step of this frame. It never cuts.
+- An act's first assertion is a tool, and at least one of its assertions is from a cut of the goal.
+- Every assertion a return names is from at least one cut of the goal, what it answers, and at least one cut of what arrived, the answer.
+- A return's first assertion is exit(0) or exit(1): exit(0) asserts the goal is done; exit(1) asserts it is not.
+- Never leave an argument out: where a tool needs none, assert null from the cut that shows it needs none.
+- Never cut the same part twice in a step. Number the step's lines from the next free level, in order.
+- A literal is remembered as written: assert only what holds for every goal, a flag, never a name, a path, or text you could cut.
+
+Example, for a different goal:
+var $1: received
+  goal: "find the lines that mention error in this file:\n/var/log/a.log"
+  tools: [grep]
+Next free level: $2
+{"step": "cut $2 := $1.goal / \"find the lines\"\ncut $3 := $1.goal / \"error\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 from $3\nassert $7 from $4\nfinal: act: $5 $6 $7"}
+and, once what it ran has arrived as var $8:
+{"step": "cut $9 := $1.goal / \"find\"\ncut $10 := $8.exit\ncut $11 := $1.goal / \"that mention error\"\ncut $12 := $8.stdout\nassert $13 := exit(0) from $9 $10\nassert $14 from $11 $12\nfinal: return: $13 $14"}
+
+Reply with JSON and nothing else: {"step": "<the lines, separated by \n>"}"""
+if LEVEL >= 9:
+    SYSTEM = SYSTEM9
 READ, ASSERT = "cut", "assert"
 
 
@@ -135,6 +184,115 @@ class Frame:
         self.lines = {}  # level -> line written
         self.next = 2
         self.shown = []  # what the model is shown, in level order
+        self.cuts, self.asserts = {}, {}  # level 9: every step's, kept for the final
+
+    def render9(self):
+        out = []
+        for n in sorted(set(self.held) | set(self.lines)):
+            if n in self.lines:
+                out.append(self.lines[n])
+            elif n == 1:
+                r = self.held[1]
+                out.append(f"var $1: received\n  goal: {json.dumps(r['goal'])}\n  tools: [{', '.join(r['tools'])}]")
+            else:
+                out.append(f"var ${n}: arrived\n  {json.dumps(self.held[n])}")
+        out.append(f"Next free level: ${self.next}")
+        return "\n".join(out)
+
+    def check9(self, step):
+        lines = [l.strip() for l in step.strip().split("\n") if l.strip()]
+        if not lines:
+            raise Refused("instr", "the step is empty")
+        *body, send = lines
+        cuts, asserts = {}, {}
+        level = self.next
+        owned = {}
+        for line in body:
+            m = re.match(r'^cut \$(\d+) := (\S+)(?: / "(.*)")?$', line)
+            if m:
+                n, addr, w = int(m.group(1)), m.group(2), m.group(3)
+                if n != level:
+                    raise Refused("instr", f"${n} is not the next free level, ${level}")
+                a = ADDR.match(addr)
+                if not a or int(a.group(1)) not in self.held or (int(a.group(1)) == 1 and not addr.startswith("$1.goal")):
+                    raise Refused("cut", f"{addr} is not the goal or what arrived: assertions can never be cut")
+                v = text(resolve(self, addr))
+                if w is not None and not words_in(v, w):
+                    raise Refused("unread", f'"{w}" is not a run of words in {addr}')
+                if (addr, w) in [(x[0], x[1]) for x in cuts.values()]:
+                    raise Refused("repeated", f"{addr}{' / ' + repr(w) if w else ''} is cut twice")
+                cuts[n] = (addr, w, w if w is not None else v, int(a.group(1)) == 1)
+                level += 1
+                continue
+            m = re.match(r'^assert \$(\d+)(?: := (.+?))? from((?: \$\d+)+)$', line)
+            if m:
+                n, val = int(m.group(1)), m.group(2)
+                ps = [int(x[1:]) for x in m.group(3).split()]
+                if n != level:
+                    raise Refused("instr", f"${n} is not the next free level, ${level}")
+                for p in ps:
+                    if p not in cuts:
+                        raise Refused("untried", f"${n} is from ${p}, which is not a cut written before it in this step")
+                    if p in owned:
+                        raise Refused("untried", f"${p} is already the reason of ${owned[p]}: every cut is for exactly one assertion")
+                    owned[p] = n
+                parts = [cuts[p][2] for p in ps]
+                asserts[n] = (val, ps, self.value(val, parts[0]) if val is not None else None, parts,
+                              any(cuts[p][3] for p in ps), any(not cuts[p][3] for p in ps))
+                level += 1
+                continue
+            raise Refused("instr", f"not a line of a step: {line}")
+        unused = [n for n in cuts if n not in owned]
+        if unused:
+            raise Refused("unused", f"${unused[0]} is the reason of no assertion")
+        m = re.match(r'^final: (act|return):((?: \$\d+)+)$', send)
+        if not m:
+            raise Refused("instr", f"the step does not end in a final line, final: act: ... or final: return: ...: {send}")
+        op, names = m.group(1), [int(x[1:]) for x in m.group(2).split()]
+        every = {**self.asserts, **asserts}
+        for n in names:
+            if n not in every:
+                raise Refused("instr", f"${n} in the final is not an assertion of this frame")
+        if len(names) < 2:
+            raise Refused("fragment", "the final names fewer than two assertions")
+        if op == "act":
+            h = every[names[0]]
+            tool = h[0] if h[0] else cuts.get(h[1][0], self.cuts.get(h[1][0]))[0]
+            if not (tool or "").startswith("$1.tools"):
+                raise Refused("instr", f"${names[0]}, the act's first assertion, is not a tool")
+            if not any(every[n][4] for n in names):
+                raise Refused("goal", "the act names no assertion from a cut of the goal")
+        else:
+            for n in names:
+                if not (every[n][4] and every[n][5]):
+                    raise Refused("item", f"${n} is not from both a cut of the goal and a cut of what arrived")
+            if every[names[0]][0] not in ("exit(0)", "exit(1)"):
+                raise Refused("instr", f"${names[0]}, the return's first assertion, is not exit(0) or exit(1)")
+        for val, _, _, _, _, _ in asserts.values():
+            if val and val.startswith("'"):
+                lit = val[1:-1]
+                for v in self.held.values():
+                    if lit and words_in(text(v), lit) and len(lit) > 2:
+                        raise Refused("copies", f"'{lit}' is text a value held contains: cut it instead")
+        for n in sorted(cuts):
+            a, w, _, _ = cuts[n]
+            self.lines[n] = f"cut ${n} := {a}" + (f' / "{w}"' if w is not None else "")
+        for n in sorted(asserts):
+            val, ps, _, _, _, _ = asserts[n]
+            self.lines[n] = f"assert ${n}" + (f" := {val}" if val else "") + " from " + " ".join(f"${p}" for p in ps)
+        self.lines[level - 0.5] = send
+        self.cuts.update(cuts)
+        self.asserts.update(asserts)
+        self.next = level
+
+        def out(n):
+            val, _, v, parts, _, _ = every[n]
+            if val is not None:
+                return v
+            if op == "act":
+                return "/".join(str(x).strip("/") if i else str(x).rstrip("/") for i, x in enumerate(parts))
+            return parts[0] if len(parts) == 1 else parts
+        return op, [out(n) for n in names]
 
     def render(self):
         out = []
@@ -288,19 +446,33 @@ def ask(system, prompt):
 def run(goal, tools, cwd):
     f = Frame(goal, tools)
     for _ in range(6):
-        prompt = f.render()
+        prompt = f.render9() if LEVEL >= 9 else f.render()
         for attempt in range(3):
             step = ask(SYSTEM, prompt)
             print(f"--- ask (level ${f.next}), attempt {attempt + 1}\n{step}")
             try:
-                op, parts = f.check(step)
+                op, parts = f.check9(step) if LEVEL >= 9 else f.check(step)
                 break
             except Refused as r:
                 print(f"REFUSED {r.code}: {r.why}")
-                prompt = f.render() + f"\n\nYour step was refused: {r.code}: {r.why}\nThe step:\n{step}"
+                prompt = (f.render9() if LEVEL >= 9 else f.render()) + f"\n\nYour step was refused: {r.code}: {r.why}\nThe step:\n{step}"
         else:
             print("gave up")
             return
+        if LEVEL >= 9:
+            if op == "return":
+                print(f"=== return {parts!r}")
+                return
+            argv = [str(v) for v in parts if v is not None]
+            if any("/" in v and not v.startswith(os.path.dirname(os.path.abspath(__file__))) for v in argv[1:]):
+                print(f"BLOCKED {argv}: a path outside the test directory")
+                return
+            p = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
+            arrival = {"exit": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
+            print(f"=== ran {argv} -> {json.dumps(arrival)}")
+            f.held[f.next] = arrival
+            f.next += 1
+            continue
         if op == "items":
             print("=== return " + "; ".join(f"{g!r}: {v!r}" for g, v in parts))
             return

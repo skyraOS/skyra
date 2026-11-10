@@ -1,0 +1,16 @@
+--- ask (level $2), attempt 1
+cut $2 := $1.goal / "what time"
+cut $3 := $1.goal / "is it?"
+assert $4 := $1.tools[1] from $2
+assert $5 := null from $3
+final: act: $4 $5
+=== ran ['date'] -> {"exit": 0, "stdout": "Tue Nov 10 11:32:34 EST 2026\n", "stderr": ""}
+--- ask (level $7), attempt 1
+cut $7 := $1.goal / "what time"
+cut $8 := $6.exit
+cut $9 := $1.goal / "is it?"
+cut $10 := $6.stdout[1]
+assert $11 := exit(0) from $7 $8
+assert $12 from $9 $10
+final: return: $11 $12
+=== return [0, ['is it?', 'Tue Nov 10 11:32:34 EST 2026']]
