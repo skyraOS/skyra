@@ -96,23 +96,19 @@ New implementation proposals:
   follows what a return used. `k` has a base of 1 and is widened only by
   sightings. Every reuse rule of 61 to 63 is one removed dependency. Thresholds are set per effect: for an act on a tool not
   `readOnly`, only a passed part goes free. Draft (2026-11-10).
-- [65 — Amendment to 64: every assertion has its own elimination](65-eliminate-before-introduce-proposal.md):
-  eliminations and introductions are the whole of what the model writes;
-  every clause (a condition, a class, a citation) is retired, since each
-  wrong answer so far came from one. An introduction is the model's
-  assertion, and each names exactly one elimination of its own, written
-  before it, or the step is refused `untried`. A decision is a sentence:
-  a head and at least one argument, two introductions or more, or it is
-  refused `fragment`; a head that needs no subject takes `null`,
-  introduced and paired, which the system runs as nothing. Two introductions to the parent, one to the
-  child: the child starts with only the one value its parent's operator
-  made, and must eliminate it before it can assert anything, so every
-  edge forces composition. The pairing is a record,
-  never a condition: trials test it first. An elimination need not
-  subtract, but two alike are one, so a step with more assertions than
-  sources must cut; word cuts are built with it. Built first: parts
-  passed into the operator free, everything else equal. Draft
-  (2026-11-10).
+- [65 — Amendment to 64: every introduction is from an elimination](65-eliminate-before-introduce-proposal.md):
+  fixes the terms as natural deduction's: an introduction, an
+  elimination, *E eliminates V*, *I is introduced from E* (its premise);
+  the methods are `introduce` and `eliminate`, and "cut" is retired.
+  Every clause goes, CEL with it, since each wrong answer so far came
+  from one. Every introduction is from exactly one elimination of its
+  own, and every elimination reaches an introduction. A step is a
+  sentence: a head and at least one argument, `null` introduced where
+  nothing is passed. A frame starts with one value, its parent's
+  introduction, the root's the person's request, so every edge forces
+  composition. Memory is unchanged: keys are the types of what was
+  received, values the steps, and a step votes where its eliminations
+  read the same text again, arguments aside. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code

@@ -1,22 +1,47 @@
-# 65 — Amendment to 64: every assertion has its own elimination
+# 65 — Amendment to 64: every introduction is from an elimination
 
 Date: 2026-11-10
 
 Status: **draft**. Amends [64](64-dependence-and-trial-proposal.md);
 everything in 64 it does not name stands. It takes 64's two primitives as
-the whole of what the model writes, retires every clause around them, and
-adds one requirement: **each introduction is paired with exactly one
-elimination of its own, written before it.** Nothing here is built. The
-syntax shown is provisional.
+the whole of what is written, retires every clause around them (CEL among
+them), and fixes the terms. **Every introduction is from exactly one
+elimination, and every elimination reaches an introduction.** Nothing
+here is built. The syntax shown is provisional.
+
+## Terms
+
+These are the foundations everything else is written in, so they are
+natural deduction's, and used only as defined here.
+
+| Term | Means | In natural deduction |
+|---|---|---|
+| **introduction** | a value asserted: by the person (the request), the model (a literal, an exit status, a head) or a tool (its return) | an introduction rule's conclusion |
+| **elimination** | a value read out of another: a field, a run of lines, a run of words, or the whole | an elimination rule's conclusion |
+| **E eliminates V** | E reads from V. One value is eliminated by many. | V is E's major premise |
+| **I is introduced from E** | E is the reason for I. Each introduction is from exactly one elimination; each elimination is the premise of at most one. | E is I's premise |
+| **premise** | the elimination an introduction is from | the same |
+
+- **The methods are `introduce` and `eliminate`**, in Lean and in Go:
+  `introduce` makes an introduction from a premise, `eliminate` reads one
+  value out of another. Nothing else makes a value in a frame.
+- **An assertion** is an introduction, said plainly: what the system
+  cannot check. It is not a separate term.
+- **"Cut" is retired.** In proof theory a cut is an introduction met at
+  once by an elimination of it, which here is a tree edge: a parent
+  introduces, a child eliminates. The code's `Cut`, `CutAll` and
+  `tree/cut.go` are renamed `eliminate` as they are touched.
+- **"Decision" keeps 61's meaning**: what the tally gives at a frame. A
+  step is what the model writes; the decision is which step runs.
 
 ## Why: what has worked and what has not
 
 **Eliminations and introductions have worked.** Across the live runs the
-model cut what it needed (`$1[2]`, `$4.stdout[1]`) instead of copying it,
-the copy check pushed every path and name into a cut, and the literals
-left over were flags and filters. 59's seven asks at one frame agreed on
-the instruction every time. What the model reads and what it constructs
-have been stable.
+model eliminated what it needed (`$1[2]`, `$4.stdout[1]`) instead of
+copying it, the copy check turned every path and name into an
+elimination, and the literals left over were flags and filters. 59's
+seven asks at one frame agreed on the instruction every time. What the
+model reads and what it asserts have been stable.
 
 **Clauses have not.** Every wrong answer so far came from a clause, a
 statement *about* when something holds:
@@ -29,34 +54,66 @@ statement *about* when something holds:
 | a class | 61 | `cat` and `wc` declared alike; `wc`'s counts came back as contents, exit 0 |
 | a citation | 62, 63 | the model writes `Γ`; 64 shows a `Γ` without `not` asserts that `not` does not matter |
 
-64 already removes the condition and the citation. This proposal says
-why, in one rule: the model's only assertion is an introduction, and
-everything the system decides about when it applies comes from
-eliminations, which the system computes.
+64 already removes the condition and the citation. This proposal removes
+the language they were written in: when a step applies is found by
+reading its eliminations again, as text.
 
-**An assertion alone means nothing.** A model, a person or a program that
-prints `yes` has said nothing until something around it is eliminated:
-yes to what. `exit(0)` is the same `yes`. Its meaning is the goal it
-answers, and a return that eliminated none of the goal has asserted it
-was met without looking at what was asked.
+**An introduction alone means nothing.** A model, a person or a program
+that prints `yes` has said nothing until something around it is
+eliminated: yes to what. `exit(0)` is the same `yes`. It means the goal
+it answers, and only if the goal was eliminated to answer it.
 
 ## The rule
 
-**An introduction is the model's assertion**: a literal, an exit status,
-or the operator (61, Variables: every operator is an introduction).
-`return 0` asserts the goal is met; `'-a'` asserts the flag is wanted;
-`$2 …` asserts this tool is the one to run. The system cannot check any
-of them.
+### Every introduction is from exactly one elimination
 
-### A decision is a sentence
+```text
+$1: request("list all files in this directory:\n/tmp", tools: [ls])
 
-**A decision is a head and at least one argument: two introductions or
-more.** It is a subject and a predicate, and no complete sentence lacks
-either. An exec is the same: a binary and its arguments.
+eliminate $2 := $1.goal
+eliminate $3 := $1.tools[1]                     ls
+eliminate $4 := $2[2]                           the directory
+eliminate $5 := $2 / "list"
+eliminate $6 := $2 / "all files"
+introduce $7 := '-a' from $6
+$3 $7 $4 from $5                                ls -a /tmp
+```
+
+- **Exactly one.** An introduction from no elimination, or from two, is
+  refused: a step is a list of single derivations, each readable alone.
+- **Its own.** Two introductions are never from one elimination. `ls` and
+  `-a` above are each from their own reading of the goal.
+- **Before it.** Variables are append-only, and an introduction's premise
+  is at a lower `$n`.
+- **Refused as `untried`**: an introduction from no elimination, from
+  more than one, from one another introduction is from, or from one
+  after it. The model is asked again, told which.
+
+### Every elimination reaches an introduction
+
+**An elimination is written for an introduction, or it is incoherent.**
+Each elimination is a premise, or is placed in an introduction as a value
+(`$4`, the directory, above), or is eliminated by one that is. `$2` above
+is eliminated by `$4`, `$5` and `$6`, each of which reaches an
+introduction.
+
+- **Refused as `unused`**: an elimination that reaches no introduction.
+  Reading a value and doing nothing with it is a look that leads nowhere;
+  the step it was in is not a derivation of anything.
+- **Refused as `repeated`**: an elimination alike another, the same
+  source and selector. Two alike are one reading.
+- **So the step is a derivation.** Every value in it leads from what
+  arrived to what is asserted, with nothing left over.
+
+### A step is a sentence
+
+**A step's operator is a head and at least one argument: two
+introductions or more.** It is a subject and a predicate, and no complete
+sentence lacks either. An exec is the same: a binary and its arguments.
 
 | Operator | Head, the predicate | Arguments, the subject |
 |---|---|---|
-| act | the tool run, `$2` | what it is run on |
+| act | the tool run | what it is run on |
 | return | the exit status, `0` or `1` | what is returned, and why |
 | delegate | the delegation | the goal passed, and the tools |
 
@@ -64,263 +121,258 @@ either. An exec is the same: a binary and its arguments.
   introduction. Here its head is one, and each argument is one more: the
   assertion that this value goes in this place. 64's agreement already
   counts this way: the same operator on the same position.
-- **An argument is an introduction, paired as any is.** A literal names
-  an elimination of its own, as below. A cut is paired with the
-  elimination it places: passing what was read costs nothing more.
-- **So the floor is cheap where the model reads** and costs only where it
-  writes text of its own.
+- **The head's premise is written after the operator**: `from $5`, the
+  reading of `list` that `ls` is introduced from.
+- **An argument is an introduction too.** A literal argument is
+  introduced on its own line from its premise. An eliminated argument is
+  its own premise: passing what was read costs nothing more.
+- **So the floor is cheap where the model reads**, and costs only where
+  it writes text of its own.
 - **Refused as `fragment`**: a head with no argument. It is a predicate
   whose subject is implicit. `ls` alone reads the working directory, which
   the frame never saw, and `return 0` alone is a `yes` to nothing.
 
-**Nothing is asserted, never left out.** A model that holds that a head
-needs no subject says so: it introduces `null`, paired as any
-introduction is, and the system runs it as nothing.
+**Nothing is introduced, never left out.** A model that holds that a head
+needs no subject says so: it introduces `null` from an elimination, and
+the system runs it as nothing.
 
 ```text
-$1: "what time is it?"
-$2: leaf date
+$1: request("what time is it?", tools: [date])
 
-eliminate $3 := $1 / "what time"
-eliminate $4 := $1                         nothing in it is an argument
-introduce $5 := null from $4
-$2 $5 from $3                              runs: date
+eliminate $2 := $1.goal
+eliminate $3 := $1.tools[1]                     date
+eliminate $4 := $2 / "what time"
+eliminate $5 := $2 / "it"                       nothing here is an argument
+introduce $6 := null from $5
+$3 $6 from $4                                   date
 ```
 
-- **`null` is an introduction**, so it counts toward the two, and it
-  names its own elimination: the look that found nothing to pass.
+- **`null` is an introduction**, so it counts toward the two, and it is
+  from its own elimination: the reading that found nothing to pass.
+- **So the model claims null against an elimination.** Leaving an
+  argument out was a choice the log never showed. `null from $5` is a
+  claim of absence at a place, and a trial that varies `$5` and gets an
+  argument refutes it.
 - **The system sees nothing.** An act passes no argument for it; a
   return returns nothing for it (`rm`'s `return 0 null`: done, nothing to
   show). It is not the string `'null'`, and it copies no text.
-- **It is still a unit** (64), with dependencies like any literal. `ls
-  null` reads the working directory, as `ls` alone would, but now the
-  model has said so, paired it with a look, and a trial can test it.
-- **So `fragment` is only an omission.** A head with no argument is
-  refused; a head with `null` is a claim.
+- **`fragment` is only an omission.** A head with no argument is refused;
+  a head with `null` is a claim.
 
 ### Two to the parent, one to the child
 
-**A decision is two introductions or more where it is written, and one
-where it arrives.** The parent writes a head and its arguments. They
-compose into one observation of one composite interface (61, Interface
-and observation: every operator makes one), and that is all the child
+**A step is two introductions or more where it is written, and one where
+it arrives.** The parent writes a head and its arguments. They compose
+into one value of one composite interface (61, Interface and
+observation: every operator makes one), and that is all the child
 receives.
 
 ```text
-parent    $1: "count the lines of this file:\n/tmp/x"
-          $2: leaf cat
-          $3: leaf wc
-          eliminate $4 := $1 / "count"
-          delegate(goal($1), $3) from $4         three introductions
-
-child     $1: delegation(goal: string, tool: leaf wc)   one introduction
+parent    $1: request("count the lines of this file:\n/tmp/x", tools: [cat, wc])
           eliminate $2 := $1.goal
-          eliminate $3 := $1.tool
-          eliminate $4 := $2[2]                  the file
+          eliminate $3 := $1.tools[2]               wc
+          eliminate $4 := $2 / "count"
+          delegate($2, $3) from $4                  three introductions
+
+child     $1: delegation(goal: string, tools: [wc])  one introduction
+          eliminate $2 := $1.goal
+          eliminate $3 := $1.tools[1]
+          eliminate $4 := $2[2]                     the file
           eliminate $5 := $2 / "lines"
           eliminate $6 := $2 / "count"
           introduce $7 := '-l' from $5
-          $3 $7 $4 from $6                       wc -l /tmp/x
+          $3 $7 $4 from $6                          wc -l /tmp/x
 ```
 
-- **The child sees only what the parent gave it.** Its frame starts with
-  one value, nothing else: no goal of the parent's, no tool the parent
-  kept. This is 61's narrowing, made the shape of the frame.
-- **So the child must eliminate before it can assert anything.** Its only
-  value is an introduction it did not make. Each assertion it makes is
-  paired with a cut of that one value, so one for one, below, is met by
-  taking apart what was passed, and by nothing else.
+- **The request is the person's introduction.** The root frame starts
+  with one value, as every frame does: the goal the person asserts and
+  the tools they provisioned. The person is the root's parent, and takes
+  or rejects what it returns (64: credit is anchored there).
+- **A frame starts with one value, nothing else**: no goal of the
+  parent's, no tool the parent kept. This is 61's narrowing, made the
+  shape of the frame.
+- **So a frame must eliminate before it can introduce anything.** Its
+  only value is an introduction it did not make, and every premise is an
+  elimination of it, or of what arrives later.
 - **A return is the same, upward.** The child's `return` is its head and
   arguments; the parent receives one arrival, `{exit, stdout, stderr}`,
-  and eliminates it before asserting on it. A leaf is a child: `ls`
-  receives one argv, and gives one return.
+  and eliminates it before introducing anything from it. A leaf is a
+  child: `ls` receives one argv and gives one return.
 - **This forces composition.** Every edge of the tree carries one
-  composite value. Each frame takes apart what arrived, asserts on the
-  parts, and composes two or more of them into what it sends. A frame
-  cannot pass a value on untouched: forwarding still needs a head paired
-  with a look at it.
-- **It is introduction and elimination as in type theory.** A product is
-  introduced by pairing and eliminated by projection; here the pairing is
-  the parent's decision and the projections are the child's first
-  eliminations. Every introduction that crosses an edge is met by an
-  elimination on the other side.
-
-**One for one.** Each introduction names exactly one elimination, its
-own, written before it:
+  composite value. Each frame eliminates what arrived, introduces from
+  the parts, and composes two or more introductions into what it sends.
+  A frame cannot pass a value on untouched.
+- **Every edge is a redex**: an introduction, the parent's, met by an
+  elimination, the child's. A product is introduced by its parts and
+  eliminated by projection; the child's first eliminations are the
+  projections.
 
 ```text
-$1: "list all files in this directory:\n/tmp"      goal
-$2: leaf ls                                         tool
-
-eliminate $3 := $1[2]                               the directory
-eliminate $4 := $1 / "list"
-eliminate $5 := $1 / "all files"
-introduce $6 := '-a' from $5
-$2 $6 $3 from $4
+$1: request("is /tmp/x a directory? answer yes or no:\n/tmp/x", tools: [test])
+…
+$6: {exit: 0, stdout: "yes\n", stderr: ""}       arrived
+eliminate $7 := $2[1]                            the question
+eliminate $8 := $6.stdout
+return 0 $8 from $7
 ```
+
+### An elimination need not subtract
+
+What is required is that the model read before it asserted. Reading a
+value whole is a reading:
 
 ```text
-$1: "is /tmp/x a directory? answer yes or no:\n/tmp/x"
-$3: {exit: 0, stdout: "yes\n", stderr: ""}          arrived
-
-eliminate $4 := $1[1]                               the question
-return 0 $3 from $4
+eliminate $2 := $1.goal
+eliminate $9 := $2                               whole, subtracts nothing
+…
+return 0 $8 from $9
 ```
 
-- **Exactly one.** An introduction with no elimination is refused, and so
-  is one naming two: a step is a list of single derivations, each
-  readable on its own.
-- **Its own.** Two introductions never share an elimination. `-a` and
-  `ls` above each have their own look at the goal; one look at `$1[1]`
-  cannot be the reason for both.
-- **Before it.** Variables are append-only, and an introduction names an
-  elimination at a lower `$n`. A cut written inside the operator,
-  `$2 $1[2]`, is an argument, its own elimination, never the head's.
-- **`from` after the operator pairs its head**: `ls` with `$1 / "list"`,
-  `exit(0)` with the question. Each argument is paired as above: a cut
-  with itself, a literal with the elimination it names.
-- **Every step eliminates.** Every step has a head, and the head is
-  paired.
-- **Refused as `untried`**: an introduction with no elimination, with
-  more than one, with one another introduction holds, or with one after
-  it. The model is asked again, told which.
+- **A whole elimination has no selector.** It reads its source whole, it
+  is typed as its source is, and it is logged like any other.
+- **It is safe.** A whole elimination leaves nothing out of what the
+  step depends on (Memory, below). Not subtracting costs reuse, never
+  correctness.
+- **One for one makes it subtract.** Two eliminations alike are refused,
+  so a source can be read whole once. A step with more introductions than
+  sources must take parts, and each part is a place a value can come
+  apart.
+- **It needs runs of words.** `ls` and `-a` both come from the goal's
+  first line. With only lines and fields (61) they cannot each have an
+  elimination. 62's runs of words (Lexical units), matched by text, are
+  built with this.
 
-**The pairing is a record, not a clause.** It does not say the
-introduction depends only on its elimination, and it is compiled into
-nothing. Under 64 the unit still depends on everything its frame has
-seen. The pairing is the model documenting its own assertion: which look
-it made for which claim. The system uses it in two places:
+## Memory: introductions are keys, eliminations are values
 
-- **It is read first.** A trial varies a unit's paired elimination before
-  any other dependency (64, Trials), since it is where the model said to
-  look.
-- **It is checked against the world.** A unit whose dependency on its
-  paired elimination goes free, the same assertion whatever that part
-  reads, has a pairing the sightings contradict. That is counted against
-  the model's documentation, and shown (Open, 1).
+**Memory is set up as it is.** 61's key is what a frame has received,
+and its value what was learned there. In these terms:
 
-**An elimination need not subtract.** What is required is that the model
-tried:
+- **A key is the type of the introductions a frame has received**: its
+  start, then each arrival. A type, never a value: a request's text is
+  not in its key (61, The rule), or no two goals would share anything.
+- **A value is the steps written there**, each with its eliminations and
+  the text each read when the step was written.
+- **A step votes where its eliminations read the same text again**,
+  except those placed as arguments. That is the whole of when a step
+  applies. Two strings compared, with no expression around them.
+- **The request's identity is checked in the value.** A step depends on
+  the parts of the request it did not pass, so a request asking
+  something else reads differently there, and the step does not vote.
+  Identity is held where it is checked, not where it is looked up.
+- **`from` decides nothing.** Which steps vote is a function of what
+  their eliminations read, never of which introduction each is the
+  premise of. `from` is what makes a step well formed and what a trial
+  varies first; it is not a condition.
 
-```text
-$3: {exit: 0, stdout: "yes\n", stderr: ""}          arrived
+### Built first: arguments free, the rest equal
 
-eliminate $4 := $1                                  tried, subtracts nothing
-return 0 $3 from $4
-```
+64's dependencies need trials and `span` to move. Before those are built,
+one fixed setting of them replaces the guard:
 
-- **A whole elimination is a cut with no selector.** It reads its source
-  whole, it is typed as its source is, and it is logged like any other.
-- **It is safe.** Under 64 a cut splits its source's dependency in two,
-  the part and the rest. A whole cut splits nothing, so the step depends
-  on all of `$1`, equal, and is reused only where `$1` reads what it read.
-  Not subtracting costs reuse and never correctness.
-- **One for one makes it subtract.** Two eliminations alike are one look,
-  and the second is refused. So a source can be taken whole once. A step
-  with more assertions than sources must cut, and every cut is a place a
-  value can come apart.
-- **It needs word cuts.** `-a` and `ls` both come from the goal's first
-  line. With only lines and fields (61), they cannot have an elimination
-  each. 62's runs of words (Lexical units), matched by text, are built
-  with this.
+- **What is placed as an argument is free.** `$4` above, the directory,
+  is free, as 64's open question 9 (`passed` at 1) keeps it.
+- **Everything else is equal.** The rest of each value an elimination
+  reads from, each elimination not placed as an argument, each tool.
+- **A stored step votes where all of that holds.** This is the guard,
+  derived from what the step eliminated, with nothing written about when.
+
+On the spec runs this answers what the prompt fix answered with
+keywords. Spec A eliminates its directory from line 4 and passes it. The
+rest of the goal, the spec's text, stays equal. Spec B's text differs, so
+A's step does not vote and B startles. Spec A on another directory votes.
+
+**Each condition is a set of strings at a place.** *Equal* is a set of
+one, 64's *among* is a larger set, and *free* is no condition. So 64's
+trials later change how the sets grow, not how a vote is counted.
 
 ## What it is not
 
 - **Not a citation.** 62's citation was a set the model wrote, compiled
-  into the guard, so it decided when the link selected. A pairing is one
-  elimination, and it decides nothing: what matters is still found by
-  sightings and trials (64, Dependence).
-- **Not a condition.** An elimination selects nothing by itself. It votes
-  only through the dependencies of the units after it.
+  into the guard, so it decided when the link selected. A premise is one
+  elimination, and it decides nothing: what matters is found by reading
+  again, and later by trials (64, Dependence).
+- **Not a condition.** An elimination selects nothing by itself. A step
+  votes only where its eliminations read what they read before.
 - **Not a check of meaning.** The system checks that every introduction
-  has its own elimination and that each reads something seen. It cannot
-  check that the model looked at the right thing. A step that pairs `-a`
-  with `$1[2]`, the directory, is accepted, and the pairing is the first
-  thing a trial tests.
-
-## Built first: passed parts free, the rest equal
-
-64's dependencies need trials and `span` to move. Before that is built,
-one fixed setting of them is enough to replace the guard:
-
-- **A part passed into the operator is free.** `$3` above, the directory,
-  is free, as 64's open question 9 (`passed` at 1) keeps it.
-- **Everything else is equal.** The rest of each cut source, each
-  elimination not passed, each whole `$n` seen, each tool.
-- **A stored step votes where all of that holds.** This is the guard,
-  derived from the step's eliminations, with nothing the model wrote
-  about when.
-
-On the spec runs this answers what the prompt fix answered with
-keywords. Spec A cuts its directory from `$1[4]` and passes it. The rest
-of `$1`, the spec's text, stays equal. Spec B's text differs, so A's step
-does not vote and B startles. Spec A on another directory votes.
+  is from its own elimination and that each reads something seen. It
+  cannot check that the model read the right thing. `-a` from `$4`, the
+  directory, is accepted, and that premise is the first a trial varies.
 
 ## What changes
 
-| 64 | 65 |
+| 58 to 64 | 65 |
 |---|---|
-| a step: eliminations, introductions, one operator | the same, each introduction naming one elimination of its own, before it |
-| an operator is one introduction (61) | its head and each argument: a decision is two or more |
-| an argument left out | `null`, introduced and paired: the system passes nothing |
-| refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `fragment` |
-| a cut is a selector applied | and the empty selector, a whole elimination; two alike are one |
-| runs of words, 62's | built with this: one for one needs them |
-| a trial varies a dependency | the paired elimination first |
+| 58: the model writes a CEL chain | a step: eliminations, introductions, one operator; no CEL |
+| 64: a predicate is an elimination the system computes | none for now: an elimination reads text (Open, 3) |
+| a step's introductions, unrelated to its eliminations | each from exactly one, before it; each elimination reaching one |
+| 61: an operator is one introduction | its head and each argument: a step is two or more |
+| an argument left out | `null`, introduced from an elimination: the system passes nothing |
+| 61: a frame starts with its scope, `$1 … $n` | with one value, its parent's introduction; the root's is the person's request |
+| refusals concerning a template: `fits`, `copies`, `join`, `unstored`, `unread` | and `untried`, `unused`, `repeated`, `fragment`; those concerning a condition go |
+| a cut is a selector applied | `eliminate`, and with no selector, a whole elimination |
+| 63, section 1: quorum counted on the ballot | built: needed once steps vote only at the text they read |
 | `passed` at 1, an open question | built first, with every other dependency equal |
 
-In the code: `drive`'s prompts ask for a step, not a CEL chain, and say
-to pair each introduction with its own elimination; `Machine.wrote`
-parses a step and refuses `fragment` and `untried` before any template
-check; `Sel`
-gains a word run matched by text; `recorded` keeps the step's
-eliminations in order with their pairings, beside the cuts inlined from
-the operator; `tree.Cast` reads the derived dependencies above in place
-of `Link.Cond`.
+In the code: `introduce` and `eliminate` are the methods in `model`;
+`drive`'s prompts ask for a step and say every introduction is from its
+own elimination; `Machine.wrote` parses a step and refuses `untried`,
+`unused`, `repeated` and `fragment` before any template check; `Sel`
+gains a run of words matched by text; a branch's condition is derived
+from its step; `tree`'s `StoreConds`, `CheckGuard`, `CommitChain`,
+`Written` and CEL go, and `-show` prints steps.
 
 ## Required Lean definitions and proofs
 
-In `invariants/Invariants/Model.lean` and `Machine.lean`, before any Go:
+In `invariants/Invariants/Refine.lean`, `Model.lean` and `Machine.lean`,
+before any Go. 59's tally stands, with its theorems: `tally_perm`,
+`tally_unanimous`, `tally_null`, `wins_unique`, `tally_decides_mono`.
 
-- **A committed step is paired:** every step `wrote` commits maps its
-  introductions injectively to eliminations, each at a lower `$n` than
-  its introduction.
-- **A committed decision is a sentence:** its operator has a head and at
-  least one argument, so a committed step has two introductions or more.
-- **One to the child:** a delegation's child frame starts with exactly
-  one value, the observation its parent's operator made, and every value
-  a frame holds is that, a return that arrived, or a cut or introduction
-  made in the frame.
-- **`null` is nothing:** an act or return built with a `null` argument
-  runs as one without it, and `null` copies no text.
-- **Every assertion traces to what arrived:** each introduction a
-  committed step makes is paired with an elimination whose source is the
-  frame's start or an arrival, through cuts.
-- **`untried` and `fragment` are the only new refusals:** a step that is
-  not so paired is refused `untried`, a head with no argument `fragment`,
-  and nothing is appended for either.
-- **Two eliminations alike are refused:** a committed step's
-  eliminations are pairwise distinct as (source, selector).
-- **A whole elimination reads its source:** `cut` with no selector is the
-  identity, and its interface is its source's (`cut_sound`, extended).
-- **A whole elimination splits nothing:** a step whose eliminations are
-  all whole votes only at values equal to those it was authored at.
-- **The pairing decides nothing:** two steps differing only in their
-  pairings vote alike at every frame.
-- **Passed parts are free, the rest equal:** two frames that agree on
-  everything a step does not pass decide alike under it, whatever they
-  pass.
+- **`introduce` and `eliminate`** are the only definitions that add a
+  value to a frame.
+- **A committed step is from its eliminations:** its introductions map
+  injectively to eliminations, each at a lower `$n`.
+- **A committed step is coherent:** every elimination in it reaches an
+  introduction, and no two are alike.
+- **A committed step is a sentence:** its operator has a head and at
+  least one argument.
+- **One to the child:** a child frame starts with exactly one value, the
+  one its parent's operator made; every value a frame holds is that, an
+  arrival, or made by `introduce` or `eliminate` in the frame.
+- **`null` is nothing:** an act or return with a `null` argument runs as
+  one without it.
+- **The refusals are the four:** a step that is not so formed is refused
+  `untried`, `unused`, `repeated` or `fragment`, and nothing is appended.
+- **A whole elimination reads its source:** `eliminate` with no selector
+  is the identity, and its interface is its source's.
+- **A condition is derived** (`derive`): a conjunction of (place, set of
+  strings), one for each place the step read and did not place as an
+  argument. The chain's definitions and theorems go.
+- **A step votes where it was written** (`derive_self`, replacing
+  `commit_witness`): its derived condition holds at the values it was
+  written at, so with no other voter its commit selects it, and
+  `afterStartle`'s second ask and `unselected` go.
+- **Arguments are free, the rest equal** (`passed_free`): two frames that
+  agree on every place a step read and did not place as an argument
+  decide alike under it.
+- **A request never seen gets no vote:** a frame whose start differs from
+  a step's at a place it read and did not pass is not voted for by it.
+- **`from` decides nothing** (`premise_irrelevant`): two steps alike but
+  for their premises vote alike at every frame.
+- **Quorum counts votes cast on the values**, not steps at the key.
 - **Memory is still a fold of the log:** `step_replays` holds over steps.
 
 ## Open
 
-1. **A pairing the sightings contradict.** What is done when a unit's
-   paired elimination goes free: shown to the person, counted against the
-   model, or the pairing moved to the dependency that stayed equal.
-2. **What `return 0` must pair with.** Whether `exit(0)` must pair with an
-   elimination of the goal, `$1` or part of it, as the `yes` example
-   does, and not of what arrived.
-3. **Trying in the prompt.** Whether the model is told that a whole
-   elimination is allowed, or only that it must eliminate. Told, it may
-   take each source whole and stop; untold, it may invent a cut to
-   satisfy the rule.
+1. **A premise the sightings contradict.** What is done when an
+   introduction is unchanged whatever its premise reads: shown to the
+   person, counted against the model, or moved to the dependency that
+   stayed equal.
+2. **What `return 0` must be from.** Whether `exit(0)` must be introduced
+   from an elimination of the goal, as the `yes` example's is, and not of
+   what arrived.
+3. **Predicates.** A threshold (`restarts > 2`) is not text read again.
+   Nothing in `ls`, `cat`, `wc`, `date` or `rm` needs one. Whether one
+   returns as a kind of elimination, with no expression around it.
+4. **The whole elimination in the prompt.** Whether the model is told it
+   may read a value whole. Told, it may read each source whole and stop;
+   untold, it may invent a part to satisfy the rule.
