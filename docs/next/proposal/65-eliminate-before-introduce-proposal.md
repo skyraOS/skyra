@@ -372,10 +372,18 @@ Grammar
 - **What arrived was sometimes cut whole** (`$6.stdout`, newline and
   all), the act failed, and the next step cut `$6.stdout[1]`. The world
   corrected it in one step, as 66 expects.
-- **A later version of the prompt was declined by the API** before any
-  output, intermittently, for content that is not unsafe. The prompt is
-  being rebuilt from the last version that ran cleanly, one rule at a
-  time.
+- **One layout of the prompt was declined by the API** before any
+  output, for content that is not unsafe: the rules numbered under
+  headings, with the grammar after them. The same seven rules, the
+  definitions and the premise, added one at a time to the layout that ran
+  cleanly (rules after the grammar), were never declined.
+- **With all seven rules, six programs ran to a right answer** (`ls` and
+  `cat` on two directories, `wc`, `date`, `mv`, `rm` in a sandbox) with no
+  step refused. `mv` and `rm` each looked with `ls` before acting, and
+  asserted the file from what arrived, never a literal.
+- **Rule 4 is met on a return by filler** when `exit(0)` is asserted from
+  what arrived: `mv` returned the goal's words *into the second folder*,
+  and `rm` returned its exit status, to have something sent from the goal.
 
 ## Memory: one store, through the S
 
