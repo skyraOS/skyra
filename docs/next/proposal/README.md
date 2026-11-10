@@ -63,6 +63,15 @@ New implementation proposals:
   enters the key. Every decision invokes or returns; boot, exposed to
   the root, is Act. Kinds are relative: delegate and act by k, a leaf by
   position. Draft (2026-11-09).
+- [62 — Amendment to 61: citation, and equivalence that is learned](62-citation-and-learned-equivalence-proposal.md):
+  answers 61's open question 6. Every introduction cites the eliminations
+  it was derived from; a cited span is code and the citation is compiled
+  into the guard, so a goal never seen startles. Spans are runs of words,
+  matched by text. An introduction becomes a memory entry, keyed by what
+  it cites and what it is introduced for. `classes` leaves the program:
+  alternatives at one position are held interchangeable on what memory
+  holds, gated by a new constant, `span`, and refuted by trial as before.
+  Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
