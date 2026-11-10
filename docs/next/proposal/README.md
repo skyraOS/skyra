@@ -89,8 +89,10 @@ New implementation proposals:
   has seen, and each dependency is equal, among or free: it moves only
   when the same unit is derived again where it read something else, and
   is free at `span` distinct values. A trial ask varies what the model is
-  shown and is never run. Every reuse rule of 61 to 63 is one removed
-  dependency. Thresholds are set per effect: for an act on a tool not
+  shown and is never run. What a unit's operator brings back is expected
+  the same way: for a delegation, an output contract the parent holds
+  and the child never sees, only falsified. Every reuse rule of 61 to 63
+  is one removed dependency. Thresholds are set per effect: for an act on a tool not
   `readOnly`, only a passed part goes free. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the

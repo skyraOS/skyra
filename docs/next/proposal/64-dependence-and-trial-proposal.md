@@ -23,6 +23,8 @@ model says. It is something the system finds:
    again where that dependency read something else.
 3. **The system's work is to remove dependencies**, as many as trials
    support, at a confidence the program sets by what a wrong act costs.
+4. **What follows a unit is expected, and never shown**: the same states,
+   kept on what its operator brings back, and falsified by the world.
 
 ## Why
 
@@ -203,6 +205,108 @@ anyway. A **trial** is a sighting the system makes.
   investment: spent before behavior is stable, repaid by every reuse
   after. They belong in idle time and under a budget (open question 3).
 
+## Expectation
+
+A dependency looks back: what a unit's frame had seen. Nothing above
+looks forward. The system learns when a step applies, `{P}`, and nothing
+of what should follow it, `{Q}`. A trial ask cannot supply that: it
+measures whether the model would write the same step again, never
+whether the step was right.
+
+**An expectation is a dependency on what a unit's operator brings back**:
+an elimination of the next arrival, a leaf's return or a child's, and
+what it read. It is derived the same way and has the same three states.
+
+- **Every arrival after a unit is a sighting.** Parts that read the same
+  each time stay equal; parts that vary go among, then free. No one
+  labels a sighting good or bad. What stays equal is what has always
+  followed this unit.
+- **A surprise is an arrival at which an expectation does not hold**:
+  something that always followed did not. `hesitate` is its coarse form,
+  an arrival whose shape gives a key never seen (61, Memory). An
+  expectation extends it from shapes to values.
+- **It is checked by the world**, for every act, with no shadow: for a
+  tool with effects as for a read-only one.
+
+**An expectation is a pattern.** The model may write an elimination of
+what its operator will bring back before it arrives, as it writes any
+elimination: it says where to look, and the system computes it on
+arrival.
+
+```text
+$2 $4 $3
+expect $5 := / .stdout / json          $5: the arrival, read as JSON
+```
+
+- **Matched, its variables are bound**: the next ask opens with them as
+  candidates, already defined. The system proposes the eliminations that
+  held at earlier sightings; the model keeps, drops or adds to them, as
+  it defines any variable.
+- **Unmatched, it is a surprise.**
+- **Dropping a candidate does not free it.** What the model keeps is
+  what it looks at. What matters is still found by sightings.
+- This is 61's *Reading what arrives*, generalized: there, one decoding
+  the model wrote is applied to later arrivals before the frame sees
+  them. Here any elimination is.
+
+It is still two primitives: `expect` is `eliminate`, written ahead of
+its source.
+
+### Whose error
+
+Two things can be wrong, and they are different errors:
+
+| | It is wrong when | Measured by |
+|---|---|---|
+| **the model** | the step it wrote does not do what was asked, where it wrote it | an expectation, against the world |
+| **the system** | it reused a step where the model would have written another | a trial ask, against the model |
+
+**A surprise after a reused step is settled by asking.** The model is
+asked at the context the unit voted in, the step never run:
+
+- **The same step:** the system was faithful, and the step is the
+  model's. The surprise counts against the unit.
+- **Another step:** the system generalized wrongly. Each free dependency
+  at which this context differs from the unit's sightings returns to
+  among.
+
+A surprise after a step the model has just written involves no reuse:
+it is the model's, or the world's.
+
+### The two contracts
+
+For a delegation this is a contract in two halves:
+
+| | Is | Held by | The child |
+|---|---|---|---|
+| **input contract** | what the child is passed: its scope | the child, as its key | sees it |
+| **output contract** | the parent's expectations of the return | the parent's unit | never sees it |
+
+**The output contract is never shown, only falsified.**
+
+- **A child that sees the check can satisfy the check** without doing
+  what was asked. The emitter is never the checker (invariant 1), between
+  frames as within one.
+- **A return that matches means something** only because the child did
+  not know what would be read.
+- **It is never in the child's key.** It is held in the parent's unit,
+  so what a child learns is reused under any parent (61, The call graph).
+- **A match proves nothing.** It fails to refute, and confidence in the
+  delegation grows by count, as everywhere here.
+
+**What the child needs in order to do the work is in its goal; what
+judges the work is not.** A parent that expects JSON must ask for JSON.
+An expectation the goal gives the child no way to meet tests nothing but
+luck, and its surprises say so: they fall on the parent's delegation,
+whose child wrote the same step when asked again.
+
+**A retry leaks.** A parent that delegates again with why the last
+return failed has shown part of the check. Each sighting records whether
+it was a first attempt, and a retry's match is weaker evidence.
+
+A leaf is the same: an expectation of a tool's output is an output
+contract the tool never sees.
+
 ## Every reuse rule is a removed dependency
 
 61 to 63 name several ways what was learned at one key counts at
@@ -271,11 +375,16 @@ event ::= hesitate key
         | derive   key step values        a startle: the step, and what each
                                           dependency read
         | trial    key variation step     a trial ask: never run
+        | arrive   unit values attempt    what a unit's operator brought back:
+                                          what each expectation read, and
+                                          whether a first attempt or a retry
         | refute   what                   63
 ```
 
 - **Memory is a fold of the log**: each key's steps, each unit's
-  dependencies, each dependency's values seen.
+  dependencies and expectations, and the values seen at each.
+- **A surprise is computed, not stored**: an `arrive` at which an
+  expectation of the fold before it does not hold.
 - **A dependency's state is computed, not stored.** It is a function of
   the values seen and the program's constants, so two programs differing
   only in `span` share memory, as two differing in `quorum` do (61,
@@ -298,6 +407,9 @@ event ::= hesitate key
 | 63, section 2: a chain commits only if it votes | moot: no chain; a step is authored for the values at hand |
 | 63, section 4: an operator cites; the closed reading | no citation; closed is a restriction on states |
 | 63, section 6: `span` counts an antichain | `span` counts distinct values at one dependency |
+| 61, Reading what arrives: a learned decoding, applied on arrival | any elimination written ahead, `expect`; its variables the next ask's candidates |
+| 61: no contract separate from what is passed | still none passed: the output contract is the parent's expectations, held in its unit |
+| 61: a trial judges by shadow, for read-only tools | and an expectation judges every act, by what it brought back |
 
 In the code: `tree`'s `StoreConds`, `CheckGuard`, `CommitChain` and
 effective conditions go, with the chain grammar in `drive`'s prompts;
@@ -377,3 +489,16 @@ before any Go:
 - **The tally is 59's:** with every dependency equal, the decision at a
   key is 59's tally over the steps authored for exactly these values.
 - **Refutation is final** (63), and overrides any count.
+- **An expectation is the system's:** it is an elimination of an arrival
+  and a literal, computed on arrival; `expect` adds no form `eliminate`
+  lacks.
+- **The output contract is never passed:** no expectation of a unit is
+  in the scope, the bindings or the key of the frame its operator
+  pushes; so a child's key is the same under any parent's expectations.
+- **A surprise is a function of the log:** replaying to any prefix gives
+  the surprises at that point.
+- **Blame is exclusive:** the ask after a surprise at a reused unit
+  either counts against the unit or returns a dependency to among, never
+  both; and it gives no `runLeaf`.
+- **A dropped candidate is kept:** the candidates the model does not
+  bind change no dependency's or expectation's state.
