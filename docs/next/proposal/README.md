@@ -97,18 +97,20 @@ New implementation proposals:
   sightings. Every reuse rule of 61 to 63 is one removed dependency. Thresholds are set per effect: for an act on a tool not
   `readOnly`, only a passed part goes free. Draft (2026-11-10).
 - [65 — Amendment to 64: every introduction is from an elimination](65-eliminate-before-introduce-proposal.md):
-  fixes the terms as natural deduction's: an introduction, an
-  elimination, *E eliminates V*, *I is introduced from E* (its premise);
-  the methods are `introduce` and `eliminate`, and "cut" is retired.
-  Every clause goes, CEL with it, since each wrong answer so far came
-  from one. Every introduction is from exactly one elimination of its
-  own, and every elimination reaches an introduction. A step is a
-  sentence: a head and at least one argument, `null` introduced where
-  nothing is passed. A frame starts with one value, its parent's
-  introduction, the root's the person's request, so every edge forces
-  composition. Memory is unchanged: keys are the types of what was
-  received, values the steps, and a step votes where its eliminations
-  read the same text again, arguments aside. Draft (2026-11-10).
+  fixes the terms as natural deduction's: introduction, elimination,
+  *E eliminates V*, *I is introduced from E* (its premise), composition;
+  the methods are `introduce` and `eliminate`, an address is not an
+  elimination, and "cut" is retired. Every clause goes, CEL with it. A
+  step is a substitution: each elimination reads a part of what the
+  frame received and owns the one introduction put in its place. The
+  syntax is one value received, n eliminations, two introductions or
+  more composed into one; within a frame `from` is a bijection, so a
+  trial can isolate. The data is recorded as presented, many to many,
+  and the frame is its projection: the child's one value is the parent's
+  hypothesis, tested at the child and corroborated by its return. A step
+  votes where its literal and held substitutions read the same text
+  again, passed parts free and every word not read equal. Draft
+  (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the
   interpreter; Codex exports the underlying operations. Includes the code
