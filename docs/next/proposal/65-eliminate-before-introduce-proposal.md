@@ -54,6 +54,11 @@ dynamic:  observation → [ decision: each elimination reads, each introduction 
 - **An implementation is defined by its eliminations**: what it reads,
   and so where it votes. Its introductions define the next interface,
   not it.
+- **The model writes forms; the system derives the rest.** It derives
+  interfaces from introductions, the model's and also the person's and a
+  leaf's, synthesizing each type and never asking for one. It derives
+  where an implementation applies from the model's eliminations. The
+  model writes no type and no condition.
 - **So memory's key is introductions and its value eliminations**: a key
   is the interfaces received, a value the implementations whose
   eliminations decide when each applies.
