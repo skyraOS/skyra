@@ -91,8 +91,10 @@ New implementation proposals:
   is free at `span` distinct values. A trial ask varies what the model is
   shown and is never run. What a unit's operator brings back is expected
   the same way: for a delegation, an output contract the parent holds
-  and the child never sees, only falsified. Every reuse rule of 61 to 63
-  is one removed dependency. Thresholds are set per effect: for an act on a tool not
+  and the child never sees, only falsified. Expectation met or surprised,
+  against a return held or refuted, is the system's signal; credit
+  follows what a return used. `k` has a base of 1 and is widened only by
+  sightings. Every reuse rule of 61 to 63 is one removed dependency. Thresholds are set per effect: for an act on a tool not
   `readOnly`, only a passed part goes free. Draft (2026-11-10).
 - [33 — Conversation workflows through interpreter procedures](33-procedure-adapter-extraction-proposal.md):
   list, load, create, send, close, delete and refresh enter through the

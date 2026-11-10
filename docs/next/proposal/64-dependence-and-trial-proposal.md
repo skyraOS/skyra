@@ -25,6 +25,9 @@ model says. It is something the system finds:
    support, at a confidence the program sets by what a wrong act costs.
 4. **What follows a unit is expected, and never shown**: the same states,
    kept on what its operator brings back, and falsified by the world.
+5. **Prediction and outcome together are the signal**: what was
+   surprised and what held say where the system is wrong, where to spend
+   asks, and how narrow its focus must be before it acts.
 
 ## Why
 
@@ -252,6 +255,48 @@ expect $5 := / .stdout / json          $5: the arrival, read as JSON
 It is still two primitives: `expect` is `eliminate`, written ahead of
 its source.
 
+**`expect` is offered only where memory holds an arrival.** An
+elimination's type is computed from its source (61, Variables), and
+before any arrival there is no source: an expectation written then would
+be the model inventing what should follow, an introduction under another
+name.
+
+- **Measured by position, not by a familiar word**: memory holds an
+  arrival at the key position this unit's operator leads to. One known
+  word in a new goal offers nothing.
+- **A first arrival is observed, not judged.** It is a sighting, and the
+  eliminations the model then writes of it are the candidates next time.
+  So an expectation's vocabulary lags its unit by one sighting.
+- **A first act with effects runs with no expectation.** What guards it
+  is before the act, not after: its goal held equal, and `effects.quorum`
+  (Stakes).
+- **Relations need no new variable.** *The output names the path that
+  was passed* is an elimination over the arrival and a `$n` the frame
+  already holds. It holds across values, where a constant does not, and
+  it is the kind of candidate to propose first.
+
+### Two asks
+
+A startle may be two asks, each with one job:
+
+| Ask | Shown | Writes | When |
+|---|---|---|---|
+| **define** | the frame's `$n` | eliminations, introductions, the operator: the step | every startle |
+| **expect** | the same, and the candidates | which eliminations to read from what comes back | only where `expect` is offered |
+
+- **The expectation is set before the act runs**, so it cannot be fitted
+  to what came back. A clinical trial names its endpoints before its
+  data for the same reason.
+- **The second ask may go to another model.** The model that wrote the
+  step then does not write its own check (invariant 1), and agreement
+  between the two is worth more than one model's with itself.
+- **It retires as the first does.** A first sighting is one ask. Once
+  the candidates at a position are stable the system applies them, and
+  no second ask is made.
+- **It is the shape tool use already has**: one inference to emit a
+  call, another to read what it gave; and a separate check of an action
+  before it fires is ordinary practice where a model acts on the world.
+
 ### Whose error
 
 Two things can be wrong, and they are different errors:
@@ -306,6 +351,55 @@ it was a first attempt, and a retry's match is weaker evidence.
 
 A leaf is the same: an expectation of a tool's output is an output
 contract the tool never sees.
+
+### The signal
+
+An expectation says whether an arrival was predicted. Whether it was any
+good is a second fact: the return it went into **held**, or was refuted.
+The two together are the system's error signal, and each case is defined
+only over what the system has seen, its eliminations and introductions:
+
+| Expectation | The return | What it is | What it does |
+|---|---|---|---|
+| met | held | predicted | nothing: the quiet state, and no ask |
+| surprised | held | something unexpected worked | the expectation was too narrow: the value joins among |
+| surprised | refuted | a failure, caught | counts for the expectation, against the unit |
+| met | refuted | a failure, passed | nothing the system reads tells the two apart |
+
+**The fourth case is where variables come from.** The system holds two
+sightings that read alike through every elimination it has, with
+opposite outcomes. It asks the model for a distinction, the one ask that
+is not for a step: *one of these held and one did not; write an
+elimination that reads them differently.* What the model writes is
+computed on both. If it does tell them apart, it is one more expectation
+of the unit, equal at the value the sighting that held read.
+
+**Use is credit.** A cut's provenance is exact: this field of that
+observation (61, Reference and location). So for any return the log
+gives every observation it was built from, and the units that brought
+each back.
+
+- **Used**: a part of what a unit brought back was cut into the frame's
+  return, or read by a dependency of a later unit in the frame. The
+  second counts as the first does: an `ls` run to see whether a file
+  exists appears in no return and decided the step after it.
+- **Credit follows the references**, from a return that held, to what it
+  used, to the units that brought those back, down the tree.
+- **`exit(0)` is an assertion**: the model's claim that its goal is met.
+  Credit under it is provisional until the return above it has held, and
+  the chain is anchored where the person takes the result or rejects it.
+- **A unit's signal has three values**: positive when what it brought
+  back was used under a return that held; negative when it was used
+  under a return refuted; nothing when it was never used, which is asks
+  spent for no return.
+
+**Confidence is a count, not a rate.** Three of three and three hundred
+of three hundred are both every time. Only the count says how much is
+known (Stakes, what a count buys), and only counts can be compared
+between one part of the system and another.
+
+**The signal says where to spend.** Trial asks go first to the units
+with the most surprises for their count (open question 3).
 
 ## Every reuse rule is a removed dependency
 
@@ -368,6 +462,42 @@ The stages are a clinical trial's:
 | efficacy, at scale | `quorum`, then `span` | only what is trusted |
 | surveillance after release | refutation, final, in the log | yes |
 
+## Focus
+
+`k`, the act bound, is how many tool types a frame may hold and still
+act (61, Scope and frame). It is a constant a person picks, and nothing
+says what to pick. It is how narrow the system's focus must be before it
+touches the world, so it belongs where confidence is low.
+
+**The base is 1.** A frame holding one tool acts; one holding more
+delegates, narrowing. One tool to a frame is the most a thing can be
+isolated, and it is where everything is first learned.
+
+**Anything wider is earned, and a surprise takes it back.** Two ways,
+not yet chosen between (open question 17):
+
+| | A stable subtree is compiled | Only unfamiliar tools count |
+|---|---|---|
+| What widens | a delegation, its child's act and the return, each trusted with no ask, become one unit | a tool whose expectations have `earned` sightings stops counting against `k` |
+| Learned from | the frames that already exist: composed, with no ask | the tools' own sightings |
+| It gives | one unit with one set of dependencies and expectations: what a run leaves behind, to try or to carry elsewhere | fewer frames, so fewer asks, at a goal never seen |
+| It costs | no ask is saved where every frame already trusts | a scope's kind changes as its tools become familiar, and kind is in the key |
+| Undone by | a surprise in the unit: its frames decide again | a surprise at the tool: it counts against `k` again |
+
+Either way a frame cannot have confidence in acting with three tools
+before it has been let to, so what is earned is measured on what exists:
+the frames below, or the tools held. And either way an act with effects
+earns under `effects`, since a wider frame holds more at once.
+
+```text
+constants: {
+  act:     1                       the base; no longer set
+  earned:  none | nat ≥ 1          sightings before anything widens
+}
+```
+
+With `earned` none, kinds are 61's at `k = 1`.
+
 ## The log and memory
 
 ```text
@@ -410,6 +540,8 @@ event ::= hesitate key
 | 61, Reading what arrives: a learned decoding, applied on arrival | any elimination written ahead, `expect`; its variables the next ask's candidates |
 | 61: no contract separate from what is passed | still none passed: the output contract is the parent's expectations, held in its unit |
 | 61: a trial judges by shadow, for read-only tools | and an expectation judges every act, by what it brought back |
+| 61: a startle is one ask | up to two: define, then expect, the second only where memory holds an arrival |
+| 61: `k`, the act bound, a constant of the program | the base is 1; wider is earned by sightings and undone by a surprise |
 
 In the code: `tree`'s `StoreConds`, `CheckGuard`, `CommitChain` and
 effective conditions go, with the chain grammar in `drive`'s prompts;
@@ -474,6 +606,26 @@ units; `tally` and its theorems keep their statements.
 14. **An expectation of a child's child.** A parent sees only its
     child's return. Whether a surprise there is ever traced to the frame
     below that caused it, through the tree's links.
+15. **What the second ask sees.** Shown the step, it predicts what that
+    step brings back. Shown only the variables, it says what any right
+    step should bring back: a check more independent of the first ask,
+    and harder to write.
+16. **What the signal is for.** The table gives a sign. What the system
+    then prefers is not settled: the return that held, fewer asks on the
+    way to it, fewer frames. A path that reaches `exit(0)` in fewer steps
+    than before is better than expected, and nothing here yet makes it
+    spread.
+17. **How `k` is earned.** The two ways in Focus. Compiling keeps every
+    key and saves no ask. Counting only unfamiliar tools saves asks at
+    new goals and moves keys, since kind is in the key (61, Scope and
+    frame), and it needs a frame's kind fixed when it is pushed, from
+    the log before it, so it replays.
+18. **The distinction ask.** Whether it counts against the refinement
+    bound; what is done when the model writes an elimination that reads
+    both sightings alike; and whether a distinction found at one unit is
+    proposed at others with the same operator.
+19. **Credit for being read.** Whether a unit read by a later dependency
+    earns what one cut into the return does, or less.
 
 ## Required Lean definitions and proofs
 
@@ -519,3 +671,19 @@ before any Go:
   both; and it gives no `runLeaf`.
 - **A dropped candidate is kept:** the candidates the model does not
   bind change no dependency's or expectation's state.
+- **`expect` needs an arrival:** an `expect` is admitted only when
+  memory holds an arrival at the key position its unit's operator leads
+  to; so every expectation's elimination has a synthesized type.
+- **The expectation precedes the act:** the second ask's answer is
+  logged before the unit's `runLeaf` or push.
+- **The signal is a function of the log:** for a unit and an arrival,
+  exactly one of the four cases holds, and replay gives the same one.
+- **A distinction is checked, not trusted:** the elimination a
+  distinction ask returns becomes an expectation only if it reads the
+  two sightings differently; the ask gives no `runLeaf`.
+- **Credit follows provenance:** a unit is credited by a return only if
+  a location that return reads, or a dependency of a later unit of its
+  frame, resolves into what the unit brought back.
+- **Earned focus is undone:** with `earned` none every kind is 61's at
+  `k = 1`; a surprise in what widened a frame gives back the kinds it
+  had before.
