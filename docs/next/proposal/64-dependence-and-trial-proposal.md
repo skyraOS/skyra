@@ -456,7 +456,24 @@ units; `tally` and its theorems keep their statements.
 10. **What the model is shown.** Whether an ask shows the states learned
     so far at its key. It would help the model agree with itself, and for
     the same reason weakens each sighting as independent evidence (63,
-    open question 3).
+    open question 3). The candidates an expectation binds raise the same
+    question.
+11. **Novelty or failure.** An arrival outside an expectation is new,
+    and may be fine: a file's contents differ every time, and go free.
+    Whether a surprise at an expectation that is equal counts against
+    the unit at once, or only after the ask in *Whose error*; and
+    whether an expectation is held equal before `span` sightings, when
+    one sighting is all there is.
+12. **Whether a surprise is final.** It is the world's evidence, and 63
+    makes the world's evidence final. But the world also changes: a tool
+    updated, a service down. Whether a surprise refutes, or is a vote
+    with more weight than a model's.
+13. **What a retry may say.** Whether a parent delegating again may pass
+    why the return failed, which helps the child and leaks the contract,
+    or only the return itself.
+14. **An expectation of a child's child.** A parent sees only its
+    child's return. Whether a surprise there is ever traced to the frame
+    below that caused it, through the tree's links.
 
 ## Required Lean definitions and proofs
 
