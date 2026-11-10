@@ -453,6 +453,34 @@ from there by elimination (61, Reference and location).
 - **The API exposes values by binding, and stability is computed over
   variables.**
 
+### What memory knows: the reverse index
+
+**Eliminations index the introductions they have owned.** Read the other
+way, the log's many-to-many relation gives, for each text an elimination
+has read, every introduction put in its place and where:
+
+```text
+"move"        →  mv                     at who = opus-5.5's binary, 14 sightings
+              →  a moving company's API  1 sighting
+"all files"   →  -a
+"this folder" →  .
+```
+
+- **It is derived**: a fold of the log, as memory is. Nothing new is
+  stored.
+- **It is what memory knows**, and its counts are what is most probable,
+  relative to the identity it is read under. Which identities count, one
+  *who* or several, is the fold's policy (What the data owes a policy).
+- **It proposes and never decides.** It may offer candidates at an ask,
+  and substitutions at a trial (64, Trials). The tally counts only what
+  was written.
+- **Shown candidates leak.** A step written with candidates shown may
+  agree with the prompt, not with the goal, so it is recorded as shown,
+  and the history policy decides what such a vote counts (as 64 counts a
+  retry).
+- **It is not read at a program's boot.** Boot is decided as it is (61),
+  with nothing proposed from what other runs learned.
+
 ### Built first: when a step votes
 
 64's dependencies need trials and `span` to move. Before those are built,
