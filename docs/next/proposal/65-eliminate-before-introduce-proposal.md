@@ -292,11 +292,15 @@ variable: the binary, by content hash. Claude Opus 5 and Claude Opus 5.5
 are two binaries, each wrapped by the administrator, and two identities.
 
 - **The model is in a frame's *who*.** A frame's who is the binary of the
-  model that writes its steps. This reverses 61 (Scope and frame: the
-  model is never in the key) for isolation's sake: a trial measures a
-  model (64, Trials), and votes from two models in one memory cannot be
-  told apart. What one model learned does not count for another; a new
-  binary starts unlearned.
+  model that writes its steps, for isolation's sake: a trial measures a
+  model (64, Trials), and votes from two models under one identity
+  cannot be told apart.
+- **Sharing what was learned is policy, not data.** The data keeps every
+  *who* apart, so that whatever is shared can be traced. Whether steps
+  one binary learned are offered to another, and how they are counted,
+  is a policy over that data, never a property of the key. 61 shared
+  across models by leaving the model out of the key; here the key keeps
+  it, and sharing is decided above it.
 - **The working directory is not in *where*.** A frame knows its
   directory only by calling something that shows it, `ls` or `pwd`, and
   then it is an introduction a leaf asserted, in the frame's path like
@@ -305,7 +309,8 @@ are two binaries, each wrapped by the administrator, and two identities.
   Expectation), recorded.
 - **What a directory means for an effect is the administrator's.** A
   binary that must act only in one place is provisioned to: its wrapper
-  sets its directory, and that is in its hash.
+  sets its directory, and that is in its hash. Anything more, such as
+  requiring an effect to follow a look, is policy per *who* (Open, 5).
 
 **Role says how a key is used:**
 
@@ -477,11 +482,7 @@ before any Go. 59's tally stands, with its theorems: `tally_perm`,
 4. **The whole elimination in the prompt.** Whether the model is told it
    may read a value whole. Told, it may read each address whole and stop;
    untold, it may invent a part to satisfy the rule.
-5. **An effect in an unseen directory.** A frame that learned `rm null`
-   or a relative path where it never looked would run it wherever the
-   binary is started. Whether an effect's argument must be introduced from
-   an arrival that showed the place, or whether the administrator's
-   wrapper is always where that is settled.
-6. **Moving across binaries.** A new model's binary starts unlearned.
-   Whether what an old one learned is offered to the new one, as a
-   borrow a trial refutes, or never.
+5. **Policy per *who*.** What may be shared between binaries, and what
+   an effect must have read first (an `rm null` learned where the frame
+   never looked runs wherever its binary is started), are policies over
+   the data, set per *who*. Not designed here.
