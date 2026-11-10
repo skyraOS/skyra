@@ -21,7 +21,8 @@ LEVEL=8 python3 -u -I step.py testdir/case-cat-a.json
 
 `LEVEL` picks the prompt: 0 is the base (round 3's, with a grep example in place of
 wc), and each level adds one change (`LEVELS` in `step.py`); 7 is the seven rules,
-8 adds line-item returns. `step-declined.py` keeps the layout the API declined
+8 adds line-item returns. The rendered prompts are in `prompts/`: `level-0.txt` to `level-8.txt`, and
+`declined.txt`, the layout the API declined. `step-declined.py` keeps that driver
 (rounds 4 to 6). In `data/`, `<testdir>` stands for the scratch directory the runs
 used.
 
