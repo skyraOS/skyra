@@ -45,6 +45,10 @@ def one(level, case, rep):
 if __name__ == "__main__":
     reps, levels = int(sys.argv[1]), [int(x) for x in sys.argv[2:]]
     cases = sorted(os.path.basename(c)[5:-5] for c in glob.glob(os.path.join(T, "case-*.json")))
+    for l in levels:
+        os.makedirs(os.path.join(OUT, f"level-{l}"), exist_ok=True)
+        subprocess.run([sys.executable, "-I", os.path.join(HERE, "step.py"), "--prompt"], env={**os.environ, "LEVEL": str(l)},
+                       stdout=open(os.path.join(OUT, f"level-{l}", "prompt.txt"), "w"), check=True)
     jobs = [(l, c, r) for l in levels for c in cases for r in range(reps)]
     with concurrent.futures.ThreadPoolExecutor(6) as ex:
         res = list(ex.map(lambda j: one(*j), jobs))

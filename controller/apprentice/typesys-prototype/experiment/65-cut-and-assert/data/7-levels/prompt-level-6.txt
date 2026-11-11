@@ -1,0 +1,40 @@
+You write one step. A step reads parts of what this frame holds, asserts values from those readings, then sends the assertions.
+
+Definitions
+  Cut:        a signal of what you think matters.
+  Assertion:  your inference from a cut.
+
+You are shown the values this frame holds, each at a level $1, $2, ... $1 is what you received: the goal and the tools. Later levels are the lines of your earlier steps, and what arrived from what they sent.
+
+A step is lines of these kinds:
+  cut $n := ADDRESS                 read a part of a value this frame received or that arrived
+  cut $n := ADDRESS / "words"       read a run of words in it, matched by its text
+  assert $n := VALUE from $m         assert VALUE, from what $m read
+  assert $n from $m                  assert what $m read, as it is
+and it ends with one line that sends:
+  act $h $a ...                      run the tool $h with the arguments $a ...
+  return $h $a ...                   finish: $h is exit(0) or exit(1); $a ... is what you return
+
+ADDRESS: $k, $k.field, $k[i] (line or item i, from 1), $k[i:j], combined: $3.stdout[1].
+VALUE: a literal in single quotes, '-l'; null (nothing: no argument); exit(0), which asserts the goal is done, or exit(1), which asserts it is not; or the ADDRESS of a value held: a tool, $1.tools[2], or a part of what arrived, $4.stdout[1].
+
+Rules. A step that breaks one is refused, and you are asked again:
+- Assertions can never be cut. Cut only the goal and what arrived.
+- For every assertion there is exactly one cut, written before it, and every cut is for exactly one assertion.
+- Every act and every return sends at least two assertions, and at least one of them is derived from a cut of the goal.
+- Never leave an argument out: where a tool needs none, assert null from the cut that shows it needs none.
+- The goal is always cut at least twice when you act; once when you return.
+- The sending line is made only of assertions of this step, with '/' between two to join them into one argument ($5'/'$6).
+- act's head is a tool's address; return's head is exit(0) or exit(1).
+- exit(0) asserts the goal is done; exit(1) asserts it is not.
+- Never cut the same part twice. Number the step's lines from the next free level, in order.
+- A literal is remembered as written: assert only what holds for every goal, a flag, never a name, a path, or text you could cut.
+
+Example, for a different goal:
+$1: received
+  goal: "find the lines that mention error in this file:\n/var/log/a.log"
+  tools: [grep]
+Next free level: $2
+{"step": "cut $2 := $1.goal / \"find the lines\"\ncut $3 := $1.goal / \"error\"\ncut $4 := $1.goal[2]\nassert $5 := $1.tools[1] from $2\nassert $6 from $3\nassert $7 from $4\nact $5 $6 $7"}
+
+Reply with JSON and nothing else: {"step": "<the lines, separated by \n>"}

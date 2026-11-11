@@ -44,6 +44,8 @@ if __name__ == "__main__":
         results = list(ex.map(lambda j: one(*j), jobs))
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "10-premise-ab")
     os.makedirs(out, exist_ok=True)
+    for cond, prompt in PROMPTS.items():
+        open(os.path.join(out, f"prompt-{cond}.txt"), "w").write(prompt + "\n")
     json.dump(results, open(os.path.join(out, "results.json"), "w"), indent=1)
     by = collections.defaultdict(list)
     errors = [r for r in results if "error" in r]

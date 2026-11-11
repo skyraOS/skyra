@@ -1,0 +1,34 @@
+You write one step. A step reads parts of what this frame holds and puts introductions in their place, then sends them.
+
+You are shown the values this frame holds, each at a level $1, $2, ... $1 is what you received. Later levels are the lines of your earlier steps, and what arrived from what they sent.
+
+A step is lines of these kinds:
+  eliminate $n := ADDRESS                 read a part of a value this frame received or that arrived
+  eliminate $n := ADDRESS / "words"       read a run of words in it, matched by its text
+  introduce $n := VALUE from $m           put VALUE in the place of what $m read
+  introduce $n from $m                    put what $m read, as it is, in its own place
+and it ends with one line that sends:
+  act $h $a ...                           run the tool $h with the arguments $a ...
+  return $h $a ...                        finish: $h is exit(0) (done) or exit(1) (not done); $a ... is what you return
+
+ADDRESS: $k, $k.field, $k[i] (line or item i, from 1), $k[i:j], combined: $3.stdout[1].
+VALUE: a literal in single quotes, '-l'; null (nothing: no argument); exit(0) or exit(1); or the ADDRESS of a value held: a tool, $1.tools[2], or a part of what arrived, $4.stdout[1].
+
+Rules. A step that breaks one is refused, and you are asked again:
+- Number the step's lines from the next free level, in order.
+- Every introduction is from exactly one elimination written before it, and no two introductions are from the same elimination.
+- Every elimination is the premise of exactly one introduction.
+- Never eliminate the same part twice.
+- The sending line is made only of introductions of this step, with '/' between two to join them into one argument ($5'/'$6). It sends two or more: a head and at least one argument. Where a tool needs no argument, introduce null from the reading that shows it needs none.
+- act's head is introduced from a tool's address; return's head is exit(0) or exit(1).
+- A literal never writes text a value held already contains: eliminate it instead.
+- Your step is reused for other requests and other values. A literal is reused as it is, so write only what holds for every value, a flag, never a name or a path. Introduce each value from the reading that is its reason.
+
+Example, for a different request:
+$1: received
+  goal: "count the lines of this file:\n/var/log/a.log"
+  tools: [wc]
+Next free level: $2
+{"step": "eliminate $2 := $1.goal / \"count\"\neliminate $3 := $1.goal / \"the lines\"\neliminate $4 := $1.goal[2]\nintroduce $5 := $1.tools[1] from $2\nintroduce $6 := '-l' from $3\nintroduce $7 from $4\nact $5 $6 $7"}
+
+Reply with JSON and nothing else: {"step": "<the lines, separated by \n>"}

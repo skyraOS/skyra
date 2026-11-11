@@ -21,26 +21,33 @@ LEVEL=8 python3 -u -I step.py testdir/case-cat-a.json
 
 `LEVEL` picks the prompt: 0 is the base (round 3's, with a grep example in place of
 wc), and each level adds one change (`LEVELS` in `step.py`); 7 is the seven rules,
-8 adds line-item returns. The rendered prompts are in `prompts/`: `level-0.txt` to `level-9.txt`, and
-`declined.txt`, the layout the API declined. `step-declined.py` keeps that driver
-(rounds 4 to 6). In `data/`, `<testdir>` stands for the scratch directory the runs
-used.
+8 adds line-item returns, 9 is `var` and `final`. `step-declined.py` keeps the driver of
+rounds 4 to 6. In `data/`, `<testdir>` stands for the scratch directory the runs used.
+
+**Prompts.** Every round's exact system prompt is in `prompts/`, and a copy is in its
+`data/` folder (`prompt.txt`, or `prompt-<variant>.txt` where a round ran more than one).
+`level-N.txt` is `LEVEL=N`; `round-N-*.txt` are the prompts of rounds 1 to 6, which came
+before the levels. Those six were never committed: they were rebuilt by replaying
+`step.py`'s edits from the session's transcript, checked against round 6's, which was kept
+(it matches byte for byte). `python3 -I step.py --prompt` prints the prompt for `LEVEL`;
+every log from now on starts with the level and the prompt's sha256, and `bench.py` and
+`ab.py` write the prompts they ran into their `data/` folder.
 
 ## Rounds
 
 | `data/` | Prompt | Runs | Result |
 |---|---|---|---|
-| `1-first` | eliminate / introduce, one example | ls/cat ×2 | right; every premise tautological: `ls` from `$1.tools[1]`, itself. (The first `a` run hit a driver bug in joins, since fixed and rerun.) |
-| `2-read-vs-eliminate` | *read* or *eliminate*, and *assert*; a goal rule | ls/cat ×4 | right; premises from the goal (`cat` from "contents", `exit(0)` from "show"); *read*: no refusals; most runs read the goal whole |
-| `3-cut` | *cut* and *assert* | ls/cat ×4 | right; no premise was the whole goal; cut its own assertion twice (refused); passed `stdout` whole 3 of 4, the act failed and was fixed next step |
-| `4-six-rules` | restructured: definitions, premise, numbered rules, grammar after | 6 programs | ls/cat and wc right; date, mv, rm declined by the API |
-| `5-seven-rules-declined` | the same, seven rules | 6 | every ask declined (`stop_reason: refusal`, no output) |
-| `6-no-premise-declined` | the same without the premise | 6 | declined, but for one `date` step: `null` from "is it" |
-| `7-levels` | round 3's layout, the changes added one level at a time | ls/cat × levels 0–7 | none declined; the content was never the cause, the layout was |
-| `8-seven-rules` | level 7 | 6 programs | all right, no refusals; `mv` and `rm` looked with `ls` before acting; returns padded to meet rule 4 (`mv` returned "into the second folder") |
-| `9-line-items` | level 8: a return is line items (goal, child) | 6 programs | all right; one refusal (cut a tool), fixed; padding gone: `mv` and `rm` return only `(exit(0) from the goal, the exit status)`; payloads labeled: `("the lines of this file", "2")` |
-| `10-premise-ab` | level 8 with and without the premise, first step only (`ab.py`) | 6 programs × 3 × 2 = 36 asks | no effect on what was asserted: all 36 asserted the same tools and arguments. One difference in the cuts: for `ls`, with the premise 6 of 6 cut "the only file in this directory", without it 2 of 6 (else "in this directory"). One refusal, with the premise (date cut a tool) |
-| `11-final` | level 8 against level 9 (`var`, assertions from several cuts, `final: act:` / `final: return:` naming assertions from any step), with a seventh case whose reason is scattered (`bench.py`) | 7 programs × 3 × 2 = 42 | all 42 right, no refusals at either level. Multi-cut assertions used in every run, only as the path join and the line items; no final named an earlier step's assertion. Labels moved but not better: `mv` again returned `("into the second folder", "")`. The scattered case was right by position: every run took `ls`'s line 1, which happened to be the notes file, and never cut "with notes in its name" as the reason |
+| `1-first` | [`round-1-first`](prompts/round-1-first.txt): eliminate / introduce, one example | ls/cat ×2 | right; every premise tautological: `ls` from `$1.tools[1]`, itself. (The first `a` run hit a driver bug in joins, since fixed and rerun.) |
+| `2-read-vs-eliminate` | [`round-2-read`](prompts/round-2-read.txt), [`round-2-eliminate`](prompts/round-2-eliminate.txt): *read* or *eliminate*, and *assert*; a goal rule | ls/cat ×4 | right; premises from the goal (`cat` from "contents", `exit(0)` from "show"); *read*: no refusals; most runs read the goal whole |
+| `3-cut` | [`round-3-cut`](prompts/round-3-cut.txt): *cut* and *assert* | ls/cat ×4 | right; no premise was the whole goal; cut its own assertion twice (refused); passed `stdout` whole 3 of 4, the act failed and was fixed next step |
+| `4-six-rules` | [`round-4-six-rules`](prompts/round-4-six-rules.txt): restructured: definitions, premise, numbered rules, grammar after | 6 programs | ls/cat and wc right; date, mv, rm declined by the API |
+| `5-seven-rules-declined` | [`round-5-seven-rules`](prompts/round-5-seven-rules.txt): the same, seven rules | 6 | every ask declined (`stop_reason: refusal`, no output) |
+| `6-no-premise-declined` | [`round-6-no-premise`](prompts/round-6-no-premise.txt): the same without the premise | 6 | declined, but for one `date` step: `null` from "is it" |
+| `7-levels` | [`level-0`](prompts/level-0.txt) to [`level-7`](prompts/level-7.txt): round 3's layout, the changes added one level at a time | ls/cat × levels 0–7 | none declined; the content was never the cause, the layout was |
+| `8-seven-rules` | [`level-7`](prompts/level-7.txt) | 6 programs | all right, no refusals; `mv` and `rm` looked with `ls` before acting; returns padded to meet rule 4 (`mv` returned "into the second folder") |
+| `9-line-items` | [`level-8`](prompts/level-8.txt): a return is line items (goal, child) | 6 programs | all right; one refusal (cut a tool), fixed; padding gone: `mv` and `rm` return only `(exit(0) from the goal, the exit status)`; payloads labeled: `("the lines of this file", "2")` |
+| `10-premise-ab` | [`level-8`](prompts/level-8.txt) against [`level-8-no-premise`](prompts/level-8-no-premise.txt), first step only (`ab.py`) | 6 programs × 3 × 2 = 36 asks | no effect on what was asserted: all 36 asserted the same tools and arguments. One difference in the cuts: for `ls`, with the premise 6 of 6 cut "the only file in this directory", without it 2 of 6 (else "in this directory"). One refusal, with the premise (date cut a tool) |
+| `11-final` | [`level-8`](prompts/level-8.txt) against [`level-9`](prompts/level-9.txt) (`var`, assertions from several cuts, `final: act:` / `final: return:` naming assertions from any step), with a seventh case whose reason is scattered (`bench.py`) | 7 programs × 3 × 2 = 42 | all 42 right, no refusals at either level. Multi-cut assertions used in every run, only as the path join and the line items; no final named an earlier step's assertion. Labels moved but not better: `mv` again returned `("into the second folder", "")`. The scattered case was right by position: every run took `ls`'s line 1, which happened to be the notes file, and never cut "with notes in its name" as the reason |
 
 ## Findings
 

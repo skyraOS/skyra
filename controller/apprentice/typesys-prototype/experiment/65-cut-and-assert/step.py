@@ -5,7 +5,7 @@ A frame receives one value, $1: request(goal, tools). Claude writes a step
 65's rules or runs it; a return arrives as one introduction at the next
 level. Usage: python3 -I step.py GOAL_DIR [tools...]
 """
-import json, os, re, subprocess, sys
+import hashlib, json, os, re, subprocess, sys
 
 BASE = r"""You write one step. A step reads parts of what this frame holds, asserts values from those readings, then sends the assertions.
 
@@ -445,6 +445,7 @@ def ask(system, prompt):
 
 def run(goal, tools, cwd):
     f = Frame(goal, tools)
+    print(f"--- prompt: level {LEVEL}, sha256 {hashlib.sha256(SYSTEM.encode()).hexdigest()[:12]}")
     for _ in range(6):
         prompt = f.render9() if LEVEL >= 9 else f.render()
         for attempt in range(3):
@@ -492,5 +493,7 @@ def run(goal, tools, cwd):
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "--prompt":
+        sys.exit(print(SYSTEM))
     goal, tools = json.load(open(sys.argv[1]))
     run(goal, tools, os.path.dirname(os.path.abspath(__file__)))
